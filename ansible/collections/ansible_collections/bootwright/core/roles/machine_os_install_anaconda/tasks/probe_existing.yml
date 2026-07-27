@@ -152,10 +152,8 @@
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} answers SSH but
       rejects Bootwright's install identity
-      {{ bootwright_component.osInstall.ssh.user }}
-      {%- if (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0 %}
-      and orchestration account {{ bootwright_component.osInstall.ssh.fallbackUser }}
-      {%- endif %}
+      {{ bootwright_component.osInstall.ssh.user }}{%- if (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0 %}
+      and orchestration account {{ bootwright_component.osInstall.ssh.fallbackUser }}{%- endif %}
       (ssh rc {{ bootwright_os_pre_ssh_auth.rc | default(1) }}). Bootwright cannot read
       {{ bootwright_os_marker_path }} to prove it owns this host, and a reinstall wipes
       its disks, so an unverifiable host fails closed like a foreign one. Restore

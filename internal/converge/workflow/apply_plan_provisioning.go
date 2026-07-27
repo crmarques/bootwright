@@ -106,7 +106,7 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 		}
 		hashVars, err := provisioningDesiredHashVars(p, contentRoot)
 		if err != nil {
-			return fmt.Errorf("Playbook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
+			return fmt.Errorf("playbook/%s: %w; fix or remove the unreadable content so bootwright can prove what would run", p.Metadata.Name, err)
 		}
 		extraVarPairs, err := provisioningExtraVarPairs(p, anchor, gating)
 		if err != nil {
@@ -316,7 +316,7 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 	}
 	if len(unresolvedMachines) > 0 {
 		return "", nil, false, false, fmt.Errorf(
-			"Playbook/%s spec.target.machines %s resolve to no inventory host because they are not nodes of any container cluster or managed storage cluster; target them with spec.target.hostGroups instead, or remove them",
+			"playbook/%s spec.target.machines %s resolve to no inventory host because they are not nodes of any container cluster or managed storage cluster; target them with spec.target.hostGroups instead, or remove them",
 			p.Metadata.Name, strings.Join(unresolvedMachines, ", "))
 	}
 	tokens = dedupeStrings(tokens)
@@ -325,7 +325,7 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 			return "", nil, false, false, nil
 		}
 		return "", nil, false, false, fmt.Errorf(
-			"Playbook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
+			"playbook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
 			p.Metadata.Name)
 	}
 	return strings.Join(tokens, ":"), orderClusters, fleetWide, true, nil
@@ -413,7 +413,7 @@ func provisioningExtraVarPairs(p v1alpha1.Playbook, anchor string, gating bool) 
 	if len(p.Spec.ExtraVars) > 0 {
 		data, err := json.Marshal(p.Spec.ExtraVars)
 		if err != nil {
-			return nil, fmt.Errorf("Playbook/%s spec.extraVars cannot be encoded: %w", p.Metadata.Name, err)
+			return nil, fmt.Errorf("playbook/%s spec.extraVars cannot be encoded: %w", p.Metadata.Name, err)
 		}
 		pairs = append(pairs, string(data))
 	}

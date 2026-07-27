@@ -44,16 +44,6 @@ func assertDependsOn(t *testing.T, task ApplyTask, dep string) {
 	t.Fatalf("%s dependencies = %v, want to include %q", task.Entry.ID, task.Entry.Dependencies, dep)
 }
 
-func assertOrderingDependsOn(t *testing.T, task ApplyTask, dep string) {
-	t.Helper()
-	for _, d := range task.Entry.OrderingDependencies {
-		if d == dep {
-			return
-		}
-	}
-	t.Fatalf("%s orderingDependencies = %v, want to include %q", task.Entry.ID, task.Entry.OrderingDependencies, dep)
-}
-
 func TestPlanPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.Playbooks = []v1alpha1.Playbook{
