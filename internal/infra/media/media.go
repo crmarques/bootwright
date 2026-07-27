@@ -332,7 +332,7 @@ func List() ([]Entry, error) {
 	return out, nil
 }
 
-func Remove(key string) (Entry, error) {
+func Delete(key string) (Entry, error) {
 	path, err := Path(key)
 	if err != nil {
 		return Entry{}, err
@@ -342,7 +342,7 @@ func Remove(key string) (Entry, error) {
 		return Entry{}, err
 	}
 	if err := os.Remove(path); err != nil {
-		return Entry{}, fmt.Errorf("remove media %s: %w", path, err)
+		return Entry{}, fmt.Errorf("delete media %s: %w", path, err)
 	}
 	return entry, nil
 }

@@ -44,19 +44,19 @@ func TestAddListRemoveFile(t *testing.T) {
 		t.Fatalf("entries = %#v", entries)
 	}
 
-	removed, err := Remove("rhel.iso")
+	deleted, err := Delete("rhel.iso")
 	if err != nil {
-		t.Fatalf("Remove: %v", err)
+		t.Fatalf("Delete: %v", err)
 	}
-	if removed.Name != "rhel.iso" {
-		t.Fatalf("removed = %#v", removed)
+	if deleted.Name != "rhel.iso" {
+		t.Fatalf("deleted = %#v", deleted)
 	}
 	entries, err = List()
 	if err != nil {
-		t.Fatalf("List after remove: %v", err)
+		t.Fatalf("List after delete: %v", err)
 	}
 	if len(entries) != 0 {
-		t.Fatalf("entries after remove = %#v", entries)
+		t.Fatalf("entries after delete = %#v", entries)
 	}
 }
 

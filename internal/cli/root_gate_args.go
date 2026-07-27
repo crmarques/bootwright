@@ -84,7 +84,7 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "add", "remove", "rm":
+		case "add", "delete":
 			return argsHaveNameValue(args[2:])
 		case "list":
 			return true

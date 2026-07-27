@@ -37,9 +37,9 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 
-	stdout, stderr, code = runCLI(t, "media", "remove", "--name", "rhel.iso", "--yes")
+	stdout, stderr, code = runCLI(t, "media", "delete", "--name", "rhel.iso", "--yes")
 	if code != 0 {
-		t.Fatalf("media remove exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+		t.Fatalf("media delete exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	if _, err := os.Stat(filepath.Join(media.StoreDir(), "rhel.iso")); !os.IsNotExist(err) {
 		t.Fatalf("stored ISO still exists or stat failed: %v", err)

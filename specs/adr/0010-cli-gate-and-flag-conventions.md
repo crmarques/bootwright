@@ -79,7 +79,7 @@ touch root-owned state:
   accepts families only, because a sub-phase has no single destroy
   playbook.
 - Targeted resource commands take `--name` rather than positionals
-  (`secret delete/show`, `media add/remove`, `add-ons add/delete`,
+  (`secret delete/show`, `media add/delete`, `add-ons add/delete`,
   `machine`/`cluster` `rsh`/`exec`).
 
 ### Destructive-command gating and override remedies

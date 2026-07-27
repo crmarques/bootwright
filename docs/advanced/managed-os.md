@@ -378,7 +378,7 @@ subcommands before applying:
 bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file ./rhel-9.7-x86_64-boot.iso
 bootwright media add --name rhel-9.7-x86_64-dvd.iso  --from-url http://mirror.example.test/rhel.iso --sha256 <hex>
 bootwright media list
-bootwright media remove --name rhel-9.7-x86_64-boot.iso --yes
+bootwright media delete --name rhel-9.7-x86_64-boot.iso --yes
 ```
 
 `media add` takes exactly one of `--from-file` or `--from-url`, an optional

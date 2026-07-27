@@ -26,7 +26,7 @@ func newMediaCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	cmd.AddCommand(
 		newMediaAddCmd(stdin, stdout),
 		newMediaListCmd(stdout),
-		newMediaRemoveCmd(stdin, stdout),
+		newMediaDeleteCmd(stdin, stdout),
 	)
 	requireSubcommand(cmd)
 	return cmd
@@ -140,34 +140,33 @@ func newMediaListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newMediaRemoveCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+func newMediaDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var name string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:     "remove --name <filename.iso>",
-		Aliases: []string{"rm"},
-		Short:   "Remove an ISO from the managed media store",
-		Args:    cobra.NoArgs,
+		Use:   "delete --name <filename.iso>",
+		Short: "Delete an ISO from the managed media store",
+		Args:  cobra.NoArgs,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "media store filename, e.g. rhel-9-x86_64-dvd.iso (required)")
-	addYesFlag(cmd, &yes, "remove")
+	addYesFlag(cmd, &yes, "delete")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if name == "" {
 			return failf(2, "--name is required")
 		}
-		output.New(stdout).Command("media remove")
+		output.New(stdout).Command("media delete")
 		key := name
-		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Remove media %s from %s? [y/N] (default: no): ", key, media.StoreDir())) {
-			return failErr(1, errors.New("media remove aborted"))
+		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete media %s from %s? [y/N] (default: no): ", key, media.StoreDir())) {
+			return failErr(1, errors.New("media delete aborted"))
 		}
-		entry, err := media.Remove(key)
+		entry, err := media.Delete(key)
 		if err != nil {
 			if strings.Contains(err.Error(), "no such file") {
 				return failf(1, "media %q not found in %s", key, media.StoreDir())
 			}
 			return failErr(1, err)
 		}
-		output.NewContinuation(stdout).Summary(output.StatusOK, entry.Name, "removed "+entry.Path)
+		output.NewContinuation(stdout).Summary(output.StatusOK, entry.Name, "deleted "+entry.Path)
 		return nil
 	}
 	return cmd
