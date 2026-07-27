@@ -121,10 +121,16 @@ context-scoped loader so the teardown executes against exactly the set planning
 gated and the preview showed. The destroy task graph is split-equals-monolith:
 every `task_*_destroy` playbook (the real entry points; `workflow_*_destroy`
 are thin wrappers) reuses the run's `--limit` and extra-vars unchanged and
-restricts itself with its own `hosts:` selector. The chain uses ORDERING deps
+restricts itself with its own `hosts:` selector. Most edges are ORDERING deps
 so one failed stage no longer blocks later independent stages — safe because
-each step carries its own ownership/safety gate; chain order is correctness,
-not a safety boundary. A scoped infra destroy also refuses when selected
+each step carries its own ownership/safety gate. THREE edges are fail-closed
+hard deps and ARE safety boundaries (ADR 0023): guest machine-infra before its
+KubeVirt host's, container-cluster records on the whole machine-infra set, and
+the terminal machine-infra records sweep on that same set. Everything else is
+ordering. `TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph` now
+enforces that the `workflow_*_destroy` wrappers are a topological order of the
+graph the split path emits; they had silently disagreed for a long time.
+A scoped infra destroy also refuses when selected
 clusters share a provider service component with unscoped clusters
 (`stategraph.SharedDestroyConflicts`) — container names and state dirs are
 keyed per (provider, name), so destroying a shared instance breaks the
@@ -176,15 +182,23 @@ already read `storage-destroy-result.json` out of the run's task-artifacts
 directory — purging earlier would race that read.
 
 **Full lifecycle reverses credential dependencies, not only stage names:**
-no-stage `destroy --clusters` uses the selected `all` work set. Managed storage
-must be removed before its machines; machine registration and infra-component
-services are removed before machine substrate, then container runtime follows.
-Infra-component teardown connects over SSH to its placement machine, so running
-machine infrastructure first makes a successfully deleted service host
-unresolvable or unreachable before its services and ownership records can be
-removed. Machine-scoped destroy deliberately keeps only registration and
-machine-infrastructure steps; it must not inherit the reordered full infra
-chain by slicing it. Container cleanup has a HARD dependency on successful
+no-stage `destroy --clusters` uses the selected `all` work set. Teardown is the
+inverse of build-up (ADR 0023): cluster installer/add-on runtime and managed
+storage go first, then registration and node access, then machine substrate,
+then cluster records, then infra-component and provider services LAST — apply
+gives every machines-phase task an explicit dependency on the fabric services,
+so the fabric outlives the machines it serves. The one carve-out is the
+infra-component PLACEMENT CLOSURE: a cluster hosting an infra component, or any
+transitive KubeVirt host of one, tears its machines down AFTER infra components,
+because that teardown connects over SSH to its own placement machine. The
+closure over ancestors is what keeps the carve-out acyclic; `destroyChain` runs
+an explicit Kahn pass and fails planning on a cycle, because the scheduler
+otherwise breaks silently on `running == 0 && !startedAny`.
+Machine-scoped destroy deliberately keeps only registration and
+machine-infrastructure steps, UNFANNED; it must not inherit the reordered full
+infra chain by slicing it, and must not fan, because
+`ResetMachineConvergeRecordsAfterDestroy` gates on the BARE kind key that
+fan-out leaves false. Container cleanup has a HARD dependency on successful
 machine teardown. That hard edge keeps cluster kubeconfigs, install records,
 and ownership evidence when VM deletion fails. It is also what lets a selected
 KubeVirt child be deleted through its still-live host before a selected host
@@ -237,8 +251,17 @@ carries its own `DestroyTaskKindStorageNodeAccess`, not
 `DestroyTaskKindStorageCluster`, so `destroyKindForApplyTaskKind` only clears
 the apply-side `nodeaccess.<cluster>` converge record once this dedicated step
 succeeds — a bare "Storage clusters" success no longer implies node access was
-reverted. Guarded by TestPlanDestroyTasksClustersChain,
+reverted. Since ADR 0023 these three steps fan PER STORAGE CLUSTER, so the rule
+is "node access revoke is last FOR ITS OWN CLUSTER", not last globally: the
+edges are `storage-clusters.<S>` then `machine-registration.<S>` then
+`storage-node-access.<S>`, and they must never cross clusters, or one cluster's
+failure serialises an unrelated one. The shared-identity hazard is per node, and
+the inventory still renders one `ansible_user` per node per run, so two storage
+clusters sharing a node with different `clusterSSH` identities remains broken
+exactly as before — that needs a validation rule, not a chain-order workaround.
+Guarded by TestPlanDestroyTasksClustersChain,
 TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
+TestPlanDestroyTasksFansOutIndependentStorageClusters,
 TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
 TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.
 

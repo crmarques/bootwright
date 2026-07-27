@@ -179,13 +179,20 @@ failed heartbeat save) stops the run rather than risking a double mutator.
 
 ### Teardown makes maximal progress behind dependency-aware gates
 
+The ordering rule in this section is superseded by
+[ADR 0023](0023-teardown-is-the-inverse-of-buildup.md), which derives the
+destroy order by inverting the apply graph, fans the per-cluster steps out, and
+names three fail-closed edges rather than one. The gating philosophy below is
+unchanged and still governs.
+
 The destroy task graph sequences independent stages with ordering dependencies,
-so a failed stage does not block later independent cleanup. Full-lifecycle
-container runtime cleanup is the exception: it has a hard dependency on
+so a failed stage does not block later independent cleanup. Container-cluster
+records cleanup is the exception: it has a hard dependency on
 successful machine-infrastructure teardown because deleting cluster kubeconfigs
 or install records while an owned VM remains would erase the evidence and access
-needed to retry. Machine infrastructure is therefore removed before container
-runtime; when a KubeVirt host and child are selected together, child guests are
+needed to retry. Machine infrastructure is therefore removed before the records
+half of container teardown; when a KubeVirt host and child are selected
+together, child guests are
 deleted through the still-live host before the host's own machine substrate or
 kubeconfig is removed. Machine teardown uses child-before-host dependency order
 and rejects a KubeVirt host-reference cycle. An unreachable KubeVirt host

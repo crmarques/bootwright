@@ -302,7 +302,7 @@ no-`--stage` default differs from `apply`:
 
 | Invocation | Effect |
 | --- | --- |
-| `destroy` (no `--stage`) | Full lifecycle teardown: storage runtime, machine infrastructure, container runtime, then exclusively owned services; unscoped also sweeps context-owned VM artifacts and orphan ownership records. |
+| `destroy` (no `--stage`) | Full lifecycle teardown, the inverse of build-up: cluster and storage runtime first, then registration and node access, then machine infrastructure (guests before their KubeVirt hosts), then cluster records, then exclusively owned services; unscoped also sweeps context-owned VM artifacts and orphan ownership records. |
 | `destroy --stage clusters` | Cluster-stage runtime only (install runtime, add-on records, storage attachment records, managed storage services); leaves provider infrastructure. |
 | `destroy --stage infra` | Infrastructure teardown; without `--clusters` it also sweeps all context-owned VMs the provider adapters can identify. |
 | `destroy --clusters <names>` | Full lifecycle teardown for those roots, including positively owned virtual machines; retains bare-metal hardware and installed OS. |

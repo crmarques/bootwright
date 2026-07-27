@@ -1785,8 +1785,14 @@ Rules:
   `--clusters`, it must also remove all context-owned VMs that provider
   adapters can identify. With `--clusters`, it is limited to selected
   `ContainerCluster` or `StorageCluster` roots and must not run context-wide VM
-  cleanup. Infra-component services are removed before machine infrastructure
-  so their placement machines remain reachable for teardown. Managed machine
+  cleanup. Infra-component services are removed after machine infrastructure,
+  because apply makes every machines-phase task depend on the fabric services
+  and teardown is the inverse of build-up; the managed name-resolution and proxy
+  components serve the addresses machine teardown itself connects through. The
+  exception is the infra-component placement closure: a machine infrastructure
+  step whose cluster hosts an infra component, or is a transitive KubeVirt host
+  of one, runs after infra-component removal so that placement machine remains
+  reachable for its own teardown. Managed machine
   disk cleanup is limited to provider-owned disks or declared
   Bootwright-managed devices; Bootwright must not wipe arbitrary visible disks.
 - `destroy --stage clusters` removes cluster-stage runtime for selected or all
@@ -1797,10 +1803,14 @@ Rules:
   state removal is scoped to the owned cluster's fsid directories; the shared
   `/etc/ceph`, `/var/lib/ceph`, and `/var/log/ceph` trees are removed
   wholesale only when no foreign fsid remains on the node.
-- `destroy` with `--stage` omitted tears down the full lifecycle of its work set:
-  storage-cluster runtime, machine registration, and exclusively owned
-  infra-component services are removed before machine infrastructure, then
-  container-cluster runtime and provider services are removed. Without
+- `destroy` with `--stage` omitted tears down the full lifecycle of its work set
+  as the inverse of build-up: container-cluster installer and add-on runtime
+  first, concurrently with storage-cluster runtime; then machine registration and
+  storage node access; then machine infrastructure, guests strictly before their
+  KubeVirt hosts; then container-cluster records and captured credentials; and
+  finally the exclusively owned infra-component services and provider services.
+  Steps that name a single cluster are planned per cluster, so one cluster's
+  failure blocks only its own dependents rather than the whole fleet. Without
   `--clusters`, the work set is the whole context and the infra teardown also
   sweeps context-owned VM artifacts and orphan ownership records exactly as
   unscoped `destroy --stage infra` does. With `--clusters`, the work set is

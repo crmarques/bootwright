@@ -235,6 +235,36 @@ func TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess(t *testing.T)
 	}
 }
 
+func TestFannedMachineInfraAttributesOutcomePerCluster(t *testing.T) {
+	ledger := workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{
+		{
+			ID:           "destroy.machine-infra.ceph-a",
+			Kind:         workflow.DestroyTaskKindMachineInfra,
+			ResourceKeys: []string{"ceph-a", workflow.DestroyMachineResourceKeyPrefix + "a0"},
+			Status:       workflow.TaskStatusOK,
+		},
+		{
+			ID:           "destroy.machine-infra.ceph-b",
+			Kind:         workflow.DestroyTaskKindMachineInfra,
+			ResourceKeys: []string{"ceph-b"},
+			Status:       workflow.TaskStatusFailed,
+		},
+	}}
+	outcome := workflow.SucceededDestroyTaskKinds(ledger)
+	if !outcome.Covers(workflow.DestroyTaskKindMachineInfra, "ceph-a") {
+		t.Fatal("a fanned machine teardown that succeeded must claim its own cluster, or its substrate release is withheld because an unrelated cluster failed")
+	}
+	if outcome.Covers(workflow.DestroyTaskKindMachineInfra, "ceph-b") {
+		t.Fatal("a failed fanned machine teardown must not claim its cluster")
+	}
+	if outcome[workflow.DestroyTaskKindMachineInfra] {
+		t.Fatal("the bare kind key must stay false while any task of that kind is non-OK: ResetMachineConvergeRecordsAfterDestroy gates the whole machine reset on it")
+	}
+	if outcome.Covers(workflow.DestroyTaskKindMachineInfra, "machine:a0") {
+		t.Fatal("machine-prefixed resource keys serialise concurrent tasks and must never become cluster coverage keys, or a release is written for work that never ran")
+	}
+}
+
 func objectRecorded(objects []workflow.ObjectClassification, key string) bool {
 	for _, o := range objects {
 		if o.ObjectKey == key {

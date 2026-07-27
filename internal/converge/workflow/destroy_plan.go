@@ -416,21 +416,6 @@ func destroyStorageInventoryGroupClusters(state v1alpha1.State) map[string]bool 
 	return out
 }
 
-func fanOutDestroyStep(state v1alpha1.State, step destroyStep, clusters []string) []destroyStep {
-	out := make([]destroyStep, 0, len(clusters))
-	for _, cluster := range clusters {
-		fanned := step
-		fanned.id = step.id + "." + cluster
-		fanned.baseID = step.id
-		fanned.label = step.label + " " + cluster
-		fanned.limit = render.StorageClusterGroupName(cluster)
-		fanned.forksLimit = render.StorageClusterGroupName(cluster)
-		fanned.resourceKeys = destroyClusterResourceKeys(state, cluster)
-		out = append(out, fanned)
-	}
-	return out
-}
-
 func destroyClusterResourceKeys(state v1alpha1.State, cluster string) []string {
 	out := []string{cluster}
 	for _, machine := range ClusterSubstrateMachineNames(state, cluster) {
@@ -578,24 +563,6 @@ func machineInfraDestroyGraph(state v1alpha1.State) (map[string]bool, map[string
 		}
 	}
 	return names, parents
-}
-
-func destroyStepClusters(state v1alpha1.State, kind string) []string {
-	var names []string
-	switch kind {
-	case DestroyTaskKindStorageCluster, DestroyTaskKindStorageNodeAccess:
-		for _, cluster := range state.StorageClusters {
-			names = append(names, cluster.Metadata.Name)
-		}
-	case DestroyTaskKindContainerCluster:
-		for _, cluster := range state.ContainerClusters {
-			names = append(names, cluster.Metadata.Name)
-		}
-	default:
-		return nil
-	}
-	sort.Strings(names)
-	return names
 }
 
 func PrepareDestroyTaskGraph(runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {

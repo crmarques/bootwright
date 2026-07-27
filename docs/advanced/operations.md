@@ -115,7 +115,7 @@ apply/plan reruns only; `destroy` does not accept them.
 | --- | --- |
 | `destroy --stage clusters` | Cluster-stage runtime for selected or all `ContainerCluster` and `StorageCluster` names: OpenShift install runtime, add-on records, generated storage attachment records, and managed storage cluster services and runtime. Does not touch provider infrastructure. |
 | `destroy --stage infra` | Provider, infra-component, machine-infra, and storage-infra state. Without `--clusters` it also sweeps every context-owned VM that provider adapters can identify. |
-| `destroy` (no `--stage`) | Full lifecycle for the work set: storage runtime, machine infrastructure, container runtime, then exclusively owned services. With no selector it covers the context and also runs the context-wide VM and orphan-ownership sweep; with `--clusters` it is limited to those roots. |
+| `destroy` (no `--stage`) | Full lifecycle for the work set, as the inverse of build-up: cluster installer and add-on runtime together with storage runtime, then registration and node access, then machine infrastructure with guests before their KubeVirt hosts, then cluster records, then exclusively owned infra-component and provider services. With no selector it covers the context and also runs the context-wide VM and orphan-ownership sweep; with `--clusters` it is limited to those roots. |
 
 !!! note "The no-stage default is full teardown"
     Omitting `--stage` tears down the full lifecycle of the work set. With no

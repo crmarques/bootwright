@@ -32,3 +32,4 @@ files.
 | [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | Accepted |
 | [0021](0021-external-playbook-content.md) | External Playbook Content | Accepted |
 | [0022](0022-cluster-wait-bootstrap-boundary.md) | Cluster Install Wait Splits at the Bootstrap Boundary | Accepted |
+| [0023](0023-teardown-is-the-inverse-of-buildup.md) | Teardown Is the Inverse of Build-Up | Accepted |
