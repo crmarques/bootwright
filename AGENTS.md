@@ -69,6 +69,14 @@ depends on them.
   and external process passthrough such as Ansible streams.
 - **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases,
   compatibility shims, or legacy examples.
+- **State-change authorization.** A state change happens only when the operator
+  explicitly asked for it. Every new state-changing command, flag, kind, or
+  provider must classify its authorization and default to refusal: drift,
+  foreign ownership, unknown state, or a failed probe fails closed before the
+  first side effect; a refusal names what was found, why it is unsafe, and the
+  exact `bootwright …` command that proceeds intentionally; and the case joins
+  the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`. The
+  normative contract is in `specs/state-model.md` and ADR 0007.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
   teach workflows and link back. Add implementation detail only when current code
   or an accepted decision needs it.

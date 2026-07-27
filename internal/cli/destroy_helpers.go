@@ -41,8 +41,14 @@ func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.Partia
 	}
 }
 
-func printConvergeRecordResetProblems(stdout io.Writer, problems []error) {
+func printConvergeRecordResetProblems(stdout io.Writer, problems []error) error {
+	if len(problems) == 0 {
+		return nil
+	}
+	details := make([]string, 0, len(problems))
 	for _, problem := range problems {
 		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run destroy before the next apply")
+		details = append(details, problem.Error())
 	}
+	return fmt.Errorf("teardown finished but %d post-destroy record cleanup(s) failed: %s; a surviving converge record makes the next apply classify the destroyed resource as already converged and skip re-provisioning it, and a missing substrate-release record leaves its reinstall unauthorized — remove the reported file(s) under the context's runs/ tree, or re-run bootwright destroy for the same scope, before the next apply", len(problems), strings.Join(details, "; "))
 }

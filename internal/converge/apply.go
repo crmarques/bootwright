@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -45,7 +47,51 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	return fmt.Errorf("apply --converge-drifted would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
 }
 
-func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
+func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string, ownershipRecords []ownership.ResourceRecord) error {
+	if err := checkContainerRenameOrphan(state, objects, clustersDir); err != nil {
+		return err
+	}
+	return checkStorageRenameOrphan(state, objects, ownershipRecords)
+}
+
+func checkStorageRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, ownershipRecords []ownership.ResourceRecord) error {
+	declared := map[string]bool{}
+	for _, cluster := range state.StorageClusters {
+		declared[cluster.Metadata.Name] = true
+	}
+	seen := map[string]bool{}
+	var undeclared []string
+	for _, record := range ownershipRecords {
+		if record.Kind != string(ownership.KindStorageCluster) || record.Cluster == "" {
+			continue
+		}
+		if record.Owner != "" && record.Owner != ownership.Owner {
+			continue
+		}
+		if declared[record.Cluster] || seen[record.Cluster] {
+			continue
+		}
+		seen[record.Cluster] = true
+		undeclared = append(undeclared, record.Cluster)
+	}
+	if len(undeclared) == 0 {
+		return nil
+	}
+	var created []string
+	for _, o := range objects {
+		if o.Kind == workflow.ObjectKindStorageCluster && !o.Recorded() {
+			created = append(created, strings.TrimPrefix(o.Label, workflow.ObjectKindStorageCluster+"/"))
+		}
+	}
+	if len(created) == 0 {
+		return nil
+	}
+	sort.Strings(undeclared)
+	sort.Strings(created)
+	return fmt.Errorf("apply would provision new StorageCluster(s) %s while %s remain provisioned (Bootwright ownership records prove a live cephadm cluster) but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would bootstrap the new name from scratch, reimaging its machines on bare metal, and orphan the old Ceph cluster with its OSD data. To rename, restore the old metadata.name; to replace, temporarily restore the old StorageCluster YAML (metadata.name %s), run `bootwright destroy --clusters %s`, then remove that YAML and re-apply — destroy resolves --clusters against the declared state, so the old cluster can only be torn down while its YAML is present; to keep both, leave the old cluster declared", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+}
+
+func checkContainerRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
 	provisioned, err := workflow.RecordedProvisionedClusters(clustersDir)
 	if err != nil {
 		return err

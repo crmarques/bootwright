@@ -77,6 +77,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 
 | Topic | File |
 | --- | --- |
+| The registries and guard tests that keep the apply/destroy authorization contract closed over new code: the ApplyTaskKinds registry, the reconfigure-only allowlist, the apply-kind→destroy-kind reset map, the record round-trip pin, and the (command, flags, state, scope) safety matrix built on the advanced two-DC baseline. | [apply-destroy-authorization-guards.md](apply-destroy-authorization-guards.md) |
 | Planner gotchas: prior-phase capability injection silently dropping ordering deps, conditional ISO dependencies, virtctl provisioning/preflight split, phantom install records on skip, provisioning-playbook guards, ordering-vs-hard deps, and where apply-result state belongs. | [apply-task-graph-planning.md](apply-task-graph-planning.md) |
 | Substrate destroy refuse-foreign/warn gates stay per-resource: a shared foreign_gate helper was evaluated and rejected (non-uniform control flow, resource-specific fail_msg remediation, audited test pins). | [substrate-destroy-gate-no-shared-helper.md](substrate-destroy-gate-no-shared-helper.md) |
 | How the container-cluster install-record gate refuses silent adoption, why destroy must remove controller-side install state, how apply --converge-drifted skips healthy Available=True clusters but rebuilds on probe error, and the structural-hash migration-safety rules. | [cluster-install-record-gates.md](cluster-install-record-gates.md) |

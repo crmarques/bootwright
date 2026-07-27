@@ -101,8 +101,25 @@ func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
-	b.WriteString("include the nested cluster(s) in --clusters or destroy them first; --force does not widen the selected work set")
+	tenants := strings.Join(kubeVirtConflictTenants(conflicts), ",")
+	b.WriteString("include the nested cluster(s) in the same selection, or destroy them first with `bootwright destroy --clusters " + tenants + " --yes`; --force does not widen the selected work set")
 	return fmt.Errorf("%s", b.String())
+}
+
+func kubeVirtConflictTenants(conflicts []KubeVirtTenantConflict) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range conflicts {
+		for _, tenant := range c.Tenants {
+			if seen[tenant] {
+				continue
+			}
+			seen[tenant] = true
+			out = append(out, tenant)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func ValidateKubeVirtClusterSelection(state v1alpha1.State, containerNames []string, clustersDir string) error {

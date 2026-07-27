@@ -381,86 +381,6 @@ learned; this file records what it still owes.
   `.agents/knowledge/`.
 - Related: add-ons/fusion-data-foundation/4.21/add-on.yaml, add-ons/catalog.yaml
 
-## B-029 — Post-destroy record-cleanup failures degrade to warnings
-- Status: open
-- Area: converge / destroy / records
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: medium
-- Problem: `ResetConvergeRecordsAfterDestroy` and
-  `ResetMachineConvergeRecordsAfterDestroy` (internal/converge/destroy.go:105,
-  191) collect record-removal/release-write problems into `[]error`, and the
-  only consumer, `printConvergeRecordResetProblems`
-  (internal/cli/scope_destroy_cmd.go:395), prints them as "stale records"
-  warnings — the destroy still exits 0. A failed converge-record removal
-  leaves the resource classifying `match` against pre-destroy evidence (the
-  next apply skips re-provisioning it), and a failed substrate-release write
-  leaves the reinstall unauthorized; both surface only as a scrollable
-  warning line.
-- Exit: decide a hard-fail or retry story — e.g. exit non-zero when any
-  cleanup problem remains, or persist a "cleanup pending" marker that the next
-  apply/destroy refuses to proceed past, so a stale record cannot silently
-  survive its teardown.
-- Related: internal/converge/destroy.go, internal/cli/scope_destroy_cmd.go
-
-## B-030 — Availability-probe ERRORS count as reinstall triggers under --converge-drifted
-- Status: open
-- Area: converge / apply-modes / container-clusters
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: high
-- Problem: `OverrideRebuildInstalledClusters`
-  (internal/converge/workflow/install_state.go:407-418) adds a cluster to the
-  reinstall set when the availability probe returns an ERROR (`availErr !=
-  nil`), not only when the cluster reports `Available=False`. Under
-  `--converge-drifted --confirm-data-loss --yes` a transient API outage,
-  expired kubeconfig, or controller-side network blip therefore authorizes a
-  full reinstall that wipes node disks. The descriptor text names the remedy,
-  but a non-interactive run never shows it before acting.
-- Exit: treat probe errors as fail-closed refusals distinct from a probed
-  `Available=False` — abort the run naming the unreachable cluster rather than
-  scheduling its reinstall, and require the operator to exclude it or restore
-  reachability.
-- Related: internal/converge/workflow/install_state.go
-
-## B-031 — The Go `foreign` record tier has no writer
-- Status: open
-- Area: converge / records
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: low
-- Problem: `ClassifyConvergeSafety`
-  (internal/converge/workflow/converge_safety.go:293-304) returns `foreign`
-  when `record.Owner.Manager != "bootwright"`, but the only record writer
-  (converge_safety.go:197-199) always stamps `Manager: "bootwright"` — no code
-  path ever writes a different manager, so the `foreign` tier is dead
-  defense-in-depth exercised only by tests. A record-schema change (e.g. a
-  renamed owner field decoding to empty) could silently flip every record to
-  `foreign` — or a marshalling bug could orphan the refusal entirely — with no
-  writer-side round-trip pinning the contract.
-- Exit: either add a guard test that round-trips a written record through the
-  classifier and pins the owner-field schema, or document the tier as
-  corruption-detection-only in ADR 0007 so a schema migration knows it must
-  keep the refusal reachable.
-- Related: internal/converge/workflow/converge_safety.go,
-  specs/adr/0007-apply-destroy-safety-model.md
-
-## B-032 — --reclaim-devices uses --converge-drifted as its destroyProtection override
-- Status: open
-- Area: cli / apply-modes / safety
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: medium
-- Problem: `CheckReclaimDestroyProtection` (internal/converge/apply.go:119-130)
-  waives the `destroyProtection`/`protectedKinds` gate for `--reclaim-devices`
-  when `--converge-drifted` is passed ("add --converge-drifted to authorize"),
-  while `CheckApplyOverrideDestroyProtection` (apply.go:16-46) refuses drifted
-  destructive rebuilds on a protected environment even WITH
-  `--converge-drifted`, routing them through `destroy --force`. The same flag
-  is a sufficient protected-data-loss override on one path and explicitly
-  insufficient on the other — an inconsistent authorization boundary.
-- Exit: unify the contract: either route protected-device reclaim through the
-  destroy authorization boundary like drifted rebuilds, or record the
-  deliberate asymmetry (in-band recovery of an owned disk vs. whole-object
-  rebuild) in ADR 0007 and the state-model reclaim bullet.
-- Related: internal/converge/apply.go, specs/state-model.md
-
 ## B-033 — Incomplete-bootstrap Ceph recovery zaps OSDs without the rebuild-authorized list
 - Status: open
 - Area: ceph / apply-modes
@@ -481,42 +401,6 @@ learned; this file records what it still owes.
   data-free.
 - Related: [ceph-override-structural-rebuild.md](ceph-override-structural-rebuild.md)
 
-## B-034 — Rename fail-closed gate covers ContainerClusters only
-- Status: open
-- Area: converge / apply-modes / storage
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: medium
-- Problem: `CheckApplyRenameOrphan` (internal/converge/apply.go:48-79) detects
-  the rename signature (new cluster provisioned while a provisioned cluster is
-  no longer declared) only for `state.ContainerClusters` against
-  `RecordedProvisionedClusters`. A renamed `StorageCluster` has no equivalent
-  gate: apply provisions the new name from scratch (reimaging its machines on
-  bare metal) and silently orphans the old, still-running Ceph cluster and its
-  converge/ownership records.
-- Exit: extend the gate to StorageClusters using their converge-safety or
-  ownership records as the "provisioned" evidence, with the same
-  restore-then-destroy remedy text.
-- Related: internal/converge/apply.go, specs/adr/0007-apply-destroy-safety-model.md
-
-## B-035 — --include-unowned lifts refusals beyond its spec enumeration
-- Status: open
-- Area: cli / destroy / spec-truth
-- Origin: apply/destroy safety audit 2026-07-23
-- Severity: low
-- Problem: the state-model `destroy --include-unowned` bullet
-  (specs/state-model.md:1759) enumerates "a libvirt domain, KubeVirt
-  VirtualMachine, or vSphere VM", but the flag's extra-var also lifts the
-  unowned-refusal for the shared libvirt NETWORK
-  (machine_substrate_libvirt/tasks/destroy.yml:182-196) and for KubeVirt
-  DataVolumes (machine_substrate_kubevirt/tasks/destroy.yml:222-234). Both are
-  reasonable but undocumented: an operator authorizing an unowned VM teardown
-  is also authorizing removal of a network other machines may use.
-- Exit: either extend the spec enumeration (and the flag help text) to name
-  the network/DataVolume surfaces, or split the network case behind its own
-  refusal that --include-unowned does not lift.
-- Related: specs/state-model.md,
-  [substrate-destroy-gate-no-shared-helper.md](substrate-destroy-gate-no-shared-helper.md)
-
 ## B-036 — all:true filter-OSD reclaim swallows zap failures
 - Status: open
 - Area: ceph / osd-safety
@@ -533,3 +417,22 @@ learned; this file records what it still owes.
   per-device failure summary and exclude the device from the expected-OSD
   count so the readiness wait can diagnose instead of hanging.
 - Related: [ceph-osd-device-safety.md](ceph-osd-device-safety.md)
+
+## B-037 — No managed-OS machine in the advanced safety-matrix baseline
+- Status: open
+- Area: examples / tests / safety-matrix
+- Origin: apply/destroy safety contract review 2026-07-26
+- Severity: low
+- Problem: `examples/baremetal-redfish-multidc-virtualized-odf-ceph` is the
+  advanced baseline the safety matrix
+  (internal/cli/apply_destroy_safety_matrix_test.go) runs on. Its KubeVirt-hosted
+  child clusters do give the matrix real machine-substrate rows (release
+  disclosure, machine-granular release), but every Ceph node declares
+  `os.provided: true` and every KubeVirt *host* is bare metal, so two paths stay
+  unreachable end-to-end: the bare-metal managed-OS reinstall data-loss
+  acknowledgment, and a machine-substrate rebuild of a KubeVirt host cluster.
+  Both are pinned only at unit level.
+- Exit: add a managed-OS machine (or a libvirt-hosted KubeVirt host) to the
+  baseline — in the existing example or a second one — and promote those two
+  scenarios into the matrix.
+- Related: [apply-destroy-authorization-guards.md](apply-destroy-authorization-guards.md)

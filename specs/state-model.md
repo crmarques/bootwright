@@ -1810,7 +1810,12 @@ Rules:
   gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
   VM that matches the Bootwright `<cluster>-<machine>` naming but carries a
   missing or mismatched ownership marker — the recovery path when the
-  desired-state names changed after the resources were applied. It is orthogonal
+  desired-state names changed after the resources were applied. The same
+  relaxation covers the substrate resources those VMs own or share: the
+  cluster's libvirt network and its KubeVirt DataVolumes. The network is the
+  widest surface it lifts — removing an unowned libvirt network can strand VMs
+  of another context that use it — so the flag is scoped to the machine layer
+  and refused outside it. It is orthogonal
   to `--force` (it neither authorizes protected-environment teardown nor is
   authorized by it), does not relax the Ceph cluster or OSD-device ownership
   gates, never relaxes the device data-safety checks (a mounted, in-use, or
@@ -1844,7 +1849,20 @@ Rules:
 - Destroying a KubeVirt host cluster while an installed nested cluster is left
   outside the selected work set fails before mutation. `--force` does not widen
   `--clusters`; the nested cluster must be selected in the same full-lifecycle
-  destroy or destroyed first.
+  destroy or destroyed first. The same gate binds a *scoped* `apply` that would
+  rebuild a host cluster's machine substrate — a `--converge-drifted` rebuild or
+  a release-authorized reinstall — and it keys on the run's selected work set,
+  so a `--machines` selection is gated exactly like a `--clusters` one: the
+  nested cluster must be inside the selection or already destroyed. An unscoped
+  apply covers every cluster, so nothing is left stranded and the gate does not
+  apply.
+- Post-teardown record cleanup is part of the destroy contract, not advisory
+  bookkeeping. When a destroy completes its remote work but cannot remove a
+  convergence record, an install record, or write a substrate-release record, it
+  reports each problem and exits non-zero: a surviving convergence record makes
+  the next `apply` classify the destroyed resource as already converged and skip
+  re-provisioning it, and a missing release record leaves its reinstall
+  unauthorized. The refusal names the files to remove or the destroy to re-run.
 - A destroy that tears down machine substrate writes a substrate-release
   record (`runs/substrate-release/`) — the positive authorization the next
   `apply` needs before it may reinstall the released substrate. The record is
@@ -1932,6 +1950,14 @@ Rules:
   fails closed under `--expect-new` unless the machine's substrate release
   covers it, so recorded state alone can never make `--expect-new` treat a
   live host as greenfield.
+- The rename signature fails closed for both cluster kinds. When an apply would
+  provision a new `ContainerCluster` or `StorageCluster` while a provisioned
+  cluster of the same kind is no longer declared, apply refuses before any
+  mutation and names the restore-then-`destroy --clusters` sequence. The
+  "provisioned" evidence is the per-cluster install record for a
+  `ContainerCluster` and the Bootwright-owned `storage-cluster` ownership record
+  for a `StorageCluster`; a record owned by another manager is never rename
+  evidence.
 - `apply` is additive for every kind: it never removes, deprovisions, or
   unconfigures a live resource whose declaration was deleted from desired state.
   Deletion is not a plannable apply action; removal crosses the destroy
@@ -1952,6 +1978,16 @@ Rules:
   Bootwright refuses to reboot without `--converge-drifted` (which recreates the agent
   ISO and reboots the nodes; no completed cluster is destroyed). An unrecognized
   phase also fails closed.
+- A cluster whose availability cannot be probed is never treated as a rebuild
+  candidate. When a `ContainerCluster` whose recorded install inputs match
+  desired state cannot be probed at all — no reachable API, no usable
+  kubeconfig, no `oc` — `apply --converge-drifted` fails closed before any
+  mutation, naming each unprovable cluster, the probe error, and the remedies
+  (restore reachability and re-run; exclude it with `--clusters`; or
+  `destroy --clusters <name>` then re-apply to rebuild it deliberately). A
+  probe that succeeds and reports `Available=False` is different evidence — the
+  cluster answered — and still authorizes the `--converge-drifted` rebuild under
+  the data-loss acknowledgment.
 - `apply --converge-drifted` is command-scoped. It may continue past Bootwright-owned
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the
@@ -1964,8 +2000,8 @@ Rules:
 - `--converge-drifted`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
-  provisioning, cluster add-ons, machine RHSM registration, provisioning-playbook
-  re-runs, and storage-attachment apply — it is an idempotent, non-destructive
+  provisioning, cluster add-ons, machine RHSM registration, and
+  provisioning-playbook re-runs — it is an idempotent, non-destructive
   re-apply that touches no data, OS, or VM. For every
   other kind — a managed-OS or substrate machine (reinstall; disks wiped) and a
   container or storage cluster (reinstall / `cephadm rm-cluster --zap-osds`) — it
@@ -2000,7 +2036,14 @@ Rules:
   cluster is recorded Bootwright-owned nothing is reclaimed. The wipe runs in the
   `deps` phase, so the run scope must include it (`--stage deps`, `--through
   base`, or the full graph), and it is gated by the same data-loss acknowledgment
-  (`--confirm-data-loss` or an interactive confirm).
+  (`--confirm-data-loss` or an interactive confirm). On a protected environment
+  (or with `StorageCluster` in `protectedKinds`) it additionally requires
+  `--converge-drifted` as the explicit protected-data-loss authorization. That
+  is a deliberate exception to the rule that a protected destructive rebuild
+  crosses the `destroy` boundary: reclaim recovers named devices of a cluster
+  that stays up, so routing it through `destroy` would demand a strictly larger
+  destruction (the whole Ceph cluster) to recover a smaller one. The refusal
+  names the flag that authorizes it.
 - `bootwright machine trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
   runs never record trust on first use, so pipelines record it with `machine

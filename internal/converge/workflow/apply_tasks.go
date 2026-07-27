@@ -53,6 +53,32 @@ const (
 	applyStoragePlaybook             = roles.PlaybookTaskStorageClusterApply
 )
 
+func ApplyTaskKinds() []string {
+	return []string{
+		ApplyTaskKindProvider,
+		ApplyTaskKindInfraComponentServices,
+		ApplyTaskKindMachineInfraPrepare,
+		ApplyTaskKindClusterInstall,
+		ApplyTaskKindMachineInfraFinalize,
+		ApplyTaskKindManagedMachineOS,
+		ApplyTaskKindMachineRegistration,
+		ApplyTaskKindStorageNodeAccess,
+		ApplyTaskKindStorageInfra,
+		ApplyTaskKindClusterISO,
+		ApplyTaskKindHostVirtctl,
+		ApplyTaskKindNodeBoot,
+		ApplyTaskKindInstallWait,
+		ApplyTaskKindStorageCluster,
+		ApplyTaskKindClusterAddon,
+		ApplyTaskKindNodeConfigApply,
+		ApplyTaskKindProvisioningPlaybook,
+	}
+}
+
+func ApplyTaskKindIsReconfigureOnly(kind string) bool {
+	return overrideReconfigureOnlyKinds[kind]
+}
+
 type ApplyMode string
 
 const (

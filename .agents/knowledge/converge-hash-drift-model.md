@@ -62,14 +62,18 @@ for the same reason: without it any day-2 edit flipped them to structural drift
 and continue refused with a false "would reinstall the machine — its disks
 wiped".
 
-**Override allowlist fails safe — with one retired member:**
+**Override allowlist fails safe, and holds only live task kinds:**
 `overrideReconfigureOnlyKinds` is an allowlist (unlisted kind = destructive).
-The RETIRED `storageAttachmentApply` task kind is deliberately kept in the set
-(its task constant was deleted) so pre-migration convergence records stay inert
-instead of tripping the destroy-protection gate. The allowlist is bound to the
-published taxonomy in specs/state-model.md and
+The retired `storageAttachmentApply` task kind is NOT in it — it was dropped
+with its task constant, and specs/docs kept naming it until the 2026-07-26
+contract review removed it from both. Every allowlist member must be a live
+`ApplyTaskKind*` constant: a retired member is silently unreachable
+defence-in-depth, and a live kind missing from the published taxonomy makes the
+spec under-state what `--converge-drifted` destroys. The allowlist is bound to
+the published taxonomy in specs/state-model.md and
 docs/advanced/ownership-and-safety.md by
-TestOverrideReconfigureOnlyKindsMatchPublishedContract — change them together.
+TestOverrideReconfigureOnlyKindsMatchPublishedContract (which also asserts every
+member is a live task kind) — change them together.
 
 **Two kind vocabularies:** aggregated object kinds
 (`ObjectClassification.Kind`) vs the lowercase task-kind constants in

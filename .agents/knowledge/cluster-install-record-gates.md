@@ -24,7 +24,11 @@ kubeconfig makes `ReconcileApplyClusterInstallState` refuse the next apply
 with the Available=True refusal above. `RecordedProvisionedClusters`
 enumerates the per-cluster record files (not desired state), which is how a
 rename (old record orphans, new name re-provisions) or an orphan (declaration
-removed without destroy) is detected.
+removed without destroy) is detected. A `StorageCluster` has no install record,
+so `CheckApplyRenameOrphan` reads its rename evidence from the
+`storage-cluster` **ownership** records instead (owner `bootwright`, `cluster`
+field) — same signature, same restore-then-destroy remedy, different evidence
+store.
 
 **Semantics (override healthy-skip):** `apply --converge-drifted` does **not**
 reinstall a healthy cluster. A cluster whose record matches the desired
@@ -32,11 +36,27 @@ install inputs, is `installed`, and whose kubeconfig probe reports
 Available=True has its install tasks skipped:
 `cluster already installed and Available=True for desired install inputs; --converge-drifted rebuilds only drifted objects, not a healthy in-sync cluster`.
 This protects healthy clusters caught in a scoped `apply --converge-drifted` aimed at
-some other drifted object. A probe **error** (`oc` missing from PATH, API
-refusing connection on a hard-down cluster) is treated as not-available under
-override — override exists precisely to rebuild an unreachable cluster — so
-the install tasks run. Without `--converge-drifted`, the same probe error is a hard
-refusal instead.
+some other drifted object.
+
+**Constraint (a failed probe is not a rebuild authorization):** a probe
+**error** on a cluster whose record matches the desired install inputs (`oc`
+missing from PATH, an unreadable/undecryptable kubeconfig, a network blip, an
+API timeout) is a fail-closed refusal in **every** mode, including
+`--converge-drifted`. `OverrideRebuildInstalledClusters` returns an error naming
+each unprovable cluster, the probe error, and three remedies (restore
+reachability, exclude it with `--clusters`, or `bootwright destroy --clusters
+<name> --yes` then re-apply); the run stops before any mutation. It previously
+scheduled the reinstall instead, so `--converge-drifted --confirm-data-loss
+--yes` could wipe the node disks of a healthy cluster whose API was momentarily
+unreachable. A *successful* probe reporting `Available=False` is different
+evidence — the cluster answered — and still authorizes the override rebuild,
+gated by the data-loss acknowledgment. That is the single sanctioned case of
+`--converge-drifted` acting on an object whose recorded desired state matches
+(evaluated and kept 2026-07-26; rationale in ADR 0007, "Ownership is the
+authorization boundary"). Do not re-propose routing it through `destroy`:
+the cluster supplied the evidence itself, the object matches its declaration but
+not its recorded condition, and repairing a dead cluster in place is the case the
+flag exists for.
 
 **Semantics (structural hash migration safety):** Install records carry both
 `DesiredHash` (full install-input hash) and `StructuralHash` (same payload

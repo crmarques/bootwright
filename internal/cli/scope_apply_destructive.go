@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -27,6 +28,14 @@ func filterReclaimAuthorizedClusters(state v1alpha1.State, objects []workflow.Ob
 		}
 	}
 	return out
+}
+
+func overrideReinstallPlan(cmdCtx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) (descriptors, acked []string, err error) {
+	reinstalls, err := workflow.OverrideRebuildInstalledClusters(cmdCtx, clustersDir, contextName, secretsDir, state, tasks, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return workflow.ClusterReinstallDescriptors(reinstalls), workflow.ClusterReinstallNames(reinstalls), nil
 }
 
 func filterReclaimDestructiveDescriptors(clusters []string) []string {

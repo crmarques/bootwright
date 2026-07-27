@@ -229,8 +229,24 @@ func FormatStorageConsumerConflicts(conflicts []stategraph.StorageConsumerConfli
 		b.WriteString(fmt.Sprintf("  - StorageCluster %s is consumed by %s\n",
 			c.StorageCluster, strings.Join(c.ConsumingClusters, ", ")))
 	}
-	b.WriteString("include the consuming cluster(s) in --clusters, destroy them first, or remove the storage attachment binding if the consumer is already gone")
+	b.WriteString("include the consuming cluster(s) in --clusters, destroy them first with `bootwright destroy --clusters " + strings.Join(storageConflictConsumers(conflicts), ",") + " --yes`, or remove the storage attachment binding if the consumer is already gone")
 	return fmt.Errorf("%s", b.String())
+}
+
+func storageConflictConsumers(conflicts []stategraph.StorageConsumerConflict) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range conflicts {
+		for _, name := range c.ConsumingClusters {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func formatScopeConflicts(conflicts []stategraph.DestroyScopeConflict, lead, closing string) error {

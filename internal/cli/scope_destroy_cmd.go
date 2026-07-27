@@ -67,7 +67,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	addAskBecomePassFlag(cmd, &askBecomePass)
 	addYesFlag(cmd, &yes, "destroy")
 	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
-	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
+	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Also lifts the same refusal for the cluster's libvirt network and KubeVirt DataVolumes — an unowned network may still be in use by another context's VMs. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
 	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks or imply --force or --yes")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
@@ -340,14 +340,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory, skipUnreachable)
+				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory, skipUnreachable)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, purgeHistory, skipUnreachable)
+			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, purgeHistory, skipUnreachable)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
+			if resetErr != nil {
+				return failErr(1, resetErr)
+			}
 			renderResult = result
 		default:
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter)
@@ -355,7 +358,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, derr)
 			}
 			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
-				printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, nil, nil, purgeHistory, skipUnreachable)
+				if resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, nil, nil, purgeHistory, skipUnreachable); resetErr != nil {
+					return failErr(1, resetErr)
+				}
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)

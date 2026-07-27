@@ -81,7 +81,23 @@ Unprovable is not absent: a live host that answers SSH but rejects every probe
 identity (or presents a changed host key) cannot prove ownership either way,
 so the managed-OS install fails closed on it exactly as on a foreign host —
 only the machine's substrate release, written by a destroy, authorizes
-reclaiming it.
+reclaiming it. The same rule governs cluster-level probes: a *failed* probe is
+unknown state, never a rebuild authorization. A `ContainerCluster` whose
+recorded install inputs match desired state but whose availability cannot be
+probed at all fails closed in every mode including `--converge-drifted`, while a
+probe that succeeds and answers `Available=False` is real evidence and may
+authorize the rebuild. Destroying a matching-but-dead object is the operator's
+explicit `destroy` decision, not an inference an apply flag draws from a
+timeout.
+
+Rebuilding that probed-unavailable cluster is the one place `--converge-drifted`
+acts on an object whose recorded desired state still matches, and it is
+deliberate: the object matches its *declaration* but not its recorded
+*condition*, the cluster itself supplied that evidence, and repairing a dead
+cluster in place is the case the flag exists for. It stays bounded by the
+data-loss acknowledgment and by ownership, and the plain-`apply` path refuses the
+same cluster with guidance to repair it instead. Everywhere else, forcing a clean
+rebuild of a matching object remains `destroy` then `apply`.
 Destructive authority flows through positive, fail-safe tokens — e.g. the
 storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can
@@ -101,13 +117,23 @@ normal ownership gate runs again; contradictory evidence is never overwritten.
 `apply` is additive: deletion is never a plannable apply action, and the
 rename signature (a new cluster provisioned while a different provisioned
 cluster is undeclared) fails closed rather than silently re-provisioning and
-orphaning. `Environment.spec.safety.destroyProtection` and `protectedKinds`
-are one shared source of truth gating both `destroy` and destructive
-`apply --converge-drifted` rebuilds, enforced entirely in Go — no Ansible destroy role
-consumes an override extra-var. Independent of protection, destructive
+orphaning — for both cluster kinds, reading install records for a
+`ContainerCluster` and Bootwright-owned `storage-cluster` ownership records for
+a `StorageCluster`. `Environment.spec.safety.destroyProtection` and
+`protectedKinds` are one shared source of truth gating both `destroy` and
+destructive `apply --converge-drifted` rebuilds, enforced entirely in Go — no
+Ansible destroy role consumes an override extra-var. The single deliberate
+exception is `--reclaim-devices`, where `--converge-drifted` authorizes the
+protected wipe in place: reclaim recovers named devices of a cluster that stays
+up, so routing it through `destroy` would require destroying strictly more to
+recover less. Independent of protection, destructive
 rebuilds require a data-loss acknowledgment; `--yes` never authorizes
 destruction. Remedies must route to the stage that actually clears the block
 (machine substrate → `destroy --stage infra`), or the operator loops forever.
+Teardown is not finished until its records are: a destroy that cannot remove a
+convergence/install record or write a substrate release exits non-zero, because
+a surviving record silently converts the next apply's re-provisioning into a
+skip.
 
 ### Scope: render against the render set, mutate only the work set
 
@@ -139,7 +165,10 @@ machine with no provisioning work.
 `--force` never widens a selected root set. In particular, a KubeVirt host
 cluster cannot be destroyed while an installed nested cluster is left outside
 `--clusters`; the child must be selected in the same full-lifecycle destroy or
-destroyed first.
+destroyed first. The apply side of that dependency — a scoped run that would
+rebuild the host's machine substrate — gates on the same resolved work set
+rather than on one flag name, so `--machines` and `--clusters` selections are
+held to the identical rule and neither can strand a nested cluster.
 
 ### One mutating run at a time
 

@@ -64,7 +64,8 @@ clusters; see [Operations](operations.md#comparing-against-live-cluster-state)):
 
 Under `--converge-drifted`, the consequence depends on the object kind: for the
 reconfigure-only kinds (provider host services, infra-component services,
-node-config apply, per-host `virtctl`, cluster add-ons, storage-attachment apply)
+node-config apply, per-host `virtctl`, cluster add-ons, machine RHSM
+registration, provisioning-playbook re-runs)
 it is an idempotent in-place re-apply that touches no data, OS, or VM; for a
 machine (managed-OS reinstall, disks wiped) or a container/storage cluster
 (reinstall / `cephadm rm-cluster --zap-osds`) it is a destructive rebuild. Only

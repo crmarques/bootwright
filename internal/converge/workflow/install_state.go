@@ -371,11 +371,12 @@ func ClusterReinstallDescriptors(reinstalls []ClusterReinstall) []string {
 	return out
 }
 
-func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask, checker ClusterAvailabilityChecker) []ClusterReinstall {
+func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask, checker ClusterAvailabilityChecker) ([]ClusterReinstall, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
 	var out []ClusterReinstall
+	var unverifiable, unverifiableDetails []string
 	for _, name := range installTaskClusterNames(tasks) {
 		if !stateHasContainerCluster(state, name) {
 			continue
@@ -412,12 +413,35 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 		})
 		switch {
 		case availErr != nil:
-			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but availability could not be verified: %v — if this cluster should not be rebuilt, restore API reachability and re-run, or exclude it with --clusters)", name, availErr)})
+			unverifiable = append(unverifiable, name)
+			unverifiableDetails = append(unverifiableDetails, fmt.Sprintf("%s/%s (%v)", ObjectKindContainerCluster, name, availErr))
 		case !available:
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --converge-drifted reinstalls it and wipes its node disks)", name)})
 		}
 	}
-	return out
+	if len(unverifiable) > 0 {
+		return nil, unverifiableOverrideProbeError(unverifiable, unverifiableDetails, installTaskClusterNames(tasks))
+	}
+	return out, nil
+}
+
+func unverifiableOverrideProbeError(unverifiable, details, planned []string) error {
+	blocked := map[string]bool{}
+	for _, name := range unverifiable {
+		blocked[name] = true
+	}
+	var remaining []string
+	for _, name := range planned {
+		if !blocked[name] {
+			remaining = append(remaining, name)
+		}
+	}
+	exclude := "drop --converge-drifted so apply reconciles without a rebuild"
+	if len(remaining) > 0 {
+		exclude = "exclude it with bootwright apply --clusters " + strings.Join(remaining, ",") + " --converge-drifted"
+	}
+	return fmt.Errorf("apply --converge-drifted refuses to act on ContainerCluster(s) whose recorded install inputs match desired state but whose availability could not be probed: %s; an unprovable cluster is not a drifted one, so bootwright will not wipe its node disks on a failed probe — restore API reachability (and oc on PATH) and re-run, %s, or tear it down deliberately with bootwright destroy --clusters %s --yes and re-apply to rebuild it",
+		strings.Join(details, ", "), exclude, strings.Join(unverifiable, ","))
 }
 
 func OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask) []string {

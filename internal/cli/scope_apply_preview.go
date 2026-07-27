@@ -11,17 +11,14 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir, clusterScope string, rebuiltHosts []string) error {
-	if strings.TrimSpace(clusterScope) == "" || len(rebuiltHosts) == 0 {
+func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, sel clusteraccess.Selection, rebuiltHosts []string) error {
+	if !sel.Active || len(rebuiltHosts) == 0 {
 		return nil
 	}
-	selected, _, err := clusteraccess.ClusterRootNamesForTarget(state, clusterScope)
-	if err != nil {
-		return err
-	}
-	conflicts := converge.KubeVirtTenantCollateral(state, clustersDir, rebuiltHosts, selected)
+	conflicts := converge.KubeVirtTenantCollateral(state, clustersDir, rebuiltHosts, sel.ContainerRoots)
 	if len(conflicts) == 0 {
 		return nil
 	}
@@ -30,7 +27,7 @@ func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir, clusterS
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts installed %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
-	b.WriteString("include the nested cluster(s) in --clusters to rebuild them in the same run, or run bootwright destroy --stage clusters --clusters " + strings.Join(kubeVirtTenantNames(conflicts), ",") + " --yes first")
+	b.WriteString("include the nested cluster(s) in the run's selection (--clusters, or --machines covering their nodes) to rebuild them in the same run, or run bootwright destroy --stage clusters --clusters " + strings.Join(kubeVirtTenantNames(conflicts), ",") + " --yes first")
 	return errors.New(b.String())
 }
 
@@ -74,20 +71,20 @@ func forecastReinstallDescriptors(names []string) []string {
 	return out
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, reclaimDevices, clusterScope string, reinstallDrift []string) {
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipRecords []ownership.ResourceRecord) {
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
 		return
 	}
 	var refusals []error
-	if err := converge.CheckApplyRenameOrphan(fullState, objects, clustersDir); err != nil {
+	if err := converge.CheckApplyRenameOrphan(fullState, objects, clustersDir, ownershipRecords); err != nil {
 		refusals = append(refusals, err)
 	}
 	if mode == workflow.ApplyModeOverride {
 		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, forecastReinstallDescriptors(reinstallDrift)); err != nil {
 			refusals = append(refusals, err)
 		}
-		if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, clusterScope, reinstallDrift); err != nil {
+		if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, reinstallDrift); err != nil {
 			refusals = append(refusals, err)
 		}
 	}

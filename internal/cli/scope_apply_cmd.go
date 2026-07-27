@@ -222,6 +222,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactServerTargets := installOnlyArtifactServerTargets(state)
 		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
+		ownershipRecords, _, _ := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
 		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
 			cliout.NewContinuation(stdout).Warning("artifact-server retention", serr.Error())
 		} else {
@@ -246,7 +247,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err != nil {
 				return failErr(1, err)
 			}
-			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir); err != nil {
+			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir, ownershipRecords); err != nil {
 				return failErr(1, err)
 			}
 			releasedRecords, releaseErr := workflow.ConsumableSubstrateReleases(ctx.RunsDir, tasks)
@@ -255,9 +256,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 			if override {
-				reinstalls := workflow.OverrideRebuildInstalledClusters(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, nil)
-				ocpReinstallDescriptors = workflow.ClusterReinstallDescriptors(reinstalls)
-				ocpReinstallAcked = workflow.ClusterReinstallNames(reinstalls)
+				var rerr error
+				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
+					return failErr(1, rerr)
+				}
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
 					return failErr(1, err)
 				}
@@ -268,7 +270,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
 			destructiveOverride = append(destructiveOverride, releasedBareMetalReinstallDescriptors(plan.State, releasedRecords)...)
 			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
-			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, flags.clusterScope, rebuiltHosts); err != nil {
+			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts); err != nil {
 				return failErr(1, err)
 			}
 			destructiveOverride = append(destructiveOverride, converge.KubeVirtTenantDestroyDescriptors(state, clustersDir, rebuiltHosts)...)
@@ -356,7 +358,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices, flags.clusterScope, reinstallDrift)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices, sel, reinstallDrift, ownershipRecords)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			noteIneffectiveAllowDestroy(stdout, allowDestroy, true, nil)
 			printExtensionDryRun(stdout, dryRunTasks)

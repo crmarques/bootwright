@@ -63,6 +63,14 @@ declared disks before an OSD apply, and an explicit `--reclaim-devices` run
 (below). `--confirm-data-loss` has no effect on a run that plans no data-loss
 action.
 
+A failed probe is not an authorization. If a cluster whose recorded install
+inputs match desired state cannot be probed at all — the API is unreachable, the
+kubeconfig is unusable, `oc` is missing — `--converge-drifted` **fails closed**
+naming that cluster instead of scheduling a reinstall, because unknown state is
+not evidence of a broken cluster. Restore reachability and re-run, exclude it
+with `--clusters`, or tear it down deliberately with `destroy --clusters <name>`
+and re-apply.
+
 The fail-closed interaction with destroy protection is the part operators most
 often miss:
 
@@ -168,6 +176,14 @@ bootwright destroy --stage infra --clusters artifact-server
 ```
 
 ### Leaving no trace of a destroyed component
+
+Clearing those records is part of the teardown, not bookkeeping after it: if a
+`destroy` finishes its remote work but cannot remove a converge or install
+record — or cannot write the substrate-release record that authorizes the
+rebuild — it reports each problem and **exits non-zero**. A record that outlives
+its resource makes the next `apply` read it as already converged and skip
+re-provisioning. Remove the reported files, or re-run the same `destroy`, before
+applying again.
 
 By default `destroy` clears the runtime records it needs to for correctness —
 converge-safety records, install/connection records, kubeconfig — but leaves

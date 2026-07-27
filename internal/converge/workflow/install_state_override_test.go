@@ -153,8 +153,11 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 		t.Helper()
 		writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
 	}
-	one := func(t *testing.T, got []ClusterReinstall, want string) {
+	one := func(t *testing.T, got []ClusterReinstall, err error, want string) {
 		t.Helper()
+		if err != nil {
+			t.Fatalf("OverrideRebuildInstalledClusters: %v", err)
+		}
 		if len(got) != 1 || got[0].Name != cluster || !strings.Contains(got[0].Descriptor, want) {
 			t.Fatalf("want one reinstall for %s containing %q, got %v", cluster, want, got)
 		}
@@ -163,11 +166,16 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 	t.Run("no record with kubeconfig is destructive", func(t *testing.T) {
 		clustersDir, secretsDir := seed(t)
 		writeKubeconfig(t, clustersDir)
-		one(t, OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true}), "no install record")
+		got, err := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true})
+		one(t, got, err, "no install record")
 	})
 	t.Run("no record and no kubeconfig is greenfield", func(t *testing.T) {
 		clustersDir, secretsDir := seed(t)
-		if got := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true}); len(got) != 0 {
+		got, err := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true})
+		if err != nil {
+			t.Fatalf("OverrideRebuildInstalledClusters: %v", err)
+		}
+		if len(got) != 0 {
 			t.Fatalf("greenfield cluster must not be flagged destructive, got %v", got)
 		}
 	})
@@ -180,9 +188,10 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
-		one(t, OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true}), "incomplete install record")
+		got, err := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true})
+		one(t, got, err, "incomplete install record")
 	})
-	t.Run("probe error names exclusion escape", func(t *testing.T) {
+	t.Run("probe error fails closed instead of authorizing a rebuild", func(t *testing.T) {
 		clustersDir, secretsDir := seed(t)
 		hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
 		if err != nil {
@@ -196,10 +205,17 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)
-		got := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{err: errors.New("connection refused")})
-		one(t, got, "availability could not be verified")
-		if !strings.Contains(got[0].Descriptor, "--clusters") {
-			t.Fatalf("probe-error descriptor must name the --clusters exclusion escape, got %q", got[0].Descriptor)
+		got, err := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{err: errors.New("connection refused")})
+		if err == nil {
+			t.Fatalf("an unprobeable matching cluster must fail closed, got reinstalls %v", got)
+		}
+		if len(got) != 0 {
+			t.Fatalf("a fail-closed probe must authorize no reinstall, got %v", got)
+		}
+		for _, want := range []string{"connection refused", "will not wipe its node disks", "bootwright destroy --clusters " + cluster} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("probe-error refusal must contain %q, got %q", want, err)
+			}
 		}
 	})
 }
