@@ -808,11 +808,11 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: `spec.ceph.release "19.2" must be an upstream Ceph release name`,
 		},
 		{
-			name: "release-ended-oss-series",
+			name: "release-malformed-oss-version",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Release = "reef"
+				state.StorageClusters[0].Spec.Ceph.Release = "20.2"
 			},
-			want: `spec.ceph.release "reef" is not in a supported Ceph release series`,
+			want: `spec.ceph.release "20.2" must be an upstream Ceph release name`,
 		},
 		{
 			name: "release-bad-redhat-stream",
@@ -825,7 +825,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 				state.StorageClusters[0].Spec.Ceph.Release = "squid"
 			},
-			want: `spec.ceph.release "squid" must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading major digit selects the product stream`,
+			want: `spec.ceph.release "squid" must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading component selects the product stream`,
 		},
 		{
 			name: "image-mutable-latest",

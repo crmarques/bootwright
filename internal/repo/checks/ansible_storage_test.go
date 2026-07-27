@@ -1417,8 +1417,18 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok {
 		t.Fatalf("storage node OS validation must be an assert, got %v", repositoryTasks[osValidateIdx])
 	}
-	if got := fmt.Sprint(osValidate["that"]); !strings.Contains(got, "runtimeOS.exactVersions") || !strings.Contains(got, "ansible_os_family == 'RedHat'") {
-		t.Fatalf("storage node OS validation must enforce the rendered runtimeOS matrix on RHEL-family nodes, got that=%v", osValidate["that"])
+	if got := fmt.Sprint(osValidate["that"]); !strings.Contains(got, "runtimeOS.majorVersions") || !strings.Contains(got, "ansible_os_family == 'RedHat'") {
+		t.Fatalf("storage node OS validation must gate on the stable family and major version, got that=%v", osValidate["that"])
+	}
+	if got := fmt.Sprint(osValidate["that"]); strings.Contains(got, "runtimeOS.exactVersions") {
+		t.Fatalf("storage node OS validation must not hard-fail on the exact-version snapshot, got that=%v", osValidate["that"])
+	}
+	exactIdx := findAnsibleTask(t, repositoryTasks, "Report storage node OS outside the recorded Ceph release matrix")
+	if _, ok := repositoryTasks[exactIdx]["ansible.builtin.debug"]; !ok {
+		t.Fatalf("the exact runtimeOS matrix must report without failing the run, got %v", repositoryTasks[exactIdx])
+	}
+	if got := fmt.Sprint(repositoryTasks[exactIdx]["when"]); !strings.Contains(got, "runtimeOS.exactVersions") {
+		t.Fatalf("the exact runtimeOS report must key off the rendered exactVersions, got when=%v", repositoryTasks[exactIdx]["when"])
 	}
 	dispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure Ceph package repository for the rendered distribution")
 	if !(osValidateIdx < dispatchIdx) {

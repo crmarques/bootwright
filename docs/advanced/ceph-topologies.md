@@ -47,19 +47,24 @@ credential plumbing — lives in
 [Secrets and entitlements](../concepts/secrets.md#entitlements).
 
 `spec.ceph.release` selects which release to install for the chosen
-distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid
-(`squid`/`19.2.x`) releases; the default is the current exact release `20.2.2`,
-which pins both the package repository and `quay.io/ceph/ceph:v20.2.2`. Red Hat
-accepts product releases
-`9.0`, updates `9.0.1` through `9.0.3`, and `9.1` (default `9.1`); IBM accepts
-the VRMF product release `9.9.1.0` (the default). Bare `9` is
-a convenience alias normalized to the exact default for that distribution.
-The exact product release drives validation of the vendor RHEL matrix, while
-its stream still selects the repository and image-base names. The immutable
-vendor image build tag is not derivable from the product release, so pin
-`spec.ceph.image` to lock the exact build. To mirror upstream packages for a
+distribution, and Bootwright derives the artifact coordinates from it instead of
+looking them up — the leading component is the product stream, and the stream
+plus each node's RHEL major build the tools repo, the vendor `.repo` URL, and the
+daemon image repository. `oss` takes an upstream release name (`tentacle`) or an
+exact `x.y.z` version; the default `20.2.2` pins both the package repository and
+`quay.io/ceph/ceph:v20.2.2`. Red Hat and IBM take a dot-separated numeric product
+version of any length, defaulting to `9.1` and `9.9.1.0`. Bare `9` is a
+convenience alias normalized to the exact default for that distribution.
+
+Bootwright separately records vendor facts — the RHEL runtime matrix and the
+image build base — for Tentacle (`20.2.x`), Squid (`19.2.x`), Red Hat `9.0`
+through `9.0.3` and `9.1`, and IBM `9.9.1.0`. Those facts are advisory. A newer
+release installs without waiting for a Bootwright update; `bootwright check`
+warns and names what it assumed. The immutable vendor image build tag is not
+derivable from the product release either way, so pin `spec.ceph.image` to lock
+the exact build. To mirror upstream packages for a
 disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
-The catalog snapshot follows the upstream [Ceph releases](https://docs.ceph.com/en/latest/releases/),
+The recorded facts follow the upstream [Ceph releases](https://docs.ceph.com/en/latest/releases/),
 the [Red Hat Ceph Storage 9 compatibility guide](https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf),
 and IBM's [9.9.1.0 node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
 

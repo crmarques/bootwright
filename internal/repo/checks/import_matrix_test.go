@@ -36,7 +36,7 @@ var allowedImports = map[string][]string{
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
 
-	"internal/state/advice": {"api/v1alpha1", "internal/storage/topology"},
+	"internal/state/advice": {"api/v1alpha1", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},
 
 	"internal/roles":     {"api/v1alpha1"},
 	"internal/workspace": {"internal/host/localroot", "internal/host/managedroot", "internal/host/safefs"},

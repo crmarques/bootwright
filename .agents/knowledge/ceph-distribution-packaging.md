@@ -1,13 +1,31 @@
 # Ceph distribution packaging: registries, repos, EPEL, and RHSM gotchas
 
-**Constraint:** Distribution and release facts live in one Go table
-(`distributionDef` in `internal/storage/cephprovider`) — release catalogs,
-runtime-OS matrices, capability flags (`requiresRHSM`,
+**Constraint:** Distribution facts live in one Go table (`distributionDef` in
+`internal/storage/cephprovider`) — capability flags (`requiresRHSM`,
 `requiresRegistry`, `requiresLicense`), repo sets, and image templates. The
 Ansible role dispatches on the rendered flags (a `community` block vs
 `requiresRHSM`), never on distribution names (ADR 0002): a new distribution is
 a table entry plus its api/v1alpha1 constant and validation, not a new `when:`
 clause or task file.
+
+**Constraint:** Releases are *derived*, not enumerated. `ResolveRelease`
+(`internal/storage/cephprovider/release.go`) fails only on syntax; the leading
+dot-component of a product version is the stream, and the stream plus the node's
+own `ansible_distribution_major_version` build every repo id, `.repo` URL, and
+image repository. The per-release table (`releaseDef`) is a *catalog of recorded
+vendor facts* — the exact release a bare stream alias normalizes to, the RHEL
+runtime matrix, the image build base — carried on `ResolvedRelease.Cataloged`.
+A release outside it installs anyway. Do not turn the catalog back into a gate:
+vendor release lists and RHEL compatibility matrices move on the vendor's
+schedule, and a closed catalog makes a correct declaration fail until someone
+edits Go. What the catalog is missing surfaces as a `check` advisory
+(`internal/state/advice/storage_release.go`) instead.
+
+**Constraint:** Node-OS enforcement splits by how fast the fact moves. RHEL
+family and major version are hard (validation error plus an apply-time assert on
+`runtimeOS.majorVersions`). The exact minor is advisory only — a `check` warning
+and an apply-time `debug` keyed on `runtimeOS.exactVersions`. A RHEL z-stream
+released after Bootwright must never fail an otherwise-correct cluster.
 
 **Symptom:** On an IBM Storage Ceph cluster, `ceph orch upgrade ls` and the
 dashboard "Upgrade" page fail with 401 against `registry.redhat.io`.
@@ -62,10 +80,10 @@ file fails closed for operator review.
 
 **Constraint:** The renderer emits exactly one of `community.version` (a full
 x.y.z, resolving `rpm-<x.y.z>/` + `cephadm add-repo --version`, and deriving
-`quay.io/ceph/ceph:vX.Y.Z` when `image` is unset) or `community.release` (an
-active supported codename, resolving `rpm-<name>/` + `--release`; the image
-floats). The accepted community catalog is limited to active Tentacle
-(`20.2.x`) and Squid (`19.2.x`) series; unknown and ended series fail validation.
+`quay.io/ceph/ceph:vX.Y.Z` when `image` is unset) or `community.release` (a
+codename, resolving `rpm-<name>/` + `--release`; the image floats). Both paths
+are name-agnostic: Tentacle (`20.2.x`) and Squid (`19.2.x`) are the recorded
+active series, but any parseable codename or `x.y.z` resolves and warns.
 `community.checksum` is normalized to bare sha256 hex and re-prefixed into
 `get_url`'s checksum so the fetched-and-executed cephadm bootstrap binary is
 content-verified.
@@ -82,28 +100,32 @@ declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
 or denies it to turn the module off. The 9.9.1.0 runtime matrix accepts RHEL 9.8
 or 10.2.
 
-**Constraint:** Vendor releases and runtime operating systems are one catalog,
-not independent regex-validated strings. Red Hat Ceph Storage 9.0 through
-9.0.3 accept RHEL 9.6, 9.7, 10, 10.0, or 10.1; 9.1 accepts RHEL 9.8 or 10.2.
-IBM Storage Ceph 9.9.1.0 accepts RHEL 9.8 or 10.2. Bare stream `9` is normalized
-to the current exact distribution release before hashing and rendering.
+**Constraint:** The recorded runtime matrices are Red Hat Ceph Storage 9.0
+through 9.0.3 on RHEL 9.6, 9.7, 10, 10.0, or 10.1; 9.1 on RHEL 9.8 or 10.2; IBM
+Storage Ceph 9.9.1.0 on RHEL 9.8 or 10.2. They are snapshots of vendor
+documentation, enforced at major-version granularity and reported at minor.
+Bare stream `9` normalizes to the cataloged exact release before hashing and
+rendering; an uncataloged value is carried verbatim.
 
 **Constraint:** IBM Storage Ceph 9 uses IBM's four-component V.R.M.F product
 version. The trailing R.M.F retains the prior Ceph release, modification, and
 fix meaning, so IBM's equivalent of release 9.1 is `9.9.1.0`; the daemon
-container tag remains independently versioned as `v9.9.1-<build>`. Vendor
-product-version syntax accepts any number of dot-separated numeric components,
-but only cataloged releases are accepted because each requires explicit stream
-and runtime-OS facts.
+container tag remains independently versioned as `v9.9.1-<build>`. Only the
+leading component is interpreted (as the stream), so vendor product-version
+syntax accepts any number of dot-separated numeric components and the extra
+components need no Bootwright knowledge.
 
 **Constraint:** An entitlement registry override changes credentials and trust
 and acts as a mirror root, not permission to select an arbitrary repository. A
 subscription-backed cluster with a custom `registry.url` must pin
 `spec.ceph.image` at that root plus the distribution's canonical suffix:
-`rhceph/rhceph-<stream>-rhel9` for Red Hat or
-`ibm-ceph/ceph-<stream>-rhel9` for IBM. The same suffix check applies on the
-default vendor registry, preventing a Red Hat cluster from accepting an IBM or
-unrelated image merely because it is below the authenticated registry.
+`rhceph/rhceph-<stream>-rhel<build base>` for Red Hat or
+`ibm-ceph/ceph-<stream>-rhel<build base>` for IBM. The same suffix check applies
+on the default vendor registry, preventing a Red Hat cluster from accepting an
+IBM or unrelated image merely because it is below the authenticated registry.
+For an uncataloged release the build base is unknown, so the check narrows to
+the `...-rhel` prefix — namespace and stream still bind, the trailing base does
+not.
 Registry addresses are scheme-less `host[:port][/path]`; community package
 mirrors remain HTTPS URLs because cephadm refuses insecure repository
 transport.

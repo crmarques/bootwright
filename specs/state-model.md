@@ -796,22 +796,36 @@ Rules:
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
-  distribution. For `oss`, accepted active series are Tentacle (`tentacle` or
-  `20.2.x`) and Squid (`squid` or `19.2.x`); ended or unknown series are
-  rejected. Omitted defaults to the current exact supported release `20.2.2`,
-  pinning both `rpm-20.2.2` and the matching daemon image. For
-  `redhat`, supported product releases are `9.0`, `9.0.1`, `9.0.2`, `9.0.3`,
-  and `9.1` (the default). For `ibm`, the supported VRMF product release is
-  `9.9.1.0` (the default). Vendor product versions accept any number of
-  dot-separated numeric components, while the supported-release catalog
-  remains authoritative for compatibility. A bare `9`
-  remains a current-stream authoring alias and normalizes to the exact default
-  for that distribution. Validation uses the resolved product release, not
-  only its leading digit, to enforce the vendor's RHEL compatibility matrix.
-  Omitted releases and stream aliases intentionally track Bootwright's current
-  catalog: normalization materializes the exact release before convergence
-  hashing, so a catalog-default change is structural drift and remains
-  override-gated. Author an exact release to avoid that implicit upgrade intent.
+  distribution, and every artifact coordinate is *derived* from it rather than
+  looked up: the leading component is the product stream, which names the
+  subscription tools repo, the vendor `.repo` URL, and the daemon image
+  repository, while the node's own RHEL major fills the repo templates. Any
+  release Bootwright can parse is therefore installable without a code change.
+  Validation is syntactic: `oss` accepts an upstream release name (`^[a-z][a-z0-9]+$`,
+  such as `tentacle`) or an exact `x.y.z` version; `redhat` and `ibm` accept a
+  dot-separated numeric product version of any length (`9`, `9.1`, `9.9.1.0`).
+  Omitted defaults to `20.2.2` (`oss`), `9.1` (`redhat`), or `9.9.1.0` (`ibm`).
+- Bootwright additionally carries a *catalog* of releases it has recorded vendor
+  facts for — currently Tentacle (`20.2.x`) and Squid (`19.2.x`) upstream, Red Hat
+  `9.0`, `9.0.1`, `9.0.2`, `9.0.3`, `9.1`, and IBM `9.9.1.0`. The catalog is
+  advisory, not a gate: it supplies the exact release a bare stream alias
+  normalizes to, the recorded RHEL runtime matrix, and the vendor image build
+  base. A release outside it resolves generically and raises a `check` advisory
+  naming what was assumed. Bare `9` is a current-stream authoring alias only for
+  a cataloged stream; an uncataloged value is carried through verbatim.
+  Omitted releases and stream aliases intentionally track that catalog:
+  normalization materializes the exact release before convergence hashing, so a
+  catalog-default change is structural drift and remains override-gated. Author
+  an exact release to avoid that implicit upgrade intent.
+- The storage-node OS is gated on what does not move and reported on what does.
+  A Ceph node's `MachineInstallProfile` must declare the RHEL family, and its
+  version's major must be one the release runs on (`9` or `10` for every
+  cataloged release today) — both are validation errors, and both are re-asserted
+  on the node at apply time. A minor version outside the release's recorded
+  matrix is a `check` advisory and an apply-time report, never a failure: the
+  matrix is a snapshot of vendor documentation, so a RHEL z-stream released after
+  Bootwright cannot invalidate a correct declaration. An uncataloged release
+  carries no recorded matrix and is judged on family alone.
 - `spec.ceph.image` optionally pins the exact cephadm container image, which
   `cephadm bootstrap` applies as the default image for every Ceph daemon, making
   the running cluster version reproducible. It must pin a version tag or a
@@ -819,15 +833,20 @@ Rules:
   `release` derives `quay.io/ceph/ceph:vX.Y.Z` automatically when `image` is
   unset; a release name leaves the daemon image unpinned. `redhat` and `ibm`
   registry tags are not `x.y.z`, so reproducible pins are supplied here
-  explicitly. A subscription image repository must equal the selected
-  distribution and release's canonical repository:
-  `registry.redhat.io/rhceph/rhceph-<stream>-rhel9` for `redhat` or
-  `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9` for `ibm`.
-  When an entitlement overrides `registry.url`, `image` is required and its
-  repository must equal that mirror root plus the canonical vendor suffix
-  (`rhceph/rhceph-<stream>-rhel9` or
-  `ibm-ceph/ceph-<stream>-rhel9`). Changing only the login target or using an
-  arbitrary repository below a broad registry namespace is rejected.
+  explicitly. For a cataloged release, a subscription image repository must
+  equal that release's canonical repository:
+  `registry.redhat.io/rhceph/rhceph-<stream>-rhel<build base>` for `redhat` or
+  `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel<build base>` for `ibm`.
+  For an uncataloged release Bootwright knows the vendor namespace and the
+  stream but not the build base the vendor compiled that release against, so the
+  check relaxes to the `rhceph/rhceph-<stream>-rhel` /
+  `ibm-ceph/ceph-<stream>-rhel` prefix and the trailing base is the author's to
+  declare. Either way, `image` is the escape hatch that makes any release
+  installable: it overrides the derived repository for the `container_image_base`
+  pin as well.
+  When an entitlement overrides `registry.url`, `image` is required and the same
+  suffix rule applies against that mirror root. Changing only the login target or
+  using an arbitrary repository below a broad registry namespace is rejected.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
   community repository on each node with cephadm and runs Ceph client commands
@@ -843,15 +862,16 @@ Rules:
 - `distribution: redhat` requires `entitlementRef` to resolve to a
   `redhat-ceph` `Entitlement`. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph
-  packages or images. Releases `9.0`, `9.0.1`, `9.0.2`, and `9.0.3` accept
-  RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` accepts RHEL 9.8 or 10.2.
+  packages or images. Recorded runtime matrices: releases `9.0`, `9.0.1`,
+  `9.0.2`, and `9.0.3` were validated on RHEL 9.6, 9.7, 10, 10.0, or 10.1;
+  release `9.1` on RHEL 9.8 or 10.2.
 - `distribution: ibm` requires `entitlementRef` to resolve to an
   `ibm-storage-ceph` `Entitlement` with accepted license terms. IBM Storage Ceph
   registry access and license acceptance come from that entitlement; the RHEL
   BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` subscription
   the nodes register with (profile `subscription` or cluster `osSubscriptionRef`).
   Neither must mix with upstream Ceph packages
-  or images. Release `9.9.1.0` accepts RHEL 9.8 or 10.2. IBM license acceptance
+  or images. Release `9.9.1.0` was validated on RHEL 9.8 or 10.2. IBM license acceptance
   is passed non-interactively to `cephadm bootstrap`. Because that release
   enables IBM Call Home when the license is accepted, `spec.ceph.ibm.callHome`
   is required as either `enabled` or `disabled`; apply reconciles the manager

@@ -41,6 +41,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageMonitorAdvisories(object, cluster)...)
 		out = append(out, storageManagerAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
+		out = append(out, storageReleaseAdvisories(object, state, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)

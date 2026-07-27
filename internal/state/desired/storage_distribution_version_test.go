@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestValidateStorageCephVendorReleaseCatalog(t *testing.T) {
+func TestValidateStorageCephVendorReleaseAcceptsAnyProductVersion(t *testing.T) {
 	cases := []struct {
 		distribution string
 		release      string
@@ -19,11 +19,15 @@ func TestValidateStorageCephVendorReleaseCatalog(t *testing.T) {
 		{v1alpha1.StorageCephDistributionRedHat, "9.0.2", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.1", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.9", true},
+		{v1alpha1.StorageCephDistributionRedHat, "9.9", false},
+		{v1alpha1.StorageCephDistributionRedHat, "10.0", false},
 		{v1alpha1.StorageCephDistributionIBM, "9", false},
 		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1", true},
-		{v1alpha1.StorageCephDistributionIBM, "10", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1", false},
+		{v1alpha1.StorageCephDistributionIBM, "10", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0.1", false},
+		{v1alpha1.StorageCephDistributionIBM, "squid", true},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1-beta", true},
 	}
 	for _, tc := range cases {
 		errs := validateStorageCephRelease("StorageCluster/ceph spec.ceph", tc.distribution, tc.release)
@@ -33,14 +37,7 @@ func TestValidateStorageCephVendorReleaseCatalog(t *testing.T) {
 	}
 }
 
-func TestValidateStorageCephVendorReleaseSyntaxHasNoComponentLimit(t *testing.T) {
-	errs := validateStorageCephRelease("StorageCluster/ceph spec.ceph", v1alpha1.StorageCephDistributionIBM, "9.9.1.0.1")
-	if len(errs) != 1 || !strings.Contains(errs[0], "not a supported ibm product release") {
-		t.Fatalf("future numeric product version returned syntax error: %v", errs)
-	}
-}
-
-func TestValidateStorageCephOSSReleaseLifecycleCatalog(t *testing.T) {
+func TestValidateStorageCephOSSReleaseAcceptsAnyUpstreamCoordinate(t *testing.T) {
 	cases := []struct {
 		release   string
 		wantError bool
@@ -49,9 +46,12 @@ func TestValidateStorageCephOSSReleaseLifecycleCatalog(t *testing.T) {
 		{"20.2.2", false},
 		{"squid", false},
 		{"19.2.1", false},
-		{"reef", true},
-		{"18.2.7", true},
-		{"bananas", true},
+		{"reef", false},
+		{"18.2.7", false},
+		{"bananas", false},
+		{"21.2.0", false},
+		{"20.2", true},
+		{"Tentacle", true},
 	}
 	for _, tc := range cases {
 		errs := validateStorageCephRelease("StorageCluster/ceph spec.ceph", v1alpha1.StorageCephDistributionOSS, tc.release)
@@ -90,10 +90,16 @@ func TestValidateStorageCephVendorRuntimeOSMatrix(t *testing.T) {
 	}{
 		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.7", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.7", false},
-		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.8", true},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.8", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9.8", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9.11", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "10.4", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "8.10", true},
 		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.8", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.7", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.7", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "8.10", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9.9", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "8.10", false},
 	}
 	for _, tc := range cases {
 		errs := validateStorageCephManagedOS(cluster(tc.distribution, tc.release), machines, profile(tc.rhel))

@@ -56,23 +56,13 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 	if release == "" {
 		return nil
 	}
-	switch distribution {
-	case v1alpha1.StorageCephDistributionOSS:
-		if !cephOSSReleaseNamePattern.MatchString(release) && !cephOSSReleaseVersionPattern.MatchString(release) {
-			return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
-		}
-		if _, ok := cephprovider.ResolveRelease(distribution, release); !ok {
-			return []string{fmt.Sprintf("%s.release %q is not in a supported Ceph release series; supported values are {%s}", prefix, release, strings.Join(cephprovider.SupportedReleases(distribution), ", "))}
-		}
-	case v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
-		if !cephSubscriptionVersionPattern.MatchString(release) {
-			return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading major digit selects the product stream", prefix, release)}
-		}
-		if _, ok := cephprovider.ResolveRelease(distribution, release); !ok {
-			return []string{fmt.Sprintf("%s.release %q is not a supported %s product release; supported values are {%s}", prefix, release, distribution, strings.Join(cephprovider.SupportedReleases(distribution), ", "))}
-		}
+	if _, ok := cephprovider.ResolveRelease(distribution, release); ok {
+		return nil
 	}
-	return nil
+	if distribution == v1alpha1.StorageCephDistributionOSS {
+		return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
+	}
+	return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading component selects the product stream", prefix, release)}
 }
 
 func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
@@ -92,11 +82,29 @@ func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, st
 				return []string{fmt.Sprintf("%s.image is required when Entitlement/%s spec.registry.url overrides the vendor registry; pin the mirrored daemon image explicitly", prefix, entitlement.Metadata.Name)}
 			}
 		}
-		expected, ok := cephprovider.ExpectedImageRepository(distribution, cluster.Spec.Ceph.Release, registry)
-		if image != "" && ok && cephprovider.ImageRepository(image) != expected {
-			release, _ := cephprovider.ResolveRelease(distribution, cluster.Spec.Ceph.Release)
+		if image != "" {
+			return validateStorageCephImageRepository(prefix, distribution, cluster.Spec.Ceph.Release, registry, image)
+		}
+	}
+	return nil
+}
+
+func validateStorageCephImageRepository(prefix, distribution, authored, registry, image string) []string {
+	release, ok := cephprovider.ResolveRelease(distribution, authored)
+	if !ok {
+		return nil
+	}
+	repository := cephprovider.ImageRepository(image)
+	if release.Cataloged {
+		expected, ok := cephprovider.ExpectedImageRepository(distribution, authored, registry)
+		if ok && repository != expected {
 			return []string{fmt.Sprintf("%s.image repository must be %q for %s release %s; preserve the vendor repository suffix when mirroring", prefix, expected, distribution, release.Value)}
 		}
+		return nil
+	}
+	vendorPrefix, ok := cephprovider.ExpectedImageRepositoryPrefix(distribution, authored, registry)
+	if ok && !strings.HasPrefix(repository, vendorPrefix) {
+		return []string{fmt.Sprintf("%s.image repository must start with %q for %s release %s; Bootwright carries no catalog entry for that release, so the vendor namespace and stream are checked and the trailing build base is yours to declare", prefix, vendorPrefix, distribution, release.Value)}
 	}
 	return nil
 }
@@ -175,8 +183,8 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
 			continue
 		}
-		if !stringInSlice(profile.Spec.OS.Version, release.RuntimeOS.ExactVersions) {
-			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q release %q; supported RHEL versions are %s", owner, profile.Spec.OS.Version, distribution, release.Value, strings.Join(release.RuntimeOS.ExactVersions, ", ")))
+		if !cephprovider.RuntimeOSMajorAllowed(release.RuntimeOS, profile.Spec.OS.Version) {
+			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q release %q; that release runs on RHEL %s", owner, profile.Spec.OS.Version, distribution, release.Value, strings.Join(release.RuntimeOS.MajorVersions, " or ")))
 		}
 	}
 	return errs
@@ -205,13 +213,4 @@ func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[strin
 		}
 	}
 	return errs
-}
-
-func stringInSlice(value string, values []string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }

@@ -1,6 +1,7 @@
 package cephprovider
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -113,8 +114,6 @@ func TestResolveReleaseUsesDistributionVersionMatrix(t *testing.T) {
 		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.0.3", "9", "9.7", true},
 		{v1alpha1.StorageCephDistributionIBM, "", "9.9.1.0", "9", "9.8", true},
 		{v1alpha1.StorageCephDistributionIBM, "9", "9.9.1.0", "9", "10.2", true},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1", "", "", "", false},
-		{v1alpha1.StorageCephDistributionRedHat, "10", "", "", "", false},
 	}
 	for _, tc := range cases {
 		release, ok := ResolveRelease(tc.distribution, tc.authored)
@@ -123,6 +122,9 @@ func TestResolveReleaseUsesDistributionVersionMatrix(t *testing.T) {
 		}
 		if !ok {
 			continue
+		}
+		if !release.Cataloged {
+			t.Fatalf("ResolveRelease(%q, %q) is not cataloged", tc.distribution, tc.authored)
 		}
 		if release.Value != tc.wantValue || release.Stream != tc.wantStream {
 			t.Fatalf("ResolveRelease(%q, %q) = %#v", tc.distribution, tc.authored, release)
@@ -137,25 +139,79 @@ func TestResolveReleaseUsesDistributionVersionMatrix(t *testing.T) {
 	}
 }
 
-func TestResolveReleaseUsesActiveOSSSeries(t *testing.T) {
+func TestResolveReleaseAcceptsUncatalogedOSSReleases(t *testing.T) {
 	cases := []struct {
-		release string
-		ok      bool
+		release   string
+		ok        bool
+		cataloged bool
 	}{
-		{"", true},
-		{"tentacle", true},
-		{"20.2.2", true},
-		{"squid", true},
-		{"19.2.1", true},
-		{"reef", false},
-		{"18.2.7", false},
-		{"bananas", false},
+		{"", true, true},
+		{"tentacle", true, true},
+		{"20.2.2", true, true},
+		{"squid", true, true},
+		{"19.2.1", true, true},
+		{"reef", true, false},
+		{"18.2.7", true, false},
+		{"21.2.0", true, false},
+		{"20.2", false, false},
+		{"Squid", false, false},
 	}
 	for _, tc := range cases {
 		resolved, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, tc.release)
-		if ok != tc.ok {
-			t.Fatalf("ResolveRelease(oss, %q) = %#v, %t; want ok=%t", tc.release, resolved, ok, tc.ok)
+		if ok != tc.ok || (ok && resolved.Cataloged != tc.cataloged) {
+			t.Fatalf("ResolveRelease(oss, %q) = %#v, %t; want ok=%t cataloged=%t", tc.release, resolved, ok, tc.ok, tc.cataloged)
 		}
+	}
+}
+
+func TestResolveReleaseDerivesUncatalogedVendorCoordinates(t *testing.T) {
+	cases := []struct {
+		distribution string
+		release      string
+		wantStream   string
+	}{
+		{v1alpha1.StorageCephDistributionRedHat, "9.2", "9"},
+		{v1alpha1.StorageCephDistributionRedHat, "10", "10"},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9"},
+		{v1alpha1.StorageCephDistributionIBM, "10.1.0.0", "10"},
+	}
+	for _, tc := range cases {
+		resolved, ok := ResolveRelease(tc.distribution, tc.release)
+		if !ok {
+			t.Fatalf("ResolveRelease(%q, %q) rejected a future vendor release", tc.distribution, tc.release)
+		}
+		if resolved.Cataloged {
+			t.Fatalf("ResolveRelease(%q, %q) reports a catalog entry it does not have", tc.distribution, tc.release)
+		}
+		if resolved.Value != tc.release || resolved.Stream != tc.wantStream {
+			t.Fatalf("ResolveRelease(%q, %q) = %#v, want value %q stream %q", tc.distribution, tc.release, resolved, tc.release, tc.wantStream)
+		}
+		if resolved.RuntimeOS.Family != "rhel" || len(resolved.RuntimeOS.MajorVersions) != 0 || len(resolved.RuntimeOS.ExactVersions) != 0 {
+			t.Fatalf("ResolveRelease(%q, %q) invented a runtime-OS matrix: %#v", tc.distribution, tc.release, resolved.RuntimeOS)
+		}
+	}
+	if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionIBM, "9.9.1-beta"); ok {
+		t.Fatal("non-numeric vendor product version accepted")
+	}
+}
+
+func TestRuntimeOSMajorGateOutlivesTheExactVersionSnapshot(t *testing.T) {
+	release, ok := ResolveRelease(v1alpha1.StorageCephDistributionRedHat, "9.1")
+	if !ok {
+		t.Fatal("cataloged release did not resolve")
+	}
+	for _, version := range []string{"9.8", "9.11", "10.2", "10.4"} {
+		if !RuntimeOSMajorAllowed(release.RuntimeOS, version) {
+			t.Fatalf("RHEL %s rejected by the major-version gate", version)
+		}
+	}
+	for _, version := range []string{"8.10", "11.0"} {
+		if RuntimeOSMajorAllowed(release.RuntimeOS, version) {
+			t.Fatalf("RHEL %s accepted by the major-version gate", version)
+		}
+	}
+	if !RuntimeOSVersionCataloged(release.RuntimeOS, "9.8") || RuntimeOSVersionCataloged(release.RuntimeOS, "9.11") {
+		t.Fatalf("exact-version catalog lookup misreports: %#v", release.RuntimeOS)
 	}
 }
 
@@ -371,10 +427,18 @@ func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T
 			wantOK:       true,
 		},
 		{
-			name:         "unsupported release",
+			name:         "uncataloged release derives its own stream",
 			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.0",
-			wantOK:       false,
+			release:      "10.1.0.0",
+			want:         "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9",
+			wantOK:       true,
+		},
+		{
+			name:         "uncataloged redhat release derives its own stream",
+			distribution: v1alpha1.StorageCephDistributionRedHat,
+			release:      "9.2",
+			want:         "registry.redhat.io/rhceph/rhceph-9-rhel9",
+			wantOK:       true,
 		},
 	}
 	for _, tc := range cases {
@@ -384,6 +448,16 @@ func TestExpectedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T
 				t.Fatalf("ExpectedImageRepository(%q, %q, %q) = %q, %t; want %q, %t", tc.distribution, tc.release, tc.registry, got, ok, tc.want, tc.wantOK)
 			}
 		})
+	}
+}
+
+func TestExpectedImageRepositoryPrefixLeavesTheBuildBaseOpen(t *testing.T) {
+	prefix, ok := ExpectedImageRepositoryPrefix(v1alpha1.StorageCephDistributionRedHat, "10.0", "")
+	if !ok || prefix != "registry.redhat.io/rhceph/rhceph-10-rhel" {
+		t.Fatalf("ExpectedImageRepositoryPrefix = %q, %t", prefix, ok)
+	}
+	if !strings.HasPrefix("registry.redhat.io/rhceph/rhceph-10-rhel10", prefix) {
+		t.Fatalf("a rhel10-based vendor build does not match prefix %q", prefix)
 	}
 }
 
@@ -559,5 +633,41 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 	oss := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}}}
 	if repos := Select(oss, nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos; len(repos) != 0 {
 		t.Fatalf("oss redhatRepos = %#v, want none", repos)
+	}
+}
+
+func TestSelectDerivesPackageSourcesForAnUncatalogedRelease(t *testing.T) {
+	redhat := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution: v1alpha1.StorageCephDistributionRedHat,
+		Release:      "10.0",
+	}}}
+	repos := Select(redhat, nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
+	want := "rhceph-10-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
+	if len(repos) == 0 || repos[len(repos)-1] != want {
+		t.Fatalf("redhat 10.0 tools repo = %#v, want %q", repos, want)
+	}
+
+	ibm := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution: v1alpha1.StorageCephDistributionIBM,
+		Release:      "9.9.2.0",
+		IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
+	}}}
+	provider := Select(ibm, nil, secret.Index{}, "/context/secrets")
+	wantURL := "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo"
+	if provider.Repository.IBMRepoURL != wantURL {
+		t.Fatalf("ibm 9.9.2.0 repo URL = %q, want %q", provider.Repository.IBMRepoURL, wantURL)
+	}
+	if provider.ImageBase != "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" {
+		t.Fatalf("ibm 9.9.2.0 imageBase = %q", provider.ImageBase)
+	}
+	runtimeOS := Vars(provider)["runtimeOS"].(map[string]any)
+	if runtimeOS["family"] != "rhel" {
+		t.Fatalf("uncataloged release runtimeOS = %#v", runtimeOS)
+	}
+	if _, ok := runtimeOS["majorVersions"]; ok {
+		t.Fatalf("uncataloged release must not render a major-version gate: %#v", runtimeOS)
+	}
+	if _, ok := runtimeOS["exactVersions"]; ok {
+		t.Fatalf("uncataloged release must not render an exact-version matrix: %#v", runtimeOS)
 	}
 }

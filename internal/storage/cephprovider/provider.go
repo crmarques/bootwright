@@ -2,8 +2,6 @@ package cephprovider
 
 import (
 	"fmt"
-	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -19,20 +17,16 @@ const (
 
 	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-{{ ansible_distribution_major_version }}.repo"
 
-	ibmImagePathTemplate    = "ibm-ceph/ceph-%s-rhel9"
-	rhcephImagePathTemplate = "rhceph/rhceph-%s-rhel9"
+	ibmImagePathTemplate    = "ibm-ceph/ceph-%s-rhel%s"
+	rhcephImagePathTemplate = "rhceph/rhceph-%s-rhel%s"
+
+	vendorImageOSMajor = "9"
 )
 
 const (
 	rhelBaseOSRepo          = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-baseos-rpms"
 	rhelAppStreamRepo       = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-appstream-rpms"
 	rhcephToolsRepoTemplate = "rhceph-%s-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
-)
-
-var (
-	ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	ossSupportedReleaseNames  = map[string]bool{"squid": true, "tentacle": true}
-	ossSupportedSeries        = []string{"19.2.", "20.2."}
 )
 
 type distributionDef struct {
@@ -46,39 +40,56 @@ type distributionDef struct {
 	usesRHCephToolsRepo bool
 	ibmRepoTemplate     string
 	imagePathTemplate   string
+	defaultImageOSMajor string
 	runtimeOS           RuntimeOS
 }
 
 type releaseDef struct {
-	value     string
-	stream    string
-	runtimeOS RuntimeOS
+	value        string
+	imageOSMajor string
+	runtimeOS    RuntimeOS
 }
 
 func (d distributionDef) requiresEntitlement() bool {
 	return d.requiresRHSM || d.requiresRegistry || d.requiresLicense
 }
 
-func rhelCephRuntimeOS(versions []string, message string) RuntimeOS {
+func rhelCephRuntimeOS(product string, versions []string) RuntimeOS {
+	exact := append([]string(nil), versions...)
+	var majors []string
+	for _, version := range exact {
+		major := leadingComponent(version)
+		if !containsString(majors, major) {
+			majors = append(majors, major)
+		}
+	}
 	return RuntimeOS{
 		Family:         "rhel",
-		ExactVersions:  append([]string(nil), versions...),
-		ManagedMessage: message,
+		MajorVersions:  majors,
+		ExactVersions:  exact,
+		ManagedMessage: fmt.Sprintf("%s runs on RHEL %s storage nodes", product, strings.Join(majors, " or ")),
+	}
+}
+
+func rhelCephFamilyOnly(product string) RuntimeOS {
+	return RuntimeOS{
+		Family:         "rhel",
+		ManagedMessage: fmt.Sprintf("%s runs on RHEL-family storage nodes", product),
 	}
 }
 
 var (
 	rhcs90RuntimeOS = rhelCephRuntimeOS(
+		"Red Hat Ceph Storage 9.0",
 		[]string{"9.6", "9.7", "10", "10.0", "10.1"},
-		"Red Hat Ceph Storage 9.0 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes",
 	)
 	rhcs91RuntimeOS = rhelCephRuntimeOS(
+		"Red Hat Ceph Storage 9.1",
 		[]string{"9.8", "10.2"},
-		"Red Hat Ceph Storage 9.1 requires RHEL 9.8 or 10.2 on storage nodes",
 	)
 	ibm9910RuntimeOS = rhelCephRuntimeOS(
+		"IBM Storage Ceph 9.9.1.0",
 		[]string{"9.8", "10.2"},
-		"IBM Storage Ceph 9.9.1.0 requires RHEL 9.8 or 10.2 on storage nodes",
 	)
 )
 
@@ -93,12 +104,12 @@ var distributions = map[string]distributionDef{
 	v1alpha1.StorageCephDistributionRedHat: {
 		defaultRelease: "9.1",
 		releases: map[string]releaseDef{
-			"9":     {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
-			"9.0":   {value: "9.0", stream: "9", runtimeOS: rhcs90RuntimeOS},
-			"9.0.1": {value: "9.0.1", stream: "9", runtimeOS: rhcs90RuntimeOS},
-			"9.0.2": {value: "9.0.2", stream: "9", runtimeOS: rhcs90RuntimeOS},
-			"9.0.3": {value: "9.0.3", stream: "9", runtimeOS: rhcs90RuntimeOS},
-			"9.1":   {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
+			"9":     {value: "9.1", runtimeOS: rhcs91RuntimeOS},
+			"9.0":   {value: "9.0", runtimeOS: rhcs90RuntimeOS},
+			"9.0.1": {value: "9.0.1", runtimeOS: rhcs90RuntimeOS},
+			"9.0.2": {value: "9.0.2", runtimeOS: rhcs90RuntimeOS},
+			"9.0.3": {value: "9.0.3", runtimeOS: rhcs90RuntimeOS},
+			"9.1":   {value: "9.1", runtimeOS: rhcs91RuntimeOS},
 		},
 		requiresRHSM:        true,
 		requiresRegistry:    true,
@@ -106,20 +117,24 @@ var distributions = map[string]distributionDef{
 		baseRepos:           []string{rhelBaseOSRepo, rhelAppStreamRepo},
 		usesRHCephToolsRepo: true,
 		imagePathTemplate:   rhcephImagePathTemplate,
+		defaultImageOSMajor: vendorImageOSMajor,
+		runtimeOS:           rhelCephFamilyOnly("Red Hat Ceph Storage"),
 	},
 	v1alpha1.StorageCephDistributionIBM: {
 		defaultRelease: "9.9.1.0",
 		releases: map[string]releaseDef{
-			"9":       {value: "9.9.1.0", stream: "9", runtimeOS: ibm9910RuntimeOS},
-			"9.9.1.0": {value: "9.9.1.0", stream: "9", runtimeOS: ibm9910RuntimeOS},
+			"9":       {value: "9.9.1.0", runtimeOS: ibm9910RuntimeOS},
+			"9.9.1.0": {value: "9.9.1.0", runtimeOS: ibm9910RuntimeOS},
 		},
-		requiresRHSM:      true,
-		requiresRegistry:  true,
-		requiresLicense:   true,
-		registryURL:       IBMRegistryURL,
-		baseRepos:         []string{rhelBaseOSRepo, rhelAppStreamRepo},
-		ibmRepoTemplate:   ibmStorageCephRepoTemplate,
-		imagePathTemplate: ibmImagePathTemplate,
+		requiresRHSM:        true,
+		requiresRegistry:    true,
+		requiresLicense:     true,
+		registryURL:         IBMRegistryURL,
+		baseRepos:           []string{rhelBaseOSRepo, rhelAppStreamRepo},
+		ibmRepoTemplate:     ibmStorageCephRepoTemplate,
+		imagePathTemplate:   ibmImagePathTemplate,
+		defaultImageOSMajor: vendorImageOSMajor,
+		runtimeOS:           rhelCephFamilyOnly("IBM Storage Ceph"),
 	},
 }
 
@@ -150,96 +165,6 @@ type Community struct {
 type Repository struct {
 	RedHatRepos []string
 	IBMRepoURL  string
-}
-
-type RuntimeOS struct {
-	Family         string
-	MajorVersions  []string
-	ExactVersions  []string
-	ManagedMessage string
-}
-
-type ResolvedRelease struct {
-	Value     string
-	Stream    string
-	RuntimeOS RuntimeOS
-}
-
-func ResolveRelease(distribution, authored string) (ResolvedRelease, bool) {
-	def, ok := distributions[distribution]
-	if !ok {
-		return ResolvedRelease{}, false
-	}
-	value := authored
-	if value == "" {
-		value = def.defaultRelease
-	}
-	if distribution == v1alpha1.StorageCephDistributionOSS && !supportedOSSRelease(value) {
-		return ResolvedRelease{}, false
-	}
-	if def.releases == nil {
-		return ResolvedRelease{Value: value, RuntimeOS: def.runtimeOS}, true
-	}
-	release, ok := def.releases[value]
-	if !ok {
-		return ResolvedRelease{}, false
-	}
-	return ResolvedRelease{Value: release.value, Stream: release.stream, RuntimeOS: release.runtimeOS}, true
-}
-
-func SupportedReleases(distribution string) []string {
-	def, ok := distributions[distribution]
-	if !ok {
-		return nil
-	}
-	if distribution == v1alpha1.StorageCephDistributionOSS {
-		return []string{"19.2.x", "20.2.x", "squid", "tentacle"}
-	}
-	if def.releases == nil {
-		return nil
-	}
-	out := make([]string, 0, len(def.releases))
-	for value := range def.releases {
-		out = append(out, value)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func supportedOSSRelease(value string) bool {
-	if ossSupportedReleaseNames[value] {
-		return true
-	}
-	if !ossUpstreamVersionPattern.MatchString(value) {
-		return false
-	}
-	for _, series := range ossSupportedSeries {
-		if strings.HasPrefix(value, series) {
-			return true
-		}
-	}
-	return false
-}
-
-func DefaultRelease(distribution string) string {
-	if def, ok := distributions[distribution]; ok {
-		return def.defaultRelease
-	}
-	return ""
-}
-
-func DefaultRegistryURL(distribution string) string {
-	if def, ok := distributions[distribution]; ok {
-		return def.registryURL
-	}
-	return ""
-}
-
-func DerivedOSSImage(release string) string {
-	if ossUpstreamVersionPattern.MatchString(release) {
-		return ossImageRepository + ":v" + release
-	}
-	return ""
 }
 
 func Distribution(cluster v1alpha1.StorageCluster) string {
@@ -289,38 +214,6 @@ func ossImage(cluster v1alpha1.StorageCluster, community Community) string {
 		return DerivedOSSImage(community.Version)
 	}
 	return ""
-}
-
-func ImageRepository(image string) string {
-	if at := strings.IndexByte(image, '@'); at >= 0 {
-		image = image[:at]
-	}
-	segStart := strings.LastIndexByte(image, '/') + 1
-	if colon := strings.IndexByte(image[segStart:], ':'); colon >= 0 {
-		return image[:segStart+colon]
-	}
-	return image
-}
-
-func ExpectedImageRepository(distribution, release, registryURL string) (string, bool) {
-	def, ok := distributions[distribution]
-	if !ok {
-		return "", false
-	}
-	resolved, ok := ResolveRelease(distribution, release)
-	if !ok {
-		return "", false
-	}
-	if distribution == v1alpha1.StorageCephDistributionOSS {
-		return ossImageRepository, true
-	}
-	if registryURL == "" {
-		registryURL = def.registryURL
-	}
-	if def.imagePathTemplate == "" || registryURL == "" || resolved.Stream == "" {
-		return "", false
-	}
-	return strings.TrimSuffix(registryURL, "/") + "/" + fmt.Sprintf(def.imagePathTemplate, resolved.Stream), true
 }
 
 func imageBase(distribution, release, registryURL, image string) string {

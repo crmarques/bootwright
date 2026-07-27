@@ -89,8 +89,8 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
-| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0`, its `9.0.1`-`9.0.3` updates, or `9.1`; `ibm` accepts the VRMF product version `9.9.1.0`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create structural drift gated behind `apply --converge-drifted` when that default advances; pin an exact release to avoid implicit upgrades. |
-| `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must use that distribution and release's canonical repository. |
+| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. Bootwright derives the package repository, `.repo` URL, and image repository from the release rather than looking them up, so any release it can parse installs without a Bootwright update. `oss` takes an upstream release name (`tentacle`) or an exact `x.y.z` version; an exact version pins the package repository and derives `quay.io/ceph/ceph:vX.Y.Z`. `redhat` and `ibm` take a dot-separated numeric product version of any length (`9.1`, `9.9.1.0`), whose leading component is the product stream. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create structural drift gated behind `apply --converge-drifted` when that default advances; pin an exact release to avoid implicit upgrades. |
+| `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must sit in that distribution and release's canonical repository, and is the escape hatch for a release whose vendor image build base Bootwright has not recorded. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the community package payload fetched from `community.mirror`. `oss` only. |
 | `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
@@ -145,16 +145,35 @@ Distribution requirements:
 | Distribution | Requirements |
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
-| `redhat` | `entitlementRef` resolves to `redhat-ceph`. Releases `9.0` through `9.0.3` support RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` supports RHEL 9.8 or 10.2. |
-| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. Release `9.9.1.0` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
+| `redhat` | `entitlementRef` resolves to `redhat-ceph`. Recorded runtimes: releases `9.0` through `9.0.3` on RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` on RHEL 9.8 or 10.2. |
+| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. Recorded runtime for release `9.9.1.0`: RHEL 9.8 or 10.2. `ibm.callHome` is required. |
+
+### Releases Bootwright has not seen
+
+Bootwright records vendor facts for the releases above, but it does not require
+them. Anything it can parse resolves: the leading component becomes the product
+stream, and the stream plus each node's own RHEL major build the tools repo, the
+vendor `.repo` URL, and the daemon image repository. A release outside the
+recorded set installs the same way and raises a `bootwright check` warning
+naming what was assumed — chiefly the image build base, which is not derivable
+from a product version. Pin `ceph.image` to settle it.
+
+The storage-node OS follows the same split. The RHEL family and major version
+are validated and re-asserted on the node, because those move slowly. A minor
+version outside the recorded matrix only warns, at `check` and again during
+apply, so a RHEL z-stream that ships after Bootwright does not turn a correct
+declaration into a failure. Check the vendor compatibility guide when you see
+that warning.
 
 When `Entitlement.spec.registry.url` overrides the vendor namespace,
 `ceph.image` must explicitly pin the canonical vendor repository below that
 mirror root. For release stream `9`, examples are
 `mirror.example.test/vendor/rhceph/rhceph-9-rhel9:<tag>` for Red Hat and
-`mirror.example.test/vendor/ibm-ceph/ceph-9-rhel9:<tag>` for IBM. The registry
-override controls credentials and trust; it does not permit an arbitrary image
-repository below the namespace.
+`mirror.example.test/vendor/ibm-ceph/ceph-9-rhel9:<tag>` for IBM. For a release
+Bootwright has no facts for, the check covers the vendor namespace and stream
+(`.../rhceph/rhceph-<stream>-rhel`) and the trailing build base is yours. The
+registry override controls credentials and trust; it does not permit an
+arbitrary image repository below the namespace.
 
 ### Revoking root SSH on Ceph nodes
 
