@@ -1236,7 +1236,7 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfAssimilatesGlobalMonOSDConfig(t *testing.T) {
+func TestBootstrapConfAssimilatesGlobalMonMgrOSDConfig(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
@@ -1245,13 +1245,35 @@ func TestBootstrapConfAssimilatesGlobalMonOSDConfig(t *testing.T) {
 				"global":        {"osd_pool_default_size": "3"},
 				"osd":           {"osd_memory_target": "4294967296"},
 				"mgr":           {"mgr/balancer/active": "true"},
+				"mds":           {"mds_cache_memory_limit": "4294967296"},
+				"client":        {"rbd_cache": "true"},
 				"osd/class:ssd": {"osd_memory_target": "8589934592"},
 			},
 		}},
 	}
-	want := "[global]\npublic_network = 10.0.0.0/24\nosd_pool_default_size = 3\n[osd]\nosd_memory_target = 4294967296\n"
+	want := "[global]\npublic_network = 10.0.0.0/24\nosd_pool_default_size = 3\n[mgr]\nmgr/balancer/active = true\n[osd]\nosd_memory_target = 4294967296\n"
 	if got := CephadmBootstrapConf(cluster); got != want {
 		t.Fatalf("bootstrap conf =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestBootstrapConfSeedsSidecarImagePins(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Config: map[string]map[string]string{"mgr": {
+				"mgr/cephadm/container_image_prometheus":    "mirror.test:5000/prometheus/prometheus:v2.53.0",
+				"mgr/cephadm/container_image_grafana":       "mirror.test:5000/ceph/grafana:10.4.0",
+				"mgr/cephadm/container_image_alertmanager":  "mirror.test:5000/prometheus/alertmanager:v0.27.0",
+				"mgr/cephadm/container_image_node_exporter": "mirror.test:5000/prometheus/node-exporter:v1.7.0",
+			}},
+		}},
+	}
+	conf := CephadmBootstrapConf(cluster)
+	for key, value := range cluster.Spec.Ceph.Config["mgr"] {
+		if !strings.Contains(conf, key+" = "+value) {
+			t.Fatalf("bootstrap conf must seed %s so cephadm bootstrap does not deploy the monitoring stack from upstream defaults; got\n%s", key, conf)
+		}
 	}
 }
 

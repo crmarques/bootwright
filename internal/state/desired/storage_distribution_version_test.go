@@ -129,20 +129,20 @@ func TestValidateStorageCephCustomVendorRegistryRequiresMatchingImage(t *testing
 		Distribution:   v1alpha1.StorageCephDistributionRedHat,
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 	}}}
-	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "image is required") {
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph.image", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "base is required") {
 		t.Fatalf("custom registry without image = %v", errs)
 	}
-	cluster.Spec.Ceph.Image = "registry.redhat.io/rhceph/rhceph-9-rhel9:9"
-	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "image repository must start with") {
+	cluster.Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "registry.redhat.io/rhceph/rhceph-9-rhel9", Version: "9"}
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph.image", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "base must start with") {
 		t.Fatalf("cross-registry image = %v", errs)
 	}
-	cluster.Spec.Ceph.Image = "registry.example.test/ceph/rhceph/rhceph-9-rhel9:9"
-	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) != 0 {
+	cluster.Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "registry.example.test/ceph/rhceph/rhceph-9-rhel9", Version: "9"}
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph.image", cluster, state); len(errs) != 0 {
 		t.Fatalf("matching mirrored image rejected: %v", errs)
 	}
 	cluster.Spec.Ceph.Release = "10.0"
-	cluster.Spec.Ceph.Image = "registry.example.test/ceph/rhceph/rhceph-10-rhel10:10"
-	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph", cluster, state); len(errs) != 0 {
+	cluster.Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "registry.example.test/ceph/rhceph/rhceph-10-rhel10", Version: "10"}
+	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph.image", cluster, state); len(errs) != 0 {
 		t.Fatalf("a vendor build base newer than Bootwright was rejected: %v", errs)
 	}
 }
@@ -152,7 +152,8 @@ func TestStorageValidationRejectsWrongVendorImageRepository(t *testing.T) {
 		name         string
 		distribution string
 		release      string
-		image        string
+		base         string
+		version      string
 		entType      string
 		ibm          *v1alpha1.StorageCephIBMSpec
 	}{
@@ -160,21 +161,24 @@ func TestStorageValidationRejectsWrongVendorImageRepository(t *testing.T) {
 			name:         "redhat arbitrary repository",
 			distribution: v1alpha1.StorageCephDistributionRedHat,
 			release:      "9.1",
-			image:        "registry.redhat.io/ubi9/ubi:9.6",
+			base:         "registry.redhat.io/ubi9/ubi",
+			version:      "9.6",
 			entType:      v1alpha1.EntitlementTypeRedHatCeph,
 		},
 		{
 			name:         "redhat wrong stream repository",
 			distribution: v1alpha1.StorageCephDistributionRedHat,
 			release:      "9",
-			image:        "registry.redhat.io/rhceph/rhceph-10-rhel9:10",
+			base:         "registry.redhat.io/rhceph/rhceph-10-rhel9",
+			version:      "10",
 			entType:      v1alpha1.EntitlementTypeRedHatCeph,
 		},
 		{
 			name:         "ibm redhat repository",
 			distribution: v1alpha1.StorageCephDistributionIBM,
 			release:      "9.9.1.0",
-			image:        "cp.icr.io/cp/rhceph/rhceph-9-rhel9:9",
+			base:         "cp.icr.io/cp/rhceph/rhceph-9-rhel9",
+			version:      "9",
 			entType:      v1alpha1.EntitlementTypeIBMStorageCeph,
 			ibm:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
 		},
@@ -189,11 +193,11 @@ func TestStorageValidationRejectsWrongVendorImageRepository(t *testing.T) {
 			ceph := state.StorageClusters[0].Spec.Ceph
 			ceph.Distribution = tc.distribution
 			ceph.Release = tc.release
-			ceph.Image = tc.image
+			ceph.Image = &v1alpha1.StorageCephImageSpec{Base: tc.base, Version: tc.version}
 			ceph.EntitlementRef.Name = "ceph-entitlement"
 			ceph.IBM = tc.ibm
 			errs := strings.Join(validateStorage(state), "; ")
-			if !strings.Contains(errs, "image repository must start with") {
+			if !strings.Contains(errs, "base must start with") {
 				t.Fatalf("validateStorage errors = %q", errs)
 			}
 		})
@@ -212,7 +216,7 @@ func TestStorageValidationAcceptsCanonicalVendorMirrorRepository(t *testing.T) {
 	ceph := state.StorageClusters[0].Spec.Ceph
 	ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 	ceph.Release = "9.1"
-	ceph.Image = "mirror.example.test/vendor/rhceph/rhceph-9-rhel9@sha256:" + strings.Repeat("a", 64)
+	ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "mirror.example.test/vendor/rhceph/rhceph-9-rhel9", Version: "sha256:" + strings.Repeat("a", 64)}
 	ceph.EntitlementRef.Name = "ceph-entitlement"
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("validateStorage returned errors: %v", errs)

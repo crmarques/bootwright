@@ -20,11 +20,18 @@ func adviceCephCluster(name, distribution, image string, roleSets ...[]string) v
 			Type: v1alpha1.StorageClusterTypeCeph,
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: distribution,
-				Image:        image,
+				Image:        adviceImageSpec(image),
 				Topology:     v1alpha1.StorageCephTopology{Nodes: hosts},
 			},
 		},
 	}
+}
+
+func adviceImageSpec(version string) *v1alpha1.StorageCephImageSpec {
+	if version == "" {
+		return nil
+	}
+	return &v1alpha1.StorageCephImageSpec{Version: version}
 }
 
 func adviceState(clusters ...v1alpha1.StorageCluster) v1alpha1.State {
@@ -100,7 +107,7 @@ func TestStorageAdvisoriesFlagUnpinnedSubscriptionImage(t *testing.T) {
 
 func TestStorageAdvisoriesPinnedImageAndOSSAreSilentOnImage(t *testing.T) {
 	pinned := adviceCephCluster("ibm-pinned", v1alpha1.StorageCephDistributionIBM,
-		"cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc",
+		"9.9.1.0-123",
 		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
 	if got := findingsWith(StorageAdvisories(adviceState(pinned)), "spec.ceph.image"); len(got) != 0 {
 		t.Fatalf("a pinned ibm image must not raise an image advisory, got %+v", got)

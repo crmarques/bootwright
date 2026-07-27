@@ -289,13 +289,13 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 		{
 			name: "oss-image-tag",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph:v19.2.1"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Version: "v19.2.1"}
 			},
 		},
 		{
 			name: "oss-image-digest",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph@sha256:" + strings.Repeat("a", 64)
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Version: "sha256:" + strings.Repeat("a", 64)}
 			},
 		},
 		{
@@ -308,7 +308,7 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 				state.StorageClusters[0].Spec.Ceph.Release = "9"
-				state.StorageClusters[0].Spec.Ceph.Image = "registry.redhat.io/rhceph/rhceph-9-rhel9:9"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "registry.redhat.io/rhceph/rhceph-9-rhel9", Version: "9"}
 			},
 		},
 		{
@@ -830,16 +830,31 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 		{
 			name: "image-mutable-latest",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph:latest"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Version: "latest"}
 			},
-			want: `spec.ceph.image "quay.io/ceph/ceph:latest" must not use mutable :latest tag`,
+			want: `spec.ceph.image.version "latest" must be an image tag or a sha256: digest`,
 		},
 		{
-			name: "image-unpinned",
+			name: "image-base-carries-a-tag",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "quay.io/ceph/ceph:v19.2.1", Version: "v19.2.1"}
 			},
-			want: `spec.ceph.image "quay.io/ceph/ceph" must pin a version tag or digest`,
+			want: `spec.ceph.image.base "quay.io/ceph/ceph:v19.2.1" must be a bare <registry>/<path> reference`,
+		},
+		{
+			name: "image-base-without-version",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Release = "squid"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Base: "quay.io/ceph/ceph"}
+			},
+			want: `spec.ceph.image.base names no image until .version completes it`,
+		},
+		{
+			name: "package-version-on-oss",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.PackageVersion = "19.2.1-245.el9cp"
+			},
+			want: `spec.ceph.packageVersion must be empty when distribution=oss`,
 		},
 		{
 			name: "community-bad-mirror",

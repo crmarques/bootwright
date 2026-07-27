@@ -14,14 +14,14 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 		name         string
 		ceph         v1alpha1.StorageClusterCephSpec
 		wantRelease  string
-		wantImage    string
+		wantVersion  string
 		wantChecksum string
 	}{
 		{
 			name:        "oss default is exact and reproducible",
 			ceph:        v1alpha1.StorageClusterCephSpec{},
 			wantRelease: "20.2.2",
-			wantImage:   "quay.io/ceph/ceph:v20.2.2",
+			wantVersion: "v20.2.2",
 		},
 		{
 			name: "oss checksum and image are canonical",
@@ -31,7 +31,7 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 				Community:    &v1alpha1.StorageCephCommunitySpec{Checksum: checksum},
 			},
 			wantRelease:  "20.2.2",
-			wantImage:    "quay.io/ceph/ceph:v20.2.2",
+			wantVersion:  "v20.2.2",
 			wantChecksum: strings.Repeat("a", 64),
 		},
 		{
@@ -62,8 +62,8 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 			}}}
 			Normalize(&state)
 			got := state.StorageClusters[0].Spec.Ceph
-			if got.Release != tc.wantRelease || got.Image != tc.wantImage {
-				t.Fatalf("normalized release/image = %q/%q, want %q/%q", got.Release, got.Image, tc.wantRelease, tc.wantImage)
+			if got.Release != tc.wantRelease || v1alpha1.StorageCephImageVersion(got) != tc.wantVersion {
+				t.Fatalf("normalized release/image version = %q/%q, want %q/%q", got.Release, v1alpha1.StorageCephImageVersion(got), tc.wantRelease, tc.wantVersion)
 			}
 			if tc.wantChecksum != "" && got.Community.Checksum != tc.wantChecksum {
 				t.Fatalf("normalized checksum = %q, want %q", got.Community.Checksum, tc.wantChecksum)

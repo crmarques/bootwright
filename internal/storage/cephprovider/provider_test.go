@@ -187,16 +187,23 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 	}
 }
 
+func imageSpec(base, version string) *v1alpha1.StorageCephImageSpec {
+	if base == "" && version == "" {
+		return nil
+	}
+	return &v1alpha1.StorageCephImageSpec{Base: base, Version: version}
+}
+
 func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
-	oss := func(release, image string) v1alpha1.StorageCluster {
+	oss := func(release, base, version string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: v1alpha1.StorageCephDistributionOSS,
 			Release:      release,
-			Image:        image,
+			Image:        imageSpec(base, version),
 		}}}
 	}
 
-	provider := Select(oss("19.2.1", ""), nil, secret.Index{}, "/context/secrets")
+	provider := Select(oss("19.2.1", "", ""), nil, secret.Index{}, "/context/secrets")
 	if provider.Community.Version != "19.2.1" || provider.Community.Release != "" {
 		t.Fatalf("version not classified: %#v", provider.Community)
 	}
@@ -215,7 +222,7 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 		t.Fatalf("image var = %v, want derived image", vars["image"])
 	}
 
-	nameProvider := Select(oss("squid", ""), nil, secret.Index{}, "/context/secrets")
+	nameProvider := Select(oss("squid", "", ""), nil, secret.Index{}, "/context/secrets")
 	if nameProvider.Community.Release != "squid" || nameProvider.Image != "" {
 		t.Fatalf("name release derived an image: %#v image=%q", nameProvider.Community, nameProvider.Image)
 	}
@@ -223,31 +230,110 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 		t.Fatalf("name release must omit image var")
 	}
 
-	pinned := Select(oss("19.2.1", "quay.io/ceph/ceph@sha256:abc"), nil, secret.Index{}, "/context/secrets")
-	if pinned.Image != "quay.io/ceph/ceph@sha256:abc" {
-		t.Fatalf("explicit image not honored: %q", pinned.Image)
+	digest := "sha256:" + strings.Repeat("a", 64)
+	pinned := Select(oss("19.2.1", "", digest), nil, secret.Index{}, "/context/secrets")
+	if pinned.Image != "quay.io/ceph/ceph@"+digest {
+		t.Fatalf("authored digest not honored: %q", pinned.Image)
+	}
+
+	mirrored := Select(oss("19.2.1", "mirror.example.test/ceph/ceph", "v19.2.1"), nil, secret.Index{}, "/context/secrets")
+	if mirrored.Image != "mirror.example.test/ceph/ceph:v19.2.1" || mirrored.ImageBase != "mirror.example.test/ceph/ceph" {
+		t.Fatalf("authored base not honored: image=%q base=%q", mirrored.Image, mirrored.ImageBase)
+	}
+}
+
+func TestSelectComposesImageVersionOntoTheDerivedBase(t *testing.T) {
+	cluster := func(distribution, release, version string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: distribution,
+			Release:      release,
+			Image:        imageSpec("", version),
+		}}}
+	}
+	cases := []struct {
+		distribution string
+		release      string
+		version      string
+		want         string
+	}{
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.9.1.0-123", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:9.9.1.0-123"},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9-1234", "registry.redhat.io/rhceph/rhceph-9-rhel9:9-1234"},
+		{v1alpha1.StorageCephDistributionOSS, "squid", "v19.2.1", "quay.io/ceph/ceph:v19.2.1"},
+	}
+	for _, tc := range cases {
+		provider := Select(cluster(tc.distribution, tc.release, tc.version), nil, secret.Index{}, "/context/secrets")
+		if provider.Image != tc.want {
+			t.Fatalf("%s composed image = %q, want %q", tc.distribution, provider.Image, tc.want)
+		}
+		if provider.ImageBase != ImageRepository(tc.want) {
+			t.Fatalf("%s image base = %q, want %q", tc.distribution, provider.ImageBase, ImageRepository(tc.want))
+		}
+	}
+}
+
+func TestSelectComposedImageBaseMatchesTheVendorPrefixGuard(t *testing.T) {
+	for _, distribution := range []string{v1alpha1.StorageCephDistributionIBM, v1alpha1.StorageCephDistributionRedHat} {
+		for _, release := range []string{"", "9", "9.1", "10.0.0.1"} {
+			cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+				Distribution: distribution,
+				Release:      release,
+				Image:        imageSpec("", "9-1234"),
+			}}}
+			provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+			prefix, ok := ImageRepositoryPrefix(distribution, release, "")
+			if !ok {
+				t.Fatalf("%s release %q has no vendor prefix", distribution, release)
+			}
+			if !strings.HasPrefix(provider.ImageBase, prefix) {
+				t.Fatalf("%s release %q derived base %q does not satisfy the guard prefix %q", distribution, release, provider.ImageBase, prefix)
+			}
+		}
+	}
+}
+
+func TestSelectKeepsTheOwnershipPackageNameBareWhilePinningTheBuild(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution:   v1alpha1.StorageCephDistributionIBM,
+		Release:        "9.9.1.0",
+		PackageVersion: "19.2.1-245.el9cp",
+	}}}
+	provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+	if provider.CephadmPackage != "cephadm" {
+		t.Fatalf("ownership package name = %q, want bare cephadm", provider.CephadmPackage)
+	}
+	if provider.CephadmPackageSpec != "cephadm-19.2.1-245.el9cp" {
+		t.Fatalf("pinned install spec = %q", provider.CephadmPackageSpec)
+	}
+	vars := Vars(provider)
+	if vars["cephadmPackage"] != "cephadm" || vars["cephadmPackageSpec"] != "cephadm-19.2.1-245.el9cp" {
+		t.Fatalf("package vars = %#v", vars)
+	}
+
+	cluster.Spec.Ceph.PackageVersion = ""
+	if _, ok := Vars(Select(cluster, nil, secret.Index{}, "/context/secrets"))["cephadmPackageSpec"]; ok {
+		t.Fatalf("unpinned provider must omit cephadmPackageSpec")
 	}
 }
 
 func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
-	redhat := func(release, image string) v1alpha1.StorageCluster {
+	redhat := func(release, base, version string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: v1alpha1.StorageCephDistributionRedHat,
 			Release:      release,
-			Image:        image,
+			Image:        imageSpec(base, version),
 		}}}
 	}
 
-	def := Select(redhat("", ""), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
+	def := Select(redhat("", "", ""), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
 	if got := def[len(def)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("default tools repo = %q", got)
 	}
 
-	repos := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9:9"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
+	repos := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9", "9"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
 	if got := repos[len(repos)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
 		t.Fatalf("stream tools repo = %q, want rhceph-9-tools", got)
 	}
-	provider := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9:9"), nil, secret.Index{}, "/context/secrets")
+	provider := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9", "9"), nil, secret.Index{}, "/context/secrets")
 	if provider.Image != "registry.redhat.io/rhceph/rhceph-9-rhel9:9" {
 		t.Fatalf("explicit image not honored: %q", provider.Image)
 	}
@@ -273,18 +359,18 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 }
 
 func TestSelectResolvesContainerImageBase(t *testing.T) {
-	cluster := func(distribution, release, image string) v1alpha1.StorageCluster {
+	cluster := func(distribution, release, base string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: distribution,
 			Release:      release,
-			Image:        image,
+			Image:        imageSpec(base, ""),
 		}}}
 	}
 	cases := []struct {
 		name         string
 		distribution string
 		release      string
-		image        string
+		base         string
 		want         string
 	}{
 		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
@@ -293,13 +379,13 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
 		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
 		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},
-		{"ibm pinned digest", v1alpha1.StorageCephDistributionIBM, "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"redhat pinned tag", v1alpha1.StorageCephDistributionRedHat, "9.1", "registry.redhat.io/rhceph/rhceph-9-rhel9:9", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
-		{"oss pinned tag", v1alpha1.StorageCephDistributionOSS, "19.2.1", "quay.io/ceph/ceph:v19.2.1", "quay.io/ceph/ceph"},
+		{"ibm authored base", v1alpha1.StorageCephDistributionIBM, "", "mirror.example.test/ibm-ceph/ceph-9-rhel9", "mirror.example.test/ibm-ceph/ceph-9-rhel9"},
+		{"redhat authored base", v1alpha1.StorageCephDistributionRedHat, "9.1", "mirror.example.test/rhceph/rhceph-9-rhel9", "mirror.example.test/rhceph/rhceph-9-rhel9"},
+		{"oss authored base", v1alpha1.StorageCephDistributionOSS, "19.2.1", "mirror.example.test/ceph/ceph", "mirror.example.test/ceph/ceph"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := Select(cluster(tc.distribution, tc.release, tc.image), nil, secret.Index{}, "/context/secrets")
+			provider := Select(cluster(tc.distribution, tc.release, tc.base), nil, secret.Index{}, "/context/secrets")
 			if provider.ImageBase != tc.want {
 				t.Fatalf("ImageBase = %q, want %q", provider.ImageBase, tc.want)
 			}

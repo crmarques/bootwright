@@ -131,7 +131,8 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 		name         string
 		distribution string
 		release      string
-		image        string
+		imageBase    string
+		imageVersion string
 		callHome     string
 		want         string
 		wantLicense  bool
@@ -148,7 +149,8 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			name:         "ibm enabled reconciles call home",
 			distribution: v1alpha1.StorageCephDistributionIBM,
 			release:      "9.9.1.0",
-			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			imageVersion: "v9.9.1-17759",
 			callHome:     v1alpha1.StorageCephIBMCallHomeEnabled,
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
 			wantLicense:  true,
@@ -163,7 +165,8 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			name:         "ibm disabled reconciles call home",
 			distribution: v1alpha1.StorageCephDistributionIBM,
 			release:      "9.9.1.0",
-			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			imageVersion: "v9.9.1-17759",
 			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
 			wantLicense:  true,
@@ -185,7 +188,7 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 				Spec: v1alpha1.StorageClusterSpec{Type: v1alpha1.StorageClusterTypeCeph, Ceph: &v1alpha1.StorageClusterCephSpec{
 					Distribution: tc.distribution,
 					Release:      tc.release,
-					Image:        tc.image,
+					Image:        &v1alpha1.StorageCephImageSpec{Base: tc.imageBase, Version: tc.imageVersion},
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
