@@ -119,6 +119,17 @@ func TestStorageAdvisoriesPinnedImageAndOSSAreSilentOnImage(t *testing.T) {
 	}
 }
 
+func TestStorageAdvisoriesNeverNagAboutThePackageBuild(t *testing.T) {
+	cluster := adviceCephCluster("ibm", v1alpha1.StorageCephDistributionIBM, "",
+		[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
+	cluster.Spec.Ceph.PackageVersion = ""
+	for _, a := range StorageAdvisories(adviceState(cluster)) {
+		if strings.Contains(a.Finding+a.Impact+a.Remediation, "packageVersion") {
+			t.Fatalf("no advisory may nag about an unpinned cephadm build; that is release-matrix territory Bootwright does not enter: %+v", a)
+		}
+	}
+}
+
 func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 	healthy := func(name, distribution string) v1alpha1.StorageCluster {
 		return adviceCephCluster(name, distribution, "",

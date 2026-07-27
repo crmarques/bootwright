@@ -882,6 +882,34 @@ func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmPinsSidecarImagesEarlyAndConditionally(t *testing.T) {
+	tasks := storageCephBootstrapTasks(t)
+
+	bootstrapIdx := findAnsibleTask(t, tasks, "Resolve cephadm bootstrap command")
+	readIdx := findAnsibleTask(t, tasks, "Read current cephadm sidecar container images")
+	setIdx := findAnsibleTask(t, tasks, "Pin cephadm sidecar container images before the monitoring stack deploys")
+	if readIdx >= setIdx {
+		t.Fatalf("the sidecar pin must read the live value before setting it (read=%d set=%d)", readIdx, setIdx)
+	}
+	phase := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	pinInclude := strings.Index(phase, "bootstrap_steps/container_image_base.yml")
+	opsInclude := strings.Index(phase, "bootstrap_steps/topology_operations.yml")
+	if pinInclude < 0 || opsInclude < 0 || pinInclude > opsInclude {
+		t.Fatalf("the container image pins must be included well before the generic config operations; cephadm bootstrap deploys the monitoring stack in-process, so a late pin means the first pull already went to cephadm's upstream defaults (pin=%d ops=%d)", pinInclude, opsInclude)
+	}
+	if got := fmt.Sprint(tasks[setIdx]["when"]); !strings.Contains(got, "item.stdout") {
+		t.Fatalf("the sidecar pin must keep its ceph config get guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
+	}
+
+	resolve := fmt.Sprint(tasks[bootstrapIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(resolve, "--skip-monitoring-stack") {
+		t.Fatalf("bootstrap argv must still be able to skip the monitoring stack, got %v", resolve)
+	}
+	if !strings.Contains(resolve, "skipMonitoringStack") {
+		t.Fatalf("--skip-monitoring-stack must stay conditional on the rendered skipMonitoringStack flag. Making it unconditional silently deletes monitoring for every zero-config cluster: cephadmMonitoringSpecs renders nothing without a declared role or monitoring block, and Bootwright never renders ceph-exporter or crash at all. Fix sidecar image pulls by seeding them, not by skipping the stack. Got %v", resolve)
+	}
+}
+
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
@@ -1868,6 +1896,32 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	cephadmPackageBody, ok := cephadmPackage["ansible.builtin.package"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(cephadmPackageBody["name"]), "bootwright_ceph_provider.cephadmPackage") {
 		t.Fatalf("cephadm package fallback must install provider-selected cephadm package, got %v", cephadmPackage)
+	}
+	packageFactsIdx := findAnsibleTask(t, installTasks, "Gather installed package facts before pinning the cephadm build")
+	pinnedInstallIdx := findAnsibleTask(t, installTasks, "Install the pinned cephadm build on storage node")
+	if !(initialProbeIdx < packageFactsIdx && packageFactsIdx < pinnedInstallIdx && pinnedInstallIdx < recordCephadmIdx) {
+		t.Fatalf("package facts must be gathered before the pinned cephadm install so package_records_write can tell a preexisting cephadm from one Bootwright installed; otherwise destroy removes the operator's package")
+	}
+	pinnedInstall := installTasks[pinnedInstallIdx]
+	pinnedBody, ok := pinnedInstall["ansible.builtin.dnf"].(map[string]any)
+	if !ok {
+		t.Fatalf("the pinned cephadm install must use ansible.builtin.dnf; ansible.builtin.package cannot downgrade, so a pin below the installed build would fail on re-apply, got %v", pinnedInstall)
+	}
+	if pinnedBody["allow_downgrade"] != true {
+		t.Fatalf("the pinned cephadm install must set allow_downgrade so a pin below the installed build converges, got %v", pinnedBody)
+	}
+	if _, ok := pinnedInstall["failed_when"]; ok {
+		t.Fatalf("the pinned cephadm install must fail closed; an unavailable pinned build is an error, not a silent float back to whatever the repository ships, got %v", pinnedInstall)
+	}
+	if got := fmt.Sprint(pinnedBody["name"]); !strings.Contains(got, "cephadmPackageSpec") || strings.Contains(got, "~") || strings.Contains(got, "join") {
+		t.Fatalf("the pinned install name must be the rendered cephadmPackageSpec verbatim, with no Jinja string composition, got %v", got)
+	}
+	recordName := fmt.Sprint(installTasks[recordCephadmIdx]["vars"])
+	if !strings.Contains(recordName, "cephadmPackage") || strings.Contains(recordName, "cephadmPackageSpec") {
+		t.Fatalf("the ownership record must key on the bare cephadm package name, never the versioned spec; the static destroy list looks up the bare name and would orphan a versioned record, got %v", recordName)
+	}
+	if body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml"); !strings.Contains(body, "- cephadm\n") {
+		t.Fatalf("bootwright_ceph_managed_packages must keep the bare cephadm entry so destroy still matches the ownership record")
 	}
 	assertIncludeRoleName(t, installTasks[recordCephadmIdx], "bootwright.core.ownership_record")
 	if got := installTasks[verifyCephadmIdx]["failed_when"]; got != false {
