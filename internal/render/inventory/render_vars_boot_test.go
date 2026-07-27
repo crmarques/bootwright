@@ -81,6 +81,20 @@ func TestComponentPinsReflectOverrides(t *testing.T) {
 	}
 }
 
+func TestHelmReleaseURLHonorsMirrorOverride(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := HelmReleaseURL(state); got != HelmMirrorBase+"/latest" {
+		t.Errorf("helm release URL got %q, want the upstream mirror latest channel", got)
+	}
+	state.Environments[0].Spec.Defaults.HelmMirror = "https://mirror.corp.example/helm/"
+	if got := HelmReleaseURL(state); got != "https://mirror.corp.example/helm/latest" {
+		t.Errorf("helm release URL got %q, want the helmMirror override", got)
+	}
+}
+
 func TestVarsProjectResolvedComponentImages(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {

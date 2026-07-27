@@ -25,6 +25,12 @@
   changed_when: false
   when: bootwright_clis_release_url is not defined
 
+- name: Default helm release URL when not projected
+  ansible.builtin.set_fact:
+    bootwright_helm_release_url: "{{ bootwright_helm_mirror_base }}/latest"
+  changed_when: false
+  when: bootwright_helm_release_url is not defined
+
 - name: Ensure CLI install directory exists
   ansible.builtin.file:
     path: "{{ bootwright_clis_install_dir }}"
@@ -113,20 +119,17 @@
     path: "{{ bootwright_clis_tmp_parent }}"
     prefix: bootwright-controller-clis-
   register: bootwright_clis_tmp
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Compute CLI working directory
   ansible.builtin.set_fact:
     bootwright_clis_workdir: "{{ bootwright_clis_tmp.path }}/{{ bootwright_openshift_release_version }}"
   changed_when: false
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Ensure tmp working directory exists
   ansible.builtin.file:
     path: "{{ bootwright_clis_workdir }}"
     state: directory
     mode: "0755"
-  when: bootwright_clis_install_client | bool or bootwright_clis_install_oi | bool or bootwright_clis_install_oi_fips | bool
 
 - name: Download OpenShift CLI checksums
   ansible.builtin.get_url:
@@ -246,6 +249,41 @@
     mode: "0755"
   when: bootwright_clis_install_oi_fips | bool
 
+- name: Download helm checksums
+  ansible.builtin.get_url:
+    url: "{{ bootwright_helm_release_url }}/sha256sum.txt"
+    dest: "{{ bootwright_clis_workdir }}/helm-sha256sum.txt"
+    mode: "0644"
+
+- name: Read helm checksums
+  ansible.builtin.slurp:
+    src: "{{ bootwright_clis_workdir }}/helm-sha256sum.txt"
+  register: bootwright_helm_checksums
+
+- name: Resolve helm checksum
+  ansible.builtin.set_fact:
+    bootwright_helm_checksum: >-
+      {{ (bootwright_helm_checksums.content | b64decode).splitlines()
+         | select('search', '\s+helm-linux-amd64$')
+         | first | default('')
+         | regex_replace('\s+.*$', '') }}
+  changed_when: false
+
+- name: Verify the helm checksum is known
+  ansible.builtin.assert:
+    that:
+      - bootwright_helm_checksum is match('^[0-9a-f]{64}$')
+    fail_msg: >-
+      sha256sum.txt at {{ bootwright_helm_release_url }} did not contain a
+      helm-linux-amd64 checksum.
+
+- name: Install helm into install dir
+  ansible.builtin.get_url:
+    url: "{{ bootwright_helm_release_url }}/helm-linux-amd64"
+    dest: "{{ bootwright_clis_install_dir }}/helm"
+    mode: "0755"
+    checksum: "sha256:{{ bootwright_helm_checksum }}"
+
 - name: Probe final openshift-install version
   ansible.builtin.command:
     cmd: openshift-install version
@@ -258,6 +296,14 @@
   ansible.builtin.command:
     cmd: oc version --client
   register: bootwright_clis_final_oc_probe
+  environment:
+    PATH: "{{ bootwright_clis_lookup_path }}"
+  changed_when: false
+
+- name: Probe final helm version
+  ansible.builtin.command:
+    cmd: helm version --short
+  register: bootwright_clis_final_helm_probe
   environment:
     PATH: "{{ bootwright_clis_lookup_path }}"
   changed_when: false
@@ -311,6 +357,7 @@
     msg: >-
       {{
         ['openshift-install ' ~ bootwright_clis_final_oi_version, 'oc ' ~ bootwright_clis_final_oc_version]
+        + ['helm ' ~ (bootwright_clis_final_helm_probe.stdout | trim)]
         + (['openshift-install-fips ' ~ bootwright_clis_final_oi_fips_version]
            if (bootwright_clis_fips_required | default(false) | bool) else [])
       }}

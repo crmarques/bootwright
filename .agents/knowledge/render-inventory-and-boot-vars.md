@@ -77,4 +77,12 @@ and is honored in both the `openshift-install` `ComponentPin` source and
 controller actually fetches from. `virtctl` has no upstream default base:
 when `defaults.virtctlMirror` is empty the `controller_virtctl` role fetches
 the version-matched binary from each KubeVirt host cluster's OpenShift
-Virtualization `ConsoleCLIDownload`.
+Virtualization `ConsoleCLIDownload`. `helm` takes the same renderer-owned
+shape through `defaults.helmMirror`, but it does not track an OpenShift
+release, so `HelmReleaseURL` appends the mirror's `latest` channel instead of a
+version and the role verifies the binary against that channel's
+`sha256sum.txt`. That is why `helm` gets no `ComponentPin`: a lock entry whose
+version reads `latest` would record a version the run never resolved. The
+`controller_openshift_tools` tmp working directory is therefore created
+unconditionally — the helm checksum manifest is fetched on every run, even when
+the release-pinned CLIs are already current.

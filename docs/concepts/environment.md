@@ -45,6 +45,7 @@ means there is no default — an omitted optional field stays unset.
 | `spec.defaults.install.nodeSSH` | No | — | Default node SSH material for clusters that omit `install.nodeSSH` (same shape as `ContainerCluster.spec.install.nodeSSH`; see [Container clusters](container-clusters.md)). |
 | `spec.defaults.clientsMirror` | No | — | HTTP(S) base URL for mirrored OpenShift client downloads. Validated as an `http(s)` URL when set. |
 | `spec.defaults.virtctlMirror` | No | — | HTTP(S) base URL for a mirrored, version-matched `virtctl`. Empty means fetch from each KubeVirt host cluster's OpenShift Virtualization ConsoleCLIDownload; set it for disconnected labs. Validated as an `http(s)` URL when set. |
+| `spec.defaults.helmMirror` | No | — | HTTP(S) base URL for mirrored `helm` downloads. Bootwright appends the `latest` channel, so the mirror must expose `<base>/latest/helm-linux-amd64` and `<base>/latest/sha256sum.txt`. Validated as an `http(s)` URL when set. |
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
 | `spec.proxyFor.bootwright` | No | inherit default | Proxy used by Bootwright runtime actions. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
 | `spec.proxyFor.containerClusterInstall` | No | inherit default | Proxy rendered into cluster install input. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
@@ -247,6 +248,7 @@ Beyond the per-field rules above, the validator enforces:
 - `spec.domains.base` is required.
 - `spec.defaults.clientsMirror` must be an `http(s)` URL when set.
 - `spec.defaults.virtctlMirror` must be an `http(s)` URL when set.
+- `spec.defaults.helmMirror` must be an `http(s)` URL when set.
 - `spec.proxyFor.bootwright`, `spec.proxyFor.containerClusterInstall`, and
   `spec.proxyFor.machineOSInstall` must each name a declared
   `spec.infraComponents.proxies[]` entry, or be empty or the literal `none`.

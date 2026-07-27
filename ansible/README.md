@@ -25,7 +25,7 @@ from desired state.
 | `collections/ansible_collections/bootwright/core/roles/machine_os_install_*` | Bootwright-managed OS installation flows. |
 | `collections/ansible_collections/bootwright/core/roles/machine_registration_*` | Managed-node subscription registration (RHSM/Satellite bind, content proxy, and CA trust). |
 | `collections/ansible_collections/bootwright/core/roles/container_cluster_*` | Agent installer execution, boot, wait, media, and destroy. |
-| `collections/ansible_collections/bootwright/core/roles/controller_*` | Controller-host tooling: release-matched OpenShift CLIs and KubeVirt-matched virtctl. |
+| `collections/ansible_collections/bootwright/core/roles/controller_*` | Controller-host tooling: release-matched OpenShift CLIs, mirror-tracked helm, and KubeVirt-matched virtctl. |
 | `collections/ansible_collections/bootwright/core/roles/cluster_network_*` | Cluster network plumbing such as load-balancer VIP attachment on the provider host. |
 | `collections/ansible_collections/bootwright/core/roles/diagnostic_*` | Read-only cluster diagnostics such as external endpoint DNS probes. |
 | `collections/ansible_collections/bootwright/core/roles/storage_cluster_*` | Remote storage host mutation and Ceph command execution. |

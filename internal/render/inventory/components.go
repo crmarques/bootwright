@@ -21,6 +21,10 @@ const (
 
 const OpenShiftClientsMirrorBase = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp"
 
+const HelmMirrorBase = "https://mirror.openshift.com/pub/openshift-v4/clients/helm"
+
+const helmMirrorChannel = "latest"
+
 type ComponentPin struct {
 	Name       string `yaml:"name" json:"name"`
 	Version    string `yaml:"version" json:"version"`
@@ -64,6 +68,16 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 		}
 	}
 	return base + "/" + version
+}
+
+func HelmReleaseURL(state v1alpha1.State) string {
+	base := HelmMirrorBase
+	if env := stateview.Environment(state); env != nil {
+		if m := strings.TrimSpace(env.Spec.Defaults.HelmMirror); m != "" {
+			base = strings.TrimRight(m, "/")
+		}
+	}
+	return base + "/" + helmMirrorChannel
 }
 
 func VirtctlMirrorOverride(state v1alpha1.State) string {

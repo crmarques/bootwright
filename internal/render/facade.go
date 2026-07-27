@@ -67,6 +67,10 @@ func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
 	return inventory.OpenShiftClientsReleaseURL(state, version)
 }
 
+func HelmReleaseURL(state v1alpha1.State) string {
+	return inventory.HelmReleaseURL(state)
+}
+
 func VirtctlMirrorOverride(state v1alpha1.State) string {
 	return inventory.VirtctlMirrorOverride(state)
 }

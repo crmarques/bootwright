@@ -1,5 +1,6 @@
 ---
 bootwright_clis_mirror_base: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp"
+bootwright_helm_mirror_base: "https://mirror.openshift.com/pub/openshift-v4/clients/helm"
 bootwright_clis_install_dir: "/usr/local/bin"
 bootwright_clis_tmp_parent: "/tmp"
 bootwright_clis_packages:

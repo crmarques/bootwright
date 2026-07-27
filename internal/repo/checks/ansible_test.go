@@ -543,3 +543,40 @@ func TestOCPCLIsInstallFIPSInstallerWhenRequired(t *testing.T) {
 		}
 	}
 }
+
+func TestOCPCLIsInstallHelmVerifiedAgainstMirrorChecksum(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/controller_openshift_tools/tasks/main.yml")
+	checksumsIdx := findAnsibleTask(t, tasks, "Download helm checksums")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve helm checksum")
+	verifyIdx := findAnsibleTask(t, tasks, "Verify the helm checksum is known")
+	installIdx := findAnsibleTask(t, tasks, "Install helm into install dir")
+	probeIdx := findAnsibleTask(t, tasks, "Probe final helm version")
+	if !(checksumsIdx < resolveIdx && resolveIdx < verifyIdx && verifyIdx < installIdx && installIdx < probeIdx) {
+		t.Fatalf("helm must resolve and verify the mirror checksum before installing, then probe the installed binary")
+	}
+
+	get, ok := tasks[installIdx]["ansible.builtin.get_url"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no get_url body", tasks[installIdx]["name"])
+	}
+	if url := fmt.Sprint(get["url"]); !strings.HasSuffix(url, "/helm-linux-amd64") {
+		t.Fatalf("helm must come from the linux/amd64 mirror binary, got url=%v", get["url"])
+	}
+	if !strings.Contains(fmt.Sprint(get["checksum"]), "bootwright_helm_checksum") {
+		t.Fatalf("helm download must verify the resolved mirror checksum, got %v", get["checksum"])
+	}
+	if dest := fmt.Sprint(get["dest"]); !strings.HasSuffix(dest, "/helm") {
+		t.Fatalf("helm must install as helm in the CLI install dir, got dest=%v", get["dest"])
+	}
+	if mode := fmt.Sprint(get["mode"]); mode != "0755" {
+		t.Fatalf("helm must be installed executable, got mode=%v", get["mode"])
+	}
+
+	assertTask, ok := tasks[verifyIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert body", tasks[verifyIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(assertTask["that"]), "^[0-9a-f]{64}$") {
+		t.Fatalf("helm checksum guard must require a sha256 digest, got %v", assertTask["that"])
+	}
+}

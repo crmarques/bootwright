@@ -75,6 +75,7 @@ type EnvironmentDefaultsSpec struct {
 	Install       EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
 	ClientsMirror string                         `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
 	VirtctlMirror string                         `yaml:"virtctlMirror,omitempty" json:"virtctlMirror,omitempty"`
+	HelmMirror    string                         `yaml:"helmMirror,omitempty" json:"helmMirror,omitempty"`
 }
 
 type EnvironmentInstallDefaultsSpec struct {

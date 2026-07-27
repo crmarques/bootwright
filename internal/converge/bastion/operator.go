@@ -16,6 +16,7 @@ type CLIInstallSpec struct {
 	BundleDir         string
 	Executable        string
 	ClisReleaseURL    string
+	HelmReleaseURL    string
 	FIPSRequired      bool
 }
 
@@ -27,6 +28,7 @@ func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 		"-e", "bootwright_openshift_release_version=" + s.OCPReleaseVersion,
 		"-e", "bootwright_clis_install_dir=" + s.InstallDir,
 		"-e", "bootwright_clis_release_url=" + s.ClisReleaseURL,
+		"-e", "bootwright_helm_release_url=" + s.HelmReleaseURL,
 	}
 	if s.FIPSRequired {
 		argv = append(argv, "-e", "bootwright_clis_fips_required=true")
@@ -91,6 +93,7 @@ func PlanCLIInstall(state v1alpha1.State, installDir, bundleDir string, venvBin 
 		BundleDir:         bundleDir,
 		Executable:        venvBin("ansible-playbook"),
 		ClisReleaseURL:    render.OpenShiftClientsReleaseURL(state, version),
+		HelmReleaseURL:    render.HelmReleaseURL(state),
 		FIPSRequired:      StateRequiresFIPSInstaller(state),
 	}
 }

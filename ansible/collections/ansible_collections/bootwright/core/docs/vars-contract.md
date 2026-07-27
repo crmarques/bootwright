@@ -565,14 +565,15 @@ operations:
 
 ## Bastion Tools
 
-`workflow_bastion_apply_tools` installs the controller-side OpenShift CLIs. The
-renderer projects these extra vars (see `internal/converge/bastion`):
+`workflow_bastion_apply_tools` installs the controller-side OpenShift CLIs and
+`helm`. The renderer projects these extra vars (see `internal/converge/bastion`):
 
 | Fact | Shape |
 | --- | --- |
 | `bootwright_openshift_release_version` | OpenShift release the controller CLIs (`oc`, `kubectl`, `openshift-install`) are pinned to |
 | `bootwright_clis_install_dir` | Directory the controller CLIs are installed into |
 | `bootwright_clis_release_url` | Release-scoped base URL the CLIs and their checksums are fetched from; honors `Environment.spec.defaults.clientsMirror` and otherwise the pinned upstream mirror. The role falls back to `bootwright_clis_mirror_base` only when this var is not projected |
+| `bootwright_helm_release_url` | Channel-scoped base URL `helm` and its checksum manifest are fetched from; honors `Environment.spec.defaults.helmMirror` and otherwise the upstream OpenShift clients mirror, always suffixed with the `latest` channel. The role falls back to `bootwright_helm_mirror_base` only when this var is not projected. `helm` is not release-pinned: the fetch is verified against the channel's `sha256sum.txt`, and `get_url` re-downloads only when the installed binary no longer matches |
 | `bootwright_clis_fips_required` | `true` when any OpenShift cluster enables FIPS. The role then also fetches the FIPS-capable `openshift-install-fips` from the RHEL9 client archive (`openshift-install-rhel9-amd64.tar.gz`), which FIPS clusters use to build their agent ISO. Defaults to `false` (only the standard `openshift-install` is installed) |
 
 ## Projection Rule

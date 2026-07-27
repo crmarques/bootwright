@@ -174,7 +174,7 @@ bootwright plan
 
 | Command | Purpose |
 | --- | --- |
-| `bastion setup` | Installs the managed Ansible runtime and the release-matched cluster CLIs on the bastion. |
+| `bastion setup` | Installs the managed Ansible runtime, the release-matched cluster CLIs, and `helm` on the bastion. |
 | `preflight bastion` | Runs the read-only bastion dependency checks (Python, Ansible runtime, `tar`, `sudo`). |
 | `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. |
 | `render effective` | Writes the desired state with all defaults applied, so you can see exactly what will be acted on. |

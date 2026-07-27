@@ -40,6 +40,7 @@ managed infra components. Routed through `proxyFor.bootwright`.
 | --- | --- | --- |
 | `pypi.org`, `files.pythonhosted.org` | `bastion setup` builds the managed Ansible venv: pinned `pip`, `ansible-core`, and — when the estate uses them — `sushy-tools` (libvirt BMC emulation) and `pyvmomi` (vSphere). Package **metadata** is read from `pypi.org`; the wheels/sdists **download** from `files.pythonhosted.org`. | — |
 | `mirror.openshift.com` | `oc` / `openshift-install` client binaries and checksums for the release version (OpenShift/OKD). | `spec.defaults.clientsMirror` |
+| `mirror.openshift.com` | `helm` client binary and checksum from the mirror's `latest` channel. | `spec.defaults.helmMirror` |
 | `docker.io` | Container images for the managed infra components you declare: `library/haproxy` (load balancer), `library/nginx` (artifact server), `openeuler/squid` (forward proxy), `dockurr/dnsmasq` (DNS), `library/registry` (mirror registry). Only declared components pull. | mirror the images |
 
 !!! note "`bastion setup` is the first thing to egress"

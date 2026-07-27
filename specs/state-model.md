@@ -75,6 +75,11 @@ Rules:
   `clientsMirror` counterpart for `virtctl` (the KubeVirt client used for VM
   image uploads): it overrides the base URL Bootwright downloads `virtctl` from,
   for disconnected or mirrored labs.
+- `defaults.helmMirror`, when set, must be an `http(s)` URL. It is the
+  `clientsMirror` counterpart for `helm`: it overrides the base URL Bootwright
+  downloads `helm` from. `helm` is not tied to an OpenShift release, so
+  Bootwright tracks the mirror's `latest` channel and verifies the binary
+  against that channel's `sha256sum.txt` rather than pinning a version.
 - `infraComponents.*[]` entries are service access catalog entries. Each
   entry's `management` is either `external` with direct access configuration
   or `managed` with `componentRef` pointing at an `InfraComponent` arm of the
