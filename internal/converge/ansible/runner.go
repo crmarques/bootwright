@@ -56,6 +56,18 @@ var systemTempEnv = []struct {
 	{key: "ANSIBLE_REMOTE_TMP", value: SystemTempDir},
 }
 
+func joinTags(tags []string) string {
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		out = append(out, tag)
+	}
+	return strings.Join(out, ",")
+}
+
 func cleanPathList(list string) string {
 	parts := strings.Split(list, string(os.PathListSeparator))
 	out := parts[:0]
@@ -88,6 +100,8 @@ type RunSpec struct {
 	Forks              int
 	ExtraVars          string
 	ExtraVarPairs      []string
+	Tags               []string
+	SkipTags           []string
 	ArtifactsDir       string
 	OutputLogPath      string
 	Check              bool
@@ -119,6 +133,12 @@ func (r CommandRunner) Command(spec RunSpec) []string {
 	}
 	for _, pair := range spec.ExtraVarPairs {
 		args = append(args, "-e", pair)
+	}
+	if tags := joinTags(spec.Tags); tags != "" {
+		args = append(args, "--tags", tags)
+	}
+	if skipTags := joinTags(spec.SkipTags); skipTags != "" {
+		args = append(args, "--skip-tags", skipTags)
 	}
 	if spec.Limit != "" {
 		args = append(args, "--limit", spec.Limit)

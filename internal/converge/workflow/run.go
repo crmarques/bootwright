@@ -48,6 +48,8 @@ type RunOptions struct {
 	Limit                      string
 	Forks                      int
 	ExtraVarPairs              []string
+	Tags                       []string
+	SkipTags                   []string
 	RolesPath                  string
 	CollectionsPath            string
 	ArtifactsRoot              string
@@ -189,6 +191,8 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		Limit:              opts.Limit,
 		Forks:              opts.Forks,
 		ExtraVarPairs:      opts.ExtraVarPairs,
+		Tags:               opts.Tags,
+		SkipTags:           opts.SkipTags,
 		RolesPath:          opts.RolesPath,
 		CollectionsPath:    opts.CollectionsPath,
 		ArtifactsDir:       filepath.Join(artifactsRoot, opts.ArtifactsBaseName),

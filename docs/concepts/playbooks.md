@@ -59,6 +59,8 @@ spec:
   playbook: playbooks/harden.yml
   rolesPath: roles            # optional vendored roles directory
   collectionsPath: collections # optional vendored collections tree
+  tags: [tuning]              # optional --tags
+  skipTags: [reboot]          # optional --skip-tags
   extraVars:
     tuned_profile: throughput-performance
   secretRefs: [vault-token]
@@ -195,6 +197,24 @@ operator code as root over every context's secrets. Secrets named in
 `secretRefs` are read by the playbook from `{{ bootwright_secrets_dir }}/<name>`;
 their values never reach the command line. `extraVars` arrive as a single JSON
 `-e` value.
+
+## Selecting work with tags
+
+`spec.tags` and `spec.skipTags` are the `--tags` and `--skip-tags` you would pass
+by hand, so one playbook can serve several anchors without being split up:
+
+```yaml
+spec:
+  playbook: playbooks/site.yml
+  tags: [base, tuning]
+  skipTags: [reboot, teardown]
+```
+
+Each entry is a single token — Bootwright joins a list with commas, the way
+`ansible-playbook` expects — and the same tag may not appear in both lists,
+which would select and deselect the same tasks. Both lists feed the `onChange`
+input hash, so narrowing or widening the selection re-runs the playbook rather
+than reporting it converged.
 
 ## Delegating RHSM registration
 

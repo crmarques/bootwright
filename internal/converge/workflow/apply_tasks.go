@@ -129,6 +129,8 @@ type ApplyTask struct {
 	HostSlotKey        string
 	HostSlotCount      int
 	ExtraVarPairs      []string
+	Tags               []string
+	SkipTags           []string
 	RolesPath          string
 	CollectionsPath    string
 	SkipWhenConverged  bool

@@ -28,6 +28,8 @@ type RunSpecConfig struct {
 	ArtifactsDir       string
 	OutputLogPath      string
 	ExtraVarPairs      []string
+	Tags               []string
+	SkipTags           []string
 	RolesPath          string
 	CollectionsPath    string
 	Check              bool
@@ -99,6 +101,8 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		Forks:              cfg.Forks,
 		ExtraVars:          cfg.VarsPath,
 		ExtraVarPairs:      pairs,
+		Tags:               cfg.Tags,
+		SkipTags:           cfg.SkipTags,
 		ArtifactsDir:       artifactsDirAbs,
 		OutputLogPath:      cfg.OutputLogPath,
 		Check:              cfg.Check,

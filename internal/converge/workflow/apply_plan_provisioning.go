@@ -130,6 +130,8 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 				RolesPath:         provisioningVendoredPath(contentRoot, p.Spec.RolesPath),
 				CollectionsPath:   provisioningVendoredPath(contentRoot, p.Spec.CollectionsPath),
 				ExtraVarPairs:     extraVarPairs,
+				Tags:              p.Spec.Tags,
+				SkipTags:          p.Spec.SkipTags,
 				State:             state,
 				DesiredHashVars:   hashVars,
 				SkipWhenConverged: v1alpha1.PlaybookRunMode(p) == v1alpha1.PlaybookRunOnChange,
@@ -447,6 +449,8 @@ type provisioningPlaybookHashVars struct {
 	Playbook        string                  `json:"playbook"`
 	RolesPath       string                  `json:"rolesPath,omitempty"`
 	CollectionsPath string                  `json:"collectionsPath,omitempty"`
+	Tags            []string                `json:"tags,omitempty"`
+	SkipTags        []string                `json:"skipTags,omitempty"`
 	Order           int                     `json:"order,omitempty"`
 	Provides        []string                `json:"provides,omitempty"`
 	Requires        []string                `json:"requires,omitempty"`
@@ -474,6 +478,8 @@ func provisioningDesiredHashVars(p v1alpha1.Playbook, contentRoot string) (provi
 		Playbook:        p.Spec.Playbook,
 		RolesPath:       p.Spec.RolesPath,
 		CollectionsPath: p.Spec.CollectionsPath,
+		Tags:            p.Spec.Tags,
+		SkipTags:        p.Spec.SkipTags,
 		Order:           p.Spec.Order,
 		Provides:        p.Spec.Provides,
 		Requires:        p.Spec.Requires,

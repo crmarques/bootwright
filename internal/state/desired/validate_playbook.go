@@ -57,6 +57,7 @@ func validatePlaybooks(state v1alpha1.State) []string {
 			}
 		}
 
+		errs = append(errs, validatePlaybookTags(prefix, p)...)
 		errs = append(errs, validatePlaybookTarget(prefix, p, machines, containers, storage)...)
 	}
 
@@ -84,6 +85,43 @@ func validatePlaybookAnchor(prefix string, p v1alpha1.Playbook) []string {
 		return []string{fmt.Sprintf("%s.gates cannot be combined with onFailure continue: a gate that lets the stage proceed on failure is not a gate; use follows instead", prefix)}
 	}
 	return nil
+}
+
+func validatePlaybookTags(prefix string, p v1alpha1.Playbook) []string {
+	var errs []string
+	selected := map[string]bool{}
+	for _, field := range []struct {
+		name string
+		list []string
+	}{
+		{"tags", p.Spec.Tags},
+		{"skipTags", p.Spec.SkipTags},
+	} {
+		seen := map[string]bool{}
+		for i, tag := range field.list {
+			switch {
+			case strings.TrimSpace(tag) == "":
+				errs = append(errs, fmt.Sprintf("%s.%s[%d] is empty", prefix, field.name, i))
+				continue
+			case strings.TrimSpace(tag) != tag:
+				errs = append(errs, fmt.Sprintf("%s.%s[%d] %q must not contain leading or trailing whitespace", prefix, field.name, i, tag))
+				continue
+			case !provisioningTokenRe.MatchString(tag):
+				errs = append(errs, fmt.Sprintf("%s.%s[%d] %q is not a valid Ansible tag; tags are joined with commas, so each must be a single token", prefix, field.name, i, tag))
+				continue
+			case seen[tag]:
+				errs = append(errs, fmt.Sprintf("%s.%s[%d] %q is listed twice", prefix, field.name, i, tag))
+				continue
+			}
+			seen[tag] = true
+			if field.name == "tags" {
+				selected[tag] = true
+			} else if selected[tag] {
+				errs = append(errs, fmt.Sprintf("%s lists %q in both tags and skipTags, so nothing it marks would ever run", prefix, tag))
+			}
+		}
+	}
+	return errs
 }
 
 func validatePlaybookTarget(prefix string, p v1alpha1.Playbook, machines map[string]v1alpha1.Machine, containers map[string]v1alpha1.ContainerCluster, storage map[string]v1alpha1.StorageCluster) []string {

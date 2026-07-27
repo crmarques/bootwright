@@ -65,6 +65,8 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	taskOpts.Limit = task.Limit
 	taskOpts.RolesPath = task.RolesPath
 	taskOpts.CollectionsPath = task.CollectionsPath
+	taskOpts.Tags = task.Tags
+	taskOpts.SkipTags = task.SkipTags
 	taskOpts.ExtraVarPairs = append(append([]string(nil), opts.ExtraVarPairs...), task.ExtraVarPairs...)
 	taskOpts.ArtifactsBaseName = ""
 	taskOpts.ResolveInstaller = false

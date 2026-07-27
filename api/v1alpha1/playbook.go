@@ -18,6 +18,9 @@ type PlaybookSpec struct {
 	RolesPath       string `yaml:"rolesPath,omitempty" json:"rolesPath,omitempty"`
 	CollectionsPath string `yaml:"collectionsPath,omitempty" json:"collectionsPath,omitempty"`
 
+	Tags     []string `yaml:"tags,omitempty" json:"tags,omitempty"`
+	SkipTags []string `yaml:"skipTags,omitempty" json:"skipTags,omitempty"`
+
 	Target PlaybookTarget `yaml:"target" json:"target"`
 
 	Order    int      `yaml:"order,omitempty" json:"order,omitempty"`

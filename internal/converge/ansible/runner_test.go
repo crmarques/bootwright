@@ -674,3 +674,40 @@ func TestCallerOwnedChainTrusted(t *testing.T) {
 		t.Fatalf("foreign-owned chain must not be trusted")
 	}
 }
+
+func TestCommandRunnerJoinsTagSelections(t *testing.T) {
+	command := CommandRunner{}.Command(RunSpec{
+		Inventory: "inventory.yaml",
+		Playbook:  "playbook.yml",
+		ExtraVars: "vars.yml",
+		Tags:      []string{"base", "tuning"},
+		SkipTags:  []string{"reboot", "teardown"},
+	})
+	for _, want := range []struct {
+		flag  string
+		value string
+	}{
+		{"--tags", "base,tuning"},
+		{"--skip-tags", "reboot,teardown"},
+	} {
+		idx := slices.Index(command, want.flag)
+		if idx < 0 {
+			t.Fatalf("command missing %s: %v", want.flag, command)
+		}
+		if idx+1 >= len(command) || command[idx+1] != want.value {
+			t.Fatalf("%s got %v, want %q; command=%v", want.flag, command[idx+1:], want.value, command)
+		}
+	}
+}
+
+func TestCommandRunnerOmitsEmptyTagSelections(t *testing.T) {
+	command := CommandRunner{}.Command(RunSpec{
+		Inventory: "inventory.yaml",
+		Playbook:  "playbook.yml",
+		ExtraVars: "vars.yml",
+		Tags:      []string{"", "   "},
+	})
+	if slices.Contains(command, "--tags") || slices.Contains(command, "--skip-tags") {
+		t.Fatalf("blank tag entries must not reach the command line: %v", command)
+	}
+}

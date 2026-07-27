@@ -1506,6 +1506,8 @@ spec:
   playbook: playbooks/harden.yml
   rolesPath: roles
   collectionsPath: collections
+  tags: [tuning]           # optional --tags
+  skipTags: [reboot]       # optional --skip-tags
   extraVars:
     tuned_profile: throughput-performance
   secretRefs: [vault-token]
@@ -1567,6 +1569,11 @@ Rules:
   `(gates/follows, phase)` bucket: every `requires` must be met by another enabled
   playbook's `provides` in the same bucket, `provides` are unique, and the graph
   is acyclic. `spec.order` tie-breaks within a bucket.
+- `spec.tags` and `spec.skipTags` are optional lists rendered as
+  `--tags`/`--skip-tags`. Each entry is a single token (`[A-Za-z0-9][A-Za-z0-9._-]*`)
+  because Ansible joins them with commas; entries are unique within a list, and a
+  tag may not appear in both, which would select and deselect the same work. Both
+  are part of the `onChange` input hash, so changing them re-runs the playbook.
 - `spec.secretRefs` must resolve to declared `Secret` objects; the playbook
   reads them from `{{ bootwright_secrets_dir }}/<name>` (never the argv).
 - `spec.run` selects re-run behaviour: `onChange` (default) skips a run whose

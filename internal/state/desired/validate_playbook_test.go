@@ -57,6 +57,14 @@ func TestValidatePlaybook(t *testing.T) {
 		{"absolute-playbook", func(p *v1alpha1.Playbook) { p.Spec.Playbook = "/etc/passwd" }, "must be a relative path"},
 		{"escaping-playbook", func(p *v1alpha1.Playbook) { p.Spec.Playbook = "../evil.yml" }, "must stay within"},
 		{"vendor-dir", func(p *v1alpha1.Playbook) { p.Spec.RolesPath = "vendor" }, "must not be named vendor"},
+		{"empty-tag", func(p *v1alpha1.Playbook) { p.Spec.Tags = []string{"base", ""} }, "tags[1] is empty"},
+		{"comma-tag", func(p *v1alpha1.Playbook) { p.Spec.SkipTags = []string{"bla,ble"} }, "is not a valid Ansible tag"},
+		{"padded-tag", func(p *v1alpha1.Playbook) { p.Spec.Tags = []string{" base"} }, "leading or trailing whitespace"},
+		{"repeated-tag", func(p *v1alpha1.Playbook) { p.Spec.Tags = []string{"base", "base"} }, "tags[1] \"base\" is listed twice"},
+		{"contradictory-tag", func(p *v1alpha1.Playbook) {
+			p.Spec.Tags = []string{"base"}
+			p.Spec.SkipTags = []string{"base"}
+		}, "in both tags and skipTags"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
