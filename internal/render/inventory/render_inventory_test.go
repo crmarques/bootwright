@@ -354,6 +354,39 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	}
 }
 
+func TestInventorySSHCommonArgsPinHostKeysAndKeepConnectionsAlive(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	inv := inventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	entry, ok := hosts["bastion"].(map[string]any)
+	if !ok {
+		t.Fatalf("inventory has no bastion host: %v", hosts)
+	}
+	args, _ := entry["ansible_ssh_common_args"].(string)
+	for _, want := range []string{
+		"BatchMode=yes",
+		"StrictHostKeyChecking=yes",
+		"UserKnownHostsFile=" + filepath.Join("/context", "trust", "ssh", "known_hosts"),
+		"ServerAliveInterval=15",
+		"ServerAliveCountMax=3",
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("ansible_ssh_common_args = %q, want it to contain %q; the inventory variable fully replaces ansible.cfg ssh_common_args", args, want)
+		}
+	}
+	if strings.Contains(args, "accept-new") {
+		t.Fatalf("ansible_ssh_common_args = %q must not downgrade host-key verification to accept-new", args)
+	}
+}
+
 func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {

@@ -30,7 +30,11 @@ func printApplyLedgerStatus(p *cliout.Printer, runsDir string, displays map[stri
 	}
 	p.Fields(fields)
 	if ledger.EndedAt != nil {
-		p.Fields([]cliout.Field{{Key: "Ended", Value: ledger.EndedAt.Format(time.RFC3339)}})
+		p.Fields([]cliout.Field{
+			{Key: "Ended", Value: ledger.EndedAt.Format(time.RFC3339)},
+			{Key: "Duration", Value: formatRunSeconds(durationSeconds(ledger.WallClock()))},
+			{Key: "Timings", Value: "bootwright status --run " + ledger.RunID + " --timings"},
+		})
 	}
 	if ledger.Active() {
 		printApplyRunActivity(p, runsDir, ledger)

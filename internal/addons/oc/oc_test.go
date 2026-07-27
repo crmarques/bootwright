@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -147,6 +148,113 @@ func writeScript(t *testing.T, body string) string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+type barrierGetRunner struct {
+	want     int
+	release  chan struct{}
+	closer   sync.Once
+	notFound map[string]bool
+
+	mu      sync.Mutex
+	arrived int
+}
+
+func (r *barrierGetRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	if len(args) < 3 || args[0] != "get" {
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+	name := args[2]
+	r.mu.Lock()
+	r.arrived++
+	reached := r.arrived >= r.want
+	r.mu.Unlock()
+	if reached {
+		r.closer.Do(func() { close(r.release) })
+	}
+	select {
+	case <-r.release:
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("readiness checks did not overlap: only %d of %d checks were in flight", r.arrived, r.want)
+	}
+	if r.notFound[name] {
+		return nil, fmt.Errorf("namespaces %q not found", name)
+	}
+	return []byte(`{"metadata":{"name":"` + name + `"}}`), nil
+}
+
+func namespaceReadinessExtension(names ...string) v1alpha1.ClusterAddon {
+	var checks []v1alpha1.ClusterAddonReadinessCheck
+	for _, name := range names {
+		checks = append(checks, v1alpha1.ClusterAddonReadinessCheck{
+			ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+				APIVersion: "v1", Kind: "Namespace", Name: name,
+			},
+		})
+	}
+	return v1alpha1.ClusterAddon{
+		Metadata: v1alpha1.Metadata{Name: "multi-check"},
+		Spec: v1alpha1.ClusterAddonSpec{
+			Readiness: v1alpha1.ClusterAddonReadiness{Timeout: "30m", Checks: checks},
+		},
+	}
+}
+
+func TestReadyRunsDeclaredChecksConcurrently(t *testing.T) {
+	extension := namespaceReadinessExtension("a", "b", "c")
+	runner := &barrierGetRunner{want: 3, release: make(chan struct{})}
+
+	ready, observed, err := Ready(context.Background(), runner, "/tmp/kubeconfig", extension)
+	if err != nil {
+		t.Fatalf("Ready: %v", err)
+	}
+	if !ready {
+		t.Fatalf("Ready = false, observed %q", observed)
+	}
+	want := "Namespace/a Exists; Namespace/b Exists; Namespace/c Exists"
+	if observed != want {
+		t.Fatalf("observed = %q, want %q", observed, want)
+	}
+}
+
+func TestReadyReportsLowestIndexBlockerRegardlessOfCompletionOrder(t *testing.T) {
+	extension := namespaceReadinessExtension("a", "b", "c")
+	runner := &barrierGetRunner{want: 3, release: make(chan struct{}), notFound: map[string]bool{"b": true, "c": true}}
+
+	ready, observed, err := Ready(context.Background(), runner, "/tmp/kubeconfig", extension)
+	if err != nil {
+		t.Fatalf("Ready: %v", err)
+	}
+	if ready {
+		t.Fatal("Ready = true despite two failing checks")
+	}
+	want := "Namespace/a Exists; Namespace/b NotFound"
+	if observed != want {
+		t.Fatalf("observed = %q, want %q (the lowest-index failing check is the blocker and later checks stay unreported)", observed, want)
+	}
+}
+
+func TestWaitIntervalScalesWithTimeoutWithinBounds(t *testing.T) {
+	cases := []struct {
+		timeout time.Duration
+		want    time.Duration
+	}{
+		{timeout: 500 * time.Millisecond, want: 500 * time.Millisecond},
+		{timeout: 5 * time.Second, want: time.Second},
+		{timeout: 30 * time.Second, want: 5 * time.Second},
+		{timeout: 5 * time.Minute, want: 5 * time.Second},
+		{timeout: 20 * time.Minute, want: 12 * time.Second},
+		{timeout: 45 * time.Minute, want: 15 * time.Second},
+		{timeout: 4 * time.Hour, want: 15 * time.Second},
+	}
+	for _, tc := range cases {
+		if got := WaitInterval(tc.timeout); got != tc.want {
+			t.Errorf("WaitInterval(%s) = %s, want %s", tc.timeout, got, tc.want)
+		}
+	}
+	if got := WaitInterval(45 * time.Minute); got > 15*time.Second {
+		t.Fatalf("WaitInterval must stay under the 30s progress heartbeat, got %s", got)
+	}
 }
 
 func TestApplySkipsReadyExtensionRecord(t *testing.T) {

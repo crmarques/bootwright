@@ -20,7 +20,7 @@ func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 		return nil
 	}
 	seen := map[string]bool{}
-	var checks []Check
+	var bases []string
 	for _, machine := range state.Machines {
 		if !v1alpha1.MachineInstallsOS(machine) || !secretScope.allowsMachine(machine.Metadata.Name) {
 			continue
@@ -38,9 +38,16 @@ func packageSourceReachabilityChecks(state v1alpha1.State, selected []Phase, dep
 				continue
 			}
 			seen[base] = true
-			checks = append(checks, packageSourceMirrorCheck(base, deps))
+			bases = append(bases, base)
 		}
 	}
+	if len(bases) == 0 {
+		return nil
+	}
+	checks := make([]Check, len(bases))
+	forEachBounded(len(bases), packageSourceParallelism, func(i int) {
+		checks[i] = packageSourceMirrorCheck(bases[i], deps)
+	})
 	sort.SliceStable(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
 	return checks
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons/oc"
@@ -82,7 +83,8 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 	}
 
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
-	for _, root := range offline.Roots {
+	containers := probeContainerClusters(ctx, state, cf.ctx.Name, clustersDir, cf.ctx.RunsDir, offline.Roots)
+	for index, root := range offline.Roots {
 		switch root.Kind {
 		case workflow.ApplyClusterKindStorage:
 			if root.Absent {
@@ -97,7 +99,7 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 				live.InSync = false
 				continue
 			}
-			container := probeContainerCluster(ctx, state, cf.ctx.Name, clustersDir, cf.ctx.RunsDir, root.Name)
+			container := containers[index]
 			if !container.Installed || !container.Reachable || !container.Available {
 				live.InSync = false
 			}
@@ -159,6 +161,35 @@ func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, s
 		return discos, "live Ceph discovery incomplete: " + firstErrorLine(err)
 	}
 	return discos, ""
+}
+
+const liveContainerProbeParallelism = 8
+
+func probeContainerClusters(ctx context.Context, state v1alpha1.State, contextName, clustersDir, runsDir string, roots []workflow.StateCheckRoot) map[int]liveContainerDiff {
+	var indexes []int
+	for i, root := range roots {
+		if root.Kind == workflow.ApplyClusterKindContainer && !root.Absent {
+			indexes = append(indexes, i)
+		}
+	}
+	probed := make([]liveContainerDiff, len(indexes))
+	slots := make(chan struct{}, liveContainerProbeParallelism)
+	var wg sync.WaitGroup
+	for slot, index := range indexes {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func(slot int, name string) {
+			defer wg.Done()
+			defer func() { <-slots }()
+			probed[slot] = probeContainerCluster(ctx, state, contextName, clustersDir, runsDir, name)
+		}(slot, roots[index].Name)
+	}
+	wg.Wait()
+	byRoot := map[int]liveContainerDiff{}
+	for slot, index := range indexes {
+		byRoot[index] = probed[slot]
+	}
+	return byRoot
 }
 
 func probeContainerCluster(ctx context.Context, state v1alpha1.State, contextName, clustersDir, runsDir, name string) liveContainerDiff {

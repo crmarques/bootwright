@@ -1044,11 +1044,11 @@ func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 	wantIDs := []string{
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
+		"destroy.storage-node-access",
 		"destroy.infra-components",
 		"destroy.machine-infra",
 		"destroy.container-clusters",
 		"destroy.provider-services",
-		"destroy.storage-node-access",
 	}
 	gotIDs := make([]string, 0, len(report.DestroyPlan.Tasks))
 	for _, task := range report.DestroyPlan.Tasks {

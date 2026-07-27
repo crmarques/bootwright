@@ -44,9 +44,28 @@ const (
 )
 
 type ConcurrencyLimits struct {
-	Parallelism        int `json:"parallelism"`
-	ParallelismPerHost int `json:"parallelismPerHost"`
-	ParallelismRedfish int `json:"parallelismRedfish"`
+	Parallelism            int `json:"parallelism"`
+	ParallelismPerHost     int `json:"parallelismPerHost"`
+	ParallelismRedfish     int `json:"parallelismRedfish"`
+	AutoParallelism        int `json:"autoParallelism,omitempty"`
+	AutoParallelismPerHost int `json:"autoParallelismPerHost,omitempty"`
+	AutoParallelismRedfish int `json:"autoParallelismRedfish,omitempty"`
+}
+
+func (c ConcurrencyLimits) ParallelismUnbounded() bool {
+	return limitUnbounded(c.Parallelism, c.AutoParallelism)
+}
+
+func (c ConcurrencyLimits) ParallelismPerHostUnbounded() bool {
+	return limitUnbounded(c.ParallelismPerHost, c.AutoParallelismPerHost)
+}
+
+func (c ConcurrencyLimits) ParallelismRedfishUnbounded() bool {
+	return limitUnbounded(c.ParallelismRedfish, c.AutoParallelismRedfish)
+}
+
+func limitUnbounded(value, auto int) bool {
+	return auto > 0 && value >= auto
 }
 
 type RunLedger struct {
@@ -97,6 +116,8 @@ type TaskLedgerEntry struct {
 	Status               TaskStatus `json:"status"`
 	Dependencies         []string   `json:"dependencies,omitempty"`
 	OrderingDependencies []string   `json:"orderingDependencies,omitempty"`
+	ReadyAt              *time.Time `json:"readyAt,omitempty"`
+	BlockedOn            []string   `json:"blockedOn,omitempty"`
 	StartedAt            *time.Time `json:"startedAt,omitempty"`
 	EndedAt              *time.Time `json:"endedAt,omitempty"`
 	LogPath              string     `json:"logPath,omitempty"`
@@ -325,6 +346,48 @@ func ArchiveRunLedger(runsDir string, ledger RunLedger) error {
 	return nil
 }
 
+func ArchivedRunLedgerPath(runsDir, runID string) string {
+	return filepath.Join(runsDir, "history", runID, "ledger.json")
+}
+
+func LoadArchivedRunLedger(runsDir, runID string) (RunLedger, bool, error) {
+	if strings.TrimSpace(runID) == "" {
+		return RunLedger{}, false, fmt.Errorf("load archived run ledger: run id is empty")
+	}
+	path := ArchivedRunLedgerPath(runsDir, runID)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return RunLedger{}, false, nil
+	}
+	if err != nil {
+		return RunLedger{}, false, fmt.Errorf("read archived run ledger: %w", err)
+	}
+	var ledger RunLedger
+	if err := json.Unmarshal(data, &ledger); err != nil {
+		return RunLedger{}, true, fmt.Errorf("decode archived run ledger %s: %w", path, err)
+	}
+	return ledger, true, nil
+}
+
+func ArchivedRunIDs(runsDir string) []string {
+	entries, err := os.ReadDir(filepath.Join(runsDir, "history"))
+	if err != nil {
+		return nil
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(ArchivedRunLedgerPath(runsDir, entry.Name())); err != nil {
+			continue
+		}
+		ids = append(ids, entry.Name())
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func (l RunLedger) Terminal() bool {
 	switch l.Status {
 	case RunStatusOK, RunStatusFailed, RunStatusCancelled:
@@ -449,6 +512,36 @@ func (l RunLedger) Task(id string) (TaskLedgerEntry, bool) {
 func (l *RunLedger) MarkReady(id string) {
 	l.updateTask(id, func(task *TaskLedgerEntry) {
 		task.Status = TaskStatusReady
+	})
+}
+
+const maxBlockedOnReasons = 8
+
+func (l *RunLedger) MarkDependencyReady(id string, now time.Time) {
+	l.updateTask(id, func(task *TaskLedgerEntry) {
+		if task.ReadyAt != nil {
+			return
+		}
+		t := now.UTC()
+		task.ReadyAt = &t
+	})
+}
+
+func (l *RunLedger) RecordBlockedOn(id, reason string) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return
+	}
+	l.updateTask(id, func(task *TaskLedgerEntry) {
+		for _, existing := range task.BlockedOn {
+			if existing == reason {
+				return
+			}
+		}
+		if len(task.BlockedOn) >= maxBlockedOnReasons {
+			return
+		}
+		task.BlockedOn = append(task.BlockedOn, reason)
 	})
 }
 
@@ -586,4 +679,160 @@ func taskTerminal(status TaskStatus) bool {
 	default:
 		return false
 	}
+}
+
+type TaskTiming struct {
+	Entry       TaskLedgerEntry
+	Duration    time.Duration
+	QueueWait   time.Duration
+	BlockedWait time.Duration
+}
+
+type CriticalPathHop struct {
+	Timing     TaskTiming
+	Cumulative time.Duration
+}
+
+type CriticalPath struct {
+	Hops  []CriticalPathHop
+	Total time.Duration
+}
+
+func (l RunLedger) WallClock() time.Duration {
+	if l.StartedAt.IsZero() || l.EndedAt == nil {
+		return 0
+	}
+	return nonNegative(l.EndedAt.Sub(l.StartedAt))
+}
+
+func (l RunLedger) TaskTimings() []TaskTiming {
+	ends := map[string]time.Time{}
+	for _, task := range l.Tasks {
+		if task.EndedAt != nil {
+			ends[task.ID] = task.EndedAt.UTC()
+		}
+	}
+	out := make([]TaskTiming, 0, len(l.Tasks))
+	for _, task := range l.Tasks {
+		out = append(out, TaskTiming{
+			Entry:       task,
+			Duration:    taskDuration(task),
+			QueueWait:   taskQueueWait(task, ends),
+			BlockedWait: taskBlockedWait(task),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Duration != out[j].Duration {
+			return out[i].Duration > out[j].Duration
+		}
+		return out[i].Entry.ID < out[j].Entry.ID
+	})
+	return out
+}
+
+func (l RunLedger) CriticalPath() CriticalPath {
+	ordered := l.TaskTimings()
+	timings := make(map[string]TaskTiming, len(ordered))
+	for _, timing := range ordered {
+		timings[timing.Entry.ID] = timing
+	}
+	best := map[string]time.Duration{}
+	prev := map[string]string{}
+	visiting := map[string]bool{}
+	var solve func(string) time.Duration
+	solve = func(id string) time.Duration {
+		if value, ok := best[id]; ok {
+			return value
+		}
+		timing, ok := timings[id]
+		if !ok || visiting[id] {
+			return 0
+		}
+		visiting[id] = true
+		chosen := false
+		bestDep := time.Duration(0)
+		bestPrev := ""
+		for _, deps := range [][]string{timing.Entry.Dependencies, timing.Entry.OrderingDependencies} {
+			for _, dep := range deps {
+				if _, known := timings[dep]; !known {
+					continue
+				}
+				total := solve(dep)
+				if !chosen || total > bestDep || (total == bestDep && dep < bestPrev) {
+					chosen, bestDep, bestPrev = true, total, dep
+				}
+			}
+		}
+		visiting[id] = false
+		total := bestDep + timing.Duration
+		best[id] = total
+		prev[id] = bestPrev
+		return total
+	}
+	endID := ""
+	total := time.Duration(0)
+	for _, timing := range ordered {
+		got := solve(timing.Entry.ID)
+		if endID == "" || got > total {
+			endID, total = timing.Entry.ID, got
+		}
+	}
+	if endID == "" || total <= 0 {
+		return CriticalPath{}
+	}
+	ids := make([]string, 0, len(ordered))
+	for id := endID; id != ""; id = prev[id] {
+		ids = append(ids, id)
+		if len(ids) > len(ordered) {
+			break
+		}
+	}
+	hops := make([]CriticalPathHop, 0, len(ids))
+	cumulative := time.Duration(0)
+	for i := len(ids) - 1; i >= 0; i-- {
+		timing := timings[ids[i]]
+		cumulative += timing.Duration
+		hops = append(hops, CriticalPathHop{Timing: timing, Cumulative: cumulative})
+	}
+	return CriticalPath{Hops: hops, Total: total}
+}
+
+func taskDuration(task TaskLedgerEntry) time.Duration {
+	if task.StartedAt == nil || task.EndedAt == nil {
+		return 0
+	}
+	return nonNegative(task.EndedAt.Sub(*task.StartedAt))
+}
+
+func taskQueueWait(task TaskLedgerEntry, ends map[string]time.Time) time.Duration {
+	if task.StartedAt == nil {
+		return 0
+	}
+	latest := time.Time{}
+	for _, deps := range [][]string{task.Dependencies, task.OrderingDependencies} {
+		for _, dep := range deps {
+			end, ok := ends[dep]
+			if ok && end.After(latest) {
+				latest = end
+			}
+		}
+	}
+	if latest.IsZero() {
+		return 0
+	}
+	return nonNegative(task.StartedAt.UTC().Sub(latest))
+}
+
+func taskBlockedWait(task TaskLedgerEntry) time.Duration {
+	if task.StartedAt == nil || task.ReadyAt == nil {
+		return 0
+	}
+	return nonNegative(task.StartedAt.Sub(*task.ReadyAt))
+}
+
+func nonNegative(d time.Duration) time.Duration {
+	if d < 0 {
+		return 0
+	}
+	return d
 }

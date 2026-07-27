@@ -21,9 +21,23 @@ func RunScopePreflight(cmdCtx context.Context, stdout, stderr io.Writer, ctx wor
 	opts.OutputLogPath = logPath
 	opts.DryRun = dryRun
 	opts.ExtraVarPairs = VerboseNoLogExtraVarPairs(verbose)
+	opts.Forks = PreflightForks(state, limit)
 	opts.Label = scope.Name + " preflight"
 	_, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return logPath, err
+}
+
+const PreflightMaxForks = 20
+
+func PreflightForks(state v1alpha1.State, limit string) int {
+	forks := workflow.AnsibleForksForLimit(state, limit)
+	if forks > PreflightMaxForks {
+		return PreflightMaxForks
+	}
+	if forks < 1 {
+		return 1
+	}
+	return forks
 }
 
 func preflightRunner(stdout, stderr io.Writer, streamAnsible bool) ansible.CommandRunner {

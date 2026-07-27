@@ -28,7 +28,7 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps, sco
 	if deps.LookupHost == nil {
 		return nil
 	}
-	var checks []Check
+	var lookups []nameResolutionLookup
 	for _, machine := range state.Machines {
 		if len(scope) > 0 && !scope[machine.Metadata.Name] {
 			continue
@@ -42,14 +42,40 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps, sco
 			continue
 		}
 		managed := machineNameResolutionManaged(state, machine)
-		checks = append(checks, resolutionCheck(deps, "Machine/"+machine.Metadata.Name+" fqdn", fqdn, expected, managed,
-			fmt.Sprintf("create an A record %s -> %s on the DNS server provided by your infrastructure", fqdn, expected)))
+		lookups = append(lookups, nameResolutionLookup{
+			name:        "Machine/" + machine.Metadata.Name + " fqdn",
+			lookup:      fqdn,
+			expected:    expected,
+			managed:     managed,
+			remediation: fmt.Sprintf("create an A record %s -> %s on the DNS server provided by your infrastructure", fqdn, expected),
+		})
 		if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok && hostname != "" && hostname != fqdn {
-			checks = append(checks, resolutionCheck(deps, "node "+hostname, hostname, expected, managed,
-				fmt.Sprintf("create a CNAME record %s -> %s (or an A record %s -> %s) on the DNS server provided by your infrastructure", hostname, fqdn, hostname, expected)))
+			lookups = append(lookups, nameResolutionLookup{
+				name:        "node " + hostname,
+				lookup:      hostname,
+				expected:    expected,
+				managed:     managed,
+				remediation: fmt.Sprintf("create a CNAME record %s -> %s (or an A record %s -> %s) on the DNS server provided by your infrastructure", hostname, fqdn, hostname, expected),
+			})
 		}
 	}
+	if len(lookups) == 0 {
+		return nil
+	}
+	checks := make([]Check, len(lookups))
+	forEachBounded(len(lookups), nameResolutionParallelism, func(i int) {
+		l := lookups[i]
+		checks[i] = resolutionCheck(deps, l.name, l.lookup, l.expected, l.managed, l.remediation)
+	})
 	return checks
+}
+
+type nameResolutionLookup struct {
+	name        string
+	lookup      string
+	expected    string
+	managed     bool
+	remediation string
 }
 
 func resolutionCheck(deps Deps, name, lookup, expected string, managed bool, externalRemediation string) Check {

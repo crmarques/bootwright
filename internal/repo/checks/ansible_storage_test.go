@@ -1597,6 +1597,23 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(waitSync["ansible.builtin.command"]); !strings.Contains(got, "waitsync") {
 		t.Fatalf("time-sync wait must run chronyc waitsync, got %v", waitSync)
 	}
+	waitSyncBody, ok := waitSync["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("time-sync wait must use an argv command body, got %v", waitSync)
+	}
+	waitSyncArgv, ok := waitSyncBody["argv"].([]any)
+	if !ok {
+		t.Fatalf("time-sync wait must use argv, got %v", waitSyncBody)
+	}
+	wantWaitSyncArgv := []string{"chronyc", "waitsync", "30", "0", "0", "2"}
+	if len(waitSyncArgv) != len(wantWaitSyncArgv) {
+		t.Fatalf("time-sync wait argv = %v, want %v", waitSyncArgv, wantWaitSyncArgv)
+	}
+	for i, want := range wantWaitSyncArgv {
+		if fmt.Sprint(waitSyncArgv[i]) != want {
+			t.Fatalf("time-sync wait argv = %v, want %v", waitSyncArgv, wantWaitSyncArgv)
+		}
+	}
 	if got := fmt.Sprint(waitSync["when"]); !strings.Contains(got, "chronyd") {
 		t.Fatalf("time-sync wait must be gated on chronyd being a managed service, got when=%v", got)
 	}
@@ -1861,5 +1878,101 @@ func TestStorageCephadmAllDevicesCoverageReportIsNonDestructive(t *testing.T) {
 	coverageIdx := strings.Index(boot, "osd_coverage_report.yml")
 	if readinessIdx < 0 || coverageIdx < 0 || readinessIdx > coverageIdx {
 		t.Error("bootstrap.yml must include osd_coverage_report.yml after osd_readiness.yml")
+	}
+}
+
+func TestStorageCephSeedSSHCheckIsOneFailClosedSweep(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/stage_inputs.yml"
+	tasks := readAnsibleTasks(t, path)
+	checkIdx := findAnsibleTask(t, tasks, "Verify cephadm seed SSH access to storage nodes")
+	requireIdx := findAnsibleTask(t, tasks, "Require cephadm seed SSH access to every selected storage node")
+	if checkIdx >= requireIdx {
+		t.Fatalf("the seed SSH sweep must run before its gate (check=%d require=%d)", checkIdx, requireIdx)
+	}
+	check := tasks[checkIdx]
+	if _, ok := check["loop"]; ok {
+		t.Fatalf("the seed SSH check must be one module execution over every address, got loop=%v", check["loop"])
+	}
+	shell, ok := check["ansible.builtin.shell"].(map[string]any)
+	if !ok {
+		t.Fatalf("the seed SSH check must be a shell sweep, got %v", check)
+	}
+	cmd := fmt.Sprint(shell["cmd"])
+	for _, want := range []string{
+		"bootwright_ceph_seed_ssh_addresses",
+		"ssh -F",
+		">/dev/null 2>&1",
+		"exit 1",
+	} {
+		if !strings.Contains(cmd, want) {
+			t.Fatalf("the seed SSH sweep is missing %q: %v", want, shell["cmd"])
+		}
+	}
+	if strings.Contains(cmd, "${#") {
+		t.Fatalf("the seed SSH sweep uses Bash syntax that Ansible parses as a Jinja comment: %v", shell["cmd"])
+	}
+	assertRedactsByDefault(t, "Verify cephadm seed SSH access to storage nodes", check["no_log"])
+	if got := check["failed_when"]; got != false {
+		t.Fatalf("the seed SSH sweep must defer failure to the gate so no_log cannot swallow the failing addresses, got failed_when=%v", got)
+	}
+	whenClauses := fmt.Sprint(check["when"])
+	for _, want := range []string{"privateKeyPath", "knownHostsPath", "bootwright_ceph_seed_ssh_addresses"} {
+		if !strings.Contains(whenClauses, want) {
+			t.Fatalf("the seed SSH sweep when is missing %q: %v", want, check["when"])
+		}
+	}
+	require, ok := tasks[requireIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the seed SSH gate must be an assert, got %v", tasks[requireIdx])
+	}
+	if got := fmt.Sprint(require["that"]); !strings.Contains(got, "bootwright_ceph_seed_ssh_check.rc") || !strings.Contains(got, "default(1)") {
+		t.Fatalf("the seed SSH gate must fail closed on a missing or non-zero rc, got that=%v", require["that"])
+	}
+	if got := fmt.Sprint(require["fail_msg"]); !strings.Contains(got, "stdout_lines") {
+		t.Fatalf("the seed SSH gate must name the unreachable addresses the sweep collected, got fail_msg=%v", require["fail_msg"])
+	}
+	if _, ok := tasks[requireIdx]["no_log"]; ok {
+		t.Fatal("the seed SSH gate must stay visible; only the sweep that carries ssh output is redacted")
+	}
+	if got := fmt.Sprint(tasks[requireIdx]["when"]); !strings.Contains(got, "bootwright_ceph_seed_ssh_check.skipped") {
+		t.Fatalf("the seed SSH gate must run whenever the sweep ran, got when=%v", tasks[requireIdx]["when"])
+	}
+}
+
+func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/rgw_ingress_tls.yml"
+	tasks := readAnsibleTasks(t, path)
+	assembleIdx := findAnsibleTask(t, tasks, "Assemble RGW ingress TLS certificate specs")
+	writeIdx := findAnsibleTask(t, tasks, "Write RGW ingress TLS certificate spec")
+	applyIdx := findAnsibleTask(t, tasks, "Apply RGW ingress TLS certificate spec")
+	if !(assembleIdx < writeIdx && writeIdx < applyIdx) {
+		t.Fatalf("RGW ingress TLS must assemble, write, then apply (assemble=%d write=%d apply=%d)", assembleIdx, writeIdx, applyIdx)
+	}
+	assemble := tasks[assembleIdx]
+	assertRedactsByDefault(t, "Assemble RGW ingress TLS certificate specs", assemble["no_log"])
+	if got := fmt.Sprint(assemble["ansible.builtin.set_fact"]); !strings.Contains(got, "ssl_cert") || !strings.Contains(got, "item.serviceID") {
+		t.Fatalf("RGW ingress TLS assembly must keep the concatenated ssl_cert and the rendered service id, got %v", assemble["ansible.builtin.set_fact"])
+	}
+	write := tasks[writeIdx]
+	assertRedactsByDefault(t, "Write RGW ingress TLS certificate spec", write["no_log"])
+	if _, ok := write["loop"]; ok {
+		t.Fatalf("RGW ingress TLS must write one multi-document spec file, got loop=%v", write["loop"])
+	}
+	copyBody, ok := write["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("RGW ingress TLS spec must be written with copy, got %v", write)
+	}
+	if got := fmt.Sprint(copyBody["dest"]); !strings.HasSuffix(got, "/rgw-ingress-tls.yaml") {
+		t.Fatalf("RGW ingress TLS spec file must be a single fixed path, got %v", copyBody["dest"])
+	}
+	if got := copyBody["mode"]; got != "0600" {
+		t.Fatalf("RGW ingress TLS spec file carries a cert and key, so it must stay 0600, got %v", got)
+	}
+	apply := tasks[applyIdx]
+	if _, ok := apply["loop"]; ok {
+		t.Fatalf("RGW ingress TLS must run one ceph orch apply, got loop=%v", apply["loop"])
+	}
+	if got := fmt.Sprint(apply["ansible.builtin.command"]); !strings.Contains(got, "/mnt/rgw-ingress-tls.yaml") {
+		t.Fatalf("RGW ingress TLS apply must consume the merged spec file, got %v", apply["ansible.builtin.command"])
 	}
 }

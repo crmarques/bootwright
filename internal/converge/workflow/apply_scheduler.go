@@ -163,7 +163,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			if fatalErr != nil || ctx.Err() != nil {
 				break
 			}
-			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskRedfishAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) || !taskHostSlotAvailable(task, runningHostSlots, perHostLimit) {
+			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) {
+				continue
+			}
+			ledger.MarkDependencyReady(task.Entry.ID, time.Now())
+			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit); blocker != "" {
+				ledger.RecordBlockedOn(task.Entry.ID, blocker)
 				continue
 			}
 			redfishSlots := taskRedfishSlots(task, redfishLimit)
@@ -363,6 +368,20 @@ func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
 	return blocked
 }
 
+func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int) string {
+	if !taskRedfishAvailable(task, runningRedfish, redfishLimit) {
+		return "redfish budget"
+	}
+	if key := busyTaskResourceKey(task, runningResources); key != "" {
+		return "resource " + key
+	}
+	if !taskHostSlotAvailable(task, runningHostSlots, perHostLimit) {
+		key, _ := taskHostSlot(task)
+		return "host slot " + key
+	}
+	return ""
+}
+
 func taskRedfishAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {
 	if task.RedfishSlots < 1 {
 		return true
@@ -381,13 +400,13 @@ func taskRedfishSlots(task ApplyTask, redfishLimit int) int {
 	return slots
 }
 
-func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bool {
+func taskHostSlot(task ApplyTask) (string, int) {
 	key := task.HostSlotKey
 	if key == "" {
 		key = task.Entry.HostSlotKey
 	}
 	if key == "" {
-		return true
+		return "", 0
 	}
 	count := task.HostSlotCount
 	if count < 1 {
@@ -396,6 +415,14 @@ func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bo
 	if count < 1 {
 		count = 1
 	}
+	return key, count
+}
+
+func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bool {
+	key, count := taskHostSlot(task)
+	if key == "" {
+		return true
+	}
 	if limit < 1 {
 		limit = 1
 	}
@@ -403,15 +430,19 @@ func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bo
 }
 
 func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {
+	return busyTaskResourceKey(task, running) == ""
+}
+
+func busyTaskResourceKey(task ApplyTask, running map[string]int) string {
 	for _, key := range task.Entry.ResourceKeys {
 		if key == "" {
 			continue
 		}
 		if running[key] > 0 {
-			return false
+			return key
 		}
 	}
-	return true
+	return ""
 }
 
 func acquireTaskResources(task ApplyTask, running map[string]int) {
@@ -435,37 +466,17 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 }
 
 func acquireTaskHostSlots(task ApplyTask, running map[string]int) {
-	key := task.HostSlotKey
-	if key == "" {
-		key = task.Entry.HostSlotKey
-	}
+	key, count := taskHostSlot(task)
 	if key == "" {
 		return
-	}
-	count := task.HostSlotCount
-	if count < 1 {
-		count = task.Entry.HostSlotCount
-	}
-	if count < 1 {
-		count = 1
 	}
 	running[key] += count
 }
 
 func releaseTaskHostSlots(task ApplyTask, running map[string]int) {
-	key := task.HostSlotKey
-	if key == "" {
-		key = task.Entry.HostSlotKey
-	}
+	key, count := taskHostSlot(task)
 	if key == "" {
 		return
-	}
-	count := task.HostSlotCount
-	if count < 1 {
-		count = task.Entry.HostSlotCount
-	}
-	if count < 1 {
-		count = 1
 	}
 	running[key] -= count
 	if running[key] <= 0 {
@@ -580,6 +591,9 @@ func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) 
 	if limits.ParallelismRedfish <= 0 || limits.ParallelismRedfish > autoRedfish {
 		limits.ParallelismRedfish = autoRedfish
 	}
+	limits.AutoParallelism = autoGlobal
+	limits.AutoParallelismPerHost = autoPerHost
+	limits.AutoParallelismRedfish = autoRedfish
 	return limits
 }
 
@@ -597,19 +611,9 @@ func hostSlotAutoParallelism(tasks []ApplyTask) int {
 	counts := map[string]int{}
 	maxCount := 1
 	for _, task := range tasks {
-		key := task.HostSlotKey
-		if key == "" {
-			key = task.Entry.HostSlotKey
-		}
+		key, count := taskHostSlot(task)
 		if key == "" {
 			continue
-		}
-		count := task.HostSlotCount
-		if count < 1 {
-			count = task.Entry.HostSlotCount
-		}
-		if count < 1 {
-			count = 1
 		}
 		counts[key] += count
 		if counts[key] > maxCount {

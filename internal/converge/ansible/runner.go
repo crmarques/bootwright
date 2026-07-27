@@ -25,7 +25,27 @@ const processGroupTerminationGrace = 5 * time.Second
 
 const OutputLogName = "ansible-output.log"
 
+const TaskProfileName = "task-profile.jsonl"
+
+const ProfileEnvVar = "BOOTWRIGHT_ANSIBLE_PROFILE"
+
+const ArtifactsEnvVar = "BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+
+const profileCallbackName = "bw_profile"
+
+const profileCallbackRelPath = "ansible_collections/bootwright/core/plugins/callback"
+
 const SystemTempDir = "/var/tmp"
+
+const sshControlPersist = "300s"
+
+const sshControlArgs = "-C -o ControlMaster=auto -o ControlPersist=" + sshControlPersist
+
+const sshControlPathParent = "bootwright-cp"
+
+const sshControlPathMaxLen = 90
+
+const sshControlPathRootBase = "/run"
 
 var systemTempEnv = []struct {
 	key   string
@@ -144,7 +164,12 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 		env = append(env, "ANSIBLE_FILTER_PLUGINS="+filepath.Clean(spec.FilterPluginsPath))
 	}
 	if spec.ArtifactsDir != "" {
-		env = append(env, "BOOTWRIGHT_ANSIBLE_ARTIFACTS="+filepath.Clean(spec.ArtifactsDir))
+		env = append(env, ArtifactsEnvVar+"="+filepath.Clean(spec.ArtifactsDir))
+		env = appendProfileEnv(env, spec.CollectionsPath)
+	}
+	if dir := sshControlPathForRun(); dir != "" {
+		env = append(env, "ANSIBLE_SSH_CONTROL_PATH_DIR="+dir)
+		env = appendSSHControlArgs(env)
 	}
 	if extra := sudoUserSitePackages(); extra != "" {
 		env = appendPythonPath(env, extra)
@@ -219,6 +244,146 @@ func stableWorkingDir() string {
 		}
 	}
 	return ""
+}
+
+func appendProfileEnv(env []string, collectionsPath string) []string {
+	if strings.TrimSpace(os.Getenv(ProfileEnvVar)) == "" {
+		return env
+	}
+	dir := profileCallbackDir(collectionsPath)
+	if dir == "" {
+		return env
+	}
+	return append(env,
+		"ANSIBLE_CALLBACK_PLUGINS="+dir,
+		"ANSIBLE_CALLBACKS_ENABLED="+profileCallbackName,
+	)
+}
+
+func profileCallbackDir(collectionsPath string) string {
+	for _, entry := range strings.Split(collectionsPath, string(os.PathListSeparator)) {
+		if entry == "" {
+			continue
+		}
+		dir := filepath.Join(filepath.Clean(entry), filepath.FromSlash(profileCallbackRelPath))
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return ""
+}
+
+func appendSSHControlArgs(env []string) []string {
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, "ANSIBLE_SSH_ARGS=") {
+			continue
+		}
+		if strings.TrimSpace(strings.TrimPrefix(entry, "ANSIBLE_SSH_ARGS=")) != "" {
+			return env
+		}
+	}
+	return append(env, "ANSIBLE_SSH_ARGS="+sshControlArgs)
+}
+
+var sshControlPath struct {
+	mu      sync.Mutex
+	created bool
+	dir     string
+}
+
+func sshControlPathForRun() string {
+	sshControlPath.mu.Lock()
+	defer sshControlPath.mu.Unlock()
+	if !sshControlPath.created {
+		sshControlPath.dir = newSSHControlPathDir()
+		sshControlPath.created = true
+	}
+	return sshControlPath.dir
+}
+
+func newSSHControlPathDir() string {
+	base := sshControlPathBase()
+	if base == "" {
+		return ""
+	}
+	parent := filepath.Join(base, sshControlPathParent)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return ""
+	}
+	if !realDirOwnedByEUID(parent) {
+		return ""
+	}
+	if err := os.Chmod(parent, 0o700); err != nil {
+		return ""
+	}
+	reapAbandonedControlPaths(parent)
+	dir := filepath.Join(parent, strconv.Itoa(os.Getpid()))
+	if len(dir) > sshControlPathMaxLen {
+		return ""
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return ""
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		return ""
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		_ = os.RemoveAll(dir)
+		return ""
+	}
+	return dir
+}
+
+func reapAbandonedControlPaths(parent string) {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid <= 0 || pid == os.Getpid() || processAlive(pid) {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(parent, entry.Name()))
+	}
+}
+
+func processAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+func sshControlPathBase() string {
+	if os.Geteuid() == 0 {
+		if isExistingDir(sshControlPathRootBase) {
+			return sshControlPathRootBase
+		}
+		return ""
+	}
+	if dir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR")); dir != "" && isExistingDir(dir) {
+		return dir
+	}
+	if dir := filepath.Join(sshControlPathRootBase, "user", strconv.Itoa(os.Geteuid())); isExistingDir(dir) {
+		return dir
+	}
+	return ""
+}
+
+func isExistingDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func realDirOwnedByEUID(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsDir() {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+	return stat.Uid == uint32(os.Geteuid())
 }
 
 func appendSystemTempEnv(env []string) []string {

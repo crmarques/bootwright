@@ -2,6 +2,7 @@ package oc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -162,6 +163,231 @@ func TestApplyRecordsHookObservedResources(t *testing.T) {
 	want := []string{"Secret/openshift-storage/rook-ceph-external-cluster-details"}
 	if !reflect.DeepEqual(record.ObservedResources, want) {
 		t.Fatalf("ObservedResources = %v, want %v (hook-applied resources must be recorded like OLM-rendered ones)", record.ObservedResources, want)
+	}
+}
+
+type callRecordingRunner struct {
+	applies []string
+	gets    []string
+	failGet func(args []string) bool
+}
+
+func (r *callRecordingRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty oc args")
+	}
+	joined := strings.Join(args, " ")
+	switch args[0] {
+	case "apply":
+		r.applies = append(r.applies, kindFromManifest(input))
+		return nil, nil
+	case "get":
+		r.gets = append(r.gets, joined)
+		if r.failGet != nil && r.failGet(args) {
+			return nil, fmt.Errorf("not found")
+		}
+		switch {
+		case strings.Contains(joined, "subscription"):
+			return []byte(`{"status":{"installedCSV":"ready-operator.v1"}}`), nil
+		case strings.Contains(joined, "clusterserviceversion"):
+			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+		default:
+			return []byte(`{"metadata":{"name":"installed"}}`), nil
+		}
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+func (r *callRecordingRunner) gatesTouched() []string {
+	var out []string
+	for _, get := range r.gets {
+		if strings.Contains(get, "clusterserviceversion") || strings.Contains(get, "catalogsource") {
+			out = append(out, get)
+		}
+	}
+	return out
+}
+
+func alwaysHookReadyPlan() extensionplan.ExtensionPlan {
+	plan := readyExtensionPlan()
+	plan.Extension.Spec.Steps = []v1alpha1.ClusterAddonStep{
+		{Name: "prep", Gates: v1alpha1.ClusterAddonStepGateApply},
+		{
+			Name:    "attach-external-storage",
+			Follows: v1alpha1.ClusterAddonStepFollowsOperatorReady,
+			Run:     v1alpha1.PlaybookRunAlways,
+		},
+	}
+	return plan
+}
+
+func writeConvergedHookRecords(t *testing.T, dir string, plan extensionplan.ExtensionPlan) {
+	t.Helper()
+	writeReadyExtensionRecord(t, dir, plan)
+	for _, hook := range plan.Extension.Spec.Steps {
+		if v1alpha1.ClusterAddonStepRun(hook) == v1alpha1.PlaybookRunAlways {
+			continue
+		}
+		anchor, _ := v1alpha1.ClusterAddonStepAnchor(hook)
+		if err := extensionrecords.SetHook(dir, plan.Cluster, plan.Name, hook.Name, extensionrecords.HookRecord{
+			Lifecycle: anchor,
+			Status:    extensionrecords.RecordStatusReady,
+		}); err != nil {
+			t.Fatalf("SetHook %s: %v", hook.Name, err)
+		}
+	}
+}
+
+func TestApplyRunsOnlyAlwaysHooksWhenAddonIsAlreadyReady(t *testing.T) {
+	dir := t.TempDir()
+	plan := alwaysHookReadyPlan()
+	writeConvergedHookRecords(t, dir, plan)
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &callRecordingRunner{}
+	hookRunner := &recordingHookRunner{}
+
+	result, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+	}, plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if result.Skipped {
+		t.Fatalf("an always hook must still run; result = %+v", result)
+	}
+	wantHooks := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
+	if !reflect.DeepEqual(hookRunner.calls, wantHooks) {
+		t.Fatalf("hook lifecycles = %v, want %v", hookRunner.calls, wantHooks)
+	}
+	if len(runner.applies) != 0 {
+		t.Fatalf("a converged add-on must not re-apply catalog, operator or custom resources; applied %v", runner.applies)
+	}
+	if gates := runner.gatesTouched(); len(gates) != 0 {
+		t.Fatalf("a converged add-on must not re-run the CSV or catalog gate; gets %v", gates)
+	}
+	record, found, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil || !found {
+		t.Fatalf("LoadRecord: found=%v err=%v", found, err)
+	}
+	if record.Status != extensionrecords.RecordStatusWaiting || record.Phase != extensionrecords.RecordPhaseApplied {
+		t.Fatalf("record = %s/%s, want waiting/applied so Wait re-proves readiness after the hook", record.Status, record.Phase)
+	}
+	if record.AppliedAt == nil {
+		t.Fatal("record.AppliedAt must be stamped by the hook-only apply")
+	}
+}
+
+func TestApplyConvergedHooksKeepPriorObservedResources(t *testing.T) {
+	dir := t.TempDir()
+	plan := alwaysHookReadyPlan()
+	writeConvergedHookRecords(t, dir, plan)
+	record, _, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil {
+		t.Fatalf("LoadRecord: %v", err)
+	}
+	record.ObservedResources = []string{"Namespace/installed", "Subscription/installed/ready-operator"}
+	if err := extensionrecords.SaveRecord(dir, record); err != nil {
+		t.Fatalf("SaveRecord: %v", err)
+	}
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	hookRunner := observingHookRunner{observed: map[string][]string{
+		v1alpha1.ClusterAddonStepFollowsOperatorReady: {
+			"Namespace/installed",
+			"StorageCluster/installed/ocs-external-storagecluster",
+		},
+	}}
+	if _, err := Apply(context.Background(), &callRecordingRunner{}, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+	}, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	updated, found, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil || !found {
+		t.Fatalf("LoadRecord: found=%v err=%v", found, err)
+	}
+	want := []string{
+		"Namespace/installed",
+		"Subscription/installed/ready-operator",
+		"StorageCluster/installed/ocs-external-storagecluster",
+	}
+	if !reflect.DeepEqual(updated.ObservedResources, want) {
+		t.Fatalf("ObservedResources = %v, want %v", updated.ObservedResources, want)
+	}
+}
+
+func TestApplyNotReadyAddonWithAlwaysHookTakesFullPath(t *testing.T) {
+	dir := t.TempDir()
+	plan := alwaysHookReadyPlan()
+	writeConvergedHookRecords(t, dir, plan)
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &callRecordingRunner{failGet: func(args []string) bool {
+		return strings.Contains(strings.Join(args, " "), "Namespace")
+	}}
+	hookRunner := &recordingHookRunner{}
+
+	if _, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+	}, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(runner.applies) == 0 {
+		t.Fatal("a live-unready add-on must still apply its resources")
+	}
+	sawSubscription := false
+	for _, kind := range runner.applies {
+		if kind == "Subscription" {
+			sawSubscription = true
+		}
+	}
+	if !sawSubscription {
+		t.Fatalf("applied kinds = %v, want the Subscription", runner.applies)
+	}
+	if gates := runner.gatesTouched(); len(gates) == 0 {
+		t.Fatalf("a live-unready add-on must still run the CSV gate; gets %v", runner.gets)
+	}
+	wantHooks := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
+	if !reflect.DeepEqual(hookRunner.calls, wantHooks) {
+		t.Fatalf("hook lifecycles = %v, want %v", hookRunner.calls, wantHooks)
+	}
+}
+
+func TestApplyStillSkipsReadyAddonWithOnChangeHooks(t *testing.T) {
+	dir := t.TempDir()
+	plan := alwaysHookReadyPlan()
+	plan.Extension.Spec.Steps[1].Run = v1alpha1.PlaybookRunOnChange
+	writeConvergedHookRecords(t, dir, plan)
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &callRecordingRunner{}
+	hookRunner := &recordingHookRunner{}
+
+	result, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+	}, plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !result.Skipped {
+		t.Fatalf("a converged add-on with no always hook must still skip entirely; result = %+v", result)
+	}
+	if len(hookRunner.calls) != 0 {
+		t.Fatalf("skipped apply must not run hooks; calls = %v", hookRunner.calls)
 	}
 }
 

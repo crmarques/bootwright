@@ -1506,6 +1506,32 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 	}
 }
 
+func TestBootRedfishVirtualMediaProbeThrottleTracksEmulatedBMC(t *testing.T) {
+	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
+	probe := prepareTasks[findAnsibleTask(t, prepareTasks, "List VirtualMedia members for the target system")]
+	throttle, ok := probe["throttle"].(string)
+	if !ok {
+		t.Fatalf("system VirtualMedia probe throttle must be templated off the emulated-BMC signal, got %#v", probe["throttle"])
+	}
+	if !strings.Contains(throttle, "bootwright_component.boot.redfish.vmediaColdInitRetry") {
+		t.Fatalf("system VirtualMedia probe throttle must key off vmediaColdInitRetry, got %q", throttle)
+	}
+	if !strings.Contains(throttle, "1 if") || !strings.Contains(throttle, "else 0") {
+		t.Fatalf("system VirtualMedia probe must serialize only for the emulated BMC and run unthrottled otherwise, got %q", throttle)
+	}
+	if !strings.Contains(throttle, "default(false)") {
+		t.Fatalf("system VirtualMedia probe throttle must tolerate an absent vmediaColdInitRetry, got %q", throttle)
+	}
+	for _, other := range prepareTasks {
+		if fmt.Sprint(other["name"]) == "List VirtualMedia members for the target system" {
+			continue
+		}
+		if _, ok := other["throttle"]; ok {
+			t.Fatalf("%v must not serialize Redfish probes across machines", other["name"])
+		}
+	}
+}
+
 func redfishPowerTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/"

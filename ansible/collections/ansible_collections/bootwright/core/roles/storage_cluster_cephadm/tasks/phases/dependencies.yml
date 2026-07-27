@@ -65,10 +65,10 @@
     argv:
       - chronyc
       - waitsync
-      - "6"
+      - "30"
       - "0"
       - "0"
-      - "10"
+      - "2"
   register: bootwright_ceph_chrony_waitsync
   changed_when: false
   failed_when: false

@@ -4,6 +4,7 @@ import (
 	"io"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,14 +18,28 @@ var (
 	gitCommit     = "unknown"
 )
 
+const unavailableArchiveIdentity = "unavailable"
+
 type versionMetadata struct {
-	version   string
-	gitCommit string
+	version     string
+	gitCommit   string
+	vcsModified string
 }
 
 func bundleVersionMarker() string {
-	metadata := currentVersionMetadata()
-	return "version=" + metadata.version + "\ngitCommit=" + metadata.gitCommit
+	size, digest, err := bundle.EmbeddedArchiveIdentity()
+	if err != nil {
+		size, digest = 0, unavailableArchiveIdentity
+	}
+	return bundleVersionMarkerFrom(currentVersionMetadata(), size, digest)
+}
+
+func bundleVersionMarkerFrom(metadata versionMetadata, archiveBytes int64, archiveDigest string) string {
+	return "version=" + metadata.version +
+		"\ngitCommit=" + metadata.gitCommit +
+		"\nvcsModified=" + metadata.vcsModified +
+		"\nbundleBytes=" + strconv.FormatInt(archiveBytes, 10) +
+		"\nbundleArchive=" + archiveDigest
 }
 
 func currentVersionMetadata() versionMetadata {
@@ -37,8 +52,9 @@ func currentVersionMetadata() versionMetadata {
 
 func versionMetadataFrom(version, commit string, info *debug.BuildInfo) versionMetadata {
 	metadata := versionMetadata{
-		version:   strings.TrimSpace(version),
-		gitCommit: strings.TrimSpace(commit),
+		version:     strings.TrimSpace(version),
+		gitCommit:   strings.TrimSpace(commit),
+		vcsModified: buildSetting(info, "vcs.modified"),
 	}
 	if metadata.version == "" {
 		metadata.version = "dev"
@@ -49,16 +65,23 @@ func versionMetadataFrom(version, commit string, info *debug.BuildInfo) versionM
 	if metadata.gitCommit == "" {
 		metadata.gitCommit = "unknown"
 	}
+	if metadata.vcsModified == "" {
+		metadata.vcsModified = "unknown"
+	}
 	return metadata
 }
 
 func vcsRevision(info *debug.BuildInfo) string {
+	return shortCommit(buildSetting(info, "vcs.revision"))
+}
+
+func buildSetting(info *debug.BuildInfo, key string) string {
 	if info == nil {
 		return ""
 	}
 	for _, setting := range info.Settings {
-		if setting.Key == "vcs.revision" {
-			return shortCommit(setting.Value)
+		if setting.Key == key {
+			return strings.TrimSpace(setting.Value)
 		}
 	}
 	return ""

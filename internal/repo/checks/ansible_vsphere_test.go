@@ -36,6 +36,18 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 	if !strings.Contains(body, "bootwright_vsphere_destroy_info.instance is defined") {
 		t.Fatal("vsphere destroy must derive VM presence from the success-only `instance` return, not the rewritten .failed")
 	}
+	deleteBody, ok := deleteTask["community.vmware.vmware_guest"].(map[string]any)
+	if !ok {
+		t.Fatalf("Delete vSphere VM must use community.vmware.vmware_guest, got %v", deleteTask)
+	}
+	if deleteBody["state"] != "absent" || deleteBody["force"] != true {
+		t.Fatalf("Delete vSphere VM must force-remove the VM so it needs no separate power-off, got %v", deleteBody)
+	}
+	for _, task := range tasks {
+		if _, ok := task["community.vmware.vmware_guest_powerstate"]; ok {
+			t.Fatalf("%v: vmware_guest state=absent force=true already powers the VM off, so destroy must not pay for an extra vCenter login", task["name"])
+		}
+	}
 }
 
 func TestVSphereSubstrateApplyRefusesForeignVM(t *testing.T) {

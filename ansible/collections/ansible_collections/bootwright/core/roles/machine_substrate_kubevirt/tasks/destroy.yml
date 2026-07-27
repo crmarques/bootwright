@@ -138,21 +138,6 @@
         - bootwright_destroy_force_unowned | default(false) | bool
         - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
 
-    - name: Stop KubeVirt VirtualMachine
-      ansible.builtin.command:
-        argv:
-          - virtctl
-          - --kubeconfig
-          - "{{ bootwright_kubevirt_kubeconfig }}"
-          - stop
-          - "{{ bootwright_kubevirt_vm_name }}"
-          - --namespace
-          - "{{ bootwright_kubevirt_namespace }}"
-      register: bootwright_kubevirt_vm_stop
-      changed_when: bootwright_kubevirt_vm_stop.rc == 0
-      failed_when: false
-      when: bootwright_kubevirt_vm_present | bool
-
     - name: Delete KubeVirt VirtualMachine
       ansible.builtin.command:
         argv:
@@ -245,14 +230,16 @@
           - "{{ bootwright_kubevirt_namespace }}"
           - delete
           - datavolume
-          - "{{ item.item }}"
+          - "{{ bootwright_kubevirt_root_dv_name }}"
+          - "{{ bootwright_kubevirt_iso_dv_name }}"
           - --ignore-not-found=true
-      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when: (item.rc | default(1)) == 0
       register: bootwright_kubevirt_dv_delete
       changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
+      when: >-
+        bootwright_kubevirt_dv_owner.results
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | list | length > 0
 
 - name: Remove KubeVirt machine ownership record
   ansible.builtin.include_role:

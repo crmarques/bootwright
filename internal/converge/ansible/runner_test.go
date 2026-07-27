@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -196,6 +197,289 @@ printf 'collections=%s\n' "$ANSIBLE_COLLECTIONS_PATH"
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}
 	}
+}
+
+func TestCommandRunnerLeavesProfilingOffByDefault(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	stdout := runEnvProbe(t, dir, RunSpec{
+		CollectionsPath: repoCollectionsPath(t),
+		ArtifactsDir:    filepath.Join(dir, "artifacts"),
+	})
+	for _, unwanted := range []string{"callbacks=bootwright", "callback_plugins=/"} {
+		if strings.Contains(stdout, unwanted) {
+			t.Fatalf("profiling must stay off unless %s is set:\n%s", ProfileEnvVar, stdout)
+		}
+	}
+}
+
+func TestCommandRunnerEnablesProfilingCallbackOnRequest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	t.Setenv(ProfileEnvVar, "1")
+	dir := t.TempDir()
+	artifacts := filepath.Join(dir, "artifacts")
+	stdout := runEnvProbe(t, dir, RunSpec{
+		CollectionsPath: repoCollectionsPath(t),
+		ArtifactsDir:    artifacts,
+	})
+	if !strings.Contains(stdout, "callbacks="+profileCallbackName+"\n") {
+		t.Fatalf("stdout missing enabled profiling callback:\n%s", stdout)
+	}
+	wantPlugins := filepath.Join(repoCollectionsPath(t), filepath.FromSlash(profileCallbackRelPath))
+	if !strings.Contains(stdout, "callback_plugins="+wantPlugins+"\n") {
+		t.Fatalf("stdout missing callback plugin path %s:\n%s", wantPlugins, stdout)
+	}
+	if !strings.Contains(stdout, "artifacts="+artifacts+"\n") {
+		t.Fatalf("profiling output must be routed through %s:\n%s", ArtifactsEnvVar, stdout)
+	}
+}
+
+func TestCommandRunnerSkipsProfilingWithoutTheBundledCallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	t.Setenv(ProfileEnvVar, "1")
+	dir := t.TempDir()
+	stdout := runEnvProbe(t, dir, RunSpec{
+		CollectionsPath: filepath.Join(dir, "missing-collections"),
+		ArtifactsDir:    filepath.Join(dir, "artifacts"),
+	})
+	if !strings.Contains(stdout, "callbacks=\n") {
+		t.Fatalf("profiling must stay off when the callback plugin is absent:\n%s", stdout)
+	}
+}
+
+func TestCommandRunnerScopesSSHControlPathToTheRun(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("control path scoping is Linux-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("elevated runs place control sockets under /run rather than XDG_RUNTIME_DIR")
+	}
+	runtimeDir := shortRuntimeDir(t)
+
+	dir := t.TempDir()
+	stdout := runEnvProbe(t, dir, RunSpec{ArtifactsDir: filepath.Join(dir, "artifacts")})
+	controlPath := probedValue(t, stdout, "control_path")
+	if controlPath == "" {
+		t.Fatalf("stdout missing ANSIBLE_SSH_CONTROL_PATH_DIR:\n%s", stdout)
+	}
+	wantParent := filepath.Join(runtimeDir, sshControlPathParent)
+	if filepath.Dir(controlPath) != wantParent {
+		t.Fatalf("control path %s is not scoped under the runtime directory %s", controlPath, wantParent)
+	}
+	if filepath.Base(controlPath) != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("control path %s is not scoped to this run", controlPath)
+	}
+	if len(controlPath) > sshControlPathMaxLen {
+		t.Fatalf("control path %s is %d bytes, over the %d byte budget for AF_UNIX sun_path", controlPath, len(controlPath), sshControlPathMaxLen)
+	}
+	info, err := os.Stat(controlPath)
+	if err != nil {
+		t.Fatalf("Stat control path: %v", err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("control path mode = %o, want 0700", info.Mode().Perm())
+	}
+	if !strings.Contains(stdout, "ssh_args=-C -o ControlMaster=auto -o ControlPersist="+sshControlPersist+"\n") {
+		t.Fatalf("stdout missing compression and the capped control persist:\n%s", stdout)
+	}
+	again := probedValue(t, runEnvProbe(t, dir, RunSpec{ArtifactsDir: filepath.Join(dir, "artifacts")}), "control_path")
+	if again != controlPath {
+		t.Fatalf("second task got control path %s, want the run-scoped %s so masters stay shared", again, controlPath)
+	}
+}
+
+func TestSSHControlPathReapsPathsLeftByDepartedRuns(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("control path scoping is Linux-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("elevated runs place control sockets under /run rather than XDG_RUNTIME_DIR")
+	}
+	runtimeDir := shortRuntimeDir(t)
+	parent := filepath.Join(runtimeDir, sshControlPathParent)
+	departed := filepath.Join(parent, strconv.Itoa(unusedPID(t)))
+	if err := os.MkdirAll(departed, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	foreign := filepath.Join(parent, "not-a-pid")
+	if err := os.MkdirAll(foreign, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dir := sshControlPathForRun()
+	if dir == "" {
+		t.Fatal("expected a run-scoped control path")
+	}
+	if _, err := os.Stat(departed); !os.IsNotExist(err) {
+		t.Fatalf("control path %s of a departed run was not reaped: %v", departed, err)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatalf("only pid-named control paths may be reaped: %v", err)
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("this run's control path was reaped: %v", err)
+	}
+}
+
+func unusedPID(t *testing.T) int {
+	t.Helper()
+	data, err := os.ReadFile("/proc/sys/kernel/pid_max")
+	if err != nil {
+		t.Skip("cannot determine an unused pid")
+	}
+	max, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || max <= 0 {
+		t.Skip("cannot determine an unused pid")
+	}
+	return max + 1
+}
+
+func probedValue(t *testing.T, stdout, key string) string {
+	t.Helper()
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.HasPrefix(line, key+"=") {
+			return strings.TrimPrefix(line, key+"=")
+		}
+	}
+	return ""
+}
+
+func resetSSHControlPath(t *testing.T) {
+	t.Helper()
+	sshControlPath.mu.Lock()
+	sshControlPath.created = false
+	sshControlPath.dir = ""
+	sshControlPath.mu.Unlock()
+	t.Cleanup(func() {
+		sshControlPath.mu.Lock()
+		sshControlPath.created = false
+		sshControlPath.dir = ""
+		sshControlPath.mu.Unlock()
+	})
+}
+
+func TestCommandRunnerKeepsCallerSuppliedSSHArgs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("control path scoping is Linux-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("elevated runs place control sockets under /run rather than XDG_RUNTIME_DIR")
+	}
+	shortRuntimeDir(t)
+	t.Setenv("ANSIBLE_SSH_ARGS", "-C -o ControlMaster=no")
+
+	dir := t.TempDir()
+	stdout := runEnvProbe(t, dir, RunSpec{ArtifactsDir: filepath.Join(dir, "artifacts")})
+	if !strings.Contains(stdout, "ssh_args=-C -o ControlMaster=no\n") {
+		t.Fatalf("caller supplied ssh args were overridden:\n%s", stdout)
+	}
+}
+
+func TestSSHControlPathDirTightensAWideOpenParent(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("control path scoping is Linux-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("elevated runs place control sockets under /run rather than XDG_RUNTIME_DIR")
+	}
+	runtimeDir := shortRuntimeDir(t)
+	parent := filepath.Join(runtimeDir, sshControlPathParent)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	dir := newSSHControlPathDir()
+	if dir == "" {
+		t.Fatal("a parent we own should be repaired rather than abandoned")
+	}
+	info, err := os.Stat(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("control parent mode = %o, want 0700", info.Mode().Perm())
+	}
+	info, err = os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("control path mode = %o, want 0700", info.Mode().Perm())
+	}
+}
+
+func TestSSHControlPathDirRejectsARedirectedParent(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("control path scoping is Linux-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("elevated runs place control sockets under /run rather than XDG_RUNTIME_DIR")
+	}
+	runtimeDir := shortRuntimeDir(t)
+	target := filepath.Join(runtimeDir, "elsewhere")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(runtimeDir, sshControlPathParent)); err != nil {
+		t.Fatal(err)
+	}
+	if dir := newSSHControlPathDir(); dir != "" {
+		t.Fatalf("a symlinked control parent must not be used, got %s", dir)
+	}
+}
+
+func shortRuntimeDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "bwcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	resetSSHControlPath(t)
+	return dir
+}
+
+func runEnvProbe(t *testing.T, dir string, spec RunSpec) string {
+	t.Helper()
+	executable := filepath.Join(dir, "fake-ansible-playbook")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
+printf 'callbacks=%s\n' "$ANSIBLE_CALLBACKS_ENABLED"
+printf 'callback_plugins=%s\n' "$ANSIBLE_CALLBACK_PLUGINS"
+printf 'artifacts=%s\n' "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+printf 'control_path=%s\n' "$ANSIBLE_SSH_CONTROL_PATH_DIR"
+printf 'ssh_args=%s\n' "$ANSIBLE_SSH_ARGS"
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible-playbook: %v", err)
+	}
+	spec.Executable = executable
+	spec.Inventory = "inventory.yaml"
+	spec.Playbook = "playbook.yml"
+	spec.ExtraVars = "vars.yml"
+	var stdout bytes.Buffer
+	if err := (CommandRunner{Stdout: &stdout}).Run(context.Background(), spec); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return stdout.String()
+}
+
+func repoCollectionsPath(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("..", "..", "..", "ansible", "collections"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		t.Fatalf("expected the source collections tree at %s", path)
+	}
+	return path
 }
 
 func TestCommandRunnerControllingTTYSatisfiesNestedRequireTTY(t *testing.T) {

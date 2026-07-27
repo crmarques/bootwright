@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 //go:embed ansible_bundle*
@@ -29,6 +30,8 @@ const BootwrightCollectionRelPath = "collections/ansible_collections/bootwright/
 const bundleDigestRelPath = ".bootwright-bundle.sha256"
 const bundleVersionRelPath = ".bootwright-bundle.version"
 
+const VerifyBundleEnvVar = "BOOTWRIGHT_BUNDLE_VERIFY"
+
 var errEmptyAnsibleBundle = errors.New("embedded ansible bundle is empty")
 
 type AnsibleBundleResult struct {
@@ -39,15 +42,24 @@ type AnsibleBundleResult struct {
 }
 
 func EnsureAnsibleBundle(dest string, bundleVersion string) (AnsibleBundleResult, error) {
+	return ensureAnsibleBundle(dest, bundleVersion, verifyBundleRequested())
+}
+
+func ensureAnsibleBundle(dest string, bundleVersion string, verify bool) (AnsibleBundleResult, error) {
 	archive, err := openAnsibleBundleArchive()
 	if err != nil {
 		return AnsibleBundleResult{}, err
 	}
-	digest, stats, err := ansibleBundleDigest(archive)
+	stats := archiveStats(archive)
+	result := AnsibleBundleResult{Dir: dest, Files: stats.files, Bytes: stats.bytes}
+	if !verify && existingBundleVersionMatches(dest, bundleVersion) {
+		result.Reused = true
+		return result, nil
+	}
+	digest, err := ansibleBundleDigest(archive)
 	if err != nil {
 		return AnsibleBundleResult{}, err
 	}
-	result := AnsibleBundleResult{Dir: dest, Files: stats.files, Bytes: stats.bytes}
 	if existingBundleMatches(dest, digest, bundleVersion) {
 		result.Reused = true
 		return result, nil
@@ -56,6 +68,10 @@ func EnsureAnsibleBundle(dest string, bundleVersion string) (AnsibleBundleResult
 		return AnsibleBundleResult{}, err
 	}
 	return result, nil
+}
+
+func verifyBundleRequested() bool {
+	return strings.TrimSpace(os.Getenv(VerifyBundleEnvVar)) != ""
 }
 
 func IsEmptyAnsibleBundle(err error) bool {
@@ -67,27 +83,44 @@ func EmbeddedBundleDigest() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	digest, _, err := ansibleBundleDigest(archive)
-	return digest, err
+	return ansibleBundleDigest(archive)
 }
 
+func EmbeddedArchiveIdentity() (int64, string, error) {
+	archiveIdentityOnce.Do(func() {
+		data, err := bundleArchiveFS.ReadFile(bundleArchiveRelPath)
+		if err != nil {
+			archiveIdentityValue.err = fmt.Errorf("%w (rebuild bootwright via 'make build'): missing %s", errEmptyAnsibleBundle, bundleArchiveRelPath)
+			return
+		}
+		sum := sha256.Sum256(data)
+		archiveIdentityValue.size = int64(len(data))
+		archiveIdentityValue.digest = hex.EncodeToString(sum[:])
+	})
+	return archiveIdentityValue.size, archiveIdentityValue.digest, archiveIdentityValue.err
+}
+
+type embeddedArchiveIdentity struct {
+	size   int64
+	digest string
+	err    error
+}
+
+var (
+	archiveIdentityOnce  sync.Once
+	archiveIdentityValue embeddedArchiveIdentity
+)
+
 func ExtractAnsibleBundle(dest string, bundleVersion string) error {
-	result, err := EnsureAnsibleBundle(dest, bundleVersion)
+	archive, err := openAnsibleBundleArchive()
 	if err != nil {
 		return err
 	}
-	if result.Reused {
-		archive, err := openAnsibleBundleArchive()
-		if err != nil {
-			return err
-		}
-		digest, _, err := ansibleBundleDigest(archive)
-		if err != nil {
-			return err
-		}
-		return extractAnsibleBundle(archive, dest, digest, bundleVersion)
+	digest, err := ansibleBundleDigest(archive)
+	if err != nil {
+		return err
 	}
-	return nil
+	return extractAnsibleBundle(archive, dest, digest, bundleVersion)
 }
 
 func openAnsibleBundleArchive() (*zip.Reader, error) {
@@ -149,20 +182,19 @@ type ansibleBundleStats struct {
 	bytes int64
 }
 
-func ansibleBundleDigest(archive *zip.Reader) (string, ansibleBundleStats, error) {
+func ansibleBundleDigest(archive *zip.Reader) (string, error) {
 	hash := sha256.New()
-	var stats ansibleBundleStats
 	for _, f := range sortedArchiveFiles(archive) {
 		if f.FileInfo().IsDir() {
 			continue
 		}
 		rel, ok := cleanArchivePath(f.Name)
 		if !ok {
-			return "", ansibleBundleStats{}, fmt.Errorf("embedded bundle contains unsafe path %q", f.Name)
+			return "", fmt.Errorf("embedded bundle contains unsafe path %q", f.Name)
 		}
 		data, err := readArchiveFile(f)
 		if err != nil {
-			return "", ansibleBundleStats{}, fmt.Errorf("read embedded %s: %w", rel, err)
+			return "", fmt.Errorf("read embedded %s: %w", rel, err)
 		}
 		executable := "0"
 		if f.Mode()&0o111 != 0 {
@@ -170,15 +202,25 @@ func ansibleBundleDigest(archive *zip.Reader) (string, ansibleBundleStats, error
 		}
 		fmt.Fprintf(hash, "%s\x00%s\x00%d\x00", path.Clean(rel), executable, len(data))
 		if _, err := hash.Write(data); err != nil {
-			return "", ansibleBundleStats{}, err
+			return "", err
 		}
 		if _, err := hash.Write([]byte{0}); err != nil {
-			return "", ansibleBundleStats{}, err
+			return "", err
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func archiveStats(archive *zip.Reader) ansibleBundleStats {
+	var stats ansibleBundleStats
+	for _, f := range archive.File {
+		if f.FileInfo().IsDir() {
+			continue
 		}
 		stats.files++
-		stats.bytes += int64(len(data))
+		stats.bytes += int64(f.UncompressedSize64)
 	}
-	return hex.EncodeToString(hash.Sum(nil)), stats, nil
+	return stats
 }
 
 func sortedArchiveFiles(archive *zip.Reader) []*zip.File {
@@ -230,20 +272,28 @@ func existingBundleMatches(dest string, digest string, bundleVersion string) boo
 	if err != nil || strings.TrimSpace(string(data)) != digest {
 		return false
 	}
-	data, err = os.ReadFile(filepath.Join(dest, bundleVersionRelPath))
+	return existingBundleVersionMatches(dest, bundleVersion)
+}
+
+func existingBundleVersionMatches(dest string, bundleVersion string) bool {
+	data, err := os.ReadFile(filepath.Join(dest, bundleVersionRelPath))
 	if err != nil || strings.TrimSpace(string(data)) != strings.TrimSpace(bundleVersion) {
 		return false
 	}
-	for _, rel := range []string{
-		AnsibleCfgRelPath,
-		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "galaxy.yml")),
-		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "check_preflight.yml")),
-		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "workflow_infra_apply.yml")),
-	} {
+	for _, rel := range bundleProbeRelPaths() {
 		info, err := os.Stat(filepath.Join(dest, rel))
 		if err != nil || info.IsDir() {
 			return false
 		}
 	}
 	return true
+}
+
+func bundleProbeRelPaths() []string {
+	return []string{
+		AnsibleCfgRelPath,
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "galaxy.yml")),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "check_preflight.yml")),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "workflow_infra_apply.yml")),
+	}
 }

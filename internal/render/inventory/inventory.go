@@ -182,7 +182,17 @@ func machineKnownHostsPath(h v1alpha1.Machine, paths PathOptions) string {
 }
 
 func sshCommonArgs(knownHostsPath string) string {
-	return shellquote.QuoteWords([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath})
+	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath))
+}
+
+func SSHCommonArgWords(knownHostsPath string) []string {
+	return []string{
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", "UserKnownHostsFile=" + knownHostsPath,
+		"-o", "ServerAliveInterval=15",
+		"-o", "ServerAliveCountMax=3",
+	}
 }
 
 func localmachineInventoryEntry() map[string]any {

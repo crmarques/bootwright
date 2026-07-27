@@ -123,18 +123,12 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if len(plan.Extension.Spec.Readiness.Checks) > 0 &&
-		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) &&
-		!hasActiveGlobalPullSecretMergeEffect(plan) {
-		if ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension); err == nil && ready {
-			record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
-			if err != nil {
-				return TaskResult{}, err
-			}
-			if found && completeReadyRecord(record, hash) && hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
-				return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
-			}
-		}
+	converged, convergedRecord, err := convergedApplyRecord(ctx, runner, cfg, plan, hash)
+	if err != nil {
+		return TaskResult{}, err
+	}
+	if converged && !hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
+		return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 	}
 	now := time.Now().UTC()
 	record := extensionrecords.Record{
@@ -147,10 +141,19 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		StartedAt:   cfg.StartedAt.UTC(),
 		UpdatedAt:   now,
 	}
+	if converged {
+		record.ObservedResources = convergedRecord.ObservedResources
+	}
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
-	observed, failedID, err := applyExtension(ctx, runner, cfg, plan)
+	var observed []string
+	var failedID string
+	if converged {
+		observed, err = applyConvergedHooks(ctx, cfg, plan, convergedRecord.ObservedResources)
+	} else {
+		observed, failedID, err = applyExtension(ctx, runner, cfg, plan)
+	}
 	now = time.Now().UTC()
 	record.UpdatedAt = now
 	record.ObservedResources = observed
@@ -250,6 +253,55 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil
+}
+
+func convergedApplyRecord(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan, hash string) (bool, extensionrecords.Record, error) {
+	if len(plan.Extension.Spec.Readiness.Checks) == 0 || hasActiveGlobalPullSecretMergeEffect(plan) {
+		return false, extensionrecords.Record{}, nil
+	}
+	ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
+	if err != nil || !ready {
+		return false, extensionrecords.Record{}, nil
+	}
+	record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
+	if err != nil {
+		return false, extensionrecords.Record{}, err
+	}
+	if !found || !completeReadyRecord(record, hash) ||
+		!hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
+		return false, extensionrecords.Record{}, nil
+	}
+	return true, record, nil
+}
+
+func applyConvergedHooks(ctx context.Context, cfg RunConfig, plan extensionplan.ExtensionPlan, observed []string) ([]string, error) {
+	merged := append([]string(nil), observed...)
+	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepGateApply)
+	merged = appendUnseen(merged, preApplyObserved...)
+	if err != nil {
+		return merged, err
+	}
+	if plan.Extension.Spec.Type != v1alpha1.ClusterAddonTypeOLM {
+		return merged, nil
+	}
+	postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
+	merged = appendUnseen(merged, postOperatorReadyObserved...)
+	return merged, err
+}
+
+func appendUnseen(existing []string, values ...string) []string {
+	seen := make(map[string]bool, len(existing))
+	for _, item := range existing {
+		seen[item] = true
+	}
+	for _, value := range values {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		existing = append(existing, value)
+	}
+	return existing
 }
 
 func completeReadyRecord(record extensionrecords.Record, hash string) bool {

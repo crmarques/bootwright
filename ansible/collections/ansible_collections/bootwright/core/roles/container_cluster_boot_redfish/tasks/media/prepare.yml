@@ -11,7 +11,7 @@
     return_content: true
     status_code: [200, 404]
   register: bootwright_redfish_vm_list
-  throttle: 1
+  throttle: "{{ 1 if (bootwright_component.boot.redfish.vmediaColdInitRetry | default(false) | bool) else 0 }}"
   until: >-
     (bootwright_redfish_vm_list.status | default(0) | int) in [200, 404]
     or not (bootwright_component.boot.redfish.vmediaColdInitRetry | default(false) | bool)

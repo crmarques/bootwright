@@ -602,6 +602,12 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 	if got := plays[1]["strategy"]; got != "linear" {
 		t.Fatalf("parallel machine infra destroy must keep cluster dependency passes in lockstep, got strategy=%v", got)
 	}
+	if got := plays[1]["gather_facts"]; got != false {
+		t.Fatalf("synthetic machine-task hosts all resolve to one provider machine and no substrate destroy task reads ansible_facts, so the play must not gather, got gather_facts=%v", got)
+	}
+	if got, ok := plays[1]["gather_subset"]; ok {
+		t.Fatalf("machine substrate destroy play must not carry a dead gather_subset, got %v", got)
+	}
 	machineTasks := nestedAnsibleTasks(t, plays[1], "tasks")
 	machineDestroy := machineTasks[findAnsibleTask(t, machineTasks, "Destroy machine substrate in dependency order")]
 	if got := fmt.Sprint(machineDestroy["loop"]); !strings.Contains(got, "bootwright_destroy_cluster_order") {
@@ -885,9 +891,46 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("kubevirt delete guard must be skipped under --include-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 
+	for _, task := range tasks {
+		body, ok := task["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.Contains(fmt.Sprint(body["argv"]), "virtctl") {
+			t.Fatalf("%v: deleting the VirtualMachine already stops the VMI, so destroy must not pay for a separate virtctl stop", task["name"])
+		}
+	}
+
 	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
 	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
 	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
+	if _, ok := tasks[dvReadIdx]["loop"]; !ok {
+		t.Fatal("KubeVirt DataVolume probes must stay per-item so one NotFound cannot mask the other's failure")
+	}
+	dvDelete := tasks[dvDeleteIdx]
+	if _, ok := dvDelete["loop"]; ok {
+		t.Fatalf("KubeVirt DataVolume deletion must be a single idempotent kubectl call, got loop=%v", dvDelete["loop"])
+	}
+	dvDeleteBody, ok := dvDelete["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt DataVolume deletion must be a command task, got %v", dvDelete)
+	}
+	dvDeleteArgv := fmt.Sprint(dvDeleteBody["argv"])
+	for _, want := range []string{
+		"{{ bootwright_kubevirt_root_dv_name }}",
+		"{{ bootwright_kubevirt_iso_dv_name }}",
+		"--ignore-not-found=true",
+	} {
+		if !strings.Contains(dvDeleteArgv, want) {
+			t.Fatalf("KubeVirt DataVolume deletion argv missing %q: %v", want, dvDeleteBody["argv"])
+		}
+	}
+	if got := fmt.Sprint(dvDelete["when"]); !strings.Contains(got, "bootwright_kubevirt_dv_owner") {
+		t.Fatalf("KubeVirt DataVolume deletion must stay gated on the per-item probes, got when=%v", dvDelete["when"])
+	}
+	if got := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine")]["ansible.builtin.command"]); strings.Contains(got, "--wait=false") {
+		t.Fatal("KubeVirt VirtualMachine deletion must block until the guest is provably absent")
+	}
 	if !(dvReadIdx < dvRefuseIdx && dvRefuseIdx < dvDeleteIdx) {
 		t.Fatalf("kubevirt destroy must read and verify each DataVolume ownership label before deleting (read=%d refuse=%d delete=%d)", dvReadIdx, dvRefuseIdx, dvDeleteIdx)
 	}

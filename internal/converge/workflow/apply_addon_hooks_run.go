@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
+	"github.com/crmarques/bootwright/internal/render"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -304,7 +305,7 @@ func writeHookInventory(path string, targets []hookSSHTarget) error {
 		host := map[string]any{
 			"ansible_host":            target.address,
 			"bootwright_host_name":    target.label,
-			"ansible_ssh_common_args": shellquote.Quote([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + target.knownHostsPath}),
+			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath)),
 		}
 		if target.user != "" {
 			host["ansible_user"] = target.user
@@ -314,8 +315,8 @@ func writeHookInventory(path string, targets []hookSSHTarget) error {
 		}
 		hostsMap[target.inventoryName] = host
 	}
-	inventory := map[string]any{"all": map[string]any{"hosts": hostsMap}}
-	return writeWorkflowYAML(path, inventory, 0o600)
+	document := map[string]any{"all": map[string]any{"hosts": hostsMap}}
+	return writeWorkflowYAML(path, document, 0o600)
 }
 
 type hookSSHTarget struct {

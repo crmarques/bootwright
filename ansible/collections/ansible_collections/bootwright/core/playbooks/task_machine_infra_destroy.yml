@@ -44,9 +44,7 @@
 - name: Destroy machine substrate
   hosts: bootwright_machine_task_hosts
   strategy: linear
-  gather_subset:
-    - "!all"
-    - min
+  gather_facts: false
   become: true
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 

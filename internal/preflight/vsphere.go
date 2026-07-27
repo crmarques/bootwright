@@ -50,7 +50,7 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 	}
 	resolver := secret.NewResolver(contextName, secretsDir, secret.NewIndex(state))
 	seen := map[string]bool{}
-	var checks []Check
+	var vCenters []v1alpha1.VSphereVCenter
 	for _, p := range state.InfraProviders {
 		if p.Spec.Type != v1alpha1.ProvisionerVSphere || p.Spec.VSphere == nil {
 			continue
@@ -61,18 +61,29 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, s
 				continue
 			}
 			seen[key] = true
-			if vc.DisableCertificateVerification {
-				checks = append(checks, Check{
-					Group:       checkGroupInstallerTools,
-					Name:        vc.Server + " vCenter TLS",
-					Status:      StatusWarn,
-					Evidence:    "disableCertificateVerification is set for " + vc.Server,
-					Impact:      "the session probe (and apply) send vCenter basic-auth credentials over unverified TLS, exposing them to a man-in-the-middle on the management segment",
-					Remediation: "add the vCenter CA to the provider trust and clear disableCertificateVerification outside self-signed labs",
-				})
-			}
-			checks = append(checks, vsphereSessionCheck(vc, resolver, deps))
+			vCenters = append(vCenters, vc)
 		}
+	}
+	if len(vCenters) == 0 {
+		return nil
+	}
+	sessions := make([]Check, len(vCenters))
+	forEachBounded(len(vCenters), vCenterParallelism, func(i int) {
+		sessions[i] = vsphereSessionCheck(vCenters[i], resolver, deps)
+	})
+	var checks []Check
+	for i, vc := range vCenters {
+		if vc.DisableCertificateVerification {
+			checks = append(checks, Check{
+				Group:       checkGroupInstallerTools,
+				Name:        vc.Server + " vCenter TLS",
+				Status:      StatusWarn,
+				Evidence:    "disableCertificateVerification is set for " + vc.Server,
+				Impact:      "the session probe (and apply) send vCenter basic-auth credentials over unverified TLS, exposing them to a man-in-the-middle on the management segment",
+				Remediation: "add the vCenter CA to the provider trust and clear disableCertificateVerification outside self-signed labs",
+			})
+		}
+		checks = append(checks, sessions[i])
 	}
 	return checks
 }

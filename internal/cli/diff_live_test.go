@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/storage/cephdiff"
 	"github.com/crmarques/bootwright/internal/storage/cephstate"
 )
@@ -88,6 +90,37 @@ func TestDiffStorageClusterUnreachableIsNotInSync(t *testing.T) {
 	result = diffStorageCluster(state, external, "ceph-prod", map[string]cephstate.Discovery{}, &live)
 	if !result.InSync || !live.InSync {
 		t.Fatalf("external cluster comparison must stay neutral: result=%+v live=%+v", result, live)
+	}
+}
+
+func TestProbeContainerClustersKeepsRootIndexMapping(t *testing.T) {
+	roots := []workflow.StateCheckRoot{
+		{Kind: workflow.ApplyClusterKindStorage, Name: "ceph-prod"},
+		{Kind: workflow.ApplyClusterKindContainer, Name: "dc1-ocp"},
+		{Kind: workflow.ApplyClusterKindContainer, Name: "dc2-ocp", Absent: true},
+		{Kind: workflow.ApplyClusterKindContainer, Name: "dc3-ocp"},
+	}
+	probed := probeContainerClusters(context.Background(), v1alpha1.State{}, "lab", t.TempDir(), t.TempDir(), roots)
+	if len(probed) != 2 {
+		t.Fatalf("probed = %v, want only the present container roots", probed)
+	}
+	for index, want := range map[int]string{1: "dc1-ocp", 3: "dc3-ocp"} {
+		got, ok := probed[index]
+		if !ok {
+			t.Fatalf("root index %d missing from probe results: %v", index, probed)
+		}
+		if got.Cluster != want {
+			t.Fatalf("probed[%d].Cluster = %q, want %q; concurrent probing must stay aligned with report order", index, got.Cluster, want)
+		}
+		if got.Installed || !strings.Contains(got.Note, "not installed") {
+			t.Fatalf("probed[%d] = %+v, want a not-installed result without a kubeconfig", index, got)
+		}
+	}
+	if _, ok := probed[0]; ok {
+		t.Fatal("storage root must not be probed as a container cluster")
+	}
+	if _, ok := probed[2]; ok {
+		t.Fatal("absent container root must not be probed")
 	}
 }
 

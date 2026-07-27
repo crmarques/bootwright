@@ -96,24 +96,6 @@
     - bootwright_destroy_force_unowned | default(false) | bool
     - not (bootwright_vsphere_destroy_owned | default(false) | bool)
 
-- name: Power off vSphere VM
-  community.vmware.vmware_guest_powerstate:
-    hostname: "{{ bootwright_vsphere.server }}"
-    port: "{{ bootwright_vsphere.port | default(443) }}"
-    username: "{{ bootwright_vsphere_credentials.username }}"
-    password: "{{ bootwright_vsphere_credentials.password }}"
-    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
-    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
-    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
-    name: "{{ bootwright_vsphere_vm_name }}"
-    state: powered-off
-    force: true
-  vars:
-    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-  failed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when: bootwright_vsphere_vm_present | bool
-
 - name: Delete vSphere VM
   community.vmware.vmware_guest:
     hostname: "{{ bootwright_vsphere.server }}"

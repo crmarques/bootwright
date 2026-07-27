@@ -92,25 +92,53 @@
     - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
 
 - name: Verify cephadm seed SSH access to storage nodes
-  ansible.builtin.command:
-    argv:
-      - ssh
-      - -F
-      - "{{ bootwright_ceph_remote_ssh_config }}"
-      - "{{ item.address }}"
-      - >-
-        {{
-          'true'
-          if bootwright_selected_storage_cluster.clusterSSH.user == 'root'
-          else 'sudo -n true'
-        }}
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      config={{ bootwright_ceph_remote_ssh_config | quote }}
+      remote={{ ('true' if bootwright_selected_storage_cluster.clusterSSH.user == 'root' else 'sudo -n true') | quote }}
+      addresses=({{ bootwright_ceph_seed_ssh_addresses | map('quote') | join(' ') }})
+      unreachable=
+      for address in "${addresses[@]}"; do
+        ssh -F "$config" "$address" "$remote" >/dev/null 2>&1 || unreachable="${unreachable}${address}"$'\n'
+      done
+      if [ -n "$unreachable" ]; then
+        printf '%s' "$unreachable"
+        exit 1
+      fi
+  vars:
+    bootwright_ceph_seed_ssh_addresses: >-
+      {{
+        bootwright_selected_storage_cluster.hosts | default([])
+        | selectattr('address', 'defined')
+        | map(attribute='address')
+        | reject('equalto', '')
+        | list
+      }}
   register: bootwright_ceph_seed_ssh_check
   changed_when: false
+  failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  loop: "{{ bootwright_selected_storage_cluster.hosts | default([]) }}"
-  loop_control:
-    label: "{{ item.hostname }}"
   when:
     - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
     - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
-    - item.address | default('') | length > 0
+    - bootwright_ceph_seed_ssh_addresses | length > 0
+
+- name: Require cephadm seed SSH access to every selected storage node
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_seed_ssh_check.rc | default(1) | int) == 0
+    fail_msg: >-
+      The cephadm seed host {{ inventory_hostname }} could not open an SSH
+      session to these storage node addresses with the cluster SSH identity
+      {{ bootwright_selected_storage_cluster.clusterSSH.user }}:
+      {{ (bootwright_ceph_seed_ssh_check.stdout_lines | default([]) | join(', ')) | default('(the seed check itself failed, exit status ' ~ (bootwright_ceph_seed_ssh_check.rc | default('unknown') | string) ~ ')', true) }}.
+      cephadm drives every other node over this identity, so bootstrapping now
+      would leave a half-formed cluster. Confirm those nodes are powered on and
+      reachable, that the cluster public key is in the node's authorized_keys,
+      and that the node's host key is in the rendered known_hosts, then
+      re-apply.
+    success_msg: >-
+      The cephadm seed host reached every selected storage node over the cluster SSH identity.
+  when: not (bootwright_ceph_seed_ssh_check.skipped | default(false) | bool)

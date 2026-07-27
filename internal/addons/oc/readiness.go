@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -51,19 +52,53 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 	}
 }
 
+const readinessFanout = 4
+
+type readinessOutcome struct {
+	ready  bool
+	detail string
+	err    error
+}
+
 func Ready(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon) (bool, string, error) {
+	outcomes := readinessOutcomes(ctx, runner, kubeconfig, extension.Spec.Readiness.Checks)
 	var observed []string
-	for _, check := range extension.Spec.Readiness.Checks {
-		ready, detail, err := checkReady(ctx, runner, kubeconfig, check)
-		if err != nil {
-			return false, strings.Join(append(observed, detail), "; "), err
+	for _, outcome := range outcomes {
+		if outcome.err != nil {
+			return false, strings.Join(append(observed, outcome.detail), "; "), outcome.err
 		}
-		observed = append(observed, detail)
-		if !ready {
+		observed = append(observed, outcome.detail)
+		if !outcome.ready {
 			return false, strings.Join(observed, "; "), nil
 		}
 	}
 	return true, strings.Join(observed, "; "), nil
+}
+
+func readinessOutcomes(ctx context.Context, runner OCRunner, kubeconfig string, checks []v1alpha1.ClusterAddonReadinessCheck) []readinessOutcome {
+	outcomes := make([]readinessOutcome, len(checks))
+	if len(checks) == 0 {
+		return outcomes
+	}
+	if len(checks) == 1 {
+		ready, detail, err := checkReady(ctx, runner, kubeconfig, checks[0])
+		outcomes[0] = readinessOutcome{ready: ready, detail: detail, err: err}
+		return outcomes
+	}
+	slots := make(chan struct{}, readinessFanout)
+	var wg sync.WaitGroup
+	for i := range checks {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			ready, detail, err := checkReady(ctx, runner, kubeconfig, checks[index])
+			outcomes[index] = readinessOutcome{ready: ready, detail: detail, err: err}
+		}(i)
+	}
+	wg.Wait()
+	return outcomes
 }
 
 func checkReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) (bool, string, error) {

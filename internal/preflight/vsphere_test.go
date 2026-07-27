@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -196,14 +197,14 @@ func TestVSphereVCenterDedupesByCredentials(t *testing.T) {
 			},
 		},
 	})
-	probes := 0
+	var probes atomic.Int64
 	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
 		if req.Method == http.MethodPost {
-			probes++
+			probes.Add(1)
 		}
 		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}})
-	if probes != 2 {
-		t.Fatalf("session POST probes = %d, want 2 (one per distinct credential): %+v", probes, checks)
+	if probes.Load() != 2 {
+		t.Fatalf("session POST probes = %d, want 2 (one per distinct credential): %+v", probes.Load(), checks)
 	}
 }

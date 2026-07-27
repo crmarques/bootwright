@@ -51,7 +51,7 @@ all:
             bootwright_host_name: localhost
         bastion:
             ansible_host: bastion.bootwright.test
-            ansible_ssh_common_args: -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/bootwright-golden/trust/ssh/known_hosts
+            ansible_ssh_common_args: -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/bootwright-golden/trust/ssh/known_hosts -o ServerAliveInterval=15 -o ServerAliveCountMax=3
             ansible_ssh_private_key_file: /bootwright-golden/home/.ssh/bootwright-ssh-key
             bootwright_host_name: bastion
         localhost:

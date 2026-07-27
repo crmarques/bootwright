@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
@@ -17,8 +18,14 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("add-on task %s has no add-on plan", task.Entry.ID)}
 	}
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	progressLog, err := openAddonProgressLog(logPath)
+	if err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
+	defer progressLog.Close()
+	progress := io.MultiWriter(stdout, &lockedApplyWriter{mu: &sync.Mutex{}, w: progressLog})
 	var result extensionoc.TaskResult
-	err := withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
+	err = withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
 		runner := extensionoc.CommandRunner{
 			LogPath: logPath,
 			Stdout:  stdout,
@@ -32,7 +39,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 			StartedAt:    time.Now(),
 			PollInterval: 0,
 			ReadRunner:   readRunner,
-			Progress:     io.MultiWriter(stdout, addonProgressLogWriter(logPath)),
+			Progress:     progress,
 			Hooks:        newAddonHookExecutor(stdout, stderr, runsDir, runID, kubeconfig, opts, task, runnerFactory),
 			Effects:      newAddonEffectExecutor(stdout, stderr, runsDir, runID, opts, task),
 		}
@@ -70,25 +77,17 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, skippedReason: result.Reason, err: err}
 }
 
-type addonProgressLogWriter string
-
-func (w addonProgressLogWriter) Write(data []byte) (int, error) {
-	path := string(w)
+func openAddonProgressLog(path string) (*os.File, error) {
 	if err := safefs.EnsureDir(filepath.Dir(path), 0o700); err != nil {
-		return 0, err
+		return nil, fmt.Errorf("create add-on progress log directory: %w", err)
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("open add-on progress log: %w", err)
 	}
 	if err := file.Chmod(0o600); err != nil {
 		_ = file.Close()
-		return 0, err
+		return nil, fmt.Errorf("chmod add-on progress log: %w", err)
 	}
-	n, writeErr := file.Write(data)
-	closeErr := file.Close()
-	if writeErr != nil {
-		return n, writeErr
-	}
-	return n, closeErr
+	return file, nil
 }

@@ -30,7 +30,9 @@ const (
 
 func newStatusCmd(stdout io.Writer) *cobra.Command {
 	var output string
+	var runID string
 	watch := false
+	timings := false
 	watchInterval := 5 * time.Second
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -44,18 +46,32 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
   bootwright status
 
   # Machine-readable output for CI
-  bootwright status --output json`,
+  bootwright status --output json
+
+  # Per-task durations, queue waits, and the critical path of a recorded run
+  bootwright status --run apply-20260727T101500.000000000Z --timings`,
 	}
 	cf := addCommonFlags()
 	addOutputFlag(cmd, &output)
 	cmd.Flags().BoolVar(&watch, "watch", false, "refresh status until the current apply run reaches a terminal state")
 	cmd.Flags().DurationVar(&watchInterval, "watch-interval", watchInterval, "status refresh interval for --watch")
+	cmd.Flags().BoolVar(&timings, "timings", false, "report per-task durations, queue waits, and the run's critical path")
+	cmd.Flags().StringVar(&runID, "run", "", "recorded run ID to report timings for (defaults to the current run)")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
 		}
 		if watch && output == outputJSON {
 			return failErr(2, fmt.Errorf("--watch is only supported with text output"))
+		}
+		if runID != "" && !timings {
+			return failErr(2, fmt.Errorf("--run is only supported with --timings"))
+		}
+		if timings {
+			if watch {
+				return failErr(2, fmt.Errorf("--timings is not supported with --watch"))
+			}
+			return runStatusTimings(stdout, cf, runID, output == outputJSON)
 		}
 		if output == outputJSON {
 			return runStatusJSON(stdout, cf)

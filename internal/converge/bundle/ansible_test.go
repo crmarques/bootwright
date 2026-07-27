@@ -112,6 +112,118 @@ func TestEnsureAnsibleBundleReextractsWhenBundleVersionChanges(t *testing.T) {
 	}
 }
 
+func TestEnsureAnsibleBundleReusesWithoutInflatingTheArchive(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "bundle")
+	marker := "version=test\ngitCommit=abc123\nbundleArchive=1111"
+	if _, err := EnsureAnsibleBundle(dest, marker); err != nil {
+		if !strings.Contains(err.Error(), "embedded ansible bundle is empty") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dest, bundleDigestRelPath), []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := EnsureAnsibleBundle(dest, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Reused {
+		t.Fatal("matching version marker should reuse the bundle without inflating the archive")
+	}
+	if second.Files == 0 || second.Bytes == 0 {
+		t.Fatalf("bundle stats were not populated on the fast path: %+v", second)
+	}
+	verified, err := ensureAnsibleBundle(dest, marker, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verified.Reused {
+		t.Fatal("verification should re-extract a bundle whose content digest no longer matches")
+	}
+	data, err := os.ReadFile(filepath.Join(dest, bundleDigestRelPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) == "stale" {
+		t.Fatal("verification did not rewrite the content digest marker")
+	}
+}
+
+func TestEnsureAnsibleBundleReextractsWhenOnlyTheArchiveIdentityChanges(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "bundle")
+	first, err := EnsureAnsibleBundle(dest, "version=dev\ngitCommit=abc123\nbundleArchive=1111")
+	if err != nil {
+		if !strings.Contains(err.Error(), "embedded ansible bundle is empty") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if first.Reused {
+		t.Fatal("first ensure unexpectedly reused an empty destination")
+	}
+	stale := filepath.Join(dest, "local-extra")
+	if err := os.WriteFile(stale, []byte("removed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := EnsureAnsibleBundle(dest, "version=dev\ngitCommit=abc123\nbundleArchive=2222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Reused {
+		t.Fatal("a rebuilt bundle at the same version and commit must be re-extracted")
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Fatal("re-extracted bundle should clear stale destination files")
+	}
+}
+
+func TestArchiveStatsMatchInflatedStats(t *testing.T) {
+	archive, err := openAnsibleBundleArchive()
+	if err != nil {
+		if !IsEmptyAnsibleBundle(err) {
+			t.Fatalf("open embedded bundle: %v", err)
+		}
+		t.Skip("embedded bundle has not been synced")
+	}
+	stats := archiveStats(archive)
+	var want ansibleBundleStats
+	for _, f := range sortedArchiveFiles(archive) {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		data, err := readArchiveFile(f)
+		if err != nil {
+			t.Fatalf("read archived %s: %v", f.Name, err)
+		}
+		want.files++
+		want.bytes += int64(len(data))
+	}
+	if stats != want {
+		t.Fatalf("archiveStats = %+v, want %+v", stats, want)
+	}
+}
+
+func TestEmbeddedArchiveIdentityIsStable(t *testing.T) {
+	size, digest, err := EmbeddedArchiveIdentity()
+	if err != nil {
+		if !IsEmptyAnsibleBundle(err) {
+			t.Fatalf("embedded archive identity: %v", err)
+		}
+		t.Skip("embedded bundle has not been synced")
+	}
+	if size <= 0 || len(digest) != 64 {
+		t.Fatalf("embedded archive identity = %d bytes, digest %q", size, digest)
+	}
+	againSize, againDigest, err := EmbeddedArchiveIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if againSize != size || againDigest != digest {
+		t.Fatalf("embedded archive identity is not stable: %d/%s then %d/%s", size, digest, againSize, againDigest)
+	}
+}
+
 func TestConfiguredCollectionExistsInSource(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "ansible", filepath.FromSlash(BootwrightCollectionRelPath))
 	if _, err := os.Stat(path); err != nil {

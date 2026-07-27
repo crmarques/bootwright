@@ -59,11 +59,7 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 		{Key: "ID", Value: ledger.RunID},
 		{Key: "Target", Value: ledger.Target},
 		{Key: "Tasks", Value: fmt.Sprintf("%d", len(ledger.Tasks))},
-		{Key: "Parallelism", Value: fmt.Sprintf("%d tasks, %d per host, %d Redfish",
-			ledger.Limits.Parallelism,
-			ledger.Limits.ParallelismPerHost,
-			ledger.Limits.ParallelismRedfish,
-		)},
+		{Key: "Parallelism", Value: applyLimitsSummary(ledger.Limits)},
 		{Key: "Run log", Value: workflow.ApplyRunLogPath(runsDir, ledger.RunID)},
 	}
 	if contextName != "" {
@@ -73,6 +69,21 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 		fields = append(fields, output.Field{Key: "Scope", Value: ledger.Scope})
 	}
 	p.Fields(fields)
+}
+
+func applyLimitsSummary(limits workflow.ConcurrencyLimits) string {
+	return fmt.Sprintf("tasks %s, per host %s, Redfish %s",
+		applyLimitValue(limits.Parallelism, limits.ParallelismUnbounded()),
+		applyLimitValue(limits.ParallelismPerHost, limits.ParallelismPerHostUnbounded()),
+		applyLimitValue(limits.ParallelismRedfish, limits.ParallelismRedfishUnbounded()),
+	)
+}
+
+func applyLimitValue(value int, unbounded bool) string {
+	if unbounded {
+		return "unbounded"
+	}
+	return fmt.Sprintf("%d", value)
 }
 
 func printApplyRunSummary(stdout io.Writer, runsDir string, clustersDir string, displays map[string]clusterDisplay, ledger workflow.RunLedger) {

@@ -40,9 +40,10 @@ func OfferTrustOnFirstUse(ctx context.Context, contextDir string, state v1alpha1
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Metadata.Name < candidates[j].Metadata.Name })
 	interact.Begin()
+	scans := scanHostsConcurrently(ctx, state, candidates, deps.Scan, policy)
 	accepted := 0
-	for _, machine := range candidates {
-		report, record, write, err := EvaluateHost(ctx, state, machine, store, false, deps.Scan, policy)
+	for i, machine := range candidates {
+		report, record, write, err := evaluateScannedHost(state, machine, store, false, policy, scans[i])
 		if err != nil {
 			interact.Warn("Machine/"+machine.Metadata.Name, err.Error())
 			continue

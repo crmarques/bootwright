@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/host/execution"
@@ -91,7 +92,11 @@ func redactedLogBytes(data []byte) []byte {
 	return []byte(fmt.Sprintf("[redacted %d bytes]", len(data)))
 }
 
+var appendLogMu sync.Mutex
+
 func appendLog(path, name string, args []string, input []byte, output []byte) error {
+	appendLogMu.Lock()
+	defer appendLogMu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -130,6 +135,12 @@ func appendLog(path, name string, args []string, input []byte, output []byte) er
 	return file.Close()
 }
 
+const (
+	waitIntervalDivisor = 100
+	minWaitInterval     = 5 * time.Second
+	maxWaitInterval     = 15 * time.Second
+)
+
 func WaitInterval(timeout time.Duration) time.Duration {
 	if timeout < time.Second {
 		return timeout
@@ -137,5 +148,12 @@ func WaitInterval(timeout time.Duration) time.Duration {
 	if timeout < 10*time.Second {
 		return time.Second
 	}
-	return 5 * time.Second
+	interval := timeout / waitIntervalDivisor
+	if interval < minWaitInterval {
+		return minWaitInterval
+	}
+	if interval > maxWaitInterval {
+		return maxWaitInterval
+	}
+	return interval
 }

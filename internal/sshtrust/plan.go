@@ -68,12 +68,17 @@ func BuildPlan(ctx context.Context, state v1alpha1.State, store Store, selected,
 	machines := append([]v1alpha1.Machine(nil), state.Machines...)
 	sort.Slice(machines, func(i, j int) bool { return machines[i].Metadata.Name < machines[j].Metadata.Name })
 	seen := map[string]bool{}
+	var ordered []v1alpha1.Machine
 	for _, machine := range machines {
 		if len(selected) > 0 && !selected[machine.Metadata.Name] {
 			continue
 		}
 		seen[machine.Metadata.Name] = true
-		report, record, write, err := EvaluateHost(ctx, state, machine, store, replace[machine.Metadata.Name], scan, policy)
+		ordered = append(ordered, machine)
+	}
+	scans := scanHostsConcurrently(ctx, state, ordered, scan, policy)
+	for i, machine := range ordered {
+		report, record, write, err := evaluateScannedHost(state, machine, store, replace[machine.Metadata.Name], policy, scans[i])
 		if err != nil {
 			return plan, err
 		}
@@ -100,44 +105,89 @@ func BuildPlan(ctx context.Context, state v1alpha1.State, store Store, selected,
 }
 
 func EvaluateHost(ctx context.Context, state v1alpha1.State, machine v1alpha1.Machine, store Store, replace bool, scan func(context.Context, string, time.Duration) ([]ScannedKey, error), policy locality.Policy) (HostReport, HostRecord, bool, error) {
+	if report, skipped := hostTrustSkipReport(state, machine, policy); skipped {
+		return report, HostRecord{}, false, nil
+	}
+	return evaluateScannedHost(state, machine, store, replace, policy, scanHost(ctx, state, machine, scan))
+}
+
+type hostScan struct {
+	keys   []ScannedKey
+	target string
+	err    error
+}
+
+func hostTrustSkipReport(state v1alpha1.State, machine v1alpha1.Machine, policy locality.Policy) (HostReport, bool) {
 	report := HostReport{Name: machine.Metadata.Name}
 	if machine.Spec.Access.SSH == nil {
 		report.Action = "skip"
 		report.Reason = "Machine has no spec.access.ssh"
-		return report, HostRecord{}, false, nil
+		return report, true
 	}
 	report.Address = stateview.MachineConnectionAddress(state, machine)
 	if locality.IsControllerLocalMachine(machine, policy) {
 		report.Action = "skip"
 		report.Reason = "controller-local Machine"
-		return report, HostRecord{}, false, nil
+		return report, true
 	}
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		report.Action = "skip"
 		report.Reason = "uses explicit knownHostsRef"
-		return report, HostRecord{}, false, nil
+		return report, true
 	}
 	if !v1alpha1.MachineOSProvided(machine) {
 		report.Action = "skip"
 		report.Reason = "Machine OS is not provided"
-		return report, HostRecord{}, false, nil
+		return report, true
 	}
-	scanTarget := report.Address
+	return report, false
+}
+
+func scanHost(ctx context.Context, state v1alpha1.State, machine v1alpha1.Machine, scan func(context.Context, string, time.Duration) ([]ScannedKey, error)) hostScan {
+	address := stateview.MachineConnectionAddress(state, machine)
+	scanTarget := address
 	keys, err := scan(ctx, scanTarget, defaultHostTrustScanTimeout)
 	if err != nil {
 		fallback := v1alpha1.MachineSSHAddress(machine)
 		if fallback == "" || fallback == scanTarget {
-			return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, scanTarget, err)
+			return hostScan{target: scanTarget, err: fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, scanTarget, err)}
 		}
 		scanTarget = fallback
 		keys, err = scan(ctx, scanTarget, defaultHostTrustScanTimeout)
 		if err != nil {
-			return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, report.Address, err)
+			return hostScan{target: scanTarget, err: fmt.Errorf("scan Machine/%s at %s: %w", machine.Metadata.Name, address, err)}
 		}
 	}
-	key, ok := SelectPreferred(keys)
+	return hostScan{keys: keys, target: scanTarget}
+}
+
+func scanHostsConcurrently(ctx context.Context, state v1alpha1.State, machines []v1alpha1.Machine, scan func(context.Context, string, time.Duration) ([]ScannedKey, error), policy locality.Policy) []hostScan {
+	scans := make([]hostScan, len(machines))
+	var pending []int
+	for i, machine := range machines {
+		if _, skipped := hostTrustSkipReport(state, machine, policy); skipped {
+			continue
+		}
+		pending = append(pending, i)
+	}
+	forEachBoundedHost(len(pending), hostTrustScanParallelism, func(k int) {
+		index := pending[k]
+		scans[index] = scanHost(ctx, state, machines[index], scan)
+	})
+	return scans
+}
+
+func evaluateScannedHost(state v1alpha1.State, machine v1alpha1.Machine, store Store, replace bool, policy locality.Policy, scanned hostScan) (HostReport, HostRecord, bool, error) {
+	report, skipped := hostTrustSkipReport(state, machine, policy)
+	if skipped {
+		return report, HostRecord{}, false, nil
+	}
+	if scanned.err != nil {
+		return report, HostRecord{}, false, scanned.err
+	}
+	key, ok := SelectPreferred(scanned.keys)
 	if !ok {
-		return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: no SSH host keys returned", machine.Metadata.Name, scanTarget)
+		return report, HostRecord{}, false, fmt.Errorf("scan Machine/%s at %s: no SSH host keys returned", machine.Metadata.Name, scanned.target)
 	}
 	hostList := report.Address
 	if ip := v1alpha1.MachineSSHAddress(machine); ip != "" && ip != report.Address {

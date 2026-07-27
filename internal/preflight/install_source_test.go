@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -13,15 +14,18 @@ import (
 
 func TestPackageSourceReachabilityProbesRepoMetadata(t *testing.T) {
 	state := loadFixtureState(t, "010-ceph-3nodes-libvirt-boot-iso")
+	var probedMu sync.Mutex
 	var probed []string
 	deps := Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
 		if req.Method != http.MethodGet {
-			t.Fatalf("probe method = %s, want GET", req.Method)
+			t.Errorf("probe method = %s, want GET", req.Method)
 		}
 		if insecure {
-			t.Fatal("package-source probe must verify TLS by default")
+			t.Error("package-source probe must verify TLS by default")
 		}
+		probedMu.Lock()
 		probed = append(probed, req.URL.String())
+		probedMu.Unlock()
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}}
 
