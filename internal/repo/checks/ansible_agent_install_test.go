@@ -325,7 +325,7 @@ func TestContainerClusterDestroySkipUnreachable(t *testing.T) {
 func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/controller_dns.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/destroy_records.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{"/etc/hosts", "blockinfile", "unsafe_writes"} {
@@ -844,18 +844,47 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 }
 
 func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/destroy.yml")
+	const roleTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/"
+	paths := readRepoFile(t, roleTasks+"destroy_paths.yml")
 	for _, want := range []string{
 		"bootwright_cluster_installer_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer\"",
 		"bootwright_cluster_addon_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/addons\"",
 		"bootwright_cluster_generated_addon_secrets_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/secrets/addons\"",
+	} {
+		if !strings.Contains(paths, want) {
+			t.Fatalf("destroy_paths missing %q", want)
+		}
+	}
+	runtime := readRepoFile(t, roleTasks+"destroy_runtime.yml")
+	for _, want := range []string{
 		"bootwright_process_cleanup_pattern: \"clusters/{{ bootwright_current_cluster.name }}/runtime/installer/\"",
 		"- \"{{ bootwright_cluster_installer_runtime_dir }}\"",
 		"- \"{{ bootwright_cluster_addon_runtime_dir }}\"",
 		"- \"{{ bootwright_cluster_generated_addon_secrets_dir }}\"",
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("destroy_agent missing %q", want)
+		if !strings.Contains(runtime, want) {
+			t.Fatalf("destroy_runtime missing %q", want)
+		}
+	}
+}
+
+func TestContainerClusterCredentialRemovalStaysInTheRecordsHalf(t *testing.T) {
+	const roleTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/"
+	records := readRepoFile(t, roleTasks+"destroy_records.yml")
+	runtime := readRepoFile(t, roleTasks+"destroy_runtime.yml")
+	for _, want := range []string{
+		"{{ bootwright_cluster_secrets_dir }}/kubeconfig",
+		"{{ bootwright_cluster_secrets_dir }}/kubeadmin-password",
+		"{{ bootwright_cluster_install_record_path }}",
+		"{{ bootwright_cluster_connection_record_path }}",
+		"bootwright_controller_resolver_dropin_path",
+		"systemd-resolved",
+	} {
+		if !strings.Contains(records, want) {
+			t.Fatalf("destroy_records missing %q", want)
+		}
+		if strings.Contains(runtime, want) {
+			t.Fatalf("destroy_runtime must not carry %q: the runtime half is the graph root and runs before machine teardown, which still needs the host kubeconfig to reach KubeVirt and the controller resolver to reach every SSH target", want)
 		}
 	}
 }

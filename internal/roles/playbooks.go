@@ -31,6 +31,7 @@ const (
 	PlaybookTaskInfraComponentServicesDestroy = "bootwright.core.task_infra_component_services_destroy"
 	PlaybookTaskProviderServicesDestroy       = "bootwright.core.task_provider_services_destroy"
 	PlaybookTaskStorageClusterDestroy         = "bootwright.core.task_storage_cluster_destroy"
-	PlaybookTaskContainerClusterAgentDestroy  = "bootwright.core.task_container_cluster_agent_destroy"
-	PlaybookTaskStorageNodeAccessDestroy      = "bootwright.core.task_storage_node_access_destroy"
+	PlaybookTaskContainerClusterAgentDestroy   = "bootwright.core.task_container_cluster_agent_destroy"
+	PlaybookTaskContainerClusterRuntimeDestroy = "bootwright.core.task_container_cluster_runtime_destroy"
+	PlaybookTaskStorageNodeAccessDestroy       = "bootwright.core.task_storage_node_access_destroy"
 )

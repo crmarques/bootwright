@@ -42,6 +42,7 @@
       loop_control:
         loop_var: bootwright_cluster_name
       when:
+        - not (bootwright_machine_infra_records_only | default(false) | bool)
         - bootwright_cluster_name in bootwright_host_clusters
         - >-
           bootwright_destroy_cluster_scope is not defined

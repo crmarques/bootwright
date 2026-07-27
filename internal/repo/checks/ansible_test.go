@@ -24,6 +24,7 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_create_agent_iso.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_runtime_destroy.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_install.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_wait_agent_install.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_apply.yml",

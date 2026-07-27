@@ -1,0 +1,21 @@
+---
+- name: Resolve cluster installer runtime dirs
+  ansible.builtin.include_tasks: destroy_paths.yml
+
+- name: Stop stale installer processes
+  ansible.builtin.include_role:
+    name: bootwright.core.support_process_cleanup
+  vars:
+    bootwright_process_cleanup_allow_pattern: true
+    bootwright_process_cleanup_pattern: "clusters/{{ bootwright_current_cluster.name }}/runtime/installer/"
+
+- name: Remove local cluster installer runtime dir
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_cluster_installer_runtime_dir }}"
+    - "{{ bootwright_cluster_addon_runtime_dir }}"
+    - "{{ bootwright_cluster_generated_addon_secrets_dir }}"
+  loop_control:
+    label: "{{ item }}"
