@@ -66,7 +66,7 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 		}
 	case v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
 		if !cephSubscriptionVersionPattern.MatchString(release) {
-			return []string{fmt.Sprintf("%s.release %q must be a product version such as 9, 9.1, or 9.9.1; its leading major digit selects the product stream", prefix, release)}
+			return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading major digit selects the product stream", prefix, release)}
 		}
 		if _, ok := cephprovider.ResolveRelease(distribution, release); !ok {
 			return []string{fmt.Sprintf("%s.release %q is not a supported %s product release; supported values are {%s}", prefix, release, distribution, strings.Join(cephprovider.SupportedReleases(distribution), ", "))}

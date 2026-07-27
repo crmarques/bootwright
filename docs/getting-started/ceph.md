@@ -76,7 +76,7 @@ my-ceph-lab/
     os/rhel-9-x86-64-dvd.yaml                        MachineImage: RHEL 9.8 DVD (local-media)
     os/rhel-9-ceph-node.yaml                         MachineInstallProfile: Anaconda RHEL install
   clusters/storage/ceph-ibm/
-    cluster.yaml                                     StorageCluster: distribution ibm, release 9.9.1
+    cluster.yaml                                     StorageCluster: distribution ibm, release 9.9.1.0
     nodes/{ceph-1,ceph-2,ceph-3}.yaml                Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
     placement-policy.yaml                            StoragePlacementPolicy: size 2 / minSize 2
     pools/{rbd,cephfs-data,cephfs-metadata,rgw}.yaml StoragePools
@@ -195,7 +195,7 @@ resolvers. It also publishes the RGW S3 endpoint
 
 The Ceph install intent. `StorageCluster` `ceph-ibm` is `type: ceph`,
 `management: managed` (bootwright installs and owns it via cephadm). Its `spec.ceph`
-block sets `distribution: ibm`, `release: "9.9.1"`, `ibm.callHome: disabled`,
+block sets `distribution: ibm`, `release: "9.9.1.0"`, `ibm.callHome: disabled`,
 `entitlementRef: ibm-storage-ceph`,
 FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap node
 (`node-01`), the public/cluster networks, the HA dashboard
@@ -229,8 +229,8 @@ environment differs.
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
 | `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
 | `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
-| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`, supported by IBM Storage Ceph 9.9.1). |
-| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph product version (`9.9.1`; bare `9` normalizes to it). |
+| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`, supported by IBM Storage Ceph 9.9.1.0). |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`; bare `9` normalizes to it). |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsName` and `spec.ceph.ingresses[].address` | The RGW endpoint and ingress VIP, if you changed the network. |

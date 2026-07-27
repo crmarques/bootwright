@@ -274,7 +274,7 @@ infra/components/artifact-server.yaml         InfraComponent: HTTPS ISO server f
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 10.20.30.0/24, external DNS refs
 infra/os/rhel-9-8-dvd.yaml                    MachineImage: RHEL 9.8 DVD (local-media)
 infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
-clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1,
+clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1.0,
                                               mgmt-gateway HA dashboard
 clusters/storage/ceph-ibm/placement-policy.yaml  size 2 / minSize 2, failureDomain host
 clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml Machines: BMC + Redfish virtual media

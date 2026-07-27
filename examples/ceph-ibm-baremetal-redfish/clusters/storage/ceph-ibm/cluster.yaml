@@ -10,7 +10,7 @@ spec:
   ceph:
     distribution: ibm
 
-    release: "9.9.1"
+    release: "9.9.1.0"
 
     ibm:
       callHome: disabled

@@ -47,7 +47,7 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 		{
 			name:        "ibm default is current exact product release",
 			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM},
-			wantRelease: "9.9.1",
+			wantRelease: "9.9.1.0",
 		},
 	}
 	for _, tc := range cases {

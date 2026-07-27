@@ -76,9 +76,9 @@ var (
 		[]string{"9.8", "10.2"},
 		"Red Hat Ceph Storage 9.1 requires RHEL 9.8 or 10.2 on storage nodes",
 	)
-	ibm991RuntimeOS = rhelCephRuntimeOS(
+	ibm9910RuntimeOS = rhelCephRuntimeOS(
 		[]string{"9.8", "10.2"},
-		"IBM Storage Ceph 9.9.1 requires RHEL 9.8 or 10.2 on storage nodes",
+		"IBM Storage Ceph 9.9.1.0 requires RHEL 9.8 or 10.2 on storage nodes",
 	)
 )
 
@@ -93,9 +93,12 @@ var distributions = map[string]distributionDef{
 	v1alpha1.StorageCephDistributionRedHat: {
 		defaultRelease: "9.1",
 		releases: map[string]releaseDef{
-			"9":   {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
-			"9.0": {value: "9.0", stream: "9", runtimeOS: rhcs90RuntimeOS},
-			"9.1": {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
+			"9":     {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
+			"9.0":   {value: "9.0", stream: "9", runtimeOS: rhcs90RuntimeOS},
+			"9.0.1": {value: "9.0.1", stream: "9", runtimeOS: rhcs90RuntimeOS},
+			"9.0.2": {value: "9.0.2", stream: "9", runtimeOS: rhcs90RuntimeOS},
+			"9.0.3": {value: "9.0.3", stream: "9", runtimeOS: rhcs90RuntimeOS},
+			"9.1":   {value: "9.1", stream: "9", runtimeOS: rhcs91RuntimeOS},
 		},
 		requiresRHSM:        true,
 		requiresRegistry:    true,
@@ -105,10 +108,10 @@ var distributions = map[string]distributionDef{
 		imagePathTemplate:   rhcephImagePathTemplate,
 	},
 	v1alpha1.StorageCephDistributionIBM: {
-		defaultRelease: "9.9.1",
+		defaultRelease: "9.9.1.0",
 		releases: map[string]releaseDef{
-			"9":     {value: "9.9.1", stream: "9", runtimeOS: ibm991RuntimeOS},
-			"9.9.1": {value: "9.9.1", stream: "9", runtimeOS: ibm991RuntimeOS},
+			"9":       {value: "9.9.1.0", stream: "9", runtimeOS: ibm9910RuntimeOS},
+			"9.9.1.0": {value: "9.9.1.0", stream: "9", runtimeOS: ibm9910RuntimeOS},
 		},
 		requiresRHSM:      true,
 		requiresRegistry:  true,

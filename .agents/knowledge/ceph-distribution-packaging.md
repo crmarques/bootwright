@@ -75,18 +75,26 @@ acceptance marker `/usr/share/ibm-storage-ceph-license/accept` exists, so it is
 written in the repository stage — before the install stage pulls `cephadm`/
 daemon tooling from the vendor sources
 (`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-<N>-rhel-9.repo`).
-IBM Storage Ceph 9.9.1 also pauses `cephadm bootstrap` for interactive license
+IBM Storage Ceph 9.9.1.0 also pauses `cephadm bootstrap` for interactive license
 acceptance unless `--automatically-accept-license` is present. That acceptance
 enables the `call_home_agent` mgr module by default, so the StorageCluster must
 declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
-or denies it to turn the module off. The 9.9.1 runtime matrix accepts RHEL 9.8
+or denies it to turn the module off. The 9.9.1.0 runtime matrix accepts RHEL 9.8
 or 10.2.
 
 **Constraint:** Vendor releases and runtime operating systems are one catalog,
-not independent regex-validated strings. Red Hat Ceph Storage 9.0 accepts RHEL
-9.6, 9.7, 10, 10.0, or 10.1; 9.1 accepts RHEL 9.8 or 10.2. IBM Storage Ceph
-9.9.1 accepts RHEL 9.8 or 10.2. Bare stream `9` is normalized to the current
-exact distribution release before hashing and rendering.
+not independent regex-validated strings. Red Hat Ceph Storage 9.0 through
+9.0.3 accept RHEL 9.6, 9.7, 10, 10.0, or 10.1; 9.1 accepts RHEL 9.8 or 10.2.
+IBM Storage Ceph 9.9.1.0 accepts RHEL 9.8 or 10.2. Bare stream `9` is normalized
+to the current exact distribution release before hashing and rendering.
+
+**Constraint:** IBM Storage Ceph 9 uses IBM's four-component V.R.M.F product
+version. The trailing R.M.F retains the prior Ceph release, modification, and
+fix meaning, so IBM's equivalent of release 9.1 is `9.9.1.0`; the daemon
+container tag remains independently versioned as `v9.9.1-<build>`. Vendor
+product-version syntax accepts any number of dot-separated numeric components,
+but only cataloged releases are accepted because each requires explicit stream
+and runtime-OS facts.
 
 **Constraint:** An entitlement registry override changes credentials and trust
 and acts as a mirror root, not permission to select an arbitrary repository. A
@@ -125,5 +133,7 @@ assumes a host-installed `ceph` or `radosgw-admin` binary.
 
 - Upstream release lifecycle: <https://docs.ceph.com/en/latest/releases/>
 - Red Hat Ceph Storage 9 compatibility guide: <https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf>
-- IBM Storage Ceph 9.9.1 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
-- IBM 9.9.1 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>
+- IBM Storage Ceph release/package mapping: <https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions>
+- IBM Storage Ceph 9.9.1.0 versioning scheme: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=whats-new-in-storage-ceph-991>
+- IBM Storage Ceph 9.9.1.0 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
+- IBM 9.9.1.0 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>

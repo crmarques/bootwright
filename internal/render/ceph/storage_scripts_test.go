@@ -146,7 +146,7 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 		{
 			name:         "ibm enabled reconciles call home",
 			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1",
+			release:      "9.9.1.0",
 			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
 			callHome:     v1alpha1.StorageCephIBMCallHomeEnabled,
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
@@ -161,7 +161,7 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 		{
 			name:         "ibm disabled reconciles call home",
 			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1",
+			release:      "9.9.1.0",
 			image:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
 			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",

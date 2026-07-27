@@ -89,7 +89,7 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
-| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0` or `9.1`; `ibm` accepts `9.9.1`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create structural drift gated behind `apply --converge-drifted` when that default advances; pin an exact release to avoid implicit upgrades. |
+| `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid (`squid`/`19.2.x`) releases; exact versions pin the package repository and derive `quay.io/ceph/ceph:vX.Y.Z`. `redhat` accepts `9.0`, its `9.0.1`-`9.0.3` updates, or `9.1`; `ibm` accepts the VRMF product version `9.9.1.0`. Bare `9` is a current-stream alias normalized to the distribution's exact default. Omitted and alias values track the catalog and can create structural drift gated behind `apply --converge-drifted` when that default advances; pin an exact release to avoid implicit upgrades. |
 | `ceph.image` | No | Derived from an `x.y.z` `oss` `ceph.release` when unset; otherwise none | Pins the exact cephadm daemon image as the default for every Ceph daemon. Must pin a version tag or a `sha256` digest (no mutable `:latest`). A `redhat` or `ibm` image must use that distribution and release's canonical repository. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the community package payload fetched from `community.mirror`. `oss` only. |
@@ -145,8 +145,8 @@ Distribution requirements:
 | Distribution | Requirements |
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
-| `redhat` | `entitlementRef` resolves to `redhat-ceph`. Release `9.0` supports RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` supports RHEL 9.8 or 10.2. |
-| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. Release `9.9.1` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
+| `redhat` | `entitlementRef` resolves to `redhat-ceph`. Releases `9.0` through `9.0.3` support RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` supports RHEL 9.8 or 10.2. |
+| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. Release `9.9.1.0` supports RHEL 9.8 or 10.2. `ibm.callHome` is required. |
 
 When `Entitlement.spec.registry.url` overrides the vendor namespace,
 `ceph.image` must explicitly pin the canonical vendor repository below that

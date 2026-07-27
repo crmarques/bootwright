@@ -51,7 +51,8 @@ distribution. `oss` accepts active Tentacle (`tentacle`/`20.2.x`) and Squid
 (`squid`/`19.2.x`) releases; the default is the current exact release `20.2.2`,
 which pins both the package repository and `quay.io/ceph/ceph:v20.2.2`. Red Hat
 accepts product releases
-`9.0` and `9.1` (default `9.1`); IBM accepts `9.9.1` (the default). Bare `9` is
+`9.0`, updates `9.0.1` through `9.0.3`, and `9.1` (default `9.1`); IBM accepts
+the VRMF product release `9.9.1.0` (the default). Bare `9` is
 a convenience alias normalized to the exact default for that distribution.
 The exact product release drives validation of the vendor RHEL matrix, while
 its stream still selects the repository and image-base names. The immutable
@@ -60,7 +61,7 @@ vendor image build tag is not derivable from the product release, so pin
 disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
 The catalog snapshot follows the upstream [Ceph releases](https://docs.ceph.com/en/latest/releases/),
 the [Red Hat Ceph Storage 9 compatibility guide](https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf),
-and IBM's [9.9.1 node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
+and IBM's [9.9.1.0 node prerequisites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes).
 
 ```yaml
 ceph:
@@ -83,7 +84,7 @@ to end, including the entitlement and license-acceptance workflow.
     re-installs.
 
 !!! warning "IBM Call Home is an explicit choice"
-    IBM Storage Ceph 9.9.1 enables Call Home when the license is accepted.
+    IBM Storage Ceph 9.9.1.0 enables Call Home when the license is accepted.
     Author `spec.ceph.ibm.callHome: enabled` to retain it or `disabled` to turn
     it off after bootstrap. Validation rejects an IBM cluster that leaves the
     outbound-communication choice implicit.

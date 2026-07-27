@@ -800,8 +800,11 @@ Rules:
   `20.2.x`) and Squid (`squid` or `19.2.x`); ended or unknown series are
   rejected. Omitted defaults to the current exact supported release `20.2.2`,
   pinning both `rpm-20.2.2` and the matching daemon image. For
-  `redhat`, supported product releases are `9.0` and `9.1` (the default). For
-  `ibm`, the supported product release is `9.9.1` (the default). A bare `9`
+  `redhat`, supported product releases are `9.0`, `9.0.1`, `9.0.2`, `9.0.3`,
+  and `9.1` (the default). For `ibm`, the supported VRMF product release is
+  `9.9.1.0` (the default). Vendor product versions accept any number of
+  dot-separated numeric components, while the supported-release catalog
+  remains authoritative for compatibility. A bare `9`
   remains a current-stream authoring alias and normalizes to the exact default
   for that distribution. Validation uses the resolved product release, not
   only its leading digit, to enforce the vendor's RHEL compatibility matrix.
@@ -840,15 +843,15 @@ Rules:
 - `distribution: redhat` requires `entitlementRef` to resolve to a
   `redhat-ceph` `Entitlement`. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph
-  packages or images. Release `9.0` accepts RHEL 9.6, 9.7, 10, 10.0, or 10.1;
-  release `9.1` accepts RHEL 9.8 or 10.2.
+  packages or images. Releases `9.0`, `9.0.1`, `9.0.2`, and `9.0.3` accept
+  RHEL 9.6, 9.7, 10, 10.0, or 10.1; release `9.1` accepts RHEL 9.8 or 10.2.
 - `distribution: ibm` requires `entitlementRef` to resolve to an
   `ibm-storage-ceph` `Entitlement` with accepted license terms. IBM Storage Ceph
   registry access and license acceptance come from that entitlement; the RHEL
   BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` subscription
   the nodes register with (profile `subscription` or cluster `osSubscriptionRef`).
   Neither must mix with upstream Ceph packages
-  or images. Release `9.9.1` accepts RHEL 9.8 or 10.2. IBM license acceptance
+  or images. Release `9.9.1.0` accepts RHEL 9.8 or 10.2. IBM license acceptance
   is passed non-interactively to `cephadm bootstrap`. Because that release
   enables IBM Call Home when the license is accepted, `spec.ceph.ibm.callHome`
   is required as either `enabled` or `disabled`; apply reconciles the manager

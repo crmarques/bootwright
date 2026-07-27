@@ -332,7 +332,7 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 				}}
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionIBM
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
-				state.StorageClusters[0].Spec.Ceph.Release = "9.9.1"
+				state.StorageClusters[0].Spec.Ceph.Release = "9.9.1.0"
 				state.StorageClusters[0].Spec.Ceph.IBM = &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled}
 			},
 		},
@@ -825,7 +825,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 				state.StorageClusters[0].Spec.Ceph.Release = "squid"
 			},
-			want: `spec.ceph.release "squid" must be a product version such as 9, 9.1, or 9.9.1; its leading major digit selects the product stream`,
+			want: `spec.ceph.release "squid" must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading major digit selects the product stream`,
 		},
 		{
 			name: "image-mutable-latest",

@@ -15,11 +15,14 @@ func TestValidateStorageCephVendorReleaseCatalog(t *testing.T) {
 	}{
 		{v1alpha1.StorageCephDistributionRedHat, "9", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.0", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0.1", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0.2", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.1", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.9", true},
 		{v1alpha1.StorageCephDistributionIBM, "9", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.0", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1", true},
 		{v1alpha1.StorageCephDistributionIBM, "10", true},
 	}
 	for _, tc := range cases {
@@ -27,6 +30,13 @@ func TestValidateStorageCephVendorReleaseCatalog(t *testing.T) {
 		if (len(errs) > 0) != tc.wantError {
 			t.Fatalf("validate release %s/%s = %v, wantError=%t", tc.distribution, tc.release, errs, tc.wantError)
 		}
+	}
+}
+
+func TestValidateStorageCephVendorReleaseSyntaxHasNoComponentLimit(t *testing.T) {
+	errs := validateStorageCephRelease("StorageCluster/ceph spec.ceph", v1alpha1.StorageCephDistributionIBM, "9.9.1.0.1")
+	if len(errs) != 1 || !strings.Contains(errs[0], "not a supported ibm product release") {
+		t.Fatalf("future numeric product version returned syntax error: %v", errs)
 	}
 }
 
@@ -79,10 +89,11 @@ func TestValidateStorageCephVendorRuntimeOSMatrix(t *testing.T) {
 		wantError    bool
 	}{
 		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.7", false},
+		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.7", false},
 		{v1alpha1.StorageCephDistributionRedHat, "9.0", "9.8", true},
 		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9.8", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1", "9.8", false},
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1", "9.7", true},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.8", false},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.7", true},
 	}
 	for _, tc := range cases {
 		errs := validateStorageCephManagedOS(cluster(tc.distribution, tc.release), machines, profile(tc.rhel))
@@ -153,7 +164,7 @@ func TestStorageValidationRejectsWrongVendorImageRepository(t *testing.T) {
 		{
 			name:         "ibm redhat repository",
 			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1",
+			release:      "9.9.1.0",
 			image:        "cp.icr.io/cp/rhceph/rhceph-9-rhel9:9",
 			entType:      v1alpha1.EntitlementTypeIBMStorageCeph,
 			ibm:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
