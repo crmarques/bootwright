@@ -275,9 +275,9 @@ any point**, and there is no second account to provision afterwards.
 ### Nodes the cluster does not install
 
 A node whose OS you supplied (`os.provided: true`) already exists, so the
-cluster cannot create its login at install time. Declare on the `Machine` how
-Bootwright reaches it, and the cluster still supplies the orchestration account
-Bootwright provisions there:
+cluster cannot create its login at install time. How Bootwright reaches it is
+the `Machine`'s own business, and the cluster still supplies the orchestration
+account Bootwright provisions there:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -292,17 +292,19 @@ spec:
   addresses:
     - name: ssh
       address: 192.0.2.60
-  access:
-    ssh:
-      auth:
-        controllerIdentity: {}
 ```
 
-`controllerIdentity` reaches the machine as the operator running Bootwright,
-with that operator's own SSH identity — the common shape for a box you already
-log into. Use `auth.privateKeyRef` instead to name a `Secret`, or
-`auth.passwordRef` for a machine that only accepts a password. See
+Omitting `access` on a machine whose OS you supplied defaults it to
+`ssh.auth.controllerIdentity`: Bootwright reaches it as the operator running
+Bootwright, with that operator's own SSH identity — the common shape for a box
+you already log into. Author `access.ssh.auth.privateKeyRef` to name a `Secret`
+instead, or `auth.passwordRef` for a machine that only accepts a password. See
 [Machines → Access](machines.md#access).
+
+The cluster's `cephadm` account is the identity cephadm orchestrates with; it
+is not the account Bootwright logs in as here. `machine rsh --name ceph-arbiter`
+connects as you, not as `cephadm` — pass `--ssh-user cephadm` when you want that
+account instead.
 
 On apply Bootwright connects with that identity, creates `cephadm`, authorizes
 the cluster key for it, writes the sudoers drop-in, and proves the account

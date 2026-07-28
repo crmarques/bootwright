@@ -2,19 +2,16 @@ package desiredstate
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-var posixUsername = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
-
 func validateStorageCephadmSSHPosture(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, state v1alpha1.State) []string {
 	var errs []string
 	user := v1alpha1.StorageClusterCephadmSSHUser(cluster)
 	revoking := v1alpha1.StorageClusterRevokesRootLogin(cluster, state)
-	if user != v1alpha1.RootSSHUser && !posixUsername.MatchString(user) {
+	if user != v1alpha1.RootSSHUser && !v1alpha1.ValidPOSIXUserName(user) {
 		errs = append(errs, fmt.Sprintf("%s.clusterSSH.user %q is not a valid POSIX user name (lowercase letter or underscore, then lowercase letters, digits, underscore or dash, at most 32 chars)", prefix, user))
 	}
 	if revoking && user == v1alpha1.RootSSHUser {

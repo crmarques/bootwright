@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func stripLeadingGlobalFlags(args []string) []string {
@@ -31,12 +33,13 @@ const (
 	flagOutputUsage       = "output format (text|json)"
 	flagOutputDryRunUsage = "output format (text|json); json requires --dry-run"
 
-	flagDryRunUsage          = "render artifacts and print the plan; change nothing remote"
-	flagAskBecomePassUsage   = "prompt for the Ansible become password (default: false as root, true otherwise)"
-	flagTrustOnFirstUseUsage = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
-	flagContextUsage         = "context to operate in (default: current context)"
-	flagPreferredIDKeyUsage  = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
-	flagVerboseUsage         = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
+	flagDryRunUsage            = "render artifacts and print the plan; change nothing remote"
+	flagAskBecomePassUsage     = "prompt for the Ansible become password (default: false as root, true otherwise)"
+	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
+	flagContextUsage           = "context to operate in (default: current context)"
+	flagPreferredSSHIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
+	flagSSHUserUsage           = "log in as this account instead of the one the desired state declares (default: the declared user, or the operator running bootwright when the Machine authenticates with spec.access.ssh.auth.controllerIdentity)"
+	flagVerboseUsage           = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 
 func validateOutputFormat(value string) error {
@@ -72,4 +75,20 @@ func addTrustOnFirstUseFlag(cmd *cobra.Command, p *bool) {
 
 func addVerboseFlag(cmd *cobra.Command, p *bool) {
 	cmd.Flags().BoolVarP(p, "verbose", "v", false, flagVerboseUsage)
+}
+
+func addSSHUserFlag(cmd *cobra.Command, p *string) {
+	cmd.Flags().StringVar(p, "ssh-user", "", flagSSHUserUsage)
+	registerFlagCompletion(cmd, "ssh-user", nil)
+}
+
+func resolveSSHUser(raw string) (string, error) {
+	user := strings.TrimSpace(raw)
+	if user == "" {
+		return "", nil
+	}
+	if !v1alpha1.ValidPOSIXUserName(user) {
+		return "", fmt.Errorf("--ssh-user %q is not a valid POSIX user name (lowercase letter or underscore, then lowercase letters, digits, underscore or dash, at most 32 chars)", raw)
+	}
+	return user, nil
 }

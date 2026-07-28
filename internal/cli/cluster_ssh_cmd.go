@@ -16,16 +16,17 @@ import (
 )
 
 func newClusterRshCmd() *cobra.Command {
-	var clusterName, node string
+	var clusterName, node, sshUser string
 	cmd := &cobra.Command{
 		Use:   "rsh --name <cluster> --node <node>",
 		Short: "Open an interactive SSH shell on a cluster node",
 		Long: `Open an interactive remote shell on a node of a container or storage cluster over
 SSH. Container cluster nodes use the cluster's install.nodeSSH private key and
 the core user; storage cluster nodes use the backing Machine's SSH identity.
-Select the node by its node name, its FQDN, or its <role>-<ordinal>
-(e.g. master-0); on a single-node cluster --node may be omitted. Run a single
-command instead with 'cluster exec'.
+Override the login account for this invocation with --ssh-user. Select the node
+by its node name, its FQDN, or its <role>-<ordinal> (e.g. master-0); on a
+single-node cluster --node may be omitted. Run a single command instead with
+'cluster exec'.
 
     bootwright cluster rsh --name managed-01 --node master-0`,
 		Args: cobra.ArbitraryArgs,
@@ -40,29 +41,35 @@ command instead with 'cluster exec'.
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
+	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return failErr(2, fmt.Errorf("cluster rsh opens an interactive shell and takes no command; run one with 'cluster exec --name %s --node %s -- %s'", clusterName, node, strings.Join(args, " ")))
 		}
+		user, err := resolveSSHUser(sshUser)
+		if err != nil {
+			return failErr(2, err)
+		}
 		machine, state, err := resolveClusterNodeMachine(cf, clusterName, node)
 		if err != nil {
 			return err
 		}
-		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, nil)
+		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, user, nil)
 	}
 	return cmd
 }
 
 func newClusterExecCmd() *cobra.Command {
-	var clusterName, node string
+	var clusterName, node, sshUser string
 	cmd := &cobra.Command{
 		Use:   "exec --name <cluster> --node <node> -- <command>...",
 		Short: "Run a command on a cluster node over SSH",
 		Long: `Run a single command on a node of a container or storage cluster over SSH and
-return its output. Select the node by its node name, its FQDN, or its
-<role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be omitted.
-Drop into an interactive shell instead with 'cluster rsh'.
+return its output. Override the login account for this invocation with
+--ssh-user. Select the node by its node name, its FQDN, or its <role>-<ordinal>
+(e.g. master-0); on a single-node cluster --node may be omitted. Drop into an
+interactive shell instead with 'cluster rsh'.
 
     bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet`,
 		Args: cobra.ArbitraryArgs,
@@ -74,26 +81,31 @@ Drop into an interactive shell instead with 'cluster rsh'.
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
+	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return failErr(2, errors.New("cluster exec requires a command after --, e.g. 'cluster exec --name <cluster> --node <node> -- systemctl status kubelet'"))
 		}
+		user, err := resolveSSHUser(sshUser)
+		if err != nil {
+			return failErr(2, err)
+		}
 		machine, state, err := resolveClusterNodeMachine(cf, clusterName, node)
 		if err != nil {
 			return err
 		}
-		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, args)
+		return execSSHToClusterNode(cmd.Context(), cf.ctx, state, clusterName, machine, user, args)
 	}
 	return cmd
 }
 
-func execSSHToClusterNode(commandCtx context.Context, ctx workspace.Context, state v1alpha1.State, clusterName, machineName string, cmdArgs []string) error {
+func execSSHToClusterNode(commandCtx context.Context, ctx workspace.Context, state v1alpha1.State, clusterName, machineName, sshUser string, cmdArgs []string) error {
 	target, err := clusterNodeSSHTarget(state, clusterName, machineName)
 	if err != nil {
 		return failErr(1, err)
 	}
-	return execSSHTarget(commandCtx, ctx, state, target, cmdArgs)
+	return execSSHTarget(commandCtx, ctx, state, overrideSSHUser(target, sshUser), cmdArgs)
 }
 
 func clusterNodeSSHTarget(state v1alpha1.State, clusterName, machineName string) (sshTarget, error) {

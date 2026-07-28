@@ -43,13 +43,16 @@ Two access shapes deliberately hold no reference. `auth.controllerIdentity`
 authenticates as the operator running Bootwright, using that operator's own
 agent and default identities: no key material enters the context, and the
 effective credential is whatever that operator already holds. The
-`--preferred-id-key` flag likewise names a controller-local private key offered
-ahead of the declared credentials, with the declared credentials as fallback;
-it is refused unless the file is a regular file with no group or other
+`--preferred-ssh-id-key` flag likewise names a controller-local private key
+offered ahead of the declared credentials, with the declared credentials as
+fallback; it is refused unless the file is a regular file with no group or other
 permissions, and it is never recorded in desired state, the converge hash, or
-an install marker. Both are per-operator ambient authority by construction and
-must be described as such — they trade reproducibility for the ability to reach
-a machine the operator already administers. Non-local durable SSH uses
+an install marker. `--ssh-user`, accepted only on the operator-driven
+`machine`/`cluster` `rsh` and `exec` commands, replaces the login account for
+one invocation and is refused unless it is a valid POSIX user name; it is
+likewise never recorded. All three are per-operator ambient authority by
+construction and must be described as such — they trade reproducibility for the
+ability to reach a machine the operator already administers. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
 Trust is recorded by `bootwright machine trust`, on first use during an
 interactive `preflight`/`apply`, or through OpenSSH's prompt during interactive

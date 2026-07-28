@@ -59,9 +59,12 @@ cluster, and validation existed only to police the disagreement.
 `access.local: true` declares the machine Bootwright runs on. It is reached with
 a local connection, is legal only with `os.provided: true`, and is **refused**
 when the machine's address does not resolve to this host. Absence of `access` no
-longer means anything about locality: it means the machine has no Bootwright
-login, which is correct for a cluster node the agent installer owns and a
-validation error for a machine Bootwright installs.
+longer means anything about locality. On an `os.provided: true` machine it
+defaults to `ssh.auth.controllerIdentity` — the operator already administers a
+box whose OS they supplied, so making them author that is ceremony. Everywhere
+else absence means the machine has no Bootwright login, which is correct for a
+cluster node the agent installer owns and a validation error for a machine
+Bootwright installs.
 
 This turns the worst failure mode — remote work silently executed on the
 controller — into a declaration that fails closed.
@@ -106,11 +109,15 @@ Combined with the derived `rootLogin: revoke` and the kickstart change below, a
 Ceph node the cluster installs never accepts a root login at any point in its
 life — not during the install window, not before a hardening pass, never.
 
-A topology node the cluster does **not** install (`os.provided: true`) still
-authors its own `access.ssh`, because the login already exists and the cluster
-cannot create it. Bootwright connects with it, provisions the orchestration
-account there, and leaves `rootLogin` at `keep` — the root posture of a machine
-whose OS the operator owns is the operator's decision.
+A topology node the cluster does **not** install (`os.provided: true`) keeps its
+own `access.ssh` — authored, or the defaulted `controllerIdentity` above —
+because the login already exists and the cluster cannot create it. Bootwright
+connects with it, provisions the orchestration account there, and leaves
+`rootLogin` at `keep` — the root posture of a machine whose OS the operator owns
+is the operator's decision. The cluster account is what cephadm orchestrates
+with; it is **not** substituted for the node's own login when Bootwright reaches
+that machine, so `machine rsh`/`exec` on a `controllerIdentity` node connects as
+the operator, not as `cephadm`.
 
 ### The cluster key may be the node key, and only that key
 
@@ -147,16 +154,26 @@ and `sudo`, and loses `authorizeMachineSSHKey`.
 - The install always writes an explicit `PermitRootLogin`: `yes` when the account
   is `root`, `no` otherwise.
 
-### `--preferred-id-key` is a per-invocation preference
+### Per-invocation SSH preferences
 
-Every command that reaches a machine accepts `--preferred-id-key <path>`. The key
-is offered **before** the credentials desired state declares, which remain the
-fallback — OpenSSH tries identities in order, so this needs no fallback logic of
-its own.
+Every command that reaches a machine accepts `--preferred-ssh-id-key <path>`.
+The key is offered **before** the credentials desired state declares, which
+remain the fallback — OpenSSH tries identities in order, so this needs no
+fallback logic of its own. It is refused unless the path is a regular file with
+no group or other permissions.
 
-It is deliberately not desired state: it is not recorded, not part of the
-converge hash, and not folded into a managed-OS install marker. It is refused
-unless the path is a regular file with no group or other permissions.
+The four commands that open an SSH session on the operator's behalf —
+`machine rsh`/`exec` and `cluster rsh`/`exec` — additionally accept
+`--ssh-user <name>`, which replaces the login account for that invocation and is
+refused unless it is a valid POSIX user name. It stops there on purpose. Where
+the key flag is *additive* and therefore safe to fan out across a whole
+converge, a user override is a *replacement*: an `apply` reaches bastions,
+machines mid-install, Ceph nodes, and container nodes over several distinct
+declared accounts at once, so one flat value could only be wrong for most of
+them. The account a converge uses is desired state, not a preference.
+
+Neither is desired state: neither is recorded, part of the converge hash, or
+folded into a managed-OS install marker.
 
 ## Consequences
 
@@ -168,8 +185,9 @@ unless the path is a regular file with no group or other permissions.
   pass applied afterwards.
 - Bootwright ships no default password. Operators who want console recovery name
   a `Secret` and get a real, per-environment credential.
-- `controllerIdentity` and `--preferred-id-key` introduce ambient, per-operator
-  authority into a product that otherwise references every credential by name.
+- `controllerIdentity`, `--preferred-ssh-id-key`, and `--ssh-user` introduce
+  ambient, per-operator authority into a product that otherwise references every
+  credential by name.
   This is a deliberate trade for the "machines I already administer" case and is
   documented as such in `security.md`; neither puts secret bytes into desired
   state.

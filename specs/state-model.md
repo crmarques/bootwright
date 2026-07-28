@@ -309,9 +309,12 @@ Rules:
 - `spec.access` is a union of `local` and `ssh`. `local: true` declares the
   machine Bootwright runs on; it is reached with a local connection, is valid
   only with `os.provided: true`, and is refused when the machine's address does
-  not resolve to the controller. Omitting `access` entirely declares no
-  Bootwright login — valid for a cluster node the agent installer owns, and
-  rejected for a machine Bootwright installs.
+  not resolve to the controller. Omitting `access` on an `os.provided: true`
+  machine defaults it to `ssh.auth.controllerIdentity` against the machine's
+  `ssh` address, else its `fqdn` — the machine is reached as the invoking
+  operator. Omitting it elsewhere declares no Bootwright login: valid for a
+  cluster node the agent installer owns, and rejected for a machine Bootwright
+  installs.
 - `spec.access.ssh.auth` is a discriminated union with exactly one arm.
   `controllerIdentity` reaches the machine as the invoking operator with that
   operator's own SSH identity; `privateKeyRef` names an `sshKeyPair` `Secret`;
@@ -336,11 +339,17 @@ Rules:
   cluster key, and `rootLogin: revoke` when that user is not `root`. Such a
   Machine authors no `access` at all. A topology node the cluster does not
   install authors its own `access.ssh` and keeps `rootLogin: keep` by default.
-- The operator may pass `--preferred-id-key <path>` on any command that reaches
-  a machine. The named private key is offered ahead of the declared
+- The operator may pass `--preferred-ssh-id-key <path>` on any command that
+  reaches a machine. The named private key is offered ahead of the declared
   credentials and the declared credentials remain the fallback. It is a
   per-invocation preference: it never enters desired state, the converge hash,
   or an install marker.
+- `--ssh-user <name>` replaces the login account for one invocation of the
+  operator-driven SSH commands — `machine rsh`/`exec` and `cluster rsh`/`exec`.
+  It is refused unless the value is a valid POSIX user name, and it is likewise
+  never recorded. It is deliberately absent from `apply` and `destroy`: a
+  converge run reaches machines over several distinct declared accounts at
+  once, and the account it uses is desired state rather than a preference.
 - `spec.access.rootLogin` is the machine's OS root-login posture: `keep` (the
   default) or `revoke`. `revoke` writes
   `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,

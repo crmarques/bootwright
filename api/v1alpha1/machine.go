@@ -1,5 +1,7 @@
 package v1alpha1
 
+import "regexp"
+
 type Machine struct {
 	APIVersion    string               `yaml:"apiVersion" json:"apiVersion"`
 	Kind          string               `yaml:"kind" json:"kind"`
@@ -443,6 +445,12 @@ func MachineSSHAddress(machine Machine) string {
 func MachineFQDNAddress(machine Machine) string {
 	address, _ := MachineAddressByName(machine, MachineAddressFQDN)
 	return address
+}
+
+var posixUserName = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+
+func ValidPOSIXUserName(user string) bool {
+	return posixUserName.MatchString(user)
 }
 
 func MachineSSHUser(machine Machine) string {

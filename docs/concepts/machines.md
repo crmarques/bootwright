@@ -242,19 +242,36 @@ preflight` checks for it. Prefer a key wherever the machine allows one.
 
 #### Offering your own key first
 
-`--preferred-id-key <path>` is available on every command that reaches a
+`--preferred-ssh-id-key <path>` is available on every command that reaches a
 machine. Bootwright offers that key **before** the credentials the desired
 state declares, and falls back to them when it is not accepted:
 
 ```console
-$ bootwright apply --preferred-id-key ~/.ssh/id_ed25519 --yes
-$ bootwright machine rsh --name ceph-0 --preferred-id-key ~/.ssh/id_ed25519
+$ bootwright apply --preferred-ssh-id-key ~/.ssh/id_ed25519 --yes
+$ bootwright machine rsh --name ceph-0 --preferred-ssh-id-key ~/.ssh/id_ed25519
 ```
 
 It is a per-invocation operator preference, never desired state: it is not
 recorded, not part of the converge hash, and does not perturb a managed-OS
 install marker. The file must be a regular file with no group or other
 permissions, or the command refuses before connecting.
+
+#### Logging in as a different account
+
+`--ssh-user <name>` is available on the four commands that open an SSH session
+for you — `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` — and
+replaces the login account for that one invocation:
+
+```console
+$ bootwright machine exec --name ceph-dc3-arbiter --ssh-user operator -- id
+```
+
+It is deliberately not on `apply` or `destroy`. Converging a fleet reaches
+bastions, machines being installed, Ceph nodes, and container nodes over
+different declared accounts at once, so a single flat override there could only
+be wrong; the account those runs use is desired state, not a preference. Like
+`--preferred-ssh-id-key`, the value never enters desired state, and it is
+refused unless it is a valid POSIX user name.
 
 #### Login identity
 
@@ -411,6 +428,9 @@ key:
 $ bootwright machine rsh --name ceph-dc1-0
 $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 ```
+
+Add `--ssh-user <name>` to log in as a different account for that one
+invocation, and `--preferred-ssh-id-key <path>` to offer your own key first.
 
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`

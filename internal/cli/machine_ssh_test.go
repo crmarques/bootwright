@@ -142,6 +142,109 @@ func TestBuildSSHInvocationQuotesExtraArgsForRemoteReassembly(t *testing.T) {
 	}
 }
 
+func controllerIdentityStorageNodeState() v1alpha1.State {
+	return v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-arbiter"},
+			Spec: v1alpha1.MachineSpec{
+				OS:        v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.17"}},
+				Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
+					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+					Auth:       v1alpha1.MachineSSHAuth{ControllerIdentity: &v1alpha1.MachineSSHControllerIdentity{}},
+				}},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						ClusterSSH: v1alpha1.StorageCephadmSSHSpec{User: "cephadm", KeyRef: v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}},
+					},
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{{Name: "arbiter", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-arbiter"}}},
+					},
+				},
+			},
+		}},
+	}
+}
+
+func TestMachineSSHTargetKeepsControllerIdentityOffTheClusterAccount(t *testing.T) {
+	target, err := machineSSHTarget(controllerIdentityStorageNodeState(), "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	if target.User != "" {
+		t.Fatalf("user = %q, want empty so SSH authenticates as the operator", target.User)
+	}
+	if target.KeyRef.Name != "" {
+		t.Fatalf("keyRef = %q, want empty for controllerIdentity", target.KeyRef.Name)
+	}
+	inv := buildSSHInvocation(target, "", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
+	if got := inv.Args[len(inv.Args)-1]; got != "10.0.0.17" {
+		t.Fatalf("target = %q, want a bare address with no login user", got)
+	}
+}
+
+func TestMachineSSHTargetUsesClusterAccountWhenTheClusterOwnsTheLogin(t *testing.T) {
+	state := controllerIdentityStorageNodeState()
+	state.Machines[0].Spec.OS.Provided = v1alpha1.BoolPtr(false)
+	state.Machines[0].Spec.Access.SSH.Auth = v1alpha1.MachineSSHAuth{
+		Provision: &v1alpha1.MachineSSHProvision{KeyRef: v1alpha1.SecretRef{Name: "ceph-cluster-key"}},
+	}
+	target, err := machineSSHTarget(state, "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	if target.User != "cephadm" {
+		t.Fatalf("user = %q, want cephadm", target.User)
+	}
+}
+
+func TestSSHUserOverridesTheDeclaredLogin(t *testing.T) {
+	target, err := machineSSHTarget(machineSSHTestState(), "ceph-0")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	if target.User != "root" {
+		t.Fatalf("declared user = %q, want root", target.User)
+	}
+	inv := buildSSHInvocation(overrideSSHUser(target, "operator"), "/base/secrets/ceph-key", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
+	if got := inv.Args[len(inv.Args)-1]; got != "operator@10.0.0.10" {
+		t.Fatalf("target = %q, want operator@10.0.0.10", got)
+	}
+	if got := overrideSSHUser(target, "").User; got != "root" {
+		t.Fatalf("empty override changed the user to %q", got)
+	}
+}
+
+func TestResolveSSHUserRefusesNonPOSIXNames(t *testing.T) {
+	if got, err := resolveSSHUser("  operator  "); err != nil || got != "operator" {
+		t.Fatalf("resolveSSHUser(padded) = %q, %v", got, err)
+	}
+	if got, err := resolveSSHUser(""); err != nil || got != "" {
+		t.Fatalf("resolveSSHUser(empty) = %q, %v", got, err)
+	}
+	for _, bad := range []string{"root@host", "-o ProxyCommand=x", "Operator", "user name", strings.Repeat("a", 33)} {
+		if _, err := resolveSSHUser(bad); err == nil {
+			t.Fatalf("resolveSSHUser(%q) was accepted", bad)
+		}
+	}
+}
+
+func TestMachineExecRejectsAnInvalidSSHUserAsUsage(t *testing.T) {
+	initHostTrustTestContext(t)
+	_, stderr, code := runCLI(t, "machine", "exec", "--name", "provider-01", "--ssh-user", "root@evil", "--", "id")
+	if code != 2 {
+		t.Fatalf("machine exec exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--ssh-user") {
+		t.Fatalf("stderr = %q, want the --ssh-user refusal", stderr)
+	}
+}
+
 func TestBuildMachineSSHInvocationErrors(t *testing.T) {
 	if _, err := machineSSHTarget(machineSSHTestState(), "ghost"); err == nil || !strings.Contains(err.Error(), "unknown Machine") {
 		t.Fatalf("unknown machine err = %v", err)

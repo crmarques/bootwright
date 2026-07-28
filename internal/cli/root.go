@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	contextOverride string
-	preferredIDKey  string
+	contextOverride   string
+	preferredSSHIDKey string
 )
 
 func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -56,9 +56,9 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVar(&contextOverride, "context", "", flagContextUsage)
 	registerContextNameCompletion(root, "context")
-	root.PersistentFlags().StringVar(&preferredIDKey, "preferred-id-key", "", flagPreferredIDKeyUsage)
+	root.PersistentFlags().StringVar(&preferredSSHIDKey, "preferred-ssh-id-key", "", flagPreferredSSHIDKeyUsage)
 	root.PersistentPreRunE = func(*cobra.Command, []string) error {
-		path, err := resolvePreferredIDKey()
+		path, err := resolvePreferredSSHIDKey()
 		if err != nil {
 			return failErr(2, err)
 		}

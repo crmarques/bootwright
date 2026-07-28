@@ -67,7 +67,7 @@ func execSSHTarget(commandCtx context.Context, ctx workspace.Context, state v1al
 }
 
 func prepareSSHInvocation(ctx workspace.Context, state v1alpha1.State, target sshTarget, extraArgs []string, sshPath string) (sshInvocation, error) {
-	preferredKeyPath, err := resolvePreferredIDKey()
+	preferredKeyPath, err := resolvePreferredSSHIDKey()
 	if err != nil {
 		return sshInvocation{}, err
 	}
