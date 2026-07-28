@@ -3,8 +3,11 @@
   ansible.builtin.command:
     argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
+    bootwright_node_access_sudoers_content: "{{ bootwright_node_access_sudoers_lines | join('\n') }}"
     bootwright_node_access_command: >-
-      {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.sudoersPath | quote }}
+      test "$({{ bootwright_node_access_sudo }} cat
+      {{ bootwright_node_access.sudoersPath | quote }} 2>/dev/null)"
+      = {{ bootwright_node_access_sudoers_content | quote }}
   delegate_to: localhost
   become: false
   register: bootwright_node_access_sudoers_probe
@@ -12,10 +15,7 @@
   failed_when: false
 
 - name: Reconcile the storage node orchestration sudoers grant
-  when: >-
-    (bootwright_node_access_sudoers_probe.rc | default(1) | int) != 0
-    or (bootwright_node_access_sudoers_probe.stdout | default('') | trim)
-       != (bootwright_node_access_sudoers_lines | join('\n'))
+  when: (bootwright_node_access_sudoers_probe.rc | default(1) | int) != 0
   block:
     - name: Stage the storage node orchestration sudoers grant
       ansible.builtin.command:
