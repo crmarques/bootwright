@@ -123,6 +123,7 @@ type ContainerClusterNetworkCIDR struct {
 
 type OCPNodeSpec struct {
 	Name       string               `yaml:"name" json:"name"`
+	FQDN       string               `yaml:"fqdn,omitempty" json:"fqdn,omitempty"`
 	Role       string               `yaml:"role" json:"role"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	Labels     map[string]string    `yaml:"labels,omitempty" json:"labels,omitempty"`

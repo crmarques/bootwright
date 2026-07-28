@@ -762,11 +762,12 @@ Rules:
   `Machine`.
 - `spec.nodes[].name` names the node, independent of the machine name, and is
   required: it is declared explicitly per node, with no default inferred from
-  list position. A bare label composes to
-  `<name>.<cluster>.<domains.containerClusters>` (the container-cluster
-  zone; `domains.containerClusters` defaults to `domains.clusters`, which
-  defaults to `domains.base`); a dotted value is an explicit FQDN used
-  verbatim. The composed FQDN is the cluster-visible node identity, and its
+  list position. It must be a DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and
+  composes to `<name>.<cluster>.<domains.containerClusters>` (the
+  container-cluster zone; `domains.containerClusters` defaults to
+  `domains.clusters`, which defaults to `domains.base`). A dotted value is
+  rejected; `spec.nodes[].fqdn` is the explicit override, used verbatim and
+  unaffected by the zone (ADR 0025). The composed FQDN is the cluster-visible node identity, and its
   DNS record resolves through the bound machine's `fqdn` (managed
   resolution renders a `cname`; provided resolution requires the operator's
   record, checked by the "Name resolution" preflight group).
@@ -1125,12 +1126,14 @@ Rules:
   `osd`/`devices`, or by two fleets.
   `name` names the node, independent of the machine name, and is the
   rendered cephadm host-spec hostname. It is required and declared explicitly
-  per node — there is no default inferred from list position; a
-  bare label composes to `<name>.<cluster>.<domains.storageClusters>` (the
+  per node — there is no default inferred from list position. It must be a DNS
+  label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and composes to
+  `<name>.<cluster>.<domains.storageClusters>` (the
   storage-cluster zone; `domains.storageClusters` defaults to
   `domains.clusters`, which defaults to `domains.base`; kept bare when the
-  `Environment` declares no domain); a dotted value is an explicit FQDN
-  used verbatim. It is rendered
+  `Environment` declares no domain). A dotted value is rejected;
+  `topology.nodes[].fqdn` is the explicit override, used verbatim and
+  unaffected by the zone (ADR 0025). It is rendered
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer
   sets the OS hostname to the same node FQDN), operator-guaranteed for

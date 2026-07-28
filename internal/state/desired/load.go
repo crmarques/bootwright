@@ -61,6 +61,9 @@ func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclus
 	if err := resolveRegisteredAddons(&state); err != nil {
 		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
+	if errs := validateAuthoredNodeNames(state); len(errs) > 0 {
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, errors.New(strings.Join(errs, "; "))
+	}
 	Normalize(&state)
 	selected := applyEnvironmentClusterSelection(state)
 	exclusions := clusterSelectionExclusions(state, selected)

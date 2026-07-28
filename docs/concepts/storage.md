@@ -360,6 +360,199 @@ that — change `clusterSSH.user` to `root` as a separate, deliberate step.
     own nodes is fine — its blast radius is exactly those nodes.
 
 
+### Monitoring
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `monitoring.enabled` | No | `true` (when the `monitoring` block is present) | `false` renders the bootstrap `--skip-monitoring-stack` flag and no monitoring specs. |
+| `monitoring.prometheus` | No | — | Per-service tuning; placement derives from the `prometheus` role. |
+| `monitoring.grafana` | No | — | Per-service tuning; placement derives from the `grafana` role. |
+| `monitoring.alertmanager` | No | — | Per-service tuning; placement derives from the `alertmanager` role. |
+| `monitoring.nodeExporter` | No | every host (cephadm behavior) | node-exporter has no topology role; an authored block narrows by explicit placement only. |
+| `monitoring.loki` | No | — | Centralized-logging aggregator (`service_type: loki`); role-less, placement authored explicitly. cephadm provisions Grafana's Loki datasource itself; no dashboard mgr command is emitted. `retentionTime`/`retentionSize` do not apply (cephadm's `MonitoringSpec` rejects them). |
+| `monitoring.promtail` | No | — | Log shipper (`service_type: promtail`); role-less. Ships to loki, so it has no dashboard wiring. |
+
+!!! note "Absent versus present"
+    Omitting the `monitoring` block deploys cephadm's **default** monitoring
+    stack with cephadm's own placement. Authoring the block switches to
+    role-derived placement (like `mon`/`mgr`), with `enabled` defaulting to
+    `true`; `enabled: false` skips the stack.
+
+Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
+`nodeExporter`, `loki`, `promtail`) carries:
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `placement` | No | every host carrying the service's role | See [Shared placement](#shared-placement). |
+| `port` | No | cephadm default | Service port. |
+| `retentionTime` | No | cephadm default | Retention time (Prometheus only; `retention_time`/`retention_size` exist only on cephadm's `PrometheusSpec`, and every other monitoring service rejects the keys). |
+| `retentionSize` | No | `10GB` | Retention size (Prometheus only). cephadm leaves the TSDB size-unbounded and caps it by time alone, so on a Ceph node the TSDB grows on the same filesystem as `/var/lib/ceph` for the whole retention window. Bootwright always renders a `retention_size` to bound it; raise it when you have the headroom. |
+| `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
+
+### Node root-filesystem budget
+
+Everything cephadm keeps outside the OSD data disks — container images, the
+`/var/lib/ceph/<fsid>` data directory, the mon RocksDB store, the crash spool,
+the Prometheus TSDB, Grafana, Alertmanager and Loki — lands on the node's root
+filesystem. `bootwright preflight` sizes that filesystem per node from the roles
+the node declares:
+
+| Term | GiB | Applies to |
+| --- | --- | --- |
+| Base | 20 | Every storage node (container images, cephadm data dir, crash spool, journal) |
+| `mon` | +15 | Nodes carrying the `mon` role (the RocksDB store grows during peering and backfill, and only trims once all PGs are `active+clean`) |
+| `mgr` | +5 | Nodes carrying the `mgr` role |
+| `prometheus` | +`retentionSize` + 4 | Nodes where the Prometheus service is placed |
+| `grafana` | +2 | Nodes where Grafana is placed |
+| `alertmanager` | +1 | Nodes where Alertmanager is placed |
+| `loki` | +20 | Nodes where Loki is placed (cephadm sets no Loki retention) |
+
+Preflight **fails** below an absolute floor of 20 GiB free and **warns** below
+the computed budget. A node that installs under budget still comes up, but its
+root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
+alert will fire on the trailing fill rate — see
+[Ceph disk-space alerts flap after install](../troubleshooting.md#ceph-disk-space-alerts-flap-after-install).
+
+### Passthrough services
+
+For cephadm service types Bootwright does not model first-class (for example
+`rbd-mirror`, `snmp-gateway`), `ceph.services[]` renders field-for-field into a
+`ceph orch apply` document.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `services[].serviceType` | Yes | — | cephadm service type. |
+| `services[].serviceID` | No | — | cephadm service ID. The `serviceType/serviceID` pair must be unique. |
+| `services[].placement` | Yes | — | Must set `hosts` or `sites`; see [Shared placement](#shared-placement). |
+| `services[].spec` | No | — | Raw service spec map, rendered 1:1 into cephadm. |
+
+!!! warning "Do not duplicate first-class surfaces"
+    Do not declare service types already owned by Bootwright surfaces —
+    monitors, managers, OSDs, MDS, RGW, NFS, ingress, or the monitoring
+    services.
+
+### Topology
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `topology.nodes` | Yes | — | At least one node. |
+| `topology.nodes[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
+| `topology.nodes[].name` | Yes | — | The cluster's name for this node — independent of the machine name and unique within the cluster. Must be a DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and composes to `<name>.<cluster>.<domains.storageClusters>` (the storage-cluster zone; see [Environment → Domain model](environment.md#domain-model)). A dotted value is rejected — use `topology.nodes[].fqdn` to pin a name outside that zone. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname. |
+| `topology.nodes[].fqdn` | No | composed from `name` | Explicit FQDN for a node whose real OS hostname lives outside the storage-cluster zone (a pre-existing corporate host, say). Used verbatim as the cephadm host-spec hostname. `name` is still required — it stays the node's identity inside the cluster and is what `placement.hosts[]` and `cephadm.bootstrap.node` resolve against. See [ADR 0025](https://github.com/crmarques/bootwright/blob/main/specs/adr/0025-composed-names-are-labels-plus-explicit-overrides.md). |
+| `topology.nodes[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
+| `topology.nodes[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
+| `topology.nodes[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
+| `topology.nodes[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
+| `topology.nodes[].osd` | No | — | Drivegroup-shaped OSD device selection; see [OSD device selection](#osd-device-selection). Requires the `osd` role. Mutually exclusive with `devices`. |
+| `topology.osdDrivegroups[]` | No | — | Fleet OSD specs spanning many hosts; see [Fleet OSD drivegroups](#fleet-osd-drivegroups). |
+
+!!! note "Cross-field rules"
+    - An `osd`-role host **must** select devices via `devices[]`, `osd`, or a
+      fleet `osdDrivegroups[]` entry that covers it. Consuming all available
+      devices is the explicit opt-in `osd: {dataDevices: {all: true}}`, never the
+      omission default.
+    - `devices[]` and `osd` are mutually exclusive (`devices[]` is the shorthand
+      for `osd.dataDevices.paths`).
+    - A host is owned by **one** OSD spec: a host covered by a fleet
+      `osdDrivegroups[]` entry must not also author per-host `devices[]`/`osd`,
+      and no two fleet entries may claim the same host.
+
+#### Fleet OSD drivegroups
+
+For homogeneous racks, `topology.osdDrivegroups[]` renders **one** cephadm OSD
+service spanning many hosts (the dominant declarative cephadm idiom) instead of
+one spec per host. Per-host `nodes[].osd` remains the override for heterogeneous
+nodes.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `serviceID` | Yes | — | cephadm OSD service ID; unique across drivegroups. |
+| `placement` | No | every `osd`-role host | Narrow the span by `sites`/`hosts`; see [Shared placement](#shared-placement). |
+| `osd` | Yes | — | The drivegroup-shaped selection (same fields as [OSD device selection](#osd-device-selection)). |
+
+#### OSD device selection
+
+All field names render 1:1 into the cephadm OSD drivegroup spec.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `osd.dataDevices` | Yes (when `osd` is set) | — | Data device selector. |
+| `osd.dbDevices` | No | — | DB device selector. |
+| `osd.walDevices` | No | — | WAL device selector. |
+| `osd.filterLogic` | No | `AND` | How cephadm combines the device filters across selectors: `AND` (intersect) or `OR` (union). Spec-level (`filter_logic`). |
+| `osd.encrypted` | No | `false` | Enable encrypted (LUKS) OSDs. |
+| `osd.tpm2` | No | `false` | Seal the OSD LUKS key in the host TPM (`tpm2`). Requires `encrypted: true`. |
+| `osd.osdsPerDevice` | No | cephadm default | OSDs per selected device (non-negative). |
+| `osd.crushDeviceClass` | No | — | CRUSH device class for the whole drivegroup. |
+| `osd.blockDBSize` | No | — | Per-OSD DB slice size carved from `dbDevices` (`block_db_size`, e.g. `60G`). |
+| `osd.blockWALSize` | No | — | Per-OSD WAL slice size carved from `walDevices` (`block_wal_size`). |
+| `osd.dbSlots` | No | — | Number of equal DB slices per shared `dbDevices` device (`db_slots`, non-negative). |
+| `osd.walSlots` | No | — | Number of equal WAL slices per shared `walDevices` device (`wal_slots`, non-negative). |
+| `osd.dataAllocateFraction` | No | `1` | Fraction `(0,1]` of each data device to allocate (`data_allocate_fraction`), reserving headroom. |
+| `osd.unmanaged` | No | `false` | Freeze this OSD service so cephadm stops claiming new devices (`unmanaged`, a top-level service-spec key). |
+| `osd.serviceOverrides` | No | — | cephadm common service-spec escape hatch: `extraContainerArgs[]`, `extraEntrypointArgs[]`, `networks[]` (CIDRs), and `customConfigs[]` (`{mountPath, content}`, absolute mount path). Rendered as top-level service-spec keys. |
+
+Each device selector (`dataDevices`, `dbDevices`, `walDevices`) mirrors the
+cephadm drivegroup device filter:
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `*.paths[]` | No | — | Literal device paths. |
+| `*.pathSpecs[]` | No | — | Expanded path form `{path, crushDeviceClass}` pinning a per-device CRUSH class; renders to the cephadm `paths: [{path, crush_device_class}]` mapping. |
+| `*.all` | No | `false` | Select all matching devices. |
+| `*.model` | No | — | Device model filter (`model`). |
+| `*.vendor` | No | — | Device vendor filter (`vendor`). |
+| `*.rotational` | No | — | Rotational filter. |
+| `*.size` | No | — | Size filter: a single size (`10G`) or a range (`10G:40G`, `:40G`, `10G:`). |
+| `*.limit` | No | — | Cap on matching devices (non-negative). |
+
+!!! note "Cross-field rules"
+    - `paths`, `pathSpecs`, and `all` are **mutually exclusive** within one
+      selector; set at most one. `pathSpecs[].path` is required.
+    - A selector must select something: set at least one of `paths`, `pathSpecs`,
+      `all`, `model`, `vendor`, `rotational`, `size`, or `limit`. `model`,
+      `vendor`, `rotational`, `size`, and `limit` only narrow the match.
+    - Address fleet disks by `model`/`vendor` rather than `/dev` paths, which can
+      reorder across boots.
+
+!!! warning "Stable device addressing"
+    Kernel `/dev/sdX` / `/dev/vdX` names are **not stable** — they can reorder
+    across boots, so a name recorded on one boot may point at a different disk on
+    the next. Bootwright's OSD ownership marker and the empty-device / destroy
+    gates key on the **literal** path string, so an unstable name can make them
+    reason about the wrong disk. For explicitly-addressed OSDs prefer a stable
+    path — `/dev/disk/by-id/...`, `/dev/disk/by-path/...`, or a `wwn-...` link —
+    which is accepted anywhere a path is (`devices[]`, `dataDevices.paths`,
+    `pathSpecs[].path`). For homogeneous fleets, a `model`/`vendor`/`size`/
+    `rotational` filter avoids per-disk paths entirely.
+
+    There is deliberately **no `wwn`/`serial` filter field** — the selector
+    filters mirror cephadm exactly (`model`, `vendor`, `rotational`, `size`,
+    `limit`). Per-disk stable selection is expressed as a `/dev/disk/by-id` or
+    `wwn` **path** in `paths`/`pathSpecs`, not as a filter.
+
+#### Stretch mode
+
+Authoring the `stretch` block is the enablement signal — its presence turns on
+stretch mode. Only `failureDomain` and the tiebreaker node are facts the
+operator alone knows; normalize derives the rest from the topology.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `topology.stretch.failureDomain` | Yes (when stretch is enabled) | — | CRUSH failure domain mapping sites to real buckets. |
+| `topology.stretch.dataSites[]` | No | the topology's non-tiebreaker sites | Must resolve to exactly the two mon-bearing data sites. Author only when extra OSD-only sites would be wrongly derived. |
+| `topology.stretch.tiebreaker.node` | Yes (when stretch is enabled) | — | Mon-only node with no OSD devices, in the tiebreaker site; named by its node name (FQDN or short label), never the machine name. |
+| `topology.stretch.tiebreaker.site` | No | the tiebreaker node's site | Must be distinct from `dataSites`. |
+| `topology.stretch.ruleName` | No | `stretch-rule` | Stretch CRUSH rule inherited by policy-less stretch pools. |
+
+!!! note "Fixed stretch replication"
+    Stretch is supported only as two data sites plus one mon-only tiebreaker
+    site. Policy-less replicated pools get `size: 4` / `minSize: 2` as a
+    render-time constant — non-4/2 stretch is unsupported and the replication is
+    not authorable. Erasure pools are not allowed on stretch-mode clusters. See
+    [Ceph topologies](../advanced/ceph-topologies.md) for the full stretch
+    walkthrough.
+
 ## StoragePlacementPolicy
 
 Reusable placement and replicated-pool defaults for pools that select it via

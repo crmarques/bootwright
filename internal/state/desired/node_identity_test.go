@@ -123,7 +123,7 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
 				{Name: "node01", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
 				{Name: "master-0", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m2"}},
-				{Name: "pinned.corp.example.com", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m3"}},
+				{Name: "pinned", FQDN: "pinned.corp.example.com", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m3"}},
 			}},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
@@ -150,11 +150,71 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 		t.Fatalf("bare-label hostname = %q, want master-0.cluster-a.example.test", got)
 	}
 	if got := hosts[2].Name; got != "pinned.corp.example.com" {
-		t.Fatalf("dotted hostname = %q, want pinned.corp.example.com verbatim", got)
+		t.Fatalf("explicit fqdn = %q, want pinned.corp.example.com verbatim", got)
 	}
 	ceph := state.StorageClusters[0].Spec.Ceph.Topology.Nodes
 	if ceph[0].Name != "node01.ceph.example.test" || ceph[1].Name != "node02.ceph.example.test" {
 		t.Fatalf("ceph node names = %q, %q, want node01.ceph.example.test, node02.ceph.example.test", ceph[0].Name, ceph[1].Name)
+	}
+}
+
+func TestAuthoredNodeNameMustBeADNSLabel(t *testing.T) {
+	state := v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+				{Name: "pinned.corp.example.com", Role: "master", MachineRef: v1alpha1.LocalObjectReference{Name: "m1"}},
+			}},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+						{Name: "srv01.corp.example.com", MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+					}},
+				},
+			},
+		}},
+	}
+
+	errs := validateAuthoredNodeNames(state)
+	if len(errs) != 2 {
+		t.Fatalf("validateAuthoredNodeNames = %v, want one error per dotted node name", errs)
+	}
+	joined := strings.Join(errs, "; ")
+	if !strings.Contains(joined, "ContainerCluster/cluster-a spec.nodes[0].name") || !strings.Contains(joined, "StorageCluster/ceph spec.ceph.topology.nodes[0].name") {
+		t.Fatalf("errors = %v, want both node paths named", errs)
+	}
+	if !strings.Contains(joined, "set the sibling fqdn field to pin a name outside that zone") {
+		t.Fatalf("errors = %v, want the fqdn field offered as the remedy", errs)
+	}
+}
+
+func TestAuthoredNodeIdentityAcceptsLabelPlusFQDN(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+						{Name: "node01", MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+						{Name: "node02", FQDN: "srv4009.corp.example.com", MachineRef: v1alpha1.LocalObjectReference{Name: "s2"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+					}},
+				},
+			},
+		}},
+	}
+	if errs := validateAuthoredNodeNames(state); len(errs) != 0 {
+		t.Fatalf("validateAuthoredNodeNames = %v, want none for a label plus an explicit fqdn", errs)
+	}
+
+	state.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].FQDN = "bad_host!.example.test"
+	errs := validateAuthoredNodeNames(state)
+	if len(errs) != 1 || !strings.Contains(errs[0], "is not a valid DNS subdomain") {
+		t.Fatalf("validateAuthoredNodeNames = %v, want the malformed fqdn rejected", errs)
 	}
 }
 

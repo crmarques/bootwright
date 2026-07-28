@@ -34,3 +34,4 @@ files.
 | [0022](0022-cluster-wait-bootstrap-boundary.md) | Cluster Install Wait Splits at the Bootstrap Boundary | Accepted |
 | [0023](0023-teardown-is-the-inverse-of-buildup.md) | Teardown Is the Inverse of Build-Up | Accepted |
 | [0024](0024-machine-access-union-and-cluster-owned-node-login.md) | Machine Access Is a Union, and a Ceph Cluster Owns Its Node Login | Accepted |
+| [0025](0025-composed-names-are-labels-plus-explicit-overrides.md) | Composed Names Are Labels Plus Explicit Overrides | Accepted |

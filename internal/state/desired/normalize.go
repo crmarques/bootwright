@@ -353,7 +353,7 @@ func normalizeNodeNames(state *v1alpha1.State) {
 		cluster := &state.ContainerClusters[i]
 		for j := range cluster.Spec.Nodes {
 			node := &cluster.Spec.Nodes[j]
-			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, containerDomain)
+			node.Name = nodeFQDN(node.Name, node.FQDN, cluster.Metadata.Name, containerDomain)
 		}
 	}
 	for i := range state.StorageClusters {
@@ -363,17 +363,17 @@ func normalizeNodeNames(state *v1alpha1.State) {
 		}
 		for j := range cluster.Spec.Ceph.Topology.Nodes {
 			node := &cluster.Spec.Ceph.Topology.Nodes[j]
-			node.Name = nodeFQDN(node.Name, cluster.Metadata.Name, storageDomain)
+			node.Name = nodeFQDN(node.Name, node.FQDN, cluster.Metadata.Name, storageDomain)
 		}
 		normalizeStorageStretch(cluster)
 	}
 }
 
-func nodeFQDN(name, clusterName, baseDomain string) string {
-	if name == "" {
-		return ""
+func nodeFQDN(name, fqdn, clusterName, baseDomain string) string {
+	if fqdn != "" {
+		return fqdn
 	}
-	if strings.Contains(name, ".") || baseDomain == "" {
+	if name == "" || baseDomain == "" {
 		return name
 	}
 	return stateview.ComposeFQDN(name, clusterName, baseDomain)

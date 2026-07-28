@@ -294,6 +294,7 @@ type StorageCephTiebreaker struct {
 
 type StorageCephNode struct {
 	Name       string               `yaml:"name" json:"name"`
+	FQDN       string               `yaml:"fqdn,omitempty" json:"fqdn,omitempty"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	Site       string               `yaml:"site,omitempty" json:"site,omitempty"`
 	Roles      []string             `yaml:"roles" json:"roles"`

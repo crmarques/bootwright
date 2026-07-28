@@ -355,7 +355,8 @@ offending line.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `nodes[].name` | Yes | — | The cluster's name for the node, independent of the machine name; unique within the cluster. A bare label composes to `<name>.<cluster>.<domains.containerClusters>` (the container-cluster zone; see [Environment → Domain model](environment.md#domain-model)); a dotted value is used verbatim as an explicit FQDN. The composed FQDN is the OpenShift node name and must equal the host's real OS hostname. It is also the node the day-2 node-config step targets when applying labels/taints. |
+| `nodes[].name` | Yes | — | The cluster's name for the node, independent of the machine name; unique within the cluster. Must be a DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and composes to `<name>.<cluster>.<domains.containerClusters>` (the container-cluster zone; see [Environment → Domain model](environment.md#domain-model)). A dotted value is rejected — use `nodes[].fqdn` to pin a name outside that zone. The composed FQDN is the OpenShift node name and must equal the host's real OS hostname. It is also the node the day-2 node-config step targets when applying labels/taints. |
+| `nodes[].fqdn` | No | composed from `name` | Explicit FQDN for a node whose real OS hostname lives outside the cluster zone (a pre-existing corporate host, say). Used verbatim as the node's cluster-visible identity. `name` is still required — it stays the node's identity inside the cluster and is what `placement`/bootstrap references resolve against. |
 | `nodes[].role` | Yes | — | `master`, `worker`, or `infra`. |
 | `nodes[].machineRef` | Yes | — | `Machine` that backs this node; no default is derived. |
 | `nodes[].labels` | No | — | Extra node labels Bootwright applies day-2. |
