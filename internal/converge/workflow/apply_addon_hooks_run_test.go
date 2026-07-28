@@ -17,7 +17,7 @@ func TestWriteHookInventoryPinsHostKeysAndKeepsConnectionsAlive(t *testing.T) {
 		keyPath:        "/runs/connection-secrets/bastion-ssh",
 		knownHostsPath: "/context/trust/ssh/known_hosts",
 	}}
-	if err := writeHookInventory(path, targets); err != nil {
+	if err := writeHookInventory(path, targets, ""); err != nil {
 		t.Fatalf("writeHookInventory: %v", err)
 	}
 	data, err := os.ReadFile(path)

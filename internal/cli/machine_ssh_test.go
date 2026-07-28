@@ -46,7 +46,7 @@ func TestBuildMachineSSHInvocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("machineSSHTarget: %v", err)
 	}
-	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", []string{"uptime"}, "/usr/bin/ssh", nil)
+	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", []string{"uptime"}, "/usr/bin/ssh", nil)
 	if inv.Path != "/usr/bin/ssh" {
 		t.Fatalf("path = %q", inv.Path)
 	}
@@ -108,7 +108,7 @@ func TestBuildMachineSSHInvocationUserOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("machineSSHTarget: %v", err)
 	}
-	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
+	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
 	if inv.Args[len(inv.Args)-1] != "core@10.0.0.10" {
 		t.Fatalf("target = %q, want core@10.0.0.10", inv.Args[len(inv.Args)-1])
 	}
@@ -121,7 +121,7 @@ func TestBuildSSHInvocationQuotesExtraArgsForRemoteReassembly(t *testing.T) {
 		t.Fatalf("machineSSHTarget: %v", err)
 	}
 	extraArgs := []string{"sudo", "podman", "ps", "--format", "{{.Names}} {{.Ports}}"}
-	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", extraArgs, "/usr/bin/ssh", nil)
+	inv := buildSSHInvocation(target, "/base/secrets/ceph-key", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", extraArgs, "/usr/bin/ssh", nil)
 
 	tail := inv.Args[len(inv.Args)-len(extraArgs):]
 	remoteCommand := strings.Join(tail, " ")
@@ -488,7 +488,7 @@ func TestOpenSSHConfigUsesOnlyParentAnonymousMaterial(t *testing.T) {
 	invocation := buildSSHInvocation(sshTarget{
 		Address: "example.test",
 		User:    "core",
-	}, keyPath, sshParentFDPath(configFile), filepath.Join(t.TempDir(), "known_hosts"), "ask", nil, sshPath, []*os.File{file, configFile})
+	}, keyPath, "", sshParentFDPath(configFile), filepath.Join(t.TempDir(), "known_hosts"), "ask", nil, sshPath, []*os.File{file, configFile})
 	args := append([]string{"-G"}, invocation.Args[1:]...)
 	output, err := execution.OSRunner{}.Output(context.Background(), execution.Command{
 		Name: sshPath,
