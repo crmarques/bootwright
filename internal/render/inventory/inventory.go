@@ -165,8 +165,11 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 		entry["ansible_connection"] = "local"
 		return entry
 	}
-	if h.Spec.Access.SSH.User != "" {
-		entry["ansible_user"] = h.Spec.Access.SSH.User
+	if paths.SSHUser != "" {
+		entry["bootwright_declared_ssh_user"] = h.Spec.Access.SSH.User
+	}
+	if user := connectionUser(h.Spec.Access.SSH.User, paths); user != "" {
+		entry["ansible_user"] = user
 	}
 	if path := secret.ResolveSSHPrivateKeyPath(v1alpha1.MachineSSHKeyRef(h).Name, paths.SecretIndex, paths.SecretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
@@ -181,9 +184,20 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 		entry["ansible_become_password"] = passwordLookup(path)
 	}
 	if path := machineKnownHostsPath(h, paths); path != "" {
-		entry["ansible_ssh_common_args"] = sshCommonArgs(path, v1alpha1.MachineSSHPasswordRef(h).Name != "", paths.PreferredIdentityFile)
+		passwordAuth := v1alpha1.MachineSSHPasswordRef(h).Name != ""
+		entry["ansible_ssh_common_args"] = sshCommonArgs(path, passwordAuth, paths.PreferredIdentityFile)
+		if paths.PreferredIdentityFile != "" {
+			entry["bootwright_declared_ssh_common_args"] = sshCommonArgs(path, passwordAuth, "")
+		}
 	}
 	return entry
+}
+
+func connectionUser(declared string, paths PathOptions) string {
+	if paths.SSHUser != "" {
+		return paths.SSHUser
+	}
+	return declared
 }
 
 func passwordLookup(path string) string {

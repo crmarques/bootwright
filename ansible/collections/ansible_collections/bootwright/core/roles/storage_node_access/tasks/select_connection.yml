@@ -38,9 +38,13 @@
   ansible.builtin.set_fact:
     ansible_user: >-
       {{
-        bootwright_node_access.user
-        if (bootwright_node_access_ready | bool)
-        else bootwright_node_access.installUser
+        bootwright_node_access.installUser
+        if (bootwright_node_access.connectionOverride | default(false) | bool)
+        else (
+          bootwright_node_access.user
+          if (bootwright_node_access_ready | bool)
+          else bootwright_node_access.installUser
+        )
       }}
   delegate_to: localhost
   become: false

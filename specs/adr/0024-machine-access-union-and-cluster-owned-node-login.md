@@ -162,18 +162,24 @@ remain the fallback — OpenSSH tries identities in order, so this needs no
 fallback logic of its own. It is refused unless the path is a regular file with
 no group or other permissions.
 
-The four commands that open an SSH session on the operator's behalf —
-`machine rsh`/`exec` and `cluster rsh`/`exec` — additionally accept
-`--ssh-user <name>`, which replaces the login account for that invocation and is
-refused unless it is a valid POSIX user name. It stops there on purpose. Where
-the key flag is *additive* and therefore safe to fan out across a whole
-converge, a user override is a *replacement*: an `apply` reaches bastions,
-machines mid-install, Ceph nodes, and container nodes over several distinct
-declared accounts at once, so one flat value could only be wrong for most of
-them. The account a converge uses is desired state, not a preference.
+Every such command also accepts `--ssh-user <name>`, which replaces the account
+Bootwright **connects as** for that invocation and is refused unless it is a
+valid POSIX user name. It reaches as far as the key flag does, including
+`apply` and `destroy`, because the two answer the same question — *whose
+credentials am I reaching this fleet with right now* — and an operator who must
+name a key usually must name the account that key belongs to.
 
-Neither is desired state: neither is recorded, part of the converge hash, or
-folded into a managed-OS install marker.
+The line it does not cross is the account Bootwright **creates or manages**. A
+Ceph cluster still orchestrates as its `clusterSSH.user`, a kickstart still
+provisions the login `auth.provision` names, and `access.rootLogin` still
+governs the same accounts it always did. So on a Ceph node the override moves
+the *install/connection* identity the node-access role logs in with, and leaves
+the `cephadm` account it provisions there untouched.
+
+Neither flag is desired state: neither is part of the converge hash or folded
+into a managed-OS install marker, and neither reaches the ownership records —
+those record the **declared** connection facts, so a later run cannot inherit
+one operator's key path or account name from an earlier one.
 
 ## Consequences
 

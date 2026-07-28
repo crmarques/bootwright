@@ -4,12 +4,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/spf13/cobra"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge"
 )
 
 func argsNeedLocalRoot(args []string) bool {
-	if len(args) == 0 || argsContainHelp(args) {
+	if len(args) == 0 || argsContainHelp(args) || argsHaveUnusableSSHUser(args) {
 		return false
 	}
 	switch args[0] {
@@ -175,6 +177,19 @@ func argsHaveInputDirValue(args []string) bool {
 			return i+1 < len(args) && args[i+1] != ""
 		case strings.HasPrefix(arg, "--input-dir="):
 			return strings.TrimPrefix(arg, "--input-dir=") != ""
+		}
+	}
+	return false
+}
+
+func argsHaveUnusableSSHUser(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--ssh-user":
+			return i+1 >= len(args) || !v1alpha1.ValidPOSIXUserName(strings.TrimSpace(args[i+1]))
+		case strings.HasPrefix(arg, "--ssh-user="):
+			return !v1alpha1.ValidPOSIXUserName(strings.TrimSpace(strings.TrimPrefix(arg, "--ssh-user=")))
 		}
 	}
 	return false

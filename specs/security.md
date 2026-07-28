@@ -47,12 +47,14 @@ effective credential is whatever that operator already holds. The
 offered ahead of the declared credentials, with the declared credentials as
 fallback; it is refused unless the file is a regular file with no group or other
 permissions, and it is never recorded in desired state, the converge hash, or
-an install marker. `--ssh-user`, accepted only on the operator-driven
-`machine`/`cluster` `rsh` and `exec` commands, replaces the login account for
-one invocation and is refused unless it is a valid POSIX user name; it is
-likewise never recorded. All three are per-operator ambient authority by
-construction and must be described as such — they trade reproducibility for the
-ability to reach a machine the operator already administers. Non-local durable SSH uses
+an install marker. `--ssh-user` replaces the account Bootwright connects as for
+one invocation, never an account it creates or manages, and is refused unless it
+is a valid POSIX user name; it is likewise never recorded. Neither flag reaches
+an ownership record: records carry the declared connection facts, so a replayed
+record cannot inherit one operator's account or key path. All three are
+per-operator ambient authority by construction and must be described as such —
+they trade reproducibility for the ability to reach a machine the operator
+already administers. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
 Trust is recorded by `bootwright machine trust`, on first use during an
 interactive `preflight`/`apply`, or through OpenSSH's prompt during interactive

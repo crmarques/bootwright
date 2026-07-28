@@ -104,7 +104,9 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 		}
 		if access := storageNodeAccessVars(state, cluster, machine, paths); access != nil {
 			entry["bootwright_node_access"] = access
-			if v1alpha1.MachineRevokesRootLogin(machine) {
+			if paths.SSHUser != "" {
+				entry["ansible_user"] = paths.SSHUser
+			} else if v1alpha1.MachineRevokesRootLogin(machine) {
 				entry["ansible_user"] = access["user"]
 			}
 		}
@@ -135,16 +137,17 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		accountKey = machineKey
 	}
 	out := map[string]any{
-		"user":              user,
-		"installUser":       v1alpha1.MachineSSHUser(machine),
-		"installIdentity":   v1alpha1.StorageClusterNodeAccountIsInstallIdentity(cluster, machine),
-		"rootLogin":         machine.Spec.Access.RootLogin,
-		"sudoersPath":       v1alpha1.NodeAccessSudoersPath(user),
-		"sshdDropInPath":    v1alpha1.NodeAccessSSHDDropIn,
-		"markerPath":        v1alpha1.NodeAccessMarkerPath,
-		"address":           v1alpha1.MachineSSHAddress(machine),
-		"connectionAddress": stateview.MachineConnectionAddress(state, machine),
-		"knownHostsManaged": machine.Spec.Access.SSH.KnownHostsRef.Name == "",
+		"user":               user,
+		"installUser":        connectionUser(v1alpha1.MachineSSHUser(machine), paths),
+		"connectionOverride": paths.SSHUser != "",
+		"installIdentity":    paths.SSHUser == "" && v1alpha1.StorageClusterNodeAccountIsInstallIdentity(cluster, machine),
+		"rootLogin":          machine.Spec.Access.RootLogin,
+		"sudoersPath":        v1alpha1.NodeAccessSudoersPath(user),
+		"sshdDropInPath":     v1alpha1.NodeAccessSSHDDropIn,
+		"markerPath":         v1alpha1.NodeAccessMarkerPath,
+		"address":            v1alpha1.MachineSSHAddress(machine),
+		"connectionAddress":  stateview.MachineConnectionAddress(state, machine),
+		"knownHostsManaged":  machine.Spec.Access.SSH.KnownHostsRef.Name == "",
 	}
 	if publicPath := secret.ResolveSSHPublicKeyPath(accountKey, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 		out["accountPublicKeyPath"] = publicPath
@@ -157,6 +160,9 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}
 	if knownHostsPath := machineKnownHostsPath(machine, paths); knownHostsPath != "" {
 		out["knownHostsPath"] = knownHostsPath
+	}
+	if paths.PreferredIdentityFile != "" {
+		out["preferredIdentityPath"] = paths.PreferredIdentityFile
 	}
 	return out
 }

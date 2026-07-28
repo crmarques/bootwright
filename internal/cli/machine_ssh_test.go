@@ -220,15 +220,25 @@ func TestSSHUserOverridesTheDeclaredLogin(t *testing.T) {
 	}
 }
 
+func withSSHUserFlag(t *testing.T, value string) {
+	t.Helper()
+	previous := sshUserOverride
+	sshUserOverride = value
+	t.Cleanup(func() { sshUserOverride = previous })
+}
+
 func TestResolveSSHUserRefusesNonPOSIXNames(t *testing.T) {
-	if got, err := resolveSSHUser("  operator  "); err != nil || got != "operator" {
+	withSSHUserFlag(t, "  operator  ")
+	if got, err := resolveSSHUser(); err != nil || got != "operator" {
 		t.Fatalf("resolveSSHUser(padded) = %q, %v", got, err)
 	}
-	if got, err := resolveSSHUser(""); err != nil || got != "" {
+	withSSHUserFlag(t, "")
+	if got, err := resolveSSHUser(); err != nil || got != "" {
 		t.Fatalf("resolveSSHUser(empty) = %q, %v", got, err)
 	}
 	for _, bad := range []string{"root@host", "-o ProxyCommand=x", "Operator", "user name", strings.Repeat("a", 33)} {
-		if _, err := resolveSSHUser(bad); err == nil {
+		withSSHUserFlag(t, bad)
+		if _, err := resolveSSHUser(); err == nil {
 			t.Fatalf("resolveSSHUser(%q) was accepted", bad)
 		}
 	}

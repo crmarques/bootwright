@@ -34,6 +34,13 @@ func TestGateStaysRootlessForTyposAndBogusStages(t *testing.T) {
 		{args: []string{"apply", "--stage=bogus"}, want: false},
 		{args: []string{"apply", "--through", "bogus"}, want: false},
 		{args: []string{"apply", "--through=bogus"}, want: false},
+		{args: []string{"apply", "--ssh-user", "operator"}, want: true},
+		{args: []string{"apply", "--ssh-user=operator"}, want: true},
+		{args: []string{"apply", "--ssh-user", "root@evil"}, want: false},
+		{args: []string{"apply", "--ssh-user=Operator"}, want: false},
+		{args: []string{"apply", "--ssh-user"}, want: false},
+		{args: []string{"machine", "exec", "--name", "m", "--ssh-user", "operator"}, want: true},
+		{args: []string{"machine", "exec", "--name", "m", "--ssh-user", "-o ProxyCommand=x"}, want: false},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {

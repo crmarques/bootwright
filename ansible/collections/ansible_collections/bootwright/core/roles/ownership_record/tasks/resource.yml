@@ -51,9 +51,10 @@
       hostFacts:
         bootwright_host_name: "{{ bootwright_host_name | default(inventory_hostname) }}"
         ansible_host: "{{ ansible_host | default('') }}"
-        ansible_user: "{{ ansible_user | default('') }}"
+        ansible_user: "{{ bootwright_declared_ssh_user | default(ansible_user | default('')) }}"
         ansible_connection: "{{ ansible_connection | default('') }}"
-        ansible_ssh_common_args: "{{ ansible_ssh_common_args | default('') }}"
+        ansible_ssh_common_args: >-
+          {{ bootwright_declared_ssh_common_args | default(ansible_ssh_common_args | default('')) }}
     bootwright_ownership_role_field: >-
       {{ {'role': bootwright_ownership_role}
          if (bootwright_ownership_role | default('owner')) == 'reference'

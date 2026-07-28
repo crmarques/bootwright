@@ -344,12 +344,17 @@ Rules:
   credentials and the declared credentials remain the fallback. It is a
   per-invocation preference: it never enters desired state, the converge hash,
   or an install marker.
-- `--ssh-user <name>` replaces the login account for one invocation of the
-  operator-driven SSH commands — `machine rsh`/`exec` and `cluster rsh`/`exec`.
-  It is refused unless the value is a valid POSIX user name, and it is likewise
-  never recorded. It is deliberately absent from `apply` and `destroy`: a
-  converge run reaches machines over several distinct declared accounts at
-  once, and the account it uses is desired state rather than a preference.
+- `--ssh-user <name>` is accepted on the same commands and replaces the account
+  Bootwright **connects as** for that invocation — the inventory `ansible_user`,
+  the add-on hook targets, and the connection identity of the Ceph node-access
+  role. It never moves an account Bootwright creates or manages: a Ceph cluster
+  still orchestrates as `spec.ceph.cephadm.clusterSSH.user`, and a managed-OS
+  install still provisions the login `auth.provision` names. It is refused
+  unless the value is a valid POSIX user name, and is likewise never recorded.
+- Neither per-invocation flag reaches an ownership record. A record captures the
+  **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
+  reach a host that has left desired state cannot inherit one operator's account
+  or key path from the run that wrote it.
 - `spec.access.rootLogin` is the machine's OS root-login posture: `keep` (the
   default) or `revoke`. `revoke` writes
   `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,

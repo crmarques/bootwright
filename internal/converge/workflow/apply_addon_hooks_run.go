@@ -69,7 +69,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 
 	inventoryPath := filepath.Join(hookRoot, "inventory.yaml")
 	varsPath := filepath.Join(hookRoot, "vars.yaml")
-	if err := writeHookInventory(inventoryPath, targets, e.opts.PreferredIdentityFile); err != nil {
+	if err := writeHookInventory(inventoryPath, targets, e.opts.PreferredIdentityFile, e.opts.SSHUser); err != nil {
 		return nil, err
 	}
 	if err := writeWorkflowYAML(varsPath, map[string]any{}, 0o600); err != nil {
@@ -306,7 +306,7 @@ func hookTimeout(hook v1alpha1.ClusterAddonStep) time.Duration {
 	return d
 }
 
-func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityFile string) error {
+func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityFile, sshUser string) error {
 	hostsMap := map[string]any{}
 	for _, target := range targets {
 		host := map[string]any{
@@ -314,8 +314,11 @@ func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityF
 			"bootwright_host_name":    target.label,
 			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath, target.passwordPath != "", preferredIdentityFile)),
 		}
-		if target.user != "" {
-			host["ansible_user"] = target.user
+		if user := target.user; sshUser != "" || user != "" {
+			if sshUser != "" {
+				user = sshUser
+			}
+			host["ansible_user"] = user
 		}
 		if target.port != 0 {
 			host["ansible_port"] = target.port

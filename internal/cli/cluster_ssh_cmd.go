@@ -16,7 +16,7 @@ import (
 )
 
 func newClusterRshCmd() *cobra.Command {
-	var clusterName, node, sshUser string
+	var clusterName, node string
 	cmd := &cobra.Command{
 		Use:   "rsh --name <cluster> --node <node>",
 		Short: "Open an interactive SSH shell on a cluster node",
@@ -41,13 +41,12 @@ single-node cluster --node may be omitted. Run a single command instead with
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
-	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return failErr(2, fmt.Errorf("cluster rsh opens an interactive shell and takes no command; run one with 'cluster exec --name %s --node %s -- %s'", clusterName, node, strings.Join(args, " ")))
 		}
-		user, err := resolveSSHUser(sshUser)
+		user, err := resolveSSHUser()
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -61,7 +60,7 @@ single-node cluster --node may be omitted. Run a single command instead with
 }
 
 func newClusterExecCmd() *cobra.Command {
-	var clusterName, node, sshUser string
+	var clusterName, node string
 	cmd := &cobra.Command{
 		Use:   "exec --name <cluster> --node <node> -- <command>...",
 		Short: "Run a command on a cluster node over SSH",
@@ -81,13 +80,12 @@ interactive shell instead with 'cluster rsh'.
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
-	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return failErr(2, errors.New("cluster exec requires a command after --, e.g. 'cluster exec --name <cluster> --node <node> -- systemctl status kubelet'"))
 		}
-		user, err := resolveSSHUser(sshUser)
+		user, err := resolveSSHUser()
 		if err != nil {
 			return failErr(2, err)
 		}

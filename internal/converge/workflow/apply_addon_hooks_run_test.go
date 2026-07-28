@@ -17,7 +17,7 @@ func TestWriteHookInventoryPinsHostKeysAndKeepsConnectionsAlive(t *testing.T) {
 		keyPath:        "/runs/connection-secrets/bastion-ssh",
 		knownHostsPath: "/context/trust/ssh/known_hosts",
 	}}
-	if err := writeHookInventory(path, targets, ""); err != nil {
+	if err := writeHookInventory(path, targets, "", ""); err != nil {
 		t.Fatalf("writeHookInventory: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -38,5 +38,28 @@ func TestWriteHookInventoryPinsHostKeysAndKeepsConnectionsAlive(t *testing.T) {
 	}
 	if strings.Contains(rendered, "accept-new") {
 		t.Fatalf("hook inventory must not downgrade host-key verification to accept-new:\n%s", rendered)
+	}
+}
+
+func TestHookInventoryHonoursTheSSHUserOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "inventory.yaml")
+	targets := []hookSSHTarget{
+		{label: "bastion", inventoryName: "hook_0", address: "bastion.example.test", user: "admin"},
+		{label: "node", inventoryName: "hook_1", address: "node.example.test"},
+	}
+	if err := writeHookInventory(path, targets, "", "operator"); err != nil {
+		t.Fatalf("writeHookInventory: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read hook inventory: %v", err)
+	}
+	body := string(data)
+	if strings.Contains(body, "ansible_user: admin") {
+		t.Fatalf("declared hook user survived --ssh-user: %s", body)
+	}
+	if strings.Count(body, "ansible_user: operator") != 2 {
+		t.Fatalf("both hook targets must take the override: %s", body)
 	}
 }

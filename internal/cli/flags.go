@@ -38,7 +38,7 @@ const (
 	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
 	flagContextUsage           = "context to operate in (default: current context)"
 	flagPreferredSSHIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
-	flagSSHUserUsage           = "log in as this account instead of the one the desired state declares (default: the declared user, or the operator running bootwright when the Machine authenticates with spec.access.ssh.auth.controllerIdentity)"
+	flagSSHUserUsage           = "log in as this account when reaching machines, instead of the one the desired state declares; accounts Bootwright creates are unaffected, so a Ceph cluster still orchestrates as its spec.ceph.cephadm.clusterSSH.user"
 	flagVerboseUsage           = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 
@@ -77,18 +77,13 @@ func addVerboseFlag(cmd *cobra.Command, p *bool) {
 	cmd.Flags().BoolVarP(p, "verbose", "v", false, flagVerboseUsage)
 }
 
-func addSSHUserFlag(cmd *cobra.Command, p *string) {
-	cmd.Flags().StringVar(p, "ssh-user", "", flagSSHUserUsage)
-	registerFlagCompletion(cmd, "ssh-user", nil)
-}
-
-func resolveSSHUser(raw string) (string, error) {
-	user := strings.TrimSpace(raw)
+func resolveSSHUser() (string, error) {
+	user := strings.TrimSpace(sshUserOverride)
 	if user == "" {
 		return "", nil
 	}
 	if !v1alpha1.ValidPOSIXUserName(user) {
-		return "", fmt.Errorf("--ssh-user %q is not a valid POSIX user name (lowercase letter or underscore, then lowercase letters, digits, underscore or dash, at most 32 chars)", raw)
+		return "", fmt.Errorf("--ssh-user %q is not a valid POSIX user name (lowercase letter or underscore, then lowercase letters, digits, underscore or dash, at most 32 chars)", sshUserOverride)
 	}
 	return user, nil
 }

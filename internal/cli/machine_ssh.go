@@ -14,7 +14,7 @@ import (
 )
 
 func newMachineRshCmd() *cobra.Command {
-	var name, sshUser string
+	name := ""
 	cmd := &cobra.Command{
 		Use:   "rsh --name <machine>",
 		Short: "Open an interactive SSH shell on a declared Machine",
@@ -35,19 +35,18 @@ private key, and the context host-key trust store recorded by
 	cmd.Flags().StringVar(&name, "name", "", "Machine name to connect to (required)")
 	_ = cmd.MarkFlagRequired("name")
 	registerMachineNameCompletion(cmd)
-	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return failErr(2, fmt.Errorf("machine rsh opens an interactive shell and takes no command; run one with 'machine exec --name %s -- %s'", name, strings.Join(args, " ")))
 		}
-		return runSSHToMachine(cmd.Context(), cf, name, sshUser, nil)
+		return runSSHToMachine(cmd.Context(), cf, name, nil)
 	}
 	return cmd
 }
 
 func newMachineExecCmd() *cobra.Command {
-	var name, sshUser string
+	name := ""
 	cmd := &cobra.Command{
 		Use:   "exec --name <machine> -- <command>...",
 		Short: "Run a command on a declared Machine over SSH",
@@ -67,19 +66,18 @@ instead with 'machine rsh'.
 	cmd.Flags().StringVar(&name, "name", "", "Machine name to run the command on (required)")
 	_ = cmd.MarkFlagRequired("name")
 	registerMachineNameCompletion(cmd)
-	addSSHUserFlag(cmd, &sshUser)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return failErr(2, errors.New("machine exec requires a command after --, e.g. 'machine exec --name <machine> -- systemctl status ceph.target'"))
 		}
-		return runSSHToMachine(cmd.Context(), cf, name, sshUser, args)
+		return runSSHToMachine(cmd.Context(), cf, name, args)
 	}
 	return cmd
 }
 
-func runSSHToMachine(commandCtx context.Context, cf *commonFlags, machineName, sshUser string, cmdArgs []string) error {
-	user, err := resolveSSHUser(sshUser)
+func runSSHToMachine(commandCtx context.Context, cf *commonFlags, machineName string, cmdArgs []string) error {
+	user, err := resolveSSHUser()
 	if err != nil {
 		return failErr(2, err)
 	}

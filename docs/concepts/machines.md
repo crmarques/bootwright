@@ -258,20 +258,24 @@ permissions, or the command refuses before connecting.
 
 #### Logging in as a different account
 
-`--ssh-user <name>` is available on the four commands that open an SSH session
-for you — `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` — and
-replaces the login account for that one invocation:
+`--ssh-user <name>` is available on the same commands and replaces the account
+Bootwright **connects as**, for that one invocation. The two flags are usually
+used together — a key you had to name generally belongs to an account you have
+to name too:
 
 ```console
 $ bootwright machine exec --name ceph-dc3-arbiter --ssh-user operator -- id
+$ bootwright apply --machines ceph-dc3-arbiter --ssh-user operator \
+    --preferred-ssh-id-key ~/.ssh/id_ed25519 --yes
 ```
 
-It is deliberately not on `apply` or `destroy`. Converging a fleet reaches
-bastions, machines being installed, Ceph nodes, and container nodes over
-different declared accounts at once, so a single flat override there could only
-be wrong; the account those runs use is desired state, not a preference. Like
-`--preferred-ssh-id-key`, the value never enters desired state, and it is
-refused unless it is a valid POSIX user name.
+It does not move an account Bootwright **creates or manages**. A Ceph cluster
+still orchestrates as its `clusterSSH.user`, and a managed-OS install still
+provisions the login `auth.provision` names — so on a Ceph node the override
+changes the identity Bootwright logs in with and leaves the `cephadm` account it
+provisions there alone. Like `--preferred-ssh-id-key`, the value never enters
+desired state or an ownership record, and it is refused unless it is a valid
+POSIX user name.
 
 #### Login identity
 

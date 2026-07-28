@@ -6,16 +6,24 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-var preferredIdentityFile string
+var (
+	preferredIdentityFile string
+	sshUser               string
+)
 
 func SetPreferredIdentityFile(path string) {
 	preferredIdentityFile = path
+}
+
+func SetSSHUser(user string) {
+	sshUser = user
 }
 
 func runOptionsForContext(ctx workspace.Context, clustersDir, executable string, state v1alpha1.State) workflow.RunOptions {
 	return workflow.RunOptions{
 		State:                 state,
 		PreferredIdentityFile: preferredIdentityFile,
+		SSHUser:               sshUser,
 		RenderedDir:           ctx.RenderedDir,
 		ClustersDir:           clustersDir,
 		RunsDir:               ctx.RunsDir,

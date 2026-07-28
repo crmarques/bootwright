@@ -40,6 +40,7 @@ type RunOptions struct {
 	ContextName                string
 	SecretsDir                 string
 	PreferredIdentityFile      string
+	SSHUser                    string
 	ManagedServicesDir         string
 	ProviderStateDir           string
 	OwnershipDir               string
@@ -148,6 +149,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		TrustSecretsDir:             opts.SecretsDir,
 		KubeVirtHostKubeconfigPaths: kubeVirtHostKubeconfigPaths,
 		PreferredIdentityFile:       opts.PreferredIdentityFile,
+		SSHUser:                     opts.SSHUser,
 	}
 	perTask := strings.TrimSpace(opts.RenderDir) != ""
 	var result render.Result

@@ -36,9 +36,11 @@ touch root-owned state:
   and subcommands, a bogus `apply`/`destroy` `--stage`/`--through` value
   (validated against `converge.ApplyStageNames`, plus the `end` sentinel
   for `--through` via `converge.ApplyThroughNames`), a `validate`
-  invocation with an unknown flag or stray positional, and any
+  invocation with an unknown flag or stray positional, any
   `--name`-targeted command missing a non-empty `--name` value
-  (`argsHaveNameValue`).
+  (`argsHaveNameValue`), and any invocation whose global `--ssh-user`
+  value is missing or is not a valid POSIX user name
+  (`argsHaveUnusableSSHUser`).
 - `destroy` with an omitted `--stage` is a full-lifecycle destroy of the whole
   context or of the roots selected by `--clusters`, and must escalate
   BEFORE context resolution — a non-root run would fail to `lstat` the

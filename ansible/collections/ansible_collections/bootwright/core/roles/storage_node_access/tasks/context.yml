@@ -41,7 +41,17 @@
           'ssh'
         ]
         + (
-          ['-i', bootwright_node_access.installPrivateKeyPath, '-o', 'IdentitiesOnly=yes']
+          ['-i', bootwright_node_access.preferredIdentityPath]
+          if (bootwright_node_access.preferredIdentityPath | default('') | length) > 0
+          else []
+        )
+        + (
+          ['-i', bootwright_node_access.installPrivateKeyPath]
+          if (bootwright_node_access.installPrivateKeyPath | default('') | length) > 0
+          else []
+        )
+        + (
+          ['-o', 'IdentitiesOnly=yes']
           if (bootwright_node_access.installPrivateKeyPath | default('') | length) > 0
           else []
         )
