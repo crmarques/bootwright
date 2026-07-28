@@ -421,6 +421,12 @@ spec:
       install:
         - cephadm
         - firewalld
+    repositories:
+      configure:
+        - id: ceph-7-tools
+          displayName: Ceph 7 Tools
+          baseURL: https://mirror.example.com/ceph/7/tools
+          gpgKeyURL: https://mirror.example.com/RPM-GPG-KEY-redhat-release
     services:
       enabled:
         - sshd
@@ -462,9 +468,39 @@ Rules:
   referenced `MachineImage.spec.bootMedia`, and must declare an
   `artifactServerEndpoint.endpointRef` that resolves to an HTTP endpoint.
 - `packageSource` affects only the Anaconda installation transaction.
-  Bootwright does not render persistent repo files or `repo --install` from it;
-  future updates use the installed system's normal Red Hat/RHSM repositories or
-  later provisioning roles.
+  Bootwright does not render persistent repo files or `repo --install` from it.
+  Repositories the installed system keeps are declared separately, under
+  `customizations.repositories`, so install-time content and day-2 content stay
+  independently selectable.
+- `customizations.repositories` declares the repositories the installed machine
+  carries. Both arms are optional and may be combined; the block is applied twice
+  — written by the Kickstart `%post` at install time, then reconciled on every
+  apply by the machines-phase `repositories.<cluster>` task, so editing it does
+  not require a reinstall.
+- `customizations.repositories.configure[]` writes one yum repo file per entry to
+  `/etc/yum.repos.d/bootwright-<id>.repo`. `id` names both the repo section and
+  the file, so it must not contain whitespace, quotes, or slashes, and must be
+  unique within the profile. `baseURL` is required and must be `http://` or
+  `https://`. `displayName` defaults to `id`. `enabled` and `gpgCheck` default to
+  `true`. `gpgKeyURL` must be `http://`, `https://`, or `file:///`, and is
+  required whenever `gpgCheck` is left enabled — a signed repo with no key is a
+  repo that cannot install anything, so it is rejected at validation rather than
+  at first `dnf` call. A `configure[]` entry whose `baseURL` is not covered by the
+  effective no_proxy gets the machine-OS-install proxy, matching how Anaconda's
+  own `repo` directives are proxied.
+- `customizations.repositories.subscription` selects entitled repositories with
+  `subscription-manager`. `enable[]` names concrete repository ids (`*` is
+  rejected — it would mean "enable everything"), `disable[]` accepts ids and `*`.
+  Listing `*` in `disable[]` alongside a non-empty `enable[]` renders as a purge:
+  exactly the enabled set survives. An id in both lists is a validation error.
+  The block requires the node to actually be registered — the profile must set
+  `spec.subscription.entitlementRef` or
+  `spec.installer.anaconda.packageSource.fromSubscription` — otherwise it is
+  rejected with a pointer to `configure[]`. When registration happens during the
+  install (`fromSubscription`), the `%post` also selects the repositories; when
+  registration is day-2 (`spec.subscription`), `%post` skips the block and only
+  the machines-phase task applies it, because `subscription-manager` has no
+  identity yet inside the installer chroot.
 - `spec.subscription.entitlementRef`, when set, must resolve to a `redhat-rhel`
   `Entitlement` (any other type is rejected). When that entitlement's
   `rhsm.management` is `managed` it drives the machines-phase
@@ -2109,8 +2145,8 @@ Rules:
 - `--converge-drifted`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
-  provisioning, cluster add-ons, machine RHSM registration, and
-  provisioning-playbook re-runs — it is an idempotent, non-destructive
+  provisioning, cluster add-ons, machine RHSM registration, machine repository
+  reconciliation, and provisioning-playbook re-runs — it is an idempotent, non-destructive
   re-apply that touches no data, OS, or VM. For every
   other kind — a managed-OS or substrate machine (reinstall; disks wiped) and a
   container or storage cluster (reinstall / `cephadm rm-cluster --zap-osds`) — it

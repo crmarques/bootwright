@@ -612,6 +612,14 @@ through Anaconda.
 | `spec.customizations.packages.install[]` | No | None | Packages to install. |
 | `spec.customizations.packages.excludeDocs` | No | `false` | Render Kickstart `--excludedocs`. |
 | `spec.customizations.packages.installWeakDeps` | No | OS default | Tri-state weak dependency setting. |
+| `spec.customizations.repositories.configure[].id` | Yes (per entry) | None | Names the yum repo section and the file `/etc/yum.repos.d/bootwright-<id>.repo`. No whitespace, quotes, or slashes; unique within the profile. |
+| `spec.customizations.repositories.configure[].displayName` | No | Falls back to `id` | Human-readable `name=` in the repo file. |
+| `spec.customizations.repositories.configure[].baseURL` | Yes (per entry) | None | Repository base URL; must be `http://` or `https://`. |
+| `spec.customizations.repositories.configure[].enabled` | No | `true` | Whether the repo is active. `false` configures it without turning it on. |
+| `spec.customizations.repositories.configure[].gpgCheck` | No | `true` | Signature enforcement. |
+| `spec.customizations.repositories.configure[].gpgKeyURL` | No (Yes when `gpgCheck`) | None | `http://`, `https://`, or `file:///` GPG key. Required unless `gpgCheck: false`. |
+| `spec.customizations.repositories.subscription.enable[]` | No | None | Entitled repository ids to enable via `subscription-manager`. `*` is rejected here. |
+| `spec.customizations.repositories.subscription.disable[]` | No | None | Entitled repository ids to disable. `*` means "all others" and, with a non-empty `enable[]`, renders as a purge. |
 | `spec.customizations.services.enabled[]` | No | None | Services to enable. |
 | `spec.customizations.services.disabled[]` | No | None | Services to disable. |
 | `spec.customizations.security.selinux.mode` | No | OS default | `enforcing`, `permissive`, or `disabled`. |
@@ -627,6 +635,69 @@ through Anaconda.
       `customizations.services.enabled`.
     - `customizations.security.fips.enabled: true` is supported only when
       `os.family` is `rhel` (compared case-insensitively).
+    - `customizations.repositories.subscription` requires the node to be
+      registered — set `spec.subscription.entitlementRef` or
+      `installer.anaconda.packageSource.fromSubscription`. Without one, use
+      `customizations.repositories.configure` instead.
+
+### Repositories on the installed machine
+
+`installer.anaconda.packageSource` feeds the Anaconda transaction only; nothing
+it declares survives into `/etc/yum.repos.d`. Repositories the running machine
+keeps are declared under `customizations.repositories`, which is applied in two
+places: the Kickstart `%post` writes it at install time, and the machines-phase
+`repositories.<cluster>` task reconciles it on every `bootwright apply`. Editing
+the block therefore converges without a reinstall.
+
+The two arms are complementary — use `configure` for content you host and
+`subscription` for content an entitlement grants:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+
+spec:
+  os:
+    family: rhel
+    version: "9.4"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-boot-iso
+      packageSource:
+        fromSubscription:
+          entitlementRef: redhat-rhel-satellite
+  customizations:
+    services:
+      enabled:
+        - sshd
+    repositories:
+      subscription:
+        enable:
+          - rhel-9-for-x86_64-baseos-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+        disable:
+          - "*"
+      configure:
+        - id: vendor-raid-tools
+          displayName: Vendor RAID utilities
+          baseURL: https://mirror.example.com/vendor/rhel9
+          gpgCheck: false
+```
+
+`disable: ["*"]` next to a non-empty `enable[]` renders as a purge, so exactly
+the two listed RHEL repositories stay on. A `configure[]` entry whose `baseURL`
+is not covered by the effective no_proxy inherits the machine-OS-install proxy,
+the same rule Anaconda's own `repo` directives follow.
+
+!!! note "When `%post` skips the subscription block"
+    `subscription-manager` has no identity inside the installer chroot until the
+    node registers. With `packageSource.fromSubscription` the Kickstart `rhsm`
+    directive registers during install, so `%post` selects the repositories
+    itself. With `spec.subscription` the node registers day-2, so `%post` skips
+    the block and the machines-phase task applies it after registration.
 
 See [The desired-state model](index.md) for the field-table and union
 conventions, [Infrastructure](infrastructure.md) for providers and networks, and
