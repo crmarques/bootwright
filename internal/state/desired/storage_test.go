@@ -1846,6 +1846,7 @@ func storageValidationState() v1alpha1.State {
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+						ClusterSSH: v1alpha1.StorageCephadmSSHSpec{User: v1alpha1.RootSSHUser},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							Node: "ceph-dc1-0",
 						},
