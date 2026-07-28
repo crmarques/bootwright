@@ -391,7 +391,7 @@ sudo visudo -cf /etc/sudoers.d/60-bootwright-cephadm.tmp \
 Finally record the node's host key so the probe pins it:
 
 ```sh
-bootwright machine trust ceph-arbiter
+bootwright machine trust --machines ceph-arbiter
 ```
 
 Apply then reconciles this node exactly like the installed ones. If the account
