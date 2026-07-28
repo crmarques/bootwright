@@ -41,3 +41,9 @@ module JSON.
 **Remote-host fix:** Keep shipped Ansible config at
 `[ssh_connection] pipelining = False` so remote `become` tasks can use the SSH
 TTY behavior Ansible applies for sudo.
+
+**Storage node scope:** the Ceph orchestration-account path prints the identical
+error string and is **not** covered here — `storage_node_access` hand-builds its
+own `ssh` argv, so no connection plugin and no `pipelining` setting is in its
+path. See
+[ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md).

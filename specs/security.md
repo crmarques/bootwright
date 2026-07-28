@@ -159,6 +159,16 @@ access public key in its `authorized_keys`, and a per-user sudoers drop-in at
 `/etc/sudoers.d/60-bootwright-<user>` containing exactly
 `Defaults:<user> !requiretty` and `<user> ALL=(ALL) NOPASSWD: ALL`.
 
+That drop-in is necessary but not sufficient, so Bootwright proves the grant
+rather than assuming it. It is evaluated only if the node reads `/etc/sudoers`
+and its `@includedir`, and only if nothing later overrides it: within the
+generic `Defaults` tier a later-sorting file in the same directory wins, and a
+`Defaults requiretty` placed after `@includedir` in `/etc/sudoers` cannot be
+overridden by any drop-in. When an LDAP or SSSD `cn=defaults` carries
+`ignore_local_sudoers`, sudo skips `/etc/sudoers` and every drop-in outright;
+the grant must then come from the directory, and Bootwright fails closed rather
+than proceeding on a file the node never reads.
+
 The privilege grant is unrestricted by necessity and the security claim is
 correspondingly narrow. cephadm's manager `sudo`-wraps every remote command it
 issues when its SSH user is not `root`, and cephadm's own helper writes the
@@ -183,8 +193,19 @@ it as `clusterSSH.keyRef` is refused.
 Revocation is ordered verify-before-revoke: the orchestration account must be
 proved to answer `sudo -n true` on every topology node before
 `PermitRootLogin no` is written on any of them, and re-proved after the `sshd`
-reload. A node whose account does not answer stops the run with root still
-reachable.
+reload. That proof is made on a terminal-less SSH channel, deliberately: it is
+the exact channel cephadm's manager issues its `sudo`-wrapped commands over, so
+a node whose policy reaches the account only from an interactive session cannot
+be orchestrated and must fail. A node whose account does not answer stops the
+run with root still reachable.
+
+A pseudo-terminal is therefore asymmetric by rule. It is permitted for the
+identity Bootwright **borrows** — the operator's out-of-band install account,
+whose ability to run one privileged command is probed differentially, without a
+terminal first and once more with one, before any mutation — and forbidden for
+the identity Bootwright **creates** and hands to cephadm, whose `sudo -n true`
+acceptance test must never gain one. Bootwright writes sudo policy only for the
+account it owns and never relaxes tty policy for the operator's account.
 
 Node access state is recorded on the machine at
 `/etc/bootwright/access-marker.json` with mode `0644`. It is non-secret —

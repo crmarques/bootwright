@@ -65,6 +65,14 @@ the kickstart's `wheel` membership. `storage_node_access` must therefore install
 mid-role and strands the node. The order is harmless in the retrofit shape,
 where `useradd` never put the account in `wheel`.
 
+The full role order is `context.yml → probe.yml → privilege.yml → account.yml →
+sudoers.yml → authorize.yml → verify.yml → revoke.yml|restore.yml → marker.yml`
+(`tasks/main.yml:5-35`). `privilege.yml` is the step that precedes `account.yml`:
+it proves the *borrowed* install identity can escalate before anything is
+created, because the `!requiretty` exemption `sudoers.yml` writes covers only the
+created account and is itself inside the window it would fix. See
+[ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md).
+
 ## 2. The `User` line in the cephadm ssh_config needs a two-space indent
 
 **Root cause:** cephadm's mgr module rewrites the SSH config it holds for the
@@ -104,7 +112,15 @@ orchestrator's remote command set is arbitrary and changes between releases.
 cannot orchestrate a cephadm cluster. Bootwright therefore writes
 `/etc/sudoers.d/60-bootwright-<user>` with `Defaults:<user> !requiretty` and
 `<user> ALL=(ALL) NOPASSWD: ALL`, scoping only the `requiretty` relaxation to
-that principal. Do not propose narrowing the sudoers rule; do not describe the
+that principal. Writing that drop-in does **not** make the grant effective: a
+later-sorting file in `/etc/sudoers.d`, a `Defaults requiretty` placed after
+`@includedir` in `/etc/sudoers`, or an LDAP/SSSD `cn=defaults` carrying
+`ignore_local_sudoers` (which skips `/etc/sudoers` and every drop-in outright)
+each defeat it, so Bootwright proves the grant instead of assuming it. The
+exemption also covers only the account Bootwright *creates*, never the install
+identity it *borrows* to create it — that window is
+[ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md).
+Do not propose narrowing the sudoers rule; do not describe the
 resulting posture as privilege separation. The honest claim, and the one the
 specs and docs make, is: no standing root SSH, a named auditable principal,
 key-only auth, and a cluster credential revocable without touching root.
@@ -121,7 +137,12 @@ key-only auth, and a cluster credential revocable without touching root.
 - Ordering is verify-before-revoke: the account must answer `sudo -n true` on
   every topology node before `PermitRootLogin no` is written anywhere, and again
   after the `sshd` reload (which is itself gated on `sshd -t`). Never reorder
-  these; a failed revoke with root already gone is unrecoverable in band.
+  these; a failed revoke with root already gone is unrecoverable in band. Those
+  three probes (`probe.yml:4`, `verify.yml:4`, `revoke.yml:82`) run on the base
+  pty-free `bootwright_node_access_ssh_argv` and **must never gain `-tt`** — they
+  are the acceptance test for the terminal-less channel cephadm's own manager
+  uses, so proving the account under a terminal certifies a cluster that cannot
+  be orchestrated.
 - Day-2 the user is reconciled with `ceph cephadm get-user` / `set-user` on an
   already-bootstrapped cluster — not by re-bootstrapping.
 - Node access state is recorded at `/etc/bootwright/access-marker.json`, mode

@@ -248,6 +248,54 @@ Alternatively serve a BMC-trusted certificate (then declare
 `InfraComponent.spec.artifactServer.tls.minVersion`/`tls.ciphers` (see
 [Artifact Server](concepts/infrastructure.md#artifact-server)).
 
+## A Ceph node refuses passwordless sudo
+
+Two different refusals on a Ceph topology node read alike. Both leave the node
+otherwise untouched and both are resolved by fixing the node and re-applying.
+
+**Before the account is created**, apply reports that the login it connected
+with "cannot run a privileged command", and no account was created, no sudoers
+file written, root SSH untouched. Bootwright proves it can escalate with the
+login it is borrowing — `bootwright` on a node the cluster installs, the
+machine's own `access.ssh` identity on an `os.provided: true` node — before it
+creates anything. A `sudo: sorry, you must have a tty to run sudo` policy on
+that login is **not** the cause and needs no change: Bootwright retries with a
+terminal and continues. The refusal means neither attempt worked.
+
+- **`rc=255` with a failed PTY allocation** — `sshd` sets `PermitTTY no` for
+  that account. Set `PermitTTY yes` in an `/etc/ssh/sshd_config.d/` drop-in and
+  reload `sshd`.
+- **Any other failure** — the login has no passwordless sudo. Grant it out of
+  band; Bootwright writes sudo policy only for the account it owns.
+
+**After the account is created**, apply reports that the node "did not accept
+`<user>@<address>` with passwordless sudo after the account was provisioned",
+with root SSH not yet revoked and still reachable. That proof runs
+`sudo -n true` on a terminal-less channel deliberately — it is how cephadm's
+manager runs — so a policy that reaches the account only from an interactive
+session fails here by design. If `/etc/sudoers.d/60-bootwright-<user>` is
+present, 0440 `root:root`, and correct, the node is not reading it:
+
+- A **later-sorting file** in `/etc/sudoers.d` overrides it within the generic
+  `Defaults` tier.
+- A **`Defaults requiretty` after `@includedir`** in `/etc/sudoers` cannot be
+  overridden by any drop-in.
+- An **LDAP or SSSD `cn=defaults` carrying `ignore_local_sudoers`** makes sudo
+  skip `/etc/sudoers` and every drop-in outright. There is no on-node fix — the
+  grant has to come from the directory.
+
+Two commands tell them apart: the `sudoers:` line in `/etc/nsswitch.conf` shows
+whether policy comes from a directory at all, and `sudo -ll -U <user>` shows
+which policy actually wins.
+
+```bash
+grep '^sudoers:' /etc/nsswitch.conf
+sudo -ll -U cephadm
+```
+
+See [Storage → The Ceph node login](concepts/storage.md#the-ceph-node-login) and
+[What apply does, in order](concepts/storage.md#what-apply-does-in-order).
+
 ## Install never completes
 
 An agent-based OpenShift/OKD install (or a Ceph bootstrap) that boots the nodes

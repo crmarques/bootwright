@@ -436,3 +436,48 @@ learned; this file records what it still owes.
   baseline — in the existing example or a second one — and promote those two
   scenarios into the matrix.
 - Related: [apply-destroy-authorization-guards.md](apply-destroy-authorization-guards.md)
+
+## B-038 — The node sudoers drop-in sorts before hardening drop-ins that override it
+- Status: open
+- Area: ceph / node-access / sudoers
+- Origin: node-access requiretty fix 2026-07-28
+- Severity: medium
+- Problem: within sudo's generic `Defaults` tier a later file in
+  `/etc/sudoers.d` overrides an earlier one, so the grant Bootwright writes at
+  `/etc/sudoers.d/60-bootwright-<user>` loses to any site hardening drop-in
+  sorting after `60-`. A later-sorting prefix would win by construction, but the
+  `60-` constant is pinned across `api/v1alpha1/types.go:87`
+  (`NodeAccessSudoersPrefix`), ADR 0019:102, ADR 0024:148, ADR 0027:56,
+  `specs/security.md:159`, `specs/state-model.md:323,578,1013`, and
+  `machine_os_install_anaconda/templates/ks.cfg.j2:208`, and renaming would
+  strand a privileged `60-` file on every already-provisioned node with no
+  reconciler that removes it. Deferred rather than dropped because the failure is
+  loud, not silent: `storage_node_access/tasks/verify.yml:11-36` refuses before
+  any root revocation and names this as the first of three causes.
+- Exit: either rename the prefix to a later-sorting one together with a
+  migration that removes the old file on reconcile, or record in
+  ceph-node-access-privileged-channel.md that the fail-closed refusal is the
+  accepted answer and the prefix stays.
+- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)
+
+## B-039 — `machine exec` / `cluster exec` allocate no terminal, so a remote `sudo` under requiretty fails
+- Status: open
+- Area: cli / ssh
+- Origin: node-access requiretty fix 2026-07-28
+- Severity: low
+- Problem: `buildSSHInvocation` (`internal/cli/ssh_client.go:170-220`) appends the
+  operator's command as arguments and never passes `-t`, so ssh allocates no
+  terminal. On a node whose sudoers sets `requiretty`,
+  `bootwright machine exec --name <m> -- sudo …` fails with
+  `sudo: sorry, you must have a tty to run sudo` even though apply now handles the
+  same node. The fix is not simply to add `-t`: `machine exec` is documented as
+  returning the command's output (`machine_ssh.go:52-58`), and a terminal injects
+  CR into that output via `ONLCR`, breaking redirection and scripted use. The
+  conventional guard is to allocate only when stdin *and* stdout are both
+  terminals, which makes the behavior depend on how the command is invoked.
+  Deferred rather than dropped because `machine rsh` already allocates a terminal
+  and is the working path today.
+- Exit: either allocate a terminal when stdin and stdout are both character
+  devices and pin it with a test, or add an explicit flag, or record that `rsh`
+  is the supported answer and document it in troubleshooting.
+- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)

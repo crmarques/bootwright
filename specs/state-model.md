@@ -1011,8 +1011,16 @@ Rules:
   on every topology node — locked password, no `wheel` membership, the machine
   access public key authorized, and a per-user sudoers drop-in at
   `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
-  and `<user> ALL=(ALL) NOPASSWD: ALL`. The name may equal that node's
-  `access.ssh.user`, which declares that the account is the machine's
+  and `<user> ALL=(ALL) NOPASSWD: ALL`. The drop-in is necessary but not
+  sufficient and is proved rather than assumed: within the generic `Defaults`
+  tier a later-sorting file in the same directory overrides it, a
+  `Defaults requiretty` placed after `@includedir` in `/etc/sudoers` cannot be
+  overridden by any drop-in, and an LDAP or SSSD `cn=defaults` carrying
+  `ignore_local_sudoers` makes sudo skip `/etc/sudoers` and every drop-in
+  outright. Apply proves the account answers `sudo -n true` over a terminal-less
+  channel — the one cephadm's manager uses — before any root revocation
+  (`security.md`, Node Login Identity and Privilege). The name may equal that
+  node's `access.ssh.user`, which declares that the account is the machine's
   install-window identity and already exists; Bootwright then reconciles the
   account instead of creating it. A `root` resolution is rejected when any
   topology node's `access.ssh.user` is non-root.

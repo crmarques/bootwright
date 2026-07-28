@@ -274,9 +274,10 @@ node never accepts a root login at any point.** See
 The cluster's `cephadm` account is layered on top of that: on apply Bootwright
 connects as `bootwright`, creates `cephadm`, authorizes the cluster key for it,
 writes `/etc/sudoers.d/60-bootwright-cephadm`, and proves the account answers
-`sudo -n true` before cephadm uses it. The two identities stay distinct — the
-substrate login is Bootwright's, the orchestration login is the cluster's — and
-`clusterSSH.keyRef` must therefore name a different `Secret` from the fleet key.
+`sudo -n true`, without a terminal, before cephadm uses it. The two identities
+stay distinct — the substrate login is Bootwright's, the orchestration login is
+the cluster's — and `clusterSSH.keyRef` must therefore name a different `Secret`
+from the fleet key.
 
 ### Nodes the cluster does not install
 
@@ -314,21 +315,28 @@ account instead.
 
 On apply Bootwright connects with that identity, creates `cephadm`, authorizes
 the cluster key for it, writes the sudoers drop-in, and proves the account
-answers `sudo -n true` before cephadm uses it. Because the machine's own login
-is not the cluster's, `rootLogin` stays `keep` unless you set it — hardening a
-machine whose OS you own is your decision, not the cluster's.
+answers `sudo -n true`, without a terminal, before cephadm uses it — after
+proving it can escalate with the identity you gave it. Because the machine's own
+login is not the cluster's, `rootLogin` stays `keep` unless you set it —
+hardening a machine whose OS you own is your decision, not the cluster's.
 
 ### What apply does, in order
 
-1. Creates the orchestration account on every topology node that lacks it —
+1. Proves it can run one privileged command as the login it is borrowing —
+   `bootwright` on a node the cluster installs, the machine's own `access.ssh`
+   identity on an `os.provided: true` node — retrying once with a terminal if
+   the node refuses `sudo` without one. Nothing is created until that succeeds.
+2. Creates the orchestration account on every topology node that lacks it —
    locked password, not in `wheel`, the cluster public key in its
    `authorized_keys`, and a sudoers drop-in at
    `/etc/sudoers.d/60-bootwright-<user>`.
-2. Proves the account answers `sudo -n true` on **every** node.
-3. For a node whose `access.rootLogin` is `revoke`, writes
+3. Proves the account answers `sudo -n true` on **every** node, and does so
+   **without** a terminal on purpose: that is the channel cephadm's manager
+   issues its commands over.
+4. For a node whose `access.rootLogin` is `revoke`, writes
    `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,
    checks it with `sshd -t`, reloads `sshd`, and re-proves the account.
-4. Bootstraps or reconciles cephadm with `--ssh-user <user>`
+5. Bootstraps or reconciles cephadm with `--ssh-user <user>`
    (`ceph cephadm set-user` on an already-bootstrapped cluster) and records the
    posture at `/etc/bootwright/access-marker.json`.
 
@@ -338,6 +346,17 @@ stops the run with root still reachable.
 To reverse a revoke, set `rootLogin: keep` and re-apply: the sshd drop-in is
 removed and root is re-authorized. The orchestration account is not deleted by
 that — change `clusterSSH.user` to `root` as a separate, deliberate step.
+
+!!! note "Nodes whose sudoers sets `requiretty`"
+    A node that refuses `sudo` without a controlling terminal needs no operator
+    action and no sudoers change. Bootwright allocates a terminal for its own
+    bootstrap connection while it provisions the account, and touches nothing
+    about your login's sudo policy. The terminal is asymmetric by design:
+    allowed for the identity Bootwright *borrows*, never for the `cephadm`
+    account it *creates*, whose `sudo -n true` proof stays terminal-less because
+    cephadm's manager runs that way. That is also why the terminal is probed for
+    rather than always used — a node with `PermitTTY no` in `sshd` answers
+    without one and would fail with one.
 
 !!! note "Changing `clusterSSH.user` on a live cluster"
     The orchestration account is not the node's install-window identity — that
