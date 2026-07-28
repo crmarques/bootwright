@@ -191,6 +191,12 @@ declarative way to park a playbook without deleting the object.
 - **`hostGroups`** — raw inventory group names, for anything the two above do not
   cover.
 
+Whatever the target resolves to, a run never reaches beyond its own scope:
+`apply --machines <names>` narrows the playbook to the hosts of the selected
+machines (plus the shared service hosts that run's fabric phase configures), and
+skips the playbook entirely when the target contains none of them — the same way
+the built-in machines-phase work is narrowed.
+
 A playbook may **not** target the bootwright controller / localhost
 (`localhost`, `bootwright_ocp_hosts`, `bootwright_controller_hosts`): it would run
 operator code as root over every context's secrets. Secrets named in

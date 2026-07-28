@@ -165,6 +165,11 @@ bootwright apply --machines dc1-master-1 --yes
 bootwright destroy --machines dc1-master-1 --force
 ```
 
+The narrowing covers operator-supplied [playbooks](../concepts/playbooks.md) too:
+a `Playbook` anchored at `fabric` or `machines` runs against the selected
+machines' hosts only, and is skipped when its target resolves to none of them —
+so a run for one node never reaches a sibling that happens to be down.
+
 A machine `destroy` tears down only that machine's substrate and never removes
 shared per-cluster networking or services the survivors still use; destroying a
 node of an installed cluster requires `--force`.

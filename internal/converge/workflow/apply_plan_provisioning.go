@@ -330,7 +330,73 @@ func resolveProvisioningTarget(state v1alpha1.State, target ApplyTarget, p v1alp
 			"playbook/%s spec.target resolves to no hosts; refusing to run it with an empty --limit, which would target every host in the fleet",
 			p.Metadata.Name)
 	}
+	if target.MachineScoped() {
+		tokens, orderClusters = narrowProvisioningTargetToMachines(state, target, tokens, orderClusters)
+		if len(tokens) == 0 {
+			return "", nil, false, false, nil
+		}
+	}
 	return strings.Join(tokens, ":"), orderClusters, fleetWide, true, nil
+}
+
+func narrowProvisioningTargetToMachines(state v1alpha1.State, target ApplyTarget, tokens, orderClusters []string) ([]string, []string) {
+	hostMachines := provisioningInventoryHostMachines(state)
+	groups := render.HostGroupMembers(state)
+	var hosts []string
+	seenHost := map[string]bool{}
+	selectedMachines := map[string]bool{}
+	for _, host := range limitTargetHosts(strings.Join(tokens, ":"), groups) {
+		if seenHost[host] || !provisioningHostInScope(target, host, hostMachines[host]) {
+			continue
+		}
+		seenHost[host] = true
+		if machine := hostMachines[host]; machine != "" {
+			selectedMachines[machine] = true
+		}
+		hosts = append(hosts, host)
+	}
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+	return hosts, provisioningClustersOwningMachines(state, orderClusters, selectedMachines)
+}
+
+func provisioningHostInScope(target ApplyTarget, host, machine string) bool {
+	if machine != "" && target.MachineIncluded(machine) {
+		return true
+	}
+	return target.FabricHosts != nil && target.FabricHosts[host]
+}
+
+func provisioningInventoryHostMachines(state v1alpha1.State) map[string]string {
+	out := map[string]string{}
+	for _, machine := range state.Machines {
+		name := machine.Metadata.Name
+		out[name] = name
+		for _, host := range render.MachineInventoryHosts(state, name) {
+			out[host] = name
+		}
+	}
+	return out
+}
+
+func provisioningClustersOwningMachines(state v1alpha1.State, clusters []string, machines map[string]bool) []string {
+	if len(clusters) == 0 {
+		return nil
+	}
+	owning := map[string]bool{}
+	for machine := range machines {
+		for _, owner := range machineOwningClusters(state, machine) {
+			owning[owner] = true
+		}
+	}
+	out := make([]string, 0, len(clusters))
+	for _, name := range clusters {
+		if owning[name] {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func machineOwningClusters(state v1alpha1.State, machine string) []string {
