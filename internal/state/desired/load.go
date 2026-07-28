@@ -166,7 +166,7 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
 		len(state.ClusterAddonBindings) == 0 &&
-		len(state.Playbooks) == 0 &&
+		len(state.CustomPlaybooks) == 0 &&
 		len(state.Secrets) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
@@ -431,13 +431,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ClusterAddonBindings = append(state.ClusterAddonBindings, item)
-		case v1alpha1.KindPlaybook:
-			var item v1alpha1.Playbook
+		case v1alpha1.KindCustomPlaybook:
+			var item v1alpha1.CustomPlaybook
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.Playbooks = append(state.Playbooks, item)
+			state.CustomPlaybooks = append(state.CustomPlaybooks, item)
 		case v1alpha1.KindSecret:
 			var item v1alpha1.Secret
 			if err := decodeKnown(node, &item); err != nil {
@@ -615,11 +615,11 @@ func sortState(state *v1alpha1.State) {
 		}
 		return state.ClusterAddonBindings[i].Metadata.Name < state.ClusterAddonBindings[j].Metadata.Name
 	}))
-	sort.SliceStable(state.Playbooks, sortByName(func(i, j int) bool {
-		if state.Playbooks[i].Metadata.Name == state.Playbooks[j].Metadata.Name {
-			return state.Playbooks[i].SourcePath < state.Playbooks[j].SourcePath
+	sort.SliceStable(state.CustomPlaybooks, sortByName(func(i, j int) bool {
+		if state.CustomPlaybooks[i].Metadata.Name == state.CustomPlaybooks[j].Metadata.Name {
+			return state.CustomPlaybooks[i].SourcePath < state.CustomPlaybooks[j].SourcePath
 		}
-		return state.Playbooks[i].Metadata.Name < state.Playbooks[j].Metadata.Name
+		return state.CustomPlaybooks[i].Metadata.Name < state.CustomPlaybooks[j].Metadata.Name
 	}))
 	sort.SliceStable(state.Secrets, sortByName(func(i, j int) bool {
 		if state.Secrets[i].Metadata.Name == state.Secrets[j].Metadata.Name {

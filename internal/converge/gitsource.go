@@ -20,13 +20,13 @@ type gitSourceRequest struct {
 
 func gitSourceRequests(state v1alpha1.State) []gitSourceRequest {
 	var out []gitSourceRequest
-	for _, p := range state.Playbooks {
-		if !v1alpha1.PlaybookIsEnabled(p) || !v1alpha1.PlaybookSourceIsGit(p.Spec.Source) {
+	for _, p := range state.CustomPlaybooks {
+		if !v1alpha1.CustomPlaybookIsEnabled(p) || !v1alpha1.PlaybookSourceIsGit(p.Spec.Source) {
 			continue
 		}
 		out = append(out, gitSourceRequest{
 			key:    workflow.GitSourceRootKeyForPlaybook(p.Metadata.Name),
-			owner:  "Playbook/" + p.Metadata.Name,
+			owner:  "CustomPlaybook/" + p.Metadata.Name,
 			source: *p.Spec.Source.Git,
 		})
 	}

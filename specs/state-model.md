@@ -161,7 +161,7 @@ Rules:
   Bootwright plans no registration task and never touches `rhsm.conf`; the arm
   must then carry only `management` (`organizationRef`, `activationKeyRef`,
   `satellite`, and `connectToInsights` are rejected), and the operator owns
-  registration — typically through a [`Playbook`](#provisioningplaybook)
+  registration — typically through a [`CustomPlaybook`](#customplaybook)
   at `stage: deps, timing: before`, which runs after the machines phase and
   (with the default `failureMode: fail`) gates the deps-phase Ceph work; a
   `machines`/`after` playbook runs at the same point in time but does not gate
@@ -474,7 +474,7 @@ Rules:
 - `packageSource.fromSubscription` sets `entitlementRef`, which must resolve to a
   `redhat-rhel` `Entitlement` whose `rhsm.management` is `managed`: the
   Anaconda-time registration is the package source, so it cannot be delegated
-  to a provisioning playbook. RHSM organization and activation key secret refs
+  to a custom playbook. RHSM organization and activation key secret refs
   are owned by that entitlement.
 - `packageSource.hostedTree` sets `fromMedia`, the full DVD Bootwright extracts
   once and serves from the selected managed artifact server. It must reference
@@ -1586,18 +1586,18 @@ Rules:
   unresolved-reference validation error, whose remedy names `add-ons add` when
   the built-in catalog ships the referenced name.
 
-## Playbook
+## CustomPlaybook
 
-`Playbook` owns one operator-supplied Ansible playbook run against
+`CustomPlaybook` owns one operator-supplied Ansible playbook run against
 machines at a chosen provisioning stage. It is the imperative escape hatch
 sibling of `ClusterAddon`: where an add-on applies declarative Kubernetes objects
-into an installed cluster, a `Playbook` injects an operator playbook
+into an installed cluster, a `CustomPlaybook` injects an operator playbook
 (and optional vendored roles/collections) into the provisioning DAG at any of the
 five sub-phases, before or after that phase's built-in work.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: Playbook
+kind: CustomPlaybook
 metadata:
   name: harden-storage-nodes
 spec:
@@ -1648,7 +1648,7 @@ Rules:
   Content outside the context snapshot is **not** copied by `context init`, so
   it must remain present and readable on the controller at apply time.
 - `spec.playbook` is required, a `.yml`/`.yaml` file path relative to the
-  `Playbook` file (or to `spec.source.path`), contained within that directory (no
+  `CustomPlaybook` file (or to `spec.source.path`), contained within that directory (no
   absolute paths, `..`, or symlinks) — the `ClusterAddon` `manifestSet.path` rules. `rolesPath`
   and `collectionsPath` are optional relative directories under the same rules,
   and must not be named `vendor` or `node_modules` (directories `context init`'s
@@ -1688,7 +1688,7 @@ A playbook is planned only when its anchor phase is in the run's phase set (the
 `--stage` filter) and its target resolves to at least one in-scope host (the
 `--clusters` filter). A `follows` playbook waits for the anchor phase's core tasks
 in scope; a `gates` playbook blocks every anchor-phase core task in scope and
-itself lands after the previous phase. Playbooks flow through `apply`, `plan`,
+itself lands after the previous phase. Custom playbooks flow through `apply`, `plan`,
 and `diff --recorded` on the existing `--stage`/`--clusters` axes; there
 is no dedicated CLI verb. Because a playbook is opaque, `diff --recorded` reports it
 as `match` (declared inputs unchanged) or `drift` (changed, will re-run) from the

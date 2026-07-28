@@ -7,8 +7,8 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func provisioningPlaybook(name, anchor, anchorKey string, target v1alpha1.PlaybookTarget) v1alpha1.Playbook {
-	spec := v1alpha1.PlaybookSpec{
+func provisioningPlaybook(name, anchor, anchorKey string, target v1alpha1.CustomPlaybookTarget) v1alpha1.CustomPlaybook {
+	spec := v1alpha1.CustomPlaybookSpec{
 		Playbook: "playbooks/" + name + ".yml",
 		Target:   target,
 	}
@@ -17,7 +17,7 @@ func provisioningPlaybook(name, anchor, anchorKey string, target v1alpha1.Playbo
 	} else {
 		spec.Follows = anchor
 	}
-	return v1alpha1.Playbook{
+	return v1alpha1.CustomPlaybook{
 		Metadata:   v1alpha1.Metadata{Name: name},
 		SourcePath: "input/playbooks/" + name + ".yaml",
 		Spec:       spec,
@@ -46,9 +46,9 @@ func assertDependsOn(t *testing.T, task ApplyTask, dep string) {
 
 func TestPlanPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("post-install", v1alpha1.PlaybookAnchorBase, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"sno-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("post-install", v1alpha1.CustomPlaybookAnchorBase, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
@@ -70,9 +70,9 @@ func TestPlanPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 
 func TestPlanPlaybookBeforeDepsGatesDepsTasks(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("pre-deps", v1alpha1.PlaybookAnchorDeps, anchorKeyGates,
-			v1alpha1.PlaybookTarget{Clusters: []string{"sno-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("pre-deps", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
@@ -88,10 +88,10 @@ func TestPlanPlaybookBeforeDepsGatesDepsTasks(t *testing.T) {
 
 func TestPlanPlaybookGatesAlwaysHardDependsOnTheStage(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	hook := provisioningPlaybook("pre-deps", v1alpha1.PlaybookAnchorDeps, anchorKeyGates,
-		v1alpha1.PlaybookTarget{Clusters: []string{"sno-libvirt"}})
+	hook := provisioningPlaybook("pre-deps", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
+		v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}})
 	hook.Spec.OnFailure = v1alpha1.PlaybookFailureFail
-	state.Playbooks = []v1alpha1.Playbook{hook}
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{hook}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
@@ -109,9 +109,9 @@ func TestPlanPlaybookGatesAlwaysHardDependsOnTheStage(t *testing.T) {
 
 func TestPlanPlaybookSkippedOutOfStage(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("machines-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"sno-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("machines-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
 	if err != nil {
@@ -122,9 +122,9 @@ func TestPlanPlaybookSkippedOutOfStage(t *testing.T) {
 
 func TestPlanPlaybookErrorsWhenTargetResolvesToNoHosts(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("ghost", v1alpha1.PlaybookAnchorBase, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"does-not-exist"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("ghost", v1alpha1.CustomPlaybookAnchorBase, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"does-not-exist"}}),
 	}
 	_, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err == nil {
@@ -136,8 +136,8 @@ func TestPlanPlaybookErrorsWhenTargetResolvesToNoHosts(t *testing.T) {
 }
 
 func TestResolveProvisioningTargetDefersOutOfScopeStorageCluster(t *testing.T) {
-	playbook := provisioningPlaybook("ceph-hook", v1alpha1.PlaybookAnchorDeps, anchorKeyGates,
-		v1alpha1.PlaybookTarget{Clusters: []string{"ceph-a"}})
+	playbook := provisioningPlaybook("ceph-hook", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
+		v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-a"}})
 	target := ApplyTarget{Name: "all", StorageClusterNames: []string{"ceph-b"}}
 
 	limit, _, _, inScope, err := resolveProvisioningTarget(v1alpha1.State{}, target, playbook,
@@ -151,8 +151,8 @@ func TestResolveProvisioningTargetDefersOutOfScopeStorageCluster(t *testing.T) {
 }
 
 func TestResolveProvisioningTargetErrorsOnMachineWithoutInventoryHost(t *testing.T) {
-	playbook := provisioningPlaybook("bastion-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-		v1alpha1.PlaybookTarget{Machines: []string{"bastion-01"}})
+	playbook := provisioningPlaybook("bastion-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		v1alpha1.CustomPlaybookTarget{Machines: []string{"bastion-01"}})
 
 	_, _, _, _, err := resolveProvisioningTarget(v1alpha1.State{}, applyAllTarget(), playbook,
 		map[string]bool{}, map[string]bool{})
@@ -166,11 +166,11 @@ func TestResolveProvisioningTargetErrorsOnMachineWithoutInventoryHost(t *testing
 
 func TestPlanPlaybookDisabledNotPlanned(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	hook := provisioningPlaybook("disabled", v1alpha1.PlaybookAnchorBase, anchorKeyFollows,
-		v1alpha1.PlaybookTarget{Clusters: []string{"sno-libvirt"}})
+	hook := provisioningPlaybook("disabled", v1alpha1.CustomPlaybookAnchorBase, anchorKeyFollows,
+		v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}})
 	disabled := false
 	hook.Spec.Enabled = &disabled
-	state.Playbooks = []v1alpha1.Playbook{hook}
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{hook}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)

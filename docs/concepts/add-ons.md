@@ -14,7 +14,7 @@ the target cluster is installed and reachable.
 
 Add-ons apply *declarative Kubernetes objects* and only after the cluster is
 installed. To run *imperative Ansible* against machines — at any stage, before or
-after the built-in work — use a [provisioning playbook](playbooks.md)
+after the built-in work — use a [custom playbook](custom-playbooks.md)
 instead.
 
 Add-ons model the initial post-install bootstrap applied *inside* an installed
@@ -512,7 +512,7 @@ uses a manifest-only hook whose Secret template consumes
 `{{ exportDetails external-storage }}`.
 
 For imperative work that is not tied to an add-on's lifecycle, use a
-[provisioning playbook](playbooks.md) instead.
+[custom playbook](custom-playbooks.md) instead.
 
 ## ClusterAddonProfile
 

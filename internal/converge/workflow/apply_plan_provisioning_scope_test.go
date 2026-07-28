@@ -21,9 +21,9 @@ func cephManagedOSExampleState(t *testing.T) v1alpha1.State {
 
 func TestPlaybookMachineScopeNarrowsStorageClusterTarget(t *testing.T) {
 	state := cephManagedOSExampleState(t)
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("node-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "ceph-0"), state)
 	if err != nil {
@@ -49,9 +49,9 @@ func TestPlaybookMachineScopeNarrowsStorageClusterTarget(t *testing.T) {
 
 func TestPlaybookMachineScopeNarrowsContainerClusterTarget(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("node-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"3-nodes-ocp-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"3-nodes-ocp-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "master-1"), state)
 	if err != nil {
@@ -70,9 +70,9 @@ func TestPlaybookMachineScopeNarrowsContainerClusterTarget(t *testing.T) {
 
 func TestPlaybookMachineScopeSkipsPlaybookWithoutSelectedHost(t *testing.T) {
 	state := cephManagedOSExampleState(t)
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("other-node-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Machines: []string{"ceph-2"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("other-node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Machines: []string{"ceph-2"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "ceph-0"), state)
 	if err != nil {
@@ -83,9 +83,9 @@ func TestPlaybookMachineScopeSkipsPlaybookWithoutSelectedHost(t *testing.T) {
 
 func TestPlaybookWithoutMachineScopeKeepsClusterGroupLimit(t *testing.T) {
 	state := cephManagedOSExampleState(t)
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("node-hook", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {

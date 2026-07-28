@@ -125,7 +125,7 @@ None of this goes in YAML — it lives encrypted in the Bootwright context.
    the RHEL install; the clusters-stage Ceph work then enables the
    BaseOS/AppStream repos cephadm needs. (Setting the RHEL entitlement's
    `rhsm.management: external` instead delegates registration to a corporate
-   `Playbook` — see `examples/ceph-external-rhsm`.)
+   `CustomPlaybook` — see `examples/ceph-external-rhsm`.)
 2. **IBM Storage Ceph entitlement key** — from the IBM Container Software Library
    (`https://myibm.ibm.com/products-services/containerlibrary`). The registry
    login is username **`cp`** with that key as the password. (The IBM license is

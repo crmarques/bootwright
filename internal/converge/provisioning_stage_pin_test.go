@@ -8,7 +8,7 @@ import (
 
 func TestSubPhaseStageNamesMatchProvisioningStages(t *testing.T) {
 	got := SubPhaseStageNames()
-	want := v1alpha1.PlaybookAnchors()
+	want := v1alpha1.CustomPlaybookAnchors()
 	if len(got) != len(want) {
 		t.Fatalf("SubPhaseStageNames()=%v, PlaybookAnchors()=%v: length mismatch", got, want)
 	}

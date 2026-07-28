@@ -15,7 +15,7 @@ enables the RHEL base/appstream repositories, installs the IBM Storage Ceph
 `.repo` definition, installs and accepts the `ibm-storage-ceph-license`, and
 logs in to the IBM container registry (from the `ibm-storage-ceph` entry).
 Setting the `rhel` entitlement's `rhsm.management: external` instead delegates
-registration to a corporate `Playbook` (see
+registration to a corporate `CustomPlaybook` (see
 `examples/ceph-external-rhsm`). The secret names below are declarations only;
 the bytes are supplied out of band.
 

@@ -63,12 +63,12 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i])
 	}
-	for i := range state.Playbooks {
-		normalizePlaybook(&state.Playbooks[i])
+	for i := range state.CustomPlaybooks {
+		normalizeCustomPlaybook(&state.CustomPlaybooks[i])
 	}
 }
 
-func normalizePlaybook(p *v1alpha1.Playbook) {
+func normalizeCustomPlaybook(p *v1alpha1.CustomPlaybook) {
 	if p.Spec.Run == "" {
 		p.Spec.Run = v1alpha1.PlaybookRunOnChange
 	}

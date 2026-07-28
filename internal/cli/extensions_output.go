@@ -48,7 +48,7 @@ func printPlaybookDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 		return
 	}
 	p := cliout.NewContinuation(stdout)
-	p.Section("Playbooks")
+	p.Section("Custom playbooks")
 	p.Tasks(lines)
 }
 

@@ -194,8 +194,8 @@ func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
 }
 
 func statePlaybooksNeedGit(state v1alpha1.State) bool {
-	for _, playbook := range state.Playbooks {
-		if v1alpha1.PlaybookIsEnabled(playbook) && v1alpha1.PlaybookSourceIsGit(playbook.Spec.Source) {
+	for _, playbook := range state.CustomPlaybooks {
+		if v1alpha1.CustomPlaybookIsEnabled(playbook) && v1alpha1.PlaybookSourceIsGit(playbook.Spec.Source) {
 			return true
 		}
 	}

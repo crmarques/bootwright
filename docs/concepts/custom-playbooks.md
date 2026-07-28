@@ -1,11 +1,11 @@
 ---
-title: Provisioning playbooks
+title: Custom playbooks
 description: Run operator-supplied Ansible playbooks (with vendored roles and collections) against machines at a chosen provisioning stage — before or after the built-in work.
 ---
 
-# Provisioning playbooks
+# Custom playbooks
 
-A `Playbook` runs an **operator-supplied Ansible playbook** against
+A `CustomPlaybook` runs an **operator-supplied Ansible playbook** against
 machines at a chosen provisioning stage. It is the imperative escape hatch for
 site-specific steps bootwright does not model — hardening a node after OS
 install, preparing storage before cluster dependencies land, registering nodes
@@ -14,7 +14,7 @@ with an external system after the cluster is up, or
 of storage nodes.
 
 It is the sibling of an [add-on](add-ons.md): an add-on applies **declarative
-Kubernetes objects** *inside* an installed cluster; a provisioning playbook runs
+Kubernetes objects** *inside* an installed cluster; a custom playbook runs
 **imperative Ansible** against machines at *any* stage — including before the
 cluster exists. Both are desired-state objects, driven by the normal `apply`
 flow; there is no dedicated CLI verb.
@@ -49,7 +49,7 @@ its stage and whose `--clusters` scope includes its target, so
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: Playbook
+kind: CustomPlaybook
 metadata:
   name: harden-storage-nodes
 spec:
@@ -77,7 +77,7 @@ absolute directory:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: Playbook
+kind: CustomPlaybook
 metadata:
   name: os-hardening
 spec:
@@ -103,7 +103,7 @@ or branch; `subdir` optionally selects a directory inside the repository.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: Playbook
+kind: CustomPlaybook
 metadata:
   name: os-hardening
 spec:
@@ -146,7 +146,7 @@ secret.
 
 A git source is not available on `ClusterAddon.spec.steps[]`: a step's content
 ships with its add-on package. Use `source.path` there, or move the work to a
-`Playbook`.
+`CustomPlaybook`.
 
 !!! warning "External content is not snapshotted"
     `context init`/`update` copies the input tree, not `spec.source.path`. The
@@ -160,8 +160,8 @@ On disk, an object without `source` sits beside its Ansible content:
 
 ```text
 input/
-  playbooks-custom/
-    harden-storage-nodes.yaml      # the Playbook object
+  custom-playbooks/
+    harden-storage-nodes.yaml      # the CustomPlaybook object
     playbooks/harden.yml           # the entry playbook
     roles/<role>/tasks/main.yml    # optional vendored roles
     collections/ansible_collections/<ns>/<name>/...  # optional vendored collections
@@ -263,7 +263,7 @@ for the normative rules.
 
 ## Relationship to add-ons
 
-| | Add-on | Provisioning playbook |
+| | Add-on | Custom playbook |
 | --- | --- | --- |
 | Payload | Declarative Kubernetes objects (`olm` / `manifestSet`) | Imperative Ansible playbook |
 | Runs via | `oc` against the cluster API | `ansible-playbook` against machines |
@@ -271,5 +271,5 @@ for the normative rules.
 | Drift | Reconciled from applied objects | Opaque; input-hash only |
 
 Use an add-on when the target is a Kubernetes object in an installed cluster; use
-a provisioning playbook when the target is a machine, at a stage an add-on cannot
+a custom playbook when the target is a machine, at a stage an add-on cannot
 reach.

@@ -106,9 +106,9 @@ func TestPlanMachineRegistrationSkippedForClustersScope(t *testing.T) {
 
 func TestPlanPlaybookAfterMachinesAnchorsOnRegistration(t *testing.T) {
 	state := cephSubscriptionExampleState(t)
-	state.Playbooks = []v1alpha1.Playbook{
-		provisioningPlaybook("corporate-rhsm", v1alpha1.PlaybookAnchorMachines, anchorKeyFollows,
-			v1alpha1.PlaybookTarget{Clusters: []string{"ceph-ibm"}}),
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
+		provisioningPlaybook("corporate-rhsm", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+			v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-ibm"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {

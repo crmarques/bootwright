@@ -36,7 +36,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`ClusterAddon`",
 		"`ClusterAddonProfile`",
 		"`ClusterAddonBinding`",
-		"`Playbook`",
+		"`CustomPlaybook`",
 		"`Secret`",
 		"`Environment`",
 	}
@@ -59,6 +59,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`ClusterInfra`",
 		"`StorageClusterBinding`",
 		"`HostPool`",
+		"`Playbook`",
 		"providerRefs",
 	}
 	for _, phrase := range rejected {
@@ -110,6 +111,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"`ClusterInfra`",
 		"kind: Host",
 		"kind: ClusterInfra",
+		"kind: Playbook",
 		"clusterInfra",
 		"hostRef",
 	}

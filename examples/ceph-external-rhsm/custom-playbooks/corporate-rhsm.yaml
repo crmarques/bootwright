@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: Playbook
+kind: CustomPlaybook
 metadata:
   name: corporate-rhsm
 spec:

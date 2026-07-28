@@ -20,19 +20,19 @@ var provisioningControllerGroups = map[string]bool{
 	"bootwright_controller_hosts": true,
 }
 
-func validatePlaybooks(state v1alpha1.State) []string {
+func validateCustomPlaybooks(state v1alpha1.State) []string {
 	var errs []string
 	machines := indexMachines(state.Machines)
 	containers := indexContainerClusters(state.ContainerClusters)
 	storage := indexStorageClusters(state.StorageClusters)
 	secrets := indexSecrets(state.Secrets)
 
-	for _, p := range state.Playbooks {
-		prefix := fmt.Sprintf("Playbook/%s spec", p.Metadata.Name)
-		if msg := validateName(v1alpha1.KindPlaybook, p.Metadata.Name); msg != "" {
+	for _, p := range state.CustomPlaybooks {
+		prefix := fmt.Sprintf("CustomCustomPlaybook/%s spec", p.Metadata.Name)
+		if msg := validateName(v1alpha1.KindCustomPlaybook, p.Metadata.Name); msg != "" {
 			errs = append(errs, msg)
 		}
-		errs = append(errs, validatePlaybookAnchor(prefix, p)...)
+		errs = append(errs, validateCustomPlaybookAnchor(prefix, p)...)
 		if p.Spec.Run != "" && p.Spec.Run != v1alpha1.PlaybookRunOnChange && p.Spec.Run != v1alpha1.PlaybookRunAlways {
 			errs = append(errs, fmt.Sprintf("%s.run %q must be %q or %q", prefix, p.Spec.Run, v1alpha1.PlaybookRunOnChange, v1alpha1.PlaybookRunAlways))
 		}
@@ -57,28 +57,28 @@ func validatePlaybooks(state v1alpha1.State) []string {
 			}
 		}
 
-		errs = append(errs, validatePlaybookTags(prefix, p)...)
-		errs = append(errs, validatePlaybookTarget(prefix, p, machines, containers, storage)...)
+		errs = append(errs, validateCustomPlaybookTags(prefix, p)...)
+		errs = append(errs, validateCustomPlaybookTarget(prefix, p, machines, containers, storage)...)
 	}
 
-	errs = append(errs, validatePlaybookOrdering(state.Playbooks)...)
+	errs = append(errs, validateCustomPlaybookOrdering(state.CustomPlaybooks)...)
 	return errs
 }
 
-func validatePlaybookAnchor(prefix string, p v1alpha1.Playbook) []string {
-	anchors := strings.Join(v1alpha1.PlaybookAnchors(), ", ")
+func validateCustomPlaybookAnchor(prefix string, p v1alpha1.CustomPlaybook) []string {
+	anchors := strings.Join(v1alpha1.CustomPlaybookAnchors(), ", ")
 	switch {
 	case p.Spec.Gates != "" && p.Spec.Follows != "":
 		return []string{fmt.Sprintf("%s must set exactly one of gates or follows, not both", prefix)}
 	case p.Spec.Gates == "" && p.Spec.Follows == "":
 		return []string{fmt.Sprintf("%s must set one of gates or follows to one of %s", prefix, anchors)}
 	}
-	anchor, gating := v1alpha1.PlaybookAnchor(p)
+	anchor, gating := v1alpha1.CustomPlaybookAnchor(p)
 	key := "follows"
 	if gating {
 		key = "gates"
 	}
-	if !slices.Contains(v1alpha1.PlaybookAnchors(), anchor) {
+	if !slices.Contains(v1alpha1.CustomPlaybookAnchors(), anchor) {
 		return []string{fmt.Sprintf("%s.%s %q must be one of %s", prefix, key, anchor, anchors)}
 	}
 	if gating && p.Spec.OnFailure == v1alpha1.PlaybookFailureContinue {
@@ -87,7 +87,7 @@ func validatePlaybookAnchor(prefix string, p v1alpha1.Playbook) []string {
 	return nil
 }
 
-func validatePlaybookTags(prefix string, p v1alpha1.Playbook) []string {
+func validateCustomPlaybookTags(prefix string, p v1alpha1.CustomPlaybook) []string {
 	var errs []string
 	selected := map[string]bool{}
 	for _, field := range []struct {
@@ -124,7 +124,7 @@ func validatePlaybookTags(prefix string, p v1alpha1.Playbook) []string {
 	return errs
 }
 
-func validatePlaybookTarget(prefix string, p v1alpha1.Playbook, machines map[string]v1alpha1.Machine, containers map[string]v1alpha1.ContainerCluster, storage map[string]v1alpha1.StorageCluster) []string {
+func validateCustomPlaybookTarget(prefix string, p v1alpha1.CustomPlaybook, machines map[string]v1alpha1.Machine, containers map[string]v1alpha1.ContainerCluster, storage map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
 	t := p.Spec.Target
 	if len(t.Clusters) == 0 && len(t.Machines) == 0 && len(t.HostGroups) == 0 {
@@ -158,18 +158,18 @@ func validatePlaybookTarget(prefix string, p v1alpha1.Playbook, machines map[str
 	return errs
 }
 
-func validatePlaybookOrdering(playbooks []v1alpha1.Playbook) []string {
+func validateCustomPlaybookOrdering(playbooks []v1alpha1.CustomPlaybook) []string {
 	var errs []string
 	type bucketKey struct {
 		anchor string
 		gating bool
 	}
-	buckets := map[bucketKey][]v1alpha1.Playbook{}
+	buckets := map[bucketKey][]v1alpha1.CustomPlaybook{}
 	for _, p := range playbooks {
-		if !v1alpha1.PlaybookIsEnabled(p) {
+		if !v1alpha1.CustomPlaybookIsEnabled(p) {
 			continue
 		}
-		anchor, gating := v1alpha1.PlaybookAnchor(p)
+		anchor, gating := v1alpha1.CustomPlaybookAnchor(p)
 		key := bucketKey{anchor, gating}
 		buckets[key] = append(buckets[key], p)
 	}
@@ -181,7 +181,7 @@ func validatePlaybookOrdering(playbooks []v1alpha1.Playbook) []string {
 					continue
 				}
 				if owner, dup := provider[cap]; dup {
-					errs = append(errs, fmt.Sprintf("Playbook/%s spec.provides %q is already provided by Playbook/%s at the same anchor", p.Metadata.Name, cap, owner))
+					errs = append(errs, fmt.Sprintf("CustomCustomPlaybook/%s spec.provides %q is already provided by CustomPlaybook/%s at the same anchor", p.Metadata.Name, cap, owner))
 					continue
 				}
 				provider[cap] = p.Metadata.Name
@@ -190,7 +190,7 @@ func validatePlaybookOrdering(playbooks []v1alpha1.Playbook) []string {
 		for _, p := range bucket {
 			for _, cap := range p.Spec.Requires {
 				if _, ok := provider[cap]; !ok {
-					errs = append(errs, fmt.Sprintf("Playbook/%s spec.requires %q is not provided by any playbook at the same anchor", p.Metadata.Name, cap))
+					errs = append(errs, fmt.Sprintf("CustomCustomPlaybook/%s spec.requires %q is not provided by any playbook at the same anchor", p.Metadata.Name, cap))
 				}
 			}
 		}
@@ -199,8 +199,8 @@ func validatePlaybookOrdering(playbooks []v1alpha1.Playbook) []string {
 	return errs
 }
 
-func provisioningOrderingCycles(bucket []v1alpha1.Playbook, provider map[string]string) []string {
-	byName := map[string]v1alpha1.Playbook{}
+func provisioningOrderingCycles(bucket []v1alpha1.CustomPlaybook, provider map[string]string) []string {
+	byName := map[string]v1alpha1.CustomPlaybook{}
 	for _, p := range bucket {
 		byName[p.Metadata.Name] = p
 	}
@@ -224,7 +224,7 @@ func provisioningOrderingCycles(bucket []v1alpha1.Playbook, provider map[string]
 				continue
 			}
 			if color[dep] == grey {
-				errs = append(errs, fmt.Sprintf("Playbook provides/requires form a cycle involving %q at the same anchor", name))
+				errs = append(errs, fmt.Sprintf("CustomPlaybook provides/requires form a cycle involving %q at the same anchor", name))
 				reported = true
 				return
 			}

@@ -153,7 +153,7 @@ need an **IBM entitlement key**:
 > `rhel` entitlement (the org ID + activation key from step 1a) via each
 > `MachineInstallProfile.spec.subscription`. Setting
 > that `rhel` entitlement's `rhsm.management: external` instead delegates
-> registration to a corporate `Playbook`
+> registration to a corporate `CustomPlaybook`
 > (see `examples/ceph-external-rhsm`). The StorageCluster explicitly sets
 > `spec.ceph.ibm.callHome: disabled` so accepting the license does not opt this
 > lab into IBM Call Home outbound communication.

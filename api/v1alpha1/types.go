@@ -29,7 +29,7 @@ const (
 	KindClusterAddon           = "ClusterAddon"
 	KindClusterAddonProfile    = "ClusterAddonProfile"
 	KindClusterAddonBinding    = "ClusterAddonBinding"
-	KindPlaybook               = "Playbook"
+	KindCustomPlaybook         = "CustomPlaybook"
 	KindSecret                 = "Secret"
 
 	ProvisionerLibvirt   = "libvirt"
@@ -292,11 +292,11 @@ const (
 
 	StorageExportTypeDataFoundation = "dataFoundation"
 
-	PlaybookAnchorFabric   = "fabric"
-	PlaybookAnchorMachines = "machines"
-	PlaybookAnchorDeps     = "deps"
-	PlaybookAnchorBase     = "base"
-	PlaybookAnchorAddOns   = "add-ons"
+	CustomPlaybookAnchorFabric   = "fabric"
+	CustomPlaybookAnchorMachines = "machines"
+	CustomPlaybookAnchorDeps     = "deps"
+	CustomPlaybookAnchorBase     = "base"
+	CustomPlaybookAnchorAddOns   = "add-ons"
 
 	PlaybookRunOnChange = "onChange"
 	PlaybookRunAlways   = "always"
@@ -343,7 +343,7 @@ type State struct {
 	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
 	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`
-	Playbooks                []Playbook               `yaml:"playbooks,omitempty" json:"playbooks,omitempty"`
+	CustomPlaybooks          []CustomPlaybook         `yaml:"customPlaybooks,omitempty" json:"customPlaybooks,omitempty"`
 	Secrets                  []Secret                 `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 }
 

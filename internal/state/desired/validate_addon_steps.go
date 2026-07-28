@@ -40,7 +40,7 @@ func validateClusterAddonSteps(state v1alpha1.State, extension v1alpha1.ClusterA
 		}
 		errs = append(errs, validatePlaybookSource(prefix, hook.Source, indexSecrets(state.Secrets))...)
 		if v1alpha1.PlaybookSourceIsGit(hook.Source) {
-			errs = append(errs, prefix+".source.git is not supported on an add-on step: a step's content ships with its add-on package. Use source.path, or move the work to a Playbook object, which supports git")
+			errs = append(errs, prefix+".source.git is not supported on an add-on step: a step's content ships with its add-on package. Use source.path, or move the work to a CustomPlaybook object, which supports git")
 		}
 		if hook.Playbook != "" {
 			if v1alpha1.PlaybookSourceIsSet(hook.Source) {

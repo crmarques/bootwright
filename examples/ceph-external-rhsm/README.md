@@ -7,13 +7,13 @@ writes RHSM proxy or repository configuration, and requires no RHSM
 organization or activation-key secrets. Registry login still comes from the
 entitlement (`registry.credentialsRef`).
 
-The corporate registration runs as the `corporate-rhsm` `Playbook`
+The corporate registration runs as the `corporate-rhsm` `CustomPlaybook`
 anchored at `stage: deps, timing: before` — after the machines-phase work has
 put the OS in place, and gating the `deps` sub-phase where Bootwright installs
 the Ceph dependencies. With the default `failureMode: fail`, a failed
 registration blocks the Ceph work instead of failing later inside package
 installs. The shipped playbook is
-a stub; replace `playbooks-custom/playbooks/corporate-rhsm.yml` with the
+a stub; replace `custom-playbooks/playbooks/corporate-rhsm.yml` with the
 site playbook (vendored roles/collections go next to it, see the
 provisioning-playbooks concept page).
 

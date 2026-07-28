@@ -108,7 +108,7 @@ Storage Ceph runs on RHEL it does not itself entitle:
   node — so the RHEL BaseOS/AppStream repos cephadm needs are available. Its
   `rhsm.organizationRef` and `rhsm.activationKeyRef` resolve to the `rhel-org`
   and `rhel-activation-key` secrets. `rhsm.management` defaults to `managed`;
-  `external` delegates registration to an operator `Playbook` and
+  `external` delegates registration to an operator `CustomPlaybook` and
   drops the org/key secrets (see the `ceph-external-rhsm` example).
 - `ibm-storage-ceph` (`type: ibm-storage-ceph`) logs each node
   into the IBM registry `cp.icr.io/cp` for the container images, accepts the

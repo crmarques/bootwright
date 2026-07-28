@@ -1,14 +1,14 @@
 package v1alpha1
 
-type Playbook struct {
-	APIVersion string       `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string       `yaml:"kind" json:"kind"`
-	Metadata   Metadata     `yaml:"metadata" json:"metadata"`
-	Spec       PlaybookSpec `yaml:"spec" json:"spec"`
-	SourcePath string       `yaml:"-" json:"-"`
+type CustomPlaybook struct {
+	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string             `yaml:"kind" json:"kind"`
+	Metadata   Metadata           `yaml:"metadata" json:"metadata"`
+	Spec       CustomPlaybookSpec `yaml:"spec" json:"spec"`
+	SourcePath string             `yaml:"-" json:"-"`
 }
 
-type PlaybookSpec struct {
+type CustomPlaybookSpec struct {
 	Gates   string `yaml:"gates,omitempty" json:"gates,omitempty"`
 	Follows string `yaml:"follows,omitempty" json:"follows,omitempty"`
 
@@ -21,7 +21,7 @@ type PlaybookSpec struct {
 	Tags     []string `yaml:"tags,omitempty" json:"tags,omitempty"`
 	SkipTags []string `yaml:"skipTags,omitempty" json:"skipTags,omitempty"`
 
-	Target PlaybookTarget `yaml:"target" json:"target"`
+	Target CustomPlaybookTarget `yaml:"target" json:"target"`
 
 	Order    int      `yaml:"order,omitempty" json:"order,omitempty"`
 	Provides []string `yaml:"provides,omitempty" json:"provides,omitempty"`
@@ -36,41 +36,41 @@ type PlaybookSpec struct {
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
-type PlaybookTarget struct {
+type CustomPlaybookTarget struct {
 	Clusters   []string `yaml:"clusters,omitempty" json:"clusters,omitempty"`
 	Machines   []string `yaml:"machines,omitempty" json:"machines,omitempty"`
 	HostGroups []string `yaml:"hostGroups,omitempty" json:"hostGroups,omitempty"`
 }
 
-func PlaybookAnchors() []string {
+func CustomPlaybookAnchors() []string {
 	return []string{
-		PlaybookAnchorFabric,
-		PlaybookAnchorMachines,
-		PlaybookAnchorDeps,
-		PlaybookAnchorBase,
-		PlaybookAnchorAddOns,
+		CustomPlaybookAnchorFabric,
+		CustomPlaybookAnchorMachines,
+		CustomPlaybookAnchorDeps,
+		CustomPlaybookAnchorBase,
+		CustomPlaybookAnchorAddOns,
 	}
 }
 
-func PlaybookIsEnabled(p Playbook) bool {
+func CustomPlaybookIsEnabled(p CustomPlaybook) bool {
 	return p.Spec.Enabled == nil || *p.Spec.Enabled
 }
 
-func PlaybookAnchor(p Playbook) (anchor string, gating bool) {
+func CustomPlaybookAnchor(p CustomPlaybook) (anchor string, gating bool) {
 	if p.Spec.Gates != "" {
 		return p.Spec.Gates, true
 	}
 	return p.Spec.Follows, false
 }
 
-func PlaybookRunMode(p Playbook) string {
+func CustomPlaybookRunMode(p CustomPlaybook) string {
 	if p.Spec.Run == "" {
 		return PlaybookRunOnChange
 	}
 	return p.Spec.Run
 }
 
-func PlaybookFailureMode(p Playbook) string {
+func CustomPlaybookFailureMode(p CustomPlaybook) string {
 	if p.Spec.OnFailure == "" {
 		return PlaybookFailureFail
 	}

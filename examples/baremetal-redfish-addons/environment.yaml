@@ -11,7 +11,7 @@ spec:
     - infra
     - clusters
     - add-ons
-    - playbooks-custom
+    - custom-playbooks
 
   infraComponents:
     artifactServers:

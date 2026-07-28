@@ -19,7 +19,7 @@ before any Ceph work; the clusters-stage Ceph work then enables the RHEL
 base/appstream and `rhceph-*-tools` repositories and logs in to
 `registry.redhat.io` — all from this entitlement. Setting
 `rhsm.management: external` instead delegates registration to a corporate
-`Playbook` (see `examples/ceph-external-rhsm`). The secret names
+`CustomPlaybook` (see `examples/ceph-external-rhsm`). The secret names
 below are declarations only; the bytes are supplied out of band.
 
 ## Credentials to supply

@@ -6,13 +6,13 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func gitState(p v1alpha1.Playbook, secrets ...v1alpha1.Secret) v1alpha1.State {
+func gitState(p v1alpha1.CustomPlaybook, secrets ...v1alpha1.Secret) v1alpha1.State {
 	state := provisioningState(p)
 	state.Secrets = secrets
 	return state
 }
 
-func gitPlaybook(git v1alpha1.PlaybookGitSource) v1alpha1.Playbook {
+func gitPlaybook(git v1alpha1.PlaybookGitSource) v1alpha1.CustomPlaybook {
 	p := basePlaybook("external")
 	p.Spec.Source = &v1alpha1.PlaybookSource{Git: &git}
 	p.Spec.Playbook = "playbooks/site.yml"
@@ -25,14 +25,14 @@ func TestValidatePlaybookGitSourceAcceptsPinnedRemote(t *testing.T) {
 		Ref:    "v1.4.0",
 		Subdir: "bootwright",
 	})
-	if errs := validatePlaybooks(gitState(p)); len(errs) != 0 {
+	if errs := validateCustomPlaybooks(gitState(p)); len(errs) != 0 {
 		t.Fatalf("pinned git source reported errors: %v", errs)
 	}
 }
 
 func TestValidatePlaybookGitSourceAcceptsBranchRef(t *testing.T) {
 	p := gitPlaybook(v1alpha1.PlaybookGitSource{URL: "https://git.example/infra.git", Ref: "main"})
-	if errs := validatePlaybooks(gitState(p)); len(errs) != 0 {
+	if errs := validateCustomPlaybooks(gitState(p)); len(errs) != 0 {
 		t.Fatalf("branch ref should be allowed: %v", errs)
 	}
 }
@@ -50,7 +50,7 @@ func TestValidatePlaybookGitSourceRejectsBadShape(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if errs := validatePlaybooks(gitState(gitPlaybook(tc.git))); !containsSubstring(errs, tc.want) {
+			if errs := validateCustomPlaybooks(gitState(gitPlaybook(tc.git))); !containsSubstring(errs, tc.want) {
 				t.Fatalf("findings %v do not contain %q", errs, tc.want)
 			}
 		})
@@ -60,7 +60,7 @@ func TestValidatePlaybookGitSourceRejectsBadShape(t *testing.T) {
 func TestValidatePlaybookGitSourceRejectsBothArms(t *testing.T) {
 	p := gitPlaybook(v1alpha1.PlaybookGitSource{URL: "https://git.example/i.git", Ref: "main"})
 	p.Spec.Source.Path = "/srv/ansible"
-	if errs := validatePlaybooks(gitState(p)); !containsSubstring(errs, "exactly one of path or git") {
+	if errs := validateCustomPlaybooks(gitState(p)); !containsSubstring(errs, "exactly one of path or git") {
 		t.Fatalf("both arms not reported: %v", errs)
 	}
 }
@@ -79,7 +79,7 @@ func TestValidatePlaybookGitSecretRefMustMatchTransport(t *testing.T) {
 		URL: "ssh://git@git.example/i.git", Ref: "main",
 		SecretRef: &v1alpha1.SecretRef{Name: "git-key"},
 	})
-	if errs := validatePlaybooks(gitState(ok, sshSecret)); len(errs) != 0 {
+	if errs := validateCustomPlaybooks(gitState(ok, sshSecret)); len(errs) != 0 {
 		t.Fatalf("ssh url with sshKeyPair secret reported errors: %v", errs)
 	}
 
@@ -87,7 +87,7 @@ func TestValidatePlaybookGitSecretRefMustMatchTransport(t *testing.T) {
 		URL: "ssh://git@git.example/i.git", Ref: "main",
 		SecretRef: &v1alpha1.SecretRef{Name: "git-token"},
 	})
-	if errs := validatePlaybooks(gitState(mismatched, tokenSecret)); !containsSubstring(errs, "authenticates https") {
+	if errs := validateCustomPlaybooks(gitState(mismatched, tokenSecret)); !containsSubstring(errs, "authenticates https") {
 		t.Fatalf("transport mismatch not reported: %v", errs)
 	}
 
@@ -95,7 +95,7 @@ func TestValidatePlaybookGitSecretRefMustMatchTransport(t *testing.T) {
 		URL: "https://git.example/i.git", Ref: "main",
 		SecretRef: &v1alpha1.SecretRef{Name: "absent"},
 	})
-	if errs := validatePlaybooks(gitState(undeclared)); !containsSubstring(errs, "does not match any Secret") {
+	if errs := validateCustomPlaybooks(gitState(undeclared)); !containsSubstring(errs, "does not match any Secret") {
 		t.Fatalf("undeclared secret not reported: %v", errs)
 	}
 }
