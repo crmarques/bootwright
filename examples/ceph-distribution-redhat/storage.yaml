@@ -13,6 +13,8 @@ spec:
       version: "9-1234"
     entitlementRef: rhcs
     cephadm:
+      clusterSSH:
+        keyRef: ceph-cluster-ssh
       bootstrap:
         node: node-01
     topology:

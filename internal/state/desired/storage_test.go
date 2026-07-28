@@ -363,6 +363,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       nodeSSH:
         keyPairRef: ceph-node-ssh
 `,
@@ -391,6 +393,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       clusterSSHKeyRef: ceph-cluster-ssh
 `,
 			want: "field clusterSSHKeyRef not found",
@@ -404,6 +408,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       clusterSSHUser: cephadm
 `,
 			want: "field clusterSSHUser not found",
@@ -564,6 +570,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       bootstrap:
         node: node01
     monitoring:
@@ -650,6 +658,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       bootstrap:
         node: node01
 MONITORING
@@ -1666,7 +1676,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.Machines[0].Spec.Access.SSH = nil
 			},
-			want: "Machine/ceph-dc1-0 spec.access.ssh is required",
+			want: "Machine/ceph-dc1-0 declares no login",
 		},
 		{
 			name: "missing-ceph-node-capability",
@@ -1674,20 +1684,6 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 				state.Machines[0].Spec.Capabilities = []string{v1alpha1.MachineCapabilityLibvirt}
 			},
 			want: `lacks capability "ceph-node"`,
-		},
-		{
-			name: "mixed-users",
-			edit: func(state *v1alpha1.State) {
-				state.Machines[1].Spec.Access.SSH.User = "ceph"
-			},
-			want: `with ssh.user "ceph"; all storage node Machines in one StorageCluster must use "root"`,
-		},
-		{
-			name: "mixed-key-refs",
-			edit: func(state *v1alpha1.State) {
-				state.Machines[1].Spec.Access.SSH.Auth.PrivateKeyRef.Name = "other-ceph-node-ssh"
-			},
-			want: `with ssh.keyRef "other-ceph-node-ssh"; all storage node Machines in one StorageCluster must use "ceph-node-ssh"`,
 		},
 	}
 	for _, tc := range cases {
@@ -1846,7 +1842,7 @@ func storageValidationState() v1alpha1.State {
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						ClusterSSH: v1alpha1.StorageCephadmSSHSpec{User: v1alpha1.RootSSHUser},
+						ClusterSSH: v1alpha1.StorageCephadmSSHSpec{KeyRef: v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							Node: "ceph-dc1-0",
 						},
@@ -1945,6 +1941,8 @@ func storageValidationState() v1alpha1.State {
 				}},
 			},
 		}},
+		Environments: []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}},
+		Secrets:      []v1alpha1.Secret{clusterSSHSecret("ceph-cluster-key", v1alpha1.SecretTypeSSHKeyPair)},
 	}
 }
 

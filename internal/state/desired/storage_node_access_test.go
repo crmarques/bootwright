@@ -14,20 +14,19 @@ func revokeRootOnStorageMachines(state *v1alpha1.State) {
 	}
 }
 
-func TestClusterSSHUserDefaultsToRootWhenRootLoginKept(t *testing.T) {
+func TestClusterSSHUserDefaultsToCephadm(t *testing.T) {
 	state := storageValidationState()
 	Normalize(&state)
-	if got := state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User; got != v1alpha1.RootSSHUser {
-		t.Fatalf("clusterSSH.user = %q, want %q so existing state renders unchanged", got, v1alpha1.RootSSHUser)
+	if got := state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User; got != v1alpha1.StorageCephadmDefaultSSHUser {
+		t.Fatalf("clusterSSH.user = %q, want %q; a managed Ceph cluster orchestrates as a named account so its nodes never accept a root login", got, v1alpha1.StorageCephadmDefaultSSHUser)
 	}
 }
 
-func TestClusterSSHUserDefaultsToCephadmWhenRootLoginRevoked(t *testing.T) {
+func TestExternalClusterKeepsRootOrchestrationUser(t *testing.T) {
 	state := storageValidationState()
-	revokeRootOnStorageMachines(&state)
-	Normalize(&state)
-	if got := state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User; got != v1alpha1.StorageCephadmDefaultSSHUser {
-		t.Fatalf("clusterSSH.user = %q, want %q", got, v1alpha1.StorageCephadmDefaultSSHUser)
+	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementExternal
+	if got := v1alpha1.StorageClusterCephadmSSHUser(state.StorageClusters[0]); got != v1alpha1.RootSSHUser {
+		t.Fatalf("clusterSSH.user = %q, want %q; Bootwright provisions no account on an external cluster", got, v1alpha1.RootSSHUser)
 	}
 }
 
@@ -40,39 +39,35 @@ func TestClusterSSHUserOverrideIsHonoredWithoutKeyRef(t *testing.T) {
 	}
 }
 
-func TestRevokedRootLoginRequiresClusterSSHKeyRef(t *testing.T) {
+func TestManagedClusterRequiresClusterSSHKeyRef(t *testing.T) {
 	state := storageValidationState()
-	revokeRootOnStorageMachines(&state)
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{}
 	Normalize(&state)
 	errs := validateStorage(state)
 	if !containsSubstring(errs, "clusterSSH.keyRef is required") {
-		t.Fatalf("expected a required-keyRef error when root login is revoked, got: %v", errs)
+		t.Fatalf("expected a required-keyRef error for the default non-root orchestration account, got: %v", errs)
 	}
 }
 
 func TestRevokedRootLoginAcceptsDedicatedClusterKey(t *testing.T) {
 	state := storageValidationState()
 	revokeRootOnStorageMachines(&state)
-	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{Name: "ceph-cluster-key"}
-	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
-	state.Secrets = append(state.Secrets, clusterSSHSecret("ceph-cluster-key", v1alpha1.SecretTypeSSHKeyPair))
 	Normalize(&state)
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("a dedicated cluster key should satisfy the revoke posture, got: %v", errs)
 	}
 }
 
-func TestRevokedRootLoginRejectsReusingTheMachineAccessKey(t *testing.T) {
+func TestAuthoredMachineKeyReusedAsClusterIdentityRejected(t *testing.T) {
 	state := storageValidationState()
 	revokeRootOnStorageMachines(&state)
 	reused := v1alpha1.MachineSSHKeyRef(state.Machines[0]).Name
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{Name: reused}
-	state.Environments = []v1alpha1.Environment{{Metadata: v1alpha1.Metadata{Name: "env"}}}
 	state.Secrets = append(state.Secrets, clusterSSHSecret(reused, v1alpha1.SecretTypeSSHKeyPair))
 	Normalize(&state)
 	errs := validateStorage(state)
-	if !containsSubstring(errs, "Declare a second sshKeyPair Secret") {
-		t.Fatalf("expected rejection of a cluster key reusing the machine access key, got: %v", errs)
+	if !containsSubstring(errs, "declare a second sshKeyPair Secret") {
+		t.Fatalf("expected rejection of a cluster key reusing an authored machine access key, got: %v", errs)
 	}
 }
 
@@ -109,6 +104,7 @@ func TestClusterSSHUserMayBeTheInstallWindowIdentity(t *testing.T) {
 
 func TestRootClusterSSHUserRejectedWhenNodesInstallNonRoot(t *testing.T) {
 	state := storageValidationState()
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = v1alpha1.RootSSHUser
 	setStorageMachineSSHUser(&state, "cephadm")
 	errs := validateStorage(state)
 	if !containsSubstring(errs, "an account that machine does not install") {
@@ -118,7 +114,7 @@ func TestRootClusterSSHUserRejectedWhenNodesInstallNonRoot(t *testing.T) {
 
 func TestNonRootClusterSSHUserRequiresClusterKeyWithoutRevoke(t *testing.T) {
 	state := storageValidationState()
-	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = v1alpha1.StorageCephadmDefaultSSHUser
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH = v1alpha1.StorageCephadmSSHSpec{User: v1alpha1.StorageCephadmDefaultSSHUser}
 	errs := validateStorage(state)
 	if !containsSubstring(errs, "clusterSSH.keyRef is required") {
 		t.Fatalf("a non-root orchestration account needs its own key whether or not root is revoked; cephadm bootstrap would otherwise persist the machine access key into the mon store, got: %v", errs)

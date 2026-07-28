@@ -10,6 +10,8 @@ spec:
     release: "9.1"
     entitlementRef: rhcs
     cephadm:
+      clusterSSH:
+        keyRef: ceph-cluster-ssh-key
       bootstrap:
         node: node-01
     networks:

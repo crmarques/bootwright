@@ -361,6 +361,8 @@ spec:
   type: ceph
   ceph:
     cephadm:
+      clusterSSH:
+        user: root
       bootstrap:
         node: ceph-0
     topology:

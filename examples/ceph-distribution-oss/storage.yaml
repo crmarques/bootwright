@@ -11,6 +11,8 @@ spec:
     community:
       mirror: https://download.ceph.com
     cephadm:
+      clusterSSH:
+        keyRef: ceph-cluster-ssh
       bootstrap:
         node: node-01
     topology:

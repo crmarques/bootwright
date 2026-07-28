@@ -23,7 +23,7 @@ func validateStorageCephadmSSHPosture(prefix string, cluster v1alpha1.StorageClu
 	if !v1alpha1.StorageClusterManagesNodeAccount(cluster) {
 		for i, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machine, ok := machines[node.MachineRef.Name]
-			if !ok {
+			if !ok || v1alpha1.MachineUsesControllerIdentity(machine) {
 				continue
 			}
 			if nodeUser := v1alpha1.MachineSSHUser(machine); nodeUser != v1alpha1.RootSSHUser {

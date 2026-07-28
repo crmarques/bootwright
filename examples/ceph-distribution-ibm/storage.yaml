@@ -16,6 +16,8 @@ spec:
     entitlementRef: ibm-storage-ceph
     osSubscriptionRef: rhel
     cephadm:
+      clusterSSH:
+        keyRef: ceph-cluster-ssh
       bootstrap:
         node: node-01
     topology:

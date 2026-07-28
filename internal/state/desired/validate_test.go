@@ -68,8 +68,8 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		files := newBaselineFiles()
 		files["environment.yaml"] = newEnvironmentYAML + secretDoc("bastion-host-known-hosts", "opaque")
 		files["service-machines.yaml"] = strings.Replace(newHostsYAML,
-			"      keyRef: bastion-host-ssh\n",
-			"      keyRef: bastion-host-ssh\n      knownHostsRef: bastion-host-known-hosts\n", 1)
+			"        privateKeyRef: bastion-host-ssh\n",
+			"        privateKeyRef: bastion-host-ssh\n      knownHostsRef: bastion-host-known-hosts\n", 1)
 		writeFiles(t, dir, files)
 		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
 			t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -79,8 +79,8 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		dir := t.TempDir()
 		files := newBaselineFiles()
 		files["service-machines.yaml"] = strings.Replace(newHostsYAML,
-			"      keyRef: bastion-host-ssh\n",
-			"      keyRef: bastion-host-ssh\n      knownHostsRef: bastion-host-known-hosts\n", 1)
+			"        privateKeyRef: bastion-host-ssh\n",
+			"        privateKeyRef: bastion-host-ssh\n      knownHostsRef: bastion-host-known-hosts\n", 1)
 		writeFiles(t, dir, files)
 		_, err := LoadNormalizeValidate([]string{dir})
 		if err == nil {
