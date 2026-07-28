@@ -276,8 +276,10 @@ manager runs — so a policy that reaches the account only from an interactive
 session fails here by design. If `/etc/sudoers.d/60-bootwright-<user>` is
 present, 0440 `root:root`, and correct, the node is not reading it:
 
-- A **later-sorting file** in `/etc/sudoers.d` overrides it within the generic
-  `Defaults` tier.
+- A **later-sorting file** in `/etc/sudoers.d` overrides it. sudo applies
+  `Defaults` in parse order and the last one wins, whether it is generic or
+  per-user, so a plain `Defaults requiretty` in a file sorting after
+  `60-bootwright-<user>` beats the per-user exemption.
 - A **`Defaults requiretty` after `@includedir`** in `/etc/sudoers` cannot be
   overridden by any drop-in.
 - An **LDAP or SSSD `cn=defaults` carrying `ignore_local_sudoers`** makes sudo

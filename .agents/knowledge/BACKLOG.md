@@ -442,10 +442,12 @@ learned; this file records what it still owes.
 - Area: ceph / node-access / sudoers
 - Origin: node-access requiretty fix 2026-07-28
 - Severity: medium
-- Problem: within sudo's generic `Defaults` tier a later file in
-  `/etc/sudoers.d` overrides an earlier one, so the grant Bootwright writes at
-  `/etc/sudoers.d/60-bootwright-<user>` loses to any site hardening drop-in
-  sorting after `60-`. A later-sorting prefix would win by construction, but the
+- Problem: sudo applies `Defaults` in parse order and the last one wins whether
+  it is generic or per-user — sudoers(5) defers only *command-specific*
+  `Defaults` — so a plain `Defaults requiretty` in any file sorting after
+  `/etc/sudoers.d/60-bootwright-<user>` beats Bootwright's per-user
+  `!requiretty` exemption. Any site hardening drop-in sorting after `60-`
+  defeats the grant. A later-sorting prefix would win by construction, but the
   `60-` constant is pinned across `api/v1alpha1/types.go:87`
   (`NodeAccessSudoersPrefix`), ADR 0019:102, ADR 0024:148, ADR 0027:56,
   `specs/security.md:159`, `specs/state-model.md:323,578,1013`, and
@@ -480,4 +482,36 @@ learned; this file records what it still owes.
 - Exit: either allocate a terminal when stdin and stdout are both character
   devices and pin it with a test, or add an explicit flag, or record that `rsh`
   is the supported answer and document it in troubleshooting.
+- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)
+
+## B-040 — Which key authorizes the orchestration account is asserted three different ways
+- Status: open
+- Area: ceph / node-access / keys
+- Origin: node-access requiretty fix 2026-07-28
+- Severity: high
+- Problem: three sources disagree about what lands in the `cephadm` account's
+  `authorized_keys`. `authorize.yml:26,39` writes
+  `bootwright_node_access_public_key`, which is `accountPublicKeyPath` — the
+  **cluster** key from `clusterSSH.keyRef`
+  (`internal/render/inventory/storage_ansible.go:135` -> `:151`) — and
+  `docs/concepts/storage.md:331` agrees. But `specs/security.md:157-158`,
+  `specs/state-model.md:1011-1012` and ADR 0019:101 all say the **machine access
+  public key** is authorized for that account, and the destroy path removes
+  *both* (`storage_cluster_cephadm/tasks/revoke_node_access.yml:48-57` removes
+  `installPublicKeyPath`, `:59-69` removes `clusterSSH.publicKeyPath`). The
+  second-order question is which key authenticates the three terminal-free
+  `sudo -n true` proofs ADR 0028 makes normative: `context.yml:43-57` offers only
+  `preferredIdentityPath` and `installPrivateKeyPath` — the *machine* private key
+  — and adds `IdentitiesOnly=yes` whenever the latter resolves, so on a cluster
+  whose `clusterSSH.keyRef` names a Secret distinct from the machine key nothing
+  offered matches what `authorize.yml` authorized. Pre-existing and untouched by
+  the requiretty change, but that change is what makes apply reach `verify.yml`
+  on a fleet that previously failed at `useradd`, so it is now reachable. No test
+  pins either side.
+- Exit: decide the boundary, then make one side true — either correct
+  `specs/security.md`, `specs/state-model.md` and ADR 0019 to say the cluster key
+  is authorized, or change `authorize.yml` to use
+  `bootwright_node_access_install_public_key`. Either way add the private half of
+  whichever key is authorized to the node-access argv, and pin the pairing with a
+  test so the three proofs cannot silently lose their credential.
 - Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)

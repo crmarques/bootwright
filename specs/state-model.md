@@ -1012,8 +1012,9 @@ Rules:
   access public key authorized, and a per-user sudoers drop-in at
   `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
   and `<user> ALL=(ALL) NOPASSWD: ALL`. The drop-in is necessary but not
-  sufficient and is proved rather than assumed: within the generic `Defaults`
-  tier a later-sorting file in the same directory overrides it, a
+  sufficient and is proved rather than assumed: sudo applies `Defaults` in parse
+  order and the last one wins whether it is generic or per-user, so any
+  later-sorting file in the same directory overrides it, a
   `Defaults requiretty` placed after `@includedir` in `/etc/sudoers` cannot be
   overridden by any drop-in, and an LDAP or SSSD `cn=defaults` carrying
   `ignore_local_sudoers` makes sudo skip `/etc/sudoers` and every drop-in

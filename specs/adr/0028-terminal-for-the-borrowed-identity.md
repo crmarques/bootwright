@@ -14,18 +14,22 @@ connection plugin — which allocates a pseudo-terminal for sudoable commands, a
 is kept doing so by `pipelining = False` in `ansible/ansible.cfg` — is therefore
 never in that path.
 
-A node whose generic `Defaults` tier sets `requiretty` refuses `sudo` on that
-channel. `sudo` evaluates `requiretty` **before** authentication, so it is
-orthogonal to `-n` and to `NOPASSWD`: the account has the grant and still cannot
-use it. The `Defaults:<user> !requiretty` line ADR 0019 makes normative is
-written for `cephadm` by `sudoers.yml`, which runs *after* `account.yml` — so
-the identity Bootwright borrows to create the account is never exempted, and the
-task that would write the exemption is itself inside the blocked window. Such a
-fleet could not be onboarded at all.
+A node whose sudoers sets `requiretty` refuses `sudo` on that channel. `sudo`
+evaluates `requiretty` **before** authentication, so it is orthogonal to `-n`
+and to `NOPASSWD`: the account has the grant and still cannot use it. The
+`Defaults:<user> !requiretty` line ADR 0019 makes normative is written for
+`cephadm` by `sudoers.yml`, which runs *after* `account.yml` — so the identity
+Bootwright borrows to create the account is never exempted, and the task that
+would write the exemption is itself inside the blocked window.
 
 Two identities are in play, and they are not symmetric. Bootwright **borrows**
-one — the operator's out-of-band install account, `operatorIdentity` under
-ADR 0027 — for the length of the provisioning window. It **creates** the other,
+one for the length of the provisioning window: the machine's
+`access.ssh.user`. On a node the cluster installs that is `bootwright`, whose
+kickstart already writes `Defaults:bootwright !requiretty`, so the window bites
+only where site policy overrides it. On an `os.provided: true` node it is the
+operator's out-of-band account, reached under ADR 0027's `operatorIdentity`
+auth arm — an account Bootwright does not own and whose sudo policy it must not
+touch, so such a fleet could not be onboarded at all. It **creates** the other,
 `cephadm`, and hands it to the cephadm manager, which `sudo`-wraps every remote
 command it issues over a connection that has no terminal and never will.
 
@@ -55,11 +59,14 @@ narrowed by one word: verified *terminal-free*, on every topology node, before
 
 ### The terminal is allocated only when a differential probe proves it necessary
 
-`privilege.yml` runs between identity selection and account creation. It runs
-`<sudo> true` without a terminal; only if that fails does it retry with one. If
-neither answers it refuses, fail-closed, before any mutation — no account, no
-sudoers file, root SSH untouched — and the message separates the two causes it
-can tell apart.
+`privilege.yml` runs between identity selection and account creation, when
+Bootwright is still connected as the borrowed login and that login needs `sudo`.
+It runs `<sudo> true` without a terminal; only if that fails does it retry with
+one. If neither answers it refuses, fail-closed, before any mutation — no
+account, no sudoers file, root SSH untouched — and the message separates the two
+causes it can tell apart. It is skipped when the orchestration account already
+answered `sudo -n true` (`probe.yml` proved the stronger property) and when the
+borrowed login is `root` (there is nothing to escalate).
 
 A terminal cannot be allocated unconditionally: a host whose `sshd` sets
 `PermitTTY no` and whose sudoers is stock answers today and would answer
@@ -76,9 +83,10 @@ authors stays what ADR 0019 fixed — one drop-in scoped to one principal, never
 global relaxation. This asymmetry extends that scoping rather than reopening it.
 
 When the created account's grant is present and correct but has no effect, the
-node is not reading it, and the refusal names the three ways that happens:
-within the generic `Defaults` tier a later file in `/etc/sudoers.d` overrides an
-earlier one; a `Defaults requiretty` placed after `@includedir` in
+node is not reading it, and the refusal names the three ways that happens: sudo
+applies `Defaults` in parse order and the last one wins whether it is generic or
+per-user, so any later-sorting file in `/etc/sudoers.d` overrides it; a
+`Defaults requiretty` placed after `@includedir` in
 `/etc/sudoers` cannot be overridden by any drop-in; and an LDAP or SSSD
 `cn=defaults` carrying `ignore_local_sudoers` skips `/etc/sudoers` and every
 drop-in outright, in which case the grant must come from the directory.
@@ -86,10 +94,12 @@ drop-in outright, in which case the grant must come from the directory.
 ### Terminal allocation is not an operator knob
 
 `ansible_pipelining`, `ansible_ssh_pipelining`, and `ansible_ssh_use_tty` are
-reserved `extraVars`. Each of them disables the terminal ansible-core allocates
-for escalated tasks, for every host in the run rather than the ones the setting
-was aimed at, and turns a `requiretty` node's every `become` task into a
-failure. Bootwright decides terminal allocation per node from the probe.
+reserved `extraVars`. Each of them can switch off the terminal ansible-core
+allocates for escalated tasks, turning a `requiretty` node's every `become` task
+into a failure, and an extra var applies to every host in the run rather than
+the ones it was aimed at — so the key is refused at any value, not only at the
+value that would disable it. Bootwright decides terminal allocation per node
+from the probe.
 
 ## Consequences
 

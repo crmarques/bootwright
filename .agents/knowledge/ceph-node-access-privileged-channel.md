@@ -68,6 +68,10 @@ differential probe is the only sound detector: `privilege.yml:2-14` runs
 with `-tt` **only** when the first failed, and `privilege.yml:28-56` refuses
 fail-closed — before `account.yml` creates anything — if neither answered.
 `privilege.yml:58-70` then sets `bootwright_node_access_privileged_argv`.
+Both probes are skipped when `bootwright_node_access_ready` is already true (the
+orchestration account answered `sudo -n true` in `probe.yml`, which is the
+stronger property) or when `bootwright_node_access_sudo` is empty (the borrowed
+login is `root`); the assert then passes on `default(0)` with nothing probed.
 
 **Do not make `-tt` unconditional.** A host whose `sshd` sets `PermitTTY no` and
 whose sudoers is stock answers pty-free today and answers `rc=255` with a failed
@@ -145,8 +149,10 @@ terminating. ansible-core encodes the same constraint upstream — `ssh.py:1518`
 adds `-tt` only `if not in_data`, i.e. never when it has data to feed. Every
 privileged payload in this role therefore produces its content on the node with
 `printf '%s\n' … | <sudo> tee …` (`sudoers.yml:27-28`, `authorize.yml:39-41`,
-`restore.yml:88-90`, `revoke.yml:27-28`) and reads nothing from the controller's
-stdin. **Do not convert any of them to a controller-fed stdin form.**
+`restore.yml:88-90`, `revoke.yml:27-28`, `marker.yml:21-22`) and reads nothing
+from the controller's stdin. **Do not convert any of them to a controller-fed
+stdin form**, and if a payload is added, it obeys the same rule whether or not
+it appears in this list.
 
 ## 5. Writing the drop-in does not mean the node evaluates it
 
@@ -157,9 +163,13 @@ revocation` fails although `/etc/sudoers.d/60-bootwright-<user>` is present,
 **Cause:** the grant is written but never applied. Three real causes, all
 observed or documented:
 
-1. **A later-sorting file wins.** Within the generic `Defaults` tier a later
-   file in `/etc/sudoers.d` overrides an earlier one, so a hardening drop-in
-   sorting after `60-bootwright-<user>` defeats it. (Deferred rename: B-038.)
+1. **A later-sorting file wins.** sudoers(5): *"In general Defaults settings are
+   applied in order, later entries will override earlier ones. However,
+   command-specific Defaults settings are applied later."* There is **no**
+   generic-before-per-user tier — only command-specific `Defaults` are deferred —
+   so a plain `Defaults requiretty` in a file sorting after
+   `60-bootwright-<user>` beats Bootwright's `Defaults:<user> !requiretty`.
+   (Deferred rename: B-038.)
 2. **`Defaults requiretty` after `@includedir`** in `/etc/sudoers` cannot be
    overridden by any drop-in.
 3. **LDAP/SSSD `ignore_local_sudoers`.** sudoers(5): *"If set via LDAP, parsing

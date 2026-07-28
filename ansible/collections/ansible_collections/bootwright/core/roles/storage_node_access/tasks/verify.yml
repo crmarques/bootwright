@@ -27,12 +27,14 @@
       way; a node whose sudo policy reaches {{ bootwright_node_access.user }} only from an
       interactive session cannot be orchestrated. If
       {{ bootwright_node_access.sudoersPath }} is present and correct but has no effect,
-      the node is not reading it: sudo applies generic Defaults before per-user Defaults,
-      but within the generic tier a later file in {{ bootwright_node_access.sudoersPath | dirname }}
-      overrides an earlier one, a Defaults requiretty placed after @includedir in
-      /etc/sudoers cannot be overridden by any drop-in, and an LDAP or SSSD cn=defaults
-      carrying ignore_local_sudoers skips /etc/sudoers and every drop-in outright — in
-      that last case the grant must come from the directory, not from this node. Run
+      the node is not reading it: sudo applies Defaults in parse order and the last one
+      wins whether it is generic or per-user, so any file in
+      {{ bootwright_node_access.sudoersPath | dirname }} sorting after
+      {{ bootwright_node_access.sudoersPath | basename }} overrides it; a Defaults
+      requiretty placed after @includedir in /etc/sudoers cannot be overridden by any
+      drop-in; and an LDAP or SSSD cn=defaults carrying ignore_local_sudoers skips
+      /etc/sudoers and every drop-in outright, in which case the grant must come from
+      the directory, not from this node. Run
       sudo -ll -U {{ bootwright_node_access.user }} on the node to see which policy wins.
   delegate_to: localhost
   become: false

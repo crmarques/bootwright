@@ -326,6 +326,8 @@ hardening a machine whose OS you own is your decision, not the cluster's.
    `bootwright` on a node the cluster installs, the machine's own `access.ssh`
    identity on an `os.provided: true` node — retrying once with a terminal if
    the node refuses `sudo` without one. Nothing is created until that succeeds.
+   Skipped where there is nothing to prove: when the orchestration account
+   already answers `sudo -n true`, and when the borrowed login is `root`.
 2. Creates the orchestration account on every topology node that lacks it —
    locked password, not in `wheel`, the cluster public key in its
    `authorized_keys`, and a sudoers drop-in at

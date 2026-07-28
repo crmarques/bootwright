@@ -161,8 +161,9 @@ access public key in its `authorized_keys`, and a per-user sudoers drop-in at
 
 That drop-in is necessary but not sufficient, so Bootwright proves the grant
 rather than assuming it. It is evaluated only if the node reads `/etc/sudoers`
-and its `@includedir`, and only if nothing later overrides it: within the
-generic `Defaults` tier a later-sorting file in the same directory wins, and a
+and its `@includedir`, and only if nothing later overrides it: sudo applies
+`Defaults` in parse order and the last one wins whether it is generic or
+per-user, so any later-sorting file in the same directory overrides it, and a
 `Defaults requiretty` placed after `@includedir` in `/etc/sudoers` cannot be
 overridden by any drop-in. When an LDAP or SSSD `cn=defaults` carries
 `ignore_local_sudoers`, sudo skips `/etc/sudoers` and every drop-in outright;
@@ -200,9 +201,9 @@ be orchestrated and must fail. A node whose account does not answer stops the
 run with root still reachable.
 
 A pseudo-terminal is therefore asymmetric by rule. It is permitted for the
-identity Bootwright **borrows** — the operator's out-of-band install account,
-whose ability to run one privileged command is probed differentially, without a
-terminal first and once more with one, before any mutation — and forbidden for
+identity Bootwright **borrows** — the machine's `access.ssh.user`, whose ability
+to run one privileged command is probed differentially, without a terminal first
+and once more with one, before any mutation — and forbidden for
 the identity Bootwright **creates** and hands to cephadm, whose `sudo -n true`
 acceptance test must never gain one. Bootwright writes sudo policy only for the
 account it owns and never relaxes tty policy for the operator's account.
