@@ -29,6 +29,19 @@ func StorageManagementFQDN(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	return ComposeFQDN(label, cluster.Metadata.Name, domain)
 }
 
+func StorageGatewayFQDN(state v1alpha1.State, gateway v1alpha1.StorageObjectGateway) string {
+	clusterName := gateway.Spec.StorageClusterRef.Name
+	domain := StorageClustersDomain(state)
+	if clusterName == "" || domain == "" {
+		return ""
+	}
+	label := gateway.Spec.Public.DNSLabel
+	if label == "" {
+		label = gateway.Metadata.Name
+	}
+	return ComposeFQDN(label, clusterName, domain)
+}
+
 func ClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
 	for _, cluster := range state.StorageClusters {
 		if cluster.Metadata.Name == name {

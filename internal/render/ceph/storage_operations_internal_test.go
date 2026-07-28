@@ -1001,7 +1001,7 @@ func TestRGWRealmZoneAndConfigRender(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "s3"},
 		Spec: v1alpha1.StorageObjectGatewaySpec{
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-			Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "s3.example.com"},
+			Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "s3"},
 			Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 				ServiceID: "s3", Realm: "prod", ZoneGroup: "us", Zone: "us-east",
 				Config: map[string]string{"rgw_max_objs_per_shard": "100000"},
@@ -1062,7 +1062,7 @@ func TestSecondGatewaySharedRealmCreatesOwnZoneGroupAndZone(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: name},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: name + ".example.com"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: name},
 				Ceph:              v1alpha1.StorageObjectGatewayCephSpec{ServiceID: id, Realm: "corp", ZoneGroup: zg, Zone: zone},
 			},
 		}

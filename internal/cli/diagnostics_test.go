@@ -39,6 +39,21 @@ func TestDiagnosticsMapRenamedCephManagementDNSName(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsMapRenamedGatewayPublicDNSName(t *testing.T) {
+	err := errors.New("decode /tmp/input/rgw.yaml document 1: yaml: unmarshal errors:\n  line 8: field dnsName not found in type v1alpha1.StorageObjectGatewayPublic")
+	diagnostics := diagnosticsFromError(err)
+	if len(diagnostics) != 1 {
+		t.Fatalf("Diagnostics returned %d entries, want 1", len(diagnostics))
+	}
+	got := diagnostics[0]
+	if got.Object != "StorageObjectGateway" || got.Field != "spec.public.dnsName" {
+		t.Fatalf("diagnostic owner = (%q, %q), want StorageObjectGateway spec.public.dnsName", got.Object, got.Field)
+	}
+	if !strings.Contains(got.Remediation, "spec.public.dnsLabel") {
+		t.Fatalf("remediation = %q, want the dnsLabel successor named", got.Remediation)
+	}
+}
+
 func TestDiagnosticsMapUnknownInstallField(t *testing.T) {
 	err := errors.New("decode /tmp/input/cluster.yaml document 1: yaml: unmarshal errors:\n  line 10: field customOverride not found in type v1alpha1.OCPInstallSpec")
 	diagnostics := diagnosticsFromError(err)

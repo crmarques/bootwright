@@ -274,7 +274,7 @@ metadata:
   name: odf-rgw
 spec:
   public:
-    dnsName: rgw-ceph.bootwright.test
+    dnsLabel: rgw-ceph
     scheme: https
     port: 443
   ceph:
@@ -290,11 +290,15 @@ spec:
           hosts: [node-01, node-02, node-03]   # node names, not machine names
 ```
 
-Under managed name resolution, `public.dnsName` gets one `host-record` per
-declared ingress VIP — one gateway with several site-scoped ingresses under a
-single `dnsName` resolves to all of their VIPs, not just the first. For a
-stable, distinct FQDN per data site instead (the Metro-DR pattern), author one
-`StorageObjectGateway` per site rather than stacking ingresses under one name.
+`public.dnsLabel` is the leftmost label only; Bootwright composes the published
+name as `<dnsLabel>.<storageClusterRef name>.<domains.storageClusters>`, the same
+composition the Ceph mgmt-gateway and node FQDNs use. It defaults to the
+gateway's own `metadata.name`, so gateways on one cluster never collide. Under
+managed name resolution that composed name gets one `host-record` per declared
+ingress VIP — one gateway with several site-scoped ingresses resolves to all of
+their VIPs, not just the first. For a stable, distinct FQDN per data site
+instead (the Metro-DR pattern), author one `StorageObjectGateway` per site
+rather than stacking ingresses under one name.
 
 See [Ceph storage topologies](ceph-topologies.md#rgw-and-ingress) for how RGW
 fits the broader storage spine.

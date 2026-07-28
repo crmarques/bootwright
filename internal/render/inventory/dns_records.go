@@ -86,7 +86,7 @@ func nodeHostRecords(state v1alpha1.State, entryName string) ([]dnsmasqRecord, [
 func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	var records []dnsmasqRecord
 	for _, gw := range state.StorageObjectGateways {
-		dnsName := gw.Spec.Public.DNSName
+		dnsName := stateview.StorageGatewayFQDN(state, gw)
 		if dnsName == "" || len(gw.Spec.Ceph.Ingresses) == 0 {
 			continue
 		}

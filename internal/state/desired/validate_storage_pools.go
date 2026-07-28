@@ -485,8 +485,8 @@ func validateStorageGatewayConfig(prefix string, gw v1alpha1.StorageObjectGatewa
 }
 
 func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObjectGateway) []string {
-	if gw.Spec.Public.DNSName == "" {
-		return []string{fmt.Sprintf("%s.dnsName is required for StorageObjectGateway/%s", prefix, gw.Metadata.Name)}
+	if label := gw.Spec.Public.DNSLabel; label != "" && !IsDNSLabel(label) {
+		return []string{fmt.Sprintf("%s.dnsLabel %q is not a valid DNS label", prefix, label)}
 	}
 	return nil
 }

@@ -142,15 +142,24 @@ func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
 		if field != "dnsName" {
 			return Diagnostic{}, false
 		}
-		return Diagnostic{
-			Object:      "StorageCluster",
-			Field:       "spec.ceph.management.dnsName",
-			Rule:        "spec.ceph.management.dnsName was replaced by dnsLabel",
-			Remediation: "set spec.ceph.management.dnsLabel to the leftmost label only; the published name is composed as <dnsLabel>.<StorageCluster name>.<Environment spec.domains.storageClusters>",
-			Message:     message,
-		}, true
+		return renamedToDNSLabel(message, "StorageCluster", "spec.ceph.management", "StorageCluster name"), true
+	case "StorageObjectGatewayPublic":
+		if field != "dnsName" {
+			return Diagnostic{}, false
+		}
+		return renamedToDNSLabel(message, "StorageObjectGateway", "spec.public", "storageClusterRef name"), true
 	default:
 		return Diagnostic{}, false
+	}
+}
+
+func renamedToDNSLabel(message, kind, block, zoneOwner string) Diagnostic {
+	return Diagnostic{
+		Object:      kind,
+		Field:       block + ".dnsName",
+		Rule:        block + ".dnsName was replaced by dnsLabel",
+		Remediation: "set " + block + ".dnsLabel to the leftmost label only; the published name is composed as <dnsLabel>.<" + zoneOwner + ">.<Environment spec.domains.storageClusters>",
+		Message:     message,
 	}
 }
 

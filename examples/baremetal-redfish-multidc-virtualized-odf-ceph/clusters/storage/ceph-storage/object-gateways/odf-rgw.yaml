@@ -6,7 +6,7 @@ spec:
   storageClusterRef: ceph-storage
 
   public:
-    dnsName: rgw-ceph.bootwright.test
+    dnsLabel: rgw-ceph
     scheme: https
     port: 443
 

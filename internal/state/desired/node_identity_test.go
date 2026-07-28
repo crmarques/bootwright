@@ -266,7 +266,7 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 				Metadata: v1alpha1.Metadata{Name: "rgw-east"},
 				Spec: v1alpha1.StorageObjectGatewaySpec{
 					StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-					Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "s3.example.com"},
+					Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "s3"},
 				},
 			},
 		},
@@ -286,11 +286,17 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[1]); got != "dashboard.ceph-east.ceph.cloud.example.net" {
 		t.Fatalf("management fqdn = %q, want dashboard.ceph-east.ceph.cloud.example.net", got)
 	}
-	if got := state.StorageObjectGateways[0].Spec.Public.DNSName; got != "rgw.ceph.ceph.cloud.example.net" {
-		t.Fatalf("gateway dnsName = %q, want rgw.ceph.ceph.cloud.example.net (keyed by the gateway's own name)", got)
+	if got := state.StorageObjectGateways[0].Spec.Public.DNSLabel; got != "rgw" {
+		t.Fatalf("gateway dnsLabel = %q, want the gateway's own name as the default label", got)
 	}
-	if got := state.StorageObjectGateways[1].Spec.Public.DNSName; got != "s3.example.com" {
-		t.Fatalf("declared gateway dnsName = %q, want s3.example.com kept verbatim", got)
+	if got := stateview.StorageGatewayFQDN(state, state.StorageObjectGateways[0]); got != "rgw.ceph.ceph.cloud.example.net" {
+		t.Fatalf("gateway fqdn = %q, want rgw.ceph.ceph.cloud.example.net (keyed by the gateway's own name)", got)
+	}
+	if got := state.StorageObjectGateways[1].Spec.Public.DNSLabel; got != "s3" {
+		t.Fatalf("declared gateway dnsLabel = %q, want s3 kept verbatim", got)
+	}
+	if got := stateview.StorageGatewayFQDN(state, state.StorageObjectGateways[1]); got != "s3.ceph.ceph.cloud.example.net" {
+		t.Fatalf("gateway fqdn = %q, want s3.ceph.ceph.cloud.example.net", got)
 	}
 }
 
@@ -320,8 +326,8 @@ func TestNormalizeKeepsCephDNSNamesEmptyWithoutStorageDomain(t *testing.T) {
 	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[0]); got != "" {
 		t.Fatalf("management fqdn = %q, want empty without an Environment storage domain", got)
 	}
-	if got := state.StorageObjectGateways[0].Spec.Public.DNSName; got != "" {
-		t.Fatalf("gateway dnsName = %q, want empty without an Environment storage domain", got)
+	if got := stateview.StorageGatewayFQDN(state, state.StorageObjectGateways[0]); got != "" {
+		t.Fatalf("gateway fqdn = %q, want empty without an Environment storage domain", got)
 	}
 }
 

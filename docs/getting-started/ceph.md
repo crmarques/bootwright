@@ -189,7 +189,7 @@ A `nameResolution` (`dnsmasq`) component pinned to `bastion`, bound to
 `192.168.140.1:53`. It authoritatively serves the lab records and forwards
 everything else (`cp.icr.io`, RHSM, IBM's repo host, NTP pools) to public
 resolvers. It also publishes the RGW S3 endpoint
-(`additionalIngressHosts: [rgw.ceph.bootwright.test]`).
+(`additionalIngressHosts: [rgw.ceph-ibm.bootwright.test]`).
 
 ### StorageCluster and its surfaces (`clusters/storage/ceph-ibm/`)
 
@@ -211,7 +211,7 @@ The surrounding objects fill in the pools and services:
 - `StorageFilesystem` `cephfs`: the CephFS filesystem over the two CephFS pools,
   with one active MDS and a standby across `node-01`/`node-02`.
 - `StorageObjectGateway` `rgw`: the RGW service on both full nodes, its public S3
-  endpoint (`rgw.ceph.bootwright.test`), and a cephadm ingress floating a single
+  endpoint (`rgw.ceph-ibm.bootwright.test`), and a cephadm ingress floating a single
   VIP (`192.168.140.80`).
 
 See [Storage](../concepts/storage.md) for the full storage model.
@@ -233,7 +233,7 @@ environment differs.
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`). Any product version installs; its leading component selects the stream. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
-| `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsName` and `spec.ceph.ingresses[].address` | The RGW endpoint and ingress VIP, if you changed the network. |
+| `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsLabel` and `spec.ceph.ingresses[].address` | The RGW endpoint label and ingress VIP, if you changed the network. |
 
 If you change the `192.168.140.*` network, update every place it appears:
 `infra/networkconfigs/ceph-net.yaml`, `infra/machines/bastion.yaml`,
@@ -363,7 +363,7 @@ and the mgmt-gateway plus ingress services.
 
 The Ceph Dashboard is served HA through the native mgmt-gateway at
 `https://dashboard.ceph-ibm.bootwright.test:8443` (its keepalived VIP is
-`192.168.140.81`); the S3 endpoint is `http://rgw.ceph.bootwright.test` (RGW
+`192.168.140.81`); the S3 endpoint is `http://rgw.ceph-ibm.bootwright.test` (RGW
 ingress VIP `192.168.140.80`).
 
 ### The dashboard admin password

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func TestValidateArtifactServerRequirementsStorageBareMetalManagedOS(t *testing.T) {
@@ -130,7 +131,7 @@ func TestStorageStretchAcceptsPerSiteObjectGatewayPair(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc1.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc1", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf.dc1",
 					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
@@ -145,7 +146,7 @@ func TestStorageStretchAcceptsPerSiteObjectGatewayPair(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "rgw-dc2"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc2.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc2", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf.dc2",
 					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
@@ -202,7 +203,7 @@ func TestStorageIngressVRRPSameIDDisjointNetworksAccepted(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc1.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc1", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf.dc1",
 					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc1"}},
@@ -219,7 +220,7 @@ func TestStorageIngressVRRPSameIDDisjointNetworksAccepted(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "rgw-dc2"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc2.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc2", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf.dc2",
 					Placement: v1alpha1.StoragePlacement{Sites: []string{"dc2"}},
@@ -1570,6 +1571,65 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	}
 }
 
+func TestStorageGatewayDNSLabelValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		label string
+		want  string
+	}{
+		{name: "bare-label", label: "rgw-dc1"},
+		{name: "omitted-defaults-to-gateway-name", label: ""},
+		{name: "fqdn-rejected", label: "rgw.example.test", want: `dnsLabel "rgw.example.test" is not a valid DNS label`},
+		{name: "uppercase-rejected", label: "RGW", want: `dnsLabel "RGW" is not a valid DNS label`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gw := v1alpha1.StorageObjectGateway{
+				Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
+				Spec: v1alpha1.StorageObjectGatewaySpec{
+					StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+					Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: tc.label},
+				},
+			}
+			got := strings.Join(validateStorageGatewayPublicEndpoint("spec.public", gw), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStorageGatewayFQDNComposesFromLabelClusterAndDomain(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
+			},
+		}},
+		StorageObjectGateways: []v1alpha1.StorageObjectGateway{{
+			Metadata: v1alpha1.Metadata{Name: "odf-rgw"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph-storage"},
+			},
+		}},
+	}
+
+	Normalize(&state)
+
+	if got := state.StorageObjectGateways[0].Spec.Public.DNSLabel; got != "odf-rgw" {
+		t.Fatalf("dnsLabel = %q, want the gateway's own name as the default", got)
+	}
+	if got := stateview.StorageGatewayFQDN(state, state.StorageObjectGateways[0]); got != "odf-rgw.ceph-storage.example.test" {
+		t.Fatalf("gateway fqdn = %q, want odf-rgw.ceph-storage.example.test", got)
+	}
+}
+
 func TestStorageObjectGatewayRejectsOldClientEndpoint(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
@@ -1892,7 +1952,7 @@ func storageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "rgw"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-ceph.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-ceph", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf",
 					Placement: v1alpha1.StoragePlacement{

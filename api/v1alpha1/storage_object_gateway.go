@@ -15,9 +15,9 @@ type StorageObjectGatewaySpec struct {
 }
 
 type StorageObjectGatewayPublic struct {
-	DNSName string `yaml:"dnsName" json:"dnsName"`
-	Scheme  string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
-	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
+	DNSLabel string `yaml:"dnsLabel,omitempty" json:"dnsLabel,omitempty"`
+	Scheme   string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
+	Port     int    `yaml:"port,omitempty" json:"port,omitempty"`
 }
 
 type StorageObjectGatewayCephSpec struct {

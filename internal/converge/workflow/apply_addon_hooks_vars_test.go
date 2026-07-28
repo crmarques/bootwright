@@ -52,11 +52,17 @@ func TestHookExtraVarPairsPropagatesMarshalError(t *testing.T) {
 
 func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T) {
 	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "lab"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
+			},
+		}},
 		StorageObjectGateways: []v1alpha1.StorageObjectGateway{{
 			Metadata: v1alpha1.Metadata{Name: "rgw-dc1"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-dc1.example.test", Scheme: "https", Port: 443},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc1", Scheme: "https", Port: 443},
 				Ceph:              v1alpha1.StorageObjectGatewayCephSpec{ServiceID: "odf.dc1"},
 			},
 		}},
@@ -95,8 +101,11 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 	}
 	spec, _ := gw["spec"].(map[string]any)
 	public, _ := spec["public"].(map[string]any)
-	if public["dnsName"] != "rgw-dc1.example.test" {
-		t.Fatalf("embedded objectGateway.spec.public.dnsName = %v, want rgw-dc1.example.test", public["dnsName"])
+	if public["dnsLabel"] != "rgw-dc1" {
+		t.Fatalf("embedded objectGateway.spec.public.dnsLabel = %v, want rgw-dc1", public["dnsLabel"])
+	}
+	if gw["publicFQDN"] != "rgw-dc1.ceph.example.test" {
+		t.Fatalf("embedded objectGateway.publicFQDN = %v, want the composed rgw-dc1.ceph.example.test the exporter hook reads", gw["publicFQDN"])
 	}
 
 	withoutRGW := executor.resolveRefObject(hooks.RefKindStorageExport, "no-rgw")

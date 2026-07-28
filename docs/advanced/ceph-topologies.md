@@ -158,8 +158,8 @@ managed `nameResolution` (dnsmasq) component referenced by the nodes'
 `NetworkConfig.nameResolutionRefs` publishes, for every machine it serves, a
 `host-record` for the machine's `fqdn` name at its IP and a `cname` from
 each node FQDN to the bound machine's `fqdn` (the bare machine label is not
-published), and publishes each object gateway's `public.dnsName` at its ingress
-VIP. Point each storage node's `NetworkConfig` `dns-resolver` at that
+published), and publishes each object gateway's composed public name at its
+ingress VIP. Point each storage node's `NetworkConfig` `dns-resolver` at that
 component. On provided (external) DNS the operator creates the records, and
 the "Name resolution" preflight group names any missing one. See
 [Networking](networking.md#name-resolution) for the resolver wiring and record
@@ -377,7 +377,7 @@ in the [storage reference](../concepts/storage.md#storageobjectgateway).
 For a stretch cluster, the site-local pattern is one `StorageObjectGateway` per
 data site, each with `spec.ceph.placement.sites` and its ingress `placement.sites`
 narrowed to that site, its own VIP, its own `firstVirtualRouterID`, and its own
-`public.dnsName` — every RGW daemon, ingress VRRP group, and HAProxy backend set
+`public.dnsLabel` — every RGW daemon, ingress VRRP group, and HAProxy backend set
 then stays inside one data center, and each ODF cluster is pointed at the one
 gateway local to it. Siblings may share a `realm`/`zoneGroup`/`zone` (or all
 leave it unset) without that being RGW multisite — Bootwright never configures

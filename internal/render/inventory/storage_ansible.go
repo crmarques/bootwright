@@ -297,7 +297,7 @@ func storageRGWIngressTLSVars(state v1alpha1.State, cluster v1alpha1.StorageClus
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		publicEndpoint, _ := topology.GatewayPublicEndpoint(gw)
+		publicEndpoint := topology.GatewayPublicEndpoint(state, gw)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {
 			if ingress.TLS == nil {
 				continue

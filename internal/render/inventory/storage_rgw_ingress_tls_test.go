@@ -25,7 +25,7 @@ func TestStorageRGWIngressTLSVars(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "rgw"},
 		Spec: v1alpha1.StorageObjectGatewaySpec{
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-			Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw.example.test", Scheme: "https", Port: 8443},
+			Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw", Scheme: "https", Port: 8443},
 			Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 				ServiceID: "odf",
 				Ingresses: []v1alpha1.StorageObjectGatewayIngress{

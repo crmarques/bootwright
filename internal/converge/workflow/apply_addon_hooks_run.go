@@ -258,7 +258,11 @@ func (e *addonHookExecutor) resolveRefObject(refKind, name string) map[string]an
 		if df := export.Spec.DataFoundation; df != nil && df.ObjectGatewayRef.Name != "" {
 			for _, gw := range e.state.StorageObjectGateways {
 				if gw.Metadata.Name == df.ObjectGatewayRef.Name {
-					object["objectGateway"] = objectToMap(gw)
+					gateway := objectToMap(gw)
+					if fqdn := stateview.StorageGatewayFQDN(e.state, gw); fqdn != "" && gateway != nil {
+						gateway["publicFQDN"] = fqdn
+					}
+					object["objectGateway"] = gateway
 					break
 				}
 			}

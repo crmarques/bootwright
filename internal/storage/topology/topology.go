@@ -147,12 +147,13 @@ func FilesystemDefaultDataPool(fs v1alpha1.StorageFilesystem) string {
 	return ""
 }
 
-func GatewayPublicEndpoint(gateway v1alpha1.StorageObjectGateway) (v1alpha1.Endpoint, bool) {
+func GatewayPublicEndpoint(state v1alpha1.State, gateway v1alpha1.StorageObjectGateway) v1alpha1.Endpoint {
 	public := gateway.Spec.Public
-	if public.DNSName == "" {
-		return v1alpha1.Endpoint{}, false
+	return v1alpha1.Endpoint{
+		DNSName: stateview.StorageGatewayFQDN(state, gateway),
+		Scheme:  public.Scheme,
+		Port:    public.Port,
 	}
-	return v1alpha1.Endpoint{DNSName: public.DNSName, Scheme: public.Scheme, Port: public.Port}, true
 }
 
 func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alpha1.Endpoint, bool) {

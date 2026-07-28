@@ -390,24 +390,11 @@ func normalizeStorageDNSAliases(state *v1alpha1.State) {
 			mgmt.DNSLabel = v1alpha1.StorageCephManagementDefaultDNSLabel
 		}
 	}
-	storageDomain := ""
-	if env := primaryEnvironment(state); env != nil {
-		storageDomain = env.Spec.Domains.StorageClustersDomain()
-	}
-	if storageDomain == "" {
-		return
-	}
-	clusters := indexStorageClusters(state.StorageClusters)
 	for i := range state.StorageObjectGateways {
 		gw := &state.StorageObjectGateways[i]
-		if gw.Spec.Public.DNSName != "" {
-			continue
+		if gw.Spec.Public.DNSLabel == "" {
+			gw.Spec.Public.DNSLabel = gw.Metadata.Name
 		}
-		cluster, ok := clusters[gw.Spec.StorageClusterRef.Name]
-		if !ok {
-			continue
-		}
-		gw.Spec.Public.DNSName = stateview.ComposeFQDN(gw.Metadata.Name, cluster.Metadata.Name, storageDomain)
 	}
 }
 

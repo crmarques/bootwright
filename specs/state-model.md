@@ -1242,16 +1242,20 @@ Rules:
   `StorageCluster`.
 - `spec.ceph.serviceID` is required; `spec.ceph.frontendPort` must be in
   `0`–`65535`.
-- `spec.public.dnsName` is the storage-owned public S3 endpoint; optional
-  `spec.public.scheme` and `spec.public.port` refine it. The gateway owns this
-  fact, so a storage-only object store needs no `ContainerCluster`. When
-  omitted, it defaults to
-  `<StorageObjectGateway.metadata.name>.<StorageCluster.metadata.name>.<domains.storageClusters>`
-  (ADR 0018) when the environment declares a domain — the same composition
-  `spec.ceph.management.dnsLabel` feeds, keyed by the gateway's own
-  name so multiple gateways on one cluster never collide. Unlike the management
-  gateway, an explicit FQDN always wins here, and the field stays required
-  (empty is rejected) when no domain is configured to compose from.
+- `spec.public` is the storage-owned public S3 endpoint; the gateway owns this
+  fact, so a storage-only object store needs no `ContainerCluster`.
+  `spec.public.dnsLabel` is the leftmost label only, never an FQDN, and the
+  published name is always composed as
+  `<dnsLabel>.<StorageCluster.metadata.name>.<domains.storageClusters>`
+  (ADR 0018) — the same composition `spec.ceph.management.dnsLabel` feeds, with
+  the cluster arm taken from `spec.storageClusterRef`. `dnsLabel` defaults to the
+  gateway's own `metadata.name`, so multiple gateways on one cluster never
+  collide, and must be a valid DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) — a
+  dotted value is rejected. Without an environment domain to compose from there
+  is no published name at all and no DNS record is emitted. Optional
+  `spec.public.scheme` and `spec.public.port` refine the endpoint and are
+  independent of the name: `port` still sets the ingress frontend port even when
+  no name can be composed.
 - `spec.ceph.placement` defaults to every topology host with the `rgw` role;
   `sites`/`hosts` narrow the selection. On stretch-mode clusters the resolved
   placement must cover at least two hosts per data site — unless `sites`
@@ -1338,9 +1342,11 @@ Rules:
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and
   same-cluster. When set, the `openshift-data-foundation`/`fusion-data-foundation`
   add-ons' external-cluster-details exporter hook passes the referenced
-  `StorageObjectGateway`'s `spec.public.dnsName:port` as `--rgw-endpoint`, so
-  ODF external mode also provisions S3/object storage; omitted, the export
-  covers RBD and CephFS only.
+  `StorageObjectGateway`'s composed public name and `spec.public.port` as
+  `--rgw-endpoint`, so ODF external mode also provisions S3/object storage;
+  omitted, the export covers RBD and CephFS only. The hook reads that name from
+  the resolved `objectGateway.publicFQDN` key the hook-ref carries alongside the
+  serialized gateway — the spec itself holds only the label.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
 - `spec.externalDetails`, when set, requires `fromSecretRef` (its only arm),

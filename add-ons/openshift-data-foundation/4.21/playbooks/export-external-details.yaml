@@ -24,7 +24,7 @@
       when: bootwright_gateway is not none
       ansible.builtin.set_fact:
         bootwright_exporter_args: >-
-          {{ bootwright_exporter_args + ['--rgw-endpoint', bootwright_gateway.spec.public.dnsName ~ ':' ~ (bootwright_gateway.spec.public.port | default(443))] }}
+          {{ bootwright_exporter_args + ['--rgw-endpoint', bootwright_gateway.publicFQDN ~ ':' ~ (bootwright_gateway.spec.public.port | default(443))] }}
 
     - name: Read the exporter script the operator publishes
       when: bootwright_exporter_script | length == 0

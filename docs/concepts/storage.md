@@ -519,7 +519,7 @@ state leaves the live service running (additive-only).
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.storageClusterRef` | Yes | — | Managed `StorageCluster` (external clusters reject Bootwright-managed gateways). |
-| `spec.public.dnsName` | Yes | — | Public S3 endpoint DNS name. |
+| `spec.public.dnsLabel` | No | `metadata.name` | Leftmost label of the public S3 endpoint. The published name is composed as `<dnsLabel>.<storageClusterRef name>.<domains.storageClusters>`, so a dotted value is rejected. |
 | `spec.public.scheme` | No | — | Public endpoint scheme. |
 | `spec.public.port` | No | — | Public endpoint port. |
 | `spec.ceph.serviceID` | Yes | — | RGW service ID. |
@@ -654,7 +654,7 @@ spec:
 | --- | --- | --- | --- |
 | `dataFoundation.rbdPoolRef` | Yes | — | RBD `StoragePool` (same cluster). |
 | `dataFoundation.filesystemRef` | Yes | — | CephFS `StorageFilesystem` (same cluster). |
-| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter hook passes that gateway's `public.dnsName:port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
+| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter hook passes that gateway's composed public name and `public.port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
 
 ### External details
 

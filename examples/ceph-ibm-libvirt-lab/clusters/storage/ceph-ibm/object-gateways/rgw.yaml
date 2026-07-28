@@ -6,7 +6,7 @@ spec:
   storageClusterRef: ceph-ibm
 
   public:
-    dnsName: rgw.ceph.bootwright.test
+    dnsLabel: rgw
     scheme: http
     port: 80
 

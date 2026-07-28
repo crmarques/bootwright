@@ -99,7 +99,7 @@ func storageDNSRecordsState(baseDomain string) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "rgw"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw.example.test"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw"},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "lab", Address: "192.168.140.80"}},
 				},
@@ -119,7 +119,7 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	want := []string{
 		"ceph-1.example.test=192.168.140.21",
 		"dashboard.ceph.example.test=192.168.140.81",
-		"rgw.example.test=192.168.140.80",
+		"rgw.ceph.example.test=192.168.140.80",
 	}
 	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hostRecords = %v, want %v", got, want)
@@ -146,7 +146,6 @@ func TestNameResolutionRecordsFallBackToMachineLabelWithoutBaseDomain(t *testing
 	want := []string{
 		"ceph-1=192.168.140.21",
 		"node01=192.168.140.21",
-		"rgw.example.test=192.168.140.80",
 	}
 	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hostRecords = %v, want %v", got, want)
@@ -169,7 +168,7 @@ func TestNameResolutionRecordsPublishEveryGatewayIngressUnderOneDNSName(t *testi
 	vars := nameResolutionComponentVars(state, entry, component)
 
 	got := recordPairs(vars["hostRecords"])
-	for _, want := range []string{"rgw.example.test=192.168.141.80", "rgw.example.test=192.168.142.80"} {
+	for _, want := range []string{"rgw.ceph.example.test=192.168.141.80", "rgw.ceph.example.test=192.168.142.80"} {
 		found := false
 		for _, pair := range got {
 			if pair == want {
