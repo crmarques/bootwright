@@ -100,51 +100,11 @@
     - bootwright_os_pre_ssh_reachable | bool
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
-- name: Probe managed OS SSH authentication as the cluster orchestration account
-  ansible.builtin.command:
-    argv:
-      - timeout
-      - "15"
-      - ssh
-      - -i
-      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
-      - -o
-      - BatchMode=yes
-      - -o
-      - ConnectTimeout=5
-      - -o
-      - GSSAPIAuthentication=no
-      - -o
-      - StrictHostKeyChecking=yes
-      - -o
-      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
-      - "{{ bootwright_component.osInstall.ssh.fallbackUser }}@{{ bootwright_component.osInstall.ssh.address }}"
-      - "true"
-  delegate_to: localhost
-  register: bootwright_os_pre_ssh_auth_fallback
-  failed_when: false
-  changed_when: false
-  when:
-    - bootwright_os_pre_ssh_reachable | bool
-    - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
-    - (bootwright_os_pre_ssh_auth.rc | default(1) | int) != 0
-    - (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0
-
 - name: Resolve managed OS readiness before install
   ansible.builtin.set_fact:
     bootwright_managed_os_already_ready: >-
-      {{
-        ((bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0)
-        or ((bootwright_os_pre_ssh_auth_fallback.rc | default(1) | int) == 0)
-      }}
-    bootwright_os_probe_user: >-
-      {{
-        ((bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0)
-        | ternary(
-          bootwright_component.osInstall.ssh.user,
-          bootwright_component.osInstall.ssh.fallbackUser | default(bootwright_component.osInstall.ssh.user)
-        )
-      }}
+      {{ (bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0 }}
+    bootwright_os_probe_user: "{{ bootwright_component.osInstall.ssh.user }}"
   changed_when: false
 
 - name: Refuse to reinstall a reachable managed OS Bootwright cannot authenticate to
@@ -152,8 +112,7 @@
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} answers SSH but
       rejects Bootwright's install identity
-      {{ bootwright_component.osInstall.ssh.user }}{%- if (bootwright_component.osInstall.ssh.fallbackUser | default('') | length) > 0 %}
-      and orchestration account {{ bootwright_component.osInstall.ssh.fallbackUser }}{%- endif %}
+      {{ bootwright_component.osInstall.ssh.user }}
       (ssh rc {{ bootwright_os_pre_ssh_auth.rc | default(1) }}). Bootwright cannot read
       {{ bootwright_os_marker_path }} to prove it owns this host, and a reinstall wipes
       its disks, so an unverifiable host fails closed like a foreign one. Restore

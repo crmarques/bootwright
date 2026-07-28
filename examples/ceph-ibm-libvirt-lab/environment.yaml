@@ -6,6 +6,9 @@ spec:
   domains:
     base: bootwright.test
 
+  machineAccess:
+    keyRef: bootwright-machine-key
+
   safety:
     destroyProtection: requiredOverride
 

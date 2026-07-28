@@ -66,7 +66,7 @@ func TestAuthoredMachineKeyReusedAsClusterIdentityRejected(t *testing.T) {
 	state.Secrets = append(state.Secrets, clusterSSHSecret(reused, v1alpha1.SecretTypeSSHKeyPair))
 	Normalize(&state)
 	errs := validateStorage(state)
-	if !containsSubstring(errs, "declare a second sshKeyPair Secret") {
+	if !containsSubstring(errs, "Declare a second sshKeyPair Secret") {
 		t.Fatalf("expected rejection of a cluster key reusing an authored machine access key, got: %v", errs)
 	}
 }
@@ -107,7 +107,7 @@ func TestRootClusterSSHUserRejectedWhenNodesInstallNonRoot(t *testing.T) {
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = v1alpha1.RootSSHUser
 	setStorageMachineSSHUser(&state, "cephadm")
 	errs := validateStorage(state)
-	if !containsSubstring(errs, "an account that machine does not install") {
+	if !containsSubstring(errs, "an account that machine does not carry") {
 		t.Fatalf("expected rejection of a root orchestration user over non-root node accounts, got: %v", errs)
 	}
 }

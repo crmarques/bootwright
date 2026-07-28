@@ -19,11 +19,11 @@ rules on this kind:
 
 - **provided** (`os.provided: true`) — the machine already runs a usable OS.
   Bootwright neither provisions a substrate nor installs an OS; it reaches the
-  machine over `access.ssh`. Omitting `access.ssh` declares it is the local
-  bastion Bootwright runs on, and it is reached with a local connection.
+  machine over `access.ssh` with the credential you declare, or as you.
 - **managed** (`os.provided: false` plus `os.installProfileRef`) — Bootwright
   installs the OS through Anaconda before any cluster or storage work, using a
   [`MachineImage`](#machineimage) and a [`MachineInstallProfile`](#machineinstallprofile).
+  It creates and owns the machine's login, so the `Machine` authors no `access`.
 - **ready** (`os.provided: false`, no `os.installProfileRef`) — the cluster
   agent installer lays the OS down (RHCOS for OpenShift); Bootwright provisions
   the substrate and boots the agent ISO.
@@ -59,7 +59,7 @@ The tables below describe only `spec`.
 | `spec.network.config` | No | None | Install network selection and overrides. Must be empty when `os.provided: true`. |
 | `spec.network.interfaceBinding[]` | When `os.provided: false` on `baremetal` with a `NetworkConfig` | None | Maps hardware NIC names to NMState interface names. |
 | `spec.addresses[]` | No | None | Durable named addresses used by SSH, services, and endpoint resolution. |
-| `spec.access` | When `os.installProfileRef` is set | None | How Bootwright reaches the machine: `local: true` for the controller, or `ssh` with an `auth` arm. A Ceph storage node the cluster installs derives it and authors nothing. |
+| `spec.access` | No | None | How Bootwright reaches a machine it did **not** install: `local: true` for the controller, or `ssh` with an `auth` arm. Refused on a machine Bootwright installs — there it derives the `bootwright` service account. |
 
 ### Capabilities
 
@@ -157,8 +157,19 @@ with `spec`; the two are mutually exclusive. `overrides` and
 
 ### Access
 
-`spec.access` says how Bootwright reaches the machine. It is a union: set
-`local` **or** `ssh`, never both.
+A machine's login is owned by exactly one of two parties, and which one is
+decided by `spec.os.provided` alone:
+
+- **Bootwright installs the machine** (`os.provided: false` with
+  `os.installProfileRef`). The install creates a `bootwright` service account,
+  authorizes the fleet key
+  [`Environment.spec.machineAccess.keyRef`](environment.md#machine-access) for
+  it, grants it passwordless `sudo`, and writes `PermitRootLogin no`. You author
+  no `access` block at all, and authoring one is a validation error.
+- **You already own the machine** (`os.provided: true`). `spec.access` says how
+  Bootwright reaches it.
+
+`spec.access` is a union: set `local` **or** `ssh`, never both.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -167,29 +178,24 @@ with `spec`; the two are mutually exclusive. `overrides` and
 | `access.local` | No | `false` | `true` declares this machine is the controller Bootwright runs on; it is reached with a local connection and needs no address or credential. Valid only with `os.provided: true`, and refused when the machine's address does not resolve to this host. |
 | `access.ssh.addressRef` | No | An address named `ssh`, else `fqdn` | Address name used for SSH; must resolve to `spec.addresses[]`. |
 | `access.ssh.port` | No | `22` | TCP port for SSH. |
-| `access.ssh.user` | No | See below | Login account. Fixed for the life of the machine — see [Login identity](#login-identity). |
+| `access.ssh.user` | No | See below | Login account on the machine you already own. |
 | `access.ssh.auth` | Yes (when `access.ssh` is set) | None | How Bootwright authenticates. Exactly one arm; see below. |
 | `access.ssh.sudoPasswordRef` | No | None | `usernamePassword` Secret supplying the `sudo` password. Bootwright escalates with `become`, so an account without passwordless `sudo` needs this. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
-| `access.rootLogin` | No | `keep`, or `revoke` on a node whose Ceph cluster supplies a non-root login | `keep` or `revoke`. `revoke` turns off root SSH on the installed node. See [Storage → The Ceph node login](storage.md#the-ceph-node-login). |
+| `access.rootLogin` | No | `keep` | `keep` or `revoke`. `revoke` turns off root SSH. Valid only on `os.provided: true` machines — one Bootwright installs never permits a root login in the first place. See [Storage → The Ceph node login](storage.md#the-ceph-node-login). |
 
 #### The `auth` arms
 
-`access.ssh.auth` is a discriminated union. The arm you set is what tells a
-reader whether the login already exists or Bootwright creates it.
+`access.ssh.auth` is a discriminated union with exactly one arm. Every arm
+describes a login that **already exists**; nothing here creates one.
 
 | Arm | Meaning |
 | --- | --- |
-| `controllerIdentity: {}` | Reach the machine as the operator running Bootwright, with that operator's own SSH identity (agent, `~/.ssh/config`, default keys). Nothing is authored, nothing is stored in the context. |
+| `operatorIdentity: {}` | Reach the machine as the operator running Bootwright, with that operator's own SSH identity (agent, `~/.ssh/config`, default keys). Nothing is authored, nothing is stored in the context. This is the arm `--ssh-user` names. |
 | `privateKeyRef` | Reach the machine with the named `sshKeyPair` `Secret`. |
 | `passwordRef` | Reach the machine with the password in the named `usernamePassword` `Secret`. Requires `access.ssh.user`. |
-| `provision.keyRef` | **Bootwright creates this login during the OS install** and authorizes the named `sshKeyPair` `Secret` for it. Legal only when `os.provided: false` with `os.installProfileRef`; required in that mode. |
 
-A machine Bootwright installs must use `provision` — the login does not exist
-until the install creates it. A machine Bootwright does not install must use
-one of the other three.
-
-`access.ssh.user` defaults to `root`, except under `controllerIdentity` where
+`access.ssh.user` defaults to `root`, except under `operatorIdentity` where
 it defaults to the invoking operator's own account, and under `passwordRef`
 where it may be taken from the Secret's username.
 
@@ -211,7 +217,7 @@ spec:
   access:
     ssh:
       auth:
-        controllerIdentity: {}
+        operatorIdentity: {}
 ```
 
 A machine reachable only by password, whose account also needs a `sudo`
@@ -256,60 +262,73 @@ recorded, not part of the converge hash, and does not perturb a managed-OS
 install marker. The file must be a regular file with no group or other
 permissions, or the command refuses before connecting.
 
-#### Logging in as a different account
+#### Logging in as yourself
 
-`--ssh-user <name>` is available on the same commands and replaces the account
-Bootwright **connects as**, for that one invocation. The two flags are usually
-used together — a key you had to name generally belongs to an account you have
-to name too:
+`--ssh-user <name>` is available on the same commands and names the account for
+machines that declare `auth.operatorIdentity` — the machines you already
+administer. The two flags are usually used together: your key and your account
+travel as a pair.
 
 ```console
-$ bootwright machine exec --name ceph-dc3-arbiter --ssh-user operator -- id
-$ bootwright apply --machines ceph-dc3-arbiter --ssh-user operator \
+$ bootwright apply --machines lab-appliance --ssh-user operator \
     --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
 ```
 
-It does not move an account Bootwright **creates or manages**. A Ceph cluster
-still orchestrates as its `clusterSSH.user`, and a managed-OS install still
-provisions the login `auth.provision` names — so on a Ceph node the override
-changes the identity Bootwright logs in with and leaves the `cephadm` account it
-provisions there alone. Like `--ssh-preferred-id-key`, the value never enters
-desired state or an ownership record, and it is refused unless it is a valid
-POSIX user name.
+It does **not** move a login Bootwright created, nor one a `Secret` already
+names. On `apply`, `destroy`, `preflight`, `plan`, and `diff` the flag is
+*refused* when no machine in the run declares `operatorIdentity`, rather than
+silently changing nothing:
 
-#### Login identity
+```console
+$ bootwright apply --machines ceph-0 --ssh-user operator --yes
+Error: --ssh-user "operator" applies only to machines that declare
+spec.access.ssh.auth.operatorIdentity, and no machine in this run does.
+```
 
-`access.ssh.user` is the machine's **install-window identity** — the account
-Bootwright authenticates as to install the OS, probe that the machine is
-already installed, and prove it owns it. Choose it before the machine is
-installed and treat it as fixed for the life of the machine.
+`machine rsh` / `exec` and `cluster rsh` / `exec` are the exception: they open
+an interactive session and nothing converges, so `--ssh-user` there means what
+it means in `ssh(1)` and reaches any account:
 
-It does not have to be `root`. On a machine Bootwright installs, the kickstart
-creates whatever account resolves here, authorizes the `provision.keyRef`
-public half for it, gives it a per-principal `NOPASSWD` sudoers drop-in, leaves
-the root password locked, and writes `PermitRootLogin no` — so a machine
-installed with a non-root account never accepts a root login at all. On an
-`os.provided: true` machine the account is whatever the operator prepared.
+```console
+$ bootwright machine exec --name ceph-0 --ssh-user cephadm -- id
+```
 
-!!! danger "Changing the login on an installed machine blocks the next apply"
-    The managed-OS readiness probe decides "this node is already installed" by
-    SSH-authenticating as that account. Point it at an account the installed
-    node does not carry and the probe fails closed: the machine is *refused*,
-    naming the remedy, rather than adopted or reinstalled. The account also
-    feeds the install-marker hash, so even a node that still answers is seen as
-    drifted. Switching an installed fleet to a different account means
-    creating that account on every node first, or reinstalling them.
+Like `--ssh-preferred-id-key`, the value never enters desired state or an
+ownership record, and it is refused unless it is a valid POSIX user name.
 
-For a Ceph storage node you do not author any of this: the `StorageCluster`
-supplies the account and the key, and the `Machine` carries no `access` block
-at all. See [Storage → The Ceph node login](storage.md#the-ceph-node-login).
+#### The `bootwright` service account
+
+On every machine Bootwright installs, the kickstart:
+
+- creates the account `bootwright`, with its password **locked** unless the
+  profile names `customizations.ssh.initialPassword.secretRef`,
+- authorizes the public half of `Environment.spec.machineAccess.keyRef` for it,
+- writes `/etc/sudoers.d/60-bootwright` granting exactly that principal
+  `NOPASSWD: ALL` (plus `!requiretty` scoped to it),
+- locks the root password, authorizes no key for `root`, and writes
+  `PermitRootLogin no`.
+
+The account name is a product constant. Because it never varies, it never
+perturbs the managed-OS install marker and the readiness probe always knows
+which account to authenticate as — the "repointing the login reinstalls the
+fleet" hazard of earlier releases cannot arise.
+
+The honest security delta is narrow and is the same one
+[ADR 0019](https://github.com/crmarques/bootwright/blob/main/specs/adr/0019-node-root-posture-and-orchestration-identity.md)
+recorded: no standing root SSH, a named auditable principal, key-only
+authentication, and a credential revocable without touching root. It is **not**
+privilege separation — the account can become root on demand.
+
+A Ceph storage node layers on top of this rather than replacing it: the
+substrate creates `bootwright`, and the `StorageCluster` provisions its own
+`cephadm` orchestration account day-2. See
+[Storage → The Ceph node login](storage.md#the-ceph-node-login).
 
 #### Declaring the controller
 
-Omitting `access` means the machine has no Bootwright login — correct for a
-cluster node the agent installer owns, and a validation error for a machine
-Bootwright installs. It does **not** mean "this is the controller": say that
-explicitly.
+Omitting `access` on an `os.provided: true` machine defaults it to
+`ssh.auth.operatorIdentity`. It does **not** mean "this is the controller": say
+that explicitly.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -628,8 +647,7 @@ through Anaconda.
 | `spec.customizations.localization.keyboard` | No | `us` | Console keyboard layout. |
 | `spec.customizations.localization.timezone` | No | `UTC` | System timezone; the hardware clock stays UTC. |
 | `spec.customizations.localization.additionalLocales[]` | No | None | Extra locales beyond `language`/`formats` to install. |
-| `spec.customizations.ssh.initialPassword.secretRef` | No | None (account locked) | `usernamePassword` Secret whose password becomes the installed account's console password. Omit to leave it locked — SSH access is by key regardless. |
-| `spec.customizations.ssh.sudo` | No | `nopasswd` | `nopasswd` writes a per-principal `NOPASSWD: ALL` sudoers drop-in for a non-root account; `none` writes no grant. |
+| `spec.customizations.ssh.initialPassword.secretRef` | No | None (account locked) | `usernamePassword` Secret whose password becomes the `bootwright` account's console password. Omit to leave it locked — SSH access is by key regardless. |
 | `spec.customizations.ssh.passwordAuthentication` | No | `false` | Enable or disable password SSH auth. |
 | `spec.customizations.storage.rootDevice.source` | No | None | Currently `machineRootDeviceHints`. |
 | `spec.customizations.packages.environment` | No | None | Currently `minimal`. |

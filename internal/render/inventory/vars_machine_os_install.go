@@ -121,9 +121,6 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		if trustDir := sshtrust.DirForSecrets(paths.trustSecretsDir()); trustDir != "" {
 			ssh["trustDir"] = trustDir
 		}
-		if fallback := managedOSFallbackSSHUser(state, machine, clusterName); fallback != "" && fallback != sshUser {
-			ssh["fallbackUser"] = fallback
-		}
 		out["ssh"] = ssh
 	}
 	desiredNetwork := machineInstallDesiredNetwork(state, ci, m, clusterName)
@@ -160,21 +157,6 @@ func managedOSSSHUser(machine v1alpha1.Machine) string {
 		return machine.Spec.Access.SSH.User
 	}
 	return v1alpha1.BootwrightSSHUser
-}
-
-func managedOSFallbackSSHUser(state v1alpha1.State, machine v1alpha1.Machine, clusterName string) string {
-	if !v1alpha1.MachineRevokesRootLogin(machine) {
-		return ""
-	}
-	for _, cluster := range state.StorageClusters {
-		if cluster.Metadata.Name != clusterName || !v1alpha1.StorageClusterManaged(cluster) {
-			continue
-		}
-		if user := v1alpha1.StorageClusterCephadmSSHUser(cluster); user != v1alpha1.RootSSHUser {
-			return user
-		}
-	}
-	return ""
 }
 
 func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool, clusterName string) map[string]any {

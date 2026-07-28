@@ -6,6 +6,9 @@ spec:
   domains:
     base: example.com
 
+  machineAccess:
+    keyRef: bootwright-machine-key
+
   safety:
     destroyProtection: requiredOverride
 

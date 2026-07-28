@@ -26,8 +26,12 @@ func TestValidateMachineAccessProvidedOptionalSSH(t *testing.T) {
 			InstallProfileRef: v1alpha1.LocalObjectReference{Name: "profile"},
 		}},
 	}
-	if !containsSubstring(validateMachineAccess(prefix, managed), "ssh is required when os.installProfileRef is set") {
-		t.Fatalf("managed-OS node without ssh should require ssh")
+	if errs := validateMachineAccess(prefix, managed); len(errs) != 0 {
+		t.Fatalf("managed-OS node authors no access; Bootwright derives the bootwright service account: %v", errs)
+	}
+	managed.Spec.Access.SSH = &v1alpha1.MachineSSHSpec{Auth: v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "k"}}}
+	if !containsSubstring(validateAuthoredMachineAccess(v1alpha1.State{Machines: []v1alpha1.Machine{managed}}), "must not be authored on a Machine Bootwright installs") {
+		t.Fatalf("authoring access on a managed-OS node should be refused")
 	}
 
 	badSSH := v1alpha1.Machine{

@@ -49,7 +49,7 @@ func deriveMachineAccess(machine *v1alpha1.Machine, fleetKey v1alpha1.SecretRef)
 }
 
 func machineAccessKeyRef(state v1alpha1.State) v1alpha1.SecretRef {
-	if len(state.Environments) == 0 {
+	if len(state.Environments) == 0 || state.Environments[0].Spec.MachineAccess == nil {
 		return v1alpha1.SecretRef{}
 	}
 	return state.Environments[0].Spec.MachineAccess.KeyRef

@@ -151,7 +151,7 @@ func controllerIdentityStorageNodeState() v1alpha1.State {
 				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.17"}},
 				Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-					Auth:       v1alpha1.MachineSSHAuth{ControllerIdentity: &v1alpha1.MachineSSHControllerIdentity{}},
+					Auth:       v1alpha1.MachineSSHAuth{OperatorIdentity: &v1alpha1.MachineSSHOperatorIdentity{}},
 				}},
 			},
 		}},

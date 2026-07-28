@@ -249,7 +249,7 @@ func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing
 	inventory := readYAMLDoc(t, result.InventoryPath)
 	hosts := inventory["all"].(map[string]any)["hosts"].(map[string]any)
 	seed := hosts[render.StorageSeedHostName(state.StorageClusters[0])].(map[string]any)
-	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
+	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(runtimeSecretsDir, "bootwright-machine-key") {
 		t.Fatalf("seed private key path = %v, want runtime secret path", got)
 	}
 	commonArgs, _ := seed["ansible_ssh_common_args"].(string)
@@ -272,7 +272,7 @@ func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing
 
 	managedOS := managedOSComponentByName(t, vars, "ceph-libvirt", "ceph-0")
 	ssh := managedOS["osInstall"].(map[string]any)["ssh"].(map[string]any)
-	if got := ssh["privateKeyPath"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
+	if got := ssh["privateKeyPath"]; got != filepath.Join(runtimeSecretsDir, "bootwright-machine-key") {
 		t.Fatalf("managed OS private key path = %v, want runtime secret path", got)
 	}
 	if got := ssh["knownHostsPath"]; got != contextKnownHosts {

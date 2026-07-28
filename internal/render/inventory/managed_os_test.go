@@ -170,7 +170,7 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	}
 }
 
-func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
+func TestManagedOSInstallDerivesTheBootwrightServiceAccount(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -179,13 +179,17 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	groups := vars["bootwright_managed_os_install_groups"].([]any)
 	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
 	osInstall := first["osInstall"].(map[string]any)
-	if got := osInstall["ssh"].(map[string]any)["user"]; got != "cephadm" {
-		t.Fatalf("managed OS ssh.user = %v, want the cluster orchestration account a cluster-claimed node derives", got)
+	if got := osInstall["ssh"].(map[string]any)["user"]; got != v1alpha1.BootwrightSSHUser {
+		t.Fatalf("managed OS ssh.user = %v, want the service account Bootwright creates on every machine it installs", got)
 	}
-	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "cephadm" {
+	kickstart := osInstall["kickstart"].(map[string]any)
+	if got := kickstart["sshUser"]; got != v1alpha1.BootwrightSSHUser {
 		t.Fatalf("managed OS kickstart.sshUser = %v, want the account the install creates", got)
 	}
-	if _, ok := osInstall["kickstart"].(map[string]any)["initialPasswordPath"]; ok {
+	if got := kickstart["sudoersPath"]; got != "/etc/sudoers.d/60-bootwright" {
+		t.Fatalf("managed OS kickstart.sudoersPath = %v, want the service account drop-in", got)
+	}
+	if _, ok := kickstart["initialPasswordPath"]; ok {
 		t.Fatal("managed OS kickstart.initialPasswordPath set without customizations.ssh.initialPassword; the installed account must stay locked")
 	}
 }
@@ -611,7 +615,7 @@ func TestMachineInstallLocalizationVarsDefaultsAndFormatSplit(t *testing.T) {
 	}
 }
 
-func TestManagedOSInstallFallbackUserForRevokedRootKeepsMarkerHash(t *testing.T) {
+func TestManagedOSInstallMarkerHashSurvivesClusterOrchestrationAccountChange(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -620,25 +624,19 @@ func TestManagedOSInstallFallbackUserForRevokedRootKeepsMarkerHash(t *testing.T)
 	baselineGroups := baselineVars["bootwright_managed_os_install_groups"].([]any)
 	baselineFirst := baselineGroups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
 	baselineInstall := baselineFirst["osInstall"].(map[string]any)
-	if _, hasFallback := baselineInstall["ssh"].(map[string]any)["fallbackUser"]; hasFallback {
-		t.Fatalf("fallbackUser must not render without rootLogin revoke")
-	}
 	baselineHash := baselineInstall["marker"].(map[string]any)["desiredHash"].(string)
 
 	for i := range state.StorageClusters {
-		state.StorageClusters[i].Spec.Ceph.Cephadm.ClusterSSH.User = "cephadm"
-	}
-	for i := range state.Machines {
-		state.Machines[i].Spec.Access.RootLogin = v1alpha1.MachineRootLoginRevoke
+		state.StorageClusters[i].Spec.Ceph.Cephadm.ClusterSSH.User = "storageadmin"
 	}
 	vars := VarsWithSecretsDir(state, "/context/secrets")
 	groups := vars["bootwright_managed_os_install_groups"].([]any)
 	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
 	osInstall := first["osInstall"].(map[string]any)
-	if _, ok := osInstall["ssh"].(map[string]any)["fallbackUser"]; ok {
-		t.Fatalf("managed OS ssh.fallbackUser = %v, want no fallback when the install-window identity already is the orchestration account", osInstall["ssh"].(map[string]any)["fallbackUser"])
+	if got := osInstall["ssh"].(map[string]any)["user"]; got != v1alpha1.BootwrightSSHUser {
+		t.Fatalf("managed OS ssh.user = %v, want the service account regardless of the cluster orchestration account", got)
 	}
 	if got := osInstall["marker"].(map[string]any)["desiredHash"].(string); got != baselineHash {
-		t.Fatalf("marker desiredHash changed with fallbackUser: %q vs %q; the probe fallback identity must not perturb recorded install identity", got, baselineHash)
+		t.Fatalf("marker desiredHash changed with the cluster orchestration account: %q vs %q; the install-window identity is a product constant and must not move", got, baselineHash)
 	}
 }

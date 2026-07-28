@@ -21,7 +21,7 @@ type EnvironmentSpec struct {
 	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
-	MachineAccess     EnvironmentMachineAccessSpec             `yaml:"machineAccess,omitempty" json:"machineAccess,omitempty"`
+	MachineAccess     *EnvironmentMachineAccessSpec            `yaml:"machineAccess,omitempty" json:"machineAccess,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	SecretStorage     EnvironmentSecretStorageSpec             `yaml:"secretStorage,omitempty" json:"secretStorage,omitempty"`
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`

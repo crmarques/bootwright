@@ -36,6 +36,7 @@ means there is no default — an omitted optional field stays unset.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-fqdn-address) and [Domain model](#domain-model). |
+| `spec.machineAccess.keyRef` | When any `Machine` installs an OS | None | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. See [Machine access](#machine-access). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
@@ -96,6 +97,44 @@ Composition under the model:
 
 `spec.domains` (DNS zones) is distinct from the `spec.containerClusters[]` /
 `spec.storageClusters[]` selection lists (cluster membership) above.
+
+## Machine access
+
+Every machine Bootwright installs carries the same login: a `bootwright` service
+account with passwordless `sudo` and no root SSH. `spec.machineAccess.keyRef` is
+the one place the fleet names the key that opens it.
+
+```yaml
+spec:
+  machineAccess:
+    keyRef: bootwright-machine-key
+```
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+```
+
+It must name an `sshKeyPair` `Secret`, and it is required as soon as any
+`Machine` sets `os.installProfileRef`. `bootwright secret generate` mints the
+material before the first apply, and `bootwright preflight` proves it exists
+before an apply touches a machine.
+
+Because this key opens every machine in the fleet, it may **not** also be named
+as a `StorageCluster`'s `spec.ceph.cephadm.clusterSSH.keyRef`: `cephadm
+bootstrap --ssh-private-key` copies the cluster identity into the Ceph mon
+config-key store, where that cluster's manager can read it. Declare a second
+generated `sshKeyPair` for the cluster.
+
+Machines you already own are unaffected — they carry their own
+[`spec.access`](machines.md#access).
 
 ## Artifact Server Default
 

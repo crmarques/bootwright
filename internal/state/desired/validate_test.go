@@ -4222,11 +4222,6 @@ spec:
 ` + baselineMachineNetworkConfigYAML() + `
   addresses:
     - { name: ip, address: 192.168.132.20 }
-  access:
-    ssh:
-      auth:
-        privateKeyRef: bastion-host-ssh
-      addressRef: ip
 `
 }
 

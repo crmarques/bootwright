@@ -622,7 +622,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	require(fmt.Sprintf("Environment/%s spec.defaults.install.pullSecretRef", env.Metadata.Name), env.Spec.Defaults.Install.PullSecretRef)
 	requireNodeSSH(fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name), env.Spec.Defaults.Install.NodeSSH, "", requireSSHKeyNoted)
-	requireSSHKey(fmt.Sprintf("Environment/%s spec.machineAccess.keyRef", env.Metadata.Name), env.Spec.MachineAccess.KeyRef)
+	if env.Spec.MachineAccess != nil {
+		requireSSHKey(fmt.Sprintf("Environment/%s spec.machineAccess.keyRef", env.Metadata.Name), env.Spec.MachineAccess.KeyRef)
+	}
 	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil {
 		owner := fmt.Sprintf("Environment/%s spec.registries.mirror", env.Metadata.Name)
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)

@@ -41,12 +41,12 @@ func TestWriteHookInventoryPinsHostKeysAndKeepsConnectionsAlive(t *testing.T) {
 	}
 }
 
-func TestHookInventoryHonoursTheSSHUserOverride(t *testing.T) {
+func TestHookInventoryScopesTheSSHUserOverrideToOperatorIdentity(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "inventory.yaml")
 	targets := []hookSSHTarget{
 		{label: "bastion", inventoryName: "hook_0", address: "bastion.example.test", user: "admin"},
-		{label: "node", inventoryName: "hook_1", address: "node.example.test"},
+		{label: "lab", inventoryName: "hook_1", address: "lab.example.test", user: "admin", operatorIdentity: true},
 	}
 	if err := writeHookInventory(path, targets, "", "operator"); err != nil {
 		t.Fatalf("writeHookInventory: %v", err)
@@ -56,10 +56,10 @@ func TestHookInventoryHonoursTheSSHUserOverride(t *testing.T) {
 		t.Fatalf("read hook inventory: %v", err)
 	}
 	body := string(data)
-	if strings.Contains(body, "ansible_user: admin") {
-		t.Fatalf("declared hook user survived --ssh-user: %s", body)
+	if strings.Count(body, "ansible_user: admin") != 1 {
+		t.Fatalf("a login named by desired state must survive --ssh-user: %s", body)
 	}
-	if strings.Count(body, "ansible_user: operator") != 2 {
-		t.Fatalf("both hook targets must take the override: %s", body)
+	if strings.Count(body, "ansible_user: operator") != 1 {
+		t.Fatalf("only the operatorIdentity target takes the override: %s", body)
 	}
 }
