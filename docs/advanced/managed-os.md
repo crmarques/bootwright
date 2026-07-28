@@ -334,8 +334,11 @@ The customization arms, by area:
   into the `%packages --inst-langs` list (authoritative over `locale -a`), so the
   active locale can never be pruned. Set `additionalLocales[]` only for extra
   locales beyond `language`/`formats`.
-- **ssh** — `initialPassword` sets the installed account's console password (omit to leave it locked), `sudo` selects the sudoers grant, and `passwordAuthentication` controls sshd password login. The key named by the Machine's `access.ssh.auth.provision.keyRef` is authorized during
-  install; `passwordAuthentication` enables or disables password SSH auth.
+- **ssh** — `initialPassword` sets the `bootwright` account's console password
+  (omit to leave it locked) and `passwordAuthentication` enables or disables
+  password SSH auth. The account itself, its `NOPASSWD` sudoers grant, and
+  `PermitRootLogin no` are install invariants, and the key authorized for it is
+  `Environment.spec.machineAccess.keyRef`.
 - **storage** — `rootDevice.source: machineRootDeviceHints` consumes the
   machine's root device hints (see below). A managed install **always** clears
   the target disk — the rendered Kickstart runs `clearpart --all --initlabel`,

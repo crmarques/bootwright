@@ -99,8 +99,8 @@ spec:
 | `ceph.osSubscriptionRef` | No | — | Names a `redhat-rhel` `Entitlement` supplying the RHEL subscription for provided-OS Ceph nodes (managed-OS nodes name it on their `MachineInstallProfile.spec.subscription` instead). Must resolve to a `redhat-rhel` entitlement. Chiefly paired with `distribution: ibm`, whose product entitlement does not itself entitle RHEL. See [Secrets](secrets.md#entitlements). |
 | `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
-| `ceph.cephadm.clusterSSH.user` | No | `cephadm` on a managed cluster; `root` on an external one | The account cephadm manages every host as (`--ssh-user`), the account a node the cluster installs is created with, and the account Bootwright connects as. Bootwright provisions it on any topology node that does not already carry it. Rejected as `root` when a node authors a non-root `access.ssh.user`. See [The Ceph node login](#the-ceph-node-login). |
-| `ceph.cephadm.clusterSSH.keyRef` | Required when `clusterSSH.user` is non-root (the default) | None | Names the `sshKeyPair` secret that is the cluster identity — the key cephadm reaches every host with, and the key the install authorizes for the node account. Must not be a `Secret` a `Machine` authors as its own `access.ssh.auth.privateKeyRef`. |
+| `ceph.cephadm.clusterSSH.user` | No | `cephadm` on a managed cluster; `root` on an external one | The account cephadm manages every host as (`--ssh-user`). Bootwright provisions it on any topology node that does not already carry it; it is never a node's install-window identity. Rejected as `root` when a topology node is one Bootwright installs, or when a provided node authors a non-root `access.ssh.user`. See [The Ceph node login](#the-ceph-node-login). |
+| `ceph.cephadm.clusterSSH.keyRef` | Required when `clusterSSH.user` is non-root (the default) | None | Names the `sshKeyPair` secret that is the cluster identity — the key cephadm reaches every host with, and the key Bootwright authorizes for the orchestration account. Must not be `Environment.spec.machineAccess.keyRef`, nor a `Secret` a `Machine` authors as its own `access.ssh.auth.privateKeyRef`. |
 | `ceph.cephadm.bootstrap.node` | Yes | — | Topology node that cephadm bootstraps on, named by its node name (FQDN or short label). A machine name is rejected with guidance naming the node. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the node machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
@@ -264,13 +264,19 @@ spec:
       address: 192.0.2.50
 ```
 
-Bootwright derives `access.ssh.user: cephadm`, an
-`access.ssh.auth.provision.keyRef` naming the cluster key, and
-`access.rootLogin: revoke`. The kickstart creates the account, authorizes the
-cluster public key for it, leaves the root password locked, writes
-`PermitRootLogin no`, and grants the account a per-principal sudoers drop-in at
-`/etc/sudoers.d/60-bootwright-cephadm`. **The node never accepts a root login at
-any point**, and there is no second account to provision afterwards.
+The node's own login is the one every machine Bootwright installs carries: the
+`bootwright` service account, authorized with
+[`Environment.spec.machineAccess.keyRef`](environment.md#machine-access), with
+the root password locked and `PermitRootLogin no` written by the kickstart. **The
+node never accepts a root login at any point.** See
+[Machines → The `bootwright` service account](machines.md#the-bootwright-service-account).
+
+The cluster's `cephadm` account is layered on top of that: on apply Bootwright
+connects as `bootwright`, creates `cephadm`, authorizes the cluster key for it,
+writes `/etc/sudoers.d/60-bootwright-cephadm`, and proves the account answers
+`sudo -n true` before cephadm uses it. The two identities stay distinct — the
+substrate login is Bootwright's, the orchestration login is the cluster's — and
+`clusterSSH.keyRef` must therefore name a different `Secret` from the fleet key.
 
 ### Nodes the cluster does not install
 
@@ -295,7 +301,7 @@ spec:
 ```
 
 Omitting `access` on a machine whose OS you supplied defaults it to
-`ssh.auth.controllerIdentity`: Bootwright reaches it as the operator running
+`ssh.auth.operatorIdentity`: Bootwright reaches it as the operator running
 Bootwright, with that operator's own SSH identity — the common shape for a box
 you already log into. Author `access.ssh.auth.privateKeyRef` to name a `Secret`
 instead, or `auth.passwordRef` for a machine that only accepts a password. See
@@ -333,13 +339,12 @@ To reverse a revoke, set `rootLogin: keep` and re-apply: the sshd drop-in is
 removed and root is re-authorized. The orchestration account is not deleted by
 that — change `clusterSSH.user` to `root` as a separate, deliberate step.
 
-!!! warning "The login is fixed for the life of the machine"
-    The account a node carries is its *install-window* identity — what
-    Bootwright installs the machine as, probes it as, and proves ownership
-    with. Changing `clusterSSH.user` on an installed fleet makes the ownership
-    probe fail closed, and the next apply **refuses** those machines until the
-    account exists on them. Choose it before the first install. See
-    [Machines → Access](machines.md#access).
+!!! note "Changing `clusterSSH.user` on a live cluster"
+    The orchestration account is not the node's install-window identity — that
+    is always `bootwright` — so changing `clusterSSH.user` no longer risks a
+    reinstall. It is still a live-cluster change: Bootwright provisions the new
+    account on every node and reconciles cephadm with `ceph cephadm set-user`,
+    and the previous account is left in place until you remove it.
 
 !!! note "What this buys, precisely"
     The account holds `NOPASSWD: ALL`, because cephadm's manager `sudo`-wraps
@@ -353,13 +358,16 @@ that — change `clusterSSH.user` to `root` as a separate, deliberate step.
     and the rationale in
     [ADR 0024](https://github.com/crmarques/bootwright/blob/main/specs/adr/0024-machine-access-union-and-cluster-owned-node-login.md).
 
-!!! danger "The cluster key must not be an authored machine key"
-    If a `Machine` authors `access.ssh.auth.privateKeyRef` and the cluster names
-    that same `Secret` as `clusterSSH.keyRef`, validation refuses: `cephadm
-    bootstrap --ssh-private-key` moves the cluster identity into the Ceph mon
-    config-key store, where the cluster's manager can read it, and that key
-    also opens machines outside the cluster. A key the cluster derives for its
-    own nodes is fine — its blast radius is exactly those nodes.
+!!! danger "The cluster key must open only the cluster's own accounts"
+    `cephadm bootstrap --ssh-private-key` moves the cluster identity into the
+    Ceph mon config-key store, where the cluster's manager can read it. So what
+    that key opens bounds the blast radius of a compromised manager, and
+    validation refuses two reuses: naming
+    `Environment.spec.machineAccess.keyRef` as `clusterSSH.keyRef` — it opens
+    the `bootwright` account on every machine in the fleet — and naming a
+    `Secret` a `Machine` authors as its own `access.ssh.auth.privateKeyRef`.
+    Declare a second generated `sshKeyPair` for the cluster; its reach is then
+    exactly the `cephadm` accounts on that cluster's nodes.
 
 
 ### Monitoring

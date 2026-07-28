@@ -214,7 +214,8 @@ silently repoint the identity Bootwright connects as for **every** host in the
 run — past the account declared on the `Machine`, past a storage cluster's
 `cephadm.clusterSSH.user`, past the recorded host-key trust, and past
 `--ssh-user` — so validation rejects it. Declare the login in desired state, or
-override it for one invocation with `--ssh-user`.
+on a machine that declares `access.ssh.auth.operatorIdentity` name your own
+account for one invocation with `--ssh-user`.
 
 ## Selecting work with tags
 

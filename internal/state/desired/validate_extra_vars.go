@@ -39,7 +39,7 @@ func validateReservedExtraVars(owner string, extraVars map[string]any) []string 
 	sort.Strings(reserved)
 	errs := make([]string, 0, len(reserved))
 	for _, key := range reserved {
-		errs = append(errs, fmt.Sprintf("%s sets %q, which is not supported. Ansible ranks an extra var above every inventory value, so it silently repoints the identity Bootwright connects and escalates with — the account from Machine spec.access.ssh.user (or a storage cluster's spec.ceph.cephadm.clusterSSH.user), its key, its recorded host-key trust, and the --ssh-user override — and it does so for every host in the run, not only the ones this targets. Declare the login in desired state, or override it for a single invocation with --ssh-user", owner, key))
+		errs = append(errs, fmt.Sprintf("%s sets %q, which is not supported. Ansible ranks an extra var above every inventory value, so it silently repoints the identity Bootwright connects and escalates with — the bootwright service account on a machine it installed, the account from Machine spec.access.ssh.user, a storage cluster's spec.ceph.cephadm.clusterSSH.user, their keys, and the recorded host-key trust — and it does so for every host in the run, not only the ones this targets. Declare the login in desired state, or on a machine that declares spec.access.ssh.auth.operatorIdentity name your own account for one invocation with --ssh-user", owner, key))
 	}
 	return errs
 }

@@ -565,19 +565,20 @@ Rules:
   `customizations.services.disabled[]` render Kickstart service state. A
   machine that references a managed OS install profile requires `sshd` in the
   enabled list so Bootwright can reconnect after installation.
-- The install authorizes the public half of the machine's
-  `access.ssh.auth.provision.keyRef` for the account it creates, so Bootwright
-  can reconnect after the install; a profile referenced by a managed-install
-  machine must therefore enable `sshd` per the rule above. The install renders
-  `PermitRootLogin yes` only when the account is `root`, and `PermitRootLogin
-  no` otherwise.
+- The install authorizes the public half of
+  `Environment.spec.machineAccess.keyRef` for the `bootwright` account it
+  creates, so Bootwright can reconnect after the install; a profile referenced
+  by a managed-install machine must therefore enable `sshd` per the rule above.
+  The install always renders `PermitRootLogin no`, locks the root password, and
+  authorizes no key for `root`.
 - `customizations.ssh.initialPassword.secretRef` names a `usernamePassword`
   `Secret` whose password becomes the created account's console password.
   Omitted, the account is created with a locked password — Bootwright ships no
   default password of any kind.
-- `customizations.ssh.sudo` is `nopasswd` (the default) or `none`. `nopasswd`
-  writes `/etc/sudoers.d/60-bootwright-<user>` granting that principal
-  `NOPASSWD: ALL` and `!requiretty`; `none` writes no grant.
+- The install always writes `/etc/sudoers.d/60-bootwright` granting the
+  `bootwright` principal `NOPASSWD: ALL` and `!requiretty`. It is not
+  configurable: Bootwright escalates with `become` throughout, so a machine
+  whose service account cannot escalate is a machine it cannot use.
 - `customizations.ssh.passwordAuthentication: true` enables sshd password
   authentication (default: key-only).
 - `customizations.security.selinux.mode` accepts `enforcing`, `permissive`, or
