@@ -73,6 +73,10 @@ const (
 	MachineInstallSudoNoPasswd = "nopasswd"
 	MachineInstallSudoNone     = "none"
 
+	MachineInstallRepositoryFileDir     = "/etc/yum.repos.d"
+	MachineInstallRepositoryFilePrefix  = "bootwright-"
+	MachineInstallSubscriptionRepoAllID = "*"
+
 	MachineRootLoginKeep   = "keep"
 	MachineRootLoginRevoke = "revoke"
 

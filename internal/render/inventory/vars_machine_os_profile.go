@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
 )
 
 func machineInstallPackagesVars(packages v1alpha1.MachineInstallPackages) map[string]any {
@@ -83,6 +84,57 @@ func localeLanguageCode(locale string) string {
 		code = code[:i]
 	}
 	return strings.ToLower(code)
+}
+
+func machineInstallRepositoriesVars(repos v1alpha1.MachineInstallRepositories, eff *proxy.Effective) map[string]any {
+	out := map[string]any{}
+	configure := make([]any, 0, len(repos.Configure))
+	for _, repo := range repos.Configure {
+		entry := map[string]any{
+			"id":       repo.ID,
+			"name":     repo.DisplayName,
+			"baseURL":  repo.BaseURL,
+			"path":     v1alpha1.MachineInstallRepositoryFilePath(repo.ID),
+			"enabled":  v1alpha1.MachineInstallRepositoryFileEnabled(repo),
+			"gpgCheck": v1alpha1.MachineInstallRepositoryFileGPGCheck(repo),
+		}
+		if repo.DisplayName == "" {
+			entry["name"] = repo.ID
+		}
+		if repo.GPGKeyURL != "" {
+			entry["gpgKeyURL"] = repo.GPGKeyURL
+		}
+		if installTargetProxied(eff, repo.BaseURL) {
+			entry["proxied"] = true
+		}
+		configure = append(configure, entry)
+	}
+	if len(configure) > 0 {
+		out["configure"] = configure
+	}
+	if subs := repos.Subscription; subs != nil {
+		subscription := map[string]any{}
+		if len(subs.Enable) > 0 {
+			subscription["enable"] = append([]string(nil), subs.Enable...)
+		}
+		if len(subs.Disable) > 0 {
+			subscription["disable"] = append([]string(nil), subs.Disable...)
+		}
+		if len(subscription) > 0 {
+			subscription["purge"] = machineInstallSubscriptionPurges(subs)
+			out["subscription"] = subscription
+		}
+	}
+	return out
+}
+
+func machineInstallSubscriptionPurges(subs *v1alpha1.MachineInstallSubscriptionRepositories) bool {
+	for _, id := range subs.Disable {
+		if id == v1alpha1.MachineInstallSubscriptionRepoAllID {
+			return true
+		}
+	}
+	return false
 }
 
 func machineInstallServicesVars(services v1alpha1.MachineInstallServices) map[string]any {

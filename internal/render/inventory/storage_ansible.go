@@ -4,6 +4,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/locality"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
 	cephrender "github.com/crmarques/bootwright/internal/render/ceph"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
@@ -98,6 +99,9 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster)
 	if machineOK {
 		entry["bootwright_os_provided"] = v1alpha1.MachineOSProvided(machine)
+		if repos := storageNodeRepositoryVars(state, machine, env); len(repos) > 0 {
+			entry["bootwright_machine_repositories"] = repos
+		}
 		if access := storageNodeAccessVars(state, cluster, machine, paths); access != nil {
 			entry["bootwright_node_access"] = access
 			if v1alpha1.MachineRevokesRootLogin(machine) {
@@ -106,6 +110,18 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 		}
 	}
 	return entry
+}
+
+func storageNodeRepositoryVars(state v1alpha1.State, machine v1alpha1.Machine, env *v1alpha1.Environment) map[string]any {
+	profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+	if !ok || !v1alpha1.MachineInstallProfileDeclaresRepositories(profile) {
+		return nil
+	}
+	var eff *proxy.Effective
+	if env != nil {
+		eff = proxy.ResolveFor(state, env, env.Spec.ProxyNameFor(v1alpha1.ProxyConsumerMachineOSInstall))
+	}
+	return machineInstallRepositoriesVars(profile.Spec.Customizations.Repositories, eff)
 }
 
 func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, machine v1alpha1.Machine, paths PathOptions) map[string]any {

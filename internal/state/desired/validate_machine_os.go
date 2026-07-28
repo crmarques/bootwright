@@ -112,6 +112,7 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		}
 		errs = append(errs, validateMachineInstallLocalization(prefix+".customizations.localization", customizations.Localization)...)
 		errs = append(errs, validateMachineInstallPackages(prefix+".customizations.packages", customizations.Packages)...)
+		errs = append(errs, validateMachineInstallRepositories(prefix+".customizations.repositories", profile, customizations.Repositories)...)
 		errs = append(errs, validateMachineInstallServices(prefix+".customizations.services", customizations.Services)...)
 		errs = append(errs, validateMachineInstallSecurity(prefix+".customizations.security", profile, customizations)...)
 	}
@@ -276,7 +277,7 @@ func validateMachineInstallPackageSource(prefix, bootMedia string, ps *v1alpha1.
 		} else if !httpURL(m.BaseURL) {
 			errs = append(errs, prefix+".packageSource.mirror.baseURL must be http:// or https://")
 		}
-		errs = append(errs, validateMachineInstallRepositories(prefix+".packageSource.mirror.repositories", m.Repositories)...)
+		errs = append(errs, validateMachineInstallMirrorRepositories(prefix+".packageSource.mirror.repositories", m.Repositories)...)
 	}
 	if c := ps.FromSubscription; c != nil && c.EntitlementRef.Name == "" {
 		errs = append(errs, prefix+".packageSource.fromSubscription.entitlementRef is required")
@@ -300,7 +301,78 @@ func httpURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-func validateMachineInstallRepositories(prefix string, repos []v1alpha1.MachineInstallRepository) []string {
+func validateMachineInstallRepositories(prefix string, profile v1alpha1.MachineInstallProfile, repos v1alpha1.MachineInstallRepositories) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, repo := range repos.Configure {
+		owner := fmt.Sprintf("%s.configure[%d]", prefix, i)
+		switch {
+		case repo.ID == "":
+			errs = append(errs, owner+".id is required")
+		case strings.ContainsAny(repo.ID, " \t\"'/"):
+			errs = append(errs, fmt.Sprintf("%s.id %q must not contain whitespace, quotes, or slashes; it names both the yum repo section and %s", owner, repo.ID, v1alpha1.MachineInstallRepositoryFilePath("<id>")))
+		case seen[repo.ID]:
+			errs = append(errs, fmt.Sprintf("%s.id %q is duplicated", owner, repo.ID))
+		}
+		seen[repo.ID] = true
+		if repo.BaseURL == "" {
+			errs = append(errs, owner+".baseURL is required")
+		} else if !httpURL(repo.BaseURL) {
+			errs = append(errs, owner+".baseURL must be http:// or https://")
+		}
+		if repo.GPGKeyURL != "" && !httpURL(repo.GPGKeyURL) && !strings.HasPrefix(repo.GPGKeyURL, "file:///") {
+			errs = append(errs, owner+".gpgKeyURL must be http://, https://, or file:///")
+		}
+		if v1alpha1.MachineInstallRepositoryFileGPGCheck(repo) && repo.GPGKeyURL == "" {
+			errs = append(errs, fmt.Sprintf("%s.gpgKeyURL is required when gpgCheck is enabled; set gpgKeyURL, or set gpgCheck: false to install unsigned packages from %q", owner, repo.ID))
+		}
+	}
+	errs = append(errs, validateMachineInstallSubscriptionRepositories(prefix+".subscription", profile, repos.Subscription)...)
+	return errs
+}
+
+func validateMachineInstallSubscriptionRepositories(prefix string, profile v1alpha1.MachineInstallProfile, subs *v1alpha1.MachineInstallSubscriptionRepositories) []string {
+	if subs == nil {
+		return nil
+	}
+	var errs []string
+	if len(subs.Enable) == 0 && len(subs.Disable) == 0 {
+		errs = append(errs, prefix+" must set at least one of: enable, disable")
+	}
+	if !v1alpha1.MachineInstallProfileRegistersSubscription(profile) {
+		errs = append(errs, prefix+" requires the node to be registered with RHSM; set spec.subscription.entitlementRef or spec.installer.anaconda.packageSource.fromSubscription, or move these repositories to customizations.repositories.configure")
+	}
+	enabled := map[string]bool{}
+	for _, field := range []struct {
+		name string
+		ids  []string
+	}{{"enable", subs.Enable}, {"disable", subs.Disable}} {
+		seen := map[string]bool{}
+		for i, id := range field.ids {
+			owner := fmt.Sprintf("%s.%s[%d]", prefix, field.name, i)
+			switch {
+			case id == "":
+				errs = append(errs, owner+" must not be empty")
+			case strings.ContainsAny(id, " \t\"'"):
+				errs = append(errs, fmt.Sprintf("%s %q must not contain whitespace or quotes", owner, id))
+			case seen[id]:
+				errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, id))
+			}
+			seen[id] = true
+			if field.name == "enable" {
+				if id == v1alpha1.MachineInstallSubscriptionRepoAllID {
+					errs = append(errs, fmt.Sprintf("%s %q is not allowed; enable must name concrete repository ids", owner, id))
+				}
+				enabled[id] = true
+			} else if enabled[id] {
+				errs = append(errs, fmt.Sprintf("%s %q is also listed in %s.enable", owner, id, prefix))
+			}
+		}
+	}
+	return errs
+}
+
+func validateMachineInstallMirrorRepositories(prefix string, repos []v1alpha1.MachineInstallRepository) []string {
 	var errs []string
 	for i, repo := range repos {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)

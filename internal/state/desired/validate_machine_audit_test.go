@@ -161,10 +161,10 @@ func TestMachineInstallStringListInternalWhitespace(t *testing.T) {
 }
 
 func TestMachineInstallRepositoryIDCharacters(t *testing.T) {
-	if !containsSubstring(validateMachineInstallRepositories("repos", []v1alpha1.MachineInstallRepository{{ID: `extra "tools`, BaseURL: "https://repo.test"}}), "must not contain whitespace or quotes") {
+	if !containsSubstring(validateMachineInstallMirrorRepositories("repos", []v1alpha1.MachineInstallRepository{{ID: `extra "tools`, BaseURL: "https://repo.test"}}), "must not contain whitespace or quotes") {
 		t.Fatalf("expected quoted repo id rejection")
 	}
-	if errs := validateMachineInstallRepositories("repos", []v1alpha1.MachineInstallRepository{{ID: "extras", BaseURL: "https://repo.test"}}); len(errs) != 0 {
+	if errs := validateMachineInstallMirrorRepositories("repos", []v1alpha1.MachineInstallRepository{{ID: "extras", BaseURL: "https://repo.test"}}); len(errs) != 0 {
 		t.Fatalf("clean repo rejected: %v", errs)
 	}
 }

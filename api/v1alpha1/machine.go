@@ -273,6 +273,13 @@ type MachineInstallAnaconda struct {
 	PackageSource       *MachineInstallPackageSource   `yaml:"packageSource,omitempty" json:"packageSource,omitempty"`
 }
 
+func (a *MachineInstallAnaconda) GetPackageSource() *MachineInstallPackageSource {
+	if a == nil {
+		return nil
+	}
+	return a.PackageSource
+}
+
 type MachineInstallRepository struct {
 	ID      string `yaml:"id" json:"id"`
 	BaseURL string `yaml:"baseURL" json:"baseURL"`
@@ -284,8 +291,65 @@ type MachineInstallCustomizations struct {
 	SSH          MachineInstallSSH          `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 	Storage      MachineInstallStorage      `yaml:"storage,omitempty" json:"storage,omitempty"`
 	Packages     MachineInstallPackages     `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Repositories MachineInstallRepositories `yaml:"repositories,omitempty" json:"repositories,omitempty"`
 	Services     MachineInstallServices     `yaml:"services,omitempty" json:"services,omitempty"`
 	Security     MachineInstallSecurity     `yaml:"security,omitempty" json:"security,omitempty"`
+}
+
+type MachineInstallRepositories struct {
+	Configure    []MachineInstallRepositoryFile          `yaml:"configure,omitempty" json:"configure,omitempty"`
+	Subscription *MachineInstallSubscriptionRepositories `yaml:"subscription,omitempty" json:"subscription,omitempty"`
+}
+
+type MachineInstallRepositoryFile struct {
+	ID          string `yaml:"id" json:"id"`
+	DisplayName string `yaml:"displayName,omitempty" json:"displayName,omitempty"`
+	BaseURL     string `yaml:"baseURL" json:"baseURL"`
+	Enabled     *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	GPGCheck    *bool  `yaml:"gpgCheck,omitempty" json:"gpgCheck,omitempty"`
+	GPGKeyURL   string `yaml:"gpgKeyURL,omitempty" json:"gpgKeyURL,omitempty"`
+}
+
+type MachineInstallSubscriptionRepositories struct {
+	Enable  []string `yaml:"enable,omitempty" json:"enable,omitempty"`
+	Disable []string `yaml:"disable,omitempty" json:"disable,omitempty"`
+}
+
+func MachineInstallRepositoryFileEnabled(repo MachineInstallRepositoryFile) bool {
+	if repo.Enabled == nil {
+		return true
+	}
+	return *repo.Enabled
+}
+
+func MachineInstallRepositoryFileGPGCheck(repo MachineInstallRepositoryFile) bool {
+	if repo.GPGCheck == nil {
+		return true
+	}
+	return *repo.GPGCheck
+}
+
+func MachineInstallRepositoryFilePath(id string) string {
+	return MachineInstallRepositoryFileDir + "/" + MachineInstallRepositoryFilePrefix + id + ".repo"
+}
+
+func MachineInstallProfileDeclaresRepositories(profile MachineInstallProfile) bool {
+	repos := profile.Spec.Customizations.Repositories
+	if len(repos.Configure) > 0 {
+		return true
+	}
+	if repos.Subscription == nil {
+		return false
+	}
+	return len(repos.Subscription.Enable) > 0 || len(repos.Subscription.Disable) > 0
+}
+
+func MachineInstallProfileRegistersSubscription(profile MachineInstallProfile) bool {
+	if profile.Spec.Subscription != nil && profile.Spec.Subscription.EntitlementRef.Name != "" {
+		return true
+	}
+	source := profile.Spec.Installer.Anaconda.GetPackageSource()
+	return source.GetFromSubscription() != nil
 }
 
 type MachineInstallHostname struct {

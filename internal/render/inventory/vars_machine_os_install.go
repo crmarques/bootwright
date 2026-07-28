@@ -98,6 +98,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"sudo":                   v1alpha1.MachineInstallSudoPolicy(profile),
 			"localization":           machineInstallLocalizationVars(profile.Spec.Customizations.Localization),
 			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
+			"repositories":           machineInstallRepositoriesVars(profile.Spec.Customizations.Repositories, eff),
 			"services":               machineInstallServicesVars(profile.Spec.Customizations.Services),
 			"security":               machineInstallSecurityVars(profile.Spec.Customizations.Security),
 			"storage":                machineInstallStorageVars(profile, state, m),
