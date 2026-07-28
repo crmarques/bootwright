@@ -107,13 +107,14 @@
     argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
-      {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_public_key | quote }}
+      {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_install_public_key | quote }}
       {{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }}
   delegate_to: localhost
   become: false
   register: bootwright_node_access_install_key_probe
   changed_when: false
   failed_when: false
+  when: (bootwright_node_access_install_public_key | length) > 0
 
 - name: Deauthorize the machine access key for the storage node install account
   ansible.builtin.command:
@@ -122,7 +123,7 @@
     bootwright_node_access_deauthorize_script: >-
       f={{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }};
       t="$f{{ bootwright_node_access_temp_suffix }}";
-      grep -vxF {{ bootwright_node_access_public_key | quote }} "$f" > "$t" || true;
+      grep -vxF {{ bootwright_node_access_install_public_key | quote }} "$f" > "$t" || true;
       cat "$t" > "$f";
       rm -f "$t"
     bootwright_node_access_command: >-
@@ -130,4 +131,6 @@
   delegate_to: localhost
   become: false
   changed_when: true
-  when: (bootwright_node_access_install_key_probe.rc | default(1) | int) == 0
+  when:
+    - (bootwright_node_access_install_public_key | length) > 0
+    - (bootwright_node_access_install_key_probe.rc | default(1) | int) == 0

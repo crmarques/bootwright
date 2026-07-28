@@ -84,6 +84,12 @@
         ~ bootwright_node_access.address
       }}
     bootwright_node_access_public_key: "{{ lookup('ansible.builtin.file', bootwright_node_access.accountPublicKeyPath) | trim }}"
+    bootwright_node_access_install_public_key: >-
+      {{
+        (lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) | trim)
+        if (bootwright_node_access.installPublicKeyPath | default('') | length) > 0
+        else ''
+      }}
     bootwright_node_access_sudoers_temp: "{{ bootwright_node_access.sudoersPath }}{{ bootwright_node_access_temp_suffix }}"
     bootwright_node_access_sudoers_lines:
       - "Defaults:{{ bootwright_node_access.user }} !requiretty"
