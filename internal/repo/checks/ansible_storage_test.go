@@ -2310,3 +2310,108 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 		t.Fatalf("RGW ingress TLS apply must consume the merged spec file, got %v", apply["ansible.builtin.command"])
 	}
 }
+
+func flattenNodeAccessTasks(t *testing.T, tasks []map[string]any) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, task := range tasks {
+		out = append(out, task)
+		for _, key := range []string{"block", "rescue", "always"} {
+			if _, ok := task[key].([]any); ok {
+				out = append(out, flattenNodeAccessTasks(t, nestedAnsibleTasks(t, task, key))...)
+			}
+		}
+	}
+	return out
+}
+
+func TestStorageNodeAccessProvesPasswordlessSudoWithoutATerminal(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	for _, proof := range []struct{ file, task string }{
+		{"probe.yml", "Probe the storage node orchestration account"},
+		{"verify.yml", "Verify passwordless sudo for the storage node orchestration account"},
+		{"revoke.yml", "Verify the storage node orchestration account after revoking root SSH"},
+	} {
+		tasks := readAnsibleTasks(t, base+proof.file)
+		idx := findAnsibleTask(t, tasks, proof.task)
+		argv := fmt.Sprint(tasks[idx]["ansible.builtin.command"])
+		if !strings.Contains(argv, "bootwright_node_access_ssh_argv") {
+			t.Fatalf("%s%s task %q must prove sudo over bootwright_node_access_ssh_argv, got %s", base, proof.file, proof.task, argv)
+		}
+		if !strings.Contains(argv, "sudo -n true") {
+			t.Fatalf("%s%s task %q must prove sudo with the literal sudo -n true, got %s", base, proof.file, proof.task, argv)
+		}
+		if strings.Contains(argv, "privileged_argv") || strings.Contains(argv, "tty") {
+			t.Fatalf("%s%s task %q must never gain a pseudo-terminal: it is the acceptance test for the terminal-free channel cephadm's manager uses, so proving it under -tt would certify a cluster that cannot be orchestrated, got %s", base, proof.file, proof.task, argv)
+		}
+	}
+}
+
+func TestStorageNodeAccessPrivilegedCommandsUseThePrivilegedInvocation(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	exempt := map[string]bool{
+		"Probe privileged execution on the storage node without a terminal": true,
+		"Probe privileged execution on the storage node with a terminal":    true,
+	}
+	for _, file := range []string{"account.yml", "sudoers.yml", "authorize.yml", "verify.yml", "revoke.yml", "restore.yml", "marker.yml", "privilege.yml"} {
+		for _, task := range flattenNodeAccessTasks(t, readAnsibleTasks(t, base+file)) {
+			cmd, ok := task["ansible.builtin.command"].(map[string]any)
+			if !ok || !strings.Contains(fmt.Sprint(task["vars"]), "bootwright_node_access_sudo") {
+				continue
+			}
+			name := fmt.Sprint(task["name"])
+			if exempt[name] {
+				continue
+			}
+			if !strings.Contains(fmt.Sprint(cmd["argv"]), "bootwright_node_access_privileged_argv") {
+				t.Fatalf("%s%s task %q escalates with bootwright_node_access_sudo but not over bootwright_node_access_privileged_argv, so it fails on a node whose sudoers sets requiretty; argv=%v", base, file, name, cmd["argv"])
+			}
+		}
+	}
+}
+
+func TestStorageNodeAccessDetectsTheTerminalRequirementBeforeProvisioning(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	main := readAnsibleTasks(t, base+"main.yml")
+	block := nestedAnsibleTasks(t, main[0], "block")
+	contextIdx := findAnsibleTask(t, block, "Resolve storage node access context")
+	probeIdx := findAnsibleTask(t, block, "Probe storage node access identities")
+	privilegeIdx := findAnsibleTask(t, block, "Resolve storage node privileged execution")
+	accountIdx := findAnsibleTask(t, block, "Ensure the storage node orchestration account")
+	if !(contextIdx < probeIdx && probeIdx < privilegeIdx && privilegeIdx < accountIdx) {
+		t.Fatalf("node access must resolve privileged execution after selecting an identity and before creating the account, so a node that cannot escalate is refused with nothing mutated (context=%d probe=%d privilege=%d account=%d)", contextIdx, probeIdx, privilegeIdx, accountIdx)
+	}
+
+	privilege := readAnsibleTasks(t, base+"privilege.yml")
+	ttyIdx := findAnsibleTask(t, privilege, "Probe privileged execution on the storage node with a terminal")
+	if got := fmt.Sprint(privilege[ttyIdx]["when"]); !strings.Contains(got, "bootwright_node_access_privilege_probe.rc") {
+		t.Fatalf("the terminal probe must run only after the terminal-free probe failed; allocating a pseudo-terminal unconditionally breaks a node whose sshd sets PermitTTY no and answers today, got when=%v", privilege[ttyIdx]["when"])
+	}
+	requireIdx := findAnsibleTask(t, privilege, "Require privileged execution on the storage node before provisioning")
+	if requireIdx < ttyIdx {
+		t.Fatalf("node access must refuse only after both probes ran (require=%d tty=%d)", requireIdx, ttyIdx)
+	}
+
+	verify := readAnsibleTasks(t, base+"verify.yml")
+	switchIdx := findAnsibleTask(t, verify, "Switch to the storage node orchestration identity")
+	if got := fmt.Sprint(verify[switchIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_node_access_privileged_argv") {
+		t.Fatalf("switching to the orchestration identity must reset the privileged invocation to the terminal-free argv, or a terminal borrowed for the install identity leaks into the account Bootwright hands to cephadm, got %v", verify[switchIdx]["ansible.builtin.set_fact"])
+	}
+}
+
+func TestStorageNodeAccessSudoersGrantIsComparedOnTheNode(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	tasks := readAnsibleTasks(t, base+"sudoers.yml")
+	probeIdx := findAnsibleTask(t, tasks, "Probe the storage node orchestration sudoers grant")
+	if got := fmt.Sprint(tasks[probeIdx]["vars"]); !strings.Contains(got, "test \"$(") {
+		t.Fatalf("the sudoers grant must be compared on the node: Ansible's Jinja does not unescape string literals, so join('\\n') in a folded scalar joins with a literal backslash-n and never matches the node's real newline, and a pseudo-terminal would inject CR into any stdout compared on the controller; got vars=%v", tasks[probeIdx]["vars"])
+	}
+	reconcileIdx := findAnsibleTask(t, tasks, "Reconcile the storage node orchestration sudoers grant")
+	when := fmt.Sprint(tasks[reconcileIdx]["when"])
+	if !strings.Contains(when, "bootwright_node_access_sudoers_probe.rc") {
+		t.Fatalf("the sudoers reconcile must key off the on-node comparison's exit status, got when=%v", tasks[reconcileIdx]["when"])
+	}
+	if strings.Contains(when, "stdout") {
+		t.Fatalf("the sudoers reconcile must not compare stdout on the controller, or it re-installs the grant with changed_when true on every apply, got when=%v", tasks[reconcileIdx]["when"])
+	}
+}
