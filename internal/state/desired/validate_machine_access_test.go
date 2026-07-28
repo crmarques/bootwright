@@ -36,7 +36,7 @@ func TestValidateMachineAccessProvidedOptionalSSH(t *testing.T) {
 			OS: v1alpha1.MachineOSSpec{Provided: &provided},
 			Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 				AddressRef: v1alpha1.LocalObjectReference{Name: "missing"},
-				KeyRef:     v1alpha1.SecretRef{Name: "k"},
+				Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "k"}},
 			}},
 		},
 	}

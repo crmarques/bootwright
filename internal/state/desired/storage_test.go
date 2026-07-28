@@ -1683,7 +1683,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		{
 			name: "mixed-key-refs",
 			edit: func(state *v1alpha1.State) {
-				state.Machines[1].Spec.Access.SSH.KeyRef.Name = "other-ceph-node-ssh"
+				state.Machines[1].Spec.Access.SSH.Auth.PrivateKeyRef.Name = "other-ceph-node-ssh"
 			},
 			want: `with ssh.keyRef "other-ceph-node-ssh"; all storage node Machines in one StorageCluster must use "ceph-node-ssh"`,
 		},
@@ -1958,7 +1958,7 @@ func storageValidationHost(name string) v1alpha1.Machine {
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 					User:          "root",
-					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					Auth:        v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 				},
 			},

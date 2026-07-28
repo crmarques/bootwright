@@ -187,8 +187,8 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "root" {
 		t.Fatalf("managed OS kickstart.sshUser = %v, want root for omitted Machine.spec.access.ssh.user", got)
 	}
-	if got := osInstall["kickstart"].(map[string]any)["sshPasswordHash"]; got != managedOSSSHLoginPasswordHash {
-		t.Fatalf("managed OS kickstart.sshPasswordHash = %v, want stable login hash", got)
+	if _, ok := osInstall["kickstart"].(map[string]any)["initialPasswordPath"]; ok {
+		t.Fatal("managed OS kickstart.initialPasswordPath set without customizations.ssh.initialPassword; the installed account must stay locked")
 	}
 }
 

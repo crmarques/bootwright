@@ -17,7 +17,7 @@ func nodeAccessState(clusterUser, rootLogin string) (v1alpha1.State, v1alpha1.St
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef: v1alpha1.LocalObjectReference{Name: "storage"},
 					User:       "root",
-					KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 				},
 			},
 		},

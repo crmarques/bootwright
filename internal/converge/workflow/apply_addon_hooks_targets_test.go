@@ -14,7 +14,7 @@ func addonHookStorageTargetState() v1alpha1.State {
 			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
 					User:          "root",
-					KeyRef:        v1alpha1.SecretRef{Name: "machine-ssh"},
+					Auth:        v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "machine-ssh"}},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "machine-known-hosts"},
 				},
 			},

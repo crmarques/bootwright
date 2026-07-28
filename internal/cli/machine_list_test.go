@@ -23,7 +23,7 @@ func machineListTestState() v1alpha1.State {
 					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.10"}},
 					Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						KeyRef:     v1alpha1.SecretRef{Name: "ceph-key"},
+						Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-key"}},
 					}},
 				},
 			},
@@ -35,7 +35,7 @@ func machineListTestState() v1alpha1.State {
 					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.20"}},
 					Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						KeyRef:     v1alpha1.SecretRef{Name: "ocp-key"},
+						Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ocp-key"}},
 					}},
 				},
 			},
@@ -47,7 +47,7 @@ func machineListTestState() v1alpha1.State {
 					Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						User:       "core",
-						KeyRef:     v1alpha1.SecretRef{Name: "bastion-key"},
+						Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "bastion-key"}},
 					}},
 				},
 			},

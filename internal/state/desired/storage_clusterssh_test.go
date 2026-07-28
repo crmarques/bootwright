@@ -9,7 +9,7 @@ import (
 func setArbiterAccessKey(state *v1alpha1.State, keyRef string) {
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "ceph-arbiter" {
-			state.Machines[i].Spec.Access.SSH.KeyRef = v1alpha1.SecretRef{Name: keyRef}
+			state.Machines[i].Spec.Access.SSH.Auth = v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: keyRef}}
 		}
 	}
 }

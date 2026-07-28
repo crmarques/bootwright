@@ -19,7 +19,7 @@ func hostTrustScopePlanningState() v1alpha1.State {
 				Access: v1alpha1.MachineAccess{
 					SSH: &v1alpha1.MachineSSHSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-						KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+						Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 					},
 				},
 			},
