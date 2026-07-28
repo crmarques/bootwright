@@ -60,6 +60,9 @@ func StorageClusterRevokesRootLogin(cluster StorageCluster, state State) bool {
 }
 
 func NodeAccessSudoersPath(user string) string {
+	if user == BootwrightSSHUser {
+		return NodeAccessSudoersDir + "/" + strings.TrimSuffix(NodeAccessSudoersPrefix, "-")
+	}
 	return NodeAccessSudoersDir + "/" + NodeAccessSudoersPrefix + user
 }
 

@@ -622,6 +622,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	require(fmt.Sprintf("Environment/%s spec.defaults.install.pullSecretRef", env.Metadata.Name), env.Spec.Defaults.Install.PullSecretRef)
 	requireNodeSSH(fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name), env.Spec.Defaults.Install.NodeSSH, "", requireSSHKeyNoted)
+	requireSSHKey(fmt.Sprintf("Environment/%s spec.machineAccess.keyRef", env.Metadata.Name), env.Spec.MachineAccess.KeyRef)
 	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil {
 		owner := fmt.Sprintf("Environment/%s spec.registries.mirror", env.Metadata.Name)
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
@@ -658,6 +659,11 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 		if machine.Spec.Hardware.Management.BMC.CredentialsRef.Name != "" {
 			require(fmt.Sprintf("Machine/%s spec.hardware.management.bmc.credentialsRef", machine.Metadata.Name), machine.Spec.Hardware.Management.BMC.CredentialsRef)
+		}
+	}
+	for _, profile := range state.MachineInstallProfiles {
+		if password := profile.Spec.Customizations.SSH.InitialPassword; password != nil {
+			requireUsernamePassword(fmt.Sprintf("MachineInstallProfile/%s spec.customizations.ssh.initialPassword.secretRef", profile.Metadata.Name), password.SecretRef)
 		}
 	}
 	for _, image := range state.MachineImages {

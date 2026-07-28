@@ -165,10 +165,10 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 		entry["ansible_connection"] = "local"
 		return entry
 	}
-	if paths.SSHUser != "" {
+	if sshUserApplies(h, paths) {
 		entry["bootwright_declared_ssh_user"] = h.Spec.Access.SSH.User
 	}
-	if user := connectionUser(h.Spec.Access.SSH.User, paths); user != "" {
+	if user := connectionUser(h, paths); user != "" {
 		entry["ansible_user"] = user
 	}
 	if path := secret.ResolveSSHPrivateKeyPath(v1alpha1.MachineSSHKeyRef(h).Name, paths.SecretIndex, paths.SecretsDir); path != "" {
@@ -193,11 +193,18 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 	return entry
 }
 
-func connectionUser(declared string, paths PathOptions) string {
-	if paths.SSHUser != "" {
+func sshUserApplies(machine v1alpha1.Machine, paths PathOptions) bool {
+	return paths.SSHUser != "" && v1alpha1.MachineUsesOperatorIdentity(machine)
+}
+
+func connectionUser(machine v1alpha1.Machine, paths PathOptions) string {
+	if sshUserApplies(machine, paths) {
 		return paths.SSHUser
 	}
-	return declared
+	if machine.Spec.Access.SSH == nil {
+		return ""
+	}
+	return machine.Spec.Access.SSH.User
 }
 
 func passwordLookup(path string) string {

@@ -95,7 +95,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"sshUser":                sshUser,
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(v1alpha1.MachineSSHKeyRef(machine).Name, paths.SecretIndex, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
-			"sudo":                   v1alpha1.MachineInstallSudoPolicy(profile),
+			"sudoersPath":            v1alpha1.NodeAccessSudoersPath(sshUser),
 			"localization":           machineInstallLocalizationVars(profile.Spec.Customizations.Localization),
 			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
 			"repositories":           machineInstallRepositoriesVars(profile.Spec.Customizations.Repositories, eff),
@@ -159,7 +159,7 @@ func managedOSSSHUser(machine v1alpha1.Machine) string {
 	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
 		return machine.Spec.Access.SSH.User
 	}
-	return "root"
+	return v1alpha1.BootwrightSSHUser
 }
 
 func managedOSFallbackSSHUser(state v1alpha1.State, machine v1alpha1.Machine, clusterName string) string {

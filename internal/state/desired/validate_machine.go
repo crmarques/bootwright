@@ -178,9 +178,6 @@ func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
 		}
 		return errs
 	}
-	if machine.Spec.OS.InstallProfileRef.Name != "" && machine.Spec.Access.SSH == nil {
-		return []string{prefix + ".ssh is required when os.installProfileRef is set, unless a managed Ceph StorageCluster lists the machine in spec.ceph.topology.nodes and supplies the login through spec.ceph.cephadm.clusterSSH"}
-	}
 	if machine.Spec.Access.SSH == nil {
 		return nil
 	}
@@ -189,7 +186,7 @@ func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
 
 func machineSSHKeyField(machine v1alpha1.Machine) string {
 	if v1alpha1.MachineProvisionsLogin(machine) {
-		return "spec.access.ssh.auth.provision.keyRef"
+		return "the Environment spec.machineAccess.keyRef it derives"
 	}
 	return "spec.access.ssh.auth.privateKeyRef"
 }
@@ -249,21 +246,12 @@ func validateMachineSSH(prefix string, machine v1alpha1.Machine) []string {
 func validateMachineSSHAuth(prefix string, machine v1alpha1.Machine, auth v1alpha1.MachineSSHAuth) []string {
 	var errs []string
 	if count := auth.ArmCount(); count == 0 {
-		return []string{prefix + " is required; set exactly one of controllerIdentity, privateKeyRef, passwordRef or provision"}
+		return []string{prefix + " is required; set exactly one of operatorIdentity, privateKeyRef or passwordRef"}
 	} else if count > 1 {
-		errs = append(errs, prefix+" sets more than one arm; set exactly one of controllerIdentity, privateKeyRef, passwordRef or provision")
+		errs = append(errs, prefix+" sets more than one arm; set exactly one of operatorIdentity, privateKeyRef or passwordRef")
 	}
-	installs := v1alpha1.MachineInstallsOS(machine)
-	if auth.Provision != nil {
-		if !installs {
-			errs = append(errs, prefix+".provision is only valid when Bootwright installs the OS (os.provided=false with os.installProfileRef); on any other Machine the login already exists and is named by privateKeyRef, passwordRef or controllerIdentity")
-		}
-		if auth.Provision.KeyRef.Name == "" {
-			errs = append(errs, prefix+".provision.keyRef is required; it is the key the install authorizes for the login and the key Bootwright then connects with")
-		}
-	}
-	if installs && auth.Provision == nil {
-		errs = append(errs, prefix+" must use the provision arm when Bootwright installs the OS; the login does not exist until the install creates it")
+	if auth.Provision != nil && auth.Provision.KeyRef.Name == "" {
+		errs = append(errs, fmt.Sprintf("Machine/%s installs an OS but Environment spec.machineAccess.keyRef is not set; it names the sshKeyPair Secret the install authorizes for the %q service account", machine.Metadata.Name, v1alpha1.BootwrightSSHUser))
 	}
 	if auth.PasswordRef.Name != "" && machine.Spec.Access.SSH.User == "" {
 		errs = append(errs, prefix+".passwordRef requires spec.access.ssh.user; a password authenticates one named account")

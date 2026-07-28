@@ -66,12 +66,11 @@ const (
 
 	RootSSHUser = "root"
 
+	BootwrightSSHUser = "bootwright"
+
 	DefaultSSHPort = 22
 
 	MachineInstallPasswordLocked = "locked"
-
-	MachineInstallSudoNoPasswd = "nopasswd"
-	MachineInstallSudoNone     = "none"
 
 	MachineInstallRepositoryFileDir     = "/etc/yum.repos.d"
 	MachineInstallRepositoryFilePrefix  = "bootwright-"

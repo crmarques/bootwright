@@ -158,25 +158,25 @@ type MachineSSHSpec struct {
 }
 
 type MachineSSHAuth struct {
-	ControllerIdentity *MachineSSHControllerIdentity `yaml:"controllerIdentity,omitempty" json:"controllerIdentity,omitempty"`
-	PrivateKeyRef      SecretRef                     `yaml:"privateKeyRef,omitempty" json:"privateKeyRef,omitempty"`
-	PasswordRef        SecretRef                     `yaml:"passwordRef,omitempty" json:"passwordRef,omitempty"`
-	Provision          *MachineSSHProvision          `yaml:"provision,omitempty" json:"provision,omitempty"`
+	OperatorIdentity *MachineSSHOperatorIdentity `yaml:"operatorIdentity,omitempty" json:"operatorIdentity,omitempty"`
+	PrivateKeyRef    SecretRef                   `yaml:"privateKeyRef,omitempty" json:"privateKeyRef,omitempty"`
+	PasswordRef      SecretRef                   `yaml:"passwordRef,omitempty" json:"passwordRef,omitempty"`
+	Provision        *MachineSSHProvision        `yaml:"-" json:"-"`
 }
 
-type MachineSSHControllerIdentity struct{}
+type MachineSSHOperatorIdentity struct{}
 
 type MachineSSHProvision struct {
-	KeyRef SecretRef `yaml:"keyRef" json:"keyRef"`
+	KeyRef SecretRef `yaml:"-" json:"-"`
 }
 
 func (a MachineSSHAuth) IsZero() bool {
-	return a.ControllerIdentity == nil && a.PrivateKeyRef.Name == "" && a.PasswordRef.Name == "" && a.Provision == nil
+	return a.OperatorIdentity == nil && a.PrivateKeyRef.Name == "" && a.PasswordRef.Name == "" && a.Provision == nil
 }
 
 func (a MachineSSHAuth) ArmCount() int {
 	count := 0
-	for _, set := range []bool{a.ControllerIdentity != nil, a.PrivateKeyRef.Name != "", a.PasswordRef.Name != "", a.Provision != nil} {
+	for _, set := range []bool{a.OperatorIdentity != nil, a.PrivateKeyRef.Name != "", a.PasswordRef.Name != "", a.Provision != nil} {
 		if set {
 			count++
 		}
@@ -369,22 +369,10 @@ type MachineInstallLocalization struct {
 type MachineInstallSSH struct {
 	PasswordAuthentication bool                           `yaml:"passwordAuthentication,omitempty" json:"passwordAuthentication,omitempty"`
 	InitialPassword        *MachineInstallInitialPassword `yaml:"initialPassword,omitempty" json:"initialPassword,omitempty"`
-	Sudo                   string                         `yaml:"sudo,omitempty" json:"sudo,omitempty"`
 }
 
 type MachineInstallInitialPassword struct {
 	SecretRef SecretRef `yaml:"secretRef" json:"secretRef"`
-}
-
-func MachineInstallSudoPolicy(profile MachineInstallProfile) string {
-	if profile.Spec.Customizations.SSH.Sudo == "" {
-		return MachineInstallSudoNoPasswd
-	}
-	return profile.Spec.Customizations.SSH.Sudo
-}
-
-func MachineInstallSudoValues() []string {
-	return []string{MachineInstallSudoNoPasswd, MachineInstallSudoNone}
 }
 
 type MachineInstallStorage struct {
@@ -461,7 +449,7 @@ func MachineSSHUser(machine Machine) string {
 	if ssh.User != "" {
 		return ssh.User
 	}
-	if ssh.Auth.ControllerIdentity != nil {
+	if ssh.Auth.OperatorIdentity != nil {
 		return ""
 	}
 	return RootSSHUser
@@ -485,8 +473,8 @@ func MachineSSHPasswordRef(machine Machine) SecretRef {
 	return machine.Spec.Access.SSH.Auth.PasswordRef
 }
 
-func MachineUsesControllerIdentity(machine Machine) bool {
-	return machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.Auth.ControllerIdentity != nil
+func MachineUsesOperatorIdentity(machine Machine) bool {
+	return machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.Auth.OperatorIdentity != nil
 }
 
 func MachineProvisionsLogin(machine Machine) bool {

@@ -129,7 +129,7 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 }
 
 func machineLoginUser(state v1alpha1.State, machine v1alpha1.Machine) string {
-	if v1alpha1.MachineUsesControllerIdentity(machine) {
+	if v1alpha1.MachineUsesOperatorIdentity(machine) {
 		return ""
 	}
 	if user, ok := storageNodeLoginUser(state, machine.Metadata.Name); ok {

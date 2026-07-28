@@ -18,6 +18,9 @@ type WorkflowPlan struct {
 }
 
 func PrepareScopedWorkflowPlan(scopedState v1alpha1.State, scope Scope, phaseList []Phase, askBecomePass, dryRun bool, records []ownership.ResourceRecord) (WorkflowPlan, error) {
+	if err := checkSSHUserScope(scopedState); err != nil {
+		return WorkflowPlan{}, err
+	}
 	selected := PhasesForState(phaseList, scopedState)
 	limit := scope.AnsibleLimit
 	ansibleNoHosts := !dryRun && (!ScopeUsesAnsible(scope) || workflow.LimitMatchesNoHostsWithOwnershipRecords(limit, scopedState, records))

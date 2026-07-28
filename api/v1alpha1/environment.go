@@ -21,6 +21,7 @@ type EnvironmentSpec struct {
 	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
+	MachineAccess     EnvironmentMachineAccessSpec             `yaml:"machineAccess,omitempty" json:"machineAccess,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	SecretStorage     EnvironmentSecretStorageSpec             `yaml:"secretStorage,omitempty" json:"secretStorage,omitempty"`
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
@@ -28,6 +29,10 @@ type EnvironmentSpec struct {
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
 	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
+}
+
+type EnvironmentMachineAccessSpec struct {
+	KeyRef SecretRef `yaml:"keyRef,omitempty" json:"keyRef,omitempty"`
 }
 
 type EnvironmentSafetySpec struct {

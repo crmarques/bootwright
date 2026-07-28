@@ -5,14 +5,14 @@ import (
 )
 
 func normalizeMachineAccess(state *v1alpha1.State) {
-	claims := storageNodeClaims(*state)
+	fleetKey := machineAccessKeyRef(*state)
 	for i := range state.Machines {
 		machine := &state.Machines[i]
 		if machine.Spec.Access.Local {
 			continue
 		}
 		if machine.Spec.Access.SSH == nil {
-			deriveMachineAccess(machine, claims[machine.Metadata.Name])
+			deriveMachineAccess(machine, fleetKey)
 		}
 		ssh := machine.Spec.Access.SSH
 		if ssh == nil {
@@ -21,8 +21,8 @@ func normalizeMachineAccess(state *v1alpha1.State) {
 		if ssh.AddressRef.Name == "" {
 			ssh.AddressRef.Name = defaultMachineAddressName(*machine)
 		}
-		if ssh.Auth.IsZero() && !v1alpha1.MachineInstallsOS(*machine) {
-			ssh.Auth.ControllerIdentity = &v1alpha1.MachineSSHControllerIdentity{}
+		if ssh.Auth.IsZero() {
+			ssh.Auth.OperatorIdentity = &v1alpha1.MachineSSHOperatorIdentity{}
 		}
 		if machine.Spec.Access.RootLogin == "" {
 			machine.Spec.Access.RootLogin = v1alpha1.MachineRootLoginKeep
@@ -30,26 +30,29 @@ func normalizeMachineAccess(state *v1alpha1.State) {
 	}
 }
 
-func deriveMachineAccess(machine *v1alpha1.Machine, cluster *v1alpha1.StorageCluster) {
+func deriveMachineAccess(machine *v1alpha1.Machine, fleetKey v1alpha1.SecretRef) {
 	switch {
-	case cluster != nil && v1alpha1.MachineInstallsOS(*machine):
-		user := v1alpha1.StorageClusterCephadmSSHUser(*cluster)
+	case v1alpha1.MachineInstallsOS(*machine):
 		machine.Spec.Access.SSH = &v1alpha1.MachineSSHSpec{
-			User: user,
+			User: v1alpha1.BootwrightSSHUser,
 			Auth: v1alpha1.MachineSSHAuth{
-				Provision: &v1alpha1.MachineSSHProvision{KeyRef: v1alpha1.SecretRef{Name: cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name}},
+				Provision: &v1alpha1.MachineSSHProvision{KeyRef: fleetKey},
 			},
 		}
 		machine.DefaultedRefs.Access = true
-		if user != v1alpha1.RootSSHUser && machine.Spec.Access.RootLogin == "" {
-			machine.Spec.Access.RootLogin = v1alpha1.MachineRootLoginRevoke
-		}
 	case v1alpha1.MachineOSProvided(*machine):
 		machine.Spec.Access.SSH = &v1alpha1.MachineSSHSpec{
-			Auth: v1alpha1.MachineSSHAuth{ControllerIdentity: &v1alpha1.MachineSSHControllerIdentity{}},
+			Auth: v1alpha1.MachineSSHAuth{OperatorIdentity: &v1alpha1.MachineSSHOperatorIdentity{}},
 		}
 		machine.DefaultedRefs.Access = true
 	}
+}
+
+func machineAccessKeyRef(state v1alpha1.State) v1alpha1.SecretRef {
+	if len(state.Environments) == 0 {
+		return v1alpha1.SecretRef{}
+	}
+	return state.Environments[0].Spec.MachineAccess.KeyRef
 }
 
 func defaultMachineAddressName(machine v1alpha1.Machine) string {
@@ -62,20 +65,4 @@ func defaultMachineAddressName(machine v1alpha1.Machine) string {
 		return v1alpha1.MachineAddressFQDN
 	}
 	return ""
-}
-
-func storageNodeClaims(state v1alpha1.State) map[string]*v1alpha1.StorageCluster {
-	claims := map[string]*v1alpha1.StorageCluster{}
-	for i := range state.StorageClusters {
-		cluster := &state.StorageClusters[i]
-		if !v1alpha1.StorageClusterManaged(*cluster) || cluster.Spec.Ceph == nil {
-			continue
-		}
-		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			if node.MachineRef.Name != "" {
-				claims[node.MachineRef.Name] = cluster
-			}
-		}
-	}
-	return claims
 }

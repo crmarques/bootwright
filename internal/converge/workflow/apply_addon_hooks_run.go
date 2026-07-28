@@ -59,6 +59,7 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 			inventoryName:    "hook_" + strconv.Itoa(i),
 			address:          address,
 			user:             m.sshUser,
+			operatorIdentity: v1alpha1.MachineUsesOperatorIdentity(m.machine),
 			port:             m.machine.Spec.Access.SSH.Port,
 			keyPath:          secret.ResolveSSHPrivateKeyPath(m.sshKeyRef.Name, idx, connectionDir),
 			passwordPath:     secret.ResolvePath(m.sshPasswordRef.Name, idx, connectionDir),
@@ -314,10 +315,11 @@ func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityF
 			"bootwright_host_name":    target.label,
 			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath, target.passwordPath != "", preferredIdentityFile)),
 		}
-		if user := target.user; sshUser != "" || user != "" {
-			if sshUser != "" {
-				user = sshUser
-			}
+		user := target.user
+		if sshUser != "" && target.operatorIdentity {
+			user = sshUser
+		}
+		if user != "" {
 			host["ansible_user"] = user
 		}
 		if target.port != 0 {
@@ -343,6 +345,7 @@ type hookSSHTarget struct {
 	inventoryName    string
 	address          string
 	user             string
+	operatorIdentity bool
 	port             int
 	keyPath          string
 	passwordPath     string

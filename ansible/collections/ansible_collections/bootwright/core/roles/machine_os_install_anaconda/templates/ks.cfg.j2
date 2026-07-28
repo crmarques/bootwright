@@ -39,7 +39,7 @@ keyboard {{ localization.keyboard | default('us', true) }}
 {% set ntp_sources = bootwright_resolved_ntp_sources | default([]) %}
 {% set ntp_flag = (' --ntpservers=' ~ (ntp_sources | join(','))) if (ntp_sources | length > 0) else '' %}
 timezone {{ localization.timezone | default('UTC', true) }} --utc{{ ntp_flag }}
-{% set ssh_user = ks.sshUser | default('root', true) %}
+{% set ssh_user = ks.sshUser | default('bootwright', true) %}
 {% set initial_password_path = ks.initialPasswordPath | default('', true) %}
 {% if initial_password_path | length > 0 %}
 {% set initial_password = lookup('ansible.builtin.file', initial_password_path) | trim %}
@@ -49,11 +49,7 @@ timezone {{ localization.timezone | default('UTC', true) }} --utc{{ ntp_flag }}
 {% else %}
 {% set initial_password = '' %}
 {% endif %}
-{% if ssh_user == 'root' and initial_password | length > 0 %}
-rootpw --plaintext --allow-ssh {{ initial_password }}
-{% else %}
 rootpw --lock
-{% endif %}
 {% set security = ks.security | default({}) %}
 {% set selinux = security.selinux | default({}) %}
 {% if selinux.mode | default('') | length > 0 %}
@@ -112,12 +108,11 @@ services{{ svc_opts }}
 {% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}
 {% endif %}
 {% if ssh_key | trim | length == 0 %}
-{{ undef(hint='machineOSInstall kickstart has no public key to authorize for ' ~ ssh_user ~ '. spec.access.ssh.auth.provision.keyRef must resolve to an sshKeyPair Secret whose public half is materialized, otherwise the installed machine would accept no login at all.') }}
+{{ undef(hint='machineOSInstall kickstart has no public key to authorize for ' ~ ssh_user ~ '. Environment spec.machineAccess.keyRef must resolve to an sshKeyPair Secret whose public half is materialized, otherwise the installed machine would accept no login at all.') }}
 {% endif %}
-{% set sudo_policy = ks.sudo | default('nopasswd', true) %}
-{% if ssh_user != 'root' and initial_password | length > 0 %}
+{% if initial_password | length > 0 %}
 user --name={{ ssh_user }} --password={{ initial_password }} --plaintext
-{% elif ssh_user != 'root' %}
+{% else %}
 user --name={{ ssh_user }} --lock
 {% endif %}
 sshkey --username={{ ssh_user }} "{{ ssh_key | trim }}"
@@ -210,25 +205,15 @@ subscription-manager repos --disable="{{ repo_id }}"
 subscription-manager repos --enable="{{ repo_id }}"
 {% endfor %}
 {% endif %}
-{% if ssh_user != 'root' and sudo_policy == 'nopasswd' %}
-cat > /etc/sudoers.d/60-bootwright-{{ ssh_user }} <<'BOOTWRIGHT_SUDOERS'
+{% set sudoers_path = ks.sudoersPath | default('/etc/sudoers.d/60-bootwright', true) %}
+cat > {{ sudoers_path }} <<'BOOTWRIGHT_SUDOERS'
 Defaults:{{ ssh_user }} !requiretty
 {{ ssh_user }} ALL=(ALL) NOPASSWD: ALL
 BOOTWRIGHT_SUDOERS
-chmod 0440 /etc/sudoers.d/60-bootwright-{{ ssh_user }}
-{% endif %}
-{% if ssh_user == 'root' and ssh_key | length > 0 %}
-install -d -m 0700 -o root -g root /root/.ssh
-cat > /root/.ssh/authorized_keys <<'BOOTWRIGHT_ROOT_AUTHORIZED_KEYS'
-{{ ssh_key | trim }}
-BOOTWRIGHT_ROOT_AUTHORIZED_KEYS
-chmod 0600 /root/.ssh/authorized_keys
-chown root:root /root/.ssh /root/.ssh/authorized_keys
-restorecon -R /root/.ssh >/dev/null 2>&1 || true
-{% endif %}
+chmod 0440 {{ sudoers_path }}
 install -d -m 0755 /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf <<'BOOTWRIGHT_SSHD_CONFIG'
-PermitRootLogin {{ 'yes' if ssh_user == 'root' else 'no' }}
+PermitRootLogin no
 {% if not (ks.passwordAuthentication | default(false)) %}
 PasswordAuthentication no
 {% endif %}
