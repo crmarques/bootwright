@@ -1,0 +1,3 @@
+---
+bootwright_machine_repositories: {}
+bootwright_machine_repositories_proxy_url: "{{ bootwright_proxy_primary | default('') }}"

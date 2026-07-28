@@ -1,0 +1,32 @@
+---
+- name: Write declared repository files
+  ansible.builtin.yum_repository:
+    file: "{{ (item.path | basename) | regex_replace('\\.repo$', '') }}"
+    name: "{{ item.id }}"
+    description: "{{ item.name }}"
+    baseurl: "{{ item.baseURL }}"
+    enabled: "{{ item.enabled | bool }}"
+    gpgcheck: "{{ item.gpgCheck | bool }}"
+    gpgkey: "{{ item.gpgKeyURL | default(omit, true) }}"
+    proxy: >-
+      {{
+        bootwright_machine_repositories_proxy_url
+        if (item.proxied | default(false)) and (bootwright_machine_repositories_proxy_url | length > 0)
+        else omit
+      }}
+    mode: "0644"
+    state: present
+  loop: "{{ bootwright_machine_repositories.configure | default([]) }}"
+  loop_control:
+    label: "{{ item.id }}"
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_machine_repositories_proxy_url | length > 0) }}"
+  register: bootwright_machine_repositories_written
+
+- name: Refresh dnf metadata for rewritten repositories
+  ansible.builtin.command:
+    argv:
+      - dnf
+      - clean
+      - metadata
+  changed_when: false
+  when: bootwright_machine_repositories_written is changed

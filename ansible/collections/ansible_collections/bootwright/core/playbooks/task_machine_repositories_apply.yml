@@ -1,0 +1,27 @@
+---
+- name: Reconcile cluster machine repositories
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+  tasks:
+    - name: End hosts outside selected storage cluster
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') != bootwright_task_storage_cluster_name | default('')
+
+    - name: End provided-OS hosts
+      ansible.builtin.meta: end_host
+      when: bootwright_os_provided | default(false) | bool
+
+    - name: End hosts declaring no repositories
+      ansible.builtin.meta: end_host
+      when: (bootwright_machine_repositories | default({}) | length) == 0
+
+    - name: Reconcile declared repositories
+      ansible.builtin.include_role:
+        name: bootwright.core.machine_repositories

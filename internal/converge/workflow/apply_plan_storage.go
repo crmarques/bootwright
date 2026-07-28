@@ -5,6 +5,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string) (map[string][]string, error) {
@@ -194,6 +195,84 @@ func planStorageRegistrationActivities(graph *ActivityGraph, state v1alpha1.Stat
 		}
 	}
 	return registrationDepsByCluster, nil
+}
+
+func planStorageRepositoryActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool, includeStorage bool, machineServiceTaskIDs []string, managedOSDepsByCluster, registrationDepsByCluster map[string][]string) (map[string][]string, error) {
+	repositoryDepsByCluster := map[string][]string{}
+	if !(phaseSet[ApplyPhaseMachines] && includeStorage) {
+		return repositoryDepsByCluster, nil
+	}
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) {
+			continue
+		}
+		if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+			continue
+		}
+		hosts := storageRepositoryHosts(state, target, cluster)
+		if len(hosts) == 0 {
+			continue
+		}
+		limit := render.StorageClusterGroupName(cluster.Metadata.Name)
+		forks := storageClusterNodeCount(cluster)
+		if target.MachineScoped() || len(hosts) != forks {
+			limit = strings.Join(hosts, ":")
+			forks = len(hosts)
+		}
+		taskID := "repositories." + cluster.Metadata.Name
+		repositoryDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+		deps := append([]string(nil), machineServiceTaskIDs...)
+		deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
+		deps = append(deps, registrationDepsByCluster[cluster.Metadata.Name]...)
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindMachineRepositories,
+					Label:        "machine repositories " + cluster.Metadata.Name,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
+					Status:       TaskStatusPending,
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+				},
+				Playbook:           applyMachineRepositoriesPlaybook,
+				Limit:              limit,
+				ExtraVarPairs:      []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
+				State:              storageTaskState(state, cluster.Metadata.Name),
+				DesiredHashVars:    storageClusterDesiredHashVars(hashState, cluster.Metadata.Name),
+				StructuralHashVars: storageClusterStructuralHashVars(hashState, cluster.Metadata.Name),
+				Forks:              forks,
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return repositoryDepsByCluster, nil
+}
+
+func storageRepositoryHosts(state v1alpha1.State, target ApplyTarget, cluster v1alpha1.StorageCluster) []string {
+	var hosts []string
+	seen := map[string]bool{}
+	for _, machineName := range selectedMachineNames(managedOSMachineNames(state, cluster), target) {
+		machine, ok := stateview.Machine(state, machineName)
+		if !ok || v1alpha1.MachineOSProvided(machine) {
+			continue
+		}
+		profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+		if !ok || !v1alpha1.MachineInstallProfileDeclaresRepositories(profile) {
+			continue
+		}
+		for _, host := range render.MachineInventoryHosts(state, machineName) {
+			if host == "" || seen[host] {
+				continue
+			}
+			seen[host] = true
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
 }
 
 func managedOSInstallLimit(clusterName string, machineNames []string, scoped bool) string {

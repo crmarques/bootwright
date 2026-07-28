@@ -18,6 +18,7 @@ const (
 	ApplyTaskKindMachineInfraFinalize   = "machineInfraFinalize"
 	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
 	ApplyTaskKindMachineRegistration    = "machineRegistration"
+	ApplyTaskKindMachineRepositories    = "machineRepositories"
 	ApplyTaskKindStorageNodeAccess      = "storageNodeAccess"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
@@ -46,6 +47,7 @@ const (
 	applyMachineInfraFinalize        = roles.PlaybookTaskMachineInfraFinalize
 	applyManagedMachineOSPlaybook    = roles.PlaybookTaskManagedMachineOSApply
 	applyMachineRegistrationPlaybook = roles.PlaybookTaskMachineRegistrationApply
+	applyMachineRepositoriesPlaybook = roles.PlaybookTaskMachineRepositoriesApply
 	applyStorageNodeAccessPlaybook   = roles.PlaybookTaskStorageNodeAccessApply
 	applyCreateISOPlaybook           = roles.PlaybookTaskContainerClusterCreateAgentISO
 	applyHostVirtctlPlaybook         = roles.PlaybookTaskHostVirtctlProvision
@@ -63,6 +65,7 @@ func ApplyTaskKinds() []string {
 		ApplyTaskKindMachineInfraFinalize,
 		ApplyTaskKindManagedMachineOS,
 		ApplyTaskKindMachineRegistration,
+		ApplyTaskKindMachineRepositories,
 		ApplyTaskKindStorageNodeAccess,
 		ApplyTaskKindStorageInfra,
 		ApplyTaskKindClusterISO,

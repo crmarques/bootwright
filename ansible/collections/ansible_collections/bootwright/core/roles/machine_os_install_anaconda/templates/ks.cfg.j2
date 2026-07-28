@@ -179,6 +179,37 @@ cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT
 BOOTWRIGHT_SATELLITE_CA
 update-ca-trust extract
 {% endif %}
+{% set repositories = ks.repositories | default({}) %}
+{% for repo in repositories.configure | default([]) %}
+# Persist the {{ repo.id }} repository so day-2 dnf on the installed system
+# resolves it. Anaconda's own repo directives cover the install transaction only.
+cat > {{ repo.path }} <<'BOOTWRIGHT_REPO_FILE'
+[{{ repo.id }}]
+name={{ repo.name }}
+baseurl={{ repo.baseURL }}
+enabled={{ 1 if repo.enabled else 0 }}
+gpgcheck={{ 1 if repo.gpgCheck else 0 }}
+{% if repo.gpgKeyURL | default('') | length > 0 %}
+gpgkey={{ repo.gpgKeyURL }}
+{% endif %}
+{% if (repo.proxied | default(false)) and (proxy_url | length > 0) %}
+proxy={{ proxy_url }}
+{% endif %}
+BOOTWRIGHT_REPO_FILE
+chmod 0644 {{ repo.path }}
+{% endfor %}
+{% set subscription_repos = repositories.subscription | default({}) %}
+{% if (rhsm.enabled | default(false)) and (subscription_repos | length > 0) %}
+# The rhsm kickstart directive already registered this node, so subscription
+# repositories can be selected here. Profiles that register day-2 instead leave
+# this to the machines-phase repositories task.
+{% for repo_id in subscription_repos.disable | default([]) %}
+subscription-manager repos --disable="{{ repo_id }}"
+{% endfor %}
+{% for repo_id in subscription_repos.enable | default([]) %}
+subscription-manager repos --enable="{{ repo_id }}"
+{% endfor %}
+{% endif %}
 {% if ssh_user != 'root' and sudo_policy == 'nopasswd' %}
 cat > /etc/sudoers.d/60-bootwright-{{ ssh_user }} <<'BOOTWRIGHT_SUDOERS'
 Defaults:{{ ssh_user }} !requiretty

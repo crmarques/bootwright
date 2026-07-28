@@ -1,0 +1,35 @@
+---
+- name: Probe RHSM registration identity
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - identity
+  register: bootwright_machine_repositories_identity
+  changed_when: false
+  failed_when: false
+
+- name: Require RHSM registration before selecting subscription repositories
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_repositories_identity.rc == 0
+    fail_msg: >-
+      {{ inventory_hostname }} declares customizations.repositories.subscription but is not
+      registered with RHSM. Registration runs in the machines-phase registration task; run a
+      full apply, or drop the subscription block and declare the repositories under
+      customizations.repositories.configure instead.
+
+- name: Enable declared subscription repositories
+  community.general.rhsm_repository:
+    name: "{{ bootwright_machine_repositories.subscription.enable }}"
+    state: enabled
+    purge: "{{ bootwright_machine_repositories.subscription.purge | default(false) | bool }}"
+  when: (bootwright_machine_repositories.subscription.enable | default([]) | length) > 0
+
+- name: Disable declared subscription repositories
+  community.general.rhsm_repository:
+    name: "{{ bootwright_machine_repositories.subscription.disable }}"
+    state: disabled
+  when:
+    - (bootwright_machine_repositories.subscription.disable | default([]) | length) > 0
+    - not ((bootwright_machine_repositories.subscription.purge | default(false) | bool)
+        and ((bootwright_machine_repositories.subscription.enable | default([]) | length) > 0))

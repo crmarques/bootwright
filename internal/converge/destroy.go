@@ -286,7 +286,8 @@ func destroyKindForApplyTaskKind(kind string) string {
 		workflow.ApplyTaskKindHostVirtctl:
 		return workflow.DestroyTaskKindContainerCluster
 	case workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindMachineInfraFinalize,
-		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindPlaybook:
+		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindMachineRepositories,
+		workflow.ApplyTaskKindPlaybook:
 		return workflow.DestroyTaskKindMachineInfra
 	case workflow.ApplyTaskKindInfraComponentServices:
 		return workflow.DestroyTaskKindInfraComponents

@@ -50,7 +50,8 @@ func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 		return PhaseSharedServices
 	case workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall,
 		workflow.ApplyTaskKindMachineInfraFinalize, workflow.ApplyTaskKindManagedMachineOS,
-		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindStorageNodeAccess,
+		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindMachineRepositories,
+		workflow.ApplyTaskKindStorageNodeAccess,
 		workflow.DestroyTaskKindMachineInfra, workflow.DestroyTaskKindMachineRegistration,
 		workflow.DestroyTaskKindStorageNodeAccess:
 		return PhaseMachines

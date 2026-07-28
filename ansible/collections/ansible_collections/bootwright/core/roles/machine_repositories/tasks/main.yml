@@ -1,0 +1,23 @@
+---
+- name: Gather repository node OS facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+
+- name: Validate repository node OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'RedHat'
+    fail_msg: >-
+      Managed repositories are supported on RHEL-family nodes only; {{ inventory_hostname }} reported
+      {{ ansible_distribution | default('<unknown>') }} (os_family {{ ansible_os_family | default('<unknown>') }}).
+
+- name: Configure declared repository files
+  ansible.builtin.include_tasks: configure.yml
+  when: (bootwright_machine_repositories.configure | default([]) | length) > 0
+
+- name: Select subscription repositories
+  ansible.builtin.include_tasks: subscription.yml
+  when: (bootwright_machine_repositories.subscription | default({}) | length) > 0
