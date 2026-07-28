@@ -33,9 +33,23 @@ CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
 desired state.
 
 Machine SSH follows the same boundary. Durable SSH connection details live on
-`Machine.spec.access.ssh`. `keyRef` and `knownHostsRef` reference `Secret`
-objects by name; when `knownHostsRef` is omitted, Bootwright records
-server keys under context-managed SSH trust state. Non-local durable SSH uses
+`Machine.spec.access.ssh`. Its `auth` union names material by reference —
+`privateKeyRef` and `passwordRef` and `provision.keyRef` resolve to `Secret`
+objects, never to bytes in desired state — and `sudoPasswordRef` and
+`knownHostsRef` likewise; when `knownHostsRef` is omitted, Bootwright records
+server keys under context-managed SSH trust state.
+
+Two access shapes deliberately hold no reference. `auth.controllerIdentity`
+authenticates as the operator running Bootwright, using that operator's own
+agent and default identities: no key material enters the context, and the
+effective credential is whatever that operator already holds. The
+`--preferred-id-key` flag likewise names a controller-local private key offered
+ahead of the declared credentials, with the declared credentials as fallback;
+it is refused unless the file is a regular file with no group or other
+permissions, and it is never recorded in desired state, the converge hash, or
+an install marker. Both are per-operator ambient authority by construction and
+must be described as such — they trade reproducibility for the ability to reach
+a machine the operator already administers. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
 Trust is recorded by `bootwright machine trust`, on first use during an
 interactive `preflight`/`apply`, or through OpenSSH's prompt during interactive
@@ -66,6 +80,13 @@ not leave vendor outbound telemetry enabled through an implicit default.
 
 A machine has two login identities, owned by two different objects, and they
 must not be conflated (ADR 0019).
+
+A `Machine` a managed Ceph `StorageCluster` lists as a topology node and
+installs does not author an access block at all: `user`, the provisioning key,
+and `rootLogin: revoke` are derived from
+`StorageCluster.spec.ceph.cephadm.clusterSSH`, so the cluster owns the login
+its nodes carry and the two cannot disagree. A node the cluster does not
+install authors its own access and is reconciled, not created.
 
 `Machine.spec.access.ssh.user` is the **install-window identity** — the account
 Bootwright authenticates as to install, probe, and take ownership of the
@@ -105,7 +126,16 @@ reversible — returning the field to `keep` removes the drop-in and
 re-authorizes root. It is accepted only on a machine a managed Ceph
 `StorageCluster` lists as a topology node under a non-root orchestration
 account; revoking a machine no such cluster claims would leave no account able
-to reach it and is refused.
+to reach it and is refused. On a node the cluster installs it is the derived
+default, so such a node declares `PermitRootLogin no` from its first boot and
+never accepts a root login at any point.
+
+The managed OS install ships no password of any kind. The account the install
+creates is locked unless `MachineInstallProfile.spec.customizations.ssh.initialPassword`
+names a `usernamePassword` `Secret`, whose value becomes that account's console
+password only. A profile must never carry a built-in or derived default here:
+a shared password compiled into the product is a fleet-wide credential no
+operator can rotate.
 
 For a non-root orchestration account Bootwright provisions that account on
 every topology node with a locked password, no `wheel` membership, the machine
@@ -124,15 +154,15 @@ sudo logs instead of anonymous `root`, key-only authentication, and a
 credential that can be rotated or revoked without touching the root account. It
 is not privilege separation and must not be described as such.
 
-`clusterSSH.keyRef` is **required** when any topology node revokes root, and
-must resolve to a declared `sshKeyPair` `Secret`. Without it the cluster
-identity falls back to the first node's `Machine` access key, and
-`cephadm bootstrap --ssh-private-key` persists that controller-held machine
-administration key into the Ceph mon config-key store, where the cluster's
-manager can read it — a key that now opens a passwordless-sudo account.
-A dedicated generated key keeps the controller's credential in the
-controller's trust domain and limits what the cluster holds to an account the
-cluster already controls.
+`clusterSSH.keyRef` is **required** whenever the orchestration account is not
+`root`, which is the managed default, and must resolve to a declared
+`sshKeyPair` `Secret`. `cephadm bootstrap --ssh-private-key` persists it into
+the Ceph mon config-key store, where the cluster's manager can read it, so what
+that key opens bounds the blast radius of a compromised manager. A key the
+cluster derives onto its own nodes opens exactly the accounts the manager
+already commands, and adds nothing. A key a `Machine` authors as its own
+`access.ssh.auth.privateKeyRef` opens machines outside the cluster, so naming
+it as `clusterSSH.keyRef` is refused.
 
 Revocation is ordered verify-before-revoke: the orchestration account must be
 proved to answer `sudo -n true` on every topology node before

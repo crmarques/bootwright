@@ -362,9 +362,9 @@ bootwright_managed_os_install_groups:
             sourceOnTarget: true
           kickstart:
             hostname: ceph-0
-            sshUser: root
-            sshPublicKeyPath: /var/lib/bootwright/contexts/lab/secrets/ceph-node-ssh.pub
-            authorizeMachineSSHKey: true
+            sshUser: cephadm
+            sshPublicKeyPath: /var/lib/bootwright/contexts/lab/secrets/ceph-cluster-ssh.pub
+            sudo: nopasswd
             passwordAuthentication: false
             packages:
               environment: minimal

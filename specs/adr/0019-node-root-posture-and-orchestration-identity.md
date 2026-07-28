@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Accepted, with the key-separation clause superseded by
+[ADR 0024](0024-machine-access-union-and-cluster-owned-node-login.md). A Ceph
+node the cluster installs now derives its whole login from `clusterSSH`, so the
+cluster key *is* that node's key; a `Secret` a `Machine` authors as its own
+access key still may not be named as the cluster identity. The two-identity
+model below remains the shape for a node the cluster does not install.
 
 ## Context
 
