@@ -388,7 +388,7 @@ spec:
       imageRef: rhel-94-dvd-iso
   customizations:
     ssh:
-      authorizeMachineSSHKey: true
+      passwordAuthentication: false
     storage:
       rootDevice:
         source: machineRootDeviceHints

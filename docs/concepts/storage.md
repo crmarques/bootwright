@@ -207,36 +207,14 @@ the trailing build base is whatever the vendor compiled that release against and
 is yours to declare. The registry override controls credentials and trust; it
 does not permit an arbitrary image repository below the namespace.
 
-### Revoking root SSH on Ceph nodes
+### The Ceph node login
 
-By default Bootwright reaches Ceph nodes as `root` and cephadm orchestrates
-them as `root`. If your policy forbids standing root SSH there are two shapes,
-and which one fits depends on whether the nodes are already installed.
-
-**Nodes already installed as `root`** keep `root` as their install-window
-identity and gain a separate orchestration account, which Bootwright provisions
-and then uses to revoke root. That is the rest of this section.
-
-**Nodes not yet installed** can carry the orchestration account from their first
-boot instead, so root SSH is never enabled at all — see
-[Orchestrating as the install-window identity](#orchestrating-as-the-install-window-identity)
-below.
-
-For the retrofit shape, declare a dedicated orchestration account on the cluster
-and revoke root on the nodes. Two fields, on two objects:
+A managed Ceph `StorageCluster` owns the login its nodes carry. You do not
+declare it on each `Machine`: `spec.ceph.cephadm.clusterSSH` names the account
+and the key once, and every topology node the cluster installs derives its
+login from it.
 
 ```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: Machine
-metadata:
-  name: ceph-0
-spec:
-  access:
-    ssh:
-      addressRef: ip
-      keyRef: lab-machine-key
-    rootLogin: revoke
----
 apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
@@ -256,45 +234,110 @@ spec:
   ceph:
     cephadm:
       clusterSSH:
-        user: cephadm
         keyRef: ceph-cluster-ssh-key
       bootstrap:
         node: node-01
 ```
 
-`clusterSSH.user` may be omitted — it already defaults to `cephadm` once any
-node `Machine` revokes root. `clusterSSH.keyRef` may not: a dedicated cluster
-key is required when revoking, so that the key cephadm stores inside the
-cluster is never the same key Bootwright administers the machines with.
+`clusterSSH.user` defaults to `cephadm`. `clusterSSH.keyRef` is required
+whenever the account is not `root`, and must resolve to an `sshKeyPair`
+`Secret` — it is the key cephadm orchestrates every host with, and the key the
+install authorizes for the account.
 
-On the next `apply` Bootwright, in this order:
+A node the cluster installs therefore needs no `access` block at all:
 
-1. Creates `cephadm` on every topology node — locked password, not in `wheel`,
-   the machine access public key in its `authorized_keys`, and a sudoers
-   drop-in at `/etc/sudoers.d/60-bootwright-cephadm`.
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-baremetal
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+  addresses:
+    - name: ssh
+      address: 192.0.2.50
+```
+
+Bootwright derives `access.ssh.user: cephadm`, an
+`access.ssh.auth.provision.keyRef` naming the cluster key, and
+`access.rootLogin: revoke`. The kickstart creates the account, authorizes the
+cluster public key for it, leaves the root password locked, writes
+`PermitRootLogin no`, and grants the account a per-principal sudoers drop-in at
+`/etc/sudoers.d/60-bootwright-cephadm`. **The node never accepts a root login at
+any point**, and there is no second account to provision afterwards.
+
+### Nodes the cluster does not install
+
+A node whose OS you supplied (`os.provided: true`) already exists, so the
+cluster cannot create its login at install time. Declare on the `Machine` how
+Bootwright reaches it, and the cluster still supplies the orchestration account
+Bootwright provisions there:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-arbiter
+spec:
+  capabilities:
+    - ceph-node
+  os:
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.0.2.60
+  access:
+    ssh:
+      auth:
+        controllerIdentity: {}
+```
+
+`controllerIdentity` reaches the machine as the operator running Bootwright,
+with that operator's own SSH identity — the common shape for a box you already
+log into. Use `auth.privateKeyRef` instead to name a `Secret`, or
+`auth.passwordRef` for a machine that only accepts a password. See
+[Machines → Access](machines.md#access).
+
+On apply Bootwright connects with that identity, creates `cephadm`, authorizes
+the cluster key for it, writes the sudoers drop-in, and proves the account
+answers `sudo -n true` before cephadm uses it. Because the machine's own login
+is not the cluster's, `rootLogin` stays `keep` unless you set it — hardening a
+machine whose OS you own is your decision, not the cluster's.
+
+### What apply does, in order
+
+1. Creates the orchestration account on every topology node that lacks it —
+   locked password, not in `wheel`, the cluster public key in its
+   `authorized_keys`, and a sudoers drop-in at
+   `/etc/sudoers.d/60-bootwright-<user>`.
 2. Proves the account answers `sudo -n true` on **every** node.
-3. Writes `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with
-   `PermitRootLogin no`, checks it with `sshd -t`, reloads `sshd`, and re-proves
-   the account.
-4. Bootstraps or reconciles cephadm with `--ssh-user cephadm`
+3. For a node whose `access.rootLogin` is `revoke`, writes
+   `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,
+   checks it with `sshd -t`, reloads `sshd`, and re-proves the account.
+4. Bootstraps or reconciles cephadm with `--ssh-user <user>`
    (`ceph cephadm set-user` on an already-bootstrapped cluster) and records the
    posture at `/etc/bootwright/access-marker.json`.
 
 Because verification precedes revocation, a node whose account is not working
 stops the run with root still reachable.
 
-To reverse it, set `rootLogin: keep` and re-apply: the sshd drop-in is removed
-and root is re-authorized. The orchestration account is not deleted by that —
-change `clusterSSH.user` back to `root` as a separate, deliberate step.
+To reverse a revoke, set `rootLogin: keep` and re-apply: the sshd drop-in is
+removed and root is re-authorized. The orchestration account is not deleted by
+that — change `clusterSSH.user` to `root` as a separate, deliberate step.
 
-!!! warning "Do not repoint `access.ssh.user` on an *installed* node"
-    `Machine.spec.access.ssh.user` is the *install-window* identity — the
-    account Bootwright installs and probes the machine as. Changing it on a node
-    that is already installed makes the ownership probe fail closed, and the
-    next apply **refuses** that machine until the account exists on it.
-    Retrofitting an installed fleet is expressed by `access.rootLogin` and
-    `clusterSSH.user`, which leave the install-window identity untouched. See
-    [Machines → Root login posture](machines.md#root-login-posture).
+!!! warning "The login is fixed for the life of the machine"
+    The account a node carries is its *install-window* identity — what
+    Bootwright installs the machine as, probes it as, and proves ownership
+    with. Changing `clusterSSH.user` on an installed fleet makes the ownership
+    probe fail closed, and the next apply **refuses** those machines until the
+    account exists on them. Choose it before the first install. See
+    [Machines → Access](machines.md#access).
 
 !!! note "What this buys, precisely"
     The account holds `NOPASSWD: ALL`, because cephadm's manager `sudo`-wraps
@@ -306,289 +349,16 @@ change `clusterSSH.user` back to `root` as a separate, deliberate step.
     rotate or revoke without touching the root account. The binding rules are
     in [`specs/security.md`](https://github.com/crmarques/bootwright/blob/main/specs/security.md)
     and the rationale in
-    [ADR 0019](https://github.com/crmarques/bootwright/blob/main/specs/adr/0019-node-root-posture-and-orchestration-identity.md).
+    [ADR 0024](https://github.com/crmarques/bootwright/blob/main/specs/adr/0024-machine-access-union-and-cluster-owned-node-login.md).
 
-### Orchestrating as the install-window identity
+!!! danger "The cluster key must not be an authored machine key"
+    If a `Machine` authors `access.ssh.auth.privateKeyRef` and the cluster names
+    that same `Secret` as `clusterSSH.keyRef`, validation refuses: `cephadm
+    bootstrap --ssh-private-key` moves the cluster identity into the Ceph mon
+    config-key store, where the cluster's manager can read it, and that key
+    also opens machines outside the cluster. A key the cluster derives for its
+    own nodes is fine — its blast radius is exactly those nodes.
 
-On nodes Bootwright has not installed yet, name the orchestration account in
-`Machine.spec.access.ssh.user` as well. The kickstart then creates it at install
-time — machine access key authorized, passwordless `sudo`, root password locked,
-no `PermitRootLogin yes` — so the node never accepts a root login at any point
-and there is no second account to provision:
-
-```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: Machine
-metadata:
-  name: ceph-0
-spec:
-  os:
-    provided: false
-    installProfileRef: rhel-ceph-node
-  access:
-    ssh:
-      user: cephadm
-      addressRef: ip
-      keyRef: lab-machine-key
-    rootLogin: revoke
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
-metadata:
-  name: ceph-oss
-spec:
-  type: ceph
-  ceph:
-    cephadm:
-      clusterSSH:
-        user: cephadm
-        keyRef: ceph-cluster-ssh-key
-```
-
-`clusterSSH.keyRef` is still required and still must be a different `Secret`
-from `access.ssh.keyRef` — more so in this shape, since the machine access key
-now opens the passwordless-sudo account directly and must never reach the Ceph
-mon config-key store.
-
-`rootLogin: revoke` remains worth setting: the posture is already implicit here,
-and `revoke` is what turns it into a declared `PermitRootLogin no` that Bootwright
-verifies and reconciles.
-
-Apply reconciles rather than creates: it finds the account present, writes
-`/etc/sudoers.d/60-bootwright-cephadm`, drops the account's install-time `wheel`
-membership *after* that grant is in place, locks its password, proves
-`sudo -n true`, revokes root, and stamps the marker.
-
-#### Preparing a provided-OS node
-
-A node with `os.provided: true` — a stretch-mode arbiter, say — is not installed
-by Bootwright, so the account has to exist before the first apply. Prepare it
-with your own credentials; Bootwright never needs them, and never stores them.
-Its own key is generated, and only the **public** half leaves the context:
-
-```sh
-bootwright secret generate
-bootwright secret show --name lab-machine-key --part public
-```
-
-Then, on the node, as an operator with `sudo`:
-
-```sh
-sudo useradd --create-home --user-group --shell /bin/bash cephadm
-sudo passwd --lock cephadm
-sudo install -d -m 0700 -o cephadm -g cephadm /home/cephadm/.ssh
-printf '%s\n' '<the public key>' | sudo tee /home/cephadm/.ssh/authorized_keys >/dev/null
-sudo chown cephadm:cephadm /home/cephadm/.ssh/authorized_keys
-sudo chmod 0600 /home/cephadm/.ssh/authorized_keys
-sudo restorecon -R /home/cephadm/.ssh
-printf '%s\n' 'Defaults:cephadm !requiretty' 'cephadm ALL=(ALL) NOPASSWD: ALL' \
-  | sudo tee /etc/sudoers.d/60-bootwright-cephadm.tmp >/dev/null
-sudo chmod 0440 /etc/sudoers.d/60-bootwright-cephadm.tmp
-sudo visudo -cf /etc/sudoers.d/60-bootwright-cephadm.tmp \
-  && sudo mv -f /etc/sudoers.d/60-bootwright-cephadm.tmp /etc/sudoers.d/60-bootwright-cephadm
-```
-
-Finally record the node's host key so the probe pins it:
-
-```sh
-bootwright machine trust --machines ceph-arbiter
-```
-
-Apply then reconciles this node exactly like the installed ones. If the account
-does not answer, the run refuses the node and names it rather than guessing
-another identity.
-
-### Monitoring
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `monitoring.enabled` | No | `true` (when the `monitoring` block is present) | `false` renders the bootstrap `--skip-monitoring-stack` flag and no monitoring specs. |
-| `monitoring.prometheus` | No | — | Per-service tuning; placement derives from the `prometheus` role. |
-| `monitoring.grafana` | No | — | Per-service tuning; placement derives from the `grafana` role. |
-| `monitoring.alertmanager` | No | — | Per-service tuning; placement derives from the `alertmanager` role. |
-| `monitoring.nodeExporter` | No | every host (cephadm behavior) | node-exporter has no topology role; an authored block narrows by explicit placement only. |
-| `monitoring.loki` | No | — | Centralized-logging aggregator (`service_type: loki`); role-less, placement authored explicitly. cephadm provisions Grafana's Loki datasource itself; no dashboard mgr command is emitted. `retentionTime`/`retentionSize` do not apply (cephadm's `MonitoringSpec` rejects them). |
-| `monitoring.promtail` | No | — | Log shipper (`service_type: promtail`); role-less. Ships to loki, so it has no dashboard wiring. |
-
-!!! note "Absent versus present"
-    Omitting the `monitoring` block deploys cephadm's **default** monitoring
-    stack with cephadm's own placement. Authoring the block switches to
-    role-derived placement (like `mon`/`mgr`), with `enabled` defaulting to
-    `true`; `enabled: false` skips the stack.
-
-Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
-`nodeExporter`, `loki`, `promtail`) carries:
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `placement` | No | every host carrying the service's role | See [Shared placement](#shared-placement). |
-| `port` | No | cephadm default | Service port. |
-| `retentionTime` | No | cephadm default | Retention time (Prometheus only; `retention_time`/`retention_size` exist only on cephadm's `PrometheusSpec`, and every other monitoring service rejects the keys). |
-| `retentionSize` | No | `10GB` | Retention size (Prometheus only). cephadm leaves the TSDB size-unbounded and caps it by time alone, so on a Ceph node the TSDB grows on the same filesystem as `/var/lib/ceph` for the whole retention window. Bootwright always renders a `retention_size` to bound it; raise it when you have the headroom. |
-
-### Node root-filesystem budget
-
-Everything cephadm keeps outside the OSD data disks — container images, the
-`/var/lib/ceph/<fsid>` data directory, the mon RocksDB store, the crash spool,
-the Prometheus TSDB, Grafana, Alertmanager and Loki — lands on the node's root
-filesystem. `bootwright preflight` sizes that filesystem per node from the roles
-the node declares:
-
-| Term | GiB | Applies to |
-| --- | --- | --- |
-| Base | 20 | Every storage node (container images, cephadm data dir, crash spool, journal) |
-| `mon` | +15 | Nodes carrying the `mon` role (the RocksDB store grows during peering and backfill, and only trims once all PGs are `active+clean`) |
-| `mgr` | +5 | Nodes carrying the `mgr` role |
-| `prometheus` | +`retentionSize` + 4 | Nodes where the Prometheus service is placed |
-| `grafana` | +2 | Nodes where Grafana is placed |
-| `alertmanager` | +1 | Nodes where Alertmanager is placed |
-| `loki` | +20 | Nodes where Loki is placed (cephadm sets no Loki retention) |
-
-Preflight **fails** below an absolute floor of 20 GiB free and **warns** below
-the computed budget. A node that installs under budget still comes up, but its
-root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
-alert will fire on the trailing fill rate — see
-[Ceph disk-space alerts flap after install](../troubleshooting.md#ceph-disk-space-alerts-flap-after-install).
-| `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
-
-### Passthrough services
-
-For cephadm service types Bootwright does not model first-class (for example
-`rbd-mirror`, `snmp-gateway`), `ceph.services[]` renders field-for-field into a
-`ceph orch apply` document.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `services[].serviceType` | Yes | — | cephadm service type. |
-| `services[].serviceID` | No | — | cephadm service ID. The `serviceType/serviceID` pair must be unique. |
-| `services[].placement` | Yes | — | Must set `hosts` or `sites`; see [Shared placement](#shared-placement). |
-| `services[].spec` | No | — | Raw service spec map, rendered 1:1 into cephadm. |
-
-!!! warning "Do not duplicate first-class surfaces"
-    Do not declare service types already owned by Bootwright surfaces —
-    monitors, managers, OSDs, MDS, RGW, NFS, ingress, or the monitoring
-    services.
-
-### Topology
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `topology.nodes` | Yes | — | At least one node. |
-| `topology.nodes[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability and declared SSH access. |
-| `topology.nodes[].name` | Yes | — | The cluster's name for this node — independent of the machine name and unique within the cluster. A bare label composes to `<name>.<cluster>.<domains.storageClusters>` (the storage-cluster zone; see [Environment → Domain model](environment.md#domain-model)); a dotted value is an explicit FQDN used verbatim. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname. |
-| `topology.nodes[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
-| `topology.nodes[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
-| `topology.nodes[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
-| `topology.nodes[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
-| `topology.nodes[].osd` | No | — | Drivegroup-shaped OSD device selection; see [OSD device selection](#osd-device-selection). Requires the `osd` role. Mutually exclusive with `devices`. |
-| `topology.osdDrivegroups[]` | No | — | Fleet OSD specs spanning many hosts; see [Fleet OSD drivegroups](#fleet-osd-drivegroups). |
-
-!!! note "Cross-field rules"
-    - An `osd`-role host **must** select devices via `devices[]`, `osd`, or a
-      fleet `osdDrivegroups[]` entry that covers it. Consuming all available
-      devices is the explicit opt-in `osd: {dataDevices: {all: true}}`, never the
-      omission default.
-    - `devices[]` and `osd` are mutually exclusive (`devices[]` is the shorthand
-      for `osd.dataDevices.paths`).
-    - A host is owned by **one** OSD spec: a host covered by a fleet
-      `osdDrivegroups[]` entry must not also author per-host `devices[]`/`osd`,
-      and no two fleet entries may claim the same host.
-
-#### Fleet OSD drivegroups
-
-For homogeneous racks, `topology.osdDrivegroups[]` renders **one** cephadm OSD
-service spanning many hosts (the dominant declarative cephadm idiom) instead of
-one spec per host. Per-host `nodes[].osd` remains the override for heterogeneous
-nodes.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `serviceID` | Yes | — | cephadm OSD service ID; unique across drivegroups. |
-| `placement` | No | every `osd`-role host | Narrow the span by `sites`/`hosts`; see [Shared placement](#shared-placement). |
-| `osd` | Yes | — | The drivegroup-shaped selection (same fields as [OSD device selection](#osd-device-selection)). |
-
-#### OSD device selection
-
-All field names render 1:1 into the cephadm OSD drivegroup spec.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `osd.dataDevices` | Yes (when `osd` is set) | — | Data device selector. |
-| `osd.dbDevices` | No | — | DB device selector. |
-| `osd.walDevices` | No | — | WAL device selector. |
-| `osd.filterLogic` | No | `AND` | How cephadm combines the device filters across selectors: `AND` (intersect) or `OR` (union). Spec-level (`filter_logic`). |
-| `osd.encrypted` | No | `false` | Enable encrypted (LUKS) OSDs. |
-| `osd.tpm2` | No | `false` | Seal the OSD LUKS key in the host TPM (`tpm2`). Requires `encrypted: true`. |
-| `osd.osdsPerDevice` | No | cephadm default | OSDs per selected device (non-negative). |
-| `osd.crushDeviceClass` | No | — | CRUSH device class for the whole drivegroup. |
-| `osd.blockDBSize` | No | — | Per-OSD DB slice size carved from `dbDevices` (`block_db_size`, e.g. `60G`). |
-| `osd.blockWALSize` | No | — | Per-OSD WAL slice size carved from `walDevices` (`block_wal_size`). |
-| `osd.dbSlots` | No | — | Number of equal DB slices per shared `dbDevices` device (`db_slots`, non-negative). |
-| `osd.walSlots` | No | — | Number of equal WAL slices per shared `walDevices` device (`wal_slots`, non-negative). |
-| `osd.dataAllocateFraction` | No | `1` | Fraction `(0,1]` of each data device to allocate (`data_allocate_fraction`), reserving headroom. |
-| `osd.unmanaged` | No | `false` | Freeze this OSD service so cephadm stops claiming new devices (`unmanaged`, a top-level service-spec key). |
-| `osd.serviceOverrides` | No | — | cephadm common service-spec escape hatch: `extraContainerArgs[]`, `extraEntrypointArgs[]`, `networks[]` (CIDRs), and `customConfigs[]` (`{mountPath, content}`, absolute mount path). Rendered as top-level service-spec keys. |
-
-Each device selector (`dataDevices`, `dbDevices`, `walDevices`) mirrors the
-cephadm drivegroup device filter:
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `*.paths[]` | No | — | Literal device paths. |
-| `*.pathSpecs[]` | No | — | Expanded path form `{path, crushDeviceClass}` pinning a per-device CRUSH class; renders to the cephadm `paths: [{path, crush_device_class}]` mapping. |
-| `*.all` | No | `false` | Select all matching devices. |
-| `*.model` | No | — | Device model filter (`model`). |
-| `*.vendor` | No | — | Device vendor filter (`vendor`). |
-| `*.rotational` | No | — | Rotational filter. |
-| `*.size` | No | — | Size filter: a single size (`10G`) or a range (`10G:40G`, `:40G`, `10G:`). |
-| `*.limit` | No | — | Cap on matching devices (non-negative). |
-
-!!! note "Cross-field rules"
-    - `paths`, `pathSpecs`, and `all` are **mutually exclusive** within one
-      selector; set at most one. `pathSpecs[].path` is required.
-    - A selector must select something: set at least one of `paths`, `pathSpecs`,
-      `all`, `model`, `vendor`, `rotational`, `size`, or `limit`. `model`,
-      `vendor`, `rotational`, `size`, and `limit` only narrow the match.
-    - Address fleet disks by `model`/`vendor` rather than `/dev` paths, which can
-      reorder across boots.
-
-!!! warning "Stable device addressing"
-    Kernel `/dev/sdX` / `/dev/vdX` names are **not stable** — they can reorder
-    across boots, so a name recorded on one boot may point at a different disk on
-    the next. Bootwright's OSD ownership marker and the empty-device / destroy
-    gates key on the **literal** path string, so an unstable name can make them
-    reason about the wrong disk. For explicitly-addressed OSDs prefer a stable
-    path — `/dev/disk/by-id/...`, `/dev/disk/by-path/...`, or a `wwn-...` link —
-    which is accepted anywhere a path is (`devices[]`, `dataDevices.paths`,
-    `pathSpecs[].path`). For homogeneous fleets, a `model`/`vendor`/`size`/
-    `rotational` filter avoids per-disk paths entirely.
-
-    There is deliberately **no `wwn`/`serial` filter field** — the selector
-    filters mirror cephadm exactly (`model`, `vendor`, `rotational`, `size`,
-    `limit`). Per-disk stable selection is expressed as a `/dev/disk/by-id` or
-    `wwn` **path** in `paths`/`pathSpecs`, not as a filter.
-
-#### Stretch mode
-
-Authoring the `stretch` block is the enablement signal — its presence turns on
-stretch mode. Only `failureDomain` and the tiebreaker node are facts the
-operator alone knows; normalize derives the rest from the topology.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `topology.stretch.failureDomain` | Yes (when stretch is enabled) | — | CRUSH failure domain mapping sites to real buckets. |
-| `topology.stretch.dataSites[]` | No | the topology's non-tiebreaker sites | Must resolve to exactly the two mon-bearing data sites. Author only when extra OSD-only sites would be wrongly derived. |
-| `topology.stretch.tiebreaker.node` | Yes (when stretch is enabled) | — | Mon-only node with no OSD devices, in the tiebreaker site; named by its node name (FQDN or short label), never the machine name. |
-| `topology.stretch.tiebreaker.site` | No | the tiebreaker node's site | Must be distinct from `dataSites`. |
-| `topology.stretch.ruleName` | No | `stretch-rule` | Stretch CRUSH rule inherited by policy-less stretch pools. |
-
-!!! note "Fixed stretch replication"
-    Stretch is supported only as two data sites plus one mon-only tiebreaker
-    site. Policy-less replicated pools get `size: 4` / `minSize: 2` as a
-    render-time constant — non-4/2 stretch is unsupported and the replication is
-    not authorable. Erasure pools are not allowed on stretch-mode clusters. See
-    [Ceph topologies](../advanced/ceph-topologies.md) for the full stretch
-    walkthrough.
 
 ## StoragePlacementPolicy
 
