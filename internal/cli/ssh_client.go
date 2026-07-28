@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ var defaultMachineSSHDeps = machineSSHDeps{
 type sshTarget struct {
 	Address       string
 	User          string
+	Port          int
 	KeyRef        v1alpha1.SecretRef
 	KnownHostsRef v1alpha1.SecretRef
 }
@@ -65,31 +67,32 @@ func execSSHTarget(commandCtx context.Context, ctx workspace.Context, state v1al
 }
 
 func prepareSSHInvocation(ctx workspace.Context, state v1alpha1.State, target sshTarget, extraArgs []string, sshPath string) (sshInvocation, error) {
-	if target.KeyRef.Name == "" {
-		return sshInvocation{}, fmt.Errorf("SSH private key reference is required")
-	}
 	resolver := secret.NewResolver(ctx.Name, ctx.SecretsDir, secret.NewIndex(state))
-	privateKeyInfo, err := resolver.StatMaterial(target.KeyRef.Name, secret.MaterialSSHPrivate)
-	if err != nil {
-		return sshInvocation{}, fmt.Errorf("stat SSH private key Secret %q: %w", target.KeyRef.Name, err)
+	var files []*os.File
+	keyPath := ""
+	if target.KeyRef.Name != "" {
+		privateKeyInfo, err := resolver.StatMaterial(target.KeyRef.Name, secret.MaterialSSHPrivate)
+		if err != nil {
+			return sshInvocation{}, fmt.Errorf("stat SSH private key Secret %q: %w", target.KeyRef.Name, err)
+		}
+		if !privateKeyInfo.Mode().IsRegular() {
+			return sshInvocation{}, fmt.Errorf("SSH private key Secret %q is not a regular file", target.KeyRef.Name)
+		}
+		if privateKeyInfo.Mode().Perm()&0o077 != 0 {
+			return sshInvocation{}, fmt.Errorf("SSH private key Secret %q has mode %#o; remove all group and other permissions", target.KeyRef.Name, privateKeyInfo.Mode().Perm())
+		}
+		privateKey, err := resolver.ReadMaterial(target.KeyRef.Name, secret.MaterialSSHPrivate)
+		if err != nil {
+			return sshInvocation{}, fmt.Errorf("read SSH private key Secret %q: %w", target.KeyRef.Name, err)
+		}
+		defer clear(privateKey)
+		keyFile, err := anonymousSSHMaterial(ctx.RunsDir, privateKey)
+		if err != nil {
+			return sshInvocation{}, err
+		}
+		files = append(files, keyFile)
+		keyPath = sshParentFDPath(keyFile)
 	}
-	if !privateKeyInfo.Mode().IsRegular() {
-		return sshInvocation{}, fmt.Errorf("SSH private key Secret %q is not a regular file", target.KeyRef.Name)
-	}
-	if privateKeyInfo.Mode().Perm()&0o077 != 0 {
-		return sshInvocation{}, fmt.Errorf("SSH private key Secret %q has mode %#o; remove all group and other permissions", target.KeyRef.Name, privateKeyInfo.Mode().Perm())
-	}
-	privateKey, err := resolver.ReadMaterial(target.KeyRef.Name, secret.MaterialSSHPrivate)
-	if err != nil {
-		return sshInvocation{}, fmt.Errorf("read SSH private key Secret %q: %w", target.KeyRef.Name, err)
-	}
-	defer clear(privateKey)
-	keyFile, err := anonymousSSHMaterial(ctx.RunsDir, privateKey)
-	if err != nil {
-		return sshInvocation{}, err
-	}
-	files := []*os.File{keyFile}
-	keyPath := sshParentFDPath(keyFile)
 	cryptoPolicy, err := loadSanitizedSSHPolicy(sshCryptoPolicyPath)
 	if err != nil {
 		closeSSHFiles(files)
@@ -164,24 +167,33 @@ func buildSSHInvocation(target sshTarget, keyPath, configPath, knownHostsPath, s
 	args := []string{
 		"ssh",
 		"-F", configPath,
-		"-o", "IdentityFile=none",
-		"-i", keyPath,
-		"-o", "IdentitiesOnly=yes",
-		"-o", "IdentityAgent=none",
-		"-o", "PreferredAuthentications=publickey",
-		"-o", "PubkeyAuthentication=yes",
-		"-o", "PasswordAuthentication=no",
-		"-o", "KbdInteractiveAuthentication=no",
+	}
+	if keyPath != "" {
+		args = append(args,
+			"-o", "IdentityFile=none",
+			"-i", keyPath,
+			"-o", "IdentitiesOnly=yes",
+			"-o", "IdentityAgent=none",
+			"-o", "PreferredAuthentications=publickey",
+			"-o", "PubkeyAuthentication=yes",
+			"-o", "PasswordAuthentication=no",
+			"-o", "KbdInteractiveAuthentication=no",
+		)
+	}
+	if target.Port != 0 {
+		args = append(args, "-p", strconv.Itoa(target.Port))
+	}
+	args = append(args,
 		"-o", "GSSAPIAuthentication=no",
 		"-o", "HostbasedAuthentication=no",
-		"-o", "HostKeyAlias=" + target.Address,
+		"-o", "HostKeyAlias="+target.Address,
 		"-o", "CheckHostIP=no",
 		"-o", "GlobalKnownHostsFile=none",
 		"-o", "KnownHostsCommand=none",
 		"-o", "VerifyHostKeyDNS=no",
 		"-o", "UpdateHostKeys=no",
 		"-o", "ForwardAgent=no",
-	}
+	)
 	if knownHostsPath != "" {
 		args = append(args,
 			"-o", "UserKnownHostsFile="+knownHostsPath,

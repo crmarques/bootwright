@@ -168,31 +168,47 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 	if h.Spec.Access.SSH.User != "" {
 		entry["ansible_user"] = h.Spec.Access.SSH.User
 	}
-	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(v1alpha1.MachineSSHKeyRef(h).Name, paths.SecretIndex, paths.SecretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
+	if port := h.Spec.Access.SSH.Port; port != 0 {
+		entry["ansible_port"] = port
+	}
+	if path := secret.ResolvePath(v1alpha1.MachineSSHPasswordRef(h).Name, paths.SecretIndex, paths.SecretsDir); path != "" {
+		entry["ansible_password"] = passwordLookup(path)
+	}
+	if path := secret.ResolvePath(h.Spec.Access.SSH.SudoPasswordRef.Name, paths.SecretIndex, paths.SecretsDir); path != "" {
+		entry["ansible_become_password"] = passwordLookup(path)
+	}
 	if path := machineKnownHostsPath(h, paths); path != "" {
-		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
+		entry["ansible_ssh_common_args"] = sshCommonArgs(path, v1alpha1.MachineSSHPasswordRef(h).Name != "")
 	}
 	return entry
+}
+
+func passwordLookup(path string) string {
+	return "{{ lookup('ansible.builtin.file', '" + path + "') | trim }}"
 }
 
 func machineKnownHostsPath(h v1alpha1.Machine, paths PathOptions) string {
 	return sshtrust.MachineKnownHostsPath(h, paths.SecretIndex, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
 }
 
-func sshCommonArgs(knownHostsPath string) string {
-	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath))
+func sshCommonArgs(knownHostsPath string, passwordAuth bool) string {
+	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath, passwordAuth))
 }
 
-func SSHCommonArgWords(knownHostsPath string) []string {
-	return []string{
-		"-o", "BatchMode=yes",
+func SSHCommonArgWords(knownHostsPath string, passwordAuth bool) []string {
+	words := []string{}
+	if !passwordAuth {
+		words = append(words, "-o", "BatchMode=yes")
+	}
+	return append(words,
 		"-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile=" + knownHostsPath,
+		"-o", "UserKnownHostsFile="+knownHostsPath,
 		"-o", "ServerAliveInterval=15",
 		"-o", "ServerAliveCountMax=3",
-	}
+	)
 }
 
 func localmachineInventoryEntry() map[string]any {

@@ -75,9 +75,9 @@ func machineSSHSecretRequirements(label string, phases []string, machine v1alpha
 	if machine.Spec.Access.SSH == nil {
 		return out
 	}
-	if machine.Spec.Access.SSH.KeyRef.Name != "" {
+	if keyRef := v1alpha1.MachineSSHKeyRef(machine); keyRef.Name != "" {
 		req := secretRefRequirement{
-			refName: machine.Spec.Access.SSH.KeyRef.Name,
+			refName: keyRef.Name,
 			label:   label + " keyRef",
 			phases:  phases,
 			role:    secret.MaterialSSHPrivate,
@@ -88,6 +88,24 @@ func machineSSHSecretRequirements(label string, phases []string, machine v1alpha
 			req.sshPair = true
 		}
 		out = append(out, req)
+	}
+	if passwordRef := v1alpha1.MachineSSHPasswordRef(machine); passwordRef.Name != "" {
+		out = append(out, secretRefRequirement{
+			refName: passwordRef.Name,
+			label:   label + " passwordRef",
+			phases:  phases,
+			role:    secret.MaterialPrimary,
+			owner:   owner,
+		})
+	}
+	if machine.Spec.Access.SSH.SudoPasswordRef.Name != "" {
+		out = append(out, secretRefRequirement{
+			refName: machine.Spec.Access.SSH.SudoPasswordRef.Name,
+			label:   label + " sudoPasswordRef",
+			phases:  phases,
+			role:    secret.MaterialPrimary,
+			owner:   owner,
+		})
 	}
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		out = append(out, secretRefRequirement{

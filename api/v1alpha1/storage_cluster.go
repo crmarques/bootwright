@@ -25,10 +25,16 @@ func StorageClusterExternal(cluster StorageCluster) bool {
 }
 
 func StorageClusterCephadmSSHUser(cluster StorageCluster) string {
-	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Cephadm.ClusterSSH.User == "" {
+	if cluster.Spec.Ceph == nil {
 		return RootSSHUser
 	}
-	return cluster.Spec.Ceph.Cephadm.ClusterSSH.User
+	if user := cluster.Spec.Ceph.Cephadm.ClusterSSH.User; user != "" {
+		return user
+	}
+	if StorageClusterManaged(cluster) {
+		return StorageCephadmDefaultSSHUser
+	}
+	return RootSSHUser
 }
 
 func StorageClusterManagesNodeAccount(cluster StorageCluster) bool {

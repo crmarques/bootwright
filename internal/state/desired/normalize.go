@@ -29,6 +29,7 @@ func Normalize(state *v1alpha1.State) {
 		normalizeMachine(&state.Machines[i])
 	}
 	normalizeMachineFQDNs(state)
+	normalizeMachineAccess(state)
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
@@ -194,17 +195,6 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		config.AttachmentRef.Name = config.NetworkConfigRef.Name
 		m.DefaultedRefs.AttachmentRef = true
-	}
-	if ssh := m.Spec.Access.SSH; ssh != nil && ssh.AddressRef.Name == "" {
-		for _, address := range m.Spec.Addresses {
-			if address.Name == "ssh" {
-				ssh.AddressRef.Name = "ssh"
-				break
-			}
-		}
-	}
-	if m.Spec.Access.SSH != nil && m.Spec.Access.RootLogin == "" {
-		m.Spec.Access.RootLogin = v1alpha1.MachineRootLoginKeep
 	}
 }
 

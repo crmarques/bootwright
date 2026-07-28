@@ -11,6 +11,7 @@ type Machine struct {
 
 type MachineDefaultedRefs struct {
 	AttachmentRef bool
+	Access        bool
 }
 
 type MachineSpec struct {
@@ -140,15 +141,45 @@ type MachineAddress struct {
 }
 
 type MachineAccess struct {
+	Local     bool            `yaml:"local,omitempty" json:"local,omitempty"`
 	SSH       *MachineSSHSpec `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 	RootLogin string          `yaml:"rootLogin,omitempty" json:"rootLogin,omitempty"`
 }
 
 type MachineSSHSpec struct {
-	AddressRef    LocalObjectReference `yaml:"addressRef" json:"addressRef"`
-	User          string               `yaml:"user,omitempty" json:"user,omitempty"`
-	KeyRef        SecretRef            `yaml:"keyRef" json:"keyRef"`
-	KnownHostsRef SecretRef            `yaml:"knownHostsRef,omitempty" json:"knownHostsRef,omitempty"`
+	AddressRef      LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	Port            int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	User            string               `yaml:"user,omitempty" json:"user,omitempty"`
+	Auth            MachineSSHAuth       `yaml:"auth,omitempty" json:"auth,omitempty"`
+	SudoPasswordRef SecretRef            `yaml:"sudoPasswordRef,omitempty" json:"sudoPasswordRef,omitempty"`
+	KnownHostsRef   SecretRef            `yaml:"knownHostsRef,omitempty" json:"knownHostsRef,omitempty"`
+}
+
+type MachineSSHAuth struct {
+	ControllerIdentity *MachineSSHControllerIdentity `yaml:"controllerIdentity,omitempty" json:"controllerIdentity,omitempty"`
+	PrivateKeyRef      SecretRef                     `yaml:"privateKeyRef,omitempty" json:"privateKeyRef,omitempty"`
+	PasswordRef        SecretRef                     `yaml:"passwordRef,omitempty" json:"passwordRef,omitempty"`
+	Provision          *MachineSSHProvision          `yaml:"provision,omitempty" json:"provision,omitempty"`
+}
+
+type MachineSSHControllerIdentity struct{}
+
+type MachineSSHProvision struct {
+	KeyRef SecretRef `yaml:"keyRef" json:"keyRef"`
+}
+
+func (a MachineSSHAuth) IsZero() bool {
+	return a.ControllerIdentity == nil && a.PrivateKeyRef.Name == "" && a.PasswordRef.Name == "" && a.Provision == nil
+}
+
+func (a MachineSSHAuth) ArmCount() int {
+	count := 0
+	for _, set := range []bool{a.ControllerIdentity != nil, a.PrivateKeyRef.Name != "", a.PasswordRef.Name != "", a.Provision != nil} {
+		if set {
+			count++
+		}
+	}
+	return count
 }
 
 type MachineImage struct {
@@ -270,8 +301,24 @@ type MachineInstallLocalization struct {
 }
 
 type MachineInstallSSH struct {
-	AuthorizeMachineSSHKey bool `yaml:"authorizeMachineSSHKey,omitempty" json:"authorizeMachineSSHKey,omitempty"`
-	PasswordAuthentication bool `yaml:"passwordAuthentication,omitempty" json:"passwordAuthentication,omitempty"`
+	PasswordAuthentication bool                          `yaml:"passwordAuthentication,omitempty" json:"passwordAuthentication,omitempty"`
+	InitialPassword        *MachineInstallInitialPassword `yaml:"initialPassword,omitempty" json:"initialPassword,omitempty"`
+	Sudo                   string                        `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+}
+
+type MachineInstallInitialPassword struct {
+	SecretRef SecretRef `yaml:"secretRef" json:"secretRef"`
+}
+
+func MachineInstallSudoPolicy(profile MachineInstallProfile) string {
+	if profile.Spec.Customizations.SSH.Sudo == "" {
+		return MachineInstallSudoNoPasswd
+	}
+	return profile.Spec.Customizations.SSH.Sudo
+}
+
+func MachineInstallSudoValues() []string {
+	return []string{MachineInstallSudoNoPasswd, MachineInstallSudoNone}
 }
 
 type MachineInstallStorage struct {
@@ -335,10 +382,54 @@ func MachineFQDNAddress(machine Machine) string {
 }
 
 func MachineSSHUser(machine Machine) string {
-	if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.User != "" {
-		return machine.Spec.Access.SSH.User
+	ssh := machine.Spec.Access.SSH
+	if ssh == nil {
+		return RootSSHUser
+	}
+	if ssh.User != "" {
+		return ssh.User
+	}
+	if ssh.Auth.ControllerIdentity != nil {
+		return ""
 	}
 	return RootSSHUser
+}
+
+func MachineSSHKeyRef(machine Machine) SecretRef {
+	ssh := machine.Spec.Access.SSH
+	if ssh == nil {
+		return SecretRef{}
+	}
+	if ssh.Auth.Provision != nil {
+		return ssh.Auth.Provision.KeyRef
+	}
+	return ssh.Auth.PrivateKeyRef
+}
+
+func MachineSSHPasswordRef(machine Machine) SecretRef {
+	if machine.Spec.Access.SSH == nil {
+		return SecretRef{}
+	}
+	return machine.Spec.Access.SSH.Auth.PasswordRef
+}
+
+func MachineUsesControllerIdentity(machine Machine) bool {
+	return machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.Auth.ControllerIdentity != nil
+}
+
+func MachineProvisionsLogin(machine Machine) bool {
+	return machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.Auth.Provision != nil
+}
+
+func MachineSSHPort(machine Machine) int {
+	if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.Port == 0 {
+		return DefaultSSHPort
+	}
+	return machine.Spec.Access.SSH.Port
+}
+
+func MachineDeclaresLocalAccess(machine Machine) bool {
+	return machine.Spec.Access.Local
 }
 
 func MachineRootLoginValues() []string {

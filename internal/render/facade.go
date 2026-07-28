@@ -59,8 +59,8 @@ func ComponentPins(state v1alpha1.State) []inventory.ComponentPin {
 	return inventory.ComponentPins(state)
 }
 
-func SSHCommonArgWords(knownHostsPath string) []string {
-	return inventory.SSHCommonArgWords(knownHostsPath)
+func SSHCommonArgWords(knownHostsPath string, passwordAuth bool) []string {
+	return inventory.SSHCommonArgWords(knownHostsPath, passwordAuth)
 }
 
 func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {

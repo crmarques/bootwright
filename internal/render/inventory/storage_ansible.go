@@ -113,6 +113,11 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		return nil
 	}
 	user := v1alpha1.StorageClusterCephadmSSHUser(cluster)
+	machineKey := v1alpha1.MachineSSHKeyRef(machine).Name
+	accountKey := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name
+	if accountKey == "" {
+		accountKey = machineKey
+	}
 	out := map[string]any{
 		"user":              user,
 		"installUser":       v1alpha1.MachineSSHUser(machine),
@@ -125,10 +130,13 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		"connectionAddress": stateview.MachineConnectionAddress(state, machine),
 		"knownHostsManaged": machine.Spec.Access.SSH.KnownHostsRef.Name == "",
 	}
-	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(accountKey, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
+		out["accountPublicKeyPath"] = publicPath
+	}
+	if privatePath := secret.ResolveSSHPrivateKeyPath(machineKey, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["installPrivateKeyPath"] = privatePath
 	}
-	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(machineKey, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 		out["installPublicKeyPath"] = publicPath
 	}
 	if knownHostsPath := machineKnownHostsPath(machine, paths); knownHostsPath != "" {
@@ -218,10 +226,10 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if !ok || machine.Spec.Access.SSH == nil {
 		return out
 	}
-	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
+	if privatePath := secret.ResolveSSHPrivateKeyPath(v1alpha1.MachineSSHKeyRef(machine).Name, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["privateKeyPath"] = privatePath
 	}
-	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(v1alpha1.MachineSSHKeyRef(machine).Name, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 		out["publicKeyPath"] = publicPath
 	}
 	if knownHostsPath := machineKnownHostsPath(machine, paths); knownHostsPath != "" {

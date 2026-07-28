@@ -66,6 +66,13 @@ const (
 
 	RootSSHUser = "root"
 
+	DefaultSSHPort = 22
+
+	MachineInstallPasswordLocked = "locked"
+
+	MachineInstallSudoNoPasswd = "nopasswd"
+	MachineInstallSudoNone     = "none"
+
 	MachineRootLoginKeep   = "keep"
 	MachineRootLoginRevoke = "revoke"
 

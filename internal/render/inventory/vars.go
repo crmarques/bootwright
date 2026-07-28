@@ -187,7 +187,7 @@ func machinesVars(state v1alpha1.State) []any {
 			entry["sshAddress"] = v1alpha1.MachineSSHAddress(h)
 			entry["sshAddressName"] = h.Spec.Access.SSH.AddressRef.Name
 			entry["sshUser"] = h.Spec.Access.SSH.User
-			entry["sshKeyName"] = h.Spec.Access.SSH.KeyRef.Name
+			entry["sshKeyName"] = v1alpha1.MachineSSHKeyRef(h).Name
 		}
 		out = append(out, entry)
 	}

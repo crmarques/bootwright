@@ -99,7 +99,8 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	return sshTarget{
 		Address:       address,
 		User:          machineLoginUser(state, machine),
-		KeyRef:        machine.Spec.Access.SSH.KeyRef,
+		Port:          machine.Spec.Access.SSH.Port,
+		KeyRef:        v1alpha1.MachineSSHKeyRef(machine),
 		KnownHostsRef: machine.Spec.Access.SSH.KnownHostsRef,
 	}, nil
 }

@@ -18,7 +18,13 @@ import (
 
 var managedOSSourceIDUnsafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-const managedOSSSHLoginPasswordHash = "$6$bwmossshlogin$Ol7r6C1RKzV8XE5IhNM4r2XrCBVflPt5NX.xLZ51oqBSBQMN/cmkAP0nHExtyEB7NiXgGuYuU9PQwUDnJIo.x."
+func machineInstallInitialPasswordPath(profile v1alpha1.MachineInstallProfile, paths PathOptions) string {
+	initial := profile.Spec.Customizations.SSH.InitialPassword
+	if initial == nil || initial.SecretRef.Name == "" {
+		return ""
+	}
+	return secret.ResolvePath(initial.SecretRef.Name, paths.SecretIndex, paths.SecretsDir)
+}
 
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {
 	if machine.Spec.Access.SSH == nil {
@@ -87,10 +93,9 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                sshUser,
-			"sshPasswordHash":        managedOSSSHLoginPasswordHash,
-			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
+			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(v1alpha1.MachineSSHKeyRef(machine).Name, paths.SecretIndex, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
-			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
+			"sudo":                   v1alpha1.MachineInstallSudoPolicy(profile),
 			"localization":           machineInstallLocalizationVars(profile.Spec.Customizations.Localization),
 			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
 			"services":               machineInstallServicesVars(profile.Spec.Customizations.Services),
@@ -99,12 +104,15 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"network":                machineInstallNetworkVars(state, ci, m, clusterName),
 		},
 	}
+	if path := machineInstallInitialPasswordPath(profile, paths); path != "" {
+		out["kickstart"].(map[string]any)["initialPasswordPath"] = path
+	}
 	if machine.Spec.Access.SSH != nil {
 		ssh := map[string]any{
 			"address":           v1alpha1.MachineSSHAddress(machine),
 			"connectionAddress": stateview.MachineConnectionAddress(state, machine),
 			"user":              sshUser,
-			"privateKeyPath":    secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, paths.SecretIndex, paths.SecretsDir),
+			"privateKeyPath":    secret.ResolveSSHPrivateKeyPath(v1alpha1.MachineSSHKeyRef(machine).Name, paths.SecretIndex, paths.SecretsDir),
 		}
 		if knownHosts := machineKnownHostsPath(machine, paths); knownHosts != "" {
 			ssh["knownHostsPath"] = knownHosts

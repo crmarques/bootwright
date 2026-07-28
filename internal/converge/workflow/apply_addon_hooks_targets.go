@@ -10,10 +10,12 @@ import (
 )
 
 type hookTargetMachine struct {
-	label     string
-	machine   v1alpha1.Machine
-	sshUser   string
-	sshKeyRef v1alpha1.SecretRef
+	label           string
+	machine         v1alpha1.Machine
+	sshUser         string
+	sshKeyRef       v1alpha1.SecretRef
+	sshPasswordRef  v1alpha1.SecretRef
+	sudoPasswordRef v1alpha1.SecretRef
 }
 
 func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonStep) ([]hookTargetMachine, error) {
@@ -152,7 +154,9 @@ func machineHookTarget(label string, machine v1alpha1.Machine) hookTargetMachine
 	target := hookTargetMachine{label: label, machine: machine}
 	if machine.Spec.Access.SSH != nil {
 		target.sshUser = machine.Spec.Access.SSH.User
-		target.sshKeyRef = machine.Spec.Access.SSH.KeyRef
+		target.sshKeyRef = v1alpha1.MachineSSHKeyRef(machine)
+		target.sshPasswordRef = v1alpha1.MachineSSHPasswordRef(machine)
+		target.sudoPasswordRef = machine.Spec.Access.SSH.SudoPasswordRef
 	}
 	return target
 }
@@ -183,6 +187,8 @@ func hookConnectionSecretNames(machines []hookTargetMachine) []string {
 			continue
 		}
 		add(m.sshKeyRef.Name)
+		add(m.sshPasswordRef.Name)
+		add(m.sudoPasswordRef.Name)
 		add(m.machine.Spec.Access.SSH.KnownHostsRef.Name)
 	}
 	return names

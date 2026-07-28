@@ -34,16 +34,16 @@ func validateStorageCephadmSSHPosture(prefix string, cluster v1alpha1.StorageClu
 		return errs
 	}
 	if cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef is required when %s.clusterSSH.user is %q rather than %q; without it cephadm's cluster identity is the node Machine access key, so the key Bootwright drives the node with would also open the passwordless-sudo %q account. Declare an sshKeyPair Secret (spec.source.generated) and name it here", prefix, prefix, user, v1alpha1.RootSSHUser, user))
+		errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef is required when %s.clusterSSH.user is %q rather than %q; it is the key cephadm orchestrates every host with, and the key a node Bootwright installs authorizes for that account. Declare an sshKeyPair Secret (spec.source.generated) and name it here", prefix, prefix, user, v1alpha1.RootSSHUser))
 	}
 	clusterKey := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name
 	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
-		if !ok {
+		if !ok || machine.DefaultedRefs.Access || clusterKey == "" {
 			continue
 		}
-		if machine.Spec.Access.SSH != nil && clusterKey != "" && machine.Spec.Access.SSH.KeyRef.Name == clusterKey {
-			errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef %q is also Machine/%s spec.access.ssh.keyRef; the cephadm cluster identity would be the same key Bootwright drives the node with, so cephadm bootstrap moves that key into the Ceph mon config-key store and it opens the passwordless-sudo %q account. Declare a second sshKeyPair Secret (spec.source.generated) for the cluster identity", prefix, clusterKey, machine.Metadata.Name, user))
+		if v1alpha1.MachineSSHKeyRef(machine).Name == clusterKey && !v1alpha1.MachineProvisionsLogin(machine) {
+			errs = append(errs, fmt.Sprintf("%s.clusterSSH.keyRef %q is also Machine/%s %s; that key already opens an account Bootwright drives the machine with outside this cluster, and cephadm bootstrap moves the cluster identity into the Ceph mon config-key store. Remove the authored access block so the node derives its login from this cluster, or declare a second sshKeyPair Secret (spec.source.generated) for the cluster identity", prefix, clusterKey, machine.Metadata.Name, machineSSHKeyField(machine)))
 			break
 		}
 	}

@@ -55,12 +55,15 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 			return nil, fmt.Errorf("hook %s target machine %s has no resolvable SSH access", hook.Name, m.machine.Metadata.Name)
 		}
 		targets = append(targets, hookSSHTarget{
-			label:          m.label,
-			inventoryName:  "hook_" + strconv.Itoa(i),
-			address:        address,
-			user:           m.sshUser,
-			keyPath:        secret.ResolveSSHPrivateKeyPath(m.sshKeyRef.Name, idx, connectionDir),
-			knownHostsPath: workflowMachineKnownHostsPath(m.machine, idx, connectionDir, e.opts.SecretsDir),
+			label:            m.label,
+			inventoryName:    "hook_" + strconv.Itoa(i),
+			address:          address,
+			user:             m.sshUser,
+			port:             m.machine.Spec.Access.SSH.Port,
+			keyPath:          secret.ResolveSSHPrivateKeyPath(m.sshKeyRef.Name, idx, connectionDir),
+			passwordPath:     secret.ResolvePath(m.sshPasswordRef.Name, idx, connectionDir),
+			sudoPasswordPath: secret.ResolvePath(m.sudoPasswordRef.Name, idx, connectionDir),
+			knownHostsPath:   workflowMachineKnownHostsPath(m.machine, idx, connectionDir, e.opts.SecretsDir),
 		})
 	}
 
@@ -305,13 +308,22 @@ func writeHookInventory(path string, targets []hookSSHTarget) error {
 		host := map[string]any{
 			"ansible_host":            target.address,
 			"bootwright_host_name":    target.label,
-			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath)),
+			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath, target.passwordPath != "")),
 		}
 		if target.user != "" {
 			host["ansible_user"] = target.user
 		}
+		if target.port != 0 {
+			host["ansible_port"] = target.port
+		}
 		if target.keyPath != "" {
 			host["ansible_ssh_private_key_file"] = target.keyPath
+		}
+		if target.passwordPath != "" {
+			host["ansible_password"] = hookPasswordLookup(target.passwordPath)
+		}
+		if target.sudoPasswordPath != "" {
+			host["ansible_become_password"] = hookPasswordLookup(target.sudoPasswordPath)
 		}
 		hostsMap[target.inventoryName] = host
 	}
@@ -320,12 +332,19 @@ func writeHookInventory(path string, targets []hookSSHTarget) error {
 }
 
 type hookSSHTarget struct {
-	label          string
-	inventoryName  string
-	address        string
-	user           string
-	keyPath        string
-	knownHostsPath string
+	label            string
+	inventoryName    string
+	address          string
+	user             string
+	port             int
+	keyPath          string
+	passwordPath     string
+	sudoPasswordPath string
+	knownHostsPath   string
+}
+
+func hookPasswordLookup(path string) string {
+	return "{{ lookup('ansible.builtin.file', '" + path + "') | trim }}"
 }
 
 func workflowMachineKnownHostsPath(machine v1alpha1.Machine, idx secret.Index, secretsDir, trustSecretsDir string) string {

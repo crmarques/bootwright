@@ -134,7 +134,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 	}
 
 	for _, machine := range state.Machines {
-		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KeyRef.Name == "" {
+		if machine.Spec.Access.SSH == nil {
 			continue
 		}
 		if locality.IsControllerLocalMachine(machine, localPolicy) {
