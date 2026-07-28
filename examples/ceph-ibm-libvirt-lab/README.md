@@ -215,7 +215,7 @@ shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
 printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
   bootwright secret set --name ibm-ceph-registry --username cp --password-stdin
 
-# Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
+# Converge the auto-managed secrets: generates the ceph-cluster-ssh keypair and
 # bmc-credentials, and copies the bastion-host-ssh file: source into the context.
 bootwright secret generate
 
@@ -275,7 +275,7 @@ Re-running `apply --yes` is idempotent. For a focused storage rerun:
 
 ```bash
 # SSH into the seed node with the generated key:
-sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-lab/secrets/ceph-node-ssh \
+sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-lab/secrets/ceph-cluster-ssh \
   root@192.168.140.21 'cephadm shell -- ceph -s'
 
 # Expect: HEALTH_OK, 3 mons (node-01, node-02, node-03), 2 mgr, 6 OSDs,

@@ -349,7 +349,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef: ceph-node-ssh
+      auth:
+        privateKeyRef: ceph-node-ssh
       addressRef: ssh
 `
 	const storage = `apiVersion: bootwright.io/v1alpha1

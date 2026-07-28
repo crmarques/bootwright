@@ -181,7 +181,8 @@ spec:
     ssh:
       addressRef: ssh
       user: core
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
 `,
 	}
 	for name, body := range files {

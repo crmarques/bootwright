@@ -57,7 +57,8 @@ spec:
   access:
     ssh:
       addressRef: ssh
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
 `,
 	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine

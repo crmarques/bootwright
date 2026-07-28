@@ -2204,7 +2204,8 @@ spec:
     - { name: ssh, address: 192.168.132.1 }
   access:
     ssh:
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
       addressRef: ssh
 `,
 				"provider.yaml": tc.providerYAML,
@@ -2541,7 +2542,8 @@ spec:
       address: 192.168.132.50
   access:
     ssh:
-      keyRef: missing-secret
+      auth:
+        privateKeyRef: missing-secret
       addressRef: ssh
 `,
 		},
@@ -3852,7 +3854,8 @@ spec:
     - { name: ssh, address: 192.168.133.1 }
   access:
     ssh:
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
       addressRef: ssh
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -4221,7 +4224,8 @@ spec:
     - { name: ip, address: 192.168.132.20 }
   access:
     ssh:
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
       addressRef: ip
 `
 }
@@ -4330,7 +4334,8 @@ spec:
       address: 192.168.132.1
   access:
     ssh:
-      keyRef: bastion-host-ssh
+      auth:
+        privateKeyRef: bastion-host-ssh
       addressRef: ssh
 `
 

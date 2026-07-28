@@ -187,7 +187,7 @@ printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
 printf '%s\n' 'YOUR_BMC_PASSWORD'   | bootwright secret set --name bmc-credentials  --username <bmc-user>   --password-stdin
 printf '%s\n' 'YOUR_PROXY_PASSWORD' | bootwright secret set --name proxy-credentials --username <proxy-user> --password-stdin
 
-# Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
+# Converge the auto-managed secrets: generates the ceph-cluster-ssh keypair and
 # copies the bastion-host-ssh file into the context.
 bootwright secret generate
 
@@ -236,7 +236,7 @@ Re-running `apply --yes` is idempotent. For a focused storage rerun:
 
 ```bash
 # SSH into the seed node with the generated key:
-sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-node-ssh \
+sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-cluster-ssh \
   root@10.20.30.21 'cephadm shell -- ceph -s'
 # Expect HEALTH_OK, 3 mons, 2 mgr, 6 OSDs, 1 cephfs, an rgw service, an nfs
 # service, a mgmt-gateway, and three ingress services.

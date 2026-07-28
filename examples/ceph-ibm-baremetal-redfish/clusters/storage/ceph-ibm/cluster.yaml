@@ -19,6 +19,8 @@ spec:
 
     cephadm:
       addressRef: ssh
+      clusterSSH:
+        keyRef: ceph-cluster-ssh
       bootstrap:
         node: node-01
 
