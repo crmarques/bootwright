@@ -181,7 +181,7 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 		entry["ansible_become_password"] = passwordLookup(path)
 	}
 	if path := machineKnownHostsPath(h, paths); path != "" {
-		entry["ansible_ssh_common_args"] = sshCommonArgs(path, v1alpha1.MachineSSHPasswordRef(h).Name != "")
+		entry["ansible_ssh_common_args"] = sshCommonArgs(path, v1alpha1.MachineSSHPasswordRef(h).Name != "", paths.PreferredIdentityFile)
 	}
 	return entry
 }
@@ -194,12 +194,15 @@ func machineKnownHostsPath(h v1alpha1.Machine, paths PathOptions) string {
 	return sshtrust.MachineKnownHostsPath(h, paths.SecretIndex, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
 }
 
-func sshCommonArgs(knownHostsPath string, passwordAuth bool) string {
-	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath, passwordAuth))
+func sshCommonArgs(knownHostsPath string, passwordAuth bool, preferredIdentityFile string) string {
+	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath, passwordAuth, preferredIdentityFile))
 }
 
-func SSHCommonArgWords(knownHostsPath string, passwordAuth bool) []string {
+func SSHCommonArgWords(knownHostsPath string, passwordAuth bool, preferredIdentityFile string) []string {
 	words := []string{}
+	if preferredIdentityFile != "" {
+		words = append(words, "-o", "IdentityFile="+preferredIdentityFile)
+	}
 	if !passwordAuth {
 		words = append(words, "-o", "BatchMode=yes")
 	}

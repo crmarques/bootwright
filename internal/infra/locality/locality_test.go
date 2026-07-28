@@ -72,10 +72,18 @@ func TestIsControllerLocalMachineProvidedWithoutSSH(t *testing.T) {
 	}}
 
 	local := v1alpha1.Machine{Spec: v1alpha1.MachineSpec{
-		OS: v1alpha1.MachineOSSpec{Provided: &provided},
+		OS:     v1alpha1.MachineOSSpec{Provided: &provided},
+		Access: v1alpha1.MachineAccess{Local: true},
 	}}
 	if !IsControllerLocalMachine(local, policy) {
-		t.Fatalf("provided-OS machine with no ssh block should be the local bastion")
+		t.Fatalf("machine declaring spec.access.local should be the controller")
+	}
+
+	undeclared := v1alpha1.Machine{Spec: v1alpha1.MachineSpec{
+		OS: v1alpha1.MachineOSSpec{Provided: &provided},
+	}}
+	if IsControllerLocalMachine(undeclared, policy) {
+		t.Fatalf("provided-OS machine with no access block must not be assumed local; locality is declared with spec.access.local")
 	}
 
 	remote := v1alpha1.Machine{Spec: v1alpha1.MachineSpec{

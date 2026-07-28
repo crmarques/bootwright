@@ -6,9 +6,16 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
+var preferredIdentityFile string
+
+func SetPreferredIdentityFile(path string) {
+	preferredIdentityFile = path
+}
+
 func runOptionsForContext(ctx workspace.Context, clustersDir, executable string, state v1alpha1.State) workflow.RunOptions {
 	return workflow.RunOptions{
-		State:              state,
+		State:                 state,
+		PreferredIdentityFile: preferredIdentityFile,
 		RenderedDir:        ctx.RenderedDir,
 		ClustersDir:        clustersDir,
 		RunsDir:            ctx.RunsDir,

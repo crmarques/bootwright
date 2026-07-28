@@ -7,6 +7,7 @@ type PathOptions struct {
 	TrustSecretsDir             string
 	KubeVirtHostKubeconfigPaths map[string]string
 	SecretIndex                 secret.Index
+	PreferredIdentityFile       string
 }
 
 func (p PathOptions) trustSecretsDir() string {

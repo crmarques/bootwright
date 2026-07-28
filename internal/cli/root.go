@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +21,10 @@ const (
 	groupGeneral   = "general"
 )
 
-var contextOverride string
+var (
+	contextOverride string
+	preferredIDKey  string
+)
 
 func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	root := &cobra.Command{
@@ -52,6 +56,15 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVar(&contextOverride, "context", "", flagContextUsage)
 	registerContextNameCompletion(root, "context")
+	root.PersistentFlags().StringVar(&preferredIDKey, "preferred-id-key", "", flagPreferredIDKeyUsage)
+	root.PersistentPreRunE = func(*cobra.Command, []string) error {
+		path, err := resolvePreferredIDKey()
+		if err != nil {
+			return failErr(2, err)
+		}
+		converge.SetPreferredIdentityFile(path)
+		return nil
+	}
 
 	root.AddGroup(
 		&cobra.Group{ID: groupSetup, Title: "Setup Commands:"},

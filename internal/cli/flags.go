@@ -35,6 +35,7 @@ const (
 	flagAskBecomePassUsage   = "prompt for the Ansible become password (default: false as root, true otherwise)"
 	flagTrustOnFirstUseUsage = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
 	flagContextUsage         = "context to operate in (default: current context)"
+	flagPreferredIDKeyUsage  = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
 	flagVerboseUsage         = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 

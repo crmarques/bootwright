@@ -67,6 +67,10 @@ func execSSHTarget(commandCtx context.Context, ctx workspace.Context, state v1al
 }
 
 func prepareSSHInvocation(ctx workspace.Context, state v1alpha1.State, target sshTarget, extraArgs []string, sshPath string) (sshInvocation, error) {
+	preferredKeyPath, err := resolvePreferredIDKey()
+	if err != nil {
+		return sshInvocation{}, err
+	}
 	resolver := secret.NewResolver(ctx.Name, ctx.SecretsDir, secret.NewIndex(state))
 	var files []*os.File
 	keyPath := ""
@@ -128,7 +132,7 @@ func prepareSSHInvocation(ctx workspace.Context, state v1alpha1.State, target ss
 			return sshInvocation{}, err
 		}
 	}
-	return buildSSHInvocation(target, keyPath, configPath, knownHostsPath, strictHostKeyChecking, extraArgs, sshPath, files), nil
+	return buildSSHInvocation(target, keyPath, preferredKeyPath, configPath, knownHostsPath, strictHostKeyChecking, extraArgs, sshPath, files), nil
 }
 
 func ensureSSHKnownHostsFile(contextDir string) (string, error) {
@@ -163,10 +167,13 @@ func ensureSSHKnownHostsFile(contextDir string) (string, error) {
 	}
 }
 
-func buildSSHInvocation(target sshTarget, keyPath, configPath, knownHostsPath, strictHostKeyChecking string, extraArgs []string, sshPath string, files []*os.File) sshInvocation {
+func buildSSHInvocation(target sshTarget, keyPath, preferredKeyPath, configPath, knownHostsPath, strictHostKeyChecking string, extraArgs []string, sshPath string, files []*os.File) sshInvocation {
 	args := []string{
 		"ssh",
 		"-F", configPath,
+	}
+	if preferredKeyPath != "" {
+		args = append(args, "-i", preferredKeyPath)
 	}
 	if keyPath != "" {
 		args = append(args,
