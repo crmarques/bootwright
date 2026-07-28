@@ -25,7 +25,7 @@ func machineSSHTestState() v1alpha1.State {
 			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.10"}},
 			Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
 				AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-				Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-key"}},
+				Auth:       v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-key"}},
 			}},
 		},
 	}}}

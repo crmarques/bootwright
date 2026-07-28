@@ -301,9 +301,9 @@ type MachineInstallLocalization struct {
 }
 
 type MachineInstallSSH struct {
-	PasswordAuthentication bool                          `yaml:"passwordAuthentication,omitempty" json:"passwordAuthentication,omitempty"`
+	PasswordAuthentication bool                           `yaml:"passwordAuthentication,omitempty" json:"passwordAuthentication,omitempty"`
 	InitialPassword        *MachineInstallInitialPassword `yaml:"initialPassword,omitempty" json:"initialPassword,omitempty"`
-	Sudo                   string                        `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+	Sudo                   string                         `yaml:"sudo,omitempty" json:"sudo,omitempty"`
 }
 
 type MachineInstallInitialPassword struct {

@@ -16,7 +16,7 @@ func storageAccessState(user string) v1alpha1.State {
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef: v1alpha1.LocalObjectReference{Name: "storage"},
 					User:       "root",
-					Auth:     v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
+					Auth:       v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 				},
 			},
 		},

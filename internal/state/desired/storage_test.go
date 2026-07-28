@@ -1959,7 +1959,7 @@ func storageValidationHost(name string) v1alpha1.Machine {
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 					User:          "root",
-					Auth:        v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
+					Auth:          v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 				},
 			},
