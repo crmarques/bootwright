@@ -28,10 +28,10 @@ func TestClusterAccessReportsStorageClusters(t *testing.T) {
 		"ceph-libvirt:",
 		"Type: ceph (managed)",
 		"Seed node: node01",
-		"SSH: ssh root@",
+		"SSH: ssh cephadm@",
 		"Monitors:",
 		"    - node01.ceph-libvirt.bootwright.test=",
-		"Health check: ssh root@",
+		"Health check: ssh cephadm@",
 		"sudo cephadm shell -- ceph -s",
 		"Admin keyring: /etc/ceph/ceph.client.admin.keyring (on node01)",
 	} {
@@ -73,7 +73,7 @@ func TestPrintClusterAccessShowsStorageAfterSuccessfulApply(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"ceph-libvirt:",
-		"Health check: ssh root@",
+		"Health check: ssh cephadm@",
 		"sudo cephadm shell -- ceph -s",
 	} {
 		if !strings.Contains(got, want) {
