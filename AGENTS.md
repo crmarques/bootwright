@@ -51,14 +51,6 @@ depends on them.
 - **Product API.** Desired-state YAML is the user-facing API: declarative,
   idempotent, typed, deterministic. Generated installer files, inventories, and
   rendered outputs are outputs, not authored source of truth.
-- **Companion inputs.** When a Bootwright change alters the desired-state API,
-  validation or defaulting, generated or example input, an add-on manifest
-  contract, or any other behavior that requires input-file changes, inspect the
-  sibling `../bootwright-template-inputs` repository and update every affected
-  template and safe rendered fixture in the same task. Follow that repository's
-  `AGENTS.md`; do not finish with the repositories knowingly inconsistent. If
-  the companion repository is unavailable or cannot be updated, report the
-  blocker and the exact pending changes.
 - **Drive official tools.** Prefer native capabilities of the tools Bootwright
   drives (for example `openshift-install`) before adding custom orchestration
   around the same operation.
