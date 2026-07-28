@@ -13,7 +13,7 @@
 
 - name: Create the storage node orchestration account
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} useradd --create-home --user-group
@@ -26,7 +26,7 @@
 
 - name: Probe the storage node orchestration account password state
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} passwd --status {{ bootwright_node_access.user | quote }}
@@ -38,7 +38,7 @@
 
 - name: Lock the storage node orchestration account password
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} passwd --lock {{ bootwright_node_access.user | quote }}
@@ -60,7 +60,7 @@
 
 - name: Install sudo on the storage node
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_install_script: >-
       if command -v dnf >/dev/null 2>&1; then exec dnf -y install sudo;

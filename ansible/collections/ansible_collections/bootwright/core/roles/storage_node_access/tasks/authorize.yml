@@ -1,7 +1,7 @@
 ---
 - name: Ensure the storage node orchestration account SSH directory
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} install -d -m 0700
@@ -20,7 +20,7 @@
 
 - name: Probe the storage node orchestration account authorized key
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_public_key | quote }}
@@ -33,7 +33,7 @@
 
 - name: Authorize the machine access key for the storage node orchestration account
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       printf '%s\n' {{ bootwright_node_access_public_key | quote }}
@@ -46,7 +46,7 @@
 
 - name: Restore SELinux labels on the storage node orchestration account SSH directory
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       command -v restorecon >/dev/null 2>&1

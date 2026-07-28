@@ -1,7 +1,7 @@
 ---
 - name: Probe the storage node root login drop-in before restoring root SSH
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} test -f {{ bootwright_node_access.sshdDropInPath | quote }}
@@ -13,7 +13,7 @@
 
 - name: Remove the storage node root login drop-in
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} rm -f {{ bootwright_node_access.sshdDropInPath | quote }}
@@ -24,7 +24,7 @@
 
 - name: Validate the storage node sshd configuration after restoring root SSH
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} sshd -t
@@ -53,7 +53,7 @@
 
 - name: Reload sshd on the storage node after restoring root SSH
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} systemctl reload sshd
@@ -64,7 +64,7 @@
 
 - name: Probe the storage node install account authorized key before restoring it
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_install_public_key | quote }}
@@ -78,7 +78,7 @@
 
 - name: Reauthorize the machine access key for the storage node install account
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} install -d -m 0700
@@ -102,7 +102,7 @@
 
 - name: Restore SELinux labels on the storage node install account SSH directory
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       command -v restorecon >/dev/null 2>&1

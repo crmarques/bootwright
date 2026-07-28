@@ -22,7 +22,18 @@
       node that {{ bootwright_node_access.sudoersPath }} is present and 0440 root:root,
       that {{ bootwright_node_access.user }} owns a 0700 ~/.ssh with a 0600
       authorized_keys holding the Machine access public key, and that SELinux labels on
-      that directory are correct (restorecon -R), then re-apply.
+      that directory are correct (restorecon -R), then re-apply. Bootwright proves this
+      without a controlling terminal on purpose, because cephadm's manager runs sudo that
+      way; a node whose sudo policy reaches {{ bootwright_node_access.user }} only from an
+      interactive session cannot be orchestrated. If
+      {{ bootwright_node_access.sudoersPath }} is present and correct but has no effect,
+      the node is not reading it: sudo applies generic Defaults before per-user Defaults,
+      but within the generic tier a later file in {{ bootwright_node_access.sudoersPath | dirname }}
+      overrides an earlier one, a Defaults requiretty placed after @includedir in
+      /etc/sudoers cannot be overridden by any drop-in, and an LDAP or SSSD cn=defaults
+      carrying ignore_local_sudoers skips /etc/sudoers and every drop-in outright — in
+      that last case the grant must come from the directory, not from this node. Run
+      sudo -ll -U {{ bootwright_node_access.user }} on the node to see which policy wins.
   delegate_to: localhost
   become: false
 
@@ -30,6 +41,8 @@
   ansible.builtin.set_fact:
     bootwright_node_access_endpoint: "{{ bootwright_node_access_target_endpoint }}"
     bootwright_node_access_sudo: sudo -n
+    bootwright_node_access_tty_required: false
+    bootwright_node_access_privileged_argv: "{{ bootwright_node_access_ssh_argv }}"
   delegate_to: localhost
   become: false
   changed_when: false

@@ -8,6 +8,9 @@
     - name: Probe storage node access identities
       ansible.builtin.include_tasks: probe.yml
 
+    - name: Resolve storage node privileged execution
+      ansible.builtin.include_tasks: privilege.yml
+
     - name: Ensure the storage node orchestration account
       ansible.builtin.include_tasks: account.yml
 

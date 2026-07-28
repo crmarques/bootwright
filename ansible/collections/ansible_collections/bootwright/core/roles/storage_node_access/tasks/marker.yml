@@ -1,7 +1,7 @@
 ---
 - name: Probe the storage node access marker
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.markerPath | quote }}
@@ -13,7 +13,7 @@
 
 - name: Stamp the storage node access marker
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root

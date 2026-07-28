@@ -1,7 +1,7 @@
 ---
 - name: Probe the storage node orchestration sudoers grant
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_sudoers_content: "{{ bootwright_node_access_sudoers_lines | join('\n') }}"
     bootwright_node_access_command: >-
@@ -19,7 +19,7 @@
   block:
     - name: Stage the storage node orchestration sudoers grant
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root
@@ -34,7 +34,7 @@
 
     - name: Validate the staged storage node orchestration sudoers grant
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} visudo -cf {{ bootwright_node_access_sudoers_temp | quote }}
@@ -45,7 +45,7 @@
 
     - name: Install the validated storage node orchestration sudoers grant
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} mv -f {{ bootwright_node_access_sudoers_temp | quote }}
@@ -58,7 +58,7 @@
   rescue:
     - name: Remove the rejected storage node orchestration sudoers grant
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} rm -f {{ bootwright_node_access_sudoers_temp | quote }}
@@ -96,7 +96,7 @@
 
 - name: Remove the storage node orchestration account from wheel
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} gpasswd --delete

@@ -1,7 +1,7 @@
 ---
 - name: Probe the storage node root login drop-in
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} cat {{ bootwright_node_access.sshdDropInPath | quote }}
@@ -19,7 +19,7 @@
   block:
     - name: Stage the storage node root login drop-in
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} install -d -m 0755 -o root -g root
@@ -34,7 +34,7 @@
 
     - name: Validate the storage node sshd configuration before revoking root SSH
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} sshd -t
@@ -45,7 +45,7 @@
 
     - name: Reload sshd on the storage node after revoking root SSH
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} systemctl reload sshd
@@ -55,7 +55,7 @@
   rescue:
     - name: Remove the rejected storage node root login drop-in
       ansible.builtin.command:
-        argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+        argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
           {{ bootwright_node_access_sudo }} rm -f {{ bootwright_node_access.sshdDropInPath | quote }}
@@ -104,7 +104,7 @@
 
 - name: Probe the storage node install account authorized key
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} grep -qxF {{ bootwright_node_access_install_public_key | quote }}
@@ -118,7 +118,7 @@
 
 - name: Deauthorize the machine access key for the storage node install account
   ansible.builtin.command:
-    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_deauthorize_script: >-
       f={{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }};

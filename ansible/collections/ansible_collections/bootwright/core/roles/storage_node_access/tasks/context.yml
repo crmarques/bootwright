@@ -75,6 +75,16 @@
   become: false
   changed_when: false
 
+- name: Resolve storage node access terminal SSH options
+  ansible.builtin.set_fact:
+    bootwright_node_access_ssh_tty_argv: >-
+      {{ bootwright_node_access_ssh_argv + bootwright_node_access_ssh_tty_options }}
+    bootwright_node_access_tty_required: false
+    bootwright_node_access_privileged_argv: "{{ bootwright_node_access_ssh_argv }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
 - name: Resolve storage node access endpoints
   ansible.builtin.set_fact:
     bootwright_node_access_target_endpoint: "{{ bootwright_node_access.user }}@{{ bootwright_node_access.address }}"
