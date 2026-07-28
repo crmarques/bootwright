@@ -186,13 +186,13 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 		t.Fatalf("seed inventory host = %v", got)
 	}
 	clusterSSH := cluster["clusterSSH"].(map[string]any)
-	if got := clusterSSH["user"]; got != "root" {
-		t.Fatalf("cluster ssh user = %v, want root", got)
+	if got := clusterSSH["user"]; got != "cephadm" {
+		t.Fatalf("cluster ssh user = %v, want cephadm", got)
 	}
-	if got := clusterSSH["privateKeyPath"]; got != filepath.Join("/context/secrets", "ceph-storage-cluster-admin-ssh-key") {
+	if got := clusterSSH["privateKeyPath"]; got != filepath.Join("/context/secrets", "ceph-cluster-ssh-key") {
 		t.Fatalf("cluster ssh private key = %v", got)
 	}
-	if got := clusterSSH["publicKeyPath"]; got != filepath.Join("/context/secrets", "ceph-storage-cluster-admin-ssh-key.pub") {
+	if got := clusterSSH["publicKeyPath"]; got != filepath.Join("/context/secrets", "ceph-cluster-ssh-key.pub") {
 		t.Fatalf("cluster ssh public key = %v", got)
 	}
 	if got := clusterSSH["knownHostsPath"]; got != filepath.Join("/context", "trust", "ssh", "known_hosts") {

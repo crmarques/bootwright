@@ -303,14 +303,14 @@ func TestInventoryUsesLocalConnectionForControllerAddressAliasHostRefs(t *testin
 	}
 }
 
-func TestInventoryUsesLocalConnectionForBastionWithoutSSH(t *testing.T) {
+func TestInventoryUsesLocalConnectionForBastionDeclaringLocalAccess(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "bastion" {
-			state.Machines[i].Spec.Access.SSH = nil
+			state.Machines[i].Spec.Access = v1alpha1.MachineAccess{Local: true}
 		}
 	}
 

@@ -31,7 +31,7 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	if summary.SeedAddress == "" {
 		t.Fatal("seed address not resolved from machine")
 	}
-	wantSSH := "ssh root@" + summary.SeedAddress
+	wantSSH := "ssh cephadm@" + summary.SeedAddress
 	if summary.SSHCommand != wantSSH {
 		t.Fatalf("ssh command = %q, want %q", summary.SSHCommand, wantSSH)
 	}

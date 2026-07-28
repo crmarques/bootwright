@@ -86,8 +86,8 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if ks["hostname"] != "node01.ceph-libvirt.bootwright.test" {
 		t.Fatalf("kickstart hostname = %v, want the node FQDN", ks["hostname"])
 	}
-	if got, _ := ks["sshPasswordHash"].(string); !strings.HasPrefix(got, "$6$") {
-		t.Fatalf("kickstart sshPasswordHash = %v, want a SHA-512 crypt hash", ks["sshPasswordHash"])
+	if _, ok := ks["initialPasswordPath"]; ok {
+		t.Fatalf("kickstart initialPasswordPath = %v, want the installed account left locked without customizations.ssh.initialPassword", ks["initialPasswordPath"])
 	}
 	packages := ks["packages"].(map[string]any)
 	if packages["environment"] != "minimal" || packages["installWeakDeps"] != false || packages["excludeDocs"] != true {
@@ -175,17 +175,15 @@ func TestManagedOSInstallDefaultsOmittedSSHUserToRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Machines[0].Spec.Access.SSH.User = ""
-
 	vars := VarsWithSecretsDir(state, "/context/secrets")
 	groups := vars["bootwright_managed_os_install_groups"].([]any)
 	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
 	osInstall := first["osInstall"].(map[string]any)
-	if got := osInstall["ssh"].(map[string]any)["user"]; got != "root" {
-		t.Fatalf("managed OS ssh.user = %v, want root for omitted Machine.spec.access.ssh.user", got)
+	if got := osInstall["ssh"].(map[string]any)["user"]; got != "cephadm" {
+		t.Fatalf("managed OS ssh.user = %v, want the cluster orchestration account a cluster-claimed node derives", got)
 	}
-	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "root" {
-		t.Fatalf("managed OS kickstart.sshUser = %v, want root for omitted Machine.spec.access.ssh.user", got)
+	if got := osInstall["kickstart"].(map[string]any)["sshUser"]; got != "cephadm" {
+		t.Fatalf("managed OS kickstart.sshUser = %v, want the account the install creates", got)
 	}
 	if _, ok := osInstall["kickstart"].(map[string]any)["initialPasswordPath"]; ok {
 		t.Fatal("managed OS kickstart.initialPasswordPath set without customizations.ssh.initialPassword; the installed account must stay locked")
@@ -637,8 +635,8 @@ func TestManagedOSInstallFallbackUserForRevokedRootKeepsMarkerHash(t *testing.T)
 	groups := vars["bootwright_managed_os_install_groups"].([]any)
 	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
 	osInstall := first["osInstall"].(map[string]any)
-	if got := osInstall["ssh"].(map[string]any)["fallbackUser"]; got != "cephadm" {
-		t.Fatalf("managed OS ssh.fallbackUser = %v, want cephadm for revoked root", got)
+	if _, ok := osInstall["ssh"].(map[string]any)["fallbackUser"]; ok {
+		t.Fatalf("managed OS ssh.fallbackUser = %v, want no fallback when the install-window identity already is the orchestration account", osInstall["ssh"].(map[string]any)["fallbackUser"])
 	}
 	if got := osInstall["marker"].(map[string]any)["desiredHash"].(string); got != baselineHash {
 		t.Fatalf("marker desiredHash changed with fallbackUser: %q vs %q; the probe fallback identity must not perturb recorded install identity", got, baselineHash)

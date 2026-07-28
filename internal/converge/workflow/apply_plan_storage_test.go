@@ -90,6 +90,6 @@ func TestProvidedOSStorageClusterKeepsMachineServiceDependencies(t *testing.T) {
 
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt")
 	assertTaskMissing(t, tasks, "osprepare.ceph-libvirt.bastion")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "nodeaccess.ceph-libvirt")
 	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "storageinfra.ceph-libvirt")
 }

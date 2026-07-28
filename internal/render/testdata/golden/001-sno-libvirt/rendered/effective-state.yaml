@@ -51,7 +51,8 @@ machines:
         access:
             ssh:
                 addressRef: ssh
-                keyRef: bastion-host-ssh
+                auth:
+                    privateKeyRef: bastion-host-ssh
             rootLogin: keep
     - apiVersion: bootwright.io/v1alpha1
       kind: Machine

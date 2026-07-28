@@ -48,15 +48,16 @@ func TestPlanStorageNodeAccessBetweenOSInstallAndRegistration(t *testing.T) {
 	assertTaskDeps(t, tasks, "storageinfra.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm", "nodeaccess.ceph-ibm", "registration.ceph-ibm")
 }
 
-func TestPlanStorageNodeAccessAbsentWhenRootLoginKept(t *testing.T) {
+func TestPlanStorageNodeAccessAbsentForARootOrchestrationAccount(t *testing.T) {
 	state := cephSubscriptionExampleState(t)
+	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.User = v1alpha1.RootSSHUser
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	for _, task := range tasks {
 		if task.Entry.ID == "nodeaccess.ceph-ibm" {
-			t.Fatal("node access task must not be planned when no node manages a dedicated account")
+			t.Fatal("node access task must not be planned when the cluster orchestrates as root; there is no account to provision")
 		}
 	}
 }

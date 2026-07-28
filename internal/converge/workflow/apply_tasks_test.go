@@ -1435,7 +1435,7 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-0")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-1")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-2")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osinstall.ceph-libvirt", "nodeaccess.ceph-libvirt")
 	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "storageinfra.ceph-libvirt")
 }
 
@@ -1471,7 +1471,7 @@ func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {
 
 	assertTaskDeps(t, tasks, "osinstall.ceph-vms", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "osinstall.ceph-vms", "kubevirt:metal-ocp:bootwright-child-ocp:vm:ceph-vms-ceph-0")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-vms", "osinstall.ceph-vms")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-vms", "osinstall.ceph-vms", "nodeaccess.ceph-vms")
 	assertTaskDeps(t, tasks, "storage.ceph-vms", "storageinfra.ceph-vms")
 }
 
