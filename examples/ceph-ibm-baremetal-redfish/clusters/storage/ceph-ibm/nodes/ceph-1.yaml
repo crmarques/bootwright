@@ -45,8 +45,3 @@ spec:
     - name: ssh
       address: 10.20.30.21
 
-  access:
-    ssh:
-      user: root
-      keyRef: ceph-node-ssh
-      addressRef: ssh

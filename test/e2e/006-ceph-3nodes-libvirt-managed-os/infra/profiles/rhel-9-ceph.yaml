@@ -18,7 +18,6 @@ spec:
       keyboard: br-abnt2
       timezone: America/Sao_Paulo
     ssh:
-      authorizeMachineSSHKey: true
       passwordAuthentication: false
     storage:
       rootDevice:

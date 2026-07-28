@@ -16,5 +16,6 @@ spec:
   access:
     ssh:
       user: root
-      keyRef: ceph-node-ssh
+      auth:
+        privateKeyRef: ceph-node-ssh
       addressRef: ssh

@@ -29,8 +29,3 @@ spec:
     - name: ssh
       address: 192.168.134.22
 
-  access:
-    ssh:
-      user: root
-      keyRef: ceph-node-ssh
-      addressRef: ssh

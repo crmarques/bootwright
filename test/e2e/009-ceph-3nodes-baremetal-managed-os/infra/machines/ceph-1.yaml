@@ -55,8 +55,3 @@ spec:
     - name: cluster
       address: 192.168.141.21
 
-  access:
-    ssh:
-      user: root
-      keyRef: ceph-node-ssh
-      addressRef: ssh

@@ -17,7 +17,6 @@ spec:
 
   customizations:
     ssh:
-      authorizeMachineSSHKey: true
       passwordAuthentication: false
     storage:
       rootDevice:

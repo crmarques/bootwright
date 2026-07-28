@@ -11,6 +11,8 @@ spec:
     distribution: oss
     release: squid
     cephadm:
+      clusterSSH:
+        keyRef: ceph-node-ssh
       bootstrap:
         node: node01
     networks:
