@@ -445,8 +445,8 @@ func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluste
 		return nil
 	}
 	var errs []string
-	if mgmt.DNSName == "" {
-		errs = append(errs, prefix+".dnsName is required")
+	if mgmt.DNSLabel != "" && !IsDNSLabel(mgmt.DNSLabel) {
+		errs = append(errs, fmt.Sprintf("%s.dnsLabel %q is not a valid DNS label", prefix, mgmt.DNSLabel))
 	}
 	if mgmt.Port < 0 || mgmt.Port > 65535 {
 		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, mgmt.Port))

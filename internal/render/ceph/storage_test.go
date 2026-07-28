@@ -502,7 +502,7 @@ func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
 					},
 				},
 				Management: &v1alpha1.StorageCephManagement{
-					DNSName: "dashboard.ceph.bootwright.test",
+					DNSLabel: "dashboard",
 					Ingress: v1alpha1.StorageCephManagementIngress{
 						Name:                     "lab",
 						Address:                  "192.168.140.81",

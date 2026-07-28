@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func TestNormalizeInjectsMachineFQDN(t *testing.T) {
@@ -242,6 +243,17 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 					},
 				},
 			},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "ceph-east"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Management: &v1alpha1.StorageCephManagement{
+						DNSLabel: "dashboard",
+						Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "192.168.0.2", PrefixLength: 24},
+					},
+				},
+			},
 		}},
 		StorageObjectGateways: []v1alpha1.StorageObjectGateway{
 			{
@@ -262,8 +274,17 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.StorageClusters[0].Spec.Ceph.Management.DNSName; got != "mgr.ceph.ceph.cloud.example.net" {
-		t.Fatalf("management dnsName = %q, want mgr.ceph.ceph.cloud.example.net", got)
+	if got := state.StorageClusters[0].Spec.Ceph.Management.DNSLabel; got != "mgr" {
+		t.Fatalf("management dnsLabel = %q, want the mgr default", got)
+	}
+	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[0]); got != "mgr.ceph.ceph.cloud.example.net" {
+		t.Fatalf("management fqdn = %q, want mgr.ceph.ceph.cloud.example.net", got)
+	}
+	if got := state.StorageClusters[1].Spec.Ceph.Management.DNSLabel; got != "dashboard" {
+		t.Fatalf("declared management dnsLabel = %q, want dashboard kept verbatim", got)
+	}
+	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[1]); got != "dashboard.ceph-east.ceph.cloud.example.net" {
+		t.Fatalf("management fqdn = %q, want dashboard.ceph-east.ceph.cloud.example.net", got)
 	}
 	if got := state.StorageObjectGateways[0].Spec.Public.DNSName; got != "rgw.ceph.ceph.cloud.example.net" {
 		t.Fatalf("gateway dnsName = %q, want rgw.ceph.ceph.cloud.example.net (keyed by the gateway's own name)", got)
@@ -296,8 +317,8 @@ func TestNormalizeKeepsCephDNSNamesEmptyWithoutStorageDomain(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.StorageClusters[0].Spec.Ceph.Management.DNSName; got != "" {
-		t.Fatalf("management dnsName = %q, want empty without an Environment storage domain", got)
+	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[0]); got != "" {
+		t.Fatalf("management fqdn = %q, want empty without an Environment storage domain", got)
 	}
 	if got := state.StorageObjectGateways[0].Spec.Public.DNSName; got != "" {
 		t.Fatalf("gateway dnsName = %q, want empty without an Environment storage domain", got)

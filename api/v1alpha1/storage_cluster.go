@@ -343,7 +343,7 @@ type StorageCephDevicePath struct {
 }
 
 type StorageCephManagement struct {
-	DNSName     string                       `yaml:"dnsName" json:"dnsName"`
+	DNSLabel    string                       `yaml:"dnsLabel,omitempty" json:"dnsLabel,omitempty"`
 	Port        int                          `yaml:"port,omitempty" json:"port,omitempty"`
 	EnableAuth  *bool                        `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
 	TLS         *StorageCephManagementTLS    `yaml:"tls,omitempty" json:"tls,omitempty"`

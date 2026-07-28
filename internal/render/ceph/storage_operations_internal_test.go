@@ -872,9 +872,9 @@ func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 				Management: &v1alpha1.StorageCephManagement{
-					DNSName: "dash.example.com",
-					TLS:     tls,
-					Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+					DNSLabel: "dash",
+					TLS:      tls,
+					Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
 				},
 				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
 					Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
@@ -1209,9 +1209,9 @@ func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
 
 func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	mgmt := &v1alpha1.StorageCephManagement{
-		DNSName: "dash.example.com",
-		TLS:     &v1alpha1.StorageCephManagementTLS{},
-		Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+		DNSLabel: "dash",
+		TLS:      &v1alpha1.StorageCephManagementTLS{},
+		Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
 	}
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -1229,7 +1229,7 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	}
 
 	plainCluster := cluster
-	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSName: "dash.example.com", Ingress: mgmt.Ingress}
+	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSLabel: "dash", Ingress: mgmt.Ingress}
 	plain := mustApplyScript(t, v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
 	if strings.Contains(plain, "[todo]") && strings.Contains(plain, "mgmt-gateway") {
 		t.Fatalf("no warning must fire when the gateway is secret-free and in the bundle:\n%s", plain)

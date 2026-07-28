@@ -89,8 +89,8 @@ func storageDNSRecordsState(baseDomain string) v1alpha1.State {
 						}},
 					},
 					Management: &v1alpha1.StorageCephManagement{
-						DNSName: "dashboard.ceph.example.test",
-						Ingress: v1alpha1.StorageCephManagementIngress{Name: "lab", Address: "192.168.140.81"},
+						DNSLabel: "dashboard",
+						Ingress:  v1alpha1.StorageCephManagementIngress{Name: "lab", Address: "192.168.140.81"},
 					},
 				},
 			},
@@ -145,7 +145,6 @@ func TestNameResolutionRecordsFallBackToMachineLabelWithoutBaseDomain(t *testing
 
 	want := []string{
 		"ceph-1=192.168.140.21",
-		"dashboard.ceph.example.test=192.168.140.81",
 		"node01=192.168.140.21",
 		"rgw.example.test=192.168.140.80",
 	}

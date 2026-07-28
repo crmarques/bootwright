@@ -979,11 +979,14 @@ Rules:
   only) `retentionTime`/`retentionSize` as `retention_time`/`retention_size`. An
   authored service must resolve to at least one host.
 - `spec.ceph.management`, when set, publishes the cephadm mgmt-gateway (the HA
-  front door to the Ceph dashboard/Grafana). `ingress` is required; `dnsName`
-  defaults to `mgr.<StorageCluster.metadata.name>.<domains.storageClusters>`
-  (ADR 0018) when omitted and the environment declares a domain, mirroring node
-  FQDN composition — an explicit value always wins, and the field stays
-  required (empty is rejected) when no domain is configured to compose from.
+  front door to the Ceph dashboard/Grafana). `ingress` is required; `dnsLabel`
+  is the leftmost label only, never an FQDN, and the published name is always
+  composed as `<dnsLabel>.<StorageCluster.metadata.name>.<domains.storageClusters>`
+  (ADR 0018), mirroring node FQDN composition. `dnsLabel` defaults to `mgr` and
+  must be a valid DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) — a dotted value is
+  rejected, so the cluster and domain arms can never be overridden per cluster.
+  Without an environment domain to compose from there is no published name at
+  all and no DNS record is emitted.
   `ingress` mirrors the RGW ingress VIP shape — `name`, `address`, `prefixLength`,
   optional `virtualInterfaceNetworks[]`, optional `firstVirtualRouterID`
   (`1`-`255`; cephadm's keepalived VRRP router ID, rendered verbatim as
@@ -1209,10 +1212,10 @@ Rules:
   omitted, it defaults to
   `<StorageObjectGateway.metadata.name>.<StorageCluster.metadata.name>.<domains.storageClusters>`
   (ADR 0018) when the environment declares a domain — the same composition
-  `spec.ceph.management.dnsName` defaults from, keyed by the gateway's own
-  name so multiple gateways on one cluster never collide. An explicit value
-  always wins, and the field stays required (empty is rejected) when no
-  domain is configured to compose from.
+  `spec.ceph.management.dnsLabel` feeds, keyed by the gateway's own
+  name so multiple gateways on one cluster never collide. Unlike the management
+  gateway, an explicit FQDN always wins here, and the field stays required
+  (empty is rejected) when no domain is configured to compose from.
 - `spec.ceph.placement` defaults to every topology host with the `rgw` role;
   `sites`/`hosts` narrow the selection. On stretch-mode clusters the resolved
   placement must cover at least two hosts per data site — unless `sites`

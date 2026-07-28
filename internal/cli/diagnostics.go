@@ -138,6 +138,17 @@ func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
 			Remediation: remediation,
 			Message:     message,
 		}, true
+	case "StorageCephManagement":
+		if field != "dnsName" {
+			return Diagnostic{}, false
+		}
+		return Diagnostic{
+			Object:      "StorageCluster",
+			Field:       "spec.ceph.management.dnsName",
+			Rule:        "spec.ceph.management.dnsName was replaced by dnsLabel",
+			Remediation: "set spec.ceph.management.dnsLabel to the leftmost label only; the published name is composed as <dnsLabel>.<StorageCluster name>.<Environment spec.domains.storageClusters>",
+			Message:     message,
+		}, true
 	default:
 		return Diagnostic{}, false
 	}

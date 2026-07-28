@@ -1,6 +1,33 @@
 package stateview
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"strings"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+func StorageClustersDomain(state v1alpha1.State) string {
+	env := Environment(state)
+	if env == nil {
+		return ""
+	}
+	return strings.TrimSpace(env.Spec.Domains.StorageClustersDomain())
+}
+
+func StorageManagementFQDN(state v1alpha1.State, cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
+		return ""
+	}
+	domain := StorageClustersDomain(state)
+	if domain == "" {
+		return ""
+	}
+	label := cluster.Spec.Ceph.Management.DNSLabel
+	if label == "" {
+		label = v1alpha1.StorageCephManagementDefaultDNSLabel
+	}
+	return ComposeFQDN(label, cluster.Metadata.Name, domain)
+}
 
 func ClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
 	for _, cluster := range state.StorageClusters {

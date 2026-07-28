@@ -362,7 +362,7 @@ dashboard URL, and the dashboard password file. Run the health check it prints;
 and the mgmt-gateway plus ingress services.
 
 The Ceph Dashboard is served HA through the native mgmt-gateway at
-`https://dashboard.ceph.bootwright.test:8443` (its keepalived VIP is
+`https://dashboard.ceph-ibm.bootwright.test:8443` (its keepalived VIP is
 `192.168.140.81`); the S3 endpoint is `http://rgw.ceph.bootwright.test` (RGW
 ingress VIP `192.168.140.80`).
 

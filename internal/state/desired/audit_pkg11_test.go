@@ -87,7 +87,7 @@ func TestValidateManagementIngressStretchCoverage(t *testing.T) {
 	cluster := storageValidationState().StorageClusters[0]
 	mgmtWith := func(sites []string) *v1alpha1.StorageCephManagement {
 		return &v1alpha1.StorageCephManagement{
-			DNSName: "dash.example.test",
+			DNSLabel: "dash",
 			Ingress: v1alpha1.StorageCephManagementIngress{
 				Name:         "dash",
 				Address:      "10.0.0.9",

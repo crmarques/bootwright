@@ -394,22 +394,22 @@ func nodeFQDN(name, clusterName, baseDomain string) string {
 }
 
 func normalizeStorageDNSAliases(state *v1alpha1.State) {
-	storageDomain := ""
-	if env := primaryEnvironment(state); env != nil {
-		storageDomain = env.Spec.Domains.StorageClustersDomain()
-	}
-	if storageDomain == "" {
-		return
-	}
 	for i := range state.StorageClusters {
 		cluster := &state.StorageClusters[i]
 		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
 			continue
 		}
 		mgmt := cluster.Spec.Ceph.Management
-		if mgmt.DNSName == "" {
-			mgmt.DNSName = stateview.ComposeFQDN("mgr", cluster.Metadata.Name, storageDomain)
+		if mgmt.DNSLabel == "" {
+			mgmt.DNSLabel = v1alpha1.StorageCephManagementDefaultDNSLabel
 		}
+	}
+	storageDomain := ""
+	if env := primaryEnvironment(state); env != nil {
+		storageDomain = env.Spec.Domains.StorageClustersDomain()
+	}
+	if storageDomain == "" {
+		return
 	}
 	clusters := indexStorageClusters(state.StorageClusters)
 	for i := range state.StorageObjectGateways {

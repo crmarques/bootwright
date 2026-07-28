@@ -110,7 +110,7 @@ spec:
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
-| `ceph.management` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it. See [The management gateway and HA dashboard](../advanced/ceph-topologies.md#the-management-gateway-and-ha-dashboard). |
+| `ceph.management` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it. `management.dnsLabel` is the leftmost label only (default `mgr`) — the published name is composed as `<dnsLabel>.<StorageCluster name>.<domains.storageClusters>`, so a dotted value is rejected. See [The management gateway and HA dashboard](../advanced/ceph-topologies.md#the-management-gateway-and-ha-dashboard). |
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
 | `ceph.topology` | Yes | — | Nodes, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
 

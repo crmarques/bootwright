@@ -289,14 +289,14 @@ sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-lab/secrets/ceph-node-ssh \
 
 The S3 endpoint is `http://rgw.ceph.bootwright.test` (RGW ingress VIP
 `192.168.140.80`) and the Ceph Dashboard is served HA through the native
-`mgmt-gateway` at `https://dashboard.ceph.bootwright.test:8443` (a separate
+`mgmt-gateway` at `https://dashboard.ceph-ibm.bootwright.test:8443` (a separate
 mgmt-gateway VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
 `bootwright cluster info` reports that dashboard URL plus the admin password
 file:
 
 ```bash
 bootwright cluster info --name ceph-ibm
-# Dashboard: https://dashboard.ceph.bootwright.test:8443
+# Dashboard: https://dashboard.ceph-ibm.bootwright.test:8443
 # Dashboard user: admin
 # Dashboard password file: .../secrets/dashboard-password
 ```
@@ -310,7 +310,7 @@ The lab dnsmasq (the `lab-dns` component on the bastion, `192.168.140.1`) is
 authoritative for `*.bootwright.test` — it serves the node FQDNs, the RGW
 endpoint, and the dashboard VIP. The Ceph nodes point at it automatically; your
 **workstation does not**, so `rgw.ceph.bootwright.test` and
-`dashboard.ceph.bootwright.test` will not resolve in your browser until you
+`dashboard.ceph-ibm.bootwright.test` will not resolve in your browser until you
 point the host at it.
 
 First confirm the record is actually served — this queries the dnsmasq directly,
@@ -318,7 +318,7 @@ bypassing your host resolver. If it comes back empty, run `bootwright apply
 --yes` first (apply is what generates the records into the dnsmasq config):
 
 ```bash
-dig +short @192.168.140.1 dashboard.ceph.bootwright.test   # expect 192.168.140.81
+dig +short @192.168.140.1 dashboard.ceph-ibm.bootwright.test   # expect 192.168.140.81
 ```
 
 Then add **split DNS** on the host so that only `*.bootwright.test` is sent to
@@ -345,11 +345,11 @@ Verify the host now resolves it, then open the URL (the dashboard serves a
 self-signed cert, so accept the browser warning):
 
 ```bash
-resolvectl query dashboard.ceph.bootwright.test   # expect 192.168.140.81 via vbr-ceph-ibm
+resolvectl query dashboard.ceph-ibm.bootwright.test   # expect 192.168.140.81 via vbr-ceph-ibm
 ```
 
 If your workstation does not run systemd-resolved, the fallback is a static
-`/etc/hosts` entry (`192.168.140.81 dashboard.ceph.bootwright.test`,
+`/etc/hosts` entry (`192.168.140.81 dashboard.ceph-ibm.bootwright.test`,
 `192.168.140.80 rgw.ceph.bootwright.test`) — simpler, but it bypasses the lab
 dnsmasq and you maintain it by hand.
 

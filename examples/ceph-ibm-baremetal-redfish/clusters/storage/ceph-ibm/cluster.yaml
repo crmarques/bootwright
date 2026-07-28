@@ -29,7 +29,7 @@ spec:
         - 10.20.30.0/24
 
     management:
-      dnsName: dashboard.ceph-ibm.example.com
+      dnsLabel: dashboard
       ingress:
         name: mgmt
         address: 10.20.30.81

@@ -332,7 +332,18 @@ ceph:
 dashboard a single highly-available VIP that floats across the mgr hosts instead
 of pinning operators to the active mgr's address. The VIP and its DNS name show
 up in `bootwright cluster info`, and a managed `nameResolution` component
-should publish that name. The `ceph-ibm-libvirt-lab` and
+should publish that name.
+
+You do not spell that name out. `spec.ceph.management.dnsLabel` is the leftmost
+label only — Bootwright composes the published name as
+`<dnsLabel>.<StorageCluster name>.<domains.storageClusters>`, the same
+composition that gives Ceph nodes their FQDNs. `dnsLabel` defaults to `mgr`, so
+a `ceph-ibm` cluster on `example.com` publishes `mgr.ceph-ibm.example.com`
+untouched, and `dnsLabel: dashboard` publishes
+`dashboard.ceph-ibm.example.com`. A dotted value is rejected: the cluster and
+domain arms are not overridable per cluster.
+
+The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
 dashboard end to end.
 
@@ -340,7 +351,7 @@ Two optional blocks secure the gateway:
 
 - `spec.ceph.management.tls` (`certificateRef` + `keyRef`, both required
   together) supplies a real certificate for the gateway frontend (cephadm
-  `ssl_certificate` / `ssl_certificate_key`). Without it the published `dnsName`
+  `ssl_certificate` / `ssl_certificate_key`). Without it the composed name
   serves a self-signed cert that browsers reject.
 - `spec.ceph.management.enableAuth: true` puts the dashboard behind SSO and
   **requires** `spec.ceph.management.oauth2Proxy` — Bootwright deploys the

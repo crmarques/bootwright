@@ -110,13 +110,14 @@ func managementHostRecords(state v1alpha1.State, entryName string) []dnsmasqReco
 			continue
 		}
 		mgmt := sc.Spec.Ceph.Management
-		if mgmt.DNSName == "" || mgmt.Ingress.Address == "" {
+		dnsName := stateview.StorageManagementFQDN(state, sc)
+		if dnsName == "" || mgmt.Ingress.Address == "" {
 			continue
 		}
 		if !storageClusterUsesNameResolution(state, sc.Metadata.Name, entryName) {
 			continue
 		}
-		records = append(records, dnsmasqRecord{name: mgmt.DNSName, address: mgmt.Ingress.Address})
+		records = append(records, dnsmasqRecord{name: dnsName, address: mgmt.Ingress.Address})
 	}
 	return records
 }

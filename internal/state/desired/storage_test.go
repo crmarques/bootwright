@@ -182,7 +182,7 @@ func TestStorageIngressVRRPCollisionOnSharedL2Rejected(t *testing.T) {
 		FirstVirtualRouterID:     51,
 	}}
 	state.StorageClusters[0].Spec.Ceph.Management = &v1alpha1.StorageCephManagement{
-		DNSName: "mgr.ceph.example.test",
+		DNSLabel: "mgr",
 		Ingress: v1alpha1.StorageCephManagementIngress{
 			Name: "mgmt", Address: "192.168.140.81", PrefixLength: 24,
 			VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
@@ -1235,10 +1235,13 @@ func TestStorageManagementAuthGate(t *testing.T) {
 		mgmt *v1alpha1.StorageCephManagement
 		want string
 	}{
-		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
-		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
-		{name: "valid-auth", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
-		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSName: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" is not a declared Secret`},
+		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
+		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
+		{name: "valid-auth", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
+		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" is not a declared Secret`},
+		{name: "dns-label-fqdn", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "dash.example.test", Ingress: baseIngress}, want: `dnsLabel "dash.example.test" is not a valid DNS label`},
+		{name: "dns-label-uppercase", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "Dash", Ingress: baseIngress}, want: `dnsLabel "Dash" is not a valid DNS label`},
+		{name: "dns-label-omitted", mgmt: &v1alpha1.StorageCephManagement{Ingress: baseIngress}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

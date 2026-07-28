@@ -33,7 +33,7 @@ spec:
         - 192.168.140.0/24
 
     management:
-      dnsName: dashboard.ceph.bootwright.test
+      dnsLabel: dashboard
       ingress:
         name: lab
         address: 192.168.140.81

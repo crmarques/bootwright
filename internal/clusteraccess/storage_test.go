@@ -108,7 +108,7 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 }
 
 func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
-	managementCluster := func(port int) v1alpha1.StorageCluster {
+	managementCluster := func(label string, port int) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
 			Spec: v1alpha1.StorageClusterSpec{
@@ -116,8 +116,8 @@ func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Management: &v1alpha1.StorageCephManagement{
-						DNSName: "dashboard.ceph.bootwright.test",
-						Port:    port,
+						DNSLabel: label,
+						Port:     port,
 						Ingress: v1alpha1.StorageCephManagementIngress{
 							Name: "lab", Address: "192.168.140.81", PrefixLength: 24,
 						},
@@ -126,17 +126,28 @@ func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
 			},
 		}
 	}
+	environment := v1alpha1.Environment{
+		Metadata: v1alpha1.Metadata{Name: "lab"},
+		Spec: v1alpha1.EnvironmentSpec{
+			Domains: v1alpha1.EnvironmentDomainsSpec{Base: "bootwright.test"},
+		},
+	}
 
 	for _, tc := range []struct {
-		name string
-		port int
-		want string
+		name  string
+		label string
+		port  int
+		want  string
 	}{
-		{"default port", 0, "https://dashboard.ceph.bootwright.test:8443"},
-		{"explicit port", 9443, "https://dashboard.ceph.bootwright.test:9443"},
+		{"default port", "dashboard", 0, "https://dashboard.ceph-ibm.bootwright.test:8443"},
+		{"explicit port", "dashboard", 9443, "https://dashboard.ceph-ibm.bootwright.test:9443"},
+		{"default label", "", 0, "https://mgr.ceph-ibm.bootwright.test:8443"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{managementCluster(tc.port)}}
+			state := v1alpha1.State{
+				Environments:    []v1alpha1.Environment{environment},
+				StorageClusters: []v1alpha1.StorageCluster{managementCluster(tc.label, tc.port)},
+			}
 			summaries := StorageSummaries(state, "")
 			if len(summaries) != 1 {
 				t.Fatalf("summaries = %+v, want one storage cluster", summaries)
