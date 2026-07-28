@@ -738,7 +738,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	for _, playbook := range state.CustomPlaybooks {
 		for i, ref := range playbook.Spec.SecretRefs {
-			require(fmt.Sprintf("CustomCustomPlaybook/%s spec.secretRefs[%d]", playbook.Metadata.Name, i), ref)
+			require(fmt.Sprintf("CustomPlaybook/%s spec.secretRefs[%d]", playbook.Metadata.Name, i), ref)
 		}
 	}
 	for _, addon := range state.ClusterAddons {

@@ -9,21 +9,33 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-preferred-id-key"}
+
 func stripLeadingGlobalFlags(args []string) []string {
 	for len(args) > 0 {
-		switch {
-		case args[0] == "--context":
+		flag, ok := leadingGlobalValueFlag(args[0])
+		if !ok {
+			return args
+		}
+		if args[0] == flag {
 			if len(args) < 2 {
 				return nil
 			}
 			args = args[2:]
-		case strings.HasPrefix(args[0], "--context="):
-			args = args[1:]
-		default:
-			return args
+			continue
 		}
+		args = args[1:]
 	}
 	return args
+}
+
+func leadingGlobalValueFlag(arg string) (string, bool) {
+	for _, flag := range globalValueFlags {
+		if arg == flag || strings.HasPrefix(arg, flag+"=") {
+			return flag, true
+		}
+	}
+	return "", false
 }
 
 const (
@@ -37,7 +49,7 @@ const (
 	flagAskBecomePassUsage     = "prompt for the Ansible become password (default: false as root, true otherwise)"
 	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
 	flagContextUsage           = "context to operate in (default: current context)"
-	flagPreferredSSHIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
+	flagSSHPreferredIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
 	flagSSHUserUsage           = "log in as this account when reaching machines, instead of the one the desired state declares; accounts Bootwright creates are unaffected, so a Ceph cluster still orchestrates as its spec.ceph.cephadm.clusterSSH.user"
 	flagVerboseUsage           = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )

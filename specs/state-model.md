@@ -339,7 +339,7 @@ Rules:
   cluster key, and `rootLogin: revoke` when that user is not `root`. Such a
   Machine authors no `access` at all. A topology node the cluster does not
   install authors its own `access.ssh` and keeps `rootLogin: keep` by default.
-- The operator may pass `--preferred-ssh-id-key <path>` on any command that
+- The operator may pass `--ssh-preferred-id-key <path>` on any command that
   reaches a machine. The named private key is offered ahead of the declared
   credentials and the declared credentials remain the fallback. It is a
   per-invocation preference: it never enters desired state, the converge hash,
@@ -1502,7 +1502,18 @@ Rules:
   - `hooks[].secretRefs[]` name `Secret`s materialized into the hook's scoped
     per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
     secrets, never the whole store. `hooks[].extraVars` is a free-form map handed
-    to the playbook as one JSON `-e` value.
+    to the playbook as one JSON `-e` value. It MUST NOT carry a connection or
+    privilege-escalation key (`ansible_user`, `ansible_ssh_user`, `ansible_host`,
+    `ansible_ssh_host`, `ansible_port`, `ansible_ssh_port`, `ansible_connection`,
+    `ansible_password`, `ansible_ssh_pass`, `ansible_private_key_file`,
+    `ansible_ssh_private_key_file`, `ansible_ssh_common_args`,
+    `ansible_ssh_extra_args`, `ansible_become`, `ansible_become_user`,
+    `ansible_become_method`, `ansible_become_pass`, `ansible_become_password`):
+    an extra var outranks every inventory value, so one would silently repoint
+    the identity Bootwright connects and escalates with for every host in the
+    run, past the declared access, the recorded host-key trust, and the
+    `--ssh-user` override. The same restriction applies to
+    `CustomPlaybook.spec.extraVars`. Validation rejects it.
   - `hooks[].timeout` bounds the playbook run (a Go duration; default `10m`).
     `hooks[].run` is `onChange` (default: skip a hook whose content and resolved
     inputs are unchanged since the last reconcile) or `always`.

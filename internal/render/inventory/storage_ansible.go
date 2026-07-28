@@ -92,6 +92,9 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 		entry = machineInventoryEntry(state, machine, env, paths, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
+		if paths.SSHUser != "" {
+			entry["ansible_user"] = paths.SSHUser
+		}
 	}
 	entry["bootwright_host_name"] = storageInventoryHostName(cluster, nodeName)
 	entry["bootwright_storage_cluster_name"] = cluster.Metadata.Name

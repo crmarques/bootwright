@@ -43,7 +43,7 @@ Two access shapes deliberately hold no reference. `auth.controllerIdentity`
 authenticates as the operator running Bootwright, using that operator's own
 agent and default identities: no key material enters the context, and the
 effective credential is whatever that operator already holds. The
-`--preferred-ssh-id-key` flag likewise names a controller-local private key
+`--ssh-preferred-id-key` flag likewise names a controller-local private key
 offered ahead of the declared credentials, with the declared credentials as
 fallback; it is refused unless the file is a regular file with no group or other
 permissions, and it is never recorded in desired state, the converge hash, or

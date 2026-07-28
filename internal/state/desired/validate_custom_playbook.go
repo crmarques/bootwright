@@ -28,7 +28,7 @@ func validateCustomPlaybooks(state v1alpha1.State) []string {
 	secrets := indexSecrets(state.Secrets)
 
 	for _, p := range state.CustomPlaybooks {
-		prefix := fmt.Sprintf("CustomCustomPlaybook/%s spec", p.Metadata.Name)
+		prefix := fmt.Sprintf("CustomPlaybook/%s spec", p.Metadata.Name)
 		if msg := validateName(v1alpha1.KindCustomPlaybook, p.Metadata.Name); msg != "" {
 			errs = append(errs, msg)
 		}
@@ -58,6 +58,7 @@ func validateCustomPlaybooks(state v1alpha1.State) []string {
 		}
 
 		errs = append(errs, validateCustomPlaybookTags(prefix, p)...)
+		errs = append(errs, validateReservedExtraVars(prefix+".extraVars", p.Spec.ExtraVars)...)
 		errs = append(errs, validateCustomPlaybookTarget(prefix, p, machines, containers, storage)...)
 	}
 
@@ -181,7 +182,7 @@ func validateCustomPlaybookOrdering(playbooks []v1alpha1.CustomPlaybook) []strin
 					continue
 				}
 				if owner, dup := provider[cap]; dup {
-					errs = append(errs, fmt.Sprintf("CustomCustomPlaybook/%s spec.provides %q is already provided by CustomPlaybook/%s at the same anchor", p.Metadata.Name, cap, owner))
+					errs = append(errs, fmt.Sprintf("CustomPlaybook/%s spec.provides %q is already provided by CustomPlaybook/%s at the same anchor", p.Metadata.Name, cap, owner))
 					continue
 				}
 				provider[cap] = p.Metadata.Name
@@ -190,7 +191,7 @@ func validateCustomPlaybookOrdering(playbooks []v1alpha1.CustomPlaybook) []strin
 		for _, p := range bucket {
 			for _, cap := range p.Spec.Requires {
 				if _, ok := provider[cap]; !ok {
-					errs = append(errs, fmt.Sprintf("CustomCustomPlaybook/%s spec.requires %q is not provided by any playbook at the same anchor", p.Metadata.Name, cap))
+					errs = append(errs, fmt.Sprintf("CustomPlaybook/%s spec.requires %q is not provided by any playbook at the same anchor", p.Metadata.Name, cap))
 				}
 			}
 		}

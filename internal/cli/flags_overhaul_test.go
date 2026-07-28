@@ -63,6 +63,7 @@ func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 		{"cluster info --cluster", []string{"cluster", "info", "--cluster", "managed-01"}, "--cluster"},
 		{"machine trust --hosts", []string{"machine", "trust", "--hosts", "provider-01"}, "--hosts"},
 		{"example init --output", []string{"example", "init", "--name", "lab", "--output", t.TempDir()}, "--output"},
+		{"global --preferred-ssh-id-key", []string{"version", "--preferred-ssh-id-key", "/x"}, "--preferred-ssh-id-key"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -86,6 +87,9 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 		{[]string{"--context=lab", "destroy", "--stage", "infra"}, []string{"destroy", "--stage", "infra"}},
 		{[]string{"apply", "--context", "lab"}, []string{"apply", "--context", "lab"}},
 		{[]string{"--context"}, nil},
+		{[]string{"--ssh-user", "operator", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-preferred-id-key=/k", "--ssh-user=operator", "--context", "lab", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-user"}, nil},
 		{nil, nil},
 	}
 	for _, tc := range cases {
@@ -100,5 +104,11 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 	}
 	if !argsNeedLocalRoot(stripLeadingGlobalFlags([]string{"--context", "lab", "apply"})) {
 		t.Fatal("`--context lab apply` should be rootful")
+	}
+	if !argsNeedLocalRoot(stripLeadingGlobalFlags([]string{"--ssh-user", "operator", "apply"})) {
+		t.Fatal("`--ssh-user operator apply` should be rootful; a global flag before the subcommand must not skip the gate")
+	}
+	if !argsHaveUnusableSSHUser([]string{"--ssh-user", "root@evil", "apply"}) {
+		t.Fatal("a leading unusable --ssh-user must keep the gate rootless so cobra reports the flag error")
 	}
 }

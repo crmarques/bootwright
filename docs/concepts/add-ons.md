@@ -386,7 +386,7 @@ everywhere else in the input tree.
 | `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
 | `steps[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
 | `steps[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
-| `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. |
+| `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. Connection and `become` keys (`ansible_user`, `ansible_host`, `ansible_connection`, `ansible_ssh_*`, `ansible_become*`, …) are rejected: an extra var outranks the inventory, so one would repoint the identity Bootwright connects as for every host in the run. |
 | `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
 | `steps[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
 | `steps[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |

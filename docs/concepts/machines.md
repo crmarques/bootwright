@@ -242,13 +242,13 @@ preflight` checks for it. Prefer a key wherever the machine allows one.
 
 #### Offering your own key first
 
-`--preferred-ssh-id-key <path>` is available on every command that reaches a
+`--ssh-preferred-id-key <path>` is available on every command that reaches a
 machine. Bootwright offers that key **before** the credentials the desired
 state declares, and falls back to them when it is not accepted:
 
 ```console
-$ bootwright apply --preferred-ssh-id-key ~/.ssh/id_ed25519 --yes
-$ bootwright machine rsh --name ceph-0 --preferred-ssh-id-key ~/.ssh/id_ed25519
+$ bootwright apply --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
+$ bootwright machine rsh --name ceph-0 --ssh-preferred-id-key ~/.ssh/id_ed25519
 ```
 
 It is a per-invocation operator preference, never desired state: it is not
@@ -266,14 +266,14 @@ to name too:
 ```console
 $ bootwright machine exec --name ceph-dc3-arbiter --ssh-user operator -- id
 $ bootwright apply --machines ceph-dc3-arbiter --ssh-user operator \
-    --preferred-ssh-id-key ~/.ssh/id_ed25519 --yes
+    --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
 ```
 
 It does not move an account Bootwright **creates or manages**. A Ceph cluster
 still orchestrates as its `clusterSSH.user`, and a managed-OS install still
 provisions the login `auth.provision` names — so on a Ceph node the override
 changes the identity Bootwright logs in with and leaves the `cephadm` account it
-provisions there alone. Like `--preferred-ssh-id-key`, the value never enters
+provisions there alone. Like `--ssh-preferred-id-key`, the value never enters
 desired state or an ownership record, and it is refused unless it is a valid
 POSIX user name.
 
@@ -434,7 +434,7 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 ```
 
 Add `--ssh-user <name>` to log in as a different account for that one
-invocation, and `--preferred-ssh-id-key <path>` to offer your own key first.
+invocation, and `--ssh-preferred-id-key <path>` to offer your own key first.
 
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`

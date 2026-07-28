@@ -204,6 +204,18 @@ operator code as root over every context's secrets. Secrets named in
 their values never reach the command line. `extraVars` arrive as a single JSON
 `-e` value.
 
+Because an Ansible extra var outranks every inventory value, `extraVars` may not
+carry a connection or privilege-escalation key — `ansible_user`,
+`ansible_ssh_user`, `ansible_host`, `ansible_port`, `ansible_connection`,
+`ansible_password`, `ansible_ssh_pass`, `ansible_private_key_file`,
+`ansible_ssh_private_key_file`, `ansible_ssh_common_args`,
+`ansible_ssh_extra_args`, or any `ansible_become*` key. One of them would
+silently repoint the identity Bootwright connects as for **every** host in the
+run — past the account declared on the `Machine`, past a storage cluster's
+`cephadm.clusterSSH.user`, past the recorded host-key trust, and past
+`--ssh-user` — so validation rejects it. Declare the login in desired state, or
+override it for one invocation with `--ssh-user`.
+
 ## Selecting work with tags
 
 `spec.tags` and `spec.skipTags` are the `--tags` and `--skip-tags` you would pass

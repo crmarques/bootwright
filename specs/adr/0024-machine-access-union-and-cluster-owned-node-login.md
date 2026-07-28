@@ -156,7 +156,7 @@ and `sudo`, and loses `authorizeMachineSSHKey`.
 
 ### Per-invocation SSH preferences
 
-Every command that reaches a machine accepts `--preferred-ssh-id-key <path>`.
+Every command that reaches a machine accepts `--ssh-preferred-id-key <path>`.
 The key is offered **before** the credentials desired state declares, which
 remain the fallback — OpenSSH tries identities in order, so this needs no
 fallback logic of its own. It is refused unless the path is a regular file with
@@ -191,7 +191,7 @@ one operator's key path or account name from an earlier one.
   pass applied afterwards.
 - Bootwright ships no default password. Operators who want console recovery name
   a `Secret` and get a real, per-environment credential.
-- `controllerIdentity`, `--preferred-ssh-id-key`, and `--ssh-user` introduce
+- `controllerIdentity`, `--ssh-preferred-id-key`, and `--ssh-user` introduce
   ambient, per-operator authority into a product that otherwise references every
   credential by name.
   This is a deliberate trade for the "machines I already administer" case and is

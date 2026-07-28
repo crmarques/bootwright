@@ -102,6 +102,18 @@ func TestSSHUserMovesTheStorageNodeConnectionNotTheClusterAccount(t *testing.T) 
 	}
 }
 
+func TestSSHUserReachesAStorageNodeWithNoDeclaredSSHAccess(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginKeep)
+	for i := range state.Machines {
+		state.Machines[i].Spec.Access.SSH = nil
+	}
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SSHUser: "operator"}, locality.Policy{})
+	if entry["ansible_user"] != "operator" {
+		t.Fatalf("ansible_user = %v, want the override; without it Ansible falls back to the account running bootwright, which is root under the local-root gate", entry["ansible_user"])
+	}
+}
+
 func TestStorageNodeAccessCarriesThePreferredIdentity(t *testing.T) {
 	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginKeep)
 	node := cluster.Spec.Ceph.Topology.Nodes[0]
