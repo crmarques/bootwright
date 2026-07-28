@@ -3,21 +3,19 @@
   ansible.builtin.assert:
     that:
       - bootwright_node_access.user | default('') | length > 0
-      - bootwright_node_access.installUser | default('') | length > 0
       - bootwright_node_access.address | default('') | length > 0
       - bootwright_node_access.connectionAddress | default('') | length > 0
       - bootwright_node_access.sudoersPath | default('') | length > 0
       - bootwright_node_access.sshdDropInPath | default('') | length > 0
       - bootwright_node_access.markerPath | default('') | length > 0
-      - bootwright_node_access.installPrivateKeyPath | default('') | length > 0
-      - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+      - bootwright_node_access.accountPublicKeyPath | default('') | length > 0
     fail_msg: >-
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} in storage
       cluster {{ bootwright_storage_cluster_name | default('<storage-cluster>') }} has an
       incomplete node-access context, so Bootwright cannot reconcile the Ceph
-      orchestration account without guessing an identity. It needs the Machine's
-      spec.access.ssh key pair (both halves must resolve from the referenced Secret), a
-      reachable address, and spec.access.ssh.user. Fix the Machine and re-apply.
+      orchestration account without guessing an identity. It needs a reachable address and
+      spec.ceph.cephadm.clusterSSH.keyRef resolving to an sshKeyPair Secret whose public
+      half is materialized. Fix the StorageCluster and re-apply.
   delegate_to: localhost
   become: false
 
@@ -27,6 +25,7 @@
       {{
         [bootwright_node_access.user]
         if (bootwright_node_access.installIdentity | default(false) | bool)
+        or (bootwright_node_access.installUser | default('') | length == 0)
         else [bootwright_node_access.user, bootwright_node_access.installUser]
       }}
   delegate_to: localhost
@@ -39,10 +38,15 @@
       {{
         [
           'timeout', bootwright_node_access_ssh_timeout | string,
-          'ssh',
-          '-i', bootwright_node_access.installPrivateKeyPath,
+          'ssh'
+        ]
+        + (
+          ['-i', bootwright_node_access.installPrivateKeyPath, '-o', 'IdentitiesOnly=yes']
+          if (bootwright_node_access.installPrivateKeyPath | default('') | length) > 0
+          else []
+        )
+        + [
           '-o', 'BatchMode=yes',
-          '-o', 'IdentitiesOnly=yes',
           '-o', 'GSSAPIAuthentication=no',
           '-o', 'ConnectTimeout=' ~ (bootwright_node_access_ssh_connect_timeout | string),
           '-o', 'ServerAliveInterval=15',
@@ -64,12 +68,38 @@
 - name: Resolve storage node access endpoints
   ansible.builtin.set_fact:
     bootwright_node_access_target_endpoint: "{{ bootwright_node_access.user }}@{{ bootwright_node_access.address }}"
-    bootwright_node_access_install_endpoint: "{{ bootwright_node_access.installUser }}@{{ bootwright_node_access.address }}"
-    bootwright_node_access_public_key: "{{ lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) | trim }}"
+    bootwright_node_access_install_endpoint: >-
+      {{
+        ((bootwright_node_access.installUser ~ '@') if (bootwright_node_access.installUser | default('') | length) > 0 else '')
+        ~ bootwright_node_access.address
+      }}
+    bootwright_node_access_public_key: "{{ lookup('ansible.builtin.file', bootwright_node_access.accountPublicKeyPath) | trim }}"
     bootwright_node_access_sudoers_temp: "{{ bootwright_node_access.sudoersPath }}{{ bootwright_node_access_temp_suffix }}"
     bootwright_node_access_sudoers_lines:
       - "Defaults:{{ bootwright_node_access.user }} !requiretty"
       - "{{ bootwright_node_access.user }} ALL=(ALL) NOPASSWD: ALL"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Probe the storage node ambient install account name
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_install_endpoint, 'id -un'] }}"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_ambient_probe
+  changed_when: false
+  failed_when: false
+  when: (bootwright_node_access.installUser | default('') | length) == 0
+
+- name: Resolve the storage node install account name
+  ansible.builtin.set_fact:
+    bootwright_node_access_install_account: >-
+      {{
+        bootwright_node_access.installUser
+        if (bootwright_node_access.installUser | default('') | length) > 0
+        else (bootwright_node_access_ambient_probe.stdout | default('') | trim)
+      }}
   delegate_to: localhost
   become: false
   changed_when: false
@@ -96,9 +126,9 @@
       - bootwright_node_access_public_key | length > 0
       - bootwright_node_access_public_key is search('^(ssh|ecdsa|sk-)')
     fail_msg: >-
-      {{ bootwright_node_access.installPublicKeyPath }} does not hold an OpenSSH public key
+      {{ bootwright_node_access.accountPublicKeyPath }} does not hold an OpenSSH public key
       for Machine {{ bootwright_storage_node_name | default(inventory_hostname) }}, so
       Bootwright will not append it to an authorized_keys file. Re-render the context so
-      the Machine's spec.access.ssh keyRef Secret resolves to its public half, then re-apply.
+      spec.ceph.cephadm.clusterSSH.keyRef resolves to its public half, then re-apply.
   delegate_to: localhost
   become: false

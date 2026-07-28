@@ -40,9 +40,17 @@ keyboard {{ localization.keyboard | default('us', true) }}
 {% set ntp_flag = (' --ntpservers=' ~ (ntp_sources | join(','))) if (ntp_sources | length > 0) else '' %}
 timezone {{ localization.timezone | default('UTC', true) }} --utc{{ ntp_flag }}
 {% set ssh_user = ks.sshUser | default('root', true) %}
-{% set ssh_password_hash = ks.sshPasswordHash | default('', true) %}
-{% if ssh_user == 'root' and ssh_password_hash | length > 0 %}
-rootpw --iscrypted --allow-ssh {{ ssh_password_hash }}
+{% set initial_password_path = ks.initialPasswordPath | default('', true) %}
+{% if initial_password_path | length > 0 %}
+{% set initial_password = lookup('ansible.builtin.file', initial_password_path) | trim %}
+{% if initial_password | length == 0 %}
+{{ undef(hint='machineOSInstall initialPassword secret ' ~ initial_password_path ~ ' is empty; it must hold the plaintext console password for ' ~ ssh_user ~ '. Set the secret, or drop customizations.ssh.initialPassword to leave the account locked.') }}
+{% endif %}
+{% else %}
+{% set initial_password = '' %}
+{% endif %}
+{% if ssh_user == 'root' and initial_password | length > 0 %}
+rootpw --plaintext --allow-ssh {{ initial_password }}
 {% else %}
 rootpw --lock
 {% endif %}
@@ -100,17 +108,19 @@ services{{ svc_opts }}
 {% endif %}
 
 {% set ssh_key = '' %}
-{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}
+{% if ks.sshPublicKeyPath | default('') | length > 0 %}
 {% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}
 {% endif %}
-{% if ssh_user != 'root' and ssh_password_hash | length > 0 %}
-user --name={{ ssh_user }} --groups=wheel --password={{ ssh_password_hash }} --iscrypted
+{% if ssh_key | trim | length == 0 %}
+{{ undef(hint='machineOSInstall kickstart has no public key to authorize for ' ~ ssh_user ~ '. spec.access.ssh.auth.provision.keyRef must resolve to an sshKeyPair Secret whose public half is materialized, otherwise the installed machine would accept no login at all.') }}
+{% endif %}
+{% set sudo_policy = ks.sudo | default('nopasswd', true) %}
+{% if ssh_user != 'root' and initial_password | length > 0 %}
+user --name={{ ssh_user }} --password={{ initial_password }} --plaintext
 {% elif ssh_user != 'root' %}
-user --name={{ ssh_user }} --groups=wheel --lock
+user --name={{ ssh_user }} --lock
 {% endif %}
-{% if ssh_key | length > 0 %}
 sshkey --username={{ ssh_user }} "{{ ssh_key | trim }}"
-{% endif %}
 
 {% if sat_enabled and sat_ca %}
 # Trust the corporate Satellite CA inside the installer runtime before the rhsm
@@ -169,9 +179,12 @@ cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT
 BOOTWRIGHT_SATELLITE_CA
 update-ca-trust extract
 {% endif %}
-{% if ssh_user != 'root' %}
-echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/99-bootwright-wheel
-chmod 0440 /etc/sudoers.d/99-bootwright-wheel
+{% if ssh_user != 'root' and sudo_policy == 'nopasswd' %}
+cat > /etc/sudoers.d/60-bootwright-{{ ssh_user }} <<'BOOTWRIGHT_SUDOERS'
+Defaults:{{ ssh_user }} !requiretty
+{{ ssh_user }} ALL=(ALL) NOPASSWD: ALL
+BOOTWRIGHT_SUDOERS
+chmod 0440 /etc/sudoers.d/60-bootwright-{{ ssh_user }}
 {% endif %}
 {% if ssh_user == 'root' and ssh_key | length > 0 %}
 install -d -m 0700 -o root -g root /root/.ssh
@@ -182,18 +195,14 @@ chmod 0600 /root/.ssh/authorized_keys
 chown root:root /root/.ssh /root/.ssh/authorized_keys
 restorecon -R /root/.ssh >/dev/null 2>&1 || true
 {% endif %}
-{% if ssh_user == 'root' or not (ks.passwordAuthentication | default(false)) %}
 install -d -m 0755 /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf <<'BOOTWRIGHT_SSHD_CONFIG'
-{% if ssh_user == 'root' %}
-PermitRootLogin yes
-{% endif %}
+PermitRootLogin {{ 'yes' if ssh_user == 'root' else 'no' }}
 {% if not (ks.passwordAuthentication | default(false)) %}
 PasswordAuthentication no
 {% endif %}
 BOOTWRIGHT_SSHD_CONFIG
 chmod 0644 /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf
-{% endif %}
 {% set marker = bootwright_component.osInstall.marker | default({}) %}
 {% if marker.path | default('') | length > 0 %}
 mkdir -p {{ marker.path | dirname }}

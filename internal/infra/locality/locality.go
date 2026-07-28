@@ -40,8 +40,11 @@ func CheckController(_ v1alpha1.State, _ Policy) Result {
 }
 
 func IsControllerLocalMachine(machine v1alpha1.Machine, policy Policy) bool {
-	if v1alpha1.MachineOSProvided(machine) && machine.Spec.Access.SSH == nil {
+	if v1alpha1.MachineDeclaresLocalAccess(machine) {
 		return true
+	}
+	if machine.Spec.Access.SSH == nil {
+		return false
 	}
 	return IsControllerLocalAddress(v1alpha1.MachineSSHAddress(machine), policy)
 }

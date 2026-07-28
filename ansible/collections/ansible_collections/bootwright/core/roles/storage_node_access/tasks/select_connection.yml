@@ -10,7 +10,10 @@
     bootwright_node_access_target_endpoint: >-
       {{ bootwright_node_access.user }}@{{ bootwright_node_access.connectionAddress }}
     bootwright_node_access_install_endpoint: >-
-      {{ bootwright_node_access.installUser }}@{{ bootwright_node_access.connectionAddress }}
+      {{
+        ((bootwright_node_access.installUser ~ '@') if (bootwright_node_access.installUser | default('') | length) > 0 else '')
+        ~ bootwright_node_access.connectionAddress
+      }}
   delegate_to: localhost
   become: false
   changed_when: false
@@ -42,7 +45,9 @@
   delegate_to: localhost
   become: false
   changed_when: false
-  when: bootwright_node_access_connection_available | bool
+  when:
+    - bootwright_node_access_connection_available | bool
+    - (bootwright_node_access_ready | bool) or (bootwright_node_access.installUser | default('') | length) > 0
 
 - name: Reset the storage node connection after teardown identity selection
   ansible.builtin.meta: reset_connection

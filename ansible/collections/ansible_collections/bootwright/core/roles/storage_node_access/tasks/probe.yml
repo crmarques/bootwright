@@ -22,8 +22,9 @@
     msg: >-
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} at
       {{ bootwright_node_access.address }} did not answer as
-      {{ bootwright_node_access_identities | join(' or ') }}, using the Machine access key
-      {{ bootwright_node_access.installPrivateKeyPath }}. Bootwright refuses to guess
+      {{ bootwright_node_access_identities | join(' or ') }}, using
+      {{ bootwright_node_access.installPrivateKeyPath | default('the identity of the account running bootwright', true) }}.
+      Bootwright refuses to guess
       another identity, so the node is untouched. Power the node on and confirm sshd is
       running, then re-authorize that key for one of those accounts and confirm
       {{ bootwright_node_access.user }} still holds its NOPASSWD grant in
@@ -62,7 +63,7 @@
     bootwright_node_access_sudo: >-
       {{
         'sudo -n'
-        if ((bootwright_node_access_ready | bool) or bootwright_node_access.installUser != 'root')
+        if ((bootwright_node_access_ready | bool) or bootwright_node_access_install_account != 'root')
         else ''
       }}
   delegate_to: localhost

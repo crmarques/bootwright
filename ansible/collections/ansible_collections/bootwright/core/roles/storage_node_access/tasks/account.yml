@@ -89,7 +89,7 @@
     argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
   vars:
     bootwright_node_access_command: >-
-      getent passwd {{ bootwright_node_access.installUser | quote }}
+      getent passwd {{ bootwright_node_access_install_account | quote }}
   delegate_to: localhost
   become: false
   register: bootwright_node_access_install_entry
@@ -106,7 +106,7 @@
     fail_msg: >-
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} did not
       return a usable passwd entry for {{ bootwright_node_access.user }} or
-      {{ bootwright_node_access.installUser }}, so Bootwright cannot locate the home
+      {{ bootwright_node_access_install_account }}, so Bootwright cannot locate the home
       directories it must write authorized_keys into. Nothing was revoked. Check that
       name resolution for both accounts works on the node (getent passwd), then re-apply.
   delegate_to: localhost

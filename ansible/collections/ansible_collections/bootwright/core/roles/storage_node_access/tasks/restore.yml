@@ -81,14 +81,14 @@
   vars:
     bootwright_node_access_command: >-
       {{ bootwright_node_access_sudo }} install -d -m 0700
-      -o {{ bootwright_node_access.installUser | quote }}
+      -o {{ bootwright_node_access_install_account | quote }}
       -g {{ bootwright_node_access_install_group | quote }}
       {{ (bootwright_node_access_install_home ~ '/.ssh') | quote }}
       && printf '%s\n' {{ bootwright_node_access_public_key | quote }}
       | {{ bootwright_node_access_sudo }} tee -a
       {{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }} >/dev/null
       && {{ bootwright_node_access_sudo }} chown
-      {{ bootwright_node_access.installUser | quote }}:{{ bootwright_node_access_install_group | quote }}
+      {{ bootwright_node_access_install_account | quote }}:{{ bootwright_node_access_install_group | quote }}
       {{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }}
       && {{ bootwright_node_access_sudo }} chmod 0600
       {{ (bootwright_node_access_install_home ~ '/.ssh/authorized_keys') | quote }}
