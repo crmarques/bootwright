@@ -21,9 +21,13 @@ enforced, so the comment stock kept growing.
 ## Decision
 
 Source files carry no prose comments. The only comments allowed are
-machine-read directives: `//go:build`, `//go:embed`, `//go:generate`,
-`//nolint`, `//lint:`, `// #nosec`, `// +marker`, `# noqa`, `# shellcheck`,
-`# yamllint`, `# ansible-lint`, `# syntax=`, shebangs, and editor modelines.
+machine-read directives — build and codegen pragmas (`//go:build`,
+`//go:embed`), linter and analyzer directives (`//nolint`, `# noqa`,
+`# yamllint`, `# ansible-lint`, `# nosec`), build-file directives (`# syntax=`,
+`# shellcheck`), and shebangs. The allowlist that actually decides is the regex
+set in `internal/repo/checks/comment_policy_test.go` (`goCommentAllow`,
+`yamlCommentAllow`, `buildFileCommentAllow`), which admits a different set per
+file type; this ADR is a reading of that test, not a second source.
 
 Comment-like lines that are content rather than commentary stay: `#` lines
 inside Jinja2 templates render into shipped artifacts (kickstart, squid.conf,
@@ -55,8 +59,11 @@ policy is enforced by guard tests in
   agents consult it on failures instead of rediscovering root causes
   (`AGENTS.md` "Knowledge Lookup").
 - `doc.go` files whose only content was a package comment were deleted;
-  packages carry no godoc. Cobra help text, being string literals, is
-  unaffected.
+  packages carry no godoc. The cost falls hardest on `api/v1alpha1`, whose
+  types are the product's public contract: `go doc` and IDE hovers show no
+  field reference, and `specs/state-model.md` plus `docs/concepts/` carry that
+  contract instead (see [ADR 0014](0014-api-grammar.md)). Cobra help text,
+  being string literals, is unaffected.
 - Stripping changed file bytes of add-on hook content and operator
   provisioning playbooks, so `run: onChange` hooks re-run once on existing
   contexts after upgrading past the migration.

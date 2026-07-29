@@ -55,7 +55,7 @@ func TestClusterAddonStepSecretRefsMustBeDeclared(t *testing.T) {
 			}},
 		}
 	}
-	if errs := validateSecretReferences(state("missing")); !containsSubstr(errs, "hooks[0].secretRefs[0]") {
+	if errs := validateSecretReferences(state("missing")); !containsSubstr(errs, "steps[0].secretRefs[0]") {
 		t.Fatalf("undeclared hook secretRef must be rejected, got %v", errs)
 	}
 	if errs := validateSecretReferences(state("hook-secret")); len(errs) != 0 {

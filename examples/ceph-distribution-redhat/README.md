@@ -22,6 +22,19 @@ base/appstream and `rhceph-*-tools` repositories and logs in to
 `CustomPlaybook` (see `examples/ceph-external-rhsm`). The secret names
 below are declarations only; the bytes are supplied out of band.
 
+## Edit First
+
+- `environment.yaml`: the fleet name and `domains.base`.
+- `machine.yaml`: the provided storage node — its `ssh` address, login user, and
+  `access.ssh.auth.privateKeyRef`.
+- `secrets.yaml`: `ceph-cluster-ssh` (generated — the cephadm cluster key),
+  `ceph-node-ssh` (points at a local private-key file), and the three
+  entitlement secrets in the table below.
+- `rhcs.yaml`: the `redhat-ceph` `Entitlement` — RHSM organization/activation
+  key and registry credential references.
+- `storage.yaml`: `spec.ceph.release`, `packageVersion`, `image.version`, the
+  cephadm bootstrap node, and the node topology.
+
 ## Credentials to supply
 
 | Entitlement field | Secret | What it holds | How to set it |

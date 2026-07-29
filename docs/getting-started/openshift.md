@@ -77,7 +77,7 @@ local context. The scaffold declares four secrets:
 | --- | --- | --- |
 | `openshift-pull-secret` (`dockerConfigJson`) | OpenShift pull secret | You set it: `bootwright secret set` |
 | `my-sno-lab-cluster-admin-ssh-key` (`sshKeyPair`) | Node (core user) SSH key pair | Generated for you: `bootwright secret generate` |
-| `bastion-host-ssh` (`sshKeyPair`) | SSH private key to reach the bastion | `source.file` reference to a key you create — see [Installation](installation.md#the-bastion-ssh-key) |
+| `bastion-host-ssh` (`sshKeyPair`) | SSH private key to reach the bastion | `source.file` reference to a key you create — see [Installation](installation.md#create-the-bastion-ssh-key) |
 | `bmc-credentials` (`usernamePassword`) | Credentials for the emulated Redfish BMC | Generated for you: `bootwright secret generate` (bootwright configures the emulator) |
 
 ### Machine (`infra/machines/bastion.yaml`, `clusters/container/my-sno-lab/cluster-machines.yaml`)
@@ -129,7 +129,7 @@ The OpenShift install intent — and only install intent. It owns the release
 (`spec.distribution.release.version`), the install `platform` render mode, the
 API / api-int / ingress `endpoints` (here sourced from the `load-balancer`
 component), the node SSH key reference (`nodeSSH.keyPairRef`), cluster/service
-`networking`, and the `hosts` list that binds the logical hostname `master-0` to
+`networking`, and the `spec.nodes[]` list that binds the node name `master-0` to
 the `my-sno-lab-master-0` Machine.
 
 The ownership rule to carry forward: **`ContainerCluster` owns install intent,
@@ -146,7 +146,7 @@ Open the scaffold and adjust these for your host. The defaults form a working
 | File | Field | Set it to |
 | --- | --- | --- |
 | `environment.yaml` | `spec.domains.base` | A DNS base domain you control or route in the lab (default `example.test`). |
-| `secrets.yaml` | `Secret/bastion-host-ssh` `spec.source.file.privateKey` | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#the-bastion-ssh-key). |
+| `secrets.yaml` | `Secret/bastion-host-ssh` `spec.source.file.privateKey` | Path to the SSH key that reaches the bastion (default `~/.ssh/bootwright-ssh-key`); create it first — see [Installation](installation.md#create-the-bastion-ssh-key). |
 | `infra/machines/bastion.yaml` | `Machine/bastion` `spec.addresses` (`ssh`) | The address bootwright uses to SSH to the bastion (default `192.168.10.11`). |
 | `clusters/container/my-sno-lab/cluster-machines.yaml` | `Machine/my-sno-lab-master-0` `spec.addresses` (`ip`) | The node's static IP on the machine network (default `192.168.130.20`). |
 | `infra/networkconfigs/networks.yaml` | `spec.machineNetwork[].cidr` | The cluster machine network CIDR (default `192.168.130.0/24`). |
@@ -164,6 +164,14 @@ bootwright validate -f ./my-sno-lab
 ```
 
 Fix any diagnostic by editing the named object and field, then validate again.
+
+## Get The OpenShift Pull Secret
+
+The install pulls the release payload from Red Hat's registries, so it needs a
+pull secret. Sign in to the Hybrid Cloud Console with a Red Hat account (the
+no-cost Developer Subscription is enough) and download the pull secret from the
+OpenShift cluster-install page. Save the file **outside** the input tree — the
+next step loads it into the context, and the YAML never carries the bytes.
 
 ## Set Up The Context
 
@@ -201,8 +209,9 @@ bootwright plan
 ## Apply
 
 Converge the lab. `apply` reconciles by default: it creates missing objects,
-skips objects whose recorded state already matches, and fails closed on drift or
-foreign ownership before changing anything.
+skips objects whose recorded state already matches, converges drift that is
+reconcilable in place, and fails closed on structural (destructive-identity)
+drift or foreign ownership before changing anything.
 
 ```bash
 bootwright apply --yes
@@ -245,32 +254,30 @@ chmod 0600 ~/.kube/my-sno-lab
 oc --kubeconfig ~/.kube/my-sno-lab get nodes
 ```
 
-To merge it into your default kubeconfig under a unique context name instead:
-
-```bash
-export CLUSTER=my-sno-lab
-export SRC="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
-export MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
-
-mkdir -p "${HOME}/.kube"
-touch "${HOME}/.kube/config"
-chmod 0600 "${HOME}/.kube/config"
-
-bootwright cluster kubeconfig --name "${CLUSTER}" > "${SRC}"
-chmod 0600 "${SRC}"
-CTX="$(oc --kubeconfig "${SRC}" config current-context)"
-oc --kubeconfig "${SRC}" config rename-context "${CTX}" "${CLUSTER}-admin"
-KUBECONFIG="${HOME}/.kube/config:${SRC}" oc config view --flatten > "${MERGED}"
-install -m 0600 "${MERGED}" "${HOME}/.kube/config"
-oc config use-context "${CLUSTER}-admin"
-```
-
 The kubeconfig carries admin credentials: keep it in a private path and never
 commit it.
 
+## Tear It Down
+
+Remove everything this lab created — the node VM, the libvirt network, and the
+infra services on the bastion:
+
+```bash
+bootwright destroy --yes
+```
+
+`destroy` is scoped the same way `apply` is, so `--stage clusters` keeps the
+machine substrate and `--clusters <name>` tears down one component. See
+[Operations, recovery & teardown](../advanced/operations.md#tearing-down-with-destroy)
+for the ownership gates, `--force`, and partial teardown.
+
 ## Next steps
 
-- Build storage next with [Provisioning a Ceph cluster](ceph.md).
+- Build a second, independent lab with
+  [Provisioning a Ceph cluster](ceph.md). It is a standalone tree on its own
+  network and context, not a storage back end for this cluster — for storage
+  attached to a cluster, read [Storage](../concepts/storage.md) and the
+  `baremetal-redfish-imported-ceph-odf` [reference example](../advanced/examples.md).
 - Read [The desired-state model](../concepts/index.md) to understand contexts,
   stages, the apply modes, and object ownership before you change the layout.
 - Browse the [reference examples](../advanced/examples.md) to pick a larger tree —

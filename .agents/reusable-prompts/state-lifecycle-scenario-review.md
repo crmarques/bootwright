@@ -116,8 +116,10 @@ rg -n 'changed_when|failed_when|check_mode|creates:|removes:|ignore_errors|no_lo
 - Read-only commands never mutate provider, BMC, cluster, storage, disk, runtime
   records, ownership records, install records, leases, or convergence-safety
   records.
-- Bare `apply` creates missing resources, skips proven matches, and fails closed
-  on drift, foreign ownership, destructive ambiguity, and unsupported states.
+- Bare `apply` creates missing resources, skips proven matches, converges drift
+  that is reconcilable in place, and fails closed on structural
+  (destructive-identity) drift, foreign ownership, destructive ambiguity, and
+  unsupported states.
 - `apply --expect-new` fails closed if any selected object already exists or has
   ownership evidence.
 - `apply --converge-drifted` is command-scoped break glass. It may cross only
@@ -158,16 +160,10 @@ shape, required evidence, refusal message, recovery path, and tests.
 
 ## Trace Standard
 
-No verdict without a trace:
-
-1. CLI command, flags, and root/sudo gate.
-2. Context input, selected roots, and scope closure.
-3. Validation, normalization, and ownership boundaries.
-4. Record classification: `missing`, `match`, `drift`, `foreign`,
-   `undeclared`, `partial`, `stale`, `unknown`, or unsupported.
-5. Plan, locks, generated contracts, Ansible/external side effects, and records
-   written or removed.
-6. User-visible output, exit code, and retry or recovery guidance.
+No verdict without a trace. Use the trace steps and the state-classification
+vocabulary owned by `apply-destroy-safety-contract.md`, "Step 3 — Trace Each
+Scenario Against The Contract"; classify anything that fits none of its terms
+as unsupported.
 
 Cite files, functions, roles, tasks, specs, docs, tests, or examples. Separate
 implemented behavior from spec intent and recommendations.

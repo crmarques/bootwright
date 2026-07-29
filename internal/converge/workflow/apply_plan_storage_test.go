@@ -57,7 +57,7 @@ func TestProvisioningPlaybookBeforeDepsHardGatesStorageClusterPrereqs(t *testing
 			return
 		}
 	}
-	t.Fatalf("storageinfra.ceph-libvirt dependencies = %v, want to include playbook.delegated-registration: ADR 0015 and specs/state-model.md promise that a deps-gating CustomPlaybook with the default failureMode: fail hard-gates the deps-phase Ceph work, which is how rhsm.management: external delegates node registration; the gate exists only because the Ceph prerequisite phases are carried by a task whose kind maps to the deps phase, so folding them into storage.ceph-libvirt (a base-phase kind) empties the deps anchor set and drops the edge", prereqs.Entry.Dependencies)
+	t.Fatalf("storageinfra.ceph-libvirt dependencies = %v, want to include playbook.delegated-registration: ADR 0015 and specs/state-model.md promise that a deps-gating CustomPlaybook with the default onFailure: fail hard-gates the deps-phase Ceph work, which is how rhsm.management: external delegates node registration; the gate exists only because the Ceph prerequisite phases are carried by a task whose kind maps to the deps phase, so folding them into storage.ceph-libvirt (a base-phase kind) empties the deps anchor set and drops the edge", prereqs.Entry.Dependencies)
 }
 
 func TestProvisioningPlaybookAfterDepsAnchorsOnStorageClusterPrereqs(t *testing.T) {

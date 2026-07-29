@@ -29,8 +29,10 @@ The KubeVirt `InfraProvider` sets exactly one host reference, alongside its
 - `kubeconfigRef` for an external virtualization cluster kubeconfig, resolved
   from a declared `Secret` object
 
-Virtualization-cluster capabilities are advertised by `ClusterAddon.spec.provides`
-(accepted values have since grown to `kubevirt`, `dataFoundation`, and `nmstate`).
+Virtualization-cluster capabilities are advertised by
+`ClusterAddon.spec.provides`. Capability names are operator-chosen strings
+validated only for shape, not against a closed vocabulary; `kubevirt` and
+`dataFoundation` are the two names Bootwright itself reasons about.
 A child cluster whose KubeVirt provider sets `hostClusterRef` is valid only when
 the referenced parent cluster has a bound add-on that provides `kubevirt`. Add-ons
 may also declare `spec.requires` to order one add-on after another that provides a
@@ -54,8 +56,8 @@ cluster install and KubeVirt add-on are already ready.
   to Bootwright cluster secrets output, and `kubeconfigRef` resolves through secret
   material.
 - Validation can reject self-hosting and dependency cycles before rendering.
-- The scheduler locks KubeVirt machine and boot operations per VM with
-  `kubevirt:<host-cluster-or-kubeconfig>:<namespace>:vm:<virtual-machine>`
-  independently of provider-host and Redfish locks. Operations against one VM
-  serialize, while distinct VMs in a shared namespace provision and boot
+- The scheduler locks KubeVirt machine and boot operations per VM,
+  independently of provider-host and Redfish locks — the lock key itself is
+  specified in [`architecture.md`](../architecture.md). Operations against one
+  VM serialize, while distinct VMs in a shared namespace provision and boot
   concurrently.

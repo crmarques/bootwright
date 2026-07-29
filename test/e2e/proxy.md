@@ -18,10 +18,11 @@ proxyFor:
   containerClusterInstall: default
 ```
 
-Omitted `proxyFor` values and the reserved value `none` disable proxy use.
-
-Managed proxy services live in `InfraComponent.spec.proxy` and are selected by
-environment proxy entries with `management: managed`.
+An empty or omitted `proxyFor` slot inherits the default proxy — the `proxies[]`
+entry with `default: true`, or the sole entry when only one is declared; the
+reserved value `none` opts a consumer out. See
+[The three proxy targets and `proxyFor`](../../docs/advanced/disconnected-proxy.md#the-three-proxy-targets-and-proxyfor)
+for the full model, including managed proxy components.
 
 Disconnected mode is set on each `ContainerCluster`:
 
@@ -30,5 +31,5 @@ install:
   mode: disconnected
 ```
 
-It requires mirror trust material under `Environment.spec.registries.mirror` and
-either an external mirror URL or a managed registry component.
+See [Disconnected install](../../docs/advanced/disconnected-proxy.md#disconnected-install)
+for the mirror trust and registry material this mode requires.

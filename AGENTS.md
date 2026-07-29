@@ -13,8 +13,8 @@ the task before editing. Do not start from partial context.
 
 ## Knowledge Lookup
 
-The repository keeps its non-spec knowledge in two indexed stores; consult them
-instead of rediscovering:
+The repository keeps its non-spec knowledge in three indexed stores; consult
+them instead of rediscovering:
 
 - **On any unexpected failure** — build, test, lint, a `bootwright` command, an
   Ansible task, an install that stalls — match the error text or symptom
@@ -24,6 +24,8 @@ instead of rediscovering:
 - **Before designing or changing behavior**, scan the decision table in
   `specs/adr/README.md`; an accepted ADR may already fix the shape of the
   change or record why the obvious alternative was rejected.
+- **Before proposing work that looks new**, check `.agents/knowledge/BACKLOG.md`
+  — it may already be recorded as deliberately deferred, with the reason.
 - **When a task uncovers a new root cause, vendor quirk, constraint, or
   decision**, record it in `.agents/knowledge/` (with a symptom row in
   `KNOWLEDGE.md`) or `specs/adr/` in the same change. Source comments are not
@@ -34,10 +36,9 @@ instead of rediscovering:
 These hold for every change; verify their current form in `/specs/` when a task
 depends on them.
 
-- **Scope.** Desired-state orchestration of cloud platforms from bare or
-  virtualized substrates through machines, managed machine OS installs, shared
-  infrastructure services, OpenShift or OKD managed clusters, Ceph storage
-  clusters, exported storage surfaces, and cluster-bound bootstrap add-ons.
+- **Scope.** Desired-state orchestration of cloud platforms across the platform
+  component set defined in `specs/domain.md`, from bare or virtualized
+  substrates through cluster-bound bootstrap add-ons.
   Bootwright may converge the whole graph or selected platform components.
   Day-2 GitOps publication of fleet content (package catalogs, KRC/SRC
   bootstrap) is a separate project; do not reintroduce it. Initial
@@ -58,7 +59,8 @@ depends on them.
   or environment-specific credentials in versioned content.
 - **Output.** CLI human output goes through the centralized `internal/cli/output`
   component. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
-  and external process passthrough such as Ansible streams.
+  and external process passthrough such as Ansible streams
+  (`specs/state-model.md`, CLI Contract).
 - **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases,
   compatibility shims, or legacy examples.
 - **State-change authorization.** A state change happens only when the operator
@@ -70,13 +72,17 @@ depends on them.
   the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`. The
   normative contract is in `specs/state-model.md` and ADR 0007.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
-  teach workflows and link back. Add implementation detail only when current code
-  or an accepted decision needs it.
-- **Comments.** Source files carry no prose comments — only machine-read
-  directives (`//go:build`, `//go:embed`, `//nolint`, `# noqa`, `# shellcheck`,
-  `# syntax=`, shebangs). Knowledge lives in `.agents/knowledge/`, decisions in
-  `specs/adr/`, schema semantics in `/specs/` and `/docs/`. Enforced by the
-  comment-policy guard tests in `internal/repo/checks`; the full rule is in
+  teach workflows and link back. The per-kind field reference is the deliberate
+  exception: every page under `docs/concepts/` is one by design (the
+  Required/Default convention is owned by `docs/concepts/index.md`), so a field
+  table there is not a duplicate of `specs/state-model.md`, and guard tests
+  require a few rules to appear in both. Add implementation detail only when
+  current code or an accepted decision needs it.
+- **Comments.** Source files carry no prose comments — only the machine-read
+  directives ADR 0006 enumerates (`//go:build`, `# noqa`, shebangs, and the
+  rest). Knowledge lives in `.agents/knowledge/`, decisions in `specs/adr/`,
+  schema semantics in `/specs/` and `/docs/`. Enforced by the comment-policy
+  guard tests in `internal/repo/checks`; the full rule is in
   `.agents/skills/code-quality/SKILL.md`.
 
 ## Implementation Workflow
@@ -89,23 +95,19 @@ brief:
 - Create a temporary branch and worktree from local `main` (preauthorized — do not
   ask). Edit only inside it; use the primary `main` worktree for read-only
   inspection until integration.
-- During investigation, run the smallest targeted command that answers the current
-  question; do not run aggregate checks unless the user asks.
-- Immediately before every `make check-fast`, user-requested `make check`, or
-  task commit on the temporary branch, check whether local `main` has advanced
-  since the branch was created or last rebased. Rebase onto it first if so, then
-  resolve and adjust the change before continuing. Repeat this check separately
-  for validation and commit even when an earlier step already found the branch
+- Rebase first: immediately before every `make check-fast`, user-requested `make
+  check`, or task commit, check whether local `main` has advanced and rebase onto
+  it if so — separately each time, even when an earlier step found the branch
   current. Use `make check-fast` by default; run `make check` only when the user
   requests that gate. Task commits are preauthorized; do not ask.
-- Once `make check-fast` passes and the branch is rebased current onto local
-  `main`, integration is preauthorized — do the final rebase, fast-forward `main`,
-  remove the worktree, and delete the branch without asking. Merge only while every
-  safety gate holds: `main` was clean at task start and is still clean, checks are
-  green, and no rebase or fast-forward conflict occurs. If any gate fails — `main`
-  dirty at integration time, a conflict, checks not green — or the user asked to
-  hold the change for review, do not touch `main`: keep the worktree and report the
-  blocker or held state instead of touching unrelated changes.
+- Once checks pass on a branch rebased current onto local `main`, integration is
+  preauthorized — do the final rebase, fast-forward `main`, remove the worktree,
+  and delete the branch without asking. Merge only while every safety gate holds:
+  `main` was clean at task start and is still clean, checks are green, and no
+  rebase or fast-forward conflict occurs. If any gate fails — `main` dirty at
+  integration time, a conflict, checks not green — or the user asked to hold the
+  change for review, do not touch `main`: keep the worktree and report the blocker
+  or held state instead of touching unrelated changes.
 
 ## Handoff Format
 
@@ -129,5 +131,9 @@ giving a commit subject after user review/testing:
 Examples:
 
 - Merged (autonomous success): `docs(agents): shorten standard handoff`
-- Held for review: `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`
+- Held for review: worktree
+  `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`, branch
+  `work/<task-slug>-<base8>-<timestamp>`, task commit
+  `feat(cli): add --machines selection`, `make check-fast` completed green —
+  held at the user's request for hardware testing.
 - Blocked: `Blocked: make check-fast could not complete`

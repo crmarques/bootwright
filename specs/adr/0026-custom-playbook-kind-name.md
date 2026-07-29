@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implemented)
+Accepted
 
 ## Context
 
@@ -64,12 +64,10 @@ kind, consistent with how every prior schema rename landed.
 
 ## Consequences
 
-- Breaking for inputs that declare `kind: Playbook`. The migration is one
+- Breaking for existing inputs and for anything parsing `validate --output json`
+  (the scope list above is the record of what moved). The migration is one
   mechanical edit per file, and the loader's unknown-kind error names the
   offending document.
-- Breaking for anything parsing `validate --output json`: the count key moved from
-  `provisioningPlaybooks` to `customPlaybooks`.
 - The API now has one word for the operator's Ansible content and a different
   one for the runtime's, so `spec.playbook` inside a `CustomPlaybook` no longer
   reads as a stutter.
-- ADR 0005 and ADR 0021 stand as written; only the kind's name changes.

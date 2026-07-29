@@ -36,8 +36,9 @@ Either guide assumes you have completed Installation and Setup first.
 
 ## What you'll need
 
-A Linux host with `sudo`, libvirt (`qemu:///system`), an SSH key pair the host
-can use to reach itself, and a free machine network with room for the node IPs
+A Linux host with `sudo`, libvirt (`qemu:///system`), `openssh-clients`, an SSH
+key pair for the bastion connection the lab trees declare
+(`bastion-host-ssh`), and a free machine network with room for the node IPs
 and a couple of virtual IPs. The OpenShift lab additionally needs an OpenShift
 pull secret; the Ceph lab additionally needs a RHEL DVD ISO, a Red Hat
 subscription, and an IBM Storage Ceph entitlement. Bootwright desired state is

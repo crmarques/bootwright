@@ -1,7 +1,10 @@
 # Load Balancer Modes
 
 Cluster endpoint ownership is declared per endpoint in
-`ContainerCluster.spec.install.endpoints`.
+`ContainerCluster.spec.install.endpoints`. For the `source.type` values, their
+defaults, and which clusters may use each one, see
+[Endpoints](../../docs/advanced/networking.md#endpoints). The case-shaped
+fragments to edit before a run:
 
 Bootwright-provisioned load balancer:
 
@@ -41,14 +44,10 @@ endpoints:
       type: external
 ```
 
-OpenShift-managed endpoint ownership is reserved for supported multi-node agent
-installs:
+OpenShift-managed endpoint ownership — multi-node agent installs only:
 
 ```yaml
 endpoints:
   api:
     address: 192.168.133.10
 ```
-
-The omitted `source.type` defaults to `openshift` for the role-keyed
-`ContainerCluster.spec.install.endpoints` entries.

@@ -20,13 +20,16 @@ rendering-side rules.
 
 ## Decision
 
-**Providers declare placement; renderers own the listening surface.** A
-provider says *where* and *how* a service runs; the renderer owns default
+**Providers declare placement; the Go layer owns the listening surface.** A
+provider says *where* and *how* a service runs; normalize and render own default
 protocols, bind addresses, and ports (`DefaultBMC*`, `DefaultSquidPort 3128`,
 `DefaultMirrorRegistryPort 5000`, the emulated-BMC listen/vmedia ports, …)
-unless a cluster-side component explicitly exposes them. Roles never re-derive a
-default port; a role reading `default(8000)` is a bug because the value must
-come from the renderer, so the projection and the consumer cannot drift.
+unless a cluster-side component explicitly exposes them. Those defaults are
+`api/v1alpha1` constants stamped onto state by normalize, so they are visible in
+`effective-state.yaml` and counted in the converge hash rather than invented at
+render time. Roles never re-derive a default port; a role reading `default(8000)`
+is a bug because the value must come from the Go layer, so the projection and the
+consumer cannot drift.
 
 **Render-internal spellings are outputs, not schema.** Values such as
 `image.mediaType` (`dvd`/`boot`), the `machines` and `bmc` service kinds, and

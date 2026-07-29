@@ -1,6 +1,8 @@
-# 0021 — External Playbook Content
+# ADR 0021: External Playbook Content
 
-Status: Accepted
+## Status
+
+Accepted
 
 ## Context
 
@@ -17,7 +19,7 @@ cannot simply be dropped in: the loader decodes every `.yaml`/`.yml` it walks, s
 
 ## Decision
 
-`Playbook.spec.source` names where the Ansible content lives. Two arms:
+`CustomPlaybook.spec.source` names where the Ansible content lives. Two arms:
 
 - `path` — an absolute directory outside the input tree, used as-is.
 - `git` — a repository (`https`, `ssh`, `file://`, or an absolute local path) at

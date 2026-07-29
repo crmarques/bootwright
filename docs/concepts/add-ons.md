@@ -12,10 +12,11 @@ provider-owned resources; add-ons are desired-state objects the
 [`Environment`](environment.md) selects, binds to clusters, and applies *after*
 the target cluster is installed and reachable.
 
-Add-ons apply *declarative Kubernetes objects* and only after the cluster is
-installed. To run *imperative Ansible* against machines — at any stage, before or
-after the built-in work — use a [custom playbook](custom-playbooks.md)
-instead.
+An add-on applies only after its cluster is installed, and everything it does —
+its declarative Kubernetes objects and the [steps](#hooks) it ships, which may
+run Ansible against machines — is bound to that add-on's install. Work that
+belongs to a provisioning phase instead, including any phase before a cluster
+exists, is a [custom playbook](custom-playbooks.md).
 
 Add-ons model the initial post-install bootstrap applied *inside* an installed
 OpenShift or OKD cluster. They render into apply plans, not installer input, and
@@ -101,11 +102,12 @@ discriminated union arm whose key is byte-identical to the `type` value.
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | `olm` or `manifestSet`. |
 | `spec.provides[]` | No | — | Capability advertisements; each value must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and be unique. |
-| `spec.requires[]` | No | — | Capability names another add-on on the cluster must provide; drives apply order. |
+| `spec.requires[]` | No | — | Capability another add-on **in the same binding** must provide; drives apply order. |
 | `spec.accepts.inputs[]` | No | — | Binding-scoped scalar inputs and effects. |
 | `spec.olm` | For `type: olm` | — | OLM resources and optional custom resources. |
 | `spec.manifestSet` | For `type: manifestSet` | — | Ordered manifest file list. |
 | `spec.readiness` | No | — | Readiness timeout and checks. |
+| `spec.steps[]` | No | — | Lifecycle steps the add-on ships: playbooks and/or templated manifests. See [Hooks](#hooks). |
 
 !!! note "Union arm must match the type"
     Exactly one of `olm` or `manifestSet` is set and it must match `spec.type`.
@@ -261,7 +263,7 @@ value.
 | `accepts.inputs[].required` | No | `false` | When `true`, every binding of this add-on must supply the input; validation rejects a binding that omits it. Optional inputs may be omitted, and any effects they carry are skipped. |
 | `accepts.inputs[].resourceRef.kind` | One of `resourceRef`/`secretRef` | — | Binding value must name a loaded object of this Bootwright kind. |
 | `accepts.inputs[].secretRef` | One of `resourceRef`/`secretRef` | — | Empty presence arm (`{}`); binding value names a Secret. |
-| `accepts.inputs[].effects[].storageExportAttachment` | One effect arm | — | Empty presence arm (`{}`); attaches a Data Foundation `StorageExport`. |
+| `accepts.inputs[].effects[].storageExportAttachment` | One effect arm | — | Empty presence arm (`{}`); wires the add-on to a Data Foundation `StorageExport` — see the contract note below. |
 | `accepts.inputs[].effects[].globalPullSecretMerge.registry` | For `globalPullSecretMerge` | — | Registry host whose credential is merged into the cluster's global pull secret. |
 | `accepts.inputs[].effects[].globalPullSecretMerge.username` | For `globalPullSecretMerge` | — | Registry username the merged credential authenticates as. |
 
@@ -273,6 +275,10 @@ value.
 !!! note "Data Foundation storage attachment contract"
     A `storageExportAttachment` effect requires the add-on to provide
     `dataFoundation` and the input to declare `resourceRef.kind: StorageExport`.
+    The effect renders no Kubernetes object by itself. It makes the bound
+    cluster's add-on apply depend on the referenced export's `StorageCluster`
+    having converged, pulls that storage cluster into the run's scope, and makes
+    the export's refs resolvable to the add-on's steps.
 
 !!! note "Global pull-secret merge contract"
     An input carrying a `globalPullSecretMerge` effect must declare
@@ -380,16 +386,17 @@ everywhere else in the input tree.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `steps[].name` | Yes | — | Hook name, unique within the add-on. |
+| `steps[].name` | Yes | — | Step name, unique within the add-on. |
 | `steps[].gates` / `steps[].follows` | Yes (exactly one) | — | `gates: apply` runs the step before the operator install and blocks it until the step succeeds. `follows: operatorReady` runs after the operator CSV reaches Succeeded, before `olm.customResources` (olm add-ons only); `follows: ready` runs after readiness checks pass. `gates` may not be combined with `onFailure: continue`. |
 | `steps[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
+| `steps[].source.path` | No | — | Absolute directory outside the input tree holding the Ansible content; `playbook`, `rolesPath` and `collectionsPath` then resolve against it. `source.git` is rejected here — a step's content ships with its add-on. See [custom playbooks](custom-playbooks.md#external-ansible-content). |
 | `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
 | `steps[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
 | `steps[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
 | `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. Connection and `become` keys (`ansible_user`, `ansible_host`, `ansible_connection`, `ansible_ssh_*`, `ansible_become*`, …) are rejected: an extra var outranks the inventory, so one would repoint the identity Bootwright connects as for every host in the run. |
 | `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
-| `steps[].run` | No | `onChange` | `onChange` skips a hook whose content and inputs are unchanged; `always` re-runs every apply. |
-| `steps[].failureMode` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A hook whose manifests consume its outputs must be `fail`. |
+| `steps[].run` | No | `onChange` | `onChange` skips a step whose content and inputs are unchanged; `always` re-runs every apply. |
+| `steps[].onFailure` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A step whose manifests consume its outputs must be `fail`. |
 | `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
 | `steps[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
 | `steps[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
@@ -436,6 +443,9 @@ external-cluster-details payload of a referenced `StorageExport` — its
 `externalDetails.fromSecretRef` secret). Each token must be an entire YAML
 scalar value.
 
+The shipped OpenShift Data Foundation add-on
+(`add-ons/openshift-data-foundation/4.21/add-on.yaml`) is the worked example:
+
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
@@ -443,48 +453,63 @@ metadata:
   name: openshift-data-foundation
 spec:
   type: olm
-  provides: [dataFoundation]
+  provides:
+    - dataFoundation
   accepts:
     inputs:
       - name: external-storage
         required: true
         resourceRef:
           kind: StorageExport
+        effects:
+          - storageExportAttachment: {}
   olm:
     namespace:
       name: openshift-storage
       create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
     operatorGroup:
       name: openshift-storage
-      targetNamespaces: [openshift-storage]
+      targetNamespaces:
+        - openshift-storage
     subscription:
       name: odf-operator
       package: odf-operator
       channel: stable-4.21
       source: redhat-operators
-      sourceNamespace: openshift-marketplace
-      installPlanApproval: Automatic
   steps:
-    - name: gather-external-details
+    - name: attach-external-storage
       follows: operatorReady
+      playbook: playbooks/export-external-details.yaml
       target:
         fromInput:
           input: external-storage
-      playbook: playbooks/export-external-details.yml
+      run: always
+      timeout: 20m
       outputs:
         - name: externalDetails
           file: external-cluster-details.json
           secret: true
           format: json
       manifests:
-        - path: manifests/rook-external-details-secret.yaml
+        - path: manifests/rook-ceph-external-cluster-details.yaml
           reclaimRendered: true
-        - path: manifests/storage-cluster.yaml
+        - path: manifests/ocs-external-storagecluster.yaml
   readiness:
+    timeout: 45m
     checks:
       - csvSucceeded:
           namespace: openshift-storage
           subscription: odf-operator
+      - condition:
+          apiVersion: ocs.openshift.io/v1
+          kind: StorageCluster
+          namespace: openshift-storage
+          name: ocs-external-storagecluster
+          condition:
+            type: Available
+            status: "True"
 ```
 
 A shipped manifest template embeds the captured output as a whole scalar:

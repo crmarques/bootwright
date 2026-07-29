@@ -2,12 +2,15 @@
 
 ## Status
 
-Accepted, with the key-separation clause superseded by
-[ADR 0024](0024-machine-access-union-and-cluster-owned-node-login.md). A Ceph
-node the cluster installs now derives its whole login from `clusterSSH`, so the
-cluster key *is* that node's key; a `Secret` a `Machine` authors as its own
-access key still may not be named as the cluster identity. The two-identity
-model below remains the shape for a node the cluster does not install.
+Accepted in part.
+[ADR 0024](0024-machine-access-union-and-cluster-owned-node-login.md)
+supersedes the access-block shape and the `clusterSSH.user` default;
+[ADR 0027](0027-bootwright-owns-the-login-it-installs.md) supersedes the
+install-window-identity model and the `rootLogin` validity rule, and restores
+the key separation this ADR argued for and ADR 0024 narrowed. What survives:
+`Machine.spec.access.rootLogin` as the OS-posture field, `clusterSSH` as the
+cluster's orchestration identity, the provisioned-account sudoers policy, and
+verify-before-revoke.
 
 ## Context
 
@@ -35,16 +38,13 @@ orchestration identity becomes something each machine re-declares and can
 disagree about.
 
 The obvious lever — repointing `Machine.spec.access.ssh.user` at a non-root
-account — is a trap, not a shortcut. That field is the **install-window**
-identity. It is folded into the managed-OS install-marker hash
-(`internal/render/inventory/vars_machine_os_marker.go`) and, more sharply, it
-is the identity `machine_os_install_anaconda`'s `probe_existing.yml` uses to
-prove a node is already installed. When authentication as that user fails,
-`bootwright_managed_os_already_ready` is `false`; both refusal guards — the
-foreign/unmarked-host refusal and the drifted-without-override refusal — are
-gated on `already_ready`, so both are skipped, and
-`bootwright_managed_os_install_required` becomes `true`. Repointing the field
-on an installed fleet therefore silently reinstalls it.
+account — was a trap, not a shortcut. That field was the **install-window**
+identity: folded into the managed-OS install-marker hash and used by the
+readiness probe to prove a node is already installed, so repointing it on an
+installed fleet silently reinstalled that fleet. ADR 0027 closed the trap by
+construction — a machine Bootwright installs authors no access at all — but the
+hazard is why the hardening lever below is a separate field rather than a new
+value for an existing one.
 
 cephadm's own non-root support also fixes the shape of the privilege policy
 rather than leaving it open. When `ssh_user` is not `root`, the cephadm mgr
@@ -65,10 +65,13 @@ belongs to.
 `PermitRootLogin no`, validates the resulting configuration with `sshd -t`
 before reloading, and re-authorizes nothing. It is reversible: setting the
 field back to `keep` removes the drop-in and restores root's authorized key.
-The field is legal only on a machine that a managed Ceph `StorageCluster`
-lists as a topology node under a non-root orchestration account — otherwise
-revoking would leave no account able to reach the machine, and validation
-refuses it.
+The field requires `spec.access.ssh` and is therefore rejected on a machine
+Bootwright installs, which never permits a root login at any point in its life
+(ADR 0027). It is accepted only on a machine that a managed Ceph
+`StorageCluster` lists as a topology node under a non-root orchestration
+account, because that cluster's node-access reconciliation is what performs the
+revoke and its orchestration account is the successor login — elsewhere the
+field would have no executor.
 
 ### `StorageCluster.spec.ceph.cephadm.clusterSSH` — the orchestration identity
 
@@ -80,10 +83,9 @@ clusterSSH:
 
 `user` is the **post-install** identity: the account cephadm orchestrates
 every host as (`cephadm --ssh-user`, later `ceph cephadm set-user`) and the
-account Bootwright itself connects as once the node is provisioned. It
-defaults to `cephadm` when any topology node's `Machine` revokes root, and to
-`root` otherwise. `keyRef` names the `sshKeyPair` `Secret` that is cephadm's
-cluster identity.
+account Bootwright itself connects as once the node is provisioned. `keyRef`
+names the `sshKeyPair` `Secret` that is cephadm's cluster identity. ADR 0024
+sets the field's default.
 
 This replaces `cephadm.clusterSSHKeyRef` and `cephadm.clusterSSHUser`. `v1alpha1`
 breaks cleanly (no alias, no shim); strict decoding rejects the retired
@@ -97,8 +99,8 @@ first topology host's `access.ssh` user. The nested block has one meaning for
 ### The account Bootwright provisions
 
 On every topology node, for a non-root `clusterSSH.user`, Bootwright creates
-the account with a locked password and no `wheel` membership, authorizes the
-machine access public key in its `authorized_keys`, and writes a per-user
+the account with a locked password, authorizes the cluster identity's public
+key (`clusterSSH.keyRef`) in its `authorized_keys`, and writes a per-user
 sudoers drop-in at `/etc/sudoers.d/60-bootwright-<user>` containing exactly:
 
 ```text
@@ -106,9 +108,11 @@ Defaults:<user> !requiretty
 <user> ALL=(ALL) NOPASSWD: ALL
 ```
 
-`NOPASSWD: ALL` is deliberate and is the only policy cephadm can be
-orchestrated under, for the reason recorded in the Context. The `!requiretty`
-default is scoped to that one principal rather than relaxed globally.
+Any inherited `wheel` membership is dropped afterwards, so the named grant is
+the account's only privilege. `NOPASSWD: ALL` is deliberate and is the only
+policy cephadm can be orchestrated under, for the reason recorded in the
+Context. The `!requiretty` default is scoped to that one principal rather than
+relaxed globally.
 
 The honest security delta is therefore narrow, and is stated as such
 everywhere it is documented: no standing root SSH, a named auditable
@@ -118,15 +122,13 @@ become root on demand.
 
 ### `clusterSSH.keyRef` is required whenever `clusterSSH.user` is not root
 
-Without it, cephadm's cluster identity falls back to the first topology
-node's `Machine` access key. `cephadm bootstrap --ssh-private-key` then
-persists that key — Bootwright's controller-held machine administration
-credential — into the Ceph mon config-key store, where the cluster's mgr can
-read it. Before this change that key opened `root`; after it, it opens an
-account with passwordless sudo, which is the same thing. Requiring a
-dedicated generated `sshKeyPair` ends the cross-trust-domain reuse: the
-controller's key stays in the controller's domain, and the key the cluster
-holds only ever opens the cluster's own orchestration account.
+`cephadm bootstrap --ssh-private-key` persists the cluster identity into the
+Ceph mon config-key store, where the cluster's mgr can read it. Any key that
+also opens machines outside the cluster would therefore cross a trust domain,
+which is why the cluster identity must be a dedicated generated `sshKeyPair`:
+the key the cluster holds only ever opens the cluster's own orchestration
+account. (The render-time fallback to a node's own machine key is removed —
+ADR 0027.)
 
 ### Verify before revoke
 
@@ -136,39 +138,21 @@ before `PermitRootLogin no` is written on any of them, and is re-proved after
 the `sshd` reload. A node whose account does not answer stops the run with
 root still reachable.
 
-### The two identities may be the same account, but only from the start
+### The orchestration account may already exist
 
-The install-window identity is fixed for the life of the machine. It does not
-have to be `root`.
+On a machine Bootwright installs, the two identities are always distinct: the
+install creates `bootwright` (ADR 0027) and `storage_node_access` provisions
+`clusterSSH.user` on top of it day-2. On a `spec.os.provided: true` node the
+operator may have prepared the orchestration account out of band and may name
+it as the node's own `access.ssh.user`; Bootwright reconciles that account
+rather than creating it.
 
-A fleet that has already been installed as `root` keeps the two names distinct:
-`access.ssh.user` stays `root`, `clusterSSH.user` is the account Bootwright
-provisions afterwards. Repointing `access.ssh.user` at the orchestration
-account *on such a fleet* is still the trap described in the Context, and is
-still the reason hardening is expressed with `rootLogin` rather than by
-rewriting the field.
-
-A fleet whose nodes carry the orchestration account from their first boot may
-instead name it in both places. `ks.cfg.j2` already creates a non-root
-`access.ssh.user` with the machine access key authorized, `wheel` membership,
-and a `NOPASSWD` grant, and it never writes `PermitRootLogin yes` or an
-unlocked root password in that shape — so the account exists before the first
-probe, the install-window identity never changes, and the node never accepts a
-root login at all. On a `spec.os.provided: true` machine the same account is
-prepared out of band; Bootwright reconciles rather than creates it.
-
-Bootwright therefore does not reject the collision. What protects the fleet is
-the runtime gate, not a static rule: an installed node that stops answering as
-its `access.ssh.user` fails the ownership probe **closed** — it is refused, not
-reinstalled — so redefining the identity on a live fleet blocks the apply
-instead of wiping it.
-
-The role adapts rather than branching into a second code path. When the two
-names are equal there is no account to create, so `account.yml` finds it
-present; the named sudoers grant is written **before** `wheel` membership is
-dropped, because in that shape `wheel` is the only thing making the connection
-Bootwright is already using privileged. That ordering is safe for the distinct
-shape too, where the freshly created account was never in `wheel`.
+The role adapts rather than branching into a second code path. When the account
+is already present `account.yml` finds it so, and the named sudoers grant is
+written **before** any `wheel` membership is dropped, because an inherited
+`wheel` membership may be the only thing making the connection Bootwright is
+already using privileged. That ordering is safe for the created-account shape
+too, where the account was never in `wheel`.
 
 ### `clusterSSH.user` must match a non-root node account
 
@@ -187,14 +171,12 @@ reconciliation idempotent.
 
 - Hardening never touches the install-window identity, so it cannot trigger a
   managed-OS reinstall. This is the whole reason the lever is a new field
-  rather than a new value for `access.ssh.user`. Naming the orchestration
-  account in `access.ssh.user` is a decision taken *before* a machine is
-  installed, not a hardening step applied to one that already is.
-- A cluster whose nodes are installed with the orchestration account as their
-  install-window identity never enables root SSH at any point, and needs no
-  second account. `rootLogin: revoke` remains meaningful there: it is what
-  turns the implicit posture (root password locked, no authorized key) into a
-  declared `PermitRootLogin no`.
+  rather than a new value for `access.ssh.user`.
+- `rootLogin` is authorable only on an `os.provided: true` machine that a
+  managed Ceph cluster claims under a non-root orchestration account. On every
+  machine Bootwright installs the posture is an install invariant, not a field:
+  the install writes `PermitRootLogin no` and authorizes no key for root
+  (ADR 0027), so there is nothing to keep or revoke.
 - The break is authored-schema-only: no shipped example authors either retired
   field, so the rename costs no example edits. Any operator state that authors
   `clusterSSHKeyRef` or `clusterSSHUser` fails to decode with a named field
@@ -208,20 +190,19 @@ reconciliation idempotent.
   `clusterSSH.user` until that field changes too, and cephadm's own
   `ceph cephadm set-user` is the day-2 reconciliation path for an already
   bootstrapped cluster.
-- The posture is Ceph-scoped by construction. A machine that no managed Ceph
-  cluster claims cannot revoke root through Bootwright today; other node
-  classes (OpenShift nodes, service machines) are unaffected.
+- Other node classes are unaffected: OpenShift nodes and service machines have
+  no Bootwright-driven root-posture lever today.
 
 ### Alternatives rejected
 
 - **A new `harden` apply stage.** The stage model is a strict linear ordering
-  over `ProvisioningStages()` — `fabric`, `machines`, `deps`, `base`,
-  `add-ons` — where `--stage`/`--through` select an inclusive range over that
-  list and the sub-phase names are pinned to it by
+  over `api/v1alpha1.CustomPlaybookAnchors()` — `fabric`, `machines`, `deps`,
+  `base`, `add-ons` — where `--stage`/`--through` select an inclusive range over
+  that list and the sub-phase names are pinned to it by
   `internal/converge/provisioning_stage_pin_test.go`. It cannot host a stage
   that must run *inside* the storage work (after the account exists and
   before cephadm bootstraps), and adding one would also widen the authored
-  `Playbook.spec.stage` vocabulary for a concern no operator
+  `CustomPlaybook.spec.gates`/`follows` vocabulary for a concern no operator
   playbook targets. Account provisioning and revocation are ordered steps of
   the storage-cluster task instead.
 - **An `Environment`-wide fan-out** (a fleet default that revokes root on

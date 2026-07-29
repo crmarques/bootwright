@@ -4,9 +4,10 @@
 
 Accepted. Supersedes the `auth.provision` and access-authoring clauses of
 [ADR 0024](0024-machine-access-union-and-cluster-owned-node-login.md), its
-per-invocation `--ssh-user` scope, and the install-window-identity clause of
-[ADR 0019](0019-node-root-posture-and-orchestration-identity.md). The rest of
-both stands.
+"the cluster key *is* the node key" clause, and its per-invocation `--ssh-user`
+scope; and the install-window-identity clause and `rootLogin` validity rule of
+[ADR 0019](0019-node-root-posture-and-orchestration-identity.md), restoring the
+key separation ADR 0019 argued for. The rest of both stands.
 
 ## Context
 
@@ -82,7 +83,8 @@ bootstrap --ssh-private-key` persists the cluster identity into the mon
 config-key store, and this key opens the `bootwright` account on **every**
 machine in the fleet, not just that cluster's nodes. The render-time fallback
 that used node[0]'s machine key when `clusterSSH.keyRef` was unset is removed
-for the same reason, and the field is required on a managed cluster.
+for the same reason, and the field is required whenever `clusterSSH.user` is
+not `root` — which is every managed cluster that installs any of its nodes.
 
 An alternative — minting the keypair into the context with nothing declared —
 was rejected. Secrets are declared, never conjured (ADR 0024); an undeclared
@@ -112,10 +114,10 @@ retired spelling by name.
 
 ### `--ssh-user` names the operator's own account, and says when it would not
 
-On `apply`, `destroy`, `preflight`, `plan`, and `diff` the flag applies only
-where the resolved auth arm is `operatorIdentity`, and the command **refuses**
-when no machine in the run declares that arm. A flag that would change nothing
-now says so instead of appearing to work.
+On `apply`, `plan`, and `destroy` — the verbs that compose a scoped workflow
+plan — the flag applies only where the resolved auth arm is `operatorIdentity`,
+and the command **refuses** when no machine in the run declares that arm. A
+flag that would change nothing now says so instead of appearing to work.
 
 This reverses ADR 0024's "it reaches as far as the key flag does". That reading
 was sound while an installed machine's login was operator-authored: overriding
@@ -145,9 +147,14 @@ the fallback, never recorded.
   separation.
 - One `Secret` and one `Environment` line replace a per-machine key reference,
   and a Ceph fleet now declares two keys with clearly different reach.
-- `customizations.ssh.sudo`, `auth.provision`, `auth.controllerIdentity`,
+- `customizations.ssh.sudo`, `auth.controllerIdentity`,
   `MachineInstallSudoValues`, and `osInstall.ssh.fallbackUser` are gone with no
   alias or shim.
+- `auth.provision` leaves the **authored** API and survives only as
+  normalize-derived state on the internal type (`yaml:"-"`), which is how
+  `spec.access` is populated for a machine Bootwright installs. Nothing can
+  author it: strict decode has no key for it, and authoring `spec.access` on
+  such a machine is rejected before normalization.
 - Existing installations are not migrated. The install-marker hash moves with
   the account, so a fleet installed under the old model is destroyed and
   reinstalled under this one.

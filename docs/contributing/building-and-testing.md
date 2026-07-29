@@ -40,12 +40,20 @@ make test          # go test ./...
 
 ## Check gates
 
-Two gates, cheapest first:
+Three gates — the two Go gates cheapest first, plus the docs build. CI
+(`.github/workflows/checks.yml`) requires all three.
 
 | Command | What it runs |
 | --- | --- |
 | `make check-fast` | Syncs the bundle, then the cheap local guardrails — CLI file-size, Go source visibility, `gofmt`, the stale-term denylist, Containerfile digest pinning, `shellcheck`, and the E2E dependency check — followed by the full `go test ./...` suite. This is the gate to run before handing off a change. |
 | `make check` | Everything in `check-fast` plus `go vet`, `staticcheck`, `go mod tidy` verification, `go test -race`, a clean-checkout test run, the Python unit tests, `ansible-syntax-check`, `ansible-lint`, and the workflow-YAML lint. Run it when you touch the Ansible collection, dependencies, or concurrency-sensitive code. |
+| `make docs-check` | The docs gate: `mkdocs build --strict`, which fails on a broken link, an unresolved reference, or a page missing from the MkDocs nav. Install its dependencies once with `python3 -m pip install -r docs/requirements.txt`, and preview with `mkdocs serve`. Run it whenever you touch `docs/` or `mkdocs.yml`; it is not part of `make check`. |
+
+`check-fast`'s E2E dependency check only verifies that `ansible-playbook` is
+reachable. The cases behind it are described in
+[`test/README.md`](https://github.com/crmarques/bootwright/blob/main/test/README.md),
+listed by `make list-e2e-cases`, and rendered without touching a host by
+`make e2e-dry-run CASE=<name>`.
 
 !!! tip "If `/tmp` is a small tmpfs"
     The full test suite can exhaust a small `/tmp` and fail with a disk-quota
@@ -63,6 +71,14 @@ tree agree, that the `.agents/knowledge` and ADR indexes match their
 directories, and that every shipped example validates. When a guard fails, it
 names the file and the rule; fix the artifact rather than the test unless the
 rule itself has genuinely changed.
+
+One example goes further than validating:
+`examples/baremetal-redfish-multidc-virtualized-odf-ceph` is the shared
+behavioral fixture. Roughly a dozen test files across `internal/cli`,
+`internal/converge/workflow`, `internal/render` (with `render/ceph` and
+`render/inventory`) and `state/desired` assert on its content by name — its
+clusters, its add-ons, its storage cluster — so renaming anything inside it is
+an API-surface change to those tests, not a pedagogical edit.
 
 Knowledge and decisions have designated homes, not source comments: incident and
 constraint knowledge in

@@ -29,9 +29,13 @@ security issues and propose or apply fixes.
 - File system and process safety: command construction, path traversal,
   unsafe permissions on rendered output, temp file handling.
 - Destructive-operation safety: idempotency and ownership of delete, undefine,
-  wipe, zap, format, reset, and remove paths; that read-only commands (`status`,
-  `diff`, `render`, `plan`, `validate`, `preflight`) never mutate or contact
-  hosts; `destroyProtection` and the command-scoped gate flags — apply
+  wipe, zap, format, reset, and remove paths; that read-only verbs never mutate
+  provider, BMC, cluster, or storage state and write no runtime records, and that
+  the no-contact and trust-recording carve-outs match the CLI Contract in
+  `specs/state-model.md` — the carve-outs are real (render's generated outputs,
+  `preflight`/`apply` host-key trust, the default live `diff` reading cluster
+  state, `diff --adopt` writing input YAML), so do not report them as defects;
+  `destroyProtection` and the command-scoped gate flags — apply
   `--converge-drifted` (with `--confirm-data-loss` for data-loss rebuilds) and
   destroy `--force` — enforced before any mutation, with `--yes` as confirmation
   only that never broadens scope; destroy acting on proven Bootwright ownership

@@ -31,9 +31,10 @@ Deliberate exceptions:
 
 - `Environment` `spec.containerClusters` and `spec.storageClusters` are fleet
   selection lists, not references — plain strings, no `Ref` suffix.
-- `CustomPlaybook` `spec.target.{clusters,machines,hostGroups}` (and the
-  `ClusterAddonHook` target `clusters`/`machines` lists) are inventory
-  selection lists, not references — same rule.
+- `CustomPlaybook` `spec.target.{clusters,machines,hostGroups}` (and
+  `ClusterAddonStep` `target.static.{clusters,machines}`, alongside the
+  `target.fromInput` and bound arms) are inventory selection lists, not
+  references — same rule.
 - `proxyFor.{bootwright,containerClusterInstall,machineOSInstall}` name a
   `spec.infraComponents.proxies[]` entry **or the `none` sentinel**, so they
   stay plain strings without the `Ref` suffix.
@@ -113,9 +114,9 @@ value.
 ## Consequences
 
 - A new reference field must take the `Ref`/`Refs` suffix and the
-  plain-name-string form, and `specs/state-model.md` must state its
-  resolution namespace. New object-form references are prohibited short of a
-  documented exception like `networkRef`.
+  plain-name-string form, and either `specs/state-model.md` or the owning
+  `docs/concepts/` page must state its resolution namespace. New object-form
+  references are prohibited short of a documented exception like `networkRef`.
 - A new one-of-several field must pick one of the two union grammars; a
   discriminator value must stay byte-identical to its arm key so strict
   decode and the exactly-one-of validators stay mechanical.

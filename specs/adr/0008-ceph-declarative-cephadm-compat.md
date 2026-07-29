@@ -27,13 +27,15 @@ reconciler would either silently destroy data or silently under-converge.
 The Ceph desired-state API deliberately mirrors cephadm and native Ceph CLI
 concepts rather than inventing its own vocabulary:
 
-- Field names and value spellings match the native surface one-for-one:
-  drivegroup device selections (`paths`, `pathSpecs`, `rotational` as 0/1,
-  `filter_logic`, `block_db_size`), service-spec keys (`unmanaged`,
-  `extra_container_args`, `networks`, `custom_configs` as top-level siblings of
-  `spec`/`placement`), erasure-code-profile knobs by their
+- Field *semantics and value vocabularies* match the native surface
+  one-for-one: drivegroup device selections, service-spec keys that stay
+  top-level siblings of `spec`/`placement`, erasure-code-profile knobs by their
   `erasure-code-profile set` spellings, and pool intents as their exact
-  `ceph osd pool set` / `set-quota` verbs. Passthrough `spec.ceph.services[]`
+  `ceph osd pool set` / `set-quota` verbs. Field *spellings* follow the
+  camelCase API grammar (ADR 0014) and the renderer lowers them to the native
+  snake_case: the author writes `filterLogic`, `blockDBSize`,
+  `extraContainerArgs`, `customConfigs`, and a real `rotational: true` that
+  renders as cephadm's `rotational: 1`. Passthrough `spec.ceph.services[]`
   render verbatim for service types not modeled first-class.
 - Distribution differences (oss/redhat/ibm) are data in one renderer table,
   not control flow; the Ansible role dispatches on rendered capability flags
@@ -48,8 +50,9 @@ Convergence is declarative-first and additive-only:
   last-write-wins. Apply never prunes an undeclared live object — removals are
   deliberate operator actions, and `diff` reports real-only objects as adopt
   candidates instead of drift.
-- `diff --live` derives the desired side with the same topology resolver the
-  renderer uses and compares it per facet against `ceph ... --format json`
+- `diff` (live is its default mode) derives the desired side with the same
+  topology resolver the renderer uses and compares it per facet against
+  `ceph ... --format json`
   reads; `diff --adopt` folds live reality back into authored YAML, but only
   the cleanly representable facets, purely additively, and through the
   history-snapshotting input-mutation path. Everything else is reported as

@@ -26,8 +26,12 @@ lab is `examples/ceph-ibm-libvirt-lab` (the snippets below are adapted from its
 
 So a *managed OS install* is the `os.provided: false` + `os.installProfileRef`
 combination: Bootwright drives Anaconda to lay down the OS, then takes the node
-over SSH. A managed-install or OS-ready machine requires `access.ssh`. See the OS
-mode rules on [Machines](../concepts/machines.md).
+over SSH. A managed-install machine authors **no** `access` block — the install
+creates the `bootwright` account and authorizes
+`Environment.spec.machineAccess.keyRef` for it; authoring `access` is a
+validation error. Only an OS-ready (`os.provided: true`) machine declares
+`access`, as either `access.ssh` or `access.local`; a local bastion may declare
+neither. See the OS mode rules on [Machines](../concepts/machines.md).
 
 The install behavior splits across two reusable kinds:
 
@@ -222,7 +226,7 @@ lever the tip above describes, taken all the way.
     referenced entitlement's `rhsm` arm carries a `satellite` block, in which case
     the install registers and pulls content from that Red Hat Satellite instead.
     No `MachineImage` change is needed — see
-    [Disconnected & proxied installs](disconnected-proxy.md).
+    [Secrets & entitlements → Corporate Satellite](../concepts/secrets.md#corporate-satellite).
 
 ### Subscribing the installed OS
 
@@ -346,6 +350,12 @@ The customization arms, by area:
   one — so there is no separate opt-in wipe control to set here.
 - **packages** — `environment` (for example `minimal`), `install[]`,
   `excludeDocs`, and the tri-state `installWeakDeps`.
+- **repositories** — `customizations.repositories`. `configure[]` writes
+  `/etc/yum.repos.d/bootwright-<id>.repo` files, both in `%post` and as a day-2
+  task; `subscription.enable[]`/`disable[]` drives `subscription-manager repos`
+  and requires a registered node (see *Subscribing the installed OS* above). The
+  field table is on
+  [Machines](../concepts/machines.md#repositories-on-the-installed-machine).
 - **services** — `enabled[]` and `disabled[]`.
 - **security** — `selinux.mode` (`enforcing`/`permissive`/`disabled`),
   `firewall.enabled`, and `fips.enabled`.

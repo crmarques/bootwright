@@ -85,7 +85,7 @@ and can also be browsed in-tree under [`docs/`](docs/).
 | Understanding the model and the schema | [Concepts and APIs](docs/concepts/index.md) — the desired-state model plus field-level reference per domain |
 | Authoring real environments | [Advanced Scenarios](docs/advanced/index.md) — fleets, disconnected/proxied, managed OS, Ceph, KubeVirt, networking, ownership & safety, operations |
 | When something fails | [Troubleshooting](docs/troubleshooting.md) |
-| Contributing to Bootwright | [Contributing](docs/contributing/index.md) — the API contract and architecture internals |
+| Contributing to Bootwright | [Contributing](docs/contributing/index.md) — the API contract and architecture internals; [AGENTS.md](AGENTS.md) for the commit-subject shape and change-submission rules |
 | Contributors and coding agents | [Specs](specs/index.md) |
 | Architecture decisions | [ADRs](specs/adr/README.md) |
 
@@ -98,19 +98,12 @@ fixtures under [`test/e2e/`](test/e2e/) are runnable test assets.
 
 ## Install The CLI
 
-Download the `bootwright` binary for your platform from
-[GitHub Releases](https://github.com/crmarques/bootwright/releases), then
-install it on your `PATH`:
+[Installation and Setup](docs/getting-started/installation.md#install-the-cli) is
+the single owner of this step: a Linux x86_64 release tarball, or a source build
+with `make build`.
 
-```bash
-chmod +x bootwright
-sudo install -m 0755 bootwright /usr/local/bin/bootwright
-bootwright version
-```
-
-If a release binary is not available yet, build the CLI from the repository
-root with the [`Containerfile`](Containerfile) and copy the binary out of the
-image:
+A third option lives only here — build the CLI from the repository root with the
+[`Containerfile`](Containerfile) and copy the binary out of the image:
 
 ```bash
 export NO_PROXY="localhost,127.0.0.1,.local,10."
@@ -146,7 +139,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty-one kind
 | --- | --- |
 | `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
 | `Entitlement` | Named vendor-controlled content access for one product (`spec.type`): RHSM subscription (with optional Satellite), vendor registry credentials, and license, referenced by `StorageCluster` and `MachineImage` |
-| `Machine` | Raw, Bootwright-managed, or externally installed machine desired state: substrate binding, OS mode, install network, named addresses, SSH, and capabilities |
+| `Machine` | OS-ready, Bootwright-installed, or installer-provisioned machine desired state: substrate binding, OS mode, install network, named addresses, access, and capabilities |
 | `MachineImage` | Bootwright-managed OS install media such as trusted base ISOs |
 | `MachineInstallProfile` | Bootwright-managed OS installation profile, installer type, repositories, storage, SSH, packages, services, SELinux, firewall, and FIPS install customizations |
 | `InfraProvider` | Provider capability, substrate profiles, provider connection facts, and network attachments |
@@ -228,14 +221,17 @@ Resource, General). Top-level commands are `validate`, `context`, `machine`,
 `bastion setup` remains a separate prerequisite command; its read-only
 dependency checks run under `preflight bastion`. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
-and tears down the whole context for `destroy` (clusters then infra). The formal
-CLI contract lives in
-[specs/state-model.md](specs/state-model.md#cli-contract).
+and tears down the whole context for `destroy` (clusters then infra).
+[specs/state-model.md](specs/state-model.md#cli-contract) is the formal contract
+for contexts (`init`/`update`), the convergence verbs (`apply`, `plan`,
+`destroy`, `diff`), `machine trust`, and `add-ons`; the remaining verbs are
+specified by their own `--help` and taught under [`docs/`](docs/).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright cluster info` prints
-URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
-never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
+URLs, the kubeadmin user, and the `cluster oc`/`kubectl`/`kubeconfig`/`rsh`
+commands. Its human output carries no reusable file path, and prints secret
+bytes only under `--secrets`. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
 while the terminal shows a ledger-backed fleet dashboard with log paths,
 phase status, running work, and concise failures. `bootwright apply --yes` is
@@ -260,7 +256,8 @@ systems.
 specs/      Source-of-truth definitions for humans and agents
 docs/       Human workflow documentation
 examples/   Safe-to-commit desired-state examples
-.agents/    Project-local coding-agent skills
+add-ons/    Built-in native add-on catalog embedded into the binary
+.agents/    Coding-agent skills, knowledge store, and backlog
 api/        Versioned desired-state types
 cmd/        CLI entrypoints
 internal/   Private implementation packages

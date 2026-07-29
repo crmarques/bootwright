@@ -10,7 +10,7 @@ places on a cluster. Bootwright models them as two independent features — set
 either, both, or neither:
 
 - **Serving certificates** — the certificates clients *see* when they hit the
-  cluster URLs, `api.<cluster>.<baseDomain>` and the `*.apps.<cluster>.<baseDomain>`
+  cluster URLs, `api.<cluster>.<domains.containerClusters>` and the `*.apps.<cluster>.<domains.containerClusters>`
   wildcard. Replace the installer's default self-signed certificates with
   corporate-issued ones so browsers and `oc` trust the endpoints without a
   warning.
@@ -34,6 +34,7 @@ how the secret bytes are declared and stored see [Secrets](../concepts/secrets.m
 | Cluster-scoped trust | Extra CAs one cluster trusts | `ContainerCluster.spec.install.additionalTrustBundleRefs[]` |
 | Fleet-wide trust | Extra CAs every cluster trusts | `Environment.spec.installTrust.caBundleRefs[]` |
 | Mirror trust | The mirror registry's CA | `Environment.spec.registries.mirror.trustBundleRef` (see [Disconnected & proxied installs](disconnected-proxy.md)) |
+| Proxy trust | The TLS-inspecting proxy's signing CA, auto-folded into every cluster install | `Environment.spec.infraComponents.proxies[].connection.trustBundleRef` (see [Disconnected & proxied installs](disconnected-proxy.md#tls-inspecting-proxies)) |
 
 ## Serving certificates for the cluster URLs
 
@@ -65,18 +66,18 @@ spec:
 Two rules the validator enforces:
 
 - **Never name the internal endpoint.** `namedCertificates[].names` must not
-  include `api-int.<cluster>.<baseDomain>`; the internal API endpoint keeps its
-  installer-generated certificate. List only the external `api.<cluster>.<baseDomain>`
+  include `api-int.<cluster>.<domains.containerClusters>`; the internal API endpoint keeps its
+  installer-generated certificate. List only the external `api.<cluster>.<domains.containerClusters>`
   (and any extra external API aliases).
 - **The ingress certificate must cover the wildcard.** The default ingress
-  certificate has to be valid for `*.apps.<cluster>.<baseDomain>` so it covers
+  certificate has to be valid for `*.apps.<cluster>.<domains.containerClusters>` so it covers
   the console, oauth, and every other route host. Bootwright checks coverage
   against the console hostname when it resolves real secret material.
 
 ## Trusted CAs
 
 Corporate CAs are merged into the install-config `additionalTrustBundle` (with
-`additionalTrustBundlePolicy: Always`) from three sources, deduplicated by name:
+`additionalTrustBundlePolicy: Always`) from four sources, deduplicated by name:
 
 ```yaml
 # Per cluster — extra CAs this cluster trusts:
@@ -94,11 +95,31 @@ spec:
       - corporate-ca
 ```
 
-The mirror registry's own CA is declared separately as
-`Environment.spec.registries.mirror.trustBundleRef` and folded into the same
-bundle; see [Disconnected & proxied installs](disconnected-proxy.md#trust-bundles).
+The two remaining sources are declared elsewhere and folded into the same bundle
+automatically: the mirror registry's own CA
+(`Environment.spec.registries.mirror.trustBundleRef`; see
+[Disconnected & proxied installs](disconnected-proxy.md#trust-bundles)) and the
+signing CA of the TLS-inspecting proxy the cluster install egresses through
+(`proxies[].connection.trustBundleRef`; see
+[TLS-inspecting proxies](disconnected-proxy.md#tls-inspecting-proxies)). You do
+**not** need to repeat either in `additionalTrustBundleRefs[]`.
 Use the cluster-scoped list for CAs only one cluster needs, and the fleet-wide
 list for a corporate root every cluster shares.
+
+### Where CA trust is declared
+
+Seven places name a CA bundle. Only the first four fold into a cluster's
+install trust:
+
+| Field | Trusts | Folded into |
+| --- | --- | --- |
+| [`ContainerCluster.spec.install.additionalTrustBundleRefs[]`](../concepts/container-clusters.md#install) | Whatever this one cluster must trust | `additionalTrustBundle` |
+| [`Environment.spec.installTrust.caBundleRefs[]`](../concepts/environment.md#fields) | A corporate root every cluster shares | `additionalTrustBundle` |
+| [`Environment.spec.infraComponents.proxies[].connection.trustBundleRef`](../concepts/environment.md#infra-component-catalog) | The TLS-inspecting proxy's re-signing CA | `additionalTrustBundle`, plus the trust store of managed hosts that egress through it |
+| [`Environment.spec.registries.mirror.trustBundleRef`](../concepts/environment.md#registries) | The mirror registry | `additionalTrustBundle` |
+| [`MachineImage.spec.trustRefs[]`](../concepts/machines.md#machineimage) | The host serving the install ISO | Nothing — used only for that download |
+| [`Entitlement.spec.rhsm.satellite.trustBundleRef`](../concepts/secrets.md#corporate-satellite) | A corporate Red Hat Satellite | Nothing — trusted on the node before registration |
+| [`Entitlement.spec.registry.trustBundleRef`](../concepts/secrets.md#types) | An entitled content registry | Nothing — trusted where that registry is pulled |
 
 ## Declaring a cert is not trusting its issuer
 

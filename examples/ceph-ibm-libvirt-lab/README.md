@@ -2,71 +2,35 @@
 
 A self-contained Bootwright example that provisions **three libvirt VMs on this
 machine**, installs **RHEL 9.8** on them as Bootwright-managed OS, and builds a
-**managed IBM Storage Ceph** cluster via cephadm:
+**managed IBM Storage Ceph** cluster via cephadm: two full nodes
+(mon/mgr/osd/mds/rgw/ingress, 3 OSDs each) plus one **monitor-only tie-breaker**.
+All three storage types are configured — **block (RBD)**, **file (CephFS)**, and
+**object (RGW with an ingress VIP)** — and the nodes are laid down in **FIPS
+mode**.
 
-| Machine | Node | Profile | Ceph roles | OSDs | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| `ceph-1` | `node-01` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-2` | `node-02` | `ceph-full` | mon, mgr, osd, mds, rgw, ingress | 3 | full node (block + file + object) |
-| `ceph-3` | `node-03` | `ceph-mon` | mon | 0 | **monitor-only tie-breaker** (quorum) |
+**[Provisioning a Ceph cluster](../../docs/getting-started/ceph.md) is the
+step-by-step guide for this tree.** It carries the node table, what every object
+in the tree does, the values you must edit, the credentials to obtain, the
+`secret set` commands, and the validate/apply/verify walkthrough — including how
+to drop FIPS. This file covers only what is specific to running the lab: host
+capacity, the sidecar-image caveat, resolving the lab names from your
+workstation, teardown, and the file map.
 
-The machines keep their `Machine` names (`ceph-1`…`ceph-3`); the cluster names
-its nodes `node-01`–`node-03` (declared explicitly as `topology.nodes[].name`), and
-the cluster YAML references nodes — `bootstrap.node: node-01`, placements on
-`node-01`/`node-02` — never machine names.
-
-All three storage types are configured: **block (RBD)**, **file (CephFS)**, and
-**object (RGW with an ingress VIP)**.
-
-The lab also installs in **FIPS mode**: `clusters/storage/ceph-ibm/cluster.yaml`
-sets `spec.ceph.security.fips.enabled` and `infra/os/rhel-9-ceph-node.yaml` sets
-`customizations.security.fips.enabled`, so each RHEL node is laid down with
-`fips=1` on the installer kernel command line. FIPS is an OS-level property —
-there is no separate cephadm switch — so Bootwright gates it to the
-`redhat`/`ibm` distributions and requires every Ceph node's install profile to
-agree. Drop both `security.fips` blocks to build the cluster without FIPS.
-
-## A note on "tie-breaker" vs Ceph "stretch mode"
-
-You asked for 2 full nodes + 1 monitor-only tie-breaker. That is exactly what
-this lab builds: **three monitors** (one of them on a dedicated, OSD-less node)
-so the cluster keeps mon quorum if one node is lost.
-
-This is **not** Ceph *stretch mode*. Bootwright's stretch validation
-(see `specs/state-model.md`) requires **exactly two
-data sites with two monitors each, plus a separate tie-breaker site** — i.e. a
-minimum of **5 nodes** (4 data + 1 arbiter). A 3-node cluster cannot satisfy
-that, so this example uses a flat single-site topology where the third node runs
-only the tie-breaking monitor. If you later want true stretch (site-level data
-HA), scale to 5 nodes and add the `spec.ceph.topology.stretch` block — see
-`examples/baremetal-redfish-multidc-virtualized-odf-ceph` in the Bootwright repo.
+Install the CLI first — see
+[Installation and Setup](../../docs/getting-started/installation.md#install-the-cli).
+`v1alpha1` is still moving, so a released binary can reject an example tree taken
+from `main`; that page's build-from-source option is the fix.
 
 Because there are only two OSD hosts, pools replicate with `size: 2, minSize: 2`
 across hosts (`clusters/storage/ceph-ibm/placement-policy.yaml`). Losing one OSD
-host pauses I/O (quorum still holds); that is expected for a 2-node data tier.
+host pauses I/O while mon quorum still holds; that is expected for a 2-node data
+tier. This is **not** Ceph *stretch mode* — for site-level data HA see
+[Ceph topologies](../../docs/advanced/ceph-topologies.md) and
+`examples/baremetal-redfish-multidc-virtualized-odf-ceph`.
 
 ---
 
-## 0. Prerequisites
-
-### 0a. A current `bootwright` binary (important)
-
-This lab uses fields added on `main` (`spec.ceph.release`, `StorageObjectGateway`
-`public:`/ingress `address:`), so it needs a current binary. Build the repo's
-`bin/bootwright` from `main` and use it:
-
-```bash
-cd /path/to/bootwright                  # your clone of the Bootwright repo
-make build                              # produces bin/bootwright
-bin/bootwright version                  # commit should match `git rev-parse HEAD`
-# Optional: put it on PATH so the commands below work as `bootwright`:
-sudo install -m 0755 bin/bootwright /usr/local/bin/bootwright
-```
-
-All commands below were validated with `bin/bootwright` built from current `main`.
-A stale release binary will reject this lab's schema.
-
-### 0b. Host capacity and libvirt
+## Host capacity and libvirt
 
 The VMs are deliberately **as lean as possible** for a provisioning test on a
 laptop. Budget roughly:
@@ -92,217 +56,54 @@ sudo systemctl enable --now libvirtd
 virsh -c qemu:///system list --all
 ```
 
-### 0c. An SSH key for the libvirt host
+---
 
-Bootwright reaches the host (as `localhost`) over SSH:
+## Before apply: the sidecar images must be pullable
 
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/bootwright-ssh-key -N ''
-ssh-copy-id -i ~/.ssh/bootwright-ssh-key.pub "$USER@localhost"
-ssh -i ~/.ssh/bootwright-ssh-key -o StrictHostKeyChecking=accept-new "$USER@localhost" true
-```
+This lab turns on the monitoring stack and two HA VIP ingresses (the RGW S3
+endpoint and the `mgmt-gateway` dashboard), so cephadm deploys
+Prometheus/Grafana/Alertmanager/node-exporter plus haproxy/keepalived. On the
+**IBM** distribution these sidecar images are not guaranteed to resolve from the
+entitled registry. Before `apply`, make sure the nodes can pull them —
+`podman login cp.icr.io` and/or pin each to an entitled `cp.icr.io` reference via
+`spec.ceph.config` under the `mgr` section
+(`mgr/cephadm/container_image_prometheus`, `…_grafana`, `…_alertmanager`,
+`…_node_exporter`, `…_haproxy`, `…_keepalived`) in
+`clusters/storage/ceph-ibm/cluster.yaml` — otherwise the monitoring stack and HA
+ingresses will not deploy.
 
 ---
 
-## 1. Get the credentials (Red Hat + IBM)
-
-You need **three** pieces of credential material. None of it goes in YAML — it is
-stored, encrypted, in the Bootwright context with `bootwright secret set`.
-
-### 1a. RHEL trial subscription → org ID + activation key
-
-Bootwright registers the RHEL VMs with `subscription-manager` in the machines
-phase, right after the RHEL install; the clusters-stage Ceph work then enables
-the RHEL BaseOS/AppStream repos that cephadm/ceph need.
-
-1. Create a Red Hat account and get RHEL entitlements with either:
-   - the **no-cost Red Hat Developer Subscription for Individuals**
-     (`https://developers.redhat.com/register` — up to 16 systems), **or**
-   - a **60-day RHEL trial** (`https://www.redhat.com/en/technologies/linux-platforms/enterprise-linux/try-it`).
-2. In the Hybrid Cloud Console, create an **activation key**:
-   `https://console.redhat.com/insights/connector/activation-keys` →
-   *Create activation key*. Give it a name (e.g. `ceph-lab`).
-3. Note your **Organization ID** (shown on the same activation-keys page, or run
-   `subscription-manager identity` on any registered RHEL box). It is a number.
-
-You now have an **org ID** and an **activation key name**.
-
-### 1b. The RHEL 9.8 DVD ISO
-
-Download `rhel-9.8-x86_64-dvd.iso` from
-`https://access.redhat.com/downloads/content/rhel` (or the Red Hat Developer
-downloads page). Save it somewhere local; you stage it into Bootwright in step 2.
-
-### 1c. IBM Storage Ceph entitlement key (the "IBM-provided" part)
-
-IBM Storage Ceph container images come from IBM's entitled registry
-`cp.icr.io/cp`. The RPMs come from IBM's public repo (no auth), but the images
-need an **IBM entitlement key**:
-
-1. Create/sign in to an **IBM account** and obtain IBM Storage Ceph
-   (trial/eval or entitled): start at
-   `https://www.ibm.com/products/storage-ceph`.
-2. Get your entitlement key from the **IBM Container Software Library**:
-   `https://myibm.ibm.com/products-services/containerlibrary` → *Get entitlement
-   key* → *Copy key*.
-3. The registry login is username **`cp`** with that key as the password.
-
-> The IBM Storage Ceph license is accepted automatically on each node because
-> the `ibm-storage-ceph` entitlement sets `license.accept: true`. That entitlement
-> holds only the IBM registry + license; the storage nodes name the separate
-> `rhel` entitlement (the org ID + activation key from step 1a) via each
-> `MachineInstallProfile.spec.subscription`. Setting
-> that `rhel` entitlement's `rhsm.management: external` instead delegates
-> registration to a corporate `CustomPlaybook`
-> (see `examples/ceph-external-rhsm`). The StorageCluster explicitly sets
-> `spec.ceph.ibm.callHome: disabled` so accepting the license does not opt this
-> lab into IBM Call Home outbound communication.
-
-**Version:** the StorageCluster pins `spec.ceph.release: "9.9.1.0"` — the IBM
-Storage Ceph product version, whose leading component gives the `9`
-repository/image stream. Bootwright keeps no release list and no support matrix,
-so it neither checks that version nor the RHEL version underneath it.
-`spec.ceph.image` and `spec.ceph.packageVersion` are left unset in this lab, so
-cephadm installs and runs whatever build its packaged default resolves to. For a
-reproducible install set `spec.ceph.image.version` (a vendor build tag, or a
-`sha256:` digest — `latest` is rejected) and `spec.ceph.packageVersion` to the
-`cephadm` RPM build IBM's table names.
-
----
-
-## 2. Stage the RHEL ISO into Bootwright
+## Verify
 
 ```bash
-bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
-bootwright media list
-```
-
-The MachineImage references it as `local-media:rhel-9.8-x86_64-dvd.iso`.
-
----
-
-## 3. Validate, import the context
-
-Run everything from this directory:
-
-```bash
-cd /path/to/bootwright/examples/ceph-ibm-libvirt-lab
-
-bootwright validate -f .
-bootwright context init --name ceph-ibm-lab -f .
-bootwright context current
-bootwright validate             # re-validate the imported context
-bootwright secret list          # shows which secrets still need bytes
-```
-
-> Run `bootwright` as your normal user, never `sudo bootwright` — it re-escalates
-> on its own. After any step, `bootwright status` prints the suggested next
-> command.
-
----
-
-## 4. Set the secrets
-
-```bash
-# Red Hat subscription: organization ID and activation key (plain strings).
-printf '%s' 'YOUR_ORG_ID'            > /tmp/rhel-org.txt
-printf '%s' 'ceph-lab'               > /tmp/rhel-activation-key.txt
-bootwright secret set --name rhel-org            --raw-file /tmp/rhel-org.txt
-bootwright secret set --name rhel-activation-key --raw-file /tmp/rhel-activation-key.txt
-shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
-
-# IBM entitlement key for cp.icr.io (username "cp", key as the password).
-printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
-  bootwright secret set --name ibm-ceph-registry --username cp --password-stdin
-
-# Converge the auto-managed secrets: generates the ceph-cluster-ssh keypair and
-# bmc-credentials, and copies the bastion-host-ssh file: source into the context.
-bootwright secret generate
-
-# Record SSH host-key trust for the libvirt host, then re-check.
-bootwright machine trust
-bootwright secret list
-bootwright validate
-```
-
-`bastion-host-ssh` is the operator-owned key at `~/.ssh/bootwright-ssh-key` from
-step 0c — declared `file:`, so you do not "set" it.
-
----
-
-## 5. Check and apply
-
-> **Sidecar images must be pullable.** This lab turns on the monitoring stack and
-> two HA VIP ingresses (the RGW S3 endpoint and the `mgmt-gateway` dashboard), so
-> cephadm deploys Prometheus/Grafana/Alertmanager/node-exporter plus
-> haproxy/keepalived. On the **IBM** distribution these sidecar images are not
-> guaranteed to resolve from the entitled registry. Before `apply`, make sure the
-> nodes can pull them — `podman login cp.icr.io` and/or pin each to an entitled
-> `cp.icr.io` reference via `spec.ceph.config` under the `mgr` section
-> (`mgr/cephadm/container_image_prometheus`, `…_grafana`, `…_alertmanager`,
-> `…_node_exporter`, `…_haproxy`, `…_keepalived`) in
-> `clusters/storage/ceph-ibm/cluster.yaml` — otherwise the monitoring stack and
-> HA ingresses will not deploy.
-
-```bash
-bootwright bastion setup --yes      # installs host prerequisites
-bootwright preflight all
-bootwright plan                     # preview the task graph (no changes)
-bootwright apply --yes
-bootwright status --watch
-```
-
-What apply does, in order:
-
-1. **infra** — defines the NAT'd libvirt network `vbr-ceph-ibm`, brings up the
-   dnsmasq resolver on the host, creates the three VMs with emulated Redfish
-   BMCs, and installs RHEL 9.8 on each via the anaconda kickstart. (Time sync is
-   each node's own `chronyd`, reaching public NTP through the NAT'd network.)
-   With the OS in place, the machines-phase registration task registers each
-   node with RHSM.
-2. **clusters** — on every node: enables the RHEL + IBM Storage Ceph repos,
-   accepts the IBM license, logs in to `cp.icr.io`, installs cephadm, then
-   bootstraps the cluster from `node-01`, adds `node-02` and the `node-03`
-   tie-breaker monitor, creates the OSDs, the RBD/CephFS/RGW pools, the CephFS
-   filesystem, and the RGW service with its ingress VIP.
-
-Re-running `apply --yes` is idempotent. For a focused storage rerun:
-`bootwright apply --stage clusters --clusters ceph-ibm --yes`.
-
----
-
-## 6. Verify
-
-```bash
-# SSH into the seed node with the generated key:
-sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-lab/secrets/ceph-cluster-ssh \
-  root@192.168.140.21 'cephadm shell -- ceph -s'
-
-# Expect: HEALTH_OK, 3 mons (node-01, node-02, node-03), 2 mgr, 6 OSDs,
-# 1 cephfs, an rgw service, a mgmt-gateway, and two ingress services
-# (rgw.lab + mgmt-gateway.lab). Inspect more:
-#   ceph orch host ls
-#   ceph osd tree
-#   ceph fs status
-#   ceph orch ls
-```
-
-The S3 endpoint is `http://rgw.ceph-ibm.bootwright.test` (RGW ingress VIP
-`192.168.140.80`) and the Ceph Dashboard is served HA through the native
-`mgmt-gateway` at `https://dashboard.ceph-ibm.bootwright.test:8443` (a separate
-mgmt-gateway VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
-`bootwright cluster info` reports that dashboard URL plus the admin password
-file:
-
-```bash
+bootwright cluster list
 bootwright cluster info --name ceph-ibm
-# Dashboard: https://dashboard.ceph-ibm.bootwright.test:8443
-# Dashboard user: admin
-# Dashboard password file: .../secrets/dashboard-password
 ```
 
-Add `--secrets` (`bootwright cluster info --name ceph-ibm --secrets`) to print
-the dashboard password inline instead of only the file path.
+`cluster info` prints the seed node, the SSH/health-check/cluster-shell commands
+to run against it, the dashboard URL and user, and — under `--secrets` only — the
+dashboard password:
+
+```text
+Dashboard: https://dashboard.ceph-ibm.bootwright.test:8443
+Dashboard user: admin
+Show password: bootwright cluster info --name ceph-ibm --secrets
+```
+
+Run the health check it prints, or let Bootwright resolve the node identity for
+you and open a shell on the seed node:
+
+```bash
+bootwright cluster rsh --name ceph-ibm --node node-01
+```
+
+Expect `HEALTH_OK`, 3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1
+CephFS, an RGW service, a mgmt-gateway, and two ingress services (`rgw.lab` +
+`mgmt-gateway.lab`). The S3 endpoint is `http://rgw.ceph-ibm.bootwright.test`
+(RGW ingress VIP `192.168.140.80`); the dashboard is served HA through the
+native `mgmt-gateway` at `https://dashboard.ceph-ibm.bootwright.test:8443` (a
+separate VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
 
 ### Resolving the lab names from your workstation
 
@@ -355,7 +156,7 @@ dnsmasq and you maintain it by hand.
 
 ---
 
-## 7. Tear down
+## Tear down
 
 This environment sets `safety.destroyProtection: requiredOverride`, so `destroy`
 refuses to run without `--force` — a routine `destroy --yes` cannot tear it
@@ -371,11 +172,14 @@ bootwright destroy --stage infra --force --yes      # remove VMs, network, servi
 ## File map
 
 ```
-environment.yaml                              Environment: secrets, IBM entitlement, lab DNS
+environment.yaml                              Environment: domains, machine access, lab DNS, destroy protection
+secrets.yaml                                  Secrets: bastion-host-ssh, ceph-cluster-ssh, bootwright-machine-key, bmc-credentials, rhel-org, rhel-activation-key, ibm-ceph-registry
+infra/entitlements/rhel.yaml                  Entitlement: RHEL subscription (org + activation key)
+infra/entitlements/ibm-storage-ceph.yaml      Entitlement: IBM registry + license acceptance
 infra/providers/libvirt.yaml                  InfraProvider: libvirt + VM profiles + bridge
 infra/machines/bastion.yaml                   Machine: the libvirt host (localhost)
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, static IPs
-infra/components/lab-dns.yaml                  InfraComponent: dnsmasq resolver + forwarders
+infra/components/lab-dns.yaml                 InfraComponent: dnsmasq resolver + forwarders
 infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.8 DVD (local-media)
 infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
 clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1.0, mgmt-gateway HA dashboard

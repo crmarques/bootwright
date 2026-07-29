@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implemented)
+Accepted
 
 ## Context
 
@@ -83,13 +83,9 @@ authors stays what ADR 0019 fixed — one drop-in scoped to one principal, never
 global relaxation. This asymmetry extends that scoping rather than reopening it.
 
 When the created account's grant is present and correct but has no effect, the
-node is not reading it, and the refusal names the three ways that happens: sudo
-applies `Defaults` in parse order and the last one wins whether it is generic or
-per-user, so any later-sorting file in `/etc/sudoers.d` overrides it; a
-`Defaults requiretty` placed after `@includedir` in
-`/etc/sudoers` cannot be overridden by any drop-in; and an LDAP or SSSD
-`cn=defaults` carrying `ignore_local_sudoers` skips `/etc/sudoers` and every
-drop-in outright, in which case the grant must come from the directory.
+node is not reading it, and the refusal names the three ways that happens —
+enumerated once, in [`security.md`](../security.md) ("Node Login Identity and
+Privilege").
 
 ### Terminal allocation is not an operator knob
 

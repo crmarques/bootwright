@@ -119,14 +119,29 @@ hostname cephadm expects. A `Machine` name is rejected with guidance naming
 the node. The same is true of the other authored node references —
 `placement.hosts[]` and `topology.stretch.tiebreaker.node`.
 
+## The cluster's node login
+
+A managed cluster owns the account cephadm orchestrates its hosts with.
+`spec.ceph.cephadm.clusterSSH.user` defaults to `cephadm` on a managed cluster
+(`root` only on an external one), and because the user is not `root`,
+`clusterSSH.keyRef` is **required** — it is the key cephadm reaches every host
+with, and the key the cluster authorizes for that account. It must name a
+second generated `sshKeyPair` `Secret`, distinct from
+`Environment.spec.machineAccess.keyRef`: `cephadm bootstrap` moves the cluster
+identity into the Ceph mon config-key store, so the fleet service-account key
+must not be the one it takes. See
+[Storage → The Ceph node login](../concepts/storage.md#the-ceph-node-login) for
+the field table and the node-side posture.
+
 ## Host identity and FQDN node naming
 
 cephadm registers every `spec.ceph.topology.nodes[]` entry under its
 `name` — the cluster's name for the node, independent of the bound machine's
-name and **required** on every entry. A bare label composes to the
-fully-qualified `<name>.<cluster>.<baseDomain>` (e.g.
-`node-03.ceph-ibm.bootwright.test`); a dotted value is an explicit FQDN taken
-verbatim. The composed FQDN is rendered verbatim into the cephadm host spec, is
+name and **required** on every entry. `name` is a strict DNS label and composes
+to the fully-qualified `<name>.<cluster>.<domains.storageClusters>` (e.g.
+`node-03.ceph-ibm.bootwright.test`); a dotted value is rejected — author the
+sibling `topology.nodes[].fqdn` to pin a name outside that zone (ADR 0025). The
+composed FQDN is rendered verbatim into the cephadm host spec, is
 the name the mgr dashboard uses to reach monitoring services (Prometheus,
 Grafana, Alertmanager), and must equal the host's real OS hostname **and
 resolve** cluster-wide:
@@ -136,13 +151,14 @@ resolve** cluster-wide:
   `nameResolution` component the node's `NetworkConfig` references publishes a
   record for it.
 - For `os.provided: true` machines, the operator guarantees it. If a machine's
-  real hostname differs, author `name:` explicitly — it is taken verbatim.
+  real hostname lives outside the composed zone, set the node's `fqdn:` field —
+  `name` stays a strict label, and `fqdn` is the escape hatch.
   A mismatch passes `validate` (which never reaches the host) but fails
   `bootwright preflight`, which compares each storage node's real hostname
   against the declared node FQDN before cephadm ever sees the host spec.
 
 The machine's own DNS name is separate: every `Machine` carries a `fqdn`
-address (`<machineName>.<baseDomain>` by default) that Bootwright connects to
+address (`<machineName>.<domains.machines>` by default) that Bootwright connects to
 and that the node FQDN resolves through — see
 [Machines](../concepts/machines.md#the-fqdn-address). A cluster-bound
 node's OS hostname must equal its node FQDN, so
@@ -168,10 +184,12 @@ model.
 ## OSD device selection
 
 Every `spec.ceph.topology.nodes[]` entry carrying the `osd` role must say which
-disks it contributes: either the lean `devices:` list of literal paths or the
-drivegroup-shaped `osd:` selection. `bootwright validate` rejects an osd-role
-host that authors neither, and rejects either form on a host without the `osd`
-role. There is no implicit all-devices default — handing every available
+disks it contributes, in one of three ways: the lean `devices:` list of literal
+paths, the drivegroup-shaped `osd:` selection, or coverage by a cluster-wide
+`spec.ceph.topology.osdDrivegroups[]` entry. `bootwright validate` rejects an
+osd-role host that neither authors `devices`/`osd` nor is covered by an
+`osdDrivegroups[]` entry, and rejects either per-host form on a host without the
+`osd` role. There is no implicit all-devices default — handing every available
 (blank) disk on a host to Ceph is the explicit opt-in
 `osd: {dataDevices: {all: true}}`:
 
@@ -213,6 +231,26 @@ nodes:
     encrypted: true
     tpm2: true                # seal the LUKS key in the host TPM
     unmanaged: false          # set true to freeze the drivegroup (no new claims)
+```
+
+For a homogeneous rack, do not repeat that block per host: one
+`topology.osdDrivegroups[]` entry renders a single cephadm OSD service spanning
+every host its `placement` selects, which is the dominant declarative cephadm
+idiom. A host covered by a drivegroup must not also author per-host
+`devices`/`osd`.
+
+```yaml
+ceph:
+  topology:
+    osdDrivegroups:
+    - serviceID: rack-a-nvme
+      placement:
+        sites:
+        - dc1
+      osd:
+        dataDevices:
+          model: MZ7LH3T8
+          rotational: false
 ```
 
 On a mixed-disk host that needs distinct CRUSH classes per device, use the
@@ -343,6 +381,21 @@ untouched, and `dnsLabel: dashboard` publishes
 `dashboard.ceph-ibm.example.com`. A dotted value is rejected: the cluster and
 domain arms are not overridable per cluster.
 
+`management.ingress` is **required** whenever the block is present — it is the
+`keepalive_only` VIP itself, so `name`, `address`, and `prefixLength` must all be
+set (`virtualInterfaceNetworks[]`, `placement`, and `firstVirtualRouterID` are
+optional, and follow the RGW ingress rules below):
+
+```yaml
+ceph:
+  management:
+    dnsLabel: dashboard
+    ingress:
+      name: lab
+      address: 192.168.140.81
+      prefixLength: 24
+```
+
 The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
 dashboard end to end.
@@ -443,9 +496,11 @@ for the owned-Ceph wipe-and-rebuild path.
 
 `bootwright cluster info` prints everything needed to reach a managed Ceph
 cluster, derived entirely from desired state — the seed node SSH line, the
-monitor list, a health-check command, the dashboard URL, and the dashboard
-credential file path. Run the **Health check** line; `HEALTH_OK` from `ceph -s`
-confirms the cluster is reachable and healthy.
+monitor list, a health-check command, the dashboard URL, and the
+`cluster info --name <cluster> --secrets` command that reveals the dashboard
+password. The seed login is the cluster's own account (`cephadm` by default,
+[above](#the-clusters-node-login)), not root. Run the **Health check** line;
+`HEALTH_OK` from `ceph -s` confirms the cluster is reachable and healthy.
 
 When `spec.domains.storageClusters` is set, the dashboard URL is
 `https://mgr.<cluster>.<domains.storageClusters>` instead of the seed node's
@@ -462,9 +517,10 @@ the controller (`clusters/<storage-cluster>/secrets/dashboard-password`, mode
 
 !!! note "Dashboard password is captured at install only"
     The password is captured solely from the one-time `cephadm bootstrap`. It is
-    never re-read or re-synced on later applies, and — like every secret —
-    `cluster info` shows its file path by default, revealing the bytes only
-    when you pass `--secrets`. The file persists after the cluster is destroyed; delete the
+    never re-read or re-synced on later applies. `cluster info` prints a reveal
+    command by default and the password bytes only when you pass `--secrets`;
+    the on-disk credential is an encrypted envelope, so reading the file
+    directly does not work. The file persists after the cluster is destroyed; delete the
     cluster's `secrets/` directory by hand if you want the credential gone. If
     the file is lost or the in-cluster password was changed, see
     [Recovering the Ceph dashboard password](../troubleshooting.md#recovering-the-ceph-dashboard-password).

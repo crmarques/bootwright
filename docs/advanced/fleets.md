@@ -46,14 +46,14 @@ cluster's nodes with that cluster; reserve `infra/` for objects genuinely shared
 across clusters.
 
 !!! note "One object per file"
-    As a rule, each input YAML file holds exactly one object and the filename
-    matches `metadata.name`; a fleet is many small files organized by directory,
-    not a few multi-document files. Two sanctioned exceptions: similar `Secret`
-    objects are grouped into a single multi-document `secrets.yaml`, and a
-    cluster's root object lives in `cluster.yaml` rather than a file named after
-    its `metadata.name`. This is the authoring layout `specs/state-model.md`
-    defines; every example and `bootwright example init` output follow it,
-    exceptions included.
+    One object per file holds everywhere — a fleet is many small files organized
+    by directory, not a few multi-document files. The one exception is that
+    similar `Secret` objects are grouped into a single multi-document
+    `secrets.yaml`. Filenames are role-based where the role is unambiguous
+    (`cluster.yaml`, `provider.yaml`, `networks.yaml`, `cluster-machines.yaml`)
+    and named after `metadata.name` otherwise. `bootwright example init` emits
+    this nested tree; the small single-cluster examples are deliberately flat —
+    see [Reference examples](examples.md).
 
 ## The single cluster-selection namespace
 
@@ -155,24 +155,22 @@ standing.
 ### Narrow to machines
 
 `--machines <names>` restricts the run to individual `Machine`s instead of whole
-clusters (the two flags are mutually exclusive). It runs only the `fabric` and
-`machines` phases, so it prepares a node up to the point a cluster install takes
-over — provisioning one replaced node, or a shared bastion, without touching the
-rest:
+clusters — one replaced node, or a shared bastion, without touching the rest.
+See [Concepts → Selecting machines](../concepts/index.md#selecting-machines) for
+the rule:
 
 ```text
 bootwright apply --machines dc1-master-1 --yes
 bootwright destroy --machines dc1-master-1 --force
 ```
 
-The narrowing covers operator-supplied [custom playbooks](../concepts/custom-playbooks.md) too:
-a `CustomPlaybook` anchored at `fabric` or `machines` runs against the selected
-machines' hosts only, and is skipped when its target resolves to none of them —
-so a run for one node never reaches a sibling that happens to be down.
-
-A machine `destroy` tears down only that machine's substrate and never removes
-shared per-cluster networking or services the survivors still use; destroying a
-node of an installed cluster requires `--force`.
+Two consequences matter in a fleet. The narrowing covers operator-supplied
+[custom playbooks](../concepts/custom-playbooks.md): a `CustomPlaybook` anchored
+at `fabric` or `machines` runs against the selected machines' hosts only, and is
+skipped when its target resolves to none of them — so a run for one node never
+reaches a sibling that happens to be down. And a machine `destroy` tears down
+only that machine's substrate, never the shared per-cluster networking or
+services the survivors still use.
 
 ### Narrow to a stage family
 
@@ -184,29 +182,19 @@ bootwright apply --stage infra --clusters dc1-ocp --yes
 bootwright apply --stage clusters --clusters dc1-ocp --yes
 ```
 
-`apply`, `plan`, and `diff` additionally accept the single-phase sub-phases
-(`fabric`, `machines`, `deps`, `base`, `add-ons`) for even tighter reruns;
-`destroy` accepts only the two families. The full stage model — families versus
-sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
-
-`--stage` and `--through` together select an inclusive **range** of stages:
-`--stage` is the first phase to run, `--through` is the last. `--stage` alone
-runs exactly what it names — one phase for a sub-phase name, that family's
-phases for `infra` or `clusters`; `--through` alone runs every phase **from the
-beginning up to and including** that stage (a cumulative build-out);
-`--through end` runs through to the final phase. Use them to converge a fleet
-incrementally up to a checkpoint, or to replay a contiguous mid-graph slice:
+`apply`, `plan`, and `diff` additionally accept the single-phase sub-phases and
+combine `--stage` with `--through` to select an inclusive **range** — useful for
+converging a fleet up to a checkpoint, or replaying a contiguous mid-graph
+slice. The full stage model — families, sub-phases, and range semantics — is on
+[Concepts → Apply stages](../concepts/index.md#apply-stages-and-families); a
+scoped command still validates the *whole* input, so an error in an unselected
+cluster blocks the run (see
+[Whole-input validation](operations.md#whole-input-validation)).
 
 ```text
 bootwright apply --through machines --clusters dc1-ocp --yes
 bootwright apply --stage deps --through base --clusters dc1-ocp --yes
 ```
-
-### Whole-input validation
-
-A scoped command still loads and validates the full state, so a desired-state
-error anywhere in the fleet blocks even a narrowed run. Fix the offending object
-(the error names it) before retrying the scoped command.
 
 !!! warning "A scoped apply cannot silently narrow a shared service"
     The shared machine-service graph — built from every `InfraComponent`, the
@@ -214,10 +202,12 @@ error anywhere in the fleet blocks even a narrowed run. Fix the offending object
     endpoint sources — is resolved **once**, before validation, rendering, or
     scoped checks make any decision. A partial
     `apply --stage infra --clusters …` therefore cannot quietly reconfigure a
-    shared service (a load balancer, DNS resolver, or artifact server) in a way
-    that would break a cluster left outside the scope. If a narrowed apply would
-    change a service another selected cluster still depends on, it is caught
-    against the full service graph rather than degrading that service silently.
+    shared service (a load balancer, DNS resolver, or NTP source) in a way
+    that would break a cluster left outside the scope. The run **fails before
+    any mutation**, naming the service and its unscoped consumers; re-run
+    without `--clusters`, or extend `--clusters` to include the unscoped
+    clusters. Self-contained services — artifact server, proxy, mirror registry,
+    BMC — re-provision identically under any scope and are not blocked.
 
 ## See also
 

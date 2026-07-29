@@ -109,7 +109,9 @@ It is UDN/CUDN-first: `kind`/`apiGroup` default to `ClusterUserDefinedNetwork` /
 accepted. Bootwright **references** the object; it does not render or own it —
 author the (C)UDN/NAD and any OVS bridge-mapping `NodeNetworkConfigurationPolicy`
 out of band, for example as a `manifestSet` add-on on the parent. See
-[Networking](networking.md) for the localnet topology and the static-IP rule.
+[Networking → KubeVirt child networks](networking.md#kubevirt-child-networks) for
+the localnet topology, the `dc1-child-net` `NetworkConfig` these machines
+reference, and the static-IP rule.
 
 ## The child machines
 
@@ -208,12 +210,6 @@ A child-only apply against a parent that is not yet ready fails before it touche
 anything, rather than half-creating VMs that cannot schedule. This mirrors the
 broader scoping rule in [Concepts](../concepts/index.md): scoped applies do not
 silently widen their scope.
-
-!!! warning "A scoped child apply never installs the parent"
-    Naming only the child in `--clusters` will not expand the scope to install
-    the parent virtualization cluster or its KubeVirt add-on. Either name both
-    parent and child, or run the child apply after the parent is independently
-    converged.
 
 ## Destroying a nested cluster
 

@@ -2,8 +2,19 @@
 
 ## Status
 
-Accepted. Supersedes the key-separation clause of ADR 0019; the rest of
-ADR 0019 stands.
+Accepted in part. Supersedes the access-block shape and the `clusterSSH.user`
+default of [ADR 0019](0019-node-root-posture-and-orchestration-identity.md);
+the rest of ADR 0019 stands.
+
+Four clauses are in turn superseded by
+[ADR 0027](0027-bootwright-owns-the-login-it-installs.md): the derived
+`user: cephadm` install identity for a topology node the cluster installs (such
+a node now carries the `bootwright` account and the cluster provisions
+`cephadm` on top day-2); the `auth.provision` arm and
+`customizations.ssh.sudo`, both removed from the authored API; "the cluster key
+*is* the node key", reversed — the cluster identity must again be a key of its
+own; and "`--ssh-user` reaches as far as the key flag does", now scoped to the
+`operatorIdentity` arm. `controllerIdentity` is spelled `operatorIdentity`.
 
 ## Context
 

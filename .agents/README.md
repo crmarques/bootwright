@@ -16,7 +16,7 @@ its area.
 | `definition-stewardship` | Changing specs, ADRs, docs, examples, E2E fixture names, or agent guidance |
 | `implementation-worktree` | Isolating every repo-tracked-file change in a temporary worktree before review and integration |
 | `implementation-validation` | Final validation before completing implementation work |
-| `architecture` | Designing OpenShift behavior, provider boundaries, multi-cluster provisioning, or lab Redfish emulation |
+| `architecture` | Designing platform behavior — OpenShift behavior, provider boundaries, multi-cluster provisioning, or lab Redfish emulation (for internal package boundaries and the Go↔Ansible split use the `architecture.md` prompt below) |
 | `repo-stewardship` | Changing repository layout, generated-output boundaries, tests, or security hygiene |
 | `security-analysis` | Reviewing secrets, credentials, permissions, command execution, supply chain, or TLS/trust handling |
 | `go-dependencies` | Adding, upgrading, replacing, or removing Go module dependencies |
@@ -36,10 +36,10 @@ current specs and code before judging.
 | `code-review.md` | Auditing implementation quality and safety — correctness, dead code, duplication, error handling, script/CI safety |
 | `code-flow-review.md` | Tracing real input end-to-end to final output for bugs, intent drift, and Go↔Ansible contract mismatches |
 | `provisioning-logic-review.md` | Reviewing the provisioning graph — closure, dependency ordering, locks, parallelism, and resumability |
-| `idempotency-safety-audit.md` | Auditing idempotency and destructive-operation safety against a provisioning scenario |
-| `apply-destroy-safety-contract.md` | Reviewing `apply`/`destroy` command and flag semantics for spec/docs/code coherence across self-generated lifecycle scenarios, then hardening the contract with actionable errors and durable guardrails |
+| `idempotency-safety-audit.md` | Auditing idempotency and destructive-operation safety against a user-supplied scenario file (read-only) |
+| `apply-destroy-safety-contract.md` | Reviewing `apply`/`destroy` command and flag semantics for spec/docs/code coherence — no input; self-generated scenarios from a fixed two-DC baseline, then implements the guardrails |
 | `security-audit.md` | Running a dedicated deep security pass — secrets, privilege, TLS/trust, and supply chain |
-| `state-lifecycle-scenario-review.md` | Pressure-testing lifecycle transitions (apply/destroy/recreate) across many ownership and state scenarios |
+| `state-lifecycle-scenario-review.md` | Pressure-testing lifecycle transitions (apply/destroy/recreate) across many ownership and state scenarios — read-only matrix; proposes safety locks, edits nothing |
 
 ## Knowledge Base
 

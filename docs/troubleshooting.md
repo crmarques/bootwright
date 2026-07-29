@@ -17,7 +17,11 @@ see [Operations and Recovery](advanced/operations.md).
     state directory at `/var/lib/bootwright/contexts/<context>/runs/`. When a
     task fails, that is the first place to look — the terminal shows a summary,
     but the detailed tool output (Ansible, `openshift-install`, `cephadm`) is
-    kept in those root-managed logs rather than streamed. `destroy --purge-history`
+    kept in those root-managed logs rather than streamed. Credential-handling
+    tasks appear as `censored due to no_log` in both the terminal and the log —
+    see
+    [Surfacing redacted output with `--verbose`](advanced/operations.md#surfacing-redacted-output-with-verbose)
+    before reaching for `-v`. `destroy --purge-history`
     deletes a torn-down component's share of these logs (see
     [Operations and Recovery](advanced/operations.md#leaving-no-trace-of-a-destroyed-component)),
     so skip it while a failure is still under investigation.
@@ -274,17 +278,12 @@ with root SSH not yet revoked and still reachable. That proof runs
 `sudo -n true` on a terminal-less channel deliberately — it is how cephadm's
 manager runs — so a policy that reaches the account only from an interactive
 session fails here by design. If `/etc/sudoers.d/60-bootwright-<user>` is
-present, 0440 `root:root`, and correct, the node is not reading it:
-
-- A **later-sorting file** in `/etc/sudoers.d` overrides it. sudo applies
-  `Defaults` in parse order and the last one wins, whether it is generic or
-  per-user, so a plain `Defaults requiretty` in a file sorting after
-  `60-bootwright-<user>` beats the per-user exemption.
-- A **`Defaults requiretty` after `@includedir`** in `/etc/sudoers` cannot be
-  overridden by any drop-in.
-- An **LDAP or SSSD `cn=defaults` carrying `ignore_local_sudoers`** makes sudo
-  skip `/etc/sudoers` and every drop-in outright. There is no on-node fix — the
-  grant has to come from the directory.
+present, 0440 `root:root`, and correct, the node is not reading it — a
+later-sorting file in `/etc/sudoers.d`, a `Defaults requiretty` placed after
+`@includedir` in `/etc/sudoers`, or an LDAP/SSSD `cn=defaults` carrying
+`ignore_local_sudoers` that makes sudo skip local files entirely. The normative
+statement of all three is
+[specs/security.md § Node Login Identity and Privilege](https://github.com/crmarques/bootwright/blob/main/specs/security.md).
 
 Two commands tell them apart: the `sudoers:` line in `/etc/nsswitch.conf` shows
 whether policy comes from a directory at all, and `sudo -ll -U <user>` shows
@@ -430,19 +429,19 @@ retention window, the journal growing to its cap), so the rule extrapolates a
 
 The alert only fires at all when the projected five-day consumption exceeds the
 free space — roughly `free < 5 × daily fill rate`. So the flapping is a real
-signal about headroom, not pure noise. Check the actual margin on every node:
+signal about headroom, not pure noise. Check the actual margin on every node —
+repeat these per storage node, or script them over `bootwright machine list`:
 
 ```bash
 # free space and the biggest consumers on the Ceph state filesystem
-ansible ceph -i <inventory> -b -m shell -a 'df -h / /var/lib/ceph; \
-  du -xsh /var/lib/ceph/* /var/lib/containers 2>/dev/null | sort -h | tail'
+bootwright cluster exec --name <storage-cluster> --node <node> -- \
+  sudo df -h / /var/lib/ceph
+bootwright cluster exec --name <storage-cluster> --node <node> -- \
+  sudo du -xsh /var/lib/ceph /var/lib/containers
 
 # journal size against its cap
-ansible ceph -i <inventory> -b -m shell -a 'journalctl --disk-usage'
-
-# what Prometheus is actually holding
-ansible ceph -i <inventory> -b -m shell -a \
-  'du -xsh /var/lib/ceph/*/prometheus.*/ 2>/dev/null'
+bootwright cluster exec --name <storage-cluster> --node <node> -- \
+  sudo journalctl --disk-usage
 ```
 
 If the nodes are comfortably empty (tens of GiB free and falling by megabytes a
@@ -454,9 +453,11 @@ filesystem is genuinely undersized for the roles the node carries — see the
 [node root-filesystem budget](concepts/storage.md#node-root-filesystem-budget).
 Remedies, in order of preference:
 
-- Give the node a larger root disk. `spec.machineOSInstall` kickstart
-  `storage.rootDisk` selects the disk the root partition grows into, so
-  reinstalling the machine against a larger disk is the durable fix.
+- Give the node a larger root disk. `Machine.spec.os.install.rootDeviceHints`
+  picks the install disk and the profile's
+  `customizations.storage.rootDevice.source: machineRootDeviceHints` makes
+  Anaconda use it — see [Managed OS installs](advanced/managed-os.md).
+  Reinstalling against a larger disk is the durable fix.
 - Lower `spec.ceph.monitoring.prometheus.retentionSize` (Bootwright defaults it
   to `10GB`) and re-apply.
 - Move the `prometheus`, `grafana`, `alertmanager` or `loki` placements onto
@@ -465,7 +466,7 @@ Remedies, in order of preference:
   `journalctl --vacuum-size=1G` now, and
   `SystemMaxUse=1G` in `/etc/systemd/journald.conf.d/` to hold it there.
 
-`bootwright preflight` now fails below 20 GiB free and warns below the
+`bootwright preflight` fails below 20 GiB free and warns below the
 per-node budget, so a re-run reports which nodes are short.
 
 ## Recovering the Ceph dashboard password

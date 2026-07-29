@@ -10,8 +10,8 @@ endpoints. The object model — `NetworkConfig`, `InfraProvider` attachments, an
 `InfraComponent` services — lives in
 [Infrastructure: providers, components & networking](../concepts/infrastructure.md);
 cluster endpoint fields live in
-[Container clusters](../concepts/container-clusters.md#endpoints). Link there for
-the field tables; this page shows how to assemble them.
+[Container clusters](../concepts/container-clusters.md#endpoints). Those pages
+own the kinds and their field tables; this page owns assembly.
 
 `NetworkConfig` is the reusable network template for agent installs. It owns:
 
@@ -102,11 +102,6 @@ spec:
         - interface: bond0
           addressRef: ip
           prefixLength: 24
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
-      - nicRef: eno2
-        interfaceName: eno2
 
   hardware:
     nics:
@@ -120,28 +115,19 @@ spec:
       address: 192.168.133.20
 ```
 
-Each `interfaceAddresses[]` entry has these fields:
+The `interfaceAddresses[]` field table is on
+[Machines → Network](../concepts/machines.md#network).
 
-| Field | Type | Required | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `interface` | string | Yes | — | NMState interface name to receive the address (e.g. `bond0`). |
-| `addressRef` | string | Yes | — | Names a `Machine.spec.addresses[]` entry; its `address` is injected at render time. |
-| `prefixLength` | int | Yes | — | CIDR prefix. 1–128; must be ≤ 32 for `ipv4`. |
-| `family` | string | No | `ipv4` | One of `ipv4` or `ipv6`. The same interface may carry one entry per family. |
+The sibling `interfaceBinding[]` is *not* in the example because this machine
+does not need it: it maps a declared `spec.hardware.nics[]` entry (`nicRef`) to a
+differently-named NMState interface (`interfaceName`). Omit it when the NMState
+interface names already equal the `hardware.nics[]` names; the render then uses
+the declared NICs as-is. Author it only to remap — for example
+`nicRef: eno1` → `interfaceName: bond0-port0`.
 
-`interfaceBinding[]` is separate: it maps a declared
-`spec.hardware.nics[]` entry (`nicRef`) to an NMState interface name
-(`interfaceName`) so the rendered host config matches each NIC by MAC. The
-`nicRef` values above (`eno1`, `eno2`) resolve to the `hardware.nics[]` entries
-declared on the same machine.
-
-!!! note "Raw NMState overrides are for non-address tweaks only"
-    `spec.network.config.overrides` patches the referenced template's raw
-    NMState for settings the template does not cover — extra routes, MTU, a
-    secondary interface, a VLAN, an additional bond. Do **not** set a static
-    install IP through `overrides`: validation rejects an interface whose install
-    IP is already owned by `interfaceAddresses[]`. `overrides` is valid only
-    alongside `networkConfigRef`.
+Use `spec.network.config.overrides` for non-address template tweaks the template
+does not cover (extra routes, MTU, a VLAN); it never carries a static install IP
+— see [Machines → Network](../concepts/machines.md#network).
 
 !!! note "Inline NetworkConfig spec"
     A machine may inline a full `NetworkConfig` spec under
@@ -181,6 +167,51 @@ Bind that attachment from each installing machine via
 attachment model, including KubeVirt secondary networks
 (`networkAttachments[].kubevirt.networkRef`), is in
 [Infrastructure](../concepts/infrastructure.md#network-attachments).
+
+### KubeVirt child networks
+
+A KubeVirt child cluster's machines attach to a `ClusterUserDefinedNetwork`
+(usually `topology: Localnet`, bridged to a physical VLAN by an
+`NodeNetworkConfigurationPolicy`) on the parent cluster. Bootwright **references**
+those objects and never renders them: author the (C)UDN and the NNCP out of band,
+typically as a `manifestSet` add-on bound to the parent, and name the (C)UDN from
+`networkAttachments[].kubevirt.networkRef`.
+
+The `NetworkConfig` a child machine references therefore describes the network
+*inside* the guest, where the single virtio NIC is named `primary` — that is the
+name `interfaceAddresses[].interface` binds to:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: dc1-child-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.151.0/24
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.151.1
+            next-hop-interface: primary
+            table-id: 254
+```
+
+A localnet CUDN carries no IPAM, so each child machine must pin its own static
+address through `interfaceAddresses[]`, exactly as a bare-metal node does. See
+[KubeVirt nested clusters](kubevirt.md) for the provider and parent-ordering
+model.
 
 ## Endpoints
 
@@ -307,12 +338,13 @@ fits the broader storage spine.
 
 `NetworkConfig.spec.nameResolutionRefs[]` selects entries from
 `Environment.spec.infraComponents.nameResolution[]`; the resolved addresses are
-injected into the rendered `dns-resolver.config.server` list. A `NetworkConfig`
-that selects a resolver must therefore not also hardcode that resolver's address
-in its `template.networkConfig.dns-resolver` — reserve static template resolver
-servers for resolvers not declared in the environment (operator-external ones).
-Keep `nameResolutionRefs` outside `template.networkConfig`; that map is raw
-NMState.
+injected into the rendered `dns-resolver.config.server` list, unioned with
+whatever the template already carries and deduplicated. Repeating a selected
+resolver's address in `template.networkConfig.dns-resolver` is therefore
+redundant rather than wrong — the ref already injects it. Reserve static template
+resolver servers for resolvers **not** declared in the environment
+(operator-external ones). Keep `nameResolutionRefs` outside
+`template.networkConfig`; that map is raw NMState.
 
 Before an agent install, Bootwright also routes the cluster domain through
 those selected resolver addresses on a systemd-resolved controller, then
@@ -353,8 +385,8 @@ apply does — and point at the apply command.
 ### Cluster records
 
 Managed name-resolution services render records for `api`, `api-int`, and the
-cluster `*.apps.<cluster>.<baseDomain>` wildcard for each consuming cluster
-(the container-cluster zone `domains.containerClusters` under
+cluster `*.apps.<cluster>.<domains.containerClusters>` wildcard for each
+consuming cluster (the container-cluster zone under
 [ADR 0018](https://github.com/crmarques/bootwright/blob/main/specs/adr/0018-environment-domain-model.md)).
 Console, OAuth, and other `*.apps` routes are already covered by that wildcard —
 do not re-author them. Use `additionalIngressHosts[]` (on the environment entry

@@ -48,16 +48,21 @@ named here as an axiom rather than hidden in a hand-written order.
 ### Derived order
 
     T0  cluster runtime (per container cluster)
-        storage clusters (per storage cluster)
-        machine infrastructure at KubeVirt nest level 0
-    T1  machine registration (per storage cluster)
-        machine infrastructure at nest level 1
-    T2  storage node access (per storage cluster)
-        machine infrastructure at nest levels 2..D
-    T3  machine infrastructure for managed storage clusters
-    T4  container-cluster records; machine-infrastructure records sweep
-    T5  infra component services
-    T6  provider services
+    T1  storage clusters (per storage cluster, after the runtime of every
+        container cluster consuming its export — A1)
+    T2  machine registration (per storage cluster)
+    T3  storage node access (per storage cluster)
+    T4  machine infrastructure (per cluster): a container cluster's task
+        follows cluster runtime; a storage cluster's follows that cluster's
+        storage, registration, and node-access teardown; a KubeVirt host's
+        task hard-depends on each of its guests', so the fan spans nest
+        levels 0..D
+    T5  container-cluster records; machine-infrastructure records sweep
+    T6  infra component services
+    T7  provider services
+
+A cluster hosting an infra component — and every transitive KubeVirt host of
+one — inverts the T4/T6 order per A3.
 
 Container-cluster teardown splits in two. The runtime half — installer runtime,
 add-on runtime, generated add-on secrets — is the inverse of the add-ons and

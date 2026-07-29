@@ -7,10 +7,11 @@ description: Task-oriented how-tos for fleets, disconnected installs, managed OS
 
 Advanced Scenarios are task-oriented how-tos that build on
 [Getting Started](../getting-started/index.md); for the object model and every
-field, see [Concepts and APIs](../concepts/index.md). Each page below assumes you
-have already run the first single-cluster apply path and now need to extend it —
-to a fleet, a disconnected estate, managed OS installs, a particular Ceph
-topology, nested KubeVirt clusters, custom networking, or recovery.
+field, see [Concepts and APIs](../concepts/index.md). The pages below cover how
+to extend a working environment — to a fleet, a disconnected estate, managed OS
+installs, a particular Ceph topology, nested KubeVirt clusters or custom
+networking — plus the safety, teardown, and example-selection references you
+will need from the first apply onward.
 
 | Scenario | Use it for |
 | --- | --- |

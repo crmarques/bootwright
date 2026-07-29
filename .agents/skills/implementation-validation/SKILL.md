@@ -6,6 +6,8 @@ changes, also run the checks from `definition-stewardship`.
 ## Load First
 
 - `/specs/architecture.md` (Testing section)
+- `/docs/contributing/building-and-testing.md` — what each gate runs, the
+  guard-test regime, and the `/tmp`-tmpfs `GOTMPDIR` trap
 
 ## Required Sequence
 
@@ -28,11 +30,9 @@ changes, also run the checks from `definition-stewardship`.
   check-fast` was running), repeat the rebase-first sequence — rebase and fix,
   then rerun `make check-fast` — until the branch is both current and green, or
   a real blocker remains.
-- Current `make check-fast` syncs the embedded ansible bundle (needs
-  `ansible-playbook`), runs the cheap local guardrails — CLI file-size, Go source
-  visibility, gofmt, stale-term, Containerfile pinning, shellcheck, and E2E
-  dependency checks — and then runs the full `go test ./...` unit-test suite,
-  which is the dominant cost and the main verification signal.
+- What each gate runs is tabulated in
+  `docs/contributing/building-and-testing.md` ("Check gates"); the full `go test
+  ./...` suite dominates `check-fast`'s cost and is its main verification signal.
 - If `make check-fast` cannot run or fails, report the blocker instead of a
   successful handoff.
 - Report any validation command that could not be run, including the reason.

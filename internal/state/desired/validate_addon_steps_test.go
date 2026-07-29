@@ -218,7 +218,7 @@ func TestValidateHookOutputConsumerMustFail(t *testing.T) {
 		Outputs:   []v1alpha1.ClusterAddonStepOutput{{Name: "d", File: "d.json"}},
 		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/s.yaml"}},
 	})
-	hookErrsContain(t, validateClusterAddonSteps(v1alpha1.State{}, addon), "failureMode must be fail")
+	hookErrsContain(t, validateClusterAddonSteps(v1alpha1.State{}, addon), "onFailure must be fail")
 }
 
 func writeHookFile(t *testing.T, dir, rel, body string) {

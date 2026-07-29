@@ -11,17 +11,13 @@ or a focused component slice. Rendering combines those objects into the concrete
 inputs consumed by `openshift-install`, provider adapters, managed OS
 installers, cephadm, storage export flows, and add-on apply tasks.
 
-This page is both the landing for the Concepts and APIs section and the hub for
-the conventions every domain page shares. The domain pages —
-[Environment](environment.md), [Machines](machines.md),
-[Infrastructure](infrastructure.md),
-[Container clusters](container-clusters.md), [Storage](storage.md),
-[Add-ons](add-ons.md), [Custom playbooks](custom-playbooks.md),
-and [Secrets](secrets.md) — teach each concept and
-document that domain's API fields together. For the execution internals (the
-render pipeline, execution identities, resource locks, the ownership-record
-cross-boundary contract, and the four-outcome classifier in depth) see
-[Architecture](../contributing/architecture.md).
+This page is the landing for the Concepts and APIs section and the hub for the
+conventions every domain page shares; each domain page teaches its concept,
+documents that domain's API fields, and links back here. The
+[Object ownership](#object-ownership) table below is the index of those pages.
+For the execution internals (the render pipeline, execution identities, resource
+locks, the ownership-record cross-boundary contract, and the four-outcome
+classifier in depth) see [Architecture](../contributing/architecture.md).
 
 ## Desired state
 
@@ -41,13 +37,13 @@ retired `v1alpha1` shapes — a retired field is rejected, not translated.
 
 ## Object ownership
 
-Each of the twenty-one authored kinds owns one slice of operational fact. The
-links point to the domain page where each kind is documented in full.
+Each authored kind owns one slice of operational fact. The links point to the
+domain page where each kind is documented in full.
 
 | Kind | Owns |
 | --- | --- |
 | [`Environment`](environment.md) | Fleet defaults, selected resources, selected clusters, secret declarations, service access catalog, proxy and registry defaults, install trust, and component image pins. |
-| [`Machine`](machines.md) | A raw, managed-OS, or OS-ready machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and durable SSH access. |
+| [`Machine`](machines.md) | An OS-ready, Bootwright-installed, or installer-provisioned machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and how an already-installed machine is reached. |
 | [`MachineImage`](machines.md) | Bootable OS install media for managed machine OS installs. |
 | [`MachineInstallProfile`](machines.md) | Reusable managed OS installer settings and customizations. |
 | [`InfraProvider`](infrastructure.md) | Substrate capability: libvirt, bare metal, vSphere, KubeVirt, machine profiles, provider facts, and network attachments. |
@@ -68,9 +64,9 @@ links point to the domain page where each kind is documented in full.
 | [`Secret`](secrets.md) | One named unit of secret material: its `spec.type` (what the material is) and optional `spec.source` (how the bytes are obtained). |
 | [`Entitlement`](secrets.md) | Named vendor-controlled access for one product: RHSM subscription, product registry, and license for RHEL or Ceph. |
 
-Post-install components do not live under `ContainerCluster.spec.install`, and
-external storage is not a `ContainerCluster` field — both are separate kinds the
-`Environment` selects and binds.
+Post-install components and external storage are separate kinds the
+`Environment` selects and binds, never `ContainerCluster.spec.install` fields —
+see [Add-ons](add-ons.md) and [Storage](storage.md).
 
 ## References
 
@@ -124,8 +120,15 @@ Two deliberate carve-outs sit outside the `Ref` grammar:
 
 ## Contexts
 
+The **controller** is the host you run Bootwright on: it runs the CLI, Ansible,
+and the cluster installers, holds the context state directory below, and is
+declared in desired state as a `Machine` with
+[`access.local: true`](machines.md#declaring-the-controller). `bootwright bastion
+setup` prepares it; the CLI verb keeps the older name, but "controller" is the
+word these pages use for the host.
+
 A context gives Bootwright a current input directory and a protected local state
-directory:
+directory on that host:
 
 | Data | Location |
 | --- | --- |
@@ -135,6 +138,11 @@ directory:
 | Secrets | `/var/lib/bootwright/contexts/<context>/secrets` |
 | Run logs and ledgers | `/var/lib/bootwright/contexts/<context>/runs` |
 | Cluster outputs | `/var/lib/bootwright/contexts/<context>/clusters/<cluster>` |
+
+The complete generated-artifact boundary — every path Bootwright writes and its
+classification — is in
+[`specs/security.md`](https://github.com/crmarques/bootwright/blob/main/specs/security.md)
+§Generated Artifacts.
 
 `context init --name <name> -f <dir>` copies the whole source directory into the
 context's `input/` directory, so the context is self-contained: every command
@@ -168,15 +176,18 @@ the installer **platform render mode**, not the provider type:
 | vSphere agent install | `vsphere` |
 | KubeVirt-hosted child machines | `none` |
 | Operator-owned external platform | `external` |
+| **Any single-node cluster** | `none` (or `external` when authored) |
 
 When the platform is omitted, it derives from the single provider type behind the
 bound machines (libvirt and bare metal derive `baremetal` with
 `provisioningNetwork: disabled`, vSphere derives `vsphere`, KubeVirt derives
 `none`). Machines spanning multiple provider types with the platform omitted are
-rejected; an authored platform always wins.
+rejected; for a multi-node cluster an authored platform wins.
 
-Single-node topologies render `platform.none` unless `external` is explicitly
-selected, because the OpenShift agent installer rejects bare-metal and vSphere
+Single-node topologies are the exception: every single-node cluster renders
+`platform.none` unless `external` is explicitly authored — regardless of the
+provider and regardless of an authored `baremetal` or `vsphere`, which is
+discarded — because the OpenShift agent installer rejects bare-metal and vSphere
 platform blocks for one-control-plane clusters.
 
 ## Apply stages and families
@@ -249,7 +260,9 @@ applied, and the run reports which ones it skipped on that assumption.
 `--clusters` accepts a comma-separated list of `ContainerCluster` and
 `StorageCluster` names on every narrowing command. The two kinds share one
 cluster selection namespace, so a bare name must be **unique across both kinds**
-and resolves to exactly one cluster root.
+and resolves to exactly one cluster root. One named exception:
+`destroy --stage infra --clusters artifact-server` accepts that literal to
+remove only the generated artifact publication service.
 
 !!! warning "KubeVirt child clusters need their parent in scope"
     A KubeVirt-backed child `ContainerCluster` depends on its parent
@@ -325,15 +338,18 @@ gate — see [Architecture](../contributing/architecture.md).
 ## Destroy
 
 `destroy` mirrors the apply stages but accepts only the two families. Its
-no-`--stage` default differs from `apply`:
+no-`--stage` default differs from `apply`: it is a **full lifecycle** teardown,
+the inverse of build-up, and unscoped it also sweeps context-owned VM artifacts
+and orphan ownership records. `--clusters` narrows that lifecycle to the named
+roots; `--machines` tears down only those machines' substrate and refuses an
+installed cluster's node without `--force`. The per-invocation matrix, the
+teardown order and what each stage retains are in
+[Operations, recovery and teardown](../advanced/operations.md#tearing-down-with-destroy).
 
-| Invocation | Effect |
-| --- | --- |
-| `destroy` (no `--stage`) | Full lifecycle teardown, the inverse of build-up: cluster and storage runtime first, then registration and node access, then machine infrastructure (guests before their KubeVirt hosts), then cluster records, then exclusively owned services; unscoped also sweeps context-owned VM artifacts and orphan ownership records. |
-| `destroy --stage clusters` | Cluster-stage runtime only (install runtime, add-on records, storage attachment records, managed storage services); leaves provider infrastructure. |
-| `destroy --stage infra` | Infrastructure teardown; without `--clusters` it also sweeps all context-owned VMs the provider adapters can identify. |
-| `destroy --clusters <names>` | Full lifecycle teardown for those roots, including positively owned virtual machines; retains bare-metal hardware and installed OS. |
-| `destroy --machines <names>` | Tears down only the named machines' substrate; leaves shared services and the rest of the cluster standing, and refuses installed-cluster nodes without `--force`. |
+`Environment.spec.safety.destroyProtection` and `spec.safety.protectedKinds[]`
+both gate teardown: with either in force, `destroy` requires `--force` — the
+same flag an installed cluster's node needs. See
+[Destroy protection](../advanced/operations.md#destroy-protection-and-the-authorization-boundary).
 
 !!! note "No stage means full lifecycle"
     Passing `--clusters` narrows the full lifecycle to those roots. Use
@@ -373,7 +389,7 @@ spec:
 | `apiVersion` | Yes | — | Must be `bootwright.io/v1alpha1`. |
 | `kind` | Yes | — | One of the authored kinds above. |
 | `metadata.name` | Yes | — | DNS-label object name, unique within its kind. |
-| `metadata.labels` | No | — | String labels for selection or inventory context. |
+| `metadata.labels` | No | — | Free-form labels; validated on `Machine` and projected into that machine's inventory vars, ignored on every other kind. |
 | `spec` | Yes | — | Kind-specific desired state. |
 
 !!! note "Cluster names share one selection namespace"
@@ -404,8 +420,8 @@ are the silent authoring failures the reference exists to catch.
 
 | Convention | Meaning |
 | --- | --- |
-| Discriminated union | A `type` field selects the populated arm, and the arm key is byte-identical to the `type` value, such as `InfraProvider.spec.type: libvirt` with `spec.libvirt`. The same grammar governs `install.platform`, `InfraComponent.spec`, `ClusterAddon.spec`, `StorageExport.spec`, `StoragePool.spec.ceph`, and the `MachineInstallProfile` installer. |
-| Presence union | Exactly one arm is set with no separate discriminator, used only where the surrounding document already fixes which arm is legal. `InfraProvider.spec.networkAttachments` uses this because the provider's `spec.type` is the kind. |
+| Discriminated union | A `type` field selects the populated arm, and the arm key is byte-identical to the `type` value, such as `InfraProvider.spec.type: libvirt` with `spec.libvirt`. The same grammar governs `install.platform`, `InfraComponent.spec`, `ClusterAddon.spec`, `StorageExport.spec`, and `StoragePool.spec.ceph`. |
+| Presence union | Exactly one arm is set and its presence is the discriminator, with no separate `type` field: the `MachineInstallProfile` installer (`anaconda` is the only backend), `MachineInstallProfile` `packageSource`, `Secret.spec.source`, and `InfraProvider.spec.networkAttachments`, where the provider's own `spec.type` already fixes the kind. |
 | Named list | User-invented names are list entries with a `name` field, such as `addresses[]`, `machineProfiles[]`, and `networkAttachments[]`. |
 | Closed map | Name-keyed maps appear only where the key set is a fixed, validated vocabulary — `ContainerCluster.spec.install.endpoints` (`api`, `api-int`, `ingress`) and `Environment.spec.componentImages` (the `componentType`/`implementation` catalog). |
 | Feature block (enable/disable) | Optional feature blocks are presence-managed; see [Feature blocks](#feature-blocks). |
@@ -464,14 +480,9 @@ schemas before any mutation.
 
 ## Where to go next
 
-- Use [Getting Started](../getting-started/index.md) for the first complete
-  apply path.
-- Use the domain pages — [Environment](environment.md),
-  [Machines](machines.md), [Infrastructure](infrastructure.md),
-  [Container clusters](container-clusters.md), [Storage](storage.md),
-  [Add-ons](add-ons.md), [Custom playbooks](custom-playbooks.md),
-  [Secrets](secrets.md) — for field-level options.
-- Use [Advanced Scenarios](../advanced/index.md) for provider, networking,
-  storage, and recovery scenarios.
-- Use [Architecture](../contributing/architecture.md) for the execution and
-  render pipeline deep dive.
+The [Object ownership](#object-ownership) table above is the index of the domain
+pages. Beyond them: [Getting Started](../getting-started/index.md) for the first
+complete apply path, [Advanced Scenarios](../advanced/index.md) for provider,
+networking, storage, and recovery scenarios, and
+[Architecture](../contributing/architecture.md) for the execution and render
+pipeline deep dive.

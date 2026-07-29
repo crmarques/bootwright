@@ -40,8 +40,9 @@ description. Treat "explicit" narrowly:
   under each:
   - bare `apply` is the **safe reconcile** default: it creates what is missing,
     skips what already matches desired state (proving the match, not re-running),
-    and **fails closed** on drift or foreign ownership. A previously-successful
-    run must run end to end mutating nothing.
+    converges drift that is reconcilable in place, and **fails closed** on
+    structural (destructive-identity) drift or foreign ownership before any
+    mutation. A previously-successful run must run end to end mutating nothing.
   - `apply --expect-new` is the **greenfield assert**: it additionally must
     **fail closed** (refuse, mutate nothing) if any selected object already
     exists — recorded by Bootwright or otherwise present.

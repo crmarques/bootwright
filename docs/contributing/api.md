@@ -20,11 +20,13 @@ behind these extension points, read [Architecture](architecture.md).
     normative sources are
     [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md),
     [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md)
-    (the CLI contract and API schema), and
-    [`specs/adr/0002-ansible-provider-dispatch.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0002-ansible-provider-dispatch.md).
-    The Go registry in `internal/roles` is the single source of truth for role
-    names. When this page and a spec disagree, the spec wins — please fix this
-    page.
+    (the CLI contract and API schema),
+    [`specs/adr/0002-ansible-provider-dispatch.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0002-ansible-provider-dispatch.md),
+    and
+    [`specs/adr/0014-api-grammar.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0014-api-grammar.md)
+    (the grammar every new field follows). The Go registry in `internal/roles`
+    is the single source of truth for role names. When this page and a spec
+    disagree, the spec wins — please fix this page.
 
 ## Where the API lives
 
@@ -38,7 +40,7 @@ new extension almost always touches one or more of these layers and subsystems:
 | Desired-state API | `api/v1alpha1` | The typed `bootwright.io/v1alpha1` kinds, their capability arms, and decode-time shape. |
 | Validation and normalization | `internal/state` | Cross-field rules, ownership checks, and normalize-injected defaults (its `desired` package). |
 | Cross-kind state | `internal/state` | Stateless views and cross-kind joins (`view`), the multi-kind graph and scoped-apply conflicts (`graph`), example scaffolding (`scaffold`), and non-blocking best-practice advisories (`advice`). |
-| Rendering | the render packages | Turning validated state into installer, provider, and storage CLI inputs. |
+| Rendering | `internal/render` (+ `render/installer`, `render/inventory`, `render/ceph`) | Turning validated state into installer, provider, and storage CLI inputs. The root package owns every file write; the emission families are filesystem-free. |
 | Entitlements | `internal/entitlements` | Resolving `Entitlement` declarations into subscription, registry-credential, and license references. |
 | Secrets | `internal/secrets` | The context secret store: declared-secret resolution, AES-256-GCM encryption, and generated credentials, certificates, and SSH key pairs. |
 | Storage domain | `internal/storage/{topology,cephprovider,cephstate,cephdiff,cephadopt}` | Ceph resolution and apply-result state: topology and placement (`topology`), package/image/registry source per distribution (`cephprovider`), live read-only observation (`cephstate`), desired-vs-live diff (`cephdiff`), and the `diff --adopt` fold-back (`cephadopt`). |
@@ -48,9 +50,20 @@ new extension almost always touches one or more of these layers and subsystems:
 | Execution | `ansible/` (`bootwright.core` collection) | The roles that do per-host work, recording ownership as they mutate. |
 | CLI | `internal/cli` | Thin command adapters that translate flags into workflow options. |
 
+The package-by-package map of that tree, down to the one-way import direction
+between the render families, is
+[`internal/README.md`](https://github.com/crmarques/bootwright/blob/main/internal/README.md).
+
 The typed kinds and their fields all live in `api/v1alpha1`. That package owns
 the decode-time shape of every authored `bootwright.io/v1alpha1` object and the
-capability arms that discriminate substrate and service behaviour.
+capability arms that discriminate substrate and service behaviour. Every new
+field follows the API grammar in
+[`specs/adr/0014-api-grammar.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0014-api-grammar.md):
+a reference field takes the `Ref`/`Refs` suffix and is authored and rendered as
+a plain name string (never the `{name: ...}` object form), a selection list
+stays suffix-free, a union discriminator value stays byte-identical to its arm
+key, and an optional feature block picks the enablement shape that ADR records.
+State the resolution namespace of a new reference in `specs/state-model.md`.
 
 ### Strict decode and no backward compatibility
 
@@ -190,20 +203,15 @@ help, and discovery. A read-only verb must not:
 - acquire a mutating run lease, or
 - mutate provider, BMC, cluster, or storage state.
 
-Most read-only verbs must not contact hosts at all. Four deliberate carve-outs:
-
-- `render` *does* write generated outputs — rendered tool inputs and
-  `effective-state.yaml` — into context state. Those are outputs, not runtime
-  records, and `render` still never contacts hosts.
-- `preflight` (and `apply` before its host check) may record SSH server-key
-  trust on first use, under interactive confirmation only.
-- default `diff` *does* contact clusters — read-only Ceph discovery on each
-  managed seed and a shallow `ClusterVersion` reachability check for
-  `ContainerCluster`s — but reads live state strictly read-only and writes no
-  runtime records. Only `diff --recorded` is fully offline.
-- `diff --adopt` additionally writes desired-state *input* YAML, snapshotting the
-  prior input to history first, while mutating no provider, BMC, cluster, or
-  storage state.
+Most read-only verbs must not contact hosts at all. Four deliberate carve-outs
+exist — `render` writes generated outputs (tool inputs and
+`effective-state.yaml`, not runtime records) and still contacts no host;
+`preflight`, and `apply` before its host check, may record SSH server-key trust
+on first use under interactive confirmation; default `diff` reads live cluster
+state, so only `diff --recorded` is fully offline; and `diff --adopt` writes
+desired-state *input* YAML after snapshotting the prior input to history. Their
+exact conditions are in `specs/state-model.md` (CLI Contract); a fifth carve-out
+means changing that contract first.
 
 !!! warning "Honour the existing flag vocabulary"
     Reuse the established narrowing flags rather than inventing parallel ones.
@@ -221,35 +229,23 @@ The binding rules for the read-only contract — and for every flag a verb may
 accept — are in `specs/state-model.md` (CLI Contract). New verbs are expected to
 keep that contract green in the CLI-contract tests.
 
-## What rendering must guarantee
+## Two contracts every extension crosses
 
-If your extension produces tool inputs, the renderer is a *second enforcement
-line*, not a best-effort formatter. Every render entry point must fail before
-writing anything when an endpoint load-balancer bind or a managed Ceph topology
-host address does not resolve, rather than degrading to output with empty values.
+If your extension renders tool inputs or mutates hosts, it inherits two
+contracts that [Architecture](architecture.md) teaches in full:
 
-Two more rules apply to any new render path:
+- [The rendering contract](architecture.md#the-rendering-contract) — rendering
+  is a second enforcement line that fails before writing anything, and ISO
+  references resolve only through the shared managed media resolver. What the
+  normalize phase has already materialized by then is listed under
+  [Normalize before render](architecture.md#normalize-before-render).
+- [The ownership-record cross-boundary contract](architecture.md#the-ownership-record-cross-boundary-contract)
+  — roles record what they create through `bootwright.core.ownership_record` at
+  mutation time; the run, install, and convergence-safety ledgers stay
+  Go-written, so never write those from a role.
 
-- **Normalize before render.** A default consumed by more than one stage is
-  materialized by the normalize phase; validators and renderers read the
-  normalized value rather than recomputing it. Emit a diagnostic on any
-  normalize-injected reference the author never wrote, stating that it was
-  defaulted and how to override it.
-- **Reuse the shared resolvers.** ISO references are resolved by the Bootwright
-  managed media resolver; providers, OS installers, and future user-supplied ISO
-  fields must not duplicate `local-media:`, `file://`, or HTTP(S) parsing. Shared
-  parsing and resolution live behind one reusable package or adapter before any
-  provider-specific role consumes it.
-
-## The ownership-record contract
-
-Anything your roles create or configure on a host must be recorded so that
-`destroy`, host package-removal gating, orphan reporting, and `diff` can
-reason about it. Ownership evidence is a named cross-boundary contract: executing
-collection roles record per-host resource and package ownership through
-`bootwright.core.ownership_record` at mutation time, and Go reads those records.
-Run, install, and convergence-safety ledgers stay Go-written — do not write those
-from a role.
+Both are specified in
+[`specs/architecture.md` → Ownership Boundaries](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md).
 
 !!! warning "No secret bytes, ever"
     Bootwright desired state and rendered output are safe to commit because they
@@ -258,7 +254,7 @@ from a role.
     inventories, effective-state snapshots, or ownership records. See
     [Secrets](../concepts/secrets.md) for the full model.
 
-## Further reading
+## See also
 
 - [Architecture](architecture.md) — the execution pipeline, locking, and the
   four-outcome classifier in depth.

@@ -14,13 +14,20 @@ YAML desired state
   -> apply substrate, machine OS, storage, cluster, and add-on phases
 ```
 
+`internal/README.md` maps these layers onto the Go package tree; the
+per-package import matrix it describes is enforced structurally by
+`internal/repo/checks`.
+
 Apply execution records a durable run ledger under the context state directory
 and a short-lived local lease for the process updating it. Cluster install
 tasks also record per-cluster install state with a non-secret desired-input
 fingerprint so repeated applies can skip completed installs and resume only
-from known-safe phases. Native Ansible, `oc`, SSH, SCP, Ceph, and installer
-process output stays in root-managed run, task, and cluster logs instead of
-streaming through the terminal.
+from known-safe phases. Ansible, `oc`, SSH, SCP, Ceph, and installer process
+output produced by apply and destroy tasks is captured into root-managed run,
+task, and cluster logs rather than streamed. The interactive passthrough verbs —
+`cluster oc`, `cluster kubectl`, and the `rsh`/`exec` shells under `cluster` and
+`machine` — stream the child process on the caller's stdio, the external process
+passthrough exception in the `state-model.md` CLI Contract.
 
 Context-backed bastion and OpenShift installer actions run on localhost.
 Commands that need context data re-exec through `sudo` when necessary and store
@@ -107,8 +114,8 @@ field by field in `state-model.md`. Every fact has one owner, and those
 boundaries drive rendering:
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
-  selected machines, machine `NetworkConfig` references, endpoints, and
-  platform render mode.
+  selected machines, machine `NetworkConfig` references, selected providers,
+  endpoints, and platform render mode.
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
   referenced `Machine` objects, `NetworkConfig` templates, and provider or
   generated substrate MAC inventory.
@@ -135,30 +142,33 @@ boundaries drive rendering:
   endpoint load-balancer bind or a managed Ceph topology node address does not
   resolve, instead of degrading to output with empty values.
 
-Convergence is resumable by default. Each mutating workflow task runs under its
+Convergence is resumable by default. Every mutating workflow task runs under its
 existing resource lock, derives a non-secret desired hash and Bootwright owner
 identity, and writes a durable convergence-safety record. The records classifier
 compares that recorded evidence against current desired state into the four
-outcomes `diff --recorded` reports (`missing`/`foreign`/`match`/`drift`; defined in
-the `state-model.md` CLI Contract). A records-based apply-mode preflight uses that
-classification to fail closed on structural (destructive-identity) drift or
-`foreign` before any mutation, for every kind; drift that is reconcilable in
-place converges on a bare `apply`, so plain `apply` never destructively
-rebuilds and never touches foreign state, but the
-classification is not itself a per-task execution-time skip gate. Once a run
-proceeds (a clean run, reconcilable drift, or `--converge-drifted`), most provider-service and infra-component
-config tasks have no reliable external probe: they re-run and rely on idempotent
-execution, and their record is marked `unknown` (recorded but not classified) as
-durable evidence rather than an apply-time skip. Execution-time skip-vs-fail
-decisions live at the concrete-probe sites.
-Cluster install reconcile reads per-cluster install records and probes live
-cluster availability, skips completed installs, resumes only from known-safe
-phases, and fails closed when install state exists for missing or different
-inputs after node boot unless a command-scoped `--converge-drifted` is given. Destroy
-requires `--force` when selected state sets
-`Environment.spec.safety.destroyProtection: requiredOverride`. Concrete probes —
-cluster install records, add-on records, managed OS markers, provider metadata,
-and storage comparison results — decide whether a rerun can skip or must fail.
+outcomes `diff --recorded` reports (`missing`/`foreign`/`match`/`drift`; defined
+in the `state-model.md` CLI Contract).
+
+A records-based apply-mode preflight uses that classification to fail closed on
+structural (destructive-identity) drift or `foreign` before any mutation, for
+every kind. Drift that is reconcilable in place converges on a bare `apply`, so
+plain `apply` never destructively rebuilds and never touches foreign state. The
+classification is not itself a per-task execution-time skip gate.
+
+Once a run proceeds — a clean run, reconcilable drift, or `--converge-drifted` —
+most provider-service and infra-component config tasks have no reliable external
+probe: they re-run and rely on idempotent execution, and their record is marked
+`unknown` (recorded but not classified) as durable evidence rather than an
+apply-time skip.
+
+Execution-time skip-vs-fail decisions live at the concrete-probe sites: cluster
+install records, add-on records, managed OS markers, provider metadata, and
+storage comparison results. Cluster install reconcile reads per-cluster install
+records and probes live cluster availability, skips completed installs, resumes
+only from known-safe phases, and fails closed when install state exists for
+missing or different inputs after node boot unless a command-scoped
+`--converge-drifted` is given. Destroy requires `--force` when selected state
+sets `Environment.spec.safety.destroyProtection: requiredOverride`.
 
 Ownership evidence is a named cross-boundary contract: executing collection
 roles write ownership through `bootwright.core.ownership_record` at mutation
@@ -174,8 +184,10 @@ the loaded desired state currently declares, so an object removed from desired
 state produces no `missing`/`match`/`drift`/`foreign` entry at all. It is not
 invisible. A complementary orphan pass walks the ownership records and reports
 every Bootwright-owned record whose machine, cluster, infra component, or
-provider is no longer declared as `undeclared`. That report is advisory: it does
-not make the report out of sync and does not change the exit code, because
+provider is no longer declared as `undeclared`. Kinds below that granularity —
+pools, filesystems, gateways, exports, add-ons — carry no ownership record and
+do fall out of enumeration entirely. The `undeclared` report is advisory: it
+does not make the report out of sync and does not change the exit code, because
 `apply` never deletes. Removing an object from desired state asks Bootwright to
 stop managing it; reclaiming what it left behind is an explicit `destroy`. A
 later same-name re-declaration can classify `match` against the stale

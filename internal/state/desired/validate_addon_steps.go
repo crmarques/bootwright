@@ -159,7 +159,7 @@ func validateHookTarget(prefix string, extension v1alpha1.ClusterAddon, hook v1a
 				continue
 			}
 			if machine.Spec.Access.SSH == nil {
-				errs = append(errs, fmt.Sprintf("%s.target.static.machines[%d] %q has no spec.access.ssh, so the hook has no way to reach it; target a Machine that configures SSH access", prefix, i, name))
+				errs = append(errs, fmt.Sprintf("%s.target.static.machines[%d] %q has no spec.access.ssh, so the step has no way to reach it; target a Machine that configures SSH access", prefix, i, name))
 			}
 		}
 		if len(target.Static.Clusters) == 0 && len(target.Static.Machines) == 0 {
@@ -184,7 +184,7 @@ func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v
 		return []string{fmt.Sprintf("%s.input %q resourceRef kind %q is not a supported target kind %v", prefix, from.Input, accepted.ResourceRef.Kind, hooks.SupportedTargetRefKinds())}
 	}
 	if accepted.ResourceRef.Kind == v1alpha1.KindStorageExport && !inputHasStorageExportAttachment(accepted) {
-		return []string{fmt.Sprintf("%s targets a StorageExport through input %q, so that input must declare a storageExportAttachment effect; without it the export's Ceph cluster and nodes are not pulled into the add-on's apply scope and the hook fails at apply time with an unresolved-reference error", prefix, from.Input)}
+		return []string{fmt.Sprintf("%s targets a StorageExport through input %q, so that input must declare a storageExportAttachment effect; without it the export's Ceph cluster and nodes are not pulled into the add-on's apply scope and the step fails at apply time with an unresolved-reference error", prefix, from.Input)}
 	}
 	return nil
 }
@@ -266,7 +266,7 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 		}
 	}
 	if consumesOutput && v1alpha1.ClusterAddonStepFailureMode(hook) == v1alpha1.PlaybookFailureContinue {
-		errs = append(errs, prefix+" consumes a hook output in its manifests, so failureMode must be fail")
+		errs = append(errs, prefix+" consumes a step output in its manifests, so onFailure must be fail")
 	}
 	return errs
 }
@@ -285,7 +285,7 @@ func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alp
 		}
 	case hooks.TokenSecret:
 		if !secretRefs[token.Arg] {
-			return []string{fmt.Sprintf("%s references secret %q not listed in the hook secretRefs", owner, token.Arg)}
+			return []string{fmt.Sprintf("%s references secret %q not listed in the step's secretRefs", owner, token.Arg)}
 		}
 	case hooks.TokenInput, hooks.TokenExportDetails:
 		return validateHookInputToken(owner, extension, token)

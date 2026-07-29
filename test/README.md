@@ -17,20 +17,8 @@ runs, what provider the cluster lands on, and the cluster topology. OCP
 install mode (connected vs. disconnected) is documented in each case's
 `README.md`, not the case name.
 
-Current cases:
-
-- `001-sno-libvirt` — Bootwright CLI runs inside a UBI9 container; the
-  libvirt provider host is reached through the fixture's declared Machine SSH
-  address; one SNO cluster.
-- `002-sno-emul-baremetal` — single-node bare-metal shape backed by
-  emulated services.
-- `003-3nodes-libvirt` — same controller/provider shape with one compact
-  3-node OpenShift cluster.
-- `004-3nodes-emul-baremetal` — three-node bare-metal shape backed by
-  emulated services.
-- `005-3nodes-baremetal` — three-node real bare-metal shape with controller
-  artifact publishing, external proxy/DNS, bonded VLAN node networking, and
-  OpenShift-managed VIPs.
+[`test/e2e/README.md`](e2e/README.md) carries the current case roster and each
+case's layout; `make list-e2e-cases` prints the same list from the tree.
 
 ## Running A Case
 

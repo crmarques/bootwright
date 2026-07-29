@@ -32,3 +32,9 @@ stand up clusters, start with the
   contract, the ownership-record cross-boundary contract, and the Ansible bundle.
 - **[Building and testing](building-and-testing.md)** — how to compile, run the
   tests, and pass the check gates.
+- **Sending a change** — get the gates green locally first
+  ([Building and testing](building-and-testing.md)); CI re-runs them from
+  `.github/workflows/checks.yml`. Commit as one Conventional Commits subject
+  line (`type(scope): subject`, 72 characters max, no body) with no
+  co-author or attribution trailer — the full convention is in
+  [`AGENTS.md`](https://github.com/crmarques/bootwright/blob/main/AGENTS.md).

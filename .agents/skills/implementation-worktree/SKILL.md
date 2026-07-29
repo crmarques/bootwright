@@ -53,6 +53,9 @@ completion, not just eventual correctness.
 - The coordinating agent reviews, combines worker output, resolves conflicts,
   and runs the final validation once for the combined result — do not run
   `make check-fast` per worker branch when a single combined run will do.
+- Fold every worker branch into one integration branch (rebase or cherry-pick,
+  in a stated order) before validating; that combined branch is the only one
+  `make check-fast` runs against and the only one `main` fast-forwards to.
 - Do not over-split: more branches means more rebase/merge/conflict-resolution
   overhead at integration. If the pieces touch overlapping files, are too small
   to justify a separate branch, or coordination would cost more wall-clock time

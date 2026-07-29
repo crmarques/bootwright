@@ -26,20 +26,15 @@ spec:
     base: lab.example.com
 ```
 
-In the tables below, **Required** marks fields the author must set.
-**Required: No** with a stated default means the field is normalize-defaulted or
-simply optional: omit it and Bootwright uses the default. A blank Default cell
-means there is no default — an omitted optional field stays unset.
-
 ## Fields
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-fqdn-address) and [Domain model](#domain-model). |
-| `spec.machineAccess.keyRef` | When any `Machine` installs an OS | None | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. See [Machine access](#machine-access). |
+| `spec.machineAccess.keyRef` | When any `Machine` installs an OS | — | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. See [Machine access](#machine-access). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `requiredOverride`; empty means `allow`. |
-| `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. A run that would destructively rebuild an object of a listed kind (`apply --converge-drifted`, `--reclaim-devices`) or tear one down (`destroy`) fails closed instead. |
+| `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. `apply --converge-drifted` on an object of a listed kind fails closed with no flag that overrides it — the remedy is an explicit `destroy` first. `--reclaim-devices` alone fails closed and names `--converge-drifted` as the authorization. `destroy` requires `--force`. |
 | `spec.containerClusters[]` | No | All loaded | Active `ContainerCluster` selection list. When set, loaded container clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.storageClusters[]` | No | All loaded | Active `StorageCluster` selection list. When set, loaded storage clusters outside the list are excluded. Selection list, not a reference (no `Ref` suffix). |
 | `spec.defaults.install.pullSecretRef` | No | — | Default pull secret for clusters that omit `install.pullSecretRef`. |
@@ -50,7 +45,7 @@ means there is no default — an omitted optional field stays unset.
 | `spec.secretStorage.mode` | No | `source` | `source` or `context`; empty means `source`. `context` requires `bootwright secret generate` to copy `file:`-sourced material into the context store before workflows read it. |
 | `spec.proxyFor.bootwright` | No | inherit default | Proxy used by Bootwright runtime actions. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
 | `spec.proxyFor.containerClusterInstall` | No | inherit default | Proxy rendered into cluster install input. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
-| `spec.proxyFor.machineOSInstall` | No | inherit default | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. Only an **external** proxy applies (the node installs before any managed proxy exists), so a managed value or a managed inherited default is rejected. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. |
+| `spec.proxyFor.machineOSInstall` | No | inherit default | Proxy the managed-OS (Anaconda) install fetch routes through — a boot-ISO node reaches its install tree or the Red Hat CDN over the network during install. A `proxies[]` name overrides; `none` opts out; empty inherits the default proxy. Only an external proxy resolves here (see [Validation](#validation)). |
 | `spec.infraComponents` | No | — | Catalog of external or managed service access entries. See [Infra-component catalog](#infra-component-catalog). |
 | `spec.registries` | No | — | Disconnected mirror and image digest source settings. See [Registries](#registries). |
 | `spec.installTrust.caBundleRefs[]` | No | — | Fleet-wide additional CA bundle secret names. |
@@ -89,11 +84,14 @@ Composition under the model:
 
 - **Machine** — `fqdn` defaults to `<machine name>.<domains.machines>`.
 - **Container cluster** — the cluster zone is
-  `<cluster name>.<domains.containerClusters>`; a node whose `hostname` is a
-  bare label resolves to `<hostname>.<cluster name>.<domains.containerClusters>`.
+  `<cluster name>.<domains.containerClusters>`; a node resolves to
+  `<nodes[].name>.<cluster name>.<domains.containerClusters>`.
 - **Storage cluster** — the cluster zone is
-  `<cluster name>.<domains.storageClusters>`; a node whose `hostname` is a bare
-  label resolves to `<hostname>.<cluster name>.<domains.storageClusters>`.
+  `<cluster name>.<domains.storageClusters>`; a node resolves to
+  `<nodes[].name>.<cluster name>.<domains.storageClusters>`.
+
+`nodes[].name` is a bare DNS label — a dotted value is rejected. To pin a host
+outside the zone, author `nodes[].fqdn`, which is used verbatim.
 
 `spec.domains` (DNS zones) is distinct from the `spec.containerClusters[]` /
 `spec.storageClusters[]` selection lists (cluster membership) above.
@@ -136,44 +134,28 @@ generated `sshKeyPair` for the cluster.
 Machines you already own are unaffected — they carry their own
 [`spec.access`](machines.md#access).
 
-## Artifact Server Default
-
-One `spec.infraComponents.artifactServers[]` entry may carry `default: true`,
-marking the server every consumer inherits when its
-`artifactServerEndpoint.serverRef` is empty. It defaults only the server
-selector: consumers still declare their own `artifactServerEndpoint.endpointRef`,
-because endpoint purpose belongs to the consumer.
-
-```yaml
-spec:
-  infraComponents:
-    artifactServers:
-      - name: default
-        default: true
-        management: managed
-        componentRef: artifact-server
-```
-
-When exactly one `artifactServers[]` entry is defined it is the default even
-without the flag, so a single-server fleet may omit `default: true`. Consumers
-may override the server by setting `artifactServerEndpoint.serverRef`; otherwise
-Bootwright applies this default when resolving the endpoint.
-
 ## Infra-component catalog
 
 `spec.infraComponents` is the fleet's catalog of shared-service access entries,
 grouped by service kind (`proxies`, `nameResolution`, `artifactServers`,
-`registries`, `ntp`). Each entry sets `management: external` or
-`management: managed`. Managed entries point at an
-[`InfraComponent`](infrastructure.md) through `componentRef`; external entries
-carry connection facts directly. `name` and `management` are required on every
-entry. The remaining fields are conditional on `management` — fields marked
-managed-only are rejected on external entries and vice versa.
+`registries`, `ntp`). It is the substitution seam: a consumer binds to a service
+by catalog name without knowing whether Bootwright runs it or the site provides
+it. Each entry sets `management: external` or `management: managed`. Managed
+entries point at an [`InfraComponent`](infrastructure.md) through `componentRef`;
+external entries carry connection facts directly. `name` and `management` are
+required on every entry. The remaining fields are conditional on `management` —
+fields marked managed-only are rejected on external entries and vice versa.
+
+Load balancers are deliberately absent from the catalog: one is bound per
+cluster endpoint, not fleet-wide, so a `ContainerCluster` endpoint points at a
+managed component directly through `source.componentRef` plus a
+`bindAddressRef`, and an operator-run load balancer is declared at the consuming
+endpoint with `source.type: external` and an `address`.
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `proxies[].name` | Yes | DNS-label entry name (not `none`). |
-| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty. At most one `proxies[]` entry may set it; when exactly one proxy is defined it is the default even without the flag. |
+| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty; see [Validation](#validation). |
 | `proxies[].management` | Yes | `external` or `managed`. |
 | `proxies[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.proxy`. Rejected on external entries. |
 | `proxies[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
@@ -189,13 +171,13 @@ managed-only are rejected on external entries and vice versa.
 | `nameResolution[].address` | For `external` | Resolver IP address (external entries only). |
 | `nameResolution[].additionalIngressHosts[]` | No | Extra ingress hostnames. |
 | `artifactServers[].name` | Yes | DNS-label entry name (not `none`). |
-| `artifactServers[].default` | No | Marks the artifact server consumers inherit when `artifactServerEndpoint.serverRef` is empty. At most one `artifactServers[]` entry may set it; when exactly one is defined it is the default even without the flag. |
+| `artifactServers[].default` | No | Marks the artifact server consumers inherit when `artifactServerEndpoint.serverRef` is empty; see [Artifact Server Default](#artifact-server-default). |
 | `artifactServers[].management` | Yes | `external` or `managed`. |
 | `artifactServers[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.artifactServer`. |
 | `artifactServers[].endpoints[].name` | For `external` | Endpoint name; `endpoints` is required on external entries, rejected on managed. |
 | `artifactServers[].endpoints[].url` | For `external` | Endpoint `http(s)` URL. |
 | `registries[].name` | Yes | DNS-label entry name (not `none`). |
-| `registries[].default` | No | Marks the default registry; at most one entry may set it. When exactly one registry is defined it is the default even without the flag. |
+| `registries[].default` | No | Marks the default registry; see [Validation](#validation). |
 | `registries[].management` | Yes | `external` or `managed`. |
 | `registries[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.registry`. |
 | `registries[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
@@ -205,6 +187,22 @@ managed-only are rejected on external entries and vice versa.
 | `ntp[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.ntp`. |
 | `ntp[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
 | `ntp[].address` | For `external` | NTP server IP or DNS hostname (external entries only). |
+
+## Artifact Server Default
+
+The `artifactServers[].default` flag defaults only the *server* selector:
+consumers still declare their own `artifactServerEndpoint.endpointRef`, because
+endpoint purpose belongs to the consumer.
+
+```yaml
+spec:
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        management: managed
+        componentRef: artifact-server
+```
 
 ## Registries
 
@@ -305,13 +303,17 @@ Beyond the per-field rules above, the validator enforces:
   and match a loaded `ContainerCluster` / `StorageCluster`.
 - `spec.resources[]`, when set, must list at least one non-empty path that is
   relative to the Environment file and stays within its directory.
-- At most one `spec.infraComponents.registries[]` entry may set `default: true`.
+- At most one `spec.infraComponents.registries[]` entry may set `default: true`;
+  a fleet with exactly one registry uses it as the default without the flag.
 - Each `spec.registries.imageDigestSources[]` entry requires `source` and at
   least one `mirrors[]` value.
 - Proxy URLs and `Entitlement.spec.registry.url` must not embed inline
   credentials.
 
-See [The desired-state model](index.md) for the conventions every field table
-shares, [Secrets & entitlements](secrets.md) for the `kind: Secret` object,
-and [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for the
-proxy and mirror how-to.
+## Where to go next
+
+- [The desired-state model](index.md) for the conventions every field table
+  shares.
+- [Secrets & entitlements](secrets.md) for the `kind: Secret` object.
+- [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for the
+  proxy and mirror how-to.

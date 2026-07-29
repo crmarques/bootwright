@@ -27,7 +27,9 @@ or a single selected `ContainerCluster` / `StorageCluster` convergence.
 These kinds share the common object envelope and the **Required** / **Default**
 column convention documented on
 [The desired-state model](index.md#object-envelope); this page documents only
-each kind's `spec`.
+each kind's `spec`. This page owns the three kinds and their field tables;
+[Networking & load balancing](../advanced/networking.md) owns how they are
+assembled into a working network.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -364,14 +366,19 @@ are rejected, so the required/applies-to columns differ per arm.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `machineProfiles[].name` | Yes | — | Profile name selected by `Machine.spec.substrate.profileRef`; unique within the provider. |
-| `machineProfiles[].cpu` | No | — | vCPU count; must be non-negative. |
-| `machineProfiles[].memoryMiB` | No | — | Memory in MiB; must be non-negative. |
-| `machineProfiles[].diskGiB` | No | — | Root disk size in GiB; must be non-negative. |
+| `machineProfiles[].cpu` | Yes on `vsphere`, otherwise No | — | vCPU count; must be non-negative, and greater than zero on vSphere. |
+| `machineProfiles[].memoryMiB` | Yes on `vsphere`, otherwise No | — | Memory in MiB; must be non-negative, and greater than zero on vSphere. |
+| `machineProfiles[].diskGiB` | Yes on `vsphere`, otherwise No | — | Root disk size in GiB; must be non-negative, and greater than zero on vSphere. |
 | `machineProfiles[].template` | No (vSphere only) | — | vSphere template to clone from; rejected on non-vSphere providers. |
 | `machineProfiles[].failureDomainRef` | See note (vSphere only) | — | vSphere failure-domain name; rejected on non-vSphere providers. |
 | `machineProfiles[].dataDisks[]` | No (libvirt and vSphere only) | — | Additional data disks; rejected on baremetal and kubevirt. |
 | `machineProfiles[].dataDisks[].name` | Yes | — | Data disk name. |
 | `machineProfiles[].dataDisks[].sizeGiB` | Yes | — | Data disk size; must be greater than zero. |
+
+!!! note "vSphere clones from a sized template"
+    A vSphere profile whose `cpu`, `memoryMiB` or `diskGiB` is zero or omitted is
+    rejected: the clone has no shape to apply. The other providers accept a
+    partial profile and fall back to their own defaults.
 
 !!! note "`failureDomainRef` multiplicity"
     On a vSphere provider with **multiple** failure domains, each machine profile
@@ -407,8 +414,7 @@ the CUDN/UDN/NAD and any OVS bridge-mapping policy out of band. See
 [References](index.md#references), the
 [`baremetal-redfish-multidc-virtualized-odf-ceph`](../advanced/examples.md)
 example, [KubeVirt nested clusters](../advanced/kubevirt.md), and
-[Networking & load balancing](../advanced/networking.md) for the localnet
-topology and the static-IP rule.
+[Networking & load balancing](../advanced/networking.md) for the static-IP rule.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -435,7 +441,9 @@ spec:
 `InfraComponent` declares one machine-bound shared service. `spec.type` is a
 discriminated union: exactly one arm is populated, the arm key equals the `type`
 value, and `spec.type` must equal that arm key. Each placed `machineRef` must
-resolve to a `Machine` and is checked for the service's required capability.
+resolve to a `Machine` that carries `container-runtime` — the service runs as a
+container, so the host needs the runtime, **not** a capability named after the
+service. The `ntp`/`chrony` arm is the exception and requires no capability.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -492,16 +500,10 @@ default HTTPS listener on port `8443`.
 | `artifactServer.endpoints[].addressRef` | Yes | — | Must resolve to a `Machine.spec.addresses[].name` on the placement machine. |
 
 !!! note "`install-only` retention"
-    An `install-only` artifact server exists only while a cluster it serves is
-    being installed. Bootwright reclaims it — container, published tree, and
-    ownership record — at the end of the apply that finishes the last referencing
-    install, and skips re-provisioning it on subsequent no-op applies, so the
-    host stays in sync without churn. A later apply that must install or rebuild a
-    node it serves brings the service back automatically, then reclaims it again.
-    Use it to shrink the post-install footprint on the bastion; leave it
-    `persistent` (the default) to keep the service available for day-2
-    re-provisioning. Reclaim is reference-aware: a server another context still
-    references is left in place. The manual equivalent remains
+    Three things the row above does not say: a reclaimed server is **not**
+    re-provisioned by subsequent no-op applies, so the host stays in sync without
+    churn; reclaim is reference-aware, so a server another context still
+    references is left in place; and the manual equivalent is
     `bootwright destroy --stage infra --clusters artifact-server`.
 
 !!! warning "BMC reachability for virtual media"
@@ -513,15 +515,13 @@ default HTTPS listener on port `8443`.
     not enough for virtual-media ISO fetches.
 
 !!! note "Legacy BMC HTTPS virtual media"
-    A legacy BMC HTTPS virtual-media client (e.g. Huawei iBMC) can fail to fetch
-    the agent ISO from an `https` listener even with BMC certificate verification
-    disabled, aborting the InsertMedia task with a generic connection failure,
-    because it cannot negotiate the modern TLS the bundled nginx/OpenSSL build
-    offers. Set `artifactServer.tls.minVersion` and `artifactServer.tls.ciphers`
-    to relax the handshake the listener presents — start broad (e.g.
-    `minVersion: TLSv1` with `ciphers: "DEFAULT:@SECLEVEL=0"`) and tighten to the
-    weakest profile the BMC accepts. This weakens TLS on a management network the
-    BMCs reach; the unguessable per-ISO publish token still gates the path.
+    `tls.minVersion` and `tls.ciphers` exist for a legacy BMC HTTPS client that
+    cannot negotiate the modern TLS the bundled nginx build offers and aborts the
+    InsertMedia task. Start broad (`minVersion: TLSv1` with
+    `ciphers: "DEFAULT:@SECLEVEL=0"`) and tighten to the weakest profile the BMC
+    accepts — this weakens TLS on the management network the BMCs reach. The
+    symptom and the surrounding trust decision are in
+    [SSH or artifact fetch failures](../troubleshooting.md#ssh-or-artifact-fetch-failures).
 
 ### Load Balancer
 
@@ -629,8 +629,7 @@ spec:
 ## Where to go next
 
 - [Networking & load balancing](../advanced/networking.md) for the deep
-  networking, endpoint, and load-balancer how-to (including the KubeVirt localnet
-  topology and static-IP rule).
+  networking, endpoint, and load-balancer how-to, including the static-IP rule.
 - [KubeVirt nested clusters](../advanced/kubevirt.md) for hosting child clusters
   on OpenShift Virtualization.
 - [Disconnected & proxied installs](../advanced/disconnected-proxy.md) for mirror

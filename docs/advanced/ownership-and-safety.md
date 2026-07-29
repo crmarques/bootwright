@@ -20,7 +20,11 @@ For the conceptual model see
 [The desired-state model](../concepts/index.md#convergence-and-drift); for the
 execution internals see [Architecture](../contributing/architecture.md); for the
 recovery procedures these guardrails protect, see
-[Operations, recovery & teardown](operations.md).
+[Operations, recovery & teardown](operations.md). The normative model is
+[ADR 0007](https://github.com/crmarques/bootwright/blob/main/specs/adr/0007-apply-destroy-safety-model.md)
+and the CLI contract in
+[specs/state-model.md](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract);
+this page is the operator-facing rendering.
 
 ## How ownership works
 
@@ -63,10 +67,10 @@ clusters; see [Operations](operations.md#comparing-against-live-cluster-state)):
 | `foreign` | Record carries a non-Bootwright owner | Fail closed — never touched |
 
 Under `--converge-drifted`, the consequence depends on the object kind: for the
-reconfigure-only kinds (provider host services, infra-component services,
-node-config apply, per-host `virtctl`, cluster add-ons, machine RHSM
-registration, provisioning-playbook re-runs)
-it is an idempotent in-place re-apply that touches no data, OS, or VM; for a
+reconfigure-only kinds — enumerated in the
+[`--converge-drifted` taxonomy](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract),
+for example cluster add-ons and machine RHSM registration — it is an idempotent
+in-place re-apply that touches no data, OS, or VM; for a
 machine (managed-OS reinstall, disks wiped) or a container/storage cluster
 (reinstall / `cephadm rm-cluster --zap-osds`) it is a destructive rebuild. Only
 the destructive kinds cross the destroy-protection boundary (below).
@@ -201,7 +205,7 @@ A few habits keep operators on the safe side of these guardrails:
 | Has anything drifted from the last apply (offline)? | `bootwright diff --recorded` |
 | Has the live cluster drifted from desired state? | `bootwright diff` (contacts clusters read-only) |
 | What is the current run doing? | `bootwright status` / `status --watch` |
-| What does Bootwright own here, and what is orphaned? | `bootwright diff --recorded` and the orphan reporting in [Operations, recovery & teardown](operations.md) |
+| What does Bootwright own here, and what is orphaned? | `bootwright diff --recorded`, plus [Troubleshooting → Resources no longer in desired state (orphans)](../troubleshooting.md#resources-no-longer-in-desired-state-orphans) |
 
 `diff --recorded` and `status` read recorded evidence and the run ledger without
 contacting provider hosts, BMCs, or clusters, so they are always safe to run.

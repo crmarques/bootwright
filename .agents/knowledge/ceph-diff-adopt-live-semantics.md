@@ -1,6 +1,7 @@
-# Ceph diff --live and --adopt: facet filters, advisories, and adopt policy
+# Ceph diff (live) and --adopt: facet filters, advisories, and adopt policy
 
-**Semantics:** `diff --live` derives each facet's desired value the way apply
+**Semantics:** `bootwright diff` runs live by default (`--recorded` is the
+opt-out; `--adopt` implies live). It derives each facet's desired value the way apply
 would (via `internal/storage/topology`, the same resolver the renderer uses),
 so a pool's effective size or a rule's failure domain match exactly. Desired is
 the `---` baseline, live is `+++`. An object declared but absent is

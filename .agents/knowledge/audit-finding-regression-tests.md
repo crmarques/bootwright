@@ -1,15 +1,21 @@
 # Audit-finding IDs referenced by regression tests (state engine)
 
-Findings from the 2026-07 full-repo audit are pinned by regression tests that
-cite the finding ID in comments or test names. Map for the state-engine/apply
-IDs; other subjects' knowledge files map their own IDs.
+Findings from the 2026-07 full-repo audit are pinned by regression tests, but
+the finding IDs themselves appear nowhere in the tree — test names describe the
+invariant, and source carries no comments (ADR 0006). This file is the only map
+from ID to test. Map for the state-engine/apply IDs; other subjects' knowledge
+files map their own IDs.
 
 **M2 — lease takeover must be a no-op signal.** A run that stalled past the
 stale window and lost its lease must stop refreshing/removing it so it never
 clobbers the new holder. Invariant: heartbeat uses `SaveRunLeaseIfOwner`,
 cleanup uses `RemoveRunLeaseIfOwner`, both treating `ErrLeaseNotOwned` as
-stop-not-fail. Tests: the M2 cases in
-`internal/converge/workflow/lease_core_audit_test.go`.
+stop-not-fail. Tests, in
+`internal/converge/workflow/lease_core_audit_test.go`:
+`TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact`,
+`TestCancelRunLedgerLeavesNewHolderLeaseIntact`,
+`TestOwnershipCheckedLeaseOpsHonorOwner` (the file's other three functions
+cover unrelated invariants).
 
 **M8 — scoped-apply hash must be scope-independent.** The virtctl task hashed
 its carried State, which is the `--clusters`-filtered set on a scoped run, so

@@ -48,11 +48,11 @@ reconfigure-only under `--converge-drifted` (ADR 0007 taxonomy).
 - The arm must carry only `management`: `organizationRef`, `activationKeyRef`,
   `satellite`, and `connectToInsights` are validation errors, so no RHSM
   secrets are demanded (preflight included).
-- The operator supplies registration as a `CustomPlaybook` at
-  `stage: deps, timing: before` — it runs after the machines phase (OS in
-  place) and the default `failureMode: fail` hard-gates the deps-phase Ceph
-  work on it. A `machines`/`after` anchor runs at the same point in time but
-  creates no forward edge into later phases (ADR 0005 `after` semantics), so
+- The operator supplies registration as a `CustomPlaybook` with
+  `gates: deps` — it runs after the machines phase (OS in place) and, because
+  `gates` may not be combined with `onFailure: continue`, hard-gates the
+  deps-phase Ceph work on it. A `follows: machines` anchor runs at the same
+  point in time but creates no forward edge into later phases (ADR 0005), so
   it must not carry delegated registration.
 - A `packageSource.fromSubscription` install profile must reference a `managed`
   entitlement: Anaconda-time registration is the package source and cannot be
@@ -75,12 +75,18 @@ the host does not need a separately installed `ceph-common` package.
 
 ### Lifecycle
 
-Registration is install-only. Destroy never unregisters (pre-existing
-contract), and storage destroy keeps removing the fixed CA anchor filenames it
-always removed. Under `external` Bootwright never writes the Satellite CA
-anchor, so that removal is a no-op there; the proxy CA anchor is still written
-by the deps-phase storage role whenever a proxy trust bundle is declared,
-independent of `rhsm.management`.
+Registration happens once, at install. Destroy is its inverse: a
+`machineRegistration` teardown step deregisters the nodes Bootwright registered
+before their substrate is deleted (ordered by ADR 0023 A2), because a reinstall
+reuses the host DMI UUID and would otherwise collide with the surviving
+Candlepin consumer. It covers only nodes of a
+`managed` storage cluster that Bootwright installed: an `os.provided: true`
+node, an `external` cluster, and an unreachable node are each skipped. Storage
+destroy keeps removing the fixed CA anchor filenames it always removed. Under
+`external` Bootwright never writes the Satellite CA anchor, so that removal is
+a no-op there; the proxy CA anchor is still written by the deps-phase storage
+role whenever a proxy trust bundle is declared, independent of
+`rhsm.management`.
 
 ### Deliberately not done
 
@@ -89,5 +95,4 @@ independent of `rhsm.management`.
   RHCOS. The role is machine-scoped so a future consumer reuses it.
 - A `rhsm` `proxyFor` slot (ADR 0012's consumer set is closed); day-2 RHSM
   proxy still renders from the resolved effective proxy.
-- Unregistration on destroy, or a subscription-status preflight for delegated
-  registration.
+- A subscription-status preflight for delegated registration.

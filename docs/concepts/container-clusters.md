@@ -181,7 +181,8 @@ together with `additionalTrustBundleRefs` — see
     `apiServer` you must supply at least one `namedCertificates` entry, and each
     entry needs both a `secretRef` and at least one `names` value. If you author
     `ingress` you must supply `defaultCertificateRef`. Named-certificate `names`
-    must not name the internal `api-int.<cluster>.<baseDomain>` endpoint.
+    must not name the internal
+    `api-int.<cluster>.<domains.containerClusters>` endpoint.
 
 ## Security
 

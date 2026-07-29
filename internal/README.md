@@ -12,6 +12,8 @@ state, validate it, render tool inputs, converge, observe.
 - `state/graph`: resolve shared host services, consumers, host placement,
   merge fields, and scoped-apply conflicts.
 - `state/scaffold`: generate per-substrate example workspaces.
+- `state/advice`: non-blocking best-practice advisories over loaded state
+  (Ceph topology and provider warnings). Never fails a command.
 - `render`: deterministically project desired state into installer inputs,
   Ansible inventory and vars, manifests, and locks. The root package owns all
   file writes and is the only importable surface; the emission families
@@ -45,6 +47,15 @@ state, validate it, render tool inputs, converge, observe.
 - `infra/{artifacts,locality,media,proxy}`: shared-infrastructure resolvers
   over state (artifact-server selection, bastion locality, install media,
   effective proxy).
+- `storage/{topology,cephprovider,cephstate,cephdiff,cephadopt}`: the Ceph
+  domain leaves — desired topology resolution (nodes, pools, OSDs), product,
+  registry and release derivation, live-state decoding, desired-vs-live
+  comparison, and the `diff --adopt` write-back.
+- `addons/{plan,render,oc,records,hooks,inputs,nativecatalog}`: cluster add-on
+  expansion and ordering, generated-resource rendering, in-cluster apply
+  through the `oc` command boundary, per-cluster add-on records, add-on-shipped
+  hooks and outputs, binding-scoped input values, and the embedded built-in
+  catalog plus its machine-local store.
 - `entitlements`, `nmstate`: small leaves (RHSM entitlements, NMState
   template rendering).
 - `host/*`: generic host-execution primitives — `safefs`, `ptyexec`,

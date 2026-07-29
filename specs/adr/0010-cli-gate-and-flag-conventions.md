@@ -27,8 +27,9 @@ touch root-owned state:
 
 - Even read-only inspectors escalate — `plan`, `diff`, `status`,
   `secret generate/list/check/encryption`, `machine list/trust`,
-  `cluster list/info/kubeconfig`, `media list`, `add-ons list` — because
-  the context and the media/add-ons stores live under
+  `cluster list/info/kubeconfig`, `context list/current`, `media list`,
+  `add-ons list`, and a `validate` that reads the context rather than a
+  `-f` file — because the context and the media/add-ons stores live under
   `/var/lib/bootwright`.
 - Any invocation cobra would reject stays rootless so the user sees
   cobra's error (including its "Did you mean" suggestion) as themselves,
@@ -54,7 +55,8 @@ touch root-owned state:
   inside the command (`shouldRunContextRootChild`), so the generic gate
   must not double-escalate them.
 - Only `context init`/`use` (and `context delete --purge`) may mutate
-  the per-user registry (`argsMayMutateRegistry`); only `apply`, rootful
+  the per-user registry (`argsMayMutateRegistry`); of those, `context use`
+  also escalates, while `init`/`update`/`delete` do not. Only `apply`, rootful
   destroy targets, and `bastion setup` may use a become password
   (`argsMayUseBecome`).
 - `machine rsh`/`exec` and `cluster rsh`/`exec` run and wait for the SSH
@@ -62,9 +64,19 @@ touch root-owned state:
   The client reads that material through a parent-held anonymous descriptor;
   Bootwright forwards cancellation, preserves the child exit status, closes
   the descriptor after SSH exits, and escalates only when a non-empty `--name`
-  is present.
+  is present. `cluster oc`/`kubectl` follow the same shape for the same reason
+  — the cluster kubeconfig is root-owned — and likewise preserve the child
+  exit status.
 - A leading global `--context` is stripped for classification only; the
   original args are forwarded verbatim to the sudo child.
+
+Alternative, considered but not validated: carry the classification on the
+cobra commands themselves (`Annotations["bootwright.io/root"]` =
+`required` | `forbidden` | `name-gated`), read it from the built command tree,
+and assert coverage with a fitness test — removing the parallel argv parser and
+the drift between it and the command set. It is recorded as an option, not a
+decision: the gate must classify before cobra parses, so the tree would have to
+be built and discarded ahead of execution, and that has not been tried.
 
 ### Flag naming coherence
 
@@ -82,7 +94,7 @@ touch root-owned state:
   playbook.
 - Targeted resource commands take `--name` rather than positionals
   (`secret delete/show`, `media add/delete`, `add-ons add/delete`,
-  `machine`/`cluster` `rsh`/`exec`).
+  `machine`/`cluster` `rsh`/`exec`, `cluster oc`/`kubectl`).
 
 ### Destructive-command gating and override remedies
 
@@ -98,14 +110,11 @@ touch root-owned state:
   shortening keeps the `--converge-drifted` tail).
 - A destroy-time Ceph marker recovery carries the identity being confirmed in
   `--recover-ceph-ownership <StorageCluster>=<fsid>` rather than a boolean
-  bypass. The value must match the selected declared cluster and the seed's
-  on-disk Ceph fsid; any existing controller owner record must agree with that
-  cluster and seed. The mapping explicitly attests ownership of that exact
-  identity, so after the remote match Bootwright may reconstruct a missing
-  controller record and re-stamp the host marker, but it never overwrites
-  contradictory evidence; a reachable live fsid is checked for contradiction
-  but never supplies authorization. The ordinary destroy confirmation remains
-  the one data-loss acknowledgment.
+  bypass: naming the exact identity is an attestation only an operator can
+  make, where a boolean would authorize whatever happens to be on the host.
+  The agreement checks it performs, and the gates it does not relax, are
+  specified in [`state-model.md`](../state-model.md) ("CLI Contract"). The
+  ordinary destroy confirmation remains the one data-loss acknowledgment.
 - Destructive selection stays unambiguous by reservation: the cluster
   name `artifact-server` is reserved so `destroy --stage infra
   --clusters artifact-server` can only mean the generated artifact
@@ -123,12 +132,15 @@ touch root-owned state:
   append-only transition lines with no ANSI cursor control.
 - Exit codes are contract: 0 success, 1 run/load failure, 2 usage
   error, and `diff` exits 3 when out of sync while still printing a
-  parsable report.
+  parsable report. The commands that hand control to a child process —
+  `cluster oc`/`kubectl` and `machine`/`cluster` `rsh`/`exec` — propagate that
+  child's exit status verbatim and are outside the contract.
 - Raw ansible output routes to per-run/per-task logs by default; `-v` /
   `--verbose` tees the full Ansible task output to the terminal AND the run
-  log, and un-censors values normally hidden as "censored due to no_log"
-  (secrets and BMC/registry/RHSM/proxy credentials, tokens, generated Ceph
-  keys) so both destinations carry them in the clear.
+  log and un-censors values normally hidden as "censored due to no_log", so a
+  verbose run leaves credential plaintext in its persisted log. The scope of
+  that escape hatch is specified in [`security.md`](../security.md)
+  ("Redaction escape hatch").
 
 ## Consequences
 
@@ -139,9 +151,10 @@ touch root-owned state:
 - New commands must be classified in the root gate and must reuse the
   shared flag help registrars; new stage-like vocabularies must derive
   from one accessor so validation, help, and completion cannot drift.
-- New destructive behavior routes through the existing `--yes` single
-  gate and the `--converge-drifted` remedy vocabulary instead of inventing
-  per-command force flags.
+- New destructive behavior reuses an existing gate wherever one fits. A new
+  flag is justified only when it carries an identity or a scope the existing
+  gates cannot express — as `--recover-ceph-ownership` does — never as a
+  second spelling of `--yes` or `--converge-drifted`.
 - Frame byte output stays testable and consistent because it is
   confined to the output package; automation can gate on the exit-code
   contract and on color-free piped output.

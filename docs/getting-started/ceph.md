@@ -45,10 +45,10 @@ how managed-OS installs work in general, see
 ## Get The Input Tree
 
 There is no `example init` provider for Ceph, so start from the ready-made
-example tree in the bootwright source repository. If you installed only the
-release binary, get the source first — clone the repo (or download and unpack a
-source tarball from
-[GitHub Releases](https://github.com/crmarques/bootwright/releases)):
+example tree in the bootwright source repository. If you installed the release
+tarball, clone the repo for the YAML — and note that example trees on `main`
+track `main`'s schema, so a released binary may reject them (see
+[Install the CLI](installation.md#install-the-cli)):
 
 ```bash
 git clone https://github.com/crmarques/bootwright.git
@@ -66,7 +66,7 @@ The example is a complete, valid bootwright tree. Its layout:
 ```text
 my-ceph-lab/
   environment.yaml                                   Environment: cluster selection, lab DNS
-  secrets.yaml                                       Secrets: node/bastion SSH, BMC, RHSM, IBM registry
+  secrets.yaml                                       Secrets: cluster/machine/bastion SSH, BMC, RHSM, IBM registry
   infra/
     providers/libvirt.yaml                           InfraProvider: libvirt + VM profiles + bridge
     machines/bastion.yaml                            Machine: the libvirt host (localhost)
@@ -97,6 +97,11 @@ under `spec.infraComponents.nameResolution`. It also sets
 `spec.safety.destroyProtection: requiredOverride`, so `destroy` refuses to run
 without `--force`.
 
+`spec.machineAccess.keyRef: bootwright-machine-key` names the fleet SSH key
+authorized for the `bootwright` service account on every node this lab installs.
+It is required because the nodes set `os.installProfileRef`, and
+`secret generate` mints it.
+
 ### Entitlements (`infra/entitlements/`)
 
 The two `Entitlement` objects that license the install are their own first-class
@@ -120,13 +125,13 @@ Storage Ceph runs on RHEL it does not itself entitle:
 
 ### Secret (`secrets.yaml`)
 
-Six `kind: Secret` objects, one per named secret, each with a `spec.type` and an
-optional `spec.source`. The bytes never go in YAML — `spec.source` says where
+Seven `kind: Secret` objects, one per named secret, each with a `spec.type` and
+an optional `spec.source`. The bytes never go in YAML — `spec.source` says where
 they come from: `bastion-host-ssh` (`sshKeyPair`) is a `file` reference to an
-operator-owned key; `ceph-node-ssh` (`sshKeyPair`) and `bmc-credentials`
-(`usernamePassword`) are `generated`; and `rhel-org`, `rhel-activation-key`
-(`opaque`), and `ibm-ceph-registry` (`usernamePassword`) are context-local,
-set with `bootwright secret set`.
+operator-owned key; `ceph-cluster-ssh` (`sshKeyPair`), `bootwright-machine-key`
+(`sshKeyPair`), and `bmc-credentials` (`usernamePassword`) are `generated`; and
+`rhel-org`, `rhel-activation-key` (`opaque`), and `ibm-ceph-registry`
+(`usernamePassword`) are context-local, set with `bootwright secret set`.
 
 ### InfraProvider (`infra/providers/libvirt.yaml`)
 
@@ -154,8 +159,11 @@ intent.
   Each binds the libvirt provider (`ceph-1`/`ceph-2` use profile `ceph-full`,
   `ceph-3` uses `ceph-mon`), sets `os.provided: false` with
   `installProfileRef: rhel-9-ceph-node` (bootwright installs RHEL onto it), gets a
-  static IP (`.21`, `.22`, `.23`), and connects over SSH as `root` with the shared
-  `ceph-node-ssh` key — one SSH identity per `StorageCluster`.
+  static IP (`.21`, `.22`, `.23`), and authors **no** `access` block — the install
+  creates the `bootwright` service account and authorizes
+  `Environment.spec.machineAccess.keyRef`. Separately, the cluster's own cephadm
+  login is `spec.ceph.cephadm.clusterSSH.keyRef: ceph-cluster-ssh` — one SSH
+  identity per `StorageCluster`.
 
 ### MachineImage and MachineInstallProfile (`infra/os/`)
 
@@ -169,10 +177,12 @@ the agent-installed OpenShift SNO lab.
   the DVD via `cdrom`.
 - `MachineInstallProfile` `rhel-9-ceph-node`: the Anaconda install
   (`installer.anaconda.imageRef: rhel-9-x86-64-dvd`) for
-  `os.family: rhel`, `version: "9.8"`. Its `customizations` authorize the
-  generated `ceph-node-ssh` key for root login, wipe and lay down the root device,
-  install a minimal base plus the runtime prerequisites (`podman`, `lvm2`,
-  `chrony`, `firewalld`), and — because the cluster requests FIPS — set
+  `os.family: rhel`, `version: "9.8"`. Its `customizations` disable SSH password
+  authentication (`ssh.passwordAuthentication: false`) — the install itself
+  creates the `bootwright` account and authorizes
+  `Environment.spec.machineAccess.keyRef` for it — wipe and lay down the root
+  device, install a minimal base plus the runtime prerequisites (`podman`,
+  `lvm2`, `chrony`, `firewalld`), and — because the cluster requests FIPS — set
   `security.fips.enabled: true` so each node is installed with `fips=1`.
 
 ### NetworkConfig (`infra/networkconfigs/ceph-net.yaml`)
@@ -293,16 +303,17 @@ shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
 printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
   bootwright secret set --name ibm-ceph-registry --username cp --password-stdin
 
-# Generate the ceph-node-ssh keypair and bmc-credentials, and import the
-# bastion-host-ssh file: source into the context.
+# Generate ceph-cluster-ssh, bootwright-machine-key and bmc-credentials, and
+# import the bastion-host-ssh file: source into the context.
 bootwright secret generate
 bootwright secret check
 bootwright secret list
 ```
 
-The remaining secrets are not "set": `ceph-node-ssh` and `bmc-credentials` are
-`generated`, and `bastion-host-ssh` is the operator-owned key referenced as a
-`file:` source — `secret generate` brings them all into the context.
+The remaining secrets are not "set": `ceph-cluster-ssh`,
+`bootwright-machine-key`, and `bmc-credentials` are `generated`, and
+`bastion-host-ssh` is the operator-owned key referenced as a `file:` source —
+`secret generate` brings them all into the context.
 
 ## Validate And Set Up The Context
 
@@ -356,10 +367,10 @@ bootwright cluster info --name ceph-ibm
 ```
 
 `cluster info` reports the seed node, the SSH and health-check commands, the
-dashboard URL, and the dashboard password file. Run the health check it prints;
-`HEALTH_OK` from `ceph -s` confirms the cluster is reachable and healthy. Expect
-3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1 CephFS, an RGW service,
-and the mgmt-gateway plus ingress services.
+dashboard URL, and the dashboard credential (see below). Run the health check it
+prints; `HEALTH_OK` from `ceph -s` confirms the cluster is reachable and healthy.
+Expect 3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1 CephFS, an RGW
+service, and the mgmt-gateway plus ingress services.
 
 The Ceph Dashboard is served HA through the native mgmt-gateway at
 `https://dashboard.ceph-ibm.bootwright.test:8443` (its keepalived VIP is
@@ -369,11 +380,12 @@ ingress VIP `192.168.140.80`).
 ### The dashboard admin password
 
 `cephadm bootstrap` generates a one-time random `admin` password. Bootwright
-captures it **during the install** and saves it, encrypted at rest, on the
-controller at `clusters/ceph-ibm/secrets/dashboard-password`. `cluster info`
-prints that file path — never the bytes unless you pass `--secrets`, which
-decrypts and prints the password itself instead. View it, then log in as
-`admin`:
+captures it **during the install** and stores it encrypted on the controller.
+`cluster info` prints a `Show password` line naming the command that reveals it
+(`bootwright cluster info --name ceph-ibm --secrets`); neither the encrypted
+file path nor the bytes are printed by default, and the file on disk is an
+encrypted envelope, so reading it directly does not work. Reveal it, then log in
+as `admin`:
 
 ```bash
 bootwright cluster info --name ceph-ibm --secrets
@@ -383,8 +395,36 @@ bootwright cluster info --name ceph-ibm --secrets
     The Ceph nodes resolve `*.bootwright.test` through the lab dnsmasq
     automatically, but your workstation does not, so the dashboard and RGW names
     will not resolve in your browser until you point the host at the lab dnsmasq
-    (`192.168.140.1`) — typically with split DNS for `~bootwright.test`, or a
-    static `/etc/hosts` fallback. The Ceph example README walks through both.
+    (`192.168.140.1`). On a systemd-resolved + NetworkManager host, attach a
+    routing-only domain to the lab bridge (`vbr-ceph-ibm`) so only
+    `*.bootwright.test` goes to the lab:
+
+    ```bash
+    sudo nmcli connection modify vbr-ceph-ibm ipv4.dns 192.168.140.1
+    sudo nmcli connection modify vbr-ceph-ibm ipv4.dns-search '~bootwright.test'
+    sudo nmcli connection up vbr-ceph-ibm
+    ```
+
+    Otherwise add static `/etc/hosts` entries
+    (`192.168.140.81 dashboard.ceph-ibm.bootwright.test` and
+    `192.168.140.80 rgw.ceph-ibm.bootwright.test`) — simpler, but maintained by
+    hand. "Resolving the lab names from your workstation" in
+    `./my-ceph-lab/README.md` covers both in more detail, including a
+    runtime-only `resolvectl` variant.
+
+## Tear It Down
+
+This lab's `Environment` sets `safety.destroyProtection: requiredOverride`, so
+every teardown needs `--force`:
+
+```bash
+bootwright destroy --stage clusters --force --yes
+bootwright destroy --stage infra --force --yes
+```
+
+See
+[Operations, recovery & teardown](../advanced/operations.md#tearing-down-with-destroy)
+for the ownership gates, scoping, and what each stage removes.
 
 ## Next steps
 

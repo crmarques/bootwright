@@ -35,20 +35,7 @@ bin/bootwright validate -f examples-wip/<fixture>/rendered
 (`./render.sh dc3.vars /tmp/dc3`) to render a second environment from the same
 template.
 
-## Known fixtures
-
-- **`env/`** — a parameterized template for a two-cluster bare-metal OpenShift
-  estate whose KubeVirt-hosted hubs consume one Bootwright-managed community
-  (OSS) Ceph cluster through IBM Fusion Data Foundation external mode. The RHEL
-  Ceph nodes install from a bastion-hosted DVD tree (`packageSource.hostedTree`)
-  and register to a corporate Red Hat Satellite day-2; the storage cluster itself
-  runs upstream Ceph from `quay.io/ceph` with no Ceph subscription. `env.vars`
-  holds the identity; `render.sh` expands `template/` into `rendered/`. See
-  `examples-wip/env/README.md` for the full build order and secret list.
-- **`env/ceph-validate.sh`** — a bastion-run diagnostic that checks a live Ceph
-  cluster's desired-vs-actual state via `bootwright cluster exec`, kept beside the
-  `env` fixture it targets.
-
-Other short-lived WIP trees (for example a nested OCP-on-OCP fixture) may come
-and go here; treat the two above as the durable ones and re-derive anything else
-from its own `render.sh`.
+No per-fixture inventory is kept here. The repo cannot detect when such a list
+goes stale — it already had — so a fixture's identity, build order, and secret
+list belong in that fixture's own `README.md`, beside the `render.sh` that
+regenerates it.

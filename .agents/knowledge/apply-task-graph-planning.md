@@ -36,8 +36,8 @@ storage/addons extension activities.
 OK/Skipped (else Blocked); `OrderingDependencies` only sequence — the task
 waits until the dep is terminal (OK/Skipped/Failed/Blocked/Cancelled) then runs
 regardless. A still-unknown ordering dep (not yet in the ledger) is NOT ready.
-`AddOrderingDependency` also gates a phase on a before-timing
-ProvisioningPlaybook whose `failureMode` is continue.
+`AddOrderingDependency` also gates a phase on a gating (`gates`)
+CustomPlaybook whose `onFailure` is continue.
 
 **virtctl provisioning:** virtctl runs on the controller, so one
 version-matched provision is planned per distinct KubeVirt host cluster in the
@@ -57,10 +57,10 @@ strand at installing and the next apply's resume path refuses with
 `restoreClusterInstallRecordOnSkip` re-saves the prior record — or removes the
 phantom when none existed (only the install record, never kubeconfig/connection).
 
-**ProvisioningPlaybook planning guards:** a playbook plans only when its stage
+**CustomPlaybook planning guards:** a playbook plans only when its stage
 is in the run's phase set AND its target resolves to at least one in-scope host
 — an empty ansible `--limit` targets EVERY host, so an out-of-scope playbook is
-skipped, not run fleet-wide. before-timing playbooks wait on the previous
+skipped, not run fleet-wide. Gating (`gates`) playbooks wait on the previous
 stage's core tasks; planning runs after every core activity is added and before
 `graph.Lower()`. The controller-target security guard hand-duplicates the group
 literals (`provisioningControllerGroups` vs render/inventory's

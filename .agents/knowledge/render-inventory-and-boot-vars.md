@@ -20,7 +20,7 @@ rather than silently dropped, or the machine-task plays have no host to run on.
 `MachineInventoryHosts` (`machine_inventory.go`) maps a `Machine` to its
 post-provision inventory host names — the agent-node host per referencing
 `ContainerCluster` and the storage-node host per referencing `StorageCluster`
-topology host — which resolves a `ProvisioningPlaybook` `target.machines` entry
+topology host — which resolves a `CustomPlaybook` `target.machines` entry
 to an ansible `--limit` token set; a machine referenced by no cluster
 contributes none.
 

@@ -62,10 +62,9 @@ only when the user explicitly requests that full gate.
   (ansible/examples/test/e2e/add-ons/.github), Makefile, Containerfile,
   and shell.
   The only comments allowed are machine-read directives, which are not
-  prose: `//go:build`, `//go:embed`, `//go:generate`, `//nolint`,
-  `//lint:`, `// #nosec`, `// +marker`, `# noqa`, `# shellcheck`,
-  `# yamllint`, `# ansible-lint`, `# syntax=`, shebang lines, and
-  editor/coding modelines.
+  prose; `specs/adr/0006-no-prose-comments-knowledge-catalog.md` enumerates
+  them, and the allowlist regexes in `comment_policy_test.go` are what
+  actually decide a borderline case.
   Every piece of information a comment would have carried has a proper
   home; put it there instead, in the same change:
   - Incident/root-cause/vendor-quirk/constraint knowledge (anything that
@@ -81,10 +80,8 @@ only when the user explicitly requests that full gate.
   If the *why* fits in the code (rename a var, split a function, extract
   a constant, tighten a type), do that first — a knowledge file is for
   what the code genuinely cannot say.
-  Exception: comment-like lines that are *content*, not commentary, stay —
-  `#` lines inside Jinja2 templates render into output files (kickstart,
-  config files) and belong to the rendered artifact; `#` lines emitted by
-  Go string literals into generated scripts are data.
+  Exception: comment-like lines that are *content*, not commentary, stay;
+  ADR 0006 states which ones and why.
 
 ## Ansible Idempotency And Destructive Safety
 

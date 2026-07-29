@@ -19,6 +19,21 @@ registration to a corporate `CustomPlaybook` (see
 `examples/ceph-external-rhsm`). The secret names below are declarations only;
 the bytes are supplied out of band.
 
+## Edit First
+
+- `environment.yaml`: the fleet name and `domains.base`.
+- `machine.yaml`: the provided storage node — its `ssh` address, login user, and
+  `access.ssh.auth.privateKeyRef`.
+- `secrets.yaml`: `ceph-cluster-ssh` (generated — the cephadm cluster key),
+  `ceph-node-ssh` (points at a local private-key file), and the three
+  entitlement secrets in the table below.
+- `rhel.yaml`: the `redhat-rhel` `Entitlement` — RHSM organization and
+  activation-key references.
+- `ibm-storage-ceph.yaml`: the `ibm-storage-ceph` `Entitlement` — registry
+  credential reference and `license.accept`.
+- `storage.yaml`: `spec.ceph.release`, `packageVersion`, `image.version`,
+  `ibm.callHome`, the cephadm bootstrap node, and the node topology.
+
 ## Credentials to supply
 
 | Entitlement field | Secret | What it holds | How to set it |
@@ -47,7 +62,8 @@ choice explicit and keeps it disabled after bootstrap.
 
 These are **provided-OS** nodes (`spec.os.provided: true`), so Bootwright cannot
 manage their OS hostname. `spec.ceph.topology.nodes[].name` is **required**;
-Bootwright composes it into the node FQDN (`<name>.<cluster>.<baseDomain>`) that
-cephadm renders verbatim, so it must resolve to and match the node's real
-hostname. Give each node a `name` that matches its host (or set the host's
-hostname to match).
+Bootwright composes it into the node FQDN
+(`<name>.<cluster>.<domains.storageClusters>`) that cephadm renders verbatim, so
+it must resolve to and match the node's real hostname. Give each node a `name`
+that matches its host (or set the host's hostname to match), or set
+`nodes[].fqdn` to the node's real FQDN when it does not follow that shape.

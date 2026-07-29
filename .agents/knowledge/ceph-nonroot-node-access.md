@@ -27,10 +27,12 @@ bootwright_managed_os_install_required = (not already_ready) or force_rebuild
 
 So repointing `access.ssh.user` at an account that does not yet exist makes the
 probe fail authentication and `already_ready` false. Since the 2026-07-23
-fail-closed hardening that lands on the *unverifiable* refusal (reachable, no
-identity authenticated) rather than a silent reinstall — but before it, both
-mode refusals were skipped (they are conditioned on the node having answered)
-and `install_required` became true, which wiped the node. The field is
+fail-closed hardening, apply stops on the *unverifiable* refusal — *Refuse to
+reinstall a reachable managed OS Bootwright cannot authenticate to* — which
+fires exactly when the node answers SSH but no identity authenticates. Before
+that hardening both mode refusals were skipped (they are conditioned on the node
+having answered), so `install_required` became true and the node was wiped. The
+field is
 additionally folded into the install-marker desired hash
 (`internal/render/inventory/vars_machine_os_marker.go`), so even a node that
 still answers is classified as drifted.
@@ -138,11 +140,10 @@ key-only auth, and a cluster credential revocable without touching root.
   every topology node before `PermitRootLogin no` is written anywhere, and again
   after the `sshd` reload (which is itself gated on `sshd -t`). Never reorder
   these; a failed revoke with root already gone is unrecoverable in band. Those
-  three probes (`probe.yml:4`, `verify.yml:4`, `revoke.yml:82`) run on the base
-  pty-free `bootwright_node_access_ssh_argv` and **must never gain `-tt`** — they
-  are the acceptance test for the terminal-less channel cephadm's own manager
-  uses, so proving the account under a terminal certifies a cluster that cannot
-  be orchestrated.
+  same three probes are also the pty-free acceptance test for the created
+  account — never give them a terminal; the rule and its test pin are in
+  [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md),
+  section 3.
 - Day-2 the user is reconciled with `ceph cephadm get-user` / `set-user` on an
   already-bootstrapped cluster — not by re-bootstrapping.
 - Node access state is recorded at `/etc/bootwright/access-marker.json`, mode

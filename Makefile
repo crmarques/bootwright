@@ -3,6 +3,7 @@ PYTHON ?= python3
 DOCKER ?= docker
 STATICCHECK ?= $(shell command -v staticcheck 2>/dev/null)
 SHELLCHECK ?= $(shell command -v shellcheck 2>/dev/null)
+MKDOCS ?= $(shell command -v mkdocs 2>/dev/null)
 COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
@@ -87,7 +88,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
@@ -266,6 +267,10 @@ workflow-yaml-check:
 	@test -n "$(YAMLLINT)" || { printf '%s\n' 'yamllint not found in PATH; install with python3 -m pip install yamllint or set YAMLLINT=/path/to/yamllint'; exit 1; }
 	$(YAMLLINT) -d '{extends: default, rules: {document-start: disable, line-length: disable, truthy: {check-keys: false}, comments-indentation: disable}}' .github/workflows
 
+docs-check:
+	@test -n "$(MKDOCS)" || { printf '%s\n' 'mkdocs not found in PATH; install with python3 -m pip install -r docs/requirements.txt or set MKDOCS=/path/to/mkdocs'; exit 1; }
+	$(MKDOCS) build --strict
+
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \
 		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
@@ -384,6 +389,7 @@ help:
 		'  check            Run fast guardrails, then Go/Python/Ansible checks, bundle sync, and go.mod tidiness' \
 		'  check-fast       Run cheap local guardrails plus Go unit tests (syncs the ansible bundle and needs ansible-playbook; no race, staticcheck, lint, or clean-checkout)' \
 		'  test             Run Go tests' \
+		'  docs-check       Build the documentation site with mkdocs --strict (the required CI docs gate)' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
 		'  plan             Render installer assets for test/e2e/001-sno-libvirt into .state' \
 		'  list-e2e-cases   List available e2e cases under test/e2e' \

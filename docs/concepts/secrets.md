@@ -100,9 +100,11 @@ spec:
   type: tlsCertificate         # context-local: `bootwright secret set --tls-cert … --tls-key …`
 ```
 
-Author one `Secret` per file, named for its `metadata.name`, the same
-one-object-per-file layout as every other kind. Paths under `source.file`
-resolve against the `Secret`'s own file.
+Similar `Secret` objects are grouped into one multi-document `secrets.yaml` —
+the sanctioned exception to the
+[one-object-per-file layout](../advanced/fleets.md#one-environment-many-clusters)
+every other kind follows, and what the examples and `bootwright example init`
+emit. Paths under `source.file` resolve against the `Secret`'s own file.
 
 ### The seven secret types
 
@@ -153,7 +155,7 @@ self-signed certificate (a `caBundle` acts as its own trust anchor).
 | `commonName` | `tlsCertificate`, `caBundle` | Yes | — | Certificate common name. |
 | `dnsNames[]` | `tlsCertificate`, `caBundle` | No | — | DNS SANs. |
 | `ipAddresses[]` | `tlsCertificate`, `caBundle` | No | — | IP SANs. |
-| `validityDays` | `tlsCertificate`, `caBundle` | No | — | Validity period; must not be negative. |
+| `validityDays` | `tlsCertificate`, `caBundle` | No | `3650` | Validity period; must not be negative. Omitting it mints a ten-year self-signed certificate. |
 | `keyType` | `sshKeyPair` | No | `ed25519` | Key algorithm: `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. Use `rsa` or ECDSA on FIPS-enforced control nodes. |
 | `comment` | `sshKeyPair` | No | — | Public key comment (no leading/trailing whitespace or newlines). |
 | `bytes` | `token` | No | `32` | Entropy of the generated token, in bytes; must not be negative. |
@@ -177,9 +179,17 @@ reference fields across the API include:
 | `install.nodeSSH.keyPairRef` (or `publicKeyRef`/`privateKeyRef`) | Cluster node SSH; see [Node SSH keys](#node-ssh-keys). |
 | `credentialsRef` | BMC, proxy, mirror-registry, and entitlement credentials. |
 | `trustBundleRef` / `installTrust.caBundleRefs[]` / `additionalTrustBundleRefs[]` | CA trust bundles. |
-| `keyRef` | `Machine.spec.access.ssh` private SSH key. |
+| `access.ssh.auth.privateKeyRef` / `auth.passwordRef` | [`Machine`](machines.md#access) SSH credentials (union arms; `auth.operatorIdentity` holds no ref). |
+| `access.ssh.sudoPasswordRef` | `Machine` sudo password, when the account needs one. |
+| `Environment.spec.machineAccess.keyRef` | The fleet key authorized for the `bootwright` service account on every machine Bootwright installs. |
+| `StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef` | A managed Ceph cluster's cephadm orchestration identity. |
 | `secretRef` / `defaultCertificateRef` | Serving certificates. |
 | `proxyAuthRef` | Proxy credentials. |
+
+The three SSH roles above — a machine's own access key, the fleet
+`machineAccess` key, and a Ceph cluster's `clusterSSH` key — must be three
+distinct `Secret` objects; validation rejects reuse. See
+[The Ceph node login](storage.md#the-ceph-node-login).
 
 ### Node SSH keys
 
@@ -206,11 +216,14 @@ container-cluster nodes. A split declaration that omits `privateKeyRef` can
 install the cluster but cannot open a node shell; add `privateKeyRef` or use a
 combined `keyPairRef`.
 
-For durable machines Bootwright or managed tools SSH into, put SSH connection
-material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key
-material; managed Ceph node hosts also require the public half at `<name>.pub`
-so Bootwright can pass it to cephadm. Generated SSH key pairs write the private
-key to `<name>` and the public key to `<name>.pub`.
+For a durable machine you already own, put SSH connection material on
+`Machine.spec.access.ssh.auth` — `privateKeyRef` or `passwordRef`. A machine
+Bootwright installs authors no access at all: the login is derived from the
+`bootwright` service account plus `Environment.spec.machineAccess.keyRef`. The
+public half a managed Ceph cluster authorizes for cephadm comes from
+`StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef`, never from a `Machine`
+field. Generated SSH key pairs write the private key to `<name>` and the public
+key to `<name>.pub`.
 
 ### SSH host trust
 
@@ -233,13 +246,8 @@ requires `bootwright machine trust --replace` after you verify the new fingerpri
 
 ## Storage modes and encryption at rest
 
-Secret bytes live under the root-managed Bootwright context directory:
-
-| Path | Location |
-| --- | --- |
-| Current context selection | `~/.bootwright/contexts.yaml` |
-| Context dir | `/var/lib/bootwright/contexts/<context>` |
-| Secrets dir | `/var/lib/bootwright/contexts/<context>/secrets` |
+Secret bytes live in the `secrets/` directory of the root-managed context
+directory — see [Contexts](index.md#contexts) for the full layout.
 
 `Environment.spec.secretStorage.mode` selects how `file:`-sourced material is
 handled:
@@ -262,9 +270,10 @@ host-local, unversioned, non-symlink regular files with mode `0600`.
     (`destroy`, `render`, `secret set`, `secret generate`) warn on the same
     mode violations but do not abort.
 
-On disk, context-local files contain JSON encryption envelopes (version,
-algorithm, key provider, key ID, context, secret name, material role, nonce,
-ciphertext, and `kdf: none`). Plaintext context files are blocked during normal
+On disk, context-local files contain JSON encryption envelopes; the envelope
+fields are specified in
+[`specs/security.md`](https://github.com/crmarques/bootwright/blob/main/specs/security.md)
+§Secret Ownership. Plaintext context files are blocked during normal
 reads; run `bootwright secret encryption migrate --yes` once to replace old
 plaintext files with encrypted envelopes. External `file:` sources remain
 operator-owned files at their declared paths.
@@ -301,10 +310,10 @@ operator-owned files at their declared paths.
 The flow is:
 
 1. Declare one `kind: Secret` object per secret.
-2. `bootwright secret set` writes context-local bytes through the local user
-   (it does **not** re-exec as root; you need write access to the context
-   secrets directory). Replacing an existing context-local secret prompts unless
-   `--yes` is passed.
+2. `bootwright secret set` stages the material as you, then self-escalates
+   through `sudo` to write it into the root-managed context store, so it may
+   prompt for your sudo password. Replacing an existing context-local secret
+   prompts unless `--yes` is passed.
 3. `bootwright secret generate` creates missing `source.generated` secrets and,
    when `secretStorage.mode: context`, copies `source.file` material into the
    context store; `--renew` regenerates every generated secret.
@@ -317,27 +326,18 @@ delete`, and the `secret encryption` family) operate on the root-managed context
 store. `bootwright secret show` reads only context-local secret files (never
 `source.file` material) and decrypts only the requested material.
 
-!!! note "Install secrets and access"
-    After a successful cluster install, the kubeadmin password, kubeconfig, and
-    (for a managed Ceph cluster) the dashboard `admin` password are captured
-    under `clusters/<cluster>/secrets/{kubeadmin-password,kubeconfig}` and
-    `clusters/<storage-cluster>/secrets/dashboard-password`. These are
-    encrypted at rest the same way as context secrets — each cluster gets its
-    own AES-256-GCM envelope keyring under `secrets/.bootwright/` — so the
-    files on disk are never plaintext; `bootwright apply` encrypts them in
-    place immediately after the capturing task succeeds. Because those files
-    are encrypted, `sudo cat` no longer reveals them and `bootwright cluster
-    info` never prints a reusable file path. Without `--secrets` it prints the
-    API and console URLs, the kubeadmin user, and the `bootwright cluster
-    info --secrets` command that reveals the kubeadmin/dashboard passwords;
-    with `--secrets` it decrypts and prints the passwords themselves. To use a
-    container cluster, run `bootwright cluster oc --name <cluster> <command>`
-    or `bootwright cluster kubectl --name <cluster> <command>` — Bootwright
-    decrypts the admin kubeconfig to a private, caller-owned temporary file for
-    the duration of the command, so `oc`/`kubectl` run as you against the
-    cluster and support shell pipelines. `bootwright cluster kubeconfig --name
-    <cluster>` streams a usable kubeconfig to stdout so you can redirect it to
-    a private file you own.
+!!! note "Install secrets are captured into the same kind of store"
+    After a successful install, the kubeadmin password, kubeconfig, and (for a
+    managed Ceph cluster) the dashboard `admin` password are captured under
+    `clusters/<cluster>/secrets/{kubeadmin-password,kubeconfig}` and
+    `clusters/<storage-cluster>/secrets/dashboard-password`. Each cluster store
+    has its own AES-256-GCM keyring under `secrets/.bootwright/`, and
+    `bootwright apply` encrypts the material in place as soon as the capturing
+    task succeeds, so the files on disk are never plaintext and `sudo cat` does
+    not reveal them — though root on the controller can still decrypt through
+    the co-located keyring. Reading and using them (`cluster info --secrets`,
+    `cluster oc`, `cluster kubectl`, `cluster kubeconfig`) is covered in
+    [Install OpenShift](../getting-started/openshift.md).
 
 Effective install/agent configs and `openshift/` manifests with resolved secrets
 are runtime outputs under

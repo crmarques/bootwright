@@ -49,7 +49,8 @@ Bootwright replaces them with one model and a single idempotent apply graph:
 3. **Render** deterministic, secret-free inputs for the official installer,
    provider, storage, and cluster tools.
 4. **Apply** the dependency graph from a bastion host — creating what is
-   missing, skipping what already matches, and failing closed on drift or
+   missing, skipping what already matches, converging drift that reconciles in
+   place, and failing closed on structural (destructive-identity) drift or
    foreign ownership before mutating anything.
 
 Desired state is the product API. The installer files and inventories Bootwright
@@ -82,23 +83,24 @@ treat the table as authoritative for what actually runs.
 | Bare metal (Redfish virtual media) | OpenShift / OKD / Ceph | Real BMCs over Redfish virtual media. |
 | vSphere (vCenter-managed VMs) | OpenShift / OKD | |
 | KubeVirt (OpenShift Virtualization VMs) | OpenShift / OKD | Nested child clusters on a Bootwright-managed parent. |
-| IPMI | Not supported | Not apply-supported today. |
 
 Ceph is a **storage** cluster family, not a substrate of its own: managed Ceph
 converges through cephadm on OS-ready or Bootwright-installed (managed-OS) nodes,
 and imported external Ceph is also supported. Those storage clusters run on the
 libvirt and bare-metal Redfish substrates above rather than in a row of their own.
+IPMI is not apply-supported: `InfraProvider.spec.type` accepts only `baremetal`,
+`libvirt`, `vsphere`, and `kubevirt`, and a machine BMC must speak `redfish`.
 
-Two topologies are intentionally first-step today: KubeVirt nested clusters
-require an installed parent cluster advertising the `kubevirt` add-on, and
-managed Ceph supports stretch mode (two data sites plus one tiebreaker, fixed at
-`size: 4` / `minSize: 2`).
+KubeVirt nested clusters need an installed parent cluster that advertises the
+`kubevirt` add-on. Managed Ceph runs single-site by default; the one multi-site
+topology supported today is stretch mode — exactly two data sites plus one
+tiebreaker, with replication fixed at `size: 4` / `minSize: 2`.
 
 ## Documentation map
 
 | Section | Use it for |
 | --- | --- |
-| [Getting Started](getting-started/index.md) | A complete, guided single-node example from scaffold to cluster access, plus installation. |
+| [Getting Started](getting-started/index.md) | Install the CLI, then two guided labs on one libvirt host: a single-node OpenShift cluster and a 3-node managed Ceph cluster. |
 | [Concepts and APIs](concepts/index.md) | The object model, references, contexts, stages, secrets, storage, add-ons, and the field-level options for every authored `bootwright.io/v1alpha1` kind. |
 | [Advanced Scenarios](advanced/index.md) | Provider-specific setup, networking, disconnected installs, managed OS, Ceph topologies, recovery, and larger examples. |
 | [Troubleshooting](troubleshooting.md) | Common validation, apply, SSH, artifact, and orphan-state failures. |

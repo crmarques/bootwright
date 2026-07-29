@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implemented)
+Accepted
 
 ## Context
 
@@ -62,15 +62,15 @@ domain source moves from `baseDomain` to `domains.machines`.
 ### Cluster zones and node FQDNs
 
 - A container cluster's zone is `<ContainerCluster.metadata.name>.<domains.containerClusters>`.
-  A node whose `hostname` is a bare label composes to
-  `<hostname>.<ContainerCluster.metadata.name>.<domains.containerClusters>`,
+  A node's `name` composes to
+  `<name>.<ContainerCluster.metadata.name>.<domains.containerClusters>`,
   and the cluster's `install-config.yaml` `baseDomain` is
   `domains.containerClusters` (OpenShift then forms `api.<cluster>.<domain>`).
 - A storage cluster's zone is `<StorageCluster.metadata.name>.<domains.storageClusters>`.
-  A node whose `hostname` is a bare label composes to
-  `<hostname>.<StorageCluster.metadata.name>.<domains.storageClusters>`.
+  A node's `name` composes to
+  `<name>.<StorageCluster.metadata.name>.<domains.storageClusters>`.
 
-An explicit dotted `hostname` is still used verbatim, unaffected by the zone.
+An explicit `nodes[].fqdn` is used verbatim, unaffected by the zone (ADR 0025).
 
 This refines ADR 0017: the node-identity and `fqdn` model stand; the domain
 each composition draws from generalizes from one `baseDomain` to the matching

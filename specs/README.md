@@ -13,9 +13,8 @@ written for **both humans and coding agents**.
 ## Source-Of-Truth Rules
 
 - Specs describe intent, constraints, and accepted boundaries.
-- Architecture decisions live under `adr/`. Only current decisions are kept;
-  superseded ADR files are removed once the surviving decision and specs carry
-  the needed context.
+- Architecture decisions live under `adr/`; see [`adr/README.md`](adr/README.md)
+  for the decision table and the ADR-retirement policy.
 - Human usage guides live in `/docs/` and reference specs for definitive
   detail; they must not duplicate spec content.
 - Implementation code must conform to these specs or update the specs in
@@ -23,13 +22,15 @@ written for **both humans and coding agents**.
 
 ## Layout
 
+`index.md` describes what each spec covers; this tree only lists them.
+
 ```text
 specs/
-├── README.md          This file
-├── index.md           Spec selection guide for a given task
-├── domain.md          Mission, operating model, UX principles
-├── architecture.md    Pipeline, layers, adapters, Ansible, testing
-├── state-model.md     Desired-state schema, validation, CLI contract
-├── security.md        Secrets, OCP install trust, supply chain
-└── adr/               Architecture Decision Records
+├── README.md
+├── index.md
+├── domain.md
+├── architecture.md
+├── state-model.md
+├── security.md
+└── adr/
 ```

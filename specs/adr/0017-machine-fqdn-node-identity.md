@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Accepted in part.
+[ADR 0018](0018-environment-domain-model.md) replaces `baseDomain` with the
+per-class `Environment.spec.domains`;
+[ADR 0025](0025-composed-names-are-labels-plus-explicit-overrides.md) replaces
+the dotted-value FQDN escape with an explicit `nodes[].fqdn` field. The
+node-identity model itself stands.
 
 ## Context
 
@@ -65,9 +70,9 @@ all (no resolver is declared that could answer).
 
 ### Independent node names
 
-A cluster node's `name` field names the node, not the machine. A bare
-label composes to `<name>.<cluster>.<clusterDomain>`; a dotted value is an
-explicit FQDN used verbatim. The node name is required and declared
+A cluster node's `name` field names the node, not the machine. It composes to
+`<name>.<cluster>.<clusterDomain>`; the sibling `nodes[].fqdn` pins a name
+outside that zone (ADR 0025). The node name is required and declared
 explicitly (`topology.nodes[].name` for storage, `spec.nodes[].name` for
 OpenShift); it is never inferred from the machine name or list position, so
 the node FQDN never embeds the machine name. Node names must be unique within

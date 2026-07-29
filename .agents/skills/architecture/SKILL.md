@@ -2,8 +2,11 @@
 
 Use this skill when designing or changing behavior related to OpenShift fleet
 provisioning, multi-cluster workflows, providers, or lab BMC
-emulation. Day-2 fleet publication (ACM, OpenShift GitOps, package catalogs,
-KRC/SRC) is owned by a separate project and is out of scope here.
+emulation. It covers platform behavior design (substrate, provider, BMC, lab
+emulation); for internal package boundaries and the Go↔Ansible split use
+`/.agents/reusable-prompts/architecture.md` instead. Day-2 fleet publication
+(ACM, OpenShift GitOps, package catalogs, KRC/SRC) is owned by a separate
+project and is out of scope here.
 
 ## Load First
 

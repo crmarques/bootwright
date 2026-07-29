@@ -14,13 +14,11 @@ execution against single-node and multi-node cluster machines.
 Managed and imported Ceph storage are in scope as peer storage-cluster phases.
 Apply and destroy can target the whole graph, selected `ContainerCluster` and
 `StorageCluster` components, or selected `Machine` objects (per-machine
-provision/teardown through a machine-scoped selection). Machine-scoped selection
-reaches only cluster-member machines and shared-service or provider hosts; a
-standalone managed-OS machine that belongs to no cluster is fail-closed, because
-Bootwright installs a managed OS only on cluster-member machines. Initial
+provision/teardown through a machine-scoped selection); the exact selection rule
+and its fail-closed cases live in `state-model.md` (CLI Contract). Initial
 post-install bootstrap of early platform components is in scope when declared as
-cluster-bound add-ons. Day-2 GitOps
-publication of fleet content is out of scope for this repository.
+cluster-bound add-ons. Day-2 GitOps publication of fleet content is out of scope
+for this repository.
 
 ## Operating Model
 
@@ -28,9 +26,9 @@ Operators author desired state as twenty-one YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
-| `Environment` | What defaults, selected resource files, proxy, mirrors, and component image pins apply to the fleet? |
+| `Environment` | What defaults, selected resource files, proxy, mirrors, fleet machine key (`spec.machineAccess.keyRef`), and component image pins apply to the fleet? |
 | `Entitlement` | What vendor-controlled content access (subscription, registry, license) does a `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph` product need? |
-| `Machine` | Which raw, Bootwright-installed, or OS-ready machine should be used, and what substrate, OS, network, SSH, and capability facts does it own? |
+| `Machine` | Which OS-ready, Bootwright-installed, or installer-provisioned machine should be used, and what substrate, OS, network, access, and capability facts does it own? |
 | `MachineImage` | Which bootable OS install media can Bootwright customize and serve? |
 | `MachineInstallProfile` | How should Bootwright install and customize an OS on a managed machine? |
 | `InfraProvider` | What substrate capabilities, machine profiles, provider connection facts, and network attachments are available? |
@@ -52,12 +50,19 @@ Operators author desired state as twenty-one YAML kinds:
 
 Every fact has one owner. Machines own substrate selection, OS lifecycle mode,
 OS install network, durable addresses (including the machine's `fqdn` DNS
-name), SSH reachability, and generic capabilities. Container clusters own
-installer intent: distribution, release, platform render mode, endpoints,
-artifact access, cluster networking, node identity (each host's node
-hostname), and node-to-machine binding. Storage clusters own Ceph intent and
-reference machines by node. Providers own substrate-level capabilities and network
-attachments. Infra components own shared service placement and endpoints.
+name), generic capabilities, and how an already-installed machine is reached.
+A machine Bootwright installs authors no access at all: the login is derived —
+the `bootwright` account plus `Environment.spec.machineAccess.keyRef`
+([ADR 0027](adr/0027-bootwright-owns-the-login-it-installs.md)). Container
+clusters own installer intent: distribution, release, platform render mode,
+endpoints, artifact access, cluster networking, node identity (each host's node
+hostname and its installed RHCOS `install.nodeSSH` login), and node-to-machine
+binding. Storage clusters own Ceph intent, reference machines by node, and own
+the cephadm orchestration identity (`clusterSSH`) layered on top of the
+substrate account
+([ADR 0019](adr/0019-node-root-posture-and-orchestration-identity.md)).
+Providers own substrate-level capabilities and network attachments. Infra
+components own shared service placement and endpoints.
 
 References point downward: consumer intent (`ContainerCluster`, `StorageCluster`,
 add-on bindings) references machines, providers, components, and networks by
@@ -96,12 +101,9 @@ desired state must fail strict decode or validation.
 ## Supported Substrates
 
 Bootwright keeps substrate abstractions open for libvirt, bare metal, vSphere,
-OpenShift Virtualization, and future providers. All four of those substrates are
-apply-supported today — each has an apply adapter in-tree — and `example init`
-prints a per-provider `apply support: supported` line as the runtime source of
-truth. The schema-versus-apply split matters only for *future* providers: the
-schema can accept a new provider's facts before its adapter lands, so apply
-coverage for any additional substrate can land independently.
+OpenShift Virtualization, and future providers; `architecture.md` (Providers)
+owns the capability arms, their apply-support status, and the rule for adding a
+substrate.
 
 The first supported nested topology treats a child OpenShift cluster as a
 normal `ContainerCluster` whose machines come from a KubeVirt `InfraProvider`.
@@ -111,9 +113,10 @@ When the virtualization cluster is Bootwright-managed, that cluster must be
 installed and bound to a `ClusterAddon` that advertises `provides: [kubevirt]`
 before child VM infrastructure is converged.
 
-The first supported external storage topology is Ceph stretch mode with two
-data sites and one monitor-only tiebreaker site. Ceph nodes are machines with
-OS-ready or Bootwright-managed OS state and `ceph-node` capability.
+Managed Ceph converges single-host, multi-host, and stretch topologies; stretch
+(two data sites plus one monitor-only tiebreaker) is enabled by the presence of
+`spec.ceph.topology.stretch` (`state-model.md`, StorageCluster). Ceph nodes are
+OS-ready or Bootwright-installed machines with the `ceph-node` capability.
 
 ## UX Principles
 

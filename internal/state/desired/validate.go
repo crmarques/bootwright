@@ -752,7 +752,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	for _, addon := range state.ClusterAddons {
 		for i, hook := range addon.Spec.Steps {
 			for j, ref := range hook.SecretRefs {
-				require(fmt.Sprintf("ClusterAddon/%s spec.hooks[%d].secretRefs[%d]", addon.Metadata.Name, i, j), ref)
+				require(fmt.Sprintf("ClusterAddon/%s spec.steps[%d].secretRefs[%d]", addon.Metadata.Name, i, j), ref)
 			}
 		}
 	}

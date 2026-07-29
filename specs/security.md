@@ -27,6 +27,11 @@ Normal reads must never fall back to plaintext; only
 `bootwright secret encryption migrate --yes` may consume existing plaintext
 context secret files and replace them with encrypted envelopes.
 
+That keyring is co-located with the material it protects, so root on the
+controller host owns both and is inside the trust boundary: it can decrypt
+every envelope. Encryption at rest defends against offline media, backups, and
+non-root readers on the controller — not against a root reader.
+
 Sensitive material includes pull secrets, SSH private keys, TLS private keys,
 BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
 CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
@@ -44,10 +49,12 @@ desired state — and `sudoPasswordRef` and `knownHostsRef` likewise; when
 `knownHostsRef` is omitted, Bootwright records server keys under
 context-managed SSH trust state.
 
-Two access shapes deliberately hold no reference. `auth.operatorIdentity`
-authenticates as the operator running Bootwright, using that operator's own
-agent and default identities: no key material enters the context, and the
-effective credential is whatever that operator already holds. The
+Three surfaces deliberately hold no reference and are per-operator ambient
+authority: the `auth.operatorIdentity` arm and the `--ssh-preferred-id-key`
+and `--ssh-user` per-invocation flags. `auth.operatorIdentity` authenticates as
+the operator running Bootwright, using that operator's own agent and default
+identities: no key material enters the context, and the effective credential is
+whatever that operator already holds. The
 `--ssh-preferred-id-key` flag likewise names a controller-local private key
 offered ahead of the declared credentials, with the declared credentials as
 fallback; it is refused unless the file is a regular file with no group or other
@@ -58,11 +65,11 @@ is refused both when the value is not a valid POSIX user name and, on the
 converging commands, when no machine in the run declares that arm; it is
 likewise never recorded. Neither flag reaches
 an ownership record: records carry the declared connection facts, so a replayed
-record cannot inherit one operator's account or key path. All three are
-per-operator ambient authority by construction and must be described as such —
-they trade reproducibility for the ability to reach a machine the operator
-already administers. Non-local durable SSH uses
-strict checking against explicit or context-managed known-hosts material.
+record cannot inherit one operator's account or key path. All three are ambient
+by construction and must be described as such — they trade reproducibility for
+the ability to reach a machine the operator already administers. Non-local
+durable SSH uses strict checking against explicit or context-managed
+known-hosts material.
 Trust is recorded by `bootwright machine trust`, on first use during an
 interactive `preflight`/`apply`, or through OpenSSH's prompt during interactive
 direct SSH. First-use recording is allowed only for a host with no existing
@@ -71,7 +78,7 @@ the displayed key fingerprint. It never happens under `--dry-run`, JSON output,
 or non-interactive execution, and a changed server key is never accepted
 interactively: it fails closed pending out-of-band verification. Machine-owned
 endpoints are then recorded deliberately with `bootwright machine trust
---replace`; container-node replacement follows the Installer Trust rules below.
+--replace`; container-node replacement follows the Direct SSH rules below.
 
 KubeVirt child-cluster profiles also follow the same boundary. `hostClusterRef`
 resolves to a generated kubeconfig already stored under Bootwright cluster
@@ -83,22 +90,56 @@ Data Foundation external-cluster details render with placeholders for Ceph
 client secrets. Generated Ceph keys are created or read during apply and must
 not be committed.
 
+### Captured Secrets
+
+An install captures credentials the cluster itself mints: `kubeconfig` and
+`kubeadmin-password` for a `ContainerCluster`, `dashboard-password` for a
+managed Ceph `StorageCluster`. They live in a per-cluster store at
+`clusters/<cluster>/secrets/` with its own keyring, under the same envelope
+rules as context-local material. Plaintext is accepted only at the post-capture
+conversion boundary, where apply encrypts what the installer wrote; a
+programmatic consumer gets a bounded `0600` scratch copy under a per-run
+runtime directory. Destroy deletes captured material through the store.
+
+### Secret Lifecycle
+
+Every secret moves through the same stages, and each stage has one owner:
+
+- **Authored** — a `Secret` object names the material; desired state carries
+  the name, never the bytes.
+- **At rest** — an AES-256-GCM envelope in the context store or a per-cluster
+  store, readable only through that store's keyring.
+- **In flight** — a per-run or per-task runtime directory with `0700`
+  directories and `0600` files, removed after execution.
+- **Captured** — the per-cluster store above.
+- **Revealed** — `secret show`, `cluster info --secrets`, and
+  `cluster kubeconfig` decrypt to memory or stdout; `cluster oc` and
+  `cluster kubectl` materialize a bounded caller-owned `0600` temporary
+  kubeconfig and remove it when the child exits.
+- **Rotated** — `secret encryption rotate` re-encrypts every material in a
+  store under a new key and drops the keys no envelope still references.
+- **Destroyed** — `secret delete` removes context-local material; `destroy`
+  removes captured material through the per-cluster store.
+
+## Vendor Outbound Telemetry
+
+Bootwright must not leave vendor outbound telemetry enabled through an implicit
+default; the choice is authored.
+
 IBM Storage Ceph license acceptance enables Call Home by default. An IBM
 `StorageCluster` must therefore declare `spec.ceph.ibm.callHome` as `enabled`
-or `disabled`; apply reconciles that choice after bootstrap. Bootwright must
-not leave vendor outbound telemetry enabled through an implicit default.
+or `disabled`; apply reconciles that choice after bootstrap.
 
 ## Node Login Identity and Privilege
 
 A machine has two login identities, owned by two different objects, and they
-must not be conflated (ADR 0019).
+must not be conflated (ADR 0019, ADR 0027).
 
-A `Machine` a managed Ceph `StorageCluster` lists as a topology node and
-installs does not author an access block at all: `user`, the provisioning key,
-and `rootLogin: revoke` are derived from
-`StorageCluster.spec.ceph.cephadm.clusterSSH`, so the cluster owns the login
-its nodes carry and the two cannot disagree. A node the cluster does not
-install authors its own access and is reconciled, not created.
+A `Machine` a managed Ceph `StorageCluster` installs authors no access block:
+it carries the `bootwright` account and the fleet key like every other
+installed machine, and the cluster provisions `clusterSSH.user` on top of it
+day-2. A topology node the cluster does not install authors its own
+`access.ssh` and is reconciled, not created.
 
 The **install-window identity** — the account Bootwright authenticates as to
 install, probe, and take ownership of the machine — is the product constant
@@ -120,8 +161,8 @@ revokes root login — while root is kept it stays the install-window identity,
 because a flow that does not provision the account first (destroy, a scoped
 apply) must not connect as an account that may not exist yet. It is
 cluster-scoped because cephadm holds exactly one such value per cluster. It
-defaults to `cephadm` when any topology node's `Machine` sets
-`spec.access.rootLogin: revoke`, and to `root` otherwise.
+defaults to `cephadm` on a managed `StorageCluster` and to `root` on an
+external one.
 
 The two identities are layered, not merged. On a node Bootwright installs the
 substrate creates `bootwright` and the cluster provisions `clusterSSH.user` on
@@ -148,10 +189,13 @@ is locked unless `MachineInstallProfile.spec.customizations.ssh.initialPassword`
 names a `usernamePassword` `Secret`, whose value becomes that account's console
 password only. A profile must never carry a built-in or derived default here:
 a shared password compiled into the product is a fleet-wide credential no
-operator can rotate. The `NOPASSWD` sudoers grant for `bootwright` is written
-unconditionally and is not configurable: Bootwright escalates with `become`
-throughout, so a machine whose service account cannot escalate is a machine it
-cannot use.
+operator can rotate. The `NOPASSWD` sudoers grant for `bootwright`, which also
+carries `Defaults:bootwright !requiretty`, is written unconditionally and is
+not configurable: Bootwright escalates with `become` throughout, so a machine
+whose service account cannot escalate is a machine it cannot use. On a machine
+Bootwright installs that exemption is why the identity it later borrows needs
+no terminal; on a machine the operator owns nothing guarantees it, which is
+what the differential probe below decides.
 
 For a non-root orchestration account Bootwright provisions that account on
 every topology node with a locked password, no `wheel` membership, the machine
@@ -178,18 +222,30 @@ cluster. A keyed account with passwordless sudo is only marginally different in
 reachable privilege from keyed root SSH. What the posture buys is precise: no
 standing root SSH on the node, a named auditable principal in the audit and
 sudo logs instead of anonymous `root`, key-only authentication, and a
-credential that can be rotated or revoked without touching the root account. It
-is not privilege separation and must not be described as such.
+credential that can be revoked without touching the root account. It is not
+privilege separation and must not be described as such.
+
+Neither SSH credential rotates today, and neither may be advertised as
+rotatable. `Environment.spec.machineAccess.keyRef` is authorized exactly once,
+by the kickstart, and no later task rewrites `authorized_keys`: replacing the
+`Secret`'s bytes strands every installed machine and the ownership probe then
+fails closed, and renaming the `Secret` reads as structural drift because the
+install-marker hash carries the basename of the rendered public-key path. For
+`cephadm.clusterSSH.keyRef` the node side re-authorizes a new public key, but
+nothing reconciles the private half in the mon config-key store — apply issues
+`ceph cephadm set-user` and never `set-priv-key`. Both are install-time
+credentials; rotating either is an out-of-band operation.
 
 `clusterSSH.keyRef` is **required** whenever the orchestration account is not
 `root`, which is the managed default, and must resolve to a declared
 `sshKeyPair` `Secret`. `cephadm bootstrap --ssh-private-key` persists it into
 the Ceph mon config-key store, where the cluster's manager can read it, so what
-that key opens bounds the blast radius of a compromised manager. A key the
-cluster derives onto its own nodes opens exactly the accounts the manager
-already commands, and adds nothing. A key a `Machine` authors as its own
-`access.ssh.auth.privateKeyRef` opens machines outside the cluster, so naming
-it as `clusterSSH.keyRef` is refused.
+that key opens bounds the blast radius of a compromised manager. It may
+therefore name neither `Environment.spec.machineAccess.keyRef`, which opens the
+`bootwright` account on **every** machine in the fleet, nor a `Secret` a
+`Machine` authors as its own `access.ssh.auth.privateKeyRef`, which opens
+machines outside the cluster. The key that store holds must open only that
+cluster's own orchestration accounts.
 
 Revocation is ordered verify-before-revoke: the orchestration account must be
 proved to answer `sudo -n true` on every topology node before
@@ -232,6 +288,10 @@ Cluster install trust is rendered only from explicit references:
 - API and ingress serving certificate material comes from
   `ContainerCluster.spec.install.servingCertificates`.
 
+Disconnected installs are cluster-scoped through
+`ContainerCluster.spec.install.mode`. They require mirror trust material and
+either an external mirror URL or a managed registry component.
+
 `cluster rsh` and `cluster exec` use the private half of the selected
 `ContainerCluster.spec.install.nodeSSH` secret for container nodes. Bootwright
 unlinks an owner-only temporary file before writing the decrypted key, keeps
@@ -239,6 +299,10 @@ its descriptor open while SSH runs, and gives OpenSSH the corresponding
 `/proc/<bootwright-pid>/fd/<fd>` path. The parent closes the descriptor after
 SSH exits. The encrypted context envelope is never passed to OpenSSH and no
 named plaintext key remains after the command.
+
+## Direct SSH
+
+Every durable direct SSH connection follows one crypto and trust policy.
 Direct SSH copies only allowlisted cryptographic directives from the Red Hat
 OpenSSH crypto-policy backend, when present, into an anonymous configuration;
 other platforms retain OpenSSH's compiled cryptographic defaults. It does not
@@ -255,11 +319,7 @@ interactive direct connection. The child receives only terminal, locale, time
 zone, and color environment values; caller-selected askpass, agent, loader, and
 crypto-provider overrides do not cross the root process boundary.
 
-Disconnected installs are cluster-scoped through
-`ContainerCluster.spec.install.mode`. They require mirror trust material and
-either an external mirror URL or a managed registry component.
-
-### BMC virtual-media certificate verification
+## BMC and Virtual-Media Trust
 
 A Machine boots from a Redfish BMC over two distinct TLS legs, each with its own
 authored control (`state-model.md`, Machine section):
@@ -358,6 +418,16 @@ Generated output boundaries are part of the safety contract:
   copied into `input/` are part of the authored input and are exempt from the
   ephemeral-only rule below — they live alongside the YAML under the same
   root-managed permissions.
+- Input-tree snapshots under
+  `/var/lib/bootwright/contexts/<context>/input-history/` inherit the same
+  secret classification as `input/`, because the snapshotted tree may carry
+  `file:`-sourced secret material. Retention and purge rules are in
+  `state-model.md`, CLI Contract.
+- Context SSH host trust lives under
+  `/var/lib/bootwright/contexts/<context>/trust/ssh/` as `known_hosts` and
+  `hosts.json`, with `0700` directories and `0600` files. The records are
+  root-managed server public keys and fingerprints — non-secret, and never
+  private key material.
 - Context-local secrets live under
   `/var/lib/bootwright/contexts/<context>/secrets/` as encrypted envelopes.
   Short-lived plaintext copies for external tools may be materialized only
@@ -415,12 +485,20 @@ Generated output boundaries are part of the safety contract:
 
 Ansible tasks that handle credentials gate `no_log` on `bootwright_no_log`, which
 defaults to `true` so secret bytes are redacted as `censored due to no_log` in
-both the terminal and the persisted `0600` run log. `apply` and `destroy` accept
-`--verbose`/`-v`, which sets `bootwright_no_log` to `false`. This is a deliberate,
+both the terminal and the persisted `0600` run log. The commands that run
+Ansible — `apply`, `destroy`, `check`, and `diff` — accept `--verbose`/`-v`,
+which sets `bootwright_no_log` to `false`. This is a deliberate,
 opt-in operator escape hatch for debugging: with it set, the secret bytes those
 tasks handle (BMC, registry, RHSM, and proxy credentials, tokens, and generated
 Ceph keys) reach both the terminal and the `0600` run log in full. Default runs
 remain redacted.
+
+A `--verbose` run therefore leaves credential plaintext in its persisted log —
+`runs/history/<run-id>/bootwright*.log` for `apply`, `runs/destroy/` or
+`runs/preflight/` for the others. Nothing expires it, and
+`destroy --purge-history` removes an apply run's directory only when that whole
+run is in its scope (`state-model.md`, CLI Contract). Purging or protecting
+that run directory afterwards is the operator's obligation.
 
 ## Code Surface Hygiene
 

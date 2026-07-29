@@ -106,7 +106,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		registerStageCompletion(cmd, converge.ApplyStageNames())
 		cmd.Flags().StringVar(&through, "through", "", fmt.Sprintf("last stage to %s (inclusive): %s (or sub-phase %s, or 'end' for the final stage); pairs with --stage as the range end, otherwise runs from the first stage", action, strings.Join(converge.FamilyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
 		registerFlagCompletion(cmd, "through", converge.ApplyThroughNames())
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply (default: all)")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to "+action+" (default: all)")
 		registerClusterScopeCompletion(cmd, clusterKindAny)
 		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesUsage)
 		registerMachineScopeCompletion(cmd)

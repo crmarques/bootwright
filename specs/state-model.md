@@ -12,7 +12,60 @@ shapes must fail strict decode or validation instead of being translated.
 
 The twenty-one kinds and the fact each owns are listed in `domain.md` (Operating
 Model). This document specifies each kind's fields, validation, and the CLI
-contract.
+contract. Per-field Required/Default tables live in `docs/concepts/<kind>.md`;
+this document owns the normative rules, and the docs pages link back to it.
+
+Every object carries the same envelope: `apiVersion`, `kind`, and `metadata`.
+`metadata.name` is required and must be a DNS label
+(`[a-z0-9]([-a-z0-9]*[a-z0-9])?`). `metadata.labels` is an optional string map.
+
+Block-style collections are a repository-asset convention, not a constraint on
+operator-authored input: examples, e2e inputs, loader fixtures, and
+`bootwright example init` output use block style — no flow-style mapping braces,
+inline lists, or empty inline maps — and a repository check enforces it over
+those trees. The loader accepts either style from any input.
+
+Authored input keeps one object per file, with two exceptions: a cluster root
+lives in `cluster.yaml`, and a tree's `Secret` objects are grouped into a single
+multi-document `secrets.yaml` so the operator has one place to see which bytes
+must be supplied. Filenames are role-based where the role is unambiguous
+(`cluster.yaml`, `provider.yaml`, `networks.yaml`, `cluster-machines.yaml`) and
+named after `metadata.name` otherwise. `bootwright example init` emits that
+nested, role-named tree — including a multi-document `secrets.yaml` — while the
+small single-cluster examples are deliberately flat. Directory layout is in
+`docs/advanced/fleets.md`.
+
+Kinds: [Environment](#environment) · [Entitlement](#entitlement) ·
+[Machine](#machine) · [MachineImage](#machineimage) ·
+[MachineInstallProfile](#machineinstallprofile) ·
+[InfraProvider](#infraprovider) · [InfraComponent](#infracomponent) ·
+[NetworkConfig](#networkconfig) · [ContainerCluster](#containercluster) ·
+[StorageCluster](#storagecluster) ·
+[StoragePlacementPolicy](#storageplacementpolicy) ·
+[StoragePool](#storagepool) · [StorageFilesystem](#storagefilesystem) ·
+[StorageObjectGateway](#storageobjectgateway) ·
+[StorageNFSExport](#storagenfsexport) · [StorageExport](#storageexport) ·
+[ClusterAddon](#clusteraddon) · [ClusterAddonProfile](#clusteraddonprofile) ·
+[ClusterAddonBinding](#clusteraddonbinding) ·
+[CustomPlaybook](#customplaybook) · [Secret](#secret).
+
+Contracts: [References and Names](#references-and-names) ·
+[Native add-on catalog store](#native-add-on-catalog-store) ·
+[Rendering Contract](#rendering-contract) ·
+[Validation Rules](#validation-rules) · [CLI Contract](#cli-contract).
+
+## References and Names
+
+- Every `Ref`/`Refs` field resolves globally by `metadata.name`, per kind,
+  against the loaded state after `Environment` selection. The authoring grammar
+  — the plain-name string form and its exceptions — is ADR 0014.
+- Object names are unique within a kind: a duplicate fails validation naming the
+  kind and the name. `Environment` (which carries its own cardinality rule) and
+  `NetworkConfig` are exempt from that check; a duplicated `NetworkConfig` name
+  resolves to the last one loaded, so keep those names unique too.
+- `ContainerCluster` and `StorageCluster` additionally share one cluster
+  selection namespace, and the name `artifact-server` is reserved — see
+  [Validation Rules](#validation-rules).
 
 ## Environment
 
@@ -21,6 +74,9 @@ optional input resource selection, and secret references, never secret bytes.
 
 Rules:
 
+- Exactly one `Environment` must be present in the loaded, selected state. Zero
+  or more than one is a validation error naming the objects found, so every
+  `Environment`-scoped default, selection list, and domain has a single owner.
 - `domains` owns the fleet DNS zones, one key per identity class, and
   `Environment` is their single owner (ADR 0018). `domains.base` is the only
   required key and is the default the others fall back to: `domains.machines`
@@ -80,13 +136,20 @@ Rules:
   downloads `helm` from. `helm` is not tied to an OpenShift release, so
   Bootwright tracks the mirror's `latest` channel and verifies the binary
   against that channel's `sha256sum.txt` rather than pinning a version.
-- `infraComponents.*[]` entries are service access catalog entries. Each
-  entry's `management` is either `external` with direct access configuration
-  or `managed` with `componentRef` pointing at an `InfraComponent` arm of the
-  matching kind. The word `type` is reserved API-wide for kind-of-thing
-  discriminators (such as `InfraComponent.spec.type`), so the
+- `infraComponents.*[]` entries are service access catalog entries. The catalog
+  has five slots — `proxies[]`, `nameResolution[]`, `artifactServers[]`,
+  `registries[]`, and `ntp[]`. Each entry's `management` is either `external`
+  with direct access configuration or `managed` with `componentRef` pointing at
+  an `InfraComponent` arm of the matching kind plus `endpointRef` naming the
+  served endpoint on that component. The word `type` is reserved API-wide for
+  kind-of-thing discriminators (such as `InfraComponent.spec.type`), so the
   who-runs-it axis is spelled `management` here, matching
   `StorageCluster.spec.management`.
+- Load balancers have no catalog slot: they are endpoint-scoped, not fleet-wide.
+  A managed one is referenced directly from the consuming endpoint through
+  `ContainerCluster.spec.install.endpoints.<slot>.source.componentRef` plus
+  `source.bindAddressRef`, and an operator-run one is declared at that endpoint
+  as `source.type: external` with an `address`.
 - `proxyFor.bootwright`, `proxyFor.containerClusterInstall`, and
   `proxyFor.machineOSInstall` override, per consumer, which proxy catalog entry
   applies: a name selects that entry, `none` opts the consumer out, and an empty
@@ -121,69 +184,65 @@ Rules:
 - Secret material is no longer an `Environment` field. The former `secrets[]`
   list was removed and promoted to a first-class [`Secret`](#secret) kind; the
   only secret-related `Environment` field is `secretStorage.mode`.
-- Entitlements are their own first-class `Entitlement` kind (one object per
-  file), not an `Environment` field; the secret material they name is declared
-  as [`Secret`](#secret) objects. Each `Entitlement` declares named subscription,
-  registry entitlement, and license references for products that need
-  vendor-controlled access. `spec.type` is the discriminator, from this set;
-  other values are rejected:
+- Entitlements are not an `Environment` field either: they are the first-class
+  [`Entitlement`](#entitlement) kind.
+
+## Entitlement
+
+`Entitlement` declares named subscription, registry entitlement, and license
+references for products that need vendor-controlled access. The secret material
+it names is declared as [`Secret`](#secret) objects; an `Entitlement` never
+carries secret bytes.
+
+Rules:
+
+- `spec.type` is the discriminator, from this set; other values are rejected:
   - `redhat-rhel`: a RHEL subscription (RHSM), for the RHEL BaseOS/AppStream
     repos.
   - `redhat-ceph`: a single Red Hat subscription covering both RHEL and the
     `rhceph` tools repo, plus `registry.redhat.io` access.
   - `ibm-storage-ceph`: IBM Storage Ceph product access (registry + license).
-
-  A `redhat-rhel` and a `redhat-ceph` entitlement require `rhsm`
+- A `redhat-rhel` and a `redhat-ceph` entitlement require `rhsm`
   (`organizationRef`, `activationKeyRef`); `redhat-ceph` also requires
   `registry.credentialsRef`. An `ibm-storage-ceph` entitlement requires
   `registry.credentialsRef` and `license.accept: true`; it takes no inline
   `rhsm` arm. The RHEL subscription it runs on is named separately by the
   storage nodes' `MachineInstallProfile.spec.subscription` or
-  `StorageCluster.spec.ceph.osSubscriptionRef`. Referenced secret material is declared as
-  [`Secret`](#secret) objects.
-  `registry.url`, when set, is a scheme-less `host[:port][/namespace]` address
+  `StorageCluster.spec.ceph.osSubscriptionRef`.
+- `registry.url`, when set, is a scheme-less `host[:port][/namespace]` address
   with no credentials, query, fragment, empty path segment, or trailing slash.
   `registry.trustBundleRef`, when set, names a CA-bundle `Secret` trusting that
   registry.
-  `rhsm.satellite`, when set, binds RHSM registration to a Red Hat
+- `rhsm.satellite`, when set, binds RHSM registration to a Red Hat
   Satellite/Capsule: `hostname` is required and must be a bare host (no scheme or
   path); `trustBundleRef` names the Capsule CA `Secret`; and `contentBaseURL` is
   a validated `http(s)` content root that normalizes to
   `https://<hostname>/pulp/content` when omitted. It is rejected when
   `rhsm.management` is `external` (the operator playbook owns Satellite binding).
-
-  The `rhsm` arm carries a who-runs-it axis: `rhsm.management` is `managed`
+- The `rhsm` arm carries a who-runs-it axis: `rhsm.management` is `managed`
   (the default when unset) or `external`. Managed registration runs as a
   machines-phase `registration.<cluster>` task on the storage nodes after the
   OS is in place and before the cluster `deps` work — Satellite binding and CA
   trust, `rhsm.conf` proxy and content-CA convergence, `subscription-manager`
-  registration, and optional Insights enrollment. With `management: external`
-  Bootwright plans no registration task and never touches `rhsm.conf`; the arm
-  must then carry only `management` (`organizationRef`, `activationKeyRef`,
-  `satellite`, and `connectToInsights` are rejected), and the operator owns
-  registration — typically through a [`CustomPlaybook`](#customplaybook)
-  at `stage: deps, timing: before`, which runs after the machines phase and
-  (with the default `failureMode: fail`) gates the deps-phase Ceph work; a
-  `machines`/`after` playbook runs at the same point in time but does not gate
-  later phases. The delegated playbook must leave the nodes able to install
-  the distribution's packages. Under
-  `external`, the subscription-backed repository enablement (which purges
-  unlisted repos) is also skipped so operator-enabled repo sets survive; the
-  cephadm install assert remains the fail-closed package-availability gate.
-  Ceph commands run through `cephadm shell`, so Bootwright does not install a
-  host `ceph-common` package. Registration is install-only: neither `destroy` nor an
-  entitlement change unregisters a node.
-
-Authored desired-state YAML uses block-style collections. Do not use
-flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
-inputs, fixtures, or scaffold output.
-
-Authored input keeps one object per file. Object files are named for their
-content — a cluster root as `cluster.yaml`, other objects by their
-`metadata.name` — and grouped into directories per the layout in
-`docs/advanced/fleets.md`. The loader still accepts multi-document files, but
-examples, e2e inputs, fixtures, and `bootwright example init` output keep one
-object per file so a name maps to exactly one file.
+  registration, and optional Insights enrollment.
+- With `management: external` Bootwright plans no registration task and never
+  touches `rhsm.conf`; the arm must then carry only `management`
+  (`organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights`
+  are rejected), and the operator owns registration — typically through a
+  [`CustomPlaybook`](#customplaybook) with `gates: deps`, which runs after the
+  machines phase and (with the default `onFailure: fail`) blocks the deps-phase
+  Ceph work; a `follows: machines` playbook runs at the same point in time but
+  does not gate later phases. The delegated playbook must leave the nodes able
+  to install the distribution's packages. Under `external`, the
+  subscription-backed repository enablement (which purges unlisted repos) is
+  also skipped so operator-enabled repo sets survive; the cephadm install assert
+  remains the fail-closed package-availability gate. Ceph commands run through
+  `cephadm shell`, so Bootwright does not install a host `ceph-common` package.
+- Registration is applied at the machines phase and reversed on teardown: a
+  `destroy` covering a managed-RHSM storage node runs the
+  `destroy.machine-registration` task, limited to the storage hosts, which
+  unregisters the node from RHSM before its substrate is deleted (ADR 0023). An
+  entitlement change on its own never registers or unregisters a node.
 
 ## Machine
 
@@ -230,8 +289,18 @@ spec:
 
 Rules:
 
-- `spec.os.provided` is required. `true` means the OS already exists;
-  `false` means Bootwright or a downstream installer must provision the OS.
+- `spec.os.provided` is required, and together with `spec.os.installProfileRef`
+  it selects one of three OS lifecycles. These are the names used throughout the
+  documentation:
+  - **OS-ready** (`os.provided: true`): the OS already exists. The machine
+    declares how it is reached (`spec.access`) and Bootwright installs nothing.
+  - **Bootwright-installed** (`os.provided: false` with an
+    `os.installProfileRef`): Bootwright installs the OS from the referenced
+    [`MachineInstallProfile`](#machineinstallprofile) and owns the resulting
+    login.
+  - **Installer-provisioned** (`os.provided: false`, no `os.installProfileRef`):
+    Bootwright provisions substrate only and a downstream installer lays the OS
+    down — `openshift-install` writing RHCOS onto an agent node.
 - `spec.os.provided: false` machines must declare `spec.substrate.providerRef`.
 - Bare-metal install machines declare physical inventory under
   `spec.hardware.nics`, boot NIC selection under `spec.hardware.boot.nicRef`,
@@ -330,10 +399,13 @@ Rules:
   runs on; it is reached with a local connection, is valid only with
   `os.provided: true`, and is refused when the machine's address does not
   resolve to the controller. Omitting `access` on an `os.provided: true`
-  machine defaults it to `ssh.auth.operatorIdentity` against the machine's
-  `ssh` address, else its `fqdn` — the machine is reached as the invoking
-  operator. Omitting it on an agent-installer node declares no Bootwright login,
-  which is valid.
+  machine defaults it to `ssh.auth.operatorIdentity` — the machine is reached as
+  the invoking operator. Omitting it on an agent-installer node declares no
+  Bootwright login, which is valid.
+- `access.ssh.addressRef` resolves to the address named `ssh`, else to the
+  implicit `fqdn` address, else to nothing (there is no only-address fallback).
+  This default applies whether or not `access` itself was authored, and a
+  machine reached over SSH that declares neither address fails validation.
 - `spec.access.ssh.auth` is a discriminated union with exactly one arm, and
   every arm describes a pre-existing login. `operatorIdentity` reaches the
   machine as the invoking operator with that operator's own SSH identity;
@@ -341,30 +413,17 @@ Rules:
   `usernamePassword` `Secret` and requires `access.ssh.user`.
   `access.ssh.port` defaults to 22 and `access.ssh.sudoPasswordRef` supplies an
   escalation password for an account without passwordless `sudo`.
+  `access.ssh.knownHostsRef` names a `Secret` holding an explicit `known_hosts`
+  entry for the machine; omitted, Bootwright manages server-key trust in the
+  context store (`security.md`, `bootwright machine trust`).
 - A `Machine` a managed Ceph `StorageCluster` lists in `spec.ceph.topology.nodes`
   and installs carries the same `bootwright` account as any other installed
   machine; the cluster provisions its own `spec.ceph.cephadm.clusterSSH.user`
   orchestration account day-2 on top of it. A topology node the cluster does not
   install authors its own `access.ssh` and keeps `rootLogin: keep` by default.
-- The operator may pass `--ssh-preferred-id-key <path>` on any command that
-  reaches a machine. The named private key is offered ahead of the declared
-  credentials and the declared credentials remain the fallback. It is a
-  per-invocation preference: it never enters desired state, the converge hash,
-  or an install marker.
-- `--ssh-user <name>` is accepted on the same commands and names the account
-  only for machines whose resolved auth arm is `operatorIdentity` — the
-  inventory `ansible_user`, the add-on hook targets, and the connection identity
-  of the Ceph node-access role. It never moves a login Bootwright created nor
-  one a `Secret` names, and `apply`, `destroy`, `preflight`, `plan`, and `diff`
-  **refuse** when no machine in the run declares that arm rather than silently
-  changing nothing. `machine`/`cluster` `rsh` and `exec` are excluded from that
-  refusal: they open an interactive session, converge nothing, and keep
-  `ssh(1)` semantics. It is refused unless the value is a valid POSIX user name,
-  and is likewise never recorded.
-- Neither per-invocation flag reaches an ownership record. A record captures the
-  **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
-  reach a host that has left desired state cannot inherit one operator's account
-  or key path from the run that wrote it.
+- The persistent `--ssh-user` and `--ssh-preferred-id-key` flags override how a
+  machine is reached for one invocation without entering desired state; they are
+  specified in the [CLI Contract](#cli-contract) under Global flags.
 - `spec.access.rootLogin` is the machine's OS root-login posture: `keep` (the
   default) or `revoke`. `revoke` writes
   `/etc/ssh/sshd_config.d/01-bootwright-access.conf` with `PermitRootLogin no`,
@@ -375,16 +434,25 @@ Rules:
   life), and it is accepted only on a
   machine that a managed Ceph `StorageCluster` lists in
   `spec.ceph.topology.nodes` under a non-root
-  `spec.ceph.cephadm.clusterSSH.user`; otherwise the revoke would leave no
-  account able to reach the machine and is rejected. Revocation is ordered
+  `spec.ceph.cephadm.clusterSSH.user`. That cluster's node-access reconciliation
+  is what performs the revoke, and its orchestration account is the replacement
+  login; on any other machine the field would have no executor and no successor
+  account, so it is rejected. Revocation is ordered
   verify-before-revoke: the orchestration account must answer `sudo -n true` on
   every topology node before root is revoked on any of them, and is re-proved
   after the `sshd` reload. Node access state is recorded on the machine at
   `/etc/bootwright/access-marker.json` (mode `0644`, non-secret). See ADR 0019
   and `security.md`.
-- `spec.capabilities[]` is a generic tag list such as `openshift-node`,
-  `ceph-node`, `ceph-admin`, `container-runtime`, `artifact-server`,
-  `load-balancer`, `proxy`, `name-resolution`, `ntp`, `registry`, `libvirt`.
+- `spec.capabilities[]` is a closed vocabulary of eleven values:
+  `openshift-node`, `ceph-node`, `ceph-admin`, `container-runtime`,
+  `artifact-server`, `load-balancer`, `proxy`, `name-resolution`, `ntp`,
+  `registry`, and `libvirt`. An unknown, empty, or duplicated entry fails
+  validation naming the `Machine` and the accepted set. Some values assert a
+  property of the machine itself — `container-runtime` (it runs containers) and
+  `libvirt` (it is a libvirt hypervisor host); others restate a binding a
+  reference already declares (`openshift-node` for a `ContainerCluster` node,
+  `ceph-node` for a `StorageCluster` topology node) and are cross-checked
+  against it.
 
 ## MachineImage
 
@@ -599,14 +667,22 @@ Rules:
 Rules:
 
 - `spec.type` accepts `baremetal`, `libvirt`, `vsphere`, or `kubevirt`.
-- Bare-metal providers declare boot behavior. Physical machine inventory lives
-  on `Machine.spec.hardware`.
+- Bare-metal providers declare boot behavior through
+  `spec.baremetal.boot.method`,
+  which is rendered verbatim into the machine boot variables the bare-metal
+  adapter consumes; omitted, the adapter's own default applies. Physical machine
+  inventory lives on `Machine.spec.hardware`.
 - `spec.baremetal.defaults.bmc` supplies fleet-wide BMC defaults inherited by
   every bound `Machine` that omits them. `tls` and `virtualMedia` inherit (a
   machine value wins over the default); `credentialsRef` stays per-machine and
   is not defaulted here, so each `Machine` sets its own BMC credential.
 - Libvirt, vSphere, and KubeVirt providers declare `machineProfiles[]`.
-  Machines select a profile through `Machine.spec.substrate.profileRef`.
+  Machines select a profile through `Machine.spec.substrate.profileRef`. Each
+  entry sets a `name` unique within the provider and the VM shape — `cpu`,
+  `memoryMiB`, `diskGiB`, and optional `dataDisks[]` (each a `name` plus
+  `sizeGiB`). The three shape fields must be non-negative everywhere and must be
+  **greater than zero on a `vsphere` provider**, which clones from a sized
+  template and cannot derive them.
 - Libvirt providers require `libvirt.machineRef` (a `libvirt`-capable `Machine`,
   the hypervisor host) and `libvirt.uri` (the libvirt connection URI).
   `libvirt.bmcEmulationDefaults` configures the emulated Redfish BMC and is
@@ -657,11 +733,23 @@ Rules:
 - Each arm except `artifactServer` declares `implementation`: which software
   realises the component. Accepted implementations are `haproxy`
   (loadBalancer), `squid` (proxy), `dnsmasq` (nameResolution), `chrony` (ntp),
-  and `mirror-registry` (registry) — the same spelling set
-  `Environment.spec.componentImages` is keyed by.
-- Component arms use `machineRef` for placement.
-- Artifact server, proxy, name-resolution, NTP, registry, and load-balancer
-  arms require compatible machine capabilities.
+  and `mirror-registry` (registry). `Environment.spec.componentImages` pins
+  images for a subset of these: it has no `ntp` category (chrony ships from the
+  distribution repositories) and adds the pseudo-implementation
+  `artifactServer.http`, which is not an authorable `implementation`.
+- Component arms use `machineRef` for placement. The referenced `Machine` must
+  carry the capability the service needs, which for every containerised
+  component — loadBalancer/`haproxy`, artifactServer, proxy/`squid`,
+  nameResolution/`dnsmasq`, registry/`mirror-registry` — is `container-runtime`,
+  not a capability of the same name as the component. An `ntp`/`chrony` arm
+  requires no capability.
+- The `proxy`, `nameResolution`, `ntp`, and `registry` arms take `bindAddress`
+  (defaults to `0.0.0.0`) and `port` (defaults to `3128`, `53`, `123`, and
+  `5000` respectively).
+- A `loadBalancer` arm places with `machineRef` and declares `bindAddresses[]`,
+  each a `name` unique within the component plus the VIP `address`. A
+  `ContainerCluster` endpoint selects one through
+  `source.componentRef` + `source.bindAddressRef`.
 - Endpoint entries use `addressRef` to select a named
   `Machine.spec.addresses[]` value on the placement machine.
 - A `nameResolution` arm authoritatively answers its rendered records and
@@ -672,10 +760,13 @@ Rules:
   IP and a `cname` from each bound node FQDN to that `fqdn` (degrading to a
   direct `host-record` when an overridden `fqdn` lives in a zone the
   resolver does not own). The bare machine-label record is not published.
-- An `artifactServer` arm places with `machineRef` and optional `bindAddress`.
+- An `artifactServer` arm places with `machineRef` and optional `bindAddress`
+  (defaults to `0.0.0.0`).
   `retention` is `persistent` (default) or `install-only` (reclaimed once installs
-  complete). `listeners[]` are required — each a `name` (DNS label), a `protocol`
-  of `http` or `https`, and a unique `port` (`1`–`65535`). `endpoints[]` each name
+  complete). `listeners[]`, when omitted, defaults to a single `https` listener
+  named `https` on port `8443`; each authored entry sets a `name` (DNS label), a
+  `protocol` of `http` or `https`, and a unique `port` (`1`–`65535`).
+  `endpoints[]` each name
   a served surface with `name`, `listenerRef` (a declared listener), and
   `addressRef` (a `Machine.spec.addresses[]` value). `tls` (`minVersion` — a TLS
   1.0–1.3 spelling — and `ciphers`) requires at least one `https` listener.
@@ -748,8 +839,9 @@ spec:
 
 Rules:
 
-- `spec.install.method` defaults to `agent`; only `agent` is currently
-  accepted.
+- Cluster names share one selection namespace with `StorageCluster`, and the
+  name `artifact-server` is reserved — see
+  [Validation Rules](#validation-rules).
 - `spec.install.platform.type` accepts `baremetal`, `vsphere`, `none`, or
   `external`.
 - An omitted `spec.install.platform` derives from the single `InfraProvider`
@@ -770,13 +862,18 @@ Rules:
   endpoint (its `address` and `source`); `render effective` materializes the
   copy and an authored `api-int` always wins.
 - `endpoints.<slot>.source.type` accepts `openshift` (default), `external`,
-  or `infraComponent`. `openshift` and `external` require `address`.
-  `infraComponent` requires `source.componentRef` pointing at a
+  or `infraComponent`. `openshift` and `external` own the endpoint's address
+  directly. `infraComponent` requires `source.componentRef` pointing at a
   `loadBalancer` `InfraComponent` and must not set `address`.
   `source.bindAddressRef` names the selected `bindAddresses[]` entry; it may
   be omitted only when the load balancer declares exactly one bind address,
   and a non-empty `source.bindAddressRef` must match a `bindAddresses[].name`
   regardless of bind count.
+  - Besides `address` and `source`, each slot accepts `dnsName` (a DNS
+    subdomain naming the endpoint when no address is owned here), `port` and
+    `scheme` (`http` or `https`) refining the endpoint URL, and — where the slot
+    owns a VIP — `prefixLength` (valid only alongside `address`) and
+    `interfaceNetworks[]` (CIDRs narrowing which interface carries the VIP).
   - **Single-node clusters** additionally reject `source.type: openshift` on the
     `api`, `api-int`, and `ingress` slots.
   - `source.componentRef` and `source.bindAddressRef` are valid only when
@@ -806,7 +903,9 @@ Rules:
   node entry.
 - `spec.distribution.type` accepts `openshift` (default, materialized by
   `render effective`) or `okd`; `openshift` clusters require a pull secret via
-  `spec.install.pullSecretRef` or the `Environment` default.
+  `spec.install.pullSecretRef` or the `Environment` default. With neither
+  authored, normalize injects the convention name `openshift-pull-secret`, which
+  must still resolve to a declared `Secret`.
 - `spec.distribution.release` selects the release to install. `version` (an
   `x.y.z`) is required for both `openshift` and `okd` unless `release.image` is
   set (a pinned release image; a mutable or `:latest` tag is rejected) — either
@@ -819,7 +918,11 @@ Rules:
 - `spec.install.nodeSSH` (and the `Environment` `defaults.install.nodeSSH` that
   fills it when omitted) sets `keyPairRef`, or `publicKeyRef` with an optional
   `privateKeyRef`. `keyPairRef` is mutually exclusive with the other two, and
-  an authored `nodeSSH` without `keyPairRef` requires `publicKeyRef`.
+  an authored `nodeSSH` without `keyPairRef` requires `publicKeyRef`. With
+  neither authored, normalize injects
+  `keyPairRef: <cluster-name>-cluster-admin-ssh-key`, which must still resolve
+  to a declared `Secret`. Both injected conventions carry a `validate`
+  diagnostic saying the value was defaulted and how to override it.
 - `cluster rsh` and `cluster exec` reach a `ContainerCluster` node with the
   private material selected by `install.nodeSSH` (`keyPairRef`, otherwise
   `privateKeyRef`), the `core` user, and the node's effective primary install
@@ -870,8 +973,11 @@ Rules:
   install — reconcilable-in-place drift, not install-config/agent-config identity.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
   nodes. `spec.compute[]` declare worker machine pools; their summed `replicas`
-  must equal the number of `worker` nodes. A single all-`master` topology omits
-  both. `replicas` is the only machine-pool field: the agent installer renders
+  must equal the number of `worker` plus `infra` nodes (an `infra` node installs
+  in the worker pool, per the role rule above). Both are an optional redundant
+  assertion of the node roster — they never scale the cluster — so a single
+  all-`master` topology omits both.
+  `replicas` is the only machine-pool field: the agent installer renders
   a single default-architecture `master`/`worker` pool, so the other
   install-config machine-pool fields (`architecture`, `hyperthreading`,
   `platform`, `name`) are not authorable.
@@ -882,21 +988,38 @@ Rules:
 
 `StorageCluster` owns imported or managed external storage intent.
 
-Rules:
+### Shape
 
+The kind has three top-level fields: `spec.type`, `spec.management`, and
+`spec.ceph`.
+
+- `spec.type` is required and must be `ceph`.
 - `spec.management` accepts `managed` or `external`; omitted means `managed`.
-- Imported storage declares external details and does not run cephadm.
+- Managed clusters require `spec.ceph`; external clusters must not set it. An
+  `external` `StorageCluster` is therefore a name and nothing more — only `type`
+  and `management`. It runs no cephadm and owns no connection facts; the
+  operator-supplied external-cluster-details payload is declared on the
+  consuming [`StorageExport`](#storageexport) as
+  `spec.externalDetails.fromSecretRef`.
+- Cluster names share one selection namespace with `ContainerCluster`, and the
+  name `artifact-server` is reserved — see
+  [Validation Rules](#validation-rules).
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
-- Managed storage seed/admin operations use `Machine.spec.access.ssh` key
-  material, as the account named by `spec.ceph.cephadm.clusterSSH.user`.
+- Managed storage seed/admin operations connect as the cluster's own
+  orchestration identity — `spec.ceph.cephadm.clusterSSH.user` with the key
+  material `clusterSSH.keyRef` names.
 - Storage convergence is additive-only across `spec.ceph.config`, `mgrModules[]`,
   `monitoring`, the `services[]` passthrough, and the `StoragePool`/
   `StorageFilesystem`/`StorageObjectGateway` kinds: `apply` creates and converges
   declared objects and never removes a live Ceph object whose declaration was
   deleted; `--converge-drifted` rebuilds only still-declared pools whose structural
-  identity changed, never prunes. Removal is out of band, pending the open
-  override/reconcile design.
+  identity changed, never prunes. This is the Ceph instance of the product-wide
+  additive-apply rule in the [CLI Contract](#cli-contract): removal crosses the
+  `destroy` authorization boundary or is performed out of band.
+
+### Distribution and builds
+
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
@@ -994,6 +1117,16 @@ Rules:
   IBM Call Home, `spec.ceph.ibm.callHome`
   is required as either `enabled` or `disabled`; apply reconciles the manager
   module to that explicit outbound-communication intent.
+- `spec.ceph.osSubscriptionRef`, when set, must resolve to a `redhat-rhel`
+  [`Entitlement`](#entitlement) whose `rhsm.management` is `managed`. It names
+  the fleet-wide RHEL subscription every storage node registers with. Omitted,
+  it is derived from the topology nodes'
+  `MachineInstallProfile.spec.subscription.entitlementRef`; if the nodes name
+  different entitlements, the derivation yields nothing and no registration is
+  planned.
+
+### cephadm identity and bootstrap
+
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.clusterSSH` declares the cluster's own SSH orchestration identity —
@@ -1004,27 +1137,23 @@ Rules:
 - `cephadm.clusterSSH.user` is the OS user cephadm manages every host as
   (`cephadm --ssh-user`, reconciled day-2 with `ceph cephadm get-user` /
   `set-user`) and the account Bootwright itself connects as once a node is
-  provisioned. It must be a valid POSIX user name. It defaults to `cephadm`
-  when any topology node's `Machine` sets `spec.access.rootLogin: revoke`, and
-  to `root` otherwise; a `root` resolution is rejected when any node revokes
-  root. When it resolves to a non-root name, Bootwright provisions that account
-  on every topology node — locked password, no `wheel` membership, the machine
-  access public key authorized, and a per-user sudoers drop-in at
+  provisioned. It must be a valid POSIX user name. It defaults to `cephadm` on a
+  managed cluster and to `root` on an external one. A `root` resolution is
+  rejected when any topology node revokes root, is a machine Bootwright installs
+  (which never permits a root login), or authors a non-root `access.ssh.user`.
+  When it resolves to a non-root name, Bootwright provisions that
+  account on every topology node — locked password, no `wheel` membership, the
+  machine access public key authorized, and a per-user sudoers drop-in at
   `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
   and `<user> ALL=(ALL) NOPASSWD: ALL`. The drop-in is necessary but not
-  sufficient and is proved rather than assumed: sudo applies `Defaults` in parse
-  order and the last one wins whether it is generic or per-user, so any
-  later-sorting file in the same directory overrides it, a
-  `Defaults requiretty` placed after `@includedir` in `/etc/sudoers` cannot be
-  overridden by any drop-in, and an LDAP or SSSD `cn=defaults` carrying
-  `ignore_local_sudoers` makes sudo skip `/etc/sudoers` and every drop-in
-  outright. Apply proves the account answers `sudo -n true` over a terminal-less
-  channel — the one cephadm's manager uses — before any root revocation
-  (`security.md`, Node Login Identity and Privilege). The name may equal that
+  sufficient and is proved rather than assumed: apply proves the account answers
+  `sudo -n true` over a terminal-less channel — the one cephadm's manager uses —
+  before any root revocation. The three ways a correct grant is still not
+  evaluated are in `security.md`, Node Login Identity and Privilege. The name
+  may equal that
   node's `access.ssh.user`, which declares that the account is the machine's
   install-window identity and already exists; Bootwright then reconciles the
-  account instead of creating it. A `root` resolution is rejected when any
-  topology node's `access.ssh.user` is non-root.
+  account instead of creating it.
 - `cephadm.clusterSSH.keyRef` names the `sshKeyPair` `Secret` that is the
   cluster's management identity — the key cephadm distributes to and reaches
   every host with, the key the install authorizes for a node the cluster
@@ -1051,11 +1180,11 @@ Rules:
   `spec.ceph.config[global]` also sets any of the three defaults it owns
   (`osd_pool_default_size`, `osd_pool_default_min_size`,
   `osd_crush_chooseleaf_type`).
-- `spec.type` is required and must be `ceph`.
-- Managed clusters require `spec.ceph`; external clusters must not set
-  `spec.ceph`.
 - `spec.ceph.cephadm.bootstrap.node` must match a
   `spec.ceph.topology.nodes[]` entry's node name.
+
+### Networks and config
+
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
   They render to the Ceph `public_network`/`cluster_network` configuration
   (seeded at bootstrap, reconciled by `ceph config set` on later applies).
@@ -1069,6 +1198,9 @@ Rules:
   `ceph mgr module enable` operations. Modules removed from the spec are not
   disabled (additive-only); module settings are declared under `config.mgr`
   (`mgr/<module>/<key>`).
+
+### Placement, monitoring, and management
+
 - Ceph placement blocks — on `spec.ceph.monitoring` services, the `services[]`
   passthrough, the management ingress, CephFS `mds`, RGW, and ingress — share one
   grammar: `hosts[]` and `sites[]` narrow the resolved host set (`hosts[]`
@@ -1128,6 +1260,9 @@ Rules:
   [`StorageNFSExport`](#storagenfsexport) kind and `loki`/`promtail` by
   `spec.ceph.monitoring`, so they must be declared there, not through this
   passthrough.
+
+### Topology, OSDs, and stretch
+
 - `spec.ceph.topology.nodes[]` require a `machineRef` to a `ceph-node`
   `Machine` and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
@@ -1187,9 +1322,15 @@ Rules:
   reference the owning `StorageCluster`.
 - `spec.ceph.topology.stretch` enables stretch mode by presence (no `enabled`
   flag):
-  - **Required:** `failureDomain` (CRUSH failure domain for the stretch rule)
-    and `tiebreaker.node` (a topology host named by node name — FQDN or
-    short label; machine names are rejected).
+  - **Required:** `failureDomain` (CRUSH failure domain for the stretch rule).
+  - **Tiebreaker (arbiter-optional):** `tiebreaker.node` names a topology host
+    by node name — FQDN or short label; machine names are rejected. Omitting the
+    whole `tiebreaker` block is accepted with a WARN advisory: without an
+    arbiter mon in a third site the cluster loses quorum if either data site
+    fails, and `enable_stretch_mode` is skipped until a tiebreaker is authored.
+    A *partially* authored tiebreaker (only `node`, or only `site`) is a hard
+    error, as is a `tiebreaker.node` that is not mon-only, carries OSD devices,
+    or sits in a data site.
   - **Normalized:** `dataSites` from the topology's non-tiebreaker sites,
     `tiebreaker.site` from the tiebreaker host's `site`, `ruleName` to
     `stretch-rule`. Author `dataSites` only to exclude OSD-only sites the
@@ -1199,10 +1340,11 @@ Rules:
     unsupported. Authoring `stretch` on an existing cluster re-rules and resizes
     every policy-less pool on the next apply with no `StoragePool` change;
     `bootwright validate` prints a one-line notice naming the inheriting pools.
-  - **Validation (post-normalize):** `dataSites` holds exactly two sites;
-    `tiebreaker.site` is distinct from them; each data site holds exactly two
-    `mon` hosts and the tiebreaker exactly one; the tiebreaker host is mon-only
-    with no OSD `devices`; erasure-coded pools are rejected; MDS, RGW, and
+  - **Validation (post-normalize):** `dataSites` holds exactly two sites; each
+    data site holds exactly two `mon` hosts. When a tiebreaker is authored,
+    `tiebreaker.site` is distinct from the data sites and holds exactly one
+    `mon` host, and that host is mon-only
+    with no OSD `devices`. Erasure-coded pools are rejected; MDS, RGW, and
     ingress placement include at least two role-capable hosts per data site.
 
 ## StoragePlacementPolicy
@@ -1499,6 +1641,12 @@ Rules:
   `manifests[].path` are relative paths resolved against the `ClusterAddon` file
   (the `manifestSet.path` rules); the loader skips the `playbooks/`, `roles/`,
   and `collections/` subtrees as Ansible content.
+  - A `steps[].manifests[].path` must contain a `manifests/` path segment, and a
+    `steps[].playbook` must contain a `playbooks/` segment unless the step sets
+    `spec.source.path`, whose external directory the loader never walks
+    (`source.git` is rejected on add-on steps). Both segments keep the loader
+    from parsing the content as desired state; a path outside them fails
+    validation.
   - `steps[].name` is required and unique within the add-on. Exactly one of
     `steps[].gates` or `steps[].follows` is required and anchors the step to a
     lifecycle point: `gates: apply` (before the operator install, blocking it
@@ -1512,17 +1660,18 @@ Rules:
     add-on and ignores `target`/`outputs`; a playbook step additionally runs
     imperative work against resolved machines and captures outputs.
   - `steps[].target` selects the machines a playbook runs against and is required
-    for a playbook step. It is a presence union — exactly one of `boundCluster`
-    (the bound `ContainerCluster`'s nodes), `fromInput` (an accepted
-    `resourceRef` input dereferenced to its object, then mapped to nodes:
-    `StorageExport` → its `storageClusterRef` Ceph nodes, `StorageCluster` → its
-    Ceph nodes, `ContainerCluster` → its agent nodes, `Machine` → the machine),
-    or static `clusters`/`machines` lists. A step carries no `hostGroups` and can
-    never resolve to the controller/localhost. `target.limit` is `firstReachable`
+    for a playbook step. It is a presence union with exactly one arm:
+    `target.boundCluster: {}` (the bound `ContainerCluster`'s nodes),
+    `target.fromInput.input: <accepted input name>` (a `resourceRef` input
+    dereferenced to its object, then mapped to nodes: `StorageExport` → its
+    `storageClusterRef` Ceph nodes, `StorageCluster` → its Ceph nodes,
+    `ContainerCluster` → its agent nodes, `Machine` → the machine), or
+    `target.static` with `clusters[]` and/or `machines[]`. A step carries no
+    `hostGroups` and can never resolve to the controller/localhost.
+    `target.limit` is `firstReachable`
     (default: run against the first machine that answers) or `all` (run against
     every resolved machine). Storage-cluster targets connect through the
-    cluster's post-install `cephadm.clusterSSH` user and key (falling back to
-    the Machine access key when `clusterSSH.keyRef` is omitted); container-cluster
+    cluster's post-install `cephadm.clusterSSH` user and key; container-cluster
     and direct Machine targets use the Machine's `access.ssh` identity.
   - `steps[].secretRefs[]` name `Secret`s materialized into the step's scoped
     per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
@@ -1639,15 +1788,19 @@ metadata:
 spec:
   follows: machines        # fabric | machines | deps | base | add-ons
   target:
-    clusters: [nprd-ceph]
+    clusters:
+      - nprd-ceph
   playbook: playbooks/harden.yml
   rolesPath: roles
   collectionsPath: collections
-  tags: [tuning]           # optional --tags
-  skipTags: [reboot]       # optional --skip-tags
+  tags:                    # optional --tags
+    - tuning
+  skipTags:                # optional --skip-tags
+    - reboot
   extraVars:
     tuned_profile: throughput-performance
-  secretRefs: [vault-token]
+  secretRefs:
+    - vault-token
   run: onChange            # onChange (default) | always
   onFailure: fail          # fail (default) | continue
 ```
@@ -1771,17 +1924,22 @@ Rules:
     `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. Its
     parameters are flat and scoped by type: `usernamePassword` takes `username`
     (default `admin`); `tlsCertificate`/`caBundle` take `commonName` (required),
-    `dnsNames[]`, `ipAddresses[]`, `validityDays` (self-signed); `sshKeyPair`
+    `dnsNames[]`, `ipAddresses[]`, `validityDays` (self-signed, default `3650`);
+    `sshKeyPair`
     takes `keyType` (default `ed25519`, one of `ed25519`, `rsa`, `ecdsa-p256`,
     `ecdsa-p384`, `ecdsa-p521`) and `comment`; `token` takes `bytes`
     (default `32`). A parameter the type does not consume is rejected.
-- Authored input keeps one `Secret` per file, named for its `metadata.name`, in a
-  fleet-global `secrets/` grouping or beside `environment.yaml`.
+- `Secret` objects are the one-object-per-file carve-out (see
+  [Kinds](#kinds)): a tree's `Secret`s are grouped into a single multi-document
+  `secrets.yaml` beside `environment.yaml`, or into a fleet-global `secrets/`
+  directory of multi-document files named for the group (for example
+  `bmc-credentials.yaml`).
 
 ## Rendering Contract
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
-  selected machines, selected providers, endpoints, and platform render mode.
+  selected machines, machine `NetworkConfig` references, selected providers,
+  endpoints, and platform render mode.
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
   each referenced `Machine`, selected `NetworkConfig` templates, per-machine
   network overrides, and substrate MAC inventory.
@@ -1802,18 +1960,20 @@ Rules:
   `source.type` becomes `openshift`); validators and renderers read the
   normalized value instead of recomputing the default. A diagnostic on a
   normalize-injected reference the author never wrote (Environment-defaults
-  copies, the `openshift-pull-secret` convention,
-  `<cluster-name>-cluster-admin-ssh-key`) says the value was defaulted and
-  how to override it.
-- References must resolve to loaded resources selected by `Environment`.
+  copies, and the `ContainerCluster` pull-secret and node-SSH conventions) says
+  the value was defaulted and how to override it.
+- References must resolve to loaded resources selected by `Environment`, and
+  object names are unique within a kind — see
+  [References and Names](#references-and-names).
+- Exactly one `Environment` must be loaded.
 - Machines must declare `spec.os.provided`.
 - Machines with `os.provided: false` must have `spec.substrate.providerRef`.
-- Machines that are used over SSH must declare
-  `spec.access.ssh.addressRef`, `keyRef`, and a matching address.
-  `access.ssh.addressRef` defaults to the address named `ssh` when one exists
-  (documented convention; there is no only-address fallback). Container-cluster
-  node access is the exception because `ContainerCluster.spec.install.nodeSSH`
-  owns the installed RHCOS identity.
+- Machines reached over SSH must resolve `spec.access.ssh.addressRef` to a
+  declared `spec.addresses[]` entry (the implicit `fqdn` address counts) and set
+  exactly one `spec.access.ssh.auth` arm — see the `Machine` access rules for
+  the union and the `addressRef` default. Container-cluster node access is the
+  exception because `ContainerCluster.spec.install.nodeSSH` owns the installed
+  RHCOS identity.
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - A `Machine` is node-bound by at most one cluster across `ContainerCluster`
@@ -1849,6 +2009,49 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
+- Exit codes are contract: `0` success, `1` a run or load failure, `2` a usage
+  error. `diff` adds `3` for out-of-sync selected state (see the `diff`
+  bullets).
+  The interactive passthrough verbs — `cluster oc`/`cluster kubectl` and
+  `machine`/`cluster` `rsh`/`exec` — propagate the child process's exit status
+  verbatim and are outside this contract.
+
+### Global flags
+
+`--context`, `--ssh-preferred-id-key`, and `--ssh-user` are persistent root
+flags, accepted on every command. The rest are registered per command, on the
+verbs that reach machines.
+
+- `--context <name>` selects the context the invocation operates in, overriding
+  the current-context selection for that invocation only. It must name an
+  existing context, and it is the selector deciding which fleet `apply` and
+  `destroy` mutate.
+- `--ssh-preferred-id-key <path>` offers the named private key ahead of the
+  declared credentials; the declared credentials remain the fallback. It is a
+  per-invocation preference: it never enters desired state, the converge hash,
+  or an install marker.
+- `--ssh-user <name>` names the account only for machines whose resolved auth
+  arm is `operatorIdentity` — the inventory `ansible_user`, the add-on step
+  targets, and the connection identity of the Ceph node-access role. It never
+  moves a login Bootwright created nor one a `Secret` names, and `apply`,
+  `plan`, and `destroy` **refuse** when no machine in the run declares that arm
+  rather than silently changing nothing. It is refused unless the value is a
+  valid POSIX user name, and is likewise never recorded.
+- Neither SSH flag reaches an ownership record. A record captures the
+  **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
+  reach a host that has left desired state cannot inherit one operator's account
+  or key path from the run that wrote it.
+- `--trust-on-first-use` (default **true**) governs the interactive host-key
+  recording described below; `--trust-on-first-use=false` never records trust.
+- `--verbose`/`-v` prints full Ansible task output **including values normally
+  censored by `no_log`** — secrets, BMC/registry/RHSM/proxy credentials, tokens,
+  generated Ceph keys — to the terminal and the run log. It is the redaction
+  escape hatch specified in `security.md`.
+- `--ask-become-pass` prompts for the Ansible become password (default: false
+  when running as root, true otherwise).
+
+### Contexts, runs, and read-only posture
+
 - `context init --name <name> -f <dir>` (`--name` and `-f` required, exactly one directory) creates
   a context by copying the whole source directory tree into the context's input
   directory at `/var/lib/bootwright/contexts/<name>/input/`. The context is
@@ -1863,6 +2066,14 @@ Rules:
   source and preserves all other context state (secrets, runs, rendered output,
   clusters, ownership, provider state). It does not change the current-context
   selection.
+- `context delete --name <name>` requires `--purge` (contexts live in shared
+  root state, so there is no partial delete) and fails closed while the context
+  still owns ownership records or installed clusters. `--force` authorizes
+  deleting it anyway: the infrastructure keeps running, and the ownership
+  records plus install-captured credentials — kubeconfigs, the kubeadmin
+  password — are permanently lost. It is also what proceeds when ownership
+  records cannot be read at all. `destroy --context <name>` first is the
+  non-abandoning path.
 - An input directory that is missing, unreadable, or not a directory is a named
   failure at context resolution/readiness time that names the context and the
   input directory and points at `context update --name <name> -f` (or `context init
@@ -1897,15 +2108,36 @@ Rules:
   confirmation; never under `--dry-run`, JSON output, or non-interactive
   execution (`--yes`). A changed key is never accepted interactively — it keeps
   failing closed until `bootwright machine trust --replace <machines>` records
-  it deliberately.
-- Cluster selection uses one flag name, `--clusters`, on every command that
-  narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `preflight`
-  scope subcommands, and `render`. It accepts a comma-separated list
+  it deliberately. Trust is recorded only when `--trust-on-first-use` (default
+  true) is left on.
+
+### Selection and stages
+
+- Any command that narrows to cluster roots spells it `--clusters`; no command
+  uses another spelling. It is accepted by `apply`, `plan`, `diff`, `destroy`
+  (with or without `--stage`), the `preflight` scope subcommands, `render`, and
+  `machine list`. `render installer` and `render storage` accept only the one
+  cluster kind they render. `preflight all` is the deliberate exception: it is
+  context-wide by design, and narrowing means running `preflight bastion`,
+  `preflight infra --clusters <name>`, and `preflight clusters --clusters
+  <name>` instead.
+- `--clusters` accepts a comma-separated list
   of `ContainerCluster` and `StorageCluster` names; validation keeps the
   names unique across both kinds, so a name selects exactly one cluster
   root. `destroy --stage infra
   --clusters` additionally accepts the literal `artifact-server` to remove only
   the generated artifact publication service.
+- An `apply --clusters` whose scope reaches the shared machine layer (the
+  `fabric`/`machines` sub-phases, the `infra` family, or the full graph) fails
+  closed when the narrowed run would re-render a shared machine service that
+  degrades under the narrowing — its configuration would be rebuilt from the
+  selected clusters alone and lose the unselected consumers. Services
+  classified as self-contained are exempt; a service with no classification is
+  treated as degrading, so a newly added one fails safe. The remedy is to widen
+  `--clusters` to cover every consumer.
+- A scoped `destroy` fails closed the same way on shared provider-service
+  conflicts. `--force` does not widen the selection there; the remedy is to
+  widen or narrow `--clusters`.
 - `--machines`, on `apply`/`plan`/`destroy`, is the per-machine alternative to
   `--clusters` and is mutually exclusive with it: a comma-separated list of
   `Machine` names. On `apply`/`plan` the scope is limited to the `fabric` and
@@ -1917,14 +2149,10 @@ Rules:
   to no cluster is fail-closed (Bootwright installs a managed OS only on
   cluster-member machines). Destroying a machine that is a node of an installed
   cluster fails closed unless `--force`.
-- `apply --stage infra` includes provider, infra-components, machine-infra, and
-  storage-infra work.
-- `apply --stage clusters` includes storage-cluster, container-cluster, and
-  add-ons work.
-- The two `--stage` families decompose into five ordered sub-phases, and
-  `--stage`/`--through` accept a sub-phase name as well as a family name. The
-  `infra` family is `fabric` then `machines`; the `clusters` family is `deps`,
-  `base`, then `add-ons`:
+- `--stage` accepts two family names, `infra` and `clusters`, which decompose
+  into five ordered sub-phases; `--stage`/`--through` accept a sub-phase name as
+  well as a family name. The `infra` family is `fabric` then `machines`; the
+  `clusters` family is `deps`, `base`, then `add-ons`:
   - `fabric` converges provider hosts (BMC services) and machine-bound shared
     services (proxy, registry, NTP, boot artifacts, DNS, load balancers).
   - `machines` makes machines exist with an OS: per-cluster substrate,
@@ -1948,6 +2176,11 @@ Rules:
   list grows. A `--stage` that orders after its `--through` is a usage error, and
   a range whose first stage is not the graph's first assumes the omitted earlier
   stages already applied and says so.
+  A family name used as a range endpoint resolves to that family's boundary
+  sub-phase: as `--stage` it starts at the family's first sub-phase, as
+  `--through` it ends at the family's last. So `--through infra` equals
+  `--through machines`, `--stage clusters` starts at `deps`, and
+  `--through clusters` is the full graph.
 - `destroy --stage infra` tears down infrastructure for the current context.
   It uses current desired state plus root-managed ownership records. Without
   `--clusters`, it must also remove all context-owned VMs that provider
@@ -1965,18 +2198,25 @@ Rules:
   Bootwright-managed devices; Bootwright must not wipe arbitrary visible disks.
 - `destroy --stage clusters` removes cluster-stage runtime for selected or all
   `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
-  add-on records, generated storage attachment records, and managed storage
-  cluster services/runtime. It does not destroy provider infrastructure. On a
+  add-on records, generated storage attachment records, managed storage
+  cluster services/runtime, and the storage nodes' orchestration account and its
+  sudoers drop-in — the inverse of the `clusterSSH.user` provisioning in ADR
+  0019, restoring the node's prior root-login posture. A clusters-stage destroy
+  therefore mutates machine OS state even though it retains the machine
+  substrate. It does not destroy provider infrastructure. On a
   node that also carries a foreign (non-Bootwright) Ceph cluster, local Ceph
   state removal is scoped to the owned cluster's fsid directories; the shared
   `/etc/ceph`, `/var/lib/ceph`, and `/var/log/ceph` trees are removed
   wholesale only when no foreign fsid remains on the node.
 - `destroy` with `--stage` omitted tears down the full lifecycle of its work set
-  as the inverse of build-up: container-cluster installer and add-on runtime
-  first, concurrently with storage-cluster runtime; then machine registration and
-  storage node access; then machine infrastructure, guests strictly before their
-  KubeVirt hosts; then container-cluster records and captured credentials; and
-  finally the exclusively owned infra-component services and provider services.
+  as the inverse of build-up (ADR 0023). Container-cluster installer and add-on
+  runtime and storage-cluster runtime are graph roots and start together. A
+  container cluster's machine infrastructure waits on that cluster's runtime
+  teardown; a storage cluster's waits additionally on its machine registration
+  and its storage node access. Machine infrastructure removes guests strictly
+  before their KubeVirt hosts. Container-cluster records and captured
+  credentials wait on the whole machine-infrastructure set, and the exclusively
+  owned infra-component services and provider services go last.
   Steps that name a single cluster are planned per cluster, so one cluster's
   failure blocks only its own dependents rather than the whole fleet. Without
   `--clusters`, the work set is the whole context and the infra teardown also
@@ -1988,22 +2228,44 @@ Rules:
   are deleted; bare-metal hardware and its installed OS are retained while
   Bootwright-local install state is released. `destroy --stage clusters
   --clusters <names>` is the explicit retain-machine-substrate operation.
-  Container-cluster runtime cleanup has a hard dependency on successful machine
-  teardown so failed virtual-machine deletion preserves kubeconfigs, install
-  records, and ownership evidence for retry. When a selected KubeVirt host and
-  its nested cluster are both destroyed, nested guest machines are removed
+  Container-cluster teardown splits in two: the runtime half — installer
+  runtime, add-on runtime, generated add-on secrets — is a graph root with no
+  predecessors, while the records half — install record, connection record,
+  captured `kubeconfig` and `kubeadmin-password` — has a hard dependency on the
+  whole machine-infrastructure set, so failed virtual-machine deletion preserves
+  credentials and ownership evidence for retry. When a selected KubeVirt host
+  and its nested cluster are both destroyed, nested guest machines are removed
   through the still-live host before either the host cluster's own machine
   substrate or its kubeconfig and runtime are removed. Machine teardown orders
   KubeVirt tenants before their host clusters and rejects a host-reference cycle.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
-- `destroy --stage infra|clusters --force` is required when selected state
+- `destroy --force` is required — with or without `--stage`, so the default
+  unscoped full-lifecycle form included — when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`, or when
   the scope-filtered teardown covers an object of a kind listed in
   `Environment.spec.safety.protectedKinds` (the granular gate — a protected kind
   absent from the scope does not require `--force`).
-  `--yes` only skips the confirmation prompt and never implies `--force`.
+  `--yes` never implies `--force`.
+- `--force` additionally authorizes three fail-closed gates that are otherwise
+  refusals, and nothing else:
+  - ownership records under the context's ownership directory that cannot be
+    read, whose resources would silently be left standing;
+  - a `--stage infra` teardown of a storage cluster still consumed by a
+    `ContainerCluster` outside the selection (it destroys the storage machine
+    substrate and its OSD data);
+  - infra components owned or referenced by another context, including the case
+    where that cross-context check cannot be evaluated at all.
+
+  It also authorizes the `--machines` installed-cluster-node gate stated above.
+  It does **not** widen `--clusters`, relax device data-safety, relax the
+  shared-provider-service scope conflict, or relax the KubeVirt tenant gate.
+- On `destroy`, the confirmation prompt **is** the data-loss acknowledgment
+  ("accept data loss", naming the storage clusters whose OSDs will be zapped),
+  so `--yes` authorizes the `cephadm rm-cluster --zap-osds`. There is no
+  `--confirm-data-loss` on `destroy`; that flag exists only on `apply`, where
+  the routine confirmation and the data-loss acknowledgment are separate gates.
 - `destroy --include-unowned` relaxes the machine-substrate teardown ownership
   gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
   VM that matches the Bootwright `<cluster>-<machine>` naming but carries a
@@ -2182,7 +2444,10 @@ Rules:
   probe that succeeds and reports `Available=False` is different evidence — the
   cluster answered — and still authorizes the `--converge-drifted` rebuild under
   the data-loss acknowledgment.
-- `apply --converge-drifted` is command-scoped. It may continue past Bootwright-owned
+- `apply --converge-drifted` authorizes every destructive rebuild in the run's
+  selected scope; it cannot be narrowed to an individual object. Narrow the
+  destructive set with `--clusters` or `--machines` before using it.
+  It may continue past Bootwright-owned
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the
   substrate VM is undefined and its disks wiped, then rebuilt), and cleanly
@@ -2211,6 +2476,14 @@ Rules:
   narrows this to specific kinds: on an `allow`-default environment, a destructive
   `apply --converge-drifted` rebuild of a protected kind still fails closed the same way,
   while an unprotected kind rebuilds. Dry-run/plan still previews the override plan.
+- `apply --converge-drifted` never reimages, in place, a machine that is a node
+  of a managed-RHSM `StorageCluster`: an in-place reinstall would strand the
+  Satellite consumer, and the reused host DMI UUID would then block
+  re-registration. Such a rebuild fails closed naming the affected clusters and
+  the remedy — `destroy --stage infra --clusters <cluster> --force`, then
+  re-apply — because destroy unregisters the node from RHSM before wiping it.
+  This refusal is independent of `destroyProtection` and `protectedKinds`: it
+  fires on an unprotected environment too.
 - Independent of `destroyProtection`, a destructive `apply --converge-drifted` rebuild (a
   managed-OS or substrate machine reinstall with disks wiped, or a container/Ceph
   cluster wipe-and-rebuild) requires an explicit data-loss acknowledgment even on an
@@ -2280,6 +2553,14 @@ Rules:
   a deletion. `diff` accepts `--stage`, `--clusters`, and `--output` like the other
   selection commands and rejects `--converge-drifted` (it neither mutates cluster state nor
   suppresses its report).
+- In **both** modes, `diff` also reports `undeclared` ("Owned but no longer
+  declared") resources: Bootwright ownership records — at `Machine`, cluster,
+  `InfraProvider`, and `InfraComponent` granularity — that correlate to no
+  object in the FULL desired state (never the `--clusters`-scoped subset), i.e.
+  objects deleted from desired state without being destroyed. `undeclared` is
+  report-only: it does not affect the exit code, which gates on selected-state
+  sync only. Reclaim an orphan with `destroy` (see the removal lifecycle in
+  `docs/advanced/operations.md`).
 - `bootwright diff --recorded` skips all cluster contact and instead produces the
   fast offline desired-vs-recorded report for automation. It compares desired
   state against the convergence-safety evidence recorded by the last apply only;
@@ -2290,14 +2571,8 @@ Rules:
     the durable convergence-safety evidence recorded by the last apply: `missing`
     (no completed apply recorded), `match` (applied with the current desired
     state), `drift` (desired state changed since it was applied), or `foreign` (a
-    non-Bootwright owner). It additionally reports `undeclared` ("Owned but no
-    longer declared") resources: Bootwright ownership records — at `Machine`,
-    cluster, `InfraProvider`, and `InfraComponent` granularity — that correlate to
-    no object in the FULL desired state (never the `--clusters`-scoped subset),
-    i.e. objects deleted from desired state without being destroyed. `undeclared`
-    is report-only: it does not affect the exit code, which gates on
-    selected-state sync only; reclaim an orphan with `destroy` (see the removal
-    lifecycle in `docs/advanced/operations.md`).
+    non-Bootwright owner). The report-only `undeclared` list described above is
+    reported alongside these four.
   - **Evidence granularity.** A root whose resources are all `missing` is reported
     as one absence; a present root reports only the resources that are not in sync.
     Drift is reported per apply task: each selected apply task is one reported
@@ -2333,10 +2608,10 @@ Rules:
     needs a destructive rebuild, so a safe reconcile is never mistaken for a wipe;
     use `render effective` and diff, or `plan`, to see which object changed, and
     the reconcilable/structural split to tell a day-2 reconcile from a reinstall.
-  - **Exit codes.** They let automation gate without parsing the report, for both
-    modes: `0` when the selected state is in sync, `3` when it is out of sync (a
-    live difference, drift, foreign, degraded, or never-applied), `1` on load
-    error, and `2` on usage error.
+  - **Exit code 3.** On top of the product-wide exit codes above, `diff` exits
+    `3` in both modes when the selected state is out of sync — a live
+    difference, drift, foreign ownership, a degraded probe, or never-applied —
+    so automation can gate without parsing the report.
 - `bootwright diff --adopt` folds the discovered live state back into desired-state
   YAML so a subsequent `apply` reproduces the cluster as it actually runs. It is the
   one mutating form of `diff`, requires live discovery (rejected with `--recorded`),

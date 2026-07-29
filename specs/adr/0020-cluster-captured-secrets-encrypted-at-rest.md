@@ -82,9 +82,10 @@ operator-owned source path. That external file is authored secret input, not a
 cluster-captured encrypted envelope.
 
 Durable encrypted paths are never passed directly to `oc`, `kubectl`, or
-`virtctl` during real execution. Under normal process completion, kubeconfig
-plaintext exists on disk only for its bounded callback or Ansible invocation,
-never as durable cluster state.
+`virtctl` during real execution. Kubeconfig plaintext exists on disk only for
+its bounded callback or Ansible invocation, never as durable cluster state; an
+abnormally terminated process can leave that scratch copy behind, which is why
+its parent directory is current-process-owned and `0700`.
 
 Human-facing reveals (`bootwright cluster info --secrets`, `bootwright cluster
 kubeconfig`) decrypt straight to memory or stdout — no scratch file at all.
@@ -110,3 +111,8 @@ cleanup gap.
 - Non-encrypted cluster-secret material is rejected by access, preflight, and
   runtime execution paths. Plaintext is accepted only at the explicit
   post-capture conversion boundary after the producing Ansible task succeeds.
+- A capture terminated between the Ansible write and the Go conversion leaves
+  plaintext at the captured path. Reads refuse it rather than migrating it
+  implicitly, so the credential stays unreadable until the next successful run
+  of the capturing task, whose `MigratePlaintextMaterial` call is idempotent
+  and converts the file in place.

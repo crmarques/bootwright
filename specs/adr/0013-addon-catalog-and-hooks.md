@@ -1,4 +1,4 @@
-# ADR 0013: Add-on Catalog, Hook Lifecycle, and OLM Readiness Gating
+# ADR 0013: Add-on Catalog, Step Lifecycle, and OLM Readiness Gating
 
 ## Status
 
@@ -46,14 +46,16 @@ then applies, and the engine waits for the operator's CSV to reach
 timeouts are typed (`catalogGateError`, `csvGateError`) and never recorded as
 failed applies of the already-applied resources.
 
-**Step lifecycle.** `ClusterAddon spec.steps` wire add-on-shipped playbooks
-and templated manifests into three lifecycle points, named by the anchor field
-the step sets: `gates: apply`, `follows: operatorReady`, and `follows: ready`.
+**Step lifecycle.** `ClusterAddon spec.steps` (named `spec.hooks`, with
+`preApply`/`postOperatorReady`/`postReady` lifecycle names, when this decision
+was taken) wire add-on-shipped playbooks and templated manifests into three
+lifecycle points, named by the anchor field the step sets: `gates: apply`,
+`follows: operatorReady`, and `follows: ready`.
 Steps default to `run: onChange`, keyed on a
 digest of shipped content plus resolved inputs and target; `run: always`
 exists for integrations that must converge every apply (the Data Foundation
-exporter hook, so rotated Ceph mon endpoints/keys keep landing). The desired
-hash is input-aware: binding-supplied input values and the per-hook shipped
+exporter step, so rotated Ceph mon endpoints/keys keep landing). The desired
+hash is input-aware: binding-supplied input values and the per-step shipped
 content digest both fold into `render.DesiredHash`, so editing an input or a
 shipped playbook re-applies an otherwise-ready add-on. Input effects (global
 pull-secret merge) run before any resource applies.
@@ -63,10 +65,10 @@ externalDetails.fromSecretRef` is the single operator-supplied arm for
 external-cluster details (the `generated` and `sshExecution` arms are
 retired). A managed-Ceph export omits `externalDetails` entirely — the
 consuming add-on produces the payload itself by running the exporter on a
-Ceph node via a `postOperatorReady` hook and consuming it as a captured
+Ceph node via a `follows: operatorReady` step and consuming it as a captured
 output. Normalize must not default the field. The compiled Data Foundation
 producer and consumer are deleted; cross-cluster ordering is expressed as
-plan-time task edges (`storage.<ceph>`, `wait.<ocp>`) derived from the hook's
+plan-time task edges (`storage.<ceph>`, `wait.<ocp>`) derived from the step's
 input ref-chain, not a compiled attachment task.
 
 ## Consequences
@@ -80,7 +82,7 @@ input ref-chain, not a compiled attachment task.
   READY or a CSV that never succeeded, without mislabeling the already-applied
   CatalogSource/Subscription as failed apply targets.
 - Add-ons without readiness checks re-apply on every run (idempotently), and
-  `run: always` hooks or a pull-secret merge effect disable the already-ready
+  `run: always` steps or a pull-secret merge effect disable the already-ready
   skip — converge-on-every-apply is the deliberate cost of correctness.
 - Rootless `validate` cannot read the root-owned store and reports an
   unresolved `addonRef` with a register remedy; `context init` (root)

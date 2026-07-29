@@ -40,7 +40,7 @@ exist — a managed value, or inheriting a managed default, is rejected at
 validation rather than silently skipped. Managed entries select an
 `InfraComponent` by `componentRef`; the URL is derived from `(machineRef,
 port)` via `ManagedProxyURL`, with the cluster-facing host substituted by
-`ClusterFacingHostAddress` when the machine's own address is not routable.
+`ClusterFacingMachineAddress` when the machine's own address is not routable.
 `ResolveEnvForContext` yields no bootstrap proxy env for a managed
 `bootwright` selection, since the proxy does not exist yet. Rendered proxy
 vars echo the resolved (post-default, post-opt-out) proxy each consumer

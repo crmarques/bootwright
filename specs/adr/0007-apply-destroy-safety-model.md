@@ -40,24 +40,17 @@ residual state.
 Destruction also leaves a positive re-authorization trail. On destroy,
 Bootwright writes a per-cluster substrate release that records that the
 cluster's substrate was deliberately torn down and so authorizes the subsequent
-`apply` to reinstall it. The release is machine-granular: `destroy --machines`
-records (or merges) the released machine names into the cluster's record, a
-cluster-scoped destroy releases the whole cluster, and an apply consumes the
-release only for the machines it actually covered — a scoped apply shrinks the
-record to the still-released remainder. `--skip-unreachable` withholds the
-release for a partially destroyed storage cluster, and for infra-only,
-machine-scoped, or non-storage teardown where no equivalent per-node completion
-proof exists. A managed storage cluster whose completion report proves that no
-topology node was skipped still receives its release, so merely enabling the
-flag does not strand a fully destroyed cluster. Skipped nodes keep failing
-closed until a full destroy finishes.
-The release is a fail-safe token like the
-others here — its absence can only withhold, never manufacture, authority to
-reinstall — closing the window where a re-run after a destroy would otherwise
-have to guess whether a missing substrate is greenfield intent or an
-interrupted teardown. Because a bare-metal destroy defers the disk wipe to the
-reinstall, a release-authorized apply covering bare-metal managed-OS machines
-is the moment data is lost and still crosses the data-loss acknowledgment.
+`apply` to reinstall it. The release is a fail-safe token like the others here —
+its absence can only withhold, never manufacture, authority to reinstall —
+closing the window where a re-run after a destroy would otherwise have to guess
+whether a missing substrate is greenfield intent or an interrupted teardown.
+That asymmetry is also why a teardown without per-node completion proof
+withholds the release rather than granting it optimistically. Its granularity,
+the cases that withhold it, and how an apply consumes it are specified in
+[`state-model.md`](../state-model.md) ("CLI Contract"). Because a bare-metal
+destroy defers the disk wipe to the reinstall, a release-authorized apply
+covering bare-metal managed-OS machines is the moment data is lost and still
+crosses the data-loss acknowledgment.
 
 ### One explicit mode variable, enforced on both sides
 
@@ -102,16 +95,17 @@ rebuild of a matching object remains `destroy` then `apply`.
 Destructive authority flows through positive, fail-safe tokens — e.g. the
 storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can
-only under-authorize. Relaxations are narrow and explicit: `--include-unowned`
-lifts only per-VM marker refusals on destroy; nothing relaxes device
-data-safety checks. A lost Ceph cluster marker is recovered only through an
-operator-supplied `<StorageCluster>=<fsid>` confirmation. It is an explicit
-ownership attestation for that exact identity: the supplied fsid must match the
-declared seed's on-disk Ceph configuration, and any existing controller record
-must agree with that cluster and seed. A reachable live fsid must also agree,
-as a contradiction check rather than an authorization source. Only then may
-Bootwright reconstruct a missing controller record and host marker before the
-normal ownership gate runs again; contradictory evidence is never overwritten.
+only under-authorize. Relaxations are narrow and explicit: on destroy,
+`--include-unowned` lifts the machine-substrate marker refusals — per-VM
+markers plus the cluster's libvirt network and its KubeVirt DataVolumes — and
+nothing relaxes device data-safety checks. A lost Ceph cluster marker is
+recovered only through an operator-supplied `<StorageCluster>=<fsid>`
+confirmation, because an ownership attestation naming an exact identity is
+evidence an operator can supply and an inference cannot: Bootwright
+reconstructs the missing record only when the supplied fsid, any surviving
+controller record, and any reachable live fsid all agree, and never overwrites
+contradictory evidence. The gate list each flag does and does not relax is
+specified in [`state-model.md`](../state-model.md) ("CLI Contract").
 
 ### Destroy is the only remover, and it fails closed
 
@@ -187,20 +181,14 @@ names three fail-closed edges rather than one. The gating philosophy below is
 unchanged and still governs.
 
 The destroy task graph sequences independent stages with ordering dependencies,
-so a failed stage does not block later independent cleanup. Container-cluster
-records cleanup is the exception: it has a hard dependency on
-successful machine-infrastructure teardown because deleting cluster kubeconfigs
-or install records while an owned VM remains would erase the evidence and access
-needed to retry. Machine infrastructure is therefore removed before the records
-half of container teardown; when a KubeVirt host and child are selected
-together, child guests are
-deleted through the still-live host before the host's own machine substrate or
-kubeconfig is removed. Machine teardown uses child-before-host dependency order
-and rejects a KubeVirt host-reference cycle. An unreachable KubeVirt host
-holding a recorded guest fails closed even under `--skip-unreachable`; it is not
-evidence that the guest is absent. The
-decomposed task playbooks are constrained to split-equals-monolith: same
-`--limit`, same extra-vars, own `hosts:` selector.
+so a failed stage does not block later independent cleanup. Only a few edges are
+hard dependencies, and the reason is always the same: proceeding would erase the
+evidence or the access a retry needs — deleting cluster kubeconfigs or install
+records while an owned VM remains, or deleting a KubeVirt host's substrate while
+its guests survive. An unreachable KubeVirt host holding a recorded guest fails
+closed even under `--skip-unreachable`; it is not evidence that the guest is
+absent. The decomposed task playbooks are constrained to
+split-equals-monolith: same `--limit`, same extra-vars, own `hosts:` selector.
 
 ## Consequences
 

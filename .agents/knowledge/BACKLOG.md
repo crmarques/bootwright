@@ -13,14 +13,16 @@ learned; this file records what it still owes.
 - **Before deferring a review finding**, file an entry here in the same change
   that merges the review's accepted fixes, so the deferral is recorded where the
   next contributor will find it.
-- **Entry lifecycle.** An entry is deleted in the commit that lands its fix (the
-  commit subject references the ID); any durable lesson from the fix moves to the
-  owning `.agents/knowledge/` file. A rejected item is deleted and replaced by a
+- **Entry lifecycle.** An entry is deleted in the same commit that lands its fix;
+  git history is the archive. Any durable lesson from the fix moves to the owning
+  `.agents/knowledge/` file. A rejected item is deleted and replaced by a
   "evaluated and rejected, do not re-propose" note in the relevant knowledge
   file — the house pattern already used by
   [substrate-destroy-gate-no-shared-helper.md](substrate-destroy-gate-no-shared-helper.md)
-  and [openshift-kubevirt-agent-boot.md](openshift-kubevirt-agent-boot.md). The
-  catalog is live-only; git history is the archive.
+  and [openshift-kubevirt-agent-boot.md](openshift-kubevirt-agent-boot.md).
+- **An entry must be readable without the review that produced it.** `Origin` is
+  provenance, never the problem statement: `Problem` states the defect, the file,
+  and where it bites, so a reader who never saw the review can act on it.
 - **IDs** are `B-NNN`, assigned in order and never reused, even after deletion.
 - **Status** is `open` or `in-progress`.
 
@@ -117,59 +119,32 @@ learned; this file records what it still owes.
   FIPS gate; add classifier tests.
 - Related: [scoped-runs-render-vs-work-set.md](scoped-runs-render-vs-work-set.md)
 
-## B-010 — Secret first-class kind: Phase E
-- Status: open
-- Area: secrets / api
-- Origin: Secret first-class kind landing (Phase E deferred)
-- Problem: the Secret-kind migration landed Phases A–D; Phase E work was scoped
-  and deferred.
-- Exit: complete the deferred Phase E scope (recover its definition from the
-  landing change) or close it explicitly.
-- Related: [secret-index-resolution.md](secret-index-resolution.md), ADR 0016
-
-## B-011 — Scoped audit 2026-07-12: NFS and fabric-hash findings (H6)
+## B-011 — Storage NFS export and fabric-hash findings left unresolved
 - Status: open
 - Area: converge / storage
-- Origin: scoped audit 2026-07-12 (finding H6 and the fabric-hash finding)
-- Problem: the H6 NFS finding and the fabric-hash finding were consciously
-  deferred at merge time.
-- Exit: resolve or explicitly close both findings; capture any resulting rule in
-  the owning knowledge file.
-- Related: [converge-hash-drift-model.md](converge-hash-drift-model.md)
+- Origin: scoped audit 2026-07-12
+- Problem: two storage findings were deferred at merge time and their content
+  now exists nowhere but this entry: the NFS export path (service ordering and
+  export idempotency keyed `<serviceID>|<pseudo>`) and the host-scoped fabric
+  projection folded into the converge hash. Neither was reduced to a defect
+  statement, so the exact defect is no longer recoverable — treat this as
+  "re-audit those two surfaces", not as a known bug.
+- Exit: re-audit the NFS export and fabric-hash surfaces against current code;
+  either file a concrete defect entry or close this one as clean.
+- Related: [converge-hash-drift-model.md](converge-hash-drift-model.md),
+  [ceph-rgw-nfs-service-ordering.md](ceph-rgw-nfs-service-ordering.md)
 
-## B-012 — Lifecycle review 2026-07-12: deferred H1/H4/H5
-- Status: open
-- Area: converge / lifecycle
-- Origin: lifecycle review 2026-07-12 (findings H1, H4, H5)
-- Problem: three high findings from the lifecycle review were deferred rather
-  than fixed in the merged batch.
-- Exit: re-examine H1/H4/H5 against current code and resolve or close each.
-- Related: [apply-task-graph-planning.md](apply-task-graph-planning.md)
-
-## B-013 — Lifecycle fixes 2026-07-05: deferred scenarios W8–W17
-- Status: open
-- Area: converge / lifecycle
-- Origin: lifecycle review + fixes 2026-07-05 (scenarios W8–W17)
-- Problem: scenarios W8 through W17 from the 140-scenario lifecycle review were
-  deferred.
-- Exit: work through W8–W17, landing fixes or recording deliberate no-ops.
-- Related: [destroy-scoping-and-sweeps.md](destroy-scoping-and-sweeps.md)
-
-## B-014 — Flow review 2026-07-09: 6 deferred findings
-- Status: open
-- Area: converge / flow
-- Origin: 23-lane flow review 2026-07-09 (6 findings deferred of 49)
-- Problem: six flow-review findings were deferred after ~43 landed.
-- Exit: revisit the six deferred findings and resolve or close them.
-- Related: [apply-task-graph-planning.md](apply-task-graph-planning.md)
-
-## B-015 — Architecture recommendations 2026-07-06: Rec1 and Rec2
+## B-015 — Two architecture recommendations left unlanded: cephadopt package, plan-builder split
 - Status: open
 - Area: architecture
-- Origin: arch-recs branch 2026-07-06 (Rec1, Rec2 deferred)
-- Problem: two architecture recommendations were deferred after the others
-  landed (cephadopt package, plan-builder split).
-- Exit: evaluate Rec1 and Rec2 for landing now or record them as declined.
+- Origin: arch-recs branch 2026-07-06
+- Problem: two package-boundary recommendations were deferred after the rest
+  landed. (1) Extract the Ceph live-adoption logic into its own `cephadopt`
+  package instead of leaving it inside the diff/adopt path. (2) Split the apply
+  plan builder, which carries the whole task-graph construction in one unit.
+  Both are refactors with no behavior change; neither has a filed defect.
+- Exit: land either refactor or record it as declined in
+  [package-boundary-contracts.md](package-boundary-contracts.md).
 - Related: [package-boundary-contracts.md](package-boundary-contracts.md)
 
 ## B-016 — No reference example for the recommended boot-ISO install path
@@ -234,7 +209,7 @@ learned; this file records what it still owes.
 - Status: open
 - Area: addons / hooks
 - Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: a `ClusterAddonHook` target with the default `limit: firstReachable`
+- Problem: a `ClusterAddonStep` target with the default `limit: firstReachable`
   retries the next candidate machine on ANY error from the playbook run, not
   only a connection failure — `internal/converge/ansible` only surfaces a bare
   process-exit error, with no parsing of Ansible's per-host unreachable/failed
@@ -451,7 +426,9 @@ learned; this file records what it still owes.
   `60-` constant is pinned across `api/v1alpha1/types.go:87`
   (`NodeAccessSudoersPrefix`), ADR 0019:102, ADR 0024:148, ADR 0027:56,
   `specs/security.md:159`, `specs/state-model.md:323,578,1013`, and
-  `machine_os_install_anaconda/templates/ks.cfg.j2:208`, and renaming would
+  `machine_os_install_anaconda/templates/ks.cfg.j2:208` — plus four operator-facing
+  docs sites naming the path literally (`docs/troubleshooting.md`,
+  `docs/concepts/storage.md` twice, `docs/concepts/machines.md`) — and renaming would
   strand a privileged `60-` file on every already-provisioned node with no
   reconciler that removes it. Deferred rather than dropped because the failure is
   loud, not silent: `storage_node_access/tasks/verify.yml:11-36` refuses before
@@ -515,3 +492,130 @@ learned; this file records what it still owes.
   whichever key is authorized to the node-access argv, and pin the pairing with a
   test so the three proofs cannot silently lose their credential.
 - Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)
+
+## B-041 — The bootstrap-wait resume path is unvalidated without a hardware soak
+- Status: open
+- Area: container-clusters / install
+- Origin: ADR 0022 (cluster wait bootstrap boundary), stated as an open risk
+- Severity: medium
+- Problem: no test in this repository proves that `openshift-install agent
+  wait-for bootstrap-complete` returns promptly against a cluster whose bootstrap
+  already completed under an earlier release — no marker file, assisted-service
+  already gone. Only a real install and a real resumed install exercise it, so an
+  Accepted ADR is currently the repo's only record of an unproven behavior.
+- Exit: run one real install and one real resumed install on hardware, record the
+  observed `wait-for bootstrap-complete` behavior in
+  [cluster-install-record-gates.md](cluster-install-record-gates.md), and delete
+  this entry.
+- Related: ADR 0022, [cluster-install-record-gates.md](cluster-install-record-gates.md)
+
+## B-042 — Two StorageClusters sharing a node with different clusterSSH identities have no validation rule
+- Status: open
+- Area: ceph / node-access / validation
+- Origin: definitions review 2026-07-28 (recorded inline in
+  destroy-scoping-and-sweeps.md, never filed)
+- Severity: medium
+- Problem: `internal/state/desired/validate_storage_access.go` validates
+  `clusterSSH.user`/`keyRef` per cluster only; nothing rejects two managed
+  `StorageCluster` objects that list the same `Machine` in their topology under
+  different orchestration identities. The inventory renders one `ansible_user`
+  per node per run, so whichever cluster runs last wins and the node-access
+  reconciliation of the other silently orchestrates as an account it did not
+  provision.
+- Exit: add a cross-cluster validation rule (one orchestration identity per
+  shared node) with a named refusal and a test, or state the shared-node
+  restriction normatively in `specs/state-model.md`.
+- Related: [destroy-scoping-and-sweeps.md](destroy-scoping-and-sweeps.md),
+  [ceph-nonroot-node-access.md](ceph-nonroot-node-access.md)
+
+## B-043 — Seven `Machine.spec.capabilities[]` values have no enforcement site
+- Status: open
+- Area: api / validation
+- Origin: definitions review 2026-07-28
+- Severity: low
+- Problem: of the eleven accepted values, only `openshift-node`, `ceph-node`,
+  `libvirt` and `container-runtime` are read anywhere —
+  `internal/state/desired/validate_machine.go` cross-checks the first three
+  against an existing reference and `internal/roles/registry.go` asserts the last
+  two as host properties. `ceph-admin`, `artifact-server`, `load-balancer`,
+  `proxy`, `name-resolution`, `ntp` and `registry` appear only in the accept-list
+  at `validate_machine.go:13-24`; they render into inventory
+  (`internal/render/inventory/vars.go`) but no playbook consumes them, so
+  authoring or omitting them changes nothing.
+- Exit: give each remaining value an enforcement site, or retire it — removal
+  from `v1alpha1` is an API break and needs its own ADR.
+- Related: [api-normalize-bookkeeping.md](api-normalize-bookkeeping.md)
+
+## B-044 — No removal path for `spec.ceph.config` entries and `mgrModules[]`
+- Status: open
+- Area: ceph / apply-modes
+- Origin: definitions review 2026-07-28 (hedge removed from specs/state-model.md)
+- Severity: low
+- Problem: storage convergence is additive-only across `spec.ceph.config` and
+  `mgrModules[]` (`specs/state-model.md`): deleting an entry from desired state
+  leaves it set on the cluster and no apply removes it. That is an instance of
+  the product-wide "deleting YAML never deletes live state" invariant, but unlike
+  a machine or a cluster there is no `destroy` scope that retires an individual
+  config key or mgr module either, so the only removal is out of band.
+- Exit: decide whether a scoped removal belongs to `destroy` at all (it crosses
+  the destroy-authorization boundary ADR 0007 owns) or stays out of band, and
+  record the answer where the additive-only rule is stated.
+- Related: [ceph-override-structural-rebuild.md](ceph-override-structural-rebuild.md)
+
+## B-045 — `access.rootLogin: revoke` is Ceph-only because no other executor exists
+- Status: open
+- Area: machines / node-access
+- Origin: definitions review 2026-07-28
+- Severity: low
+- Problem: `internal/state/desired/validate_machine.go` accepts `revoke` only on
+  a machine some managed Ceph `StorageCluster` lists under a non-root
+  `clusterSSH.user`. The reason is not that other machines lack an account — it
+  is that the revoke is executed solely by the `storage_node_access` role against
+  `bootwright_storage_hosts`, so on any other machine the field would be inert.
+  An operator who wants root SSH revoked on a bastion or a load-balancer host has
+  no path.
+- Exit: add a generic day-2 node-hardening role that can execute the revoke on
+  any machine with a non-root `access.ssh` arm, then widen the validator; or
+  record the Ceph-only scope as deliberate in the owning spec.
+- Related: [ceph-nonroot-node-access.md](ceph-nonroot-node-access.md)
+
+## B-046 — CA-trust references are spelled four different ways across the API
+- Status: open
+- Area: api / grammar
+- Origin: definitions review 2026-07-28 (corporate-certificates trust-site sweep)
+- Severity: low
+- Problem: the same concept — "a Secret holding CA certificates to trust" — is
+  authored under four names: `additionalTrustBundleRefs`
+  (`api/v1alpha1/containercluster.go:43`), `caBundleRefs`
+  (`environment.go:220`), `trustBundleRef` (`environment.go:228,243`;
+  `entitlement.go:55,62`) and `trustRefs` (`machine.go:198`). ADR 0014's grammar
+  fixes the `Ref`/`Refs` suffix but not the noun, so an author cannot predict the
+  field name for a new trust site.
+- Exit: converge on one noun for the whole API (a `v1alpha1` break — needs an
+  ADR amending 0014), or record the four spellings as deliberate with the reason
+  each differs.
+- Related: ADR 0014
+
+## B-047 — Neither SSH credential has a rotation path
+- Status: open
+- Area: security / secrets
+- Origin: definitions review 2026-07-28 (security.md claims without a contract)
+- Severity: medium
+- Problem: `specs/security.md` sells the non-root posture on "a credential that
+  can be rotated or revoked without touching the root account", but no rotation
+  path exists for either key. `Environment.spec.machineAccess.keyRef` is
+  authorized exactly once, by the kickstart (`sshkey --username={{ ssh_user }}`,
+  `ks.cfg.j2:118`); no machines-phase role touches `authorized_keys`, so rotating
+  the Secret bytes strands every installed machine and the ownership probe then
+  fails closed. Renaming that Secret additionally reads as structural drift,
+  because the install-marker hash uses the basename of `sshPublicKeyPath`
+  (`internal/render/inventory/vars_machine_os_marker.go:29-31`). For
+  `cephadm.clusterSSH.keyRef` the node side does re-authorize a new public key
+  (`storage_node_access/tasks/authorize.yml:33-44`), but nothing reconciles the
+  mon config-key private half: `ssh_user.yml` runs `ceph cephadm set-user` only,
+  and there is no `set-priv-key` anywhere in the collection.
+- Exit: specify and implement a rotation contract for both keys (re-authorize on
+  the node, re-key the mon config-key store, re-stamp the marker), or state
+  plainly in `specs/security.md` that both are install-time credentials today.
+- Related: [ceph-nonroot-node-access.md](ceph-nonroot-node-access.md),
+  [ssh-trust-store-invariants.md](ssh-trust-store-invariants.md)

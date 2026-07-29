@@ -186,8 +186,8 @@ spec:
 | `proxyFor.machineOSInstall` | The managed-OS (Anaconda) install fetch — the `rhsm`/`url`/`repo` Kickstart directives. |
 
 With no proxy marked `default: true`, an empty slot means *no proxy for that
-consumer* (the pre-default behaviour) — you then name a proxy in each slot that
-should be proxied, exactly as an override.
+consumer* — you then name a proxy in each slot that should be proxied, exactly
+as an override.
 
 A managed-OS boot ISO carries no packages, so the node reaches its install tree
 or the Red Hat CDN over the network during install; on a proxied estate that
@@ -239,12 +239,13 @@ spec:
         # endpointRef: <endpoints[] entry on egress-proxy>  # optional
 ```
 
-!!! warning "Managed proxies are not available at bootstrap"
-    A managed proxy is created by infrastructure convergence, so `bastion setup`
-    cannot depend on a managed `proxyFor.bootwright` selection: the proxy does
-    not exist yet when the bastion is prepared. Use an external proxy for
-    bootstrap, or expect Bootwright to skip managed-proxy use for its own runtime
-    actions until after the proxy component has converged. `machineOSInstall`
+!!! warning "A managed `proxyFor.bootwright` yields no proxy at all"
+    A managed selection for `proxyFor.bootwright` yields **no** proxy
+    environment for Bootwright's own controller-side actions — not at bootstrap
+    and not after convergence, because the resolver keys off the *declared*
+    management mode, never the component's state. Today the only affected
+    surface is `bastion setup`. Point `proxyFor.bootwright` at an external proxy
+    (or `none`) if the controller must egress through one. `machineOSInstall`
     never runs after convergence, so a managed selection there is rejected at
     validation rather than silently skipped (see above).
 
@@ -281,7 +282,7 @@ because that pinning cannot resolve a Satellite named only by FQDN, when the
 entitlement names a Satellite the node also resolves it (`getent`) and, if its
 address falls inside a `noProxy` CIDR, drops the proxy from rhsm.conf entirely so
 the internal Satellite is reached directly. To bypass an internal Satellite, list
-its domain or hostname in `noProxy` — a CIDR alone is now handled too, but a
+its domain or hostname in `noProxy` — a CIDR alone is handled too, but a
 domain/host entry is the most direct.
 
 ### Container image pulls (cephadm / podman)
@@ -518,6 +519,7 @@ before the first `preflight`/`apply` rather than relying on trust-on-first-use:
 bootwright machine trust
 ```
 
-See [Operations & recovery](operations.md) and the
+See [Troubleshooting → SSH or artifact fetch failures](../troubleshooting.md#ssh-or-artifact-fetch-failures),
+[Ownership, idempotency & safety](ownership-and-safety.md), and the
 `sno-libvirt-redfish-disconnected-services` example, which layers a `machine trust`
 step into its disconnected walkthrough.

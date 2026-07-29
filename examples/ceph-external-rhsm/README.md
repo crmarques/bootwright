@@ -8,20 +8,36 @@ organization or activation-key secrets. Registry login still comes from the
 entitlement (`registry.credentialsRef`).
 
 The corporate registration runs as the `corporate-rhsm` `CustomPlaybook`
-anchored at `stage: deps, timing: before` — after the machines-phase work has
-put the OS in place, and gating the `deps` sub-phase where Bootwright installs
-the Ceph dependencies. With the default `failureMode: fail`, a failed
-registration blocks the Ceph work instead of failing later inside package
-installs. The shipped playbook is
-a stub; replace `custom-playbooks/playbooks/corporate-rhsm.yml` with the
-site playbook (vendored roles/collections go next to it, see the
-provisioning-playbooks concept page).
+anchored with `gates: deps` — after the machines-phase work has put the OS in
+place, and gating the `deps` sub-phase where Bootwright installs the Ceph
+dependencies. With the default `onFailure: fail`, a failed registration blocks
+the Ceph work instead of failing later inside package installs. The shipped
+playbook is a stub; replace `custom-playbooks/playbooks/corporate-rhsm.yml`
+with the site playbook (vendored roles/collections go next to it, see
+[Custom playbooks](../../docs/concepts/custom-playbooks.md)).
 
 The registration playbook must leave every storage node able to install the
 RHEL BaseOS/AppStream and `rhceph-*-tools` packages (activation-key repo sets,
 a Satellite content view, or an internal mirror all work); Bootwright verifies
 package availability fail-closed when installing `cephadm`. Ceph client
 commands run through `cephadm shell`.
+
+## Edit First
+
+- `environment.yaml`: the fleet name and `domains.base`.
+- `machine.yaml`: the provided storage node — its `ssh` address, login user, and
+  `access.ssh.auth.privateKeyRef`.
+- `secrets.yaml`: `ceph-cluster-ssh` (generated — the cephadm cluster key),
+  `ceph-node-ssh` (points at a local private-key file), and
+  `redhat-registry-credentials`.
+- `rhcs.yaml`: the `redhat-ceph` `Entitlement` — `rhsm.management: external`
+  plus the registry credential reference.
+- `storage.yaml`: `spec.ceph.release`, the cephadm bootstrap node, and the node
+  topology.
+- `custom-playbooks/corporate-rhsm.yaml`: the gating `CustomPlaybook` — its
+  `gates` anchor and `target.clusters`.
+- `custom-playbooks/playbooks/corporate-rhsm.yml`: the stub playbook to replace
+  with the site registration.
 
 ## Credentials to supply
 

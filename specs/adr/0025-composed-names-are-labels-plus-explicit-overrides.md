@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implemented)
+Accepted
 
 ## Context
 
@@ -54,19 +54,24 @@ nodes:
 - `nodes[].fqdn` is optional and must be a DNS subdomain. When set it is the
   node's FQDN verbatim, unaffected by the cluster zone.
 - `name` remains required even when `fqdn` is set: it is the node's identity
-  within the cluster, independent of the machine name, and is what
-  `placement.hosts[]` and the bootstrap node reference resolve against.
+  within the cluster, independent of the machine name.
+
+`Normalize` resolves each node's FQDN — composed, or the authored `fqdn`
+verbatim — back into `name`, so from normalization onwards `name` holds the
+FQDN. Every surface that references a node (`placement.hosts[]`,
+`bootstrap.node`, the stretch tiebreaker, CLI `--node`) accepts either that
+FQDN or its leftmost label, so an operator may keep authoring the label.
 
 This refines ADR 0017: the node-identity model, the uniqueness rule, and every
 downstream use of the composed FQDN stand unchanged — only the way the verbatim
 override is authored moves from "a value with a dot in it" to a named field. The
 `Machine.fqdn` address, whose two-field shape this generalizes, is untouched.
 
-Because `Normalize` resolves each node's FQDN into `name` before `Validate`
-runs, the label rule is enforced on the authored input during load, ahead of
-normalization. A state that is normalized before validation therefore cannot
-re-derive the violation — this is a decode-shape rule, like strict unknown-field
-rejection, not a rule `Validate()` re-checks.
+Because that resolution happens before `Validate` runs, the label rule is
+enforced on the authored input during load, ahead of normalization. A state
+that is normalized before validation therefore cannot re-derive the violation —
+this is a decode-shape rule, like strict unknown-field rejection, not a rule
+`Validate()` re-checks.
 
 ## Consequences
 

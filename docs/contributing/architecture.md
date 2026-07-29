@@ -8,11 +8,13 @@ description: The Bootwright execution pipeline, convergence classifier, and rend
 This page is the contributor-facing deep dive behind the user-facing model in
 [The desired-state model](../concepts/index.md). The normative contract is
 [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md);
-this page does **not** restate it. It keeps only the material a contributor needs
-that the spec does not spell out — execution identities, the normalize examples,
-the corrected diff semantics, the rendered-input inspection workflow, and the
-extension checklists — and links into the spec for everything else. When this
-page and the spec disagree, the spec wins — please fix this page.
+this page summarizes rather than restates it. It keeps the material a
+contributor needs that the spec does not spell out — execution identities, the
+normalize examples, the corrected diff semantics, the rendering and
+ownership-record contracts as one teaching copy, and the rendered-input
+inspection workflow — and links into the spec for everything else. The
+extension checklists live on [API](api.md). When this page and the spec
+disagree, the spec wins — please fix this page.
 
 For the user-facing mental model first, read these once and do not expect them
 repeated here:
@@ -31,9 +33,9 @@ repeated here:
 Bootwright is a desired-state loader, validator, renderer, and idempotent apply
 pipeline: `load and strict decode -> normalize defaults -> validate ownership and
 references -> render effective state and tool inputs -> apply substrate, machine
-OS, storage, cluster, and add-on phases`. `status`, `diff`, `render`, `plan`, and
-`validate` are read-only verbs, not pipeline stages: they observe the same model
-without mutating it.
+OS, storage, cluster, and add-on phases`. The read-only verbs (see
+[API → Decide whether the verb is read-only](api.md#decide-whether-the-verb-is-read-only))
+are not pipeline stages: they observe the same model without mutating it.
 
 The full layer breakdown — the durable run ledger and lease, per-cluster install
 records, the agent-install dependency stages and post-install add-on wait, the
@@ -48,9 +50,9 @@ stages (`machine-infra`, install-wait, add-on apply) are **not** the CLI
 
 ### Normalize before render
 
-A default consumed by more than one stage is materialized by the normalize
-phase, and both validators and renderers read the normalized value rather than
-recomputing it. Examples: an omitted endpoint `source.type` becomes `openshift`;
+The rule is stated in
+[API → Where validation and normalization live](api.md#where-validation-and-normalization-live);
+what it materializes: an omitted endpoint `source.type` becomes `openshift`;
 the derived platform render mode; an `api-int` copy of `api`; the default cluster
 and service networks; `distribution: openshift`; a defaulted `attachmentRef`. Run
 `render effective` to see these materialized values. A diagnostic on any
@@ -74,19 +76,17 @@ distinct execution identities so that ownership and privilege stay explicit:
 - Controller-local Ansible work uses localhost inventory and `become` only for
   the tasks that intentionally mutate controller state.
 
-The desired-state ownership boundary holds throughout: physical machine facts do
-not move into cluster intent, and cluster release intent does not move into
-environment defaults. That keeps provider swaps and release changes explicit. See
-[The desired-state model → Object ownership](../concepts/index.md#object-ownership)
-for the full ownership table.
+The desired-state ownership boundary holds throughout these identities; the full
+ownership table is in
+[The desired-state model → Object ownership](../concepts/index.md#object-ownership).
 
 ## Convergence and the four-outcome classifier
 
-Each mutating workflow task runs under its resource lock, derives a non-secret
-desired hash and a Bootwright owner identity, and writes a durable
-**convergence-safety record**. The records classifier compares that recorded
-evidence against current desired state and yields four outcomes — `missing`,
-`match`, `drift`, `foreign` — specified in
+Each mutating workflow task writes a durable **convergence-safety record** — a
+non-secret desired hash plus a Bootwright owner identity — under its resource
+lock. The records classifier compares that recorded evidence against current
+desired state and yields four outcomes — `missing`, `match`, `drift`, `foreign`
+— specified in
 [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md)
 and summarized for operators in
 [The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift).
@@ -205,24 +205,16 @@ until the operator runs `make build`. See
 
 ## Extending the providers
 
-Provider adapters consume capability arms — machine profiles for `libvirt`,
-`vsphere`, and `kubevirt`, explicit machines for `baremetal` — instead of
-inferring behavior from names, and all four are apply-supported today. Adding a
-substrate means adding a capability arm, validation, renderer support, and an
-apply adapter, without moving physical facts into cluster intent; provider and
-BMC behavior must come from capability discovery and advertised metadata before
-any supplier-specific branching, and adapters should reuse the official CLI
-capabilities of the tools Bootwright drives (for example
-`openshift-install agent wait-for install-complete`) before adding custom
-orchestration. The narrative contract is in
+The rules a provider adapter follows — capability arms instead of name
+sniffing, capability discovery and advertised metadata before any
+supplier-specific branching, the official CLI of a tool Bootwright already
+drives before custom orchestration — are in
 [`specs/architecture.md` → Providers](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md).
 
 The step-by-step checklists for **adding a substrate adapter** and **adding a
 managed service** live in one place, on [API](api.md#adding-a-substrate-adapter)
-— they are extension walkthroughs, and keeping them beside "adding a CLI verb"
-stops the two lists from drifting apart. The full per-field schema is in
-[The desired-state model](../concepts/index.md), and the normative contract lives
-in
-[`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md)
-and
-[`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md).
+— keeping them beside "adding a CLI verb" stops the lists from drifting apart.
+The full per-field schema is in
+[The desired-state model](../concepts/index.md), and the API grammar a new field
+must follow is
+[`specs/adr/0014-api-grammar.md`](https://github.com/crmarques/bootwright/blob/main/specs/adr/0014-api-grammar.md).

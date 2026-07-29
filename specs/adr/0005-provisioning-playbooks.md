@@ -22,7 +22,8 @@ decision was taken; renamed by [ADR 0026](0026-custom-playbook-kind-name.md)),
 that runs one
 operator-supplied Ansible playbook (with optional vendored roles/collections)
 against machines, anchored to one of the five provisioning sub-phases
-(`fabric`, `machines`, `deps`, `base`, `add-ons`) with `before`/`after` timing.
+(`fabric`, `machines`, `deps`, `base`, `add-ons`) through `spec.gates` or
+`spec.follows`.
 It is authored as desired-state YAML and executed by the normal `apply` flow
 through the existing scheduler and `ansible.CommandRunner`; there is no new
 imperative CLI verb. Playbooks flow through `apply`/`plan`/`validate`/`diff`
@@ -59,12 +60,16 @@ dirs append. The loader skips `playbooks/`, `roles/`, and `collections/`
 directories (Ansible content, frequently sequence-shaped and unparseable as
 bootwright objects) while `context init` still copies them.
 
+Superseded in part by [ADR 0021](0021-external-playbook-content.md): vendored
+trees are no longer the only supported delivery — `spec.source` may name an
+external directory or a pinned git repository.
+
 ### DAG anchoring and scoping
 
-A playbook lowers into the capability DAG as an ordinary `ApplyTask`. An `after`
-playbook waits for its stage's core tasks in scope; a `before` playbook gates
-every core task of its stage in scope (a hard dependency, or a soft ordering
-dependency when `failureMode: continue`) and itself waits for the previous
+A playbook lowers into the capability DAG as an ordinary `ApplyTask`. A
+`follows` playbook waits for its stage's core tasks in scope; a `gates` playbook
+gates every core task of its stage in scope (a hard dependency — `gates` may not
+be combined with `onFailure: continue`) and itself waits for the previous
 stage's tasks. It is planned only when its stage is in the run's phase set and its
 target resolves to at least one in-scope host; an unresolved target is skipped
 rather than run fleet-wide (an empty `--limit` would target every host).
@@ -75,18 +80,15 @@ rather than run fleet-wide (an empty `--limit` would target every host).
   content-and-spec input hash only (`run: onChange` skips an unchanged run;
   `run: always` re-runs every apply). It cannot observe what a playbook did on a
   node. This is the honest contract, documented as such.
-- The five sub-phase names are shared vocabulary: `api/v1alpha1.ProvisioningStages()`
-  is the single source of truth, pinned to `internal/converge.SubPhaseStageNames()`
-  by a guard test (the leaf API package cannot import converge).
+- The five sub-phase names are shared vocabulary: the anchor list in
+  `api/v1alpha1` (`CustomPlaybookAnchors()`) is the single source of truth,
+  pinned to `internal/converge.SubPhaseStageNames()` by a guard test (the leaf
+  API package cannot import converge).
 
 ### Deliberately not done
 
-- Galaxy `requirements.yml` network install.
-
-Superseded in part by [ADR 0021](0021-external-playbook-content.md): vendored
-trees are no longer the only supported delivery — `spec.source` may name an
-external directory or a pinned git repository. The deferral of Galaxy
-`requirements.yml` installs in the apply path stands.
+- Galaxy `requirements.yml` network install. The deferral stands under
+  ADR 0021, which adds a distinct pinned fetch instead.
 - A `ClusterAddonProfile`/`Binding`-style reuse trio (a playbook is self-contained
   with its own target and inputs).
 - A `--playbook <name>` single-object CLI filter or an imperative `run-playbook`

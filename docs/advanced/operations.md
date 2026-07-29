@@ -1,6 +1,6 @@
 ---
 title: Operations and Recovery
-description: The three apply modes including break-glass --converge-drifted and greenfield --expect-new, full-lifecycle and staged destroy, destroyProtection and the destroy-authorization boundary, focused --stage/--clusters recovery, managed-OS reinstall and owned-Ceph rebuild, removing the artifact server, diff drift, --include-unowned / --skip-unreachable, run timings and the critical path, and the concurrency caps.
+description: How to recover, rerun, and tear down an applied context safely — the apply modes, the destroy stages and their authorization gates, and the run observability that shows what a run did.
 ---
 
 # Operations and recovery
@@ -28,11 +28,6 @@ drifted owned-object rebuild). See
 [Apply modes](../concepts/index.md#apply-modes) for the full model; the rest of
 this section covers the operational contract that this page owns.
 
-!!! note "`--expect-new` and `--converge-drifted` cannot be combined"
-    `--expect-new` asserts greenfield (fail if any selected object exists);
-    `--converge-drifted` authorizes rebuilding objects that already exist. They express
-    opposite intents.
-
 !!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--converge-drifted`"
     Adding an OSD device to a `spec.ceph.topology` node reconciles **in place**:
     a bare `apply` classifies an OSD-device-only change as reconcilable (not
@@ -55,8 +50,8 @@ non-Bootwright owner holds.
 authorizes the *data loss* it entails. When a run would destroy data, it stops at
 an interactive prompt — `Confirm this DESTRUCTIVE action (accept data loss)?` —
 and proceeds only on `y`. For automation, pass `--confirm-data-loss` alongside
-`--yes`; `--yes` on its own skips only the ordinary confirmation and **never**
-authorizes data loss, so a destructive rebuild under `--yes` without
+`--yes`; on `apply`, `--yes` on its own skips only the ordinary confirmation and
+**never** authorizes data loss, so a destructive rebuild under `--yes` without
 `--confirm-data-loss` fails closed. The same acknowledgement authorizes the two
 storage data-loss operations: the `all: true` OSD auto-reclaim that zaps dirty
 declared disks before an OSD apply, and an explicit `--reclaim-devices` run
@@ -81,16 +76,40 @@ often miss:
     destroy authorization boundary. (`--dry-run` still previews the override
     plan.)
 
+    The single exception is `--reclaim-devices`: on a protected context it
+    *requires* `--converge-drifted` as the protected-data-loss authorization,
+    because routing a single-disk reclaim through `destroy` would demand
+    destroying the whole cluster. See
+    [Reclaiming OSD disks](#managed-os-reinstall-and-owned-ceph-rebuild).
+
 So there are two distinct rebuild paths, and which one you use depends on
 whether the context is protected:
 
-- **Protected context** — rebuild crosses the destroy boundary. Run
-  `destroy --force` for the affected scope, then re-apply:
+- **Protected context** — rebuild crosses the destroy boundary. Which `destroy`
+  depends on what the rebuild would touch, because machine substrate is torn
+  down by the infra stage and never by the clusters stage. Run the destroy the
+  refusal names, then re-apply:
 
   ```text
-  bootwright destroy --stage clusters --clusters ocp-3node --force
-  bootwright apply --stage clusters --clusters ocp-3node --yes
+  # A cluster rebuild
+  bootwright destroy --clusters ocp-3node --force
+
+  # A machine or managed-OS rebuild
+  bootwright destroy --stage infra --clusters ocp-3node --force
+
+  # A scope covering both: the infra destroy first, then the clusters destroy
+  bootwright destroy --stage infra --clusters ocp-3node --force
+  bootwright destroy --clusters ocp-3node --force
+
+  # Then re-apply
+  bootwright apply --clusters ocp-3node --yes
   ```
+
+  A rebuild routed to the wrong stage loops: a `--stage clusters` destroy never
+  reaches the machine substrate, so the next apply finds the same drift. Add
+  `--skip-unreachable` (which itself requires `--force`) when a machine's host
+  substrate was never provisioned or is powered off — the refusal prints that
+  hint too.
 
 - **Unprotected context** — a single `apply --converge-drifted` performs the
   Bootwright-owned destructive rebuild in place:
@@ -141,7 +160,12 @@ bootwright destroy --stage infra
 
 `destroy --dry-run` renders and prints the ordered teardown commands without
 executing; `--output json` is accepted only with `--dry-run` and reports the
-ordered task chain. `--yes` skips the confirmation prompt and nothing more.
+ordered task chain. `--yes` skips the confirmation prompt and nothing more —
+but note the asymmetry with `apply`: when the teardown covers a storage cluster
+that prompt *is* the data-loss acknowledgement
+(`Confirm this DESTRUCTIVE action (accept data loss)?`), so `destroy --yes`
+authorizes the `cephadm rm-cluster --zap-osds`. `--confirm-data-loss` exists
+only on `apply`.
 
 ### Bounded, ownership-gated cleanup
 
@@ -206,8 +230,9 @@ still-live component keeps its shared ledger and run log, pruning only the
 purged component's own task directories and log. It leaves the destroy
 authorization trail (the substrate-release record that lets a later `apply`
 reinstall the same name) and unrelated context state (the ownership store,
-input-history rollback snapshots) untouched, and has nothing to remove for the
-artifact-server literal.
+input-history rollback snapshots) untouched, and is **rejected** with the
+artifact-server literal (`--stage infra --clusters artifact-server`), which has
+no per-component history — drop the flag.
 
 !!! warning "Not recoverable"
     Purged history is gone for good — there is no undo. Skip `--purge-history`
@@ -220,10 +245,12 @@ context against accidental teardown. The field accepts `allow` or
 `requiredOverride`; empty means `allow`, and protection is **never** inferred
 from environment, context, label, or cluster names.
 
-When the selected state sets `requiredOverride`, `destroy --stage infra` and
-`destroy --stage clusters` both require `--force` to proceed:
+When the selected state sets `requiredOverride`, `destroy` requires `--force` to
+proceed — with or without `--stage`, so the unscoped full-lifecycle teardown is
+covered first, as are `--stage infra` and `--stage clusters`:
 
 ```text
+bootwright destroy --force
 bootwright destroy --stage clusters --force
 ```
 
@@ -295,9 +322,14 @@ maintenance.
   sub-phase name runs that one phase, a family name runs that family's phases;
   `--through` alone runs from the very beginning up to and including the named
   phase (a cumulative build-out); `--through end` runs through to the last phase.
-  They are accepted by `apply`, `plan`, and `diff` (not `destroy`) and take the
-  same family and sub-phase names as `--stage`. A range that starts past the
-  first phase assumes the earlier phases already applied and reports which ones:
+  `--through` — and the sub-phase names — are accepted by `apply`, `plan`, and
+  `diff`; `destroy` accepts `--stage` with the two family values only. A family
+  name used as a range endpoint resolves to that family's boundary sub-phase: as
+  `--stage` it starts at the family's first sub-phase, as `--through` it ends at
+  the family's last — so `--through infra` equals `--through machines`,
+  `--stage clusters` starts at `deps`, and `--through clusters` is the full
+  graph. A range that starts past the first phase assumes the earlier phases
+  already applied and reports which ones:
 
   ```text
   # From the beginning up to and including machines
@@ -328,17 +360,11 @@ maintenance.
   ```
 
 !!! note "Check before you rebuild"
-    `bootwright diff` is **live by default**: it probes the selected clusters
-    read-only — Ceph discovery on the seed, a shallow `ClusterVersion` check per
-    container cluster — and prints the desired-vs-real differences, exiting `3` on
-    any difference. So plain `diff` **does** catch an out-of-band change — a wiped
-    disk, an undefined VM, a deleted namespace — wherever discovery reaches it.
-    For a fast offline check, `bootwright diff --recorded` skips all cluster
-    contact and classifies each root as `missing`, `match`, `drift`, or `foreign`
-    against the last recorded apply; that variant is the one blind to out-of-band
-    changes until the next apply refreshes the record. `bootwright plan` (or
-    `apply --dry-run`) shows the task graph a selection would run. Use them to
-    confirm the scope before applying.
+    `bootwright diff` is **live by default** and exits `3` on any difference;
+    `diff --recorded` is the fast offline variant — see
+    [Comparing against live cluster state](#comparing-against-live-cluster-state).
+    `bootwright plan` (or `apply --dry-run`) shows the task graph a selection
+    would run. Use them to confirm the scope before applying.
 
 ### KubeVirt child clusters do not auto-include their parent
 
@@ -362,6 +388,7 @@ What a deletion means depends on the kind:
 | A `ContainerCluster.spec.nodes[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--converge-drifted` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
 | A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
 | A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
+| A `topology.osdDrivegroups[]` / `devices[]` device path that still hosts an OSD | `apply` **fails closed** — cephadm never auto-removes an OSD, so dropping the device would orphan a running one (see the OSD-growth tip above). | Drain it first — `cephadm shell -- ceph orch osd rm <id>` — then remove the path. |
 
 Removal always crosses the destroy authorization boundary or goes out of band;
 `apply` alone never prunes.
@@ -395,6 +422,10 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     for the full convergence contract.
 
 !!! warning "Reclaiming OSD disks after a managed-OS reinstall"
+    On a protected context this is the one path where `--converge-drifted` is
+    the authorization rather than a refusal — see
+    [The three apply modes](#the-three-apply-modes).
+
     Bootwright records which disks it provisioned as OSDs in an on-node marker.
     A managed-OS reinstall wipes the OS disk (and that marker) while the separate
     OSD **data** disks keep their ceph LVM, so a plain re-apply would refuse those
@@ -450,7 +481,9 @@ bootwright diff --clusters ceph-storage --adopt
 
 For a fast, no-contact check in automation, `--recorded` compares desired state
 against the last recorded apply instead of the live clusters (the classification
-report described under [Ownership & safety](ownership-and-safety.md)).
+report described under [Ownership & safety](ownership-and-safety.md)). That
+variant is the one blind to out-of-band changes — a wiped disk, an undefined VM,
+a deleted namespace — until the next apply refreshes the record.
 
 ## Force-destroying renamed or unmarked machines
 
@@ -463,18 +496,21 @@ marker, so the teardown no longer recognizes it as its own and stops with
 "it carries no Bootwright ownership marker for this context/cluster/machine".
 
 `--include-unowned` is the recovery path: it tells the machine-substrate teardown
-to remove a matching VM despite a missing or mismatched marker. Machine
-substrate is torn down by the infra stage, so combine it with `--stage infra`
-(a clusters-only destroy never runs the machine-substrate teardown and refuses
-the flag).
+to remove a matching VM despite a missing or mismatched marker. Use it on a
+scope that tears down machine substrate — `--stage infra` (optionally with
+`--clusters`), or the default no-`--stage` full destroy. A `--stage clusters`
+run never reaches the machine-substrate teardown and refuses the flag.
 
 ```text
 bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
 ```
 
-!!! warning "`--include-unowned` is scoped to machine VMs"
-    It relaxes only the libvirt/KubeVirt/vSphere per-VM ownership-marker
-    refusals. It does **not** relax the Ceph cluster or OSD-device ownership
+!!! warning "`--include-unowned` is scoped to the machine layer"
+    It relaxes the libvirt/KubeVirt/vSphere per-VM ownership-marker refusals
+    **and** the same refusal on the cluster's libvirt network and its KubeVirt
+    DataVolumes. The network is the widest surface it lifts: removing an unowned
+    libvirt network can strand VMs of another context that use it.
+    It does **not** relax the Ceph cluster or OSD-device ownership
     gates, and it never relaxes the device data-safety checks (a mounted,
     in-use, or unprobeable device still fails closed). It is independent of
     `--force` (protected-environment teardown) and does not imply `--yes`.
@@ -595,7 +631,8 @@ storage-cluster teardown under its own ownership and device-safety gates (above)
 
 ## Surfacing redacted output with `--verbose`
 
-`apply` and `destroy` redact credential-handling task output by default: secret
+Every command that drives Ansible — `preflight` (all scopes), `diff`, `apply`,
+and `destroy` — redacts credential-handling task output by default: secret
 material shows as `censored due to no_log` in both the terminal and the persisted
 run log. `--verbose`/`-v` disables that `no_log` redaction so the same output is
 printed in full.
@@ -608,8 +645,9 @@ bootwright apply --clusters ceph-nprd --verbose
     With `--verbose` set, secret bytes that are normally censored — BMC, registry,
     RHSM, and proxy credentials, tokens, and generated Ceph keys — reach both the
     terminal and the `0600` run log under `runs/history/<run-id>/`. It is an
-    opt-in debugging aid only; default runs stay redacted. Avoid it on shared
-    terminals and scrub any logs captured during a verbose run.
+    opt-in debugging aid only; default runs stay redacted. This applies equally
+    to a verbose `preflight`, which reads the same credentials. Avoid it on
+    shared terminals and scrub any logs captured during a verbose run.
 
 ## Timing a run and reading its critical path
 
@@ -669,7 +707,9 @@ record if you want to track run cost across releases.
 !!! note "Flag combinations"
     `--run` is only accepted together with `--timings`, and `--timings` cannot be
     combined with `--watch` — a timing report describes a run, `--watch` follows
-    one. Without `--run`, the report covers the current run ledger.
+    one. Without `--run`, the report covers the current run ledger. `--watch`
+    takes `--watch-interval <duration>` for its refresh interval and is text-only:
+    combining it with `--output json` is rejected.
 
 ### Profiling the Ansible tasks inside a run
 
@@ -721,11 +761,10 @@ used, and prints `unbounded` for a cap that never constrained the graph — a ca
 reported that way is not the thing making the run slow.
 
 !!! warning "The per-host cap of 4 throttles libvirt VM creation"
-    The per-host cap counts every task targeting the same host, so on a lab where
-    one hypervisor backs the whole fleet, virtual machines are now created four
-    at a time instead of all at once. That is deliberate — an unbounded fan-out
-    onto a single libvirtd is how storage pools and `virsh` calls start timing
-    out — but it is a change in behaviour for large single-hypervisor labs. If
+    The per-host cap counts every task targeting the same host, so a lab where
+    one hypervisor backs the whole fleet creates four virtual machines at a time.
+    That is deliberate — an unbounded fan-out onto a single libvirtd is how
+    storage pools and `virsh` calls start timing out. If
     the hypervisor has the headroom, raise
     `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST`; `status --timings` shows what the
     cap is costing as `blocked … on host slot host:<host>:machine`.

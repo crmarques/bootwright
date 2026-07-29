@@ -95,6 +95,7 @@ and the two-per-site CRUSH rule still emit, but `enable_stretch_mode` is skipped
 until the tiebreaker is authored, so apply builds a coherent 2-replicas-per-site
 cluster without the netsplit tiebreaker rather than a broken
 `enable_stretch_mode` with an empty arbiter. A PARTIALLY authored tiebreaker
-(one of host/site set) is still a hard error — that is a misconfiguration, not a
+(one of node/site set) is still a hard error — that is a misconfiguration, not a
 deferral. The `dataSites==2` and two-mons-per-data-site checks stay hard in both
-cases.
+cases. The normative statement of this rule belongs in `specs/state-model.md`
+under `spec.ceph.topology.stretch`; what this file records is the mechanics.

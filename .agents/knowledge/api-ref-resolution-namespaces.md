@@ -2,8 +2,9 @@
 
 Every `*Ref` field is authored as a plain name string; the namespace it
 resolves in used to live only in the (now removed) field comments. This file
-is the lookup table. `specs/state-model.md` covers most of these; the ones
-marked *state-model gap* are documented only in `docs/concepts/*` today.
+is the lookup table. The normative home is `specs/state-model.md` plus the
+kind's page under `docs/concepts/` (ADR 0006); an entry belongs here only
+while it says something those do not.
 
 **`ContainerCluster` `install.endpoints.<slot>.source.bindAddressRef`:**
 names a `bindAddresses[]` entry on the `loadBalancer` `InfraComponent`
@@ -13,8 +14,7 @@ carry. May be omitted only when the load balancer declares exactly one bind
 address.
 
 **`InfraComponent` `spec.artifactServer.endpoints[].listenerRef`:** names a
-`listeners[]` entry on the same artifact server component. *state-model gap*
-(documented in `docs/concepts/infrastructure.md`).
+`listeners[]` entry on the same artifact server component.
 
 **`InfraComponent` `spec.artifactServer.endpoints[].addressRef`** and every
 service-arm `endpoints[].addressRef` (loadBalancer, proxy, nameResolution,
@@ -24,7 +24,6 @@ placement machine (`machineRef`).
 **`Environment` `spec.infraComponents.{proxies,nameResolution,ntp,registries}[].endpointRef`:**
 names an `endpoints[]` entry on the managed `InfraComponent` selected by that
 catalog entry's `componentRef`. Only meaningful for `management: managed`.
-*state-model gap* (documented in `docs/concepts/environment.md`).
 
 **`Environment` `spec.proxyFor.{bootwright,containerClusterInstall,machineOSInstall}`:**
 NOT references — each names a `spec.infraComponents.proxies[]` entry, or the
@@ -66,8 +65,10 @@ managed-OS nodes name their subscription via
 names; the `{name, default}` object form exists only to elect the default
 data pool on multi-pool filesystems (a single entry defaults automatically).
 
-**`ClusterAddonHook` `target.fromInput.{input,property}`:** name a binding
-input and one of its refKind-typed properties; the referenced object maps to
-inventory machines by kind (StorageExport → its `storageClusterRef` Ceph
-nodes, StorageCluster → its Ceph nodes, ContainerCluster → its agent nodes,
-Machine → the machine).
+**`ClusterAddonStep` `target.fromInput.input`:** names an accepted binding
+input whose declaration carries a `resourceRef`; that declaration supplies the
+kind, the binding supplies the object name, and the object maps to inventory
+machines by kind (StorageExport → its `storageClusterRef` Ceph nodes,
+StorageCluster → its Ceph nodes, ContainerCluster → its agent nodes, Machine →
+the machine). The sibling target arms name objects directly:
+`target.static.{clusters,machines}` and `target.boundCluster`.

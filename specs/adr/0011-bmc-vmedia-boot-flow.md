@@ -42,14 +42,12 @@ vendor mechanism is a new sibling file plus data (for example the fixed iBMC
 
 **Poll state; never trust an accepted request.** A 2xx on
 `ComputerSystem.Reset` is not evidence of power: the role polls `PowerState`
-to the expected value, bounded by `bootwright_redfish_power_state_retries` /
-`bootwright_redfish_power_state_delay_seconds`. Asynchronous `InsertMedia`
+to the expected value within a bounded budget. Asynchronous `InsertMedia`
 tasks are normalized to Task resources and polled to a terminal state, and the
 attach is confirmed against the VirtualMedia resource (or accepted task
-evidence). Retries are tail-recursive include wrappers over a seeded attempt
-fact — never `until` on a `no_log`'d task, which would censor the terminal
-failure — and refusals hidden by `no_log` are re-surfaced through
-credential-safe asserts. `PowerState=On` is not "the ISO booted": the
+evidence). A retry must not censor the failure it is retrying, and refusals
+hidden by `no_log` are re-surfaced through credential-safe asserts.
+`PowerState=On` is not "the ISO booted": the
 subsequent-boot disk override fires only behind an SSH readiness proof
 (`readiness.type=ssh`) and only when Bootwright manages the boot source
 (`setBootSource`).
@@ -90,3 +88,8 @@ reports a running OS (`PowerState=On` + `BootProgress.LastState=OSRunning`).
 - A failed restore can leave BMC certificate verification off; the flow
   surfaces a prominent warning rather than masking the original error, and the
   operator re-enables it manually.
+- The firmware quirks and the retry/staging mechanics these rules exist for
+  are cataloged in `.agents/knowledge/redfish-boot-flow-quirks.md`,
+  `redfish-power-on-silent-noop.md`, `redfish-virtual-media.md`,
+  `redfish-bmc-cert-import-mechanics.md`, `redfish-post-boot-disk-override.md`,
+  `redfish-local-artifact-staging.md`, and `redfish-proxy-bypass.md`.

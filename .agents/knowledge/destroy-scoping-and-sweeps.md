@@ -1,5 +1,7 @@
 # Destroy scoping gates, sweeps, and partial-teardown bookkeeping
 
+## Scope and gate extra-vars
+
 **Executor gate extra-vars:** `bootwright_infra_destroy_context_sweep=true`
 (whole-context / unscoped-infra destroy) tells the infra teardown to reclaim
 EVERY recorded ownership orphan, not only objects still in desired state;
@@ -38,6 +40,82 @@ re-emit the var. So a render-reference StorageCluster is never wiped by a
 container-only scope even though it renders. Guarded by
 TestDestroyClustersScopeGatesStorageWorkSet, TestPlanDestroyTasksStorageWorkSetGate,
 TestApplyDestroyScopeExtraVarsStorageGate.
+
+**destroyProtection is Go-only:** the `RequiredOverride` gate lives in
+`workflow.EvaluateDestroySafety`; NO Ansible destroy role consumes a
+destroy-override extra-var and one must not be reintroduced (cli_test guards
+against it).
+
+## Teardown ordering and per-cluster fan-out
+
+**Same set everywhere:** destroy builds its inventory through the shared
+context-scoped loader so the teardown executes against exactly the set planning
+gated and the preview showed. The destroy task graph is split-equals-monolith:
+every `task_*_destroy` playbook (the real entry points; `workflow_*_destroy`
+are thin wrappers) reuses the run's `--limit` and extra-vars unchanged and
+restricts itself with its own `hosts:` selector. Most edges are ORDERING deps
+so one failed stage no longer blocks later independent stages — safe because
+each step carries its own ownership/safety gate. THREE edges are fail-closed
+hard deps and ARE safety boundaries (ADR 0023): guest machine-infra before its
+KubeVirt host's, container-cluster records on the whole machine-infra set, and
+the terminal machine-infra records sweep on that same set. Everything else is
+ordering. `TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph` now
+enforces that the `workflow_*_destroy` wrappers are a topological order of the
+graph the split path emits; they had silently disagreed for a long time.
+A scoped infra destroy also refuses when selected
+clusters share a provider service component with unscoped clusters
+(`stategraph.SharedDestroyConflicts`) — container names and state dirs are
+keyed per (provider, name), so destroying a shared instance breaks the
+unscoped consumers.
+
+**Full lifecycle reverses credential dependencies, not only stage names:**
+no-stage `destroy --clusters` uses the selected `all` work set. Teardown is the
+inverse of build-up (ADR 0023): cluster installer/add-on runtime and managed
+storage go first, then registration and node access, then machine substrate,
+then cluster records, then infra-component and provider services LAST — apply
+gives every machines-phase task an explicit dependency on the fabric services,
+so the fabric outlives the machines it serves. The one carve-out is the
+infra-component PLACEMENT CLOSURE: a cluster hosting an infra component, or any
+transitive KubeVirt host of one, tears its machines down AFTER infra components,
+because that teardown connects over SSH to its own placement machine. The
+closure over ancestors is what keeps the carve-out acyclic; `destroyChain` runs
+an explicit Kahn pass and fails planning on a cycle, because the scheduler
+otherwise breaks silently on `running == 0 && !startedAny`.
+Machine-scoped destroy deliberately keeps only registration and
+machine-infrastructure steps, UNFANNED; it must not inherit the reordered full
+infra chain by slicing it, and must not fan, because
+`ResetMachineConvergeRecordsAfterDestroy` gates on the BARE kind key that
+fan-out leaves false. Container cleanup has a HARD dependency on successful
+machine teardown. That hard edge keeps cluster kubeconfigs, install records,
+and ownership evidence when VM deletion fails. It is also what lets a selected
+KubeVirt child be deleted through its still-live host before a selected host
+cluster loses either its own substrate or its kubeconfig. The machine-infra
+play consumes a deterministic child-before-host cluster order under the linear
+strategy. Each machine is represented by its apply-compatible synthetic
+inventory host, so the linear strategy runs one substrate-role task across all
+machines in the current cluster concurrently before advancing to the next task
+or parent-cluster pass. The old real-provider-host loop serialized every VM on
+that host, making teardown time grow by roughly one VM deletion duration per
+node. VIP detachment stays in a real-host preparation play, and ownership-record
+and context sweeps stay in a real-host cleanup play; only independent
+per-machine teardown is parallel. The planner includes both synthetic and real
+host groups in the task limit and sizes Ansible forks to the declared hosts. A
+host-reference cycle fails planning. The remaining independent steps keep
+ordering-only edges and continue after unrelated failures. Guarded by
+TestPlanDestroyTasksInfraChain, TestPlanDestroyTasksAllChain, and
+TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra,
+TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost, and
+TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped.
+
+**An unreachable KubeVirt host is not an absent guest:** a recorded
+`kubevirt-machine` requires a successful host API probe even when
+`--skip-unreachable` is set. Unlike a node-local cleanup, host-cluster
+unreachability gives no evidence that the VirtualMachine or DataVolumes are
+gone. The machine-infra task therefore fails before removing the ownership
+record; the full-lifecycle hard dependency blocks container runtime cleanup, so
+a retry keeps both the host access material and the guest evidence.
+
+## Record sweeps and partial bookkeeping
 
 **Context-wide records, root-gated cleanup:** destroy loads ownership records
 context-wide (so an unscoped destroy reclaims orphans), but the resolved
@@ -111,30 +189,73 @@ service each stamp an owner record. Failing to enumerate sibling contexts at
 all is a hard error; one unreadable sibling store is a warning and the scan
 continues (over-counting referrers fails safe).
 
-**destroyProtection is Go-only:** the `RequiredOverride` gate lives in
-`workflow.EvaluateDestroySafety`; NO Ansible destroy role consumes a
-destroy-override extra-var and one must not be reintroduced (cli_test guards
-against it).
+## Storage node-access revocation
 
-**Same set everywhere:** destroy builds its inventory through the shared
-context-scoped loader so the teardown executes against exactly the set planning
-gated and the preview showed. The destroy task graph is split-equals-monolith:
-every `task_*_destroy` playbook (the real entry points; `workflow_*_destroy`
-are thin wrappers) reuses the run's `--limit` and extra-vars unchanged and
-restricts itself with its own `hosts:` selector. Most edges are ORDERING deps
-so one failed stage no longer blocks later independent stages — safe because
-each step carries its own ownership/safety gate. THREE edges are fail-closed
-hard deps and ARE safety boundaries (ADR 0023): guest machine-infra before its
-KubeVirt host's, container-cluster records on the whole machine-infra set, and
-the terminal machine-infra records sweep on that same set. Everything else is
-ordering. `TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph` now
-enforces that the `workflow_*_destroy` wrappers are a topological order of the
-graph the split path emits; they had silently disagreed for a long time.
-A scoped infra destroy also refuses when selected
-clusters share a provider service component with unscoped clusters
-(`stategraph.SharedDestroyConflicts`) — container names and state dirs are
-keyed per (provider, name), so destroying a shared instance breaks the
-unscoped consumers.
+**Storage node access revocation is the one ordering EXCEPTION:**
+`destroy.storage-node-access` ("Storage node access") must run LAST in both the
+"clusters" and "all" chains, never folded back into `clusterDestroySteps()`.
+Every step targeting `bootwright_storage_hosts` in the same invocation
+(`destroy.storage-clusters` and, in the "all" chain, `destroy.machine-registration`)
+connects using the SAME statically-rendered `ansible_user` for that node
+(`root` or the cluster's cephadm identity, from `MachineRevokesRootLogin`) — the
+inventory is rendered once per run and never reacts to what an earlier step in
+the same run already did on the live host. Before this step existed, its work
+(restore root SSH, deauthorize the cephadm key/sudoers/marker) ran inline at the
+end of "Storage clusters" (`wipe_and_cleanup.yml`), unconditionally for every
+`rootLogin: revoke` node regardless of whether a later step in the SAME run
+still needed to connect as cephadm. A successful "Storage clusters" pass
+therefore silently broke `destroy.machine-registration`'s connection to the
+same host moments later (surfaced as an become/sudo failure, not an SSH one,
+if the SSH control connection was still warm) — and, on any run that stopped
+before reaching the (then-inline) revoke step, a later independent retry of
+"Storage clusters" would find the identity already stripped from a prior
+successful run and fail outright with an SSH permission-denied error. It now
+carries its own `DestroyTaskKindStorageNodeAccess`, not
+`DestroyTaskKindStorageCluster`, so `destroyKindForApplyTaskKind` only clears
+the apply-side `nodeaccess.<cluster>` converge record once this dedicated step
+succeeds — a bare "Storage clusters" success no longer implies node access was
+reverted. Since ADR 0023 these three steps fan PER STORAGE CLUSTER, so the rule
+is "node access revoke is last FOR ITS OWN CLUSTER", not last globally: the
+edges are `storage-clusters.<S>` then `machine-registration.<S>` then
+`storage-node-access.<S>`, and they must never cross clusters, or one cluster's
+failure serialises an unrelated one. The shared-identity hazard is per node, and
+the inventory still renders one `ansible_user` per node per run, so two storage
+clusters sharing a node with different `clusterSSH` identities remains broken
+exactly as before — that needs a validation rule, not a chain-order workaround
+(filed as B-042 in [BACKLOG.md](BACKLOG.md)).
+Guarded by TestPlanDestroyTasksClustersChain,
+TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
+TestPlanDestroyTasksFansOutIndependentStorageClusters,
+TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
+TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.
+
+Every teardown play that can target a managed Ceph node account
+(`task_storage_cluster_destroy.yml`,
+`task_machine_registration_deregister.yml`, and the dedicated
+`task_storage_node_access_destroy.yml`) begins with the node-access role's
+shared controller-local connection selector. A retry may legitimately find the
+cephadm identity already removed while the install-window identity was restored
+by an earlier partial pass. The selector chooses whichever identity answers,
+rewrites only `ansible_user`, resets the connection, and leaves the rendered
+canonical `ansible_host` intact. For Bootwright-managed SSH trust, the selector
+first repairs a missing canonical-FQDN alias by copying the already-trusted raw
+address entry under a `flock`; it never scans a new key or names a host-key
+algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
+client. Existing canonical entries and explicit `knownHostsRef` content are
+never rewritten. If neither identity answers, storage destroy feeds that result
+through its normal fail-closed/`--skip-unreachable` classification, while the
+best-effort deregistration and final revoke plays end that host.
+
+The final revoke treats an already-absent orchestration account as a completed
+cleanup state. `ansible.posix.authorized_key` resolves the target user's home
+through `getpwnam()` even for `state: absent`, so invoking it for a missing
+`cephadm` account fails instead of becoming a no-op. The revoke role probes the
+account first and gates both orchestration-account key removals on a successful
+passwd lookup; it still restores the install identity and root-login posture and
+removes the marker and sudoers grant. This preserves retry safety after an
+operator or an earlier partial teardown already removed the account.
+
+## Purging run history
 
 **`--purge-history` piggybacks on the reset functions' own success scope,
 never a parallel recomputation:** `ResetConvergeRecordsAfterDestroy` and
@@ -180,113 +301,3 @@ human troubleshooting the skip, needs it. Ordering matters: the purge call
 sits inside `printDestroyRecordReset`, AFTER `RecordPartialStorageDestroy`
 already read `storage-destroy-result.json` out of the run's task-artifacts
 directory — purging earlier would race that read.
-
-**Full lifecycle reverses credential dependencies, not only stage names:**
-no-stage `destroy --clusters` uses the selected `all` work set. Teardown is the
-inverse of build-up (ADR 0023): cluster installer/add-on runtime and managed
-storage go first, then registration and node access, then machine substrate,
-then cluster records, then infra-component and provider services LAST — apply
-gives every machines-phase task an explicit dependency on the fabric services,
-so the fabric outlives the machines it serves. The one carve-out is the
-infra-component PLACEMENT CLOSURE: a cluster hosting an infra component, or any
-transitive KubeVirt host of one, tears its machines down AFTER infra components,
-because that teardown connects over SSH to its own placement machine. The
-closure over ancestors is what keeps the carve-out acyclic; `destroyChain` runs
-an explicit Kahn pass and fails planning on a cycle, because the scheduler
-otherwise breaks silently on `running == 0 && !startedAny`.
-Machine-scoped destroy deliberately keeps only registration and
-machine-infrastructure steps, UNFANNED; it must not inherit the reordered full
-infra chain by slicing it, and must not fan, because
-`ResetMachineConvergeRecordsAfterDestroy` gates on the BARE kind key that
-fan-out leaves false. Container cleanup has a HARD dependency on successful
-machine teardown. That hard edge keeps cluster kubeconfigs, install records,
-and ownership evidence when VM deletion fails. It is also what lets a selected
-KubeVirt child be deleted through its still-live host before a selected host
-cluster loses either its own substrate or its kubeconfig. The machine-infra
-play consumes a deterministic child-before-host cluster order under the linear
-strategy. Each machine is represented by its apply-compatible synthetic
-inventory host, so the linear strategy runs one substrate-role task across all
-machines in the current cluster concurrently before advancing to the next task
-or parent-cluster pass. The old real-provider-host loop serialized every VM on
-that host, making teardown time grow by roughly one VM deletion duration per
-node. VIP detachment stays in a real-host preparation play, and ownership-record
-and context sweeps stay in a real-host cleanup play; only independent
-per-machine teardown is parallel. The planner includes both synthetic and real
-host groups in the task limit and sizes Ansible forks to the declared hosts. A
-host-reference cycle fails planning. The remaining independent steps keep
-ordering-only edges and continue after unrelated failures. Guarded by
-TestPlanDestroyTasksInfraChain, TestPlanDestroyTasksAllChain, and
-TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra,
-TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost, and
-TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped.
-
-**An unreachable KubeVirt host is not an absent guest:** a recorded
-`kubevirt-machine` requires a successful host API probe even when
-`--skip-unreachable` is set. Unlike a node-local cleanup, host-cluster
-unreachability gives no evidence that the VirtualMachine or DataVolumes are
-gone. The machine-infra task therefore fails before removing the ownership
-record; the full-lifecycle hard dependency blocks container runtime cleanup, so
-a retry keeps both the host access material and the guest evidence.
-
-**Storage node access revocation is the one ordering EXCEPTION:**
-`destroy.storage-node-access` ("Storage node access") must run LAST in both the
-"clusters" and "all" chains, never folded back into `clusterDestroySteps()`.
-Every step targeting `bootwright_storage_hosts` in the same invocation
-(`destroy.storage-clusters` and, in the "all" chain, `destroy.machine-registration`)
-connects using the SAME statically-rendered `ansible_user` for that node
-(`root` or the cluster's cephadm identity, from `MachineRevokesRootLogin`) — the
-inventory is rendered once per run and never reacts to what an earlier step in
-the same run already did on the live host. Before this step existed, its work
-(restore root SSH, deauthorize the cephadm key/sudoers/marker) ran inline at the
-end of "Storage clusters" (`wipe_and_cleanup.yml`), unconditionally for every
-`rootLogin: revoke` node regardless of whether a later step in the SAME run
-still needed to connect as cephadm. A successful "Storage clusters" pass
-therefore silently broke `destroy.machine-registration`'s connection to the
-same host moments later (surfaced as an become/sudo failure, not an SSH one,
-if the SSH control connection was still warm) — and, on any run that stopped
-before reaching the (then-inline) revoke step, a later independent retry of
-"Storage clusters" would find the identity already stripped from a prior
-successful run and fail outright with an SSH permission-denied error. It now
-carries its own `DestroyTaskKindStorageNodeAccess`, not
-`DestroyTaskKindStorageCluster`, so `destroyKindForApplyTaskKind` only clears
-the apply-side `nodeaccess.<cluster>` converge record once this dedicated step
-succeeds — a bare "Storage clusters" success no longer implies node access was
-reverted. Since ADR 0023 these three steps fan PER STORAGE CLUSTER, so the rule
-is "node access revoke is last FOR ITS OWN CLUSTER", not last globally: the
-edges are `storage-clusters.<S>` then `machine-registration.<S>` then
-`storage-node-access.<S>`, and they must never cross clusters, or one cluster's
-failure serialises an unrelated one. The shared-identity hazard is per node, and
-the inventory still renders one `ansible_user` per node per run, so two storage
-clusters sharing a node with different `clusterSSH` identities remains broken
-exactly as before — that needs a validation rule, not a chain-order workaround.
-Guarded by TestPlanDestroyTasksClustersChain,
-TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
-TestPlanDestroyTasksFansOutIndependentStorageClusters,
-TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess,
-TestDestroyKindIncludedExpandsMachineInfraToStorageNodeAccess.
-
-Every teardown play that can target a managed Ceph node account
-(`task_storage_cluster_destroy.yml`,
-`task_machine_registration_deregister.yml`, and the dedicated
-`task_storage_node_access_destroy.yml`) begins with the node-access role's
-shared controller-local connection selector. A retry may legitimately find the
-cephadm identity already removed while the install-window identity was restored
-by an earlier partial pass. The selector chooses whichever identity answers,
-rewrites only `ansible_user`, resets the connection, and leaves the rendered
-canonical `ansible_host` intact. For Bootwright-managed SSH trust, the selector
-first repairs a missing canonical-FQDN alias by copying the already-trusted raw
-address entry under a `flock`; it never scans a new key or names a host-key
-algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
-client. Existing canonical entries and explicit `knownHostsRef` content are
-never rewritten. If neither identity answers, storage destroy feeds that result
-through its normal fail-closed/`--skip-unreachable` classification, while the
-best-effort deregistration and final revoke plays end that host.
-
-The final revoke treats an already-absent orchestration account as a completed
-cleanup state. `ansible.posix.authorized_key` resolves the target user's home
-through `getpwnam()` even for `state: absent`, so invoking it for a missing
-`cephadm` account fails instead of becoming a no-op. The revoke role probes the
-account first and gates both orchestration-account key removals on a successful
-passwd lookup; it still restores the install identity and root-login posture and
-removes the marker and sudoers grant. This preserves retry safety after an
-operator or an earlier partial teardown already removed the account.

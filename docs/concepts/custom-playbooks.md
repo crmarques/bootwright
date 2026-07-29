@@ -13,18 +13,24 @@ with an external system after the cluster is up, or
 [replacing Bootwright's managed RHSM registration](#delegating-rhsm-registration)
 of storage nodes.
 
-It is the sibling of an [add-on](add-ons.md): an add-on applies **declarative
-Kubernetes objects** *inside* an installed cluster; a custom playbook runs
-**imperative Ansible** against machines at *any* stage — including before the
-cluster exists. Both are desired-state objects, driven by the normal `apply`
-flow; there is no dedicated CLI verb.
+It is the sibling of an [add-on](add-ons.md), and the axis between them is
+**lifecycle ownership**, not payload type: an add-on's work — its declarative
+objects *and* the step playbooks it ships — is bound to that add-on's install
+inside one already-running cluster; a custom playbook is bound to a
+**provisioning phase** and can run against machines before any cluster exists.
+Both are desired-state objects, driven by the normal `apply` flow; there is no
+dedicated CLI verb.
+
+See [conventions](index.md) for the object envelope and the Required/Default
+field-table convention the table below follows.
 
 ## When it runs
 
 Each playbook anchors to one of the five provisioning sub-phases — the same
-vocabulary as [`--stage`](../advanced/operations.md) — with a `timing`:
+vocabulary as [`--stage`](../advanced/operations.md) — through exactly one of
+`spec.follows` or `spec.gates`:
 
-| Stage | `after` runs once… | `before` runs just before… |
+| Anchor | `follows:` runs once… | `gates:` runs just before… |
 | --- | --- | --- |
 | `fabric` | provider hosts + shared services are up | any fabric work |
 | `machines` | machine OS install / instantiation completes | machine work starts |
@@ -34,16 +40,17 @@ vocabulary as [`--stage`](../advanced/operations.md) — with a `timing`:
 
 The three common cases map directly:
 
-- **after OS install** → `stage: machines, timing: after`
-- **before installing cluster deps** → `stage: deps, timing: before`
-- **after installing clusters** → `stage: base, timing: after`
+- **after OS install** → `follows: machines`
+- **before installing cluster deps** → `gates: deps`
+- **after installing clusters** → `follows: base`
 
-`timing` defaults to `after` when omitted. `after` waits for the stage's built-in
-work; `before` gates it (the stage waits for the playbook). A playbook runs
-during any `apply` whose `--stage` includes
-its stage and whose `--clusters` scope includes its target, so
-`apply --stage base --clusters prod` re-runs exactly the base-stage playbooks for
-`prod`.
+Exactly one of the two is required; setting both is rejected. `follows` waits
+for the anchor's built-in work; `gates` blocks it (the phase waits for the
+playbook), which is why `gates` may not be combined with `onFailure: continue`
+— a gate that lets the phase proceed on failure is not a gate. A playbook runs
+during any `apply` whose `--stage` includes its anchor and whose `--clusters`
+scope includes its target, so `apply --stage base --clusters prod` re-runs
+exactly the base-anchored playbooks for `prod`.
 
 ## Authoring
 
@@ -67,6 +74,33 @@ spec:
   run: onChange
   onFailure: fail
 ```
+
+### Fields
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `spec.gates` | Exactly one of `gates`/`follows` | — | Anchor phase this playbook blocks: `fabric`, `machines`, `deps`, `base`, `add-ons`. |
+| `spec.follows` | Exactly one of `gates`/`follows` | — | Anchor phase this playbook runs after. |
+| `spec.source` | No | — | Content lives beside the object. Set to point elsewhere; see [External Ansible content](#external-ansible-content). |
+| `spec.source.path` | Exactly one of `path`/`git` | — | Absolute directory outside the input tree. |
+| `spec.source.git.url` | With `source.git` | — | `https`, `ssh`, `file://`, or an absolute local repository path. |
+| `spec.source.git.ref` | With `source.git` | — | Commit, tag, or branch. |
+| `spec.source.git.subdir` | No | repository root | Directory inside the repository. |
+| `spec.source.git.secretRef` | No | — | `sshKeyPair` for `ssh`, `token`/`usernamePassword` for `https`; rejected for a local repository. |
+| `spec.playbook` | Yes | — | Entry playbook, `.yaml`/`.yml`, relative to the object file (or to `source`). |
+| `spec.rolesPath` | No | — | Vendored roles directory, contained the same way. |
+| `spec.collectionsPath` | No | — | Vendored collections tree, contained the same way. |
+| `spec.target` | Yes | — | At least one of `clusters`, `machines`, `hostGroups`; see [Targeting](#targeting). |
+| `spec.tags` | No | — | `--tags` tokens. |
+| `spec.skipTags` | No | — | `--skip-tags` tokens; may not repeat a `tags` entry. |
+| `spec.extraVars` | No | — | One JSON `-e` value; connection and become keys are rejected. |
+| `spec.secretRefs[]` | No | — | `Secret` names readable at `{{ bootwright_secrets_dir }}/<name>`. |
+| `spec.order` | No | `0` | Tie-break within the anchor bucket; lower runs first. |
+| `spec.provides[]` | No | — | Capabilities this playbook satisfies within its bucket. |
+| `spec.requires[]` | No | — | Capabilities another playbook in the same bucket must provide. |
+| `spec.run` | No | `onChange` | `onChange` or `always`. |
+| `spec.onFailure` | No | `fail` | `fail` or `continue`; `continue` is rejected with `gates`. |
+| `spec.enabled` | No | `true` | `false` keeps the object in desired state and plans no run. |
 
 ## External Ansible content
 
@@ -169,12 +203,15 @@ input/
 
 `playbook`, `rolesPath`, and `collectionsPath` are paths **relative to the object
 file** and must stay within its directory (no absolute paths, `..`, or symlinks).
-The loader treats `playbooks/`, `roles/`, and `collections/` directories as
-Ansible content, not authored objects, and skips them — but `bootwright context
-init`/`update` copies the whole input tree, so `ansible-playbook` finds them at
-run time. Vendored roles/collections are the **air-gap-safe** way to ship
-dependencies; a Galaxy `requirements.yml` install (which needs network) is not
-supported.
+`rolesPath` and `collectionsPath` may not be named `vendor` or `node_modules`
+either: `context init` skips those directory names when it copies the tree, so
+the vendored content would silently vanish from the context — validation rejects
+them instead. The loader treats `playbooks/`, `roles/`, and `collections/`
+directories as Ansible content, not authored objects, and skips them — but
+`bootwright context init`/`update` copies the whole input tree, so
+`ansible-playbook` finds them at run time. Vendored roles/collections are the
+**air-gap-safe** way to ship dependencies; a Galaxy `requirements.yml` install
+(which needs network) is not supported.
 
 `spec.enabled` defaults to `true`. Set `enabled: false` to keep the playbook in
 desired state — it still loads and validates — while skipping it: Bootwright
@@ -245,11 +282,11 @@ playbook: Bootwright plans no registration task, never touches `rhsm.conf`, and
 skips the repo-enablement purge, so operator-managed repo sets survive — and no
 RHSM organization or activation-key secrets exist or are demanded.
 
-Anchor the delegated playbook at `stage: deps, timing: before`: it runs after
-the machines-phase work (the OS is in place) and, with the default
-`failureMode: fail`, the deps-phase Ceph work waits for and gates on it. A
-`stage: machines, timing: after` playbook also runs after the OS install but
-does **not** gate later phases, so do not use it for delegated registration.
+Anchor the delegated playbook with `gates: deps`: it runs after the
+machines-phase work (the OS is in place) and, with the default
+`onFailure: fail`, the deps-phase Ceph work waits for and gates on it. A
+`follows: machines` playbook also runs after the OS install but does **not**
+gate later phases, so do not use it for delegated registration.
 The playbook must leave every storage node able to install the distribution
 packages — activation-key repo sets, a Satellite content view, or an internal
 mirror — because the cephadm install assert remains the fail-closed
@@ -268,21 +305,33 @@ for the normative rules.
   playbook is opaque, `bootwright diff` reports it as *match* (inputs unchanged) or
   *drift* (changed, will re-run) from this input hash only — it never observes
   what the playbook did on the node.
-- **`failureMode: fail`** (default) blocks the anchor stage when the playbook
-  fails; **`continue`** records the failure and lets the stage proceed.
-- Several playbooks in the same `(stage, timing)` bucket run concurrently unless
-  ordered by `spec.order` (a tie-break) or `spec.provides`/`spec.requires`
+- **`onFailure: fail`** (default) blocks the anchor phase when the playbook
+  fails; **`continue`** records the failure and lets the phase proceed, and is
+  rejected on a `gates` playbook.
+- Several playbooks in the same `(anchor, gates/follows)` bucket run concurrently
+  unless ordered by `spec.order` (a tie-break) or `spec.provides`/`spec.requires`
   (capability edges within the bucket, like add-on capabilities).
+- A custom playbook run is **unbounded by design**: Bootwright applies no
+  timeout, so the playbook owns any it needs (a `ClusterAddon` step, by
+  contrast, defaults to `timeout: 10m`). A playbook that hangs holds its anchor
+  phase open for the whole run.
 
 ## Relationship to add-ons
 
 | | Add-on | Custom playbook |
 | --- | --- | --- |
-| Payload | Declarative Kubernetes objects (`olm` / `manifestSet`) | Imperative Ansible playbook |
-| Runs via | `oc` against the cluster API | `ansible-playbook` against machines |
-| When | Only after the cluster is installed | Any of the five stages, before or after |
+| Payload | Declarative Kubernetes objects (`olm` / `manifestSet`), plus the steps the add-on ships | Imperative Ansible playbook |
+| Runs via | `oc` against the cluster API, plus optional step playbooks | `ansible-playbook` against machines |
+| When | Only after the cluster is installed | Any of the five phases, gating or following |
 | Drift | Reconciled from applied objects | Opaque; input-hash only |
 
-Use an add-on when the target is a Kubernetes object in an installed cluster; use
-a custom playbook when the target is a machine, at a stage an add-on cannot
-reach.
+Use an add-on when the work belongs to one component's install inside a running
+cluster; use a custom playbook when it belongs to a provisioning phase instead —
+including every phase before a cluster exists.
+
+## Where to go next
+
+- [Add-ons](add-ons.md) for the cluster-scoped sibling and its steps.
+- [Machines](machines.md) for the hosts a playbook targets.
+- [Operations, recovery and teardown](../advanced/operations.md) for `--stage`
+  and the apply modes that re-run a playbook.

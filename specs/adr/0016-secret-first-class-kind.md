@@ -51,8 +51,11 @@ resolution namespace and per-type field rules are stated in
   no inline secret material anywhere in the API, and no `Environment.spec.secrets`
   block.
 - The seven-value type set and the three source arms are the whole authoring
-  surface for secrets; a new secret shape must fit one of the seven types and
-  one of the three sources, or the type set is a deliberate, tested extension.
+  surface for secrets. Adding an eighth type or a fourth source arm is an API
+  break that needs its own ADR: strict decode rejects anything outside
+  `api/v1alpha1.SecretTypes()`, and the generatable and self-signed subsets are
+  enumerated separately (`SecretTypeGeneratable`, `SecretTypeSelfSigned`), so a
+  new type lands in three places or not at all.
 - Because the default source is `contextStore`, an author who declares only
   `kind: Secret` with a `type` and no `source` is opting into the encrypted
   per-context store; `file` and `generated` are explicit opt-outs.

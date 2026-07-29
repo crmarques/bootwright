@@ -45,13 +45,12 @@ The current inventory is the collection's own `roles/` directory and the
 per-role input contracts in
 [`vars-contract.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md).
 
-Workflow playbooks are thin wrappers. `workflow_infra_apply.yml` imports the
-external reachability check, provider-service task playbook,
-InfraComponent-service task playbook, and machine-infra task playbook.
-Destroy runs machine infrastructure before InfraComponent services and
-provider services. `workflow_clusters_apply.yml` imports preflight, machine
-infrastructure, and container-cluster install. `workflow_container_cluster_apply.yml`
-remains the focused container-cluster wrapper.
+Workflow playbooks are thin wrappers: each is an ordered list of
+`import_playbook` lines over the task playbooks of its stage, and the destroy
+workflow inverts the apply order (machine infrastructure before InfraComponent
+and provider services). The current import lists are the `workflow_*.yml` files
+in the collection's `playbooks/` directory; this ADR does not enumerate them,
+for the same reason it does not enumerate roles.
 
 Task playbooks remain the stable Go dispatch surface. Reusable playbook task
 fragments live under `playbooks/tasks/<domain>/`, while provider-specific
@@ -125,13 +124,12 @@ The projected variable blocks described in
 [`vars-contract.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md) carry the
 substrate-specific inputs each role consumes. Roles do NOT branch on
 `substrateRole` / `bmcRole` / `bootRole` to vary behavior within themselves —
-that branching belongs in the registry and renderer. The Redfish boot role
-reads `boot.redfish` and `boot.agentIso` whether the BMC is sushy-emulator or
-a vendor BMC; the libvirt media role consumes the libvirt-specific
-virtual-media cleanup block; the emulated BMC service role reads provider BMC
-service `bmcEmulated.*` for libvirt URI, ports, bind address, and auth instead
-of re-deriving defaults. Adding a substrate-dependent fact is a renderer
-change, not a role conditional.
+that branching belongs in the registry and renderer, whose side of the rule is
+[ADR 0009](0009-renderer-owns-listening-surface.md). The libvirt media role
+consumes the libvirt-specific virtual-media cleanup block; the emulated BMC
+service role reads provider BMC service `bmcEmulated.*` for libvirt URI, ports,
+bind address, and auth instead of re-deriving defaults. Adding a
+substrate-dependent fact is a renderer change, not a role conditional.
 
 The `ownership_record` role owns durable resource and package ownership
 records: executing roles include it at mutation time, and Go reads the records
