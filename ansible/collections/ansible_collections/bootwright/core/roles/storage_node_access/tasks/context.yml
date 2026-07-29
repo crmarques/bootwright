@@ -100,9 +100,11 @@
       {{ bootwright_node_access.installPublicKeyPath }} holds no machine access key for
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }}, so
       Bootwright will neither authorize nor deauthorize that key on the install account.
-      Its Secret declares the pair but the context store has no public half: run
-      bootwright secret check, then bootwright secret generate, and re-apply to reconcile
-      the install account.
+      The Secret declares an sshKeyPair the context store cannot serve: bootwright secret
+      check names the half that is missing, bootwright secret generate creates a pair the
+      store never held, and bootwright secret generate --renew replaces one it holds only
+      half of — which issues a new private key the installed fleet does not know. Re-apply
+      to reconcile the install account.
   delegate_to: localhost
   become: false
   changed_when: false

@@ -112,7 +112,8 @@
       public half is absent, so Bootwright cannot tell which line to strip from the install
       account's authorized_keys. Revoking root login while leaving that key authorized
       would report a narrowed access surface it did not narrow. Run bootwright secret
-      check, restore the key pair with bootwright secret generate, then re-apply.
+      check to name the missing half, restore the pair in the context store, then
+      re-apply.
   delegate_to: localhost
   become: false
   when: (bootwright_node_access.installPublicKeyPath | default('') | length) > 0
