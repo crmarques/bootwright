@@ -18,7 +18,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 	var name string
 	var purge bool
 	var yes bool
-	var force bool
+	var abandonResources bool
 	cmd := &cobra.Command{
 		Use:     "delete --name <ctx-name>",
 		Short:   "Delete a context",
@@ -28,7 +28,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 	cmd.Flags().StringVar(&name, "name", "", "context name (required)")
 	registerContextNameCompletion(cmd, "name")
 	cmd.Flags().BoolVar(&purge, "purge", false, "delete the context base directory (required: a context is stored in shared root state, and delete refuses without it)")
-	cmd.Flags().BoolVar(&force, "force", false, "delete the context even while it still owns running resources or installed clusters, abandoning them — their infrastructure keeps running and their ownership/install records and install-captured credentials (kubeconfigs, kubeadmin password) are lost. Prefer 'bootwright destroy --context <name>' first")
+	cmd.Flags().BoolVar(&abandonResources, "abandon-resources", false, "delete the context even while it still owns running resources or installed clusters, abandoning them — their infrastructure keeps running and their ownership/install records and install-captured credentials (kubeconfigs, kubeadmin password) are lost; destroy the context first to avoid that")
 	addYesFlag(cmd, &yes, "delete")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := workspace.ValidateName(name); err != nil {
@@ -42,8 +42,8 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			if yes {
 				childArgs = append(childArgs, "--yes")
 			}
-			if force {
-				childArgs = append(childArgs, "--force")
+			if abandonResources {
+				childArgs = append(childArgs, "--abandon-resources")
 			}
 			code, err := runWithLocalRoot(cmd.Context(), childArgs, stdin, stdout, stderr, true)
 			if err != nil {
@@ -67,7 +67,7 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			if err != nil {
 				return failErr(1, err)
 			}
-			detail, refusal := contextPurgeGuard(ctx, force)
+			detail, refusal := contextPurgeGuard(ctx, abandonResources)
 			if refusal != nil {
 				return failErr(1, refusal)
 			}
@@ -105,7 +105,7 @@ func contextDeletePrompt(name, baseDir, detail string) string {
 	return fmt.Sprintf("Delete %s and all files under %s? %s [y/N] (default: no): ", name, baseDir, detail)
 }
 
-func contextPurgeGuard(ctx workspace.Context, force bool) (string, error) {
+func contextPurgeGuard(ctx workspace.Context, abandonResources bool) (string, error) {
 	records, skipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
 	if err != nil {
 		return "", err
@@ -115,14 +115,14 @@ func contextPurgeGuard(ctx workspace.Context, force bool) (string, error) {
 		return "", err
 	}
 	detail := fmt.Sprintf("this removes %d ownership record(s), %d installed-cluster record(s), and the secrets directory %s — kubeconfigs, kubeadmin passwords, and any install-captured credentials become unrecoverable", len(records), len(installed), ctx.SecretsDir)
-	if force {
+	if abandonResources {
 		return detail, nil
 	}
 	if len(skipped) > 0 {
-		return detail, fmt.Errorf("%d ownership record(s) under %s could not be read, so bootwright cannot tell whether context %q still owns running resources; fix or remove the corrupted record file(s), run `bootwright destroy --context %s` first, or pass --force to purge regardless (abandoning whatever they own)", len(skipped), ctx.OwnershipDir, ctx.Name, ctx.Name)
+		return detail, fmt.Errorf("%d ownership record(s) under %s could not be read, so bootwright cannot tell whether context %q still owns running resources; fix or remove the corrupted record file(s), run `bootwright destroy --context %s` first, or pass --abandon-resources to purge regardless (abandoning whatever they own)", len(skipped), ctx.OwnershipDir, ctx.Name, ctx.Name)
 	}
 	if len(records) > 0 || len(installed) > 0 {
-		return detail, fmt.Errorf("context %q still owns %d resource(s) and %d installed cluster(s) — their infrastructure keeps running and their records and install-captured credentials (kubeconfigs, kubeadmin password) would be permanently lost; run `bootwright destroy --context %s` first, or pass --force to delete the context and abandon them", ctx.Name, len(records), len(installed), ctx.Name)
+		return detail, fmt.Errorf("context %q still owns %d resource(s) and %d installed cluster(s) — their infrastructure keeps running and their records and install-captured credentials (kubeconfigs, kubeadmin password) would be permanently lost; run `bootwright destroy --context %s` first, or pass --abandon-resources to delete the context and abandon them", ctx.Name, len(records), len(installed), ctx.Name)
 	}
 	return detail, nil
 }

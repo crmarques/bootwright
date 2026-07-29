@@ -13,7 +13,7 @@ import (
 
 const cephDashboardPasswordFile = "dashboard-password"
 
-var cephDashboardPort = strconv.Itoa(topology.CephManagementDefaultPort)
+var cephDashboardPort = strconv.Itoa(topology.CephMgmtGatewayDefaultPort)
 
 func StorageDashboardPasswordPath(clustersDir, clusterName string) string {
 	if clustersDir == "" {
@@ -76,13 +76,13 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		summary.ShellCommand = summary.SSHCommand + " sudo cephadm shell"
 		summary.DashboardURL = "https://" + summary.SeedAddress + ":" + cephDashboardPort
 		if domain := stateview.StorageClustersDomain(state); domain != "" {
-			alias := stateview.ComposeFQDN(v1alpha1.StorageCephManagementDefaultDNSLabel, cluster.Metadata.Name, domain)
+			alias := stateview.ComposeFQDN(v1alpha1.StorageCephMgmtGatewayDefaultDNSLabel, cluster.Metadata.Name, domain)
 			summary.DashboardURL = "https://" + alias + ":" + cephDashboardPort
 		}
 	}
-	if mgmt := cluster.Spec.Ceph.Management; mgmt != nil {
-		if fqdn := stateview.StorageManagementFQDN(state, cluster); fqdn != "" {
-			summary.DashboardURL = "https://" + fqdn + ":" + cephManagementPort(mgmt.Port)
+	if mgmt := cluster.Spec.Ceph.MgmtGateway; mgmt != nil {
+		if fqdn := stateview.StorageMgmtGatewayFQDN(state, cluster); fqdn != "" {
+			summary.DashboardURL = "https://" + fqdn + ":" + cephMgmtGatewayPort(mgmt.Port)
 		}
 	}
 	if management == v1alpha1.StorageClusterManagementManaged {
@@ -96,7 +96,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 	return summary
 }
 
-func cephManagementPort(port int) string {
+func cephMgmtGatewayPort(port int) string {
 	if port == 0 {
 		return cephDashboardPort
 	}

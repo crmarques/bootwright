@@ -1,4 +1,4 @@
-package hooks
+package steps
 
 import (
 	"os"
@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func writeHookContent(t *testing.T, dir, rel, body string) {
+func writeStepContent(t *testing.T, dir, rel, body string) {
 	t.Helper()
 	path := filepath.Join(dir, rel)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -23,15 +23,15 @@ func writeHookContent(t *testing.T, dir, rel, body string) {
 func TestContentDigestChangesWithContent(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "add-on.yaml")
-	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: all")
-	hook := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
+	writeStepContent(t, dir, "playbooks/run.yaml", "- hosts: all")
+	step := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
 
-	first, err := ContentDigest(source, hook)
+	first, err := ContentDigest(source, step)
 	if err != nil {
 		t.Fatalf("first digest: %v", err)
 	}
-	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: none")
-	second, err := ContentDigest(source, hook)
+	writeStepContent(t, dir, "playbooks/run.yaml", "- hosts: none")
+	second, err := ContentDigest(source, step)
 	if err != nil {
 		t.Fatalf("second digest: %v", err)
 	}
@@ -46,19 +46,19 @@ func TestContentDigestFailsClosedOnUnreadableContent(t *testing.T) {
 	}
 	dir := t.TempDir()
 	source := filepath.Join(dir, "add-on.yaml")
-	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: all")
-	writeHookContent(t, dir, "manifests/object.yaml", "kind: ConfigMap")
+	writeStepContent(t, dir, "playbooks/run.yaml", "- hosts: all")
+	writeStepContent(t, dir, "manifests/object.yaml", "kind: ConfigMap")
 	if err := os.Chmod(filepath.Join(dir, "manifests", "object.yaml"), 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	hook := v1alpha1.ClusterAddonStep{
+	step := v1alpha1.ClusterAddonStep{
 		Name:      "h",
 		Playbook:  "playbooks/run.yaml",
 		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/object.yaml"}},
 	}
-	if _, err := ContentDigest(source, hook); err == nil {
-		t.Fatal("expected an error for unreadable hook content")
+	if _, err := ContentDigest(source, step); err == nil {
+		t.Fatal("expected an error for unreadable step content")
 	} else if !strings.Contains(err.Error(), "object.yaml") {
 		t.Fatalf("error should name the unreadable path, got: %v", err)
 	}
@@ -67,12 +67,12 @@ func TestContentDigestFailsClosedOnUnreadableContent(t *testing.T) {
 func TestContentDigestToleratesAbsentOptionalPaths(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "add-on.yaml")
-	writeHookContent(t, dir, "playbooks/run.yaml", "- hosts: all")
+	writeStepContent(t, dir, "playbooks/run.yaml", "- hosts: all")
 
-	hook := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
-	withRoles := hook
+	step := v1alpha1.ClusterAddonStep{Name: "h", Playbook: "playbooks/run.yaml"}
+	withRoles := step
 	withRoles.RolesPath = "roles"
-	bare, err := ContentDigest(source, hook)
+	bare, err := ContentDigest(source, step)
 	if err != nil {
 		t.Fatalf("bare digest: %v", err)
 	}

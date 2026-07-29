@@ -35,7 +35,6 @@ machines:
       spec:
         capabilities:
             - container-runtime
-            - artifact-server
         os:
             provided: true
         addresses:
@@ -324,10 +323,6 @@ containerClusters:
             pullSecretRef: openshift-pull-secret
             nodeSSH:
                 keyPairRef: 3-nodes-ocp-baremetal-cluster-admin-ssh-key
-        controlPlane:
-            replicas: 3
-        compute:
-            - {}
         networking:
             clusterNetwork:
                 - cidr: 10.128.0.0/14

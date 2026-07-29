@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"reflect"
 
 	"github.com/spf13/cobra"
 
@@ -153,6 +154,43 @@ func storageAdvisoryChecks(state v1alpha1.State) []preflightCheck {
 	return checks
 }
 
+type stateCensus struct {
+	Environments             int `json:"environments"`
+	Entitlements             int `json:"entitlements"`
+	Machines                 int `json:"machines"`
+	MachineImages            int `json:"machineImages"`
+	MachineInstallProfiles   int `json:"machineInstallProfiles"`
+	NetworkConfigs           int `json:"networkConfigs"`
+	InfraProviders           int `json:"infraProviders"`
+	InfraComponents          int `json:"infraComponents"`
+	ContainerClusters        int `json:"containerClusters"`
+	StorageClusters          int `json:"storageClusters"`
+	StoragePlacementPolicies int `json:"storagePlacementPolicies"`
+	StoragePools             int `json:"storagePools"`
+	StorageFilesystems       int `json:"storageFilesystems"`
+	StorageObjectGateways    int `json:"storageObjectGateways"`
+	StorageNFSExports        int `json:"storageNFSExports"`
+	StorageExports           int `json:"storageExports"`
+	ClusterAddons            int `json:"clusterAddons"`
+	ClusterAddonProfiles     int `json:"clusterAddonProfiles"`
+	ClusterAddonBindings     int `json:"clusterAddonBindings"`
+	CustomPlaybooks          int `json:"customPlaybooks"`
+	Secrets                  int `json:"secrets"`
+}
+
+func newStateCensus(state v1alpha1.State) stateCensus {
+	census := stateCensus{}
+	target := reflect.ValueOf(&census).Elem()
+	for _, accessor := range v1alpha1.AuthoredKindAccessors() {
+		field := target.FieldByName(accessor.StateField)
+		if !field.IsValid() || field.Kind() != reflect.Int {
+			continue
+		}
+		field.SetInt(int64(len(accessor.Names(state))))
+	}
+	return census
+}
+
 type syntaxCheckReport struct {
 	OK                        bool                     `json:"ok"`
 	ExitCode                  int                      `json:"exitCode"`
@@ -161,25 +199,7 @@ type syntaxCheckReport struct {
 	ExcludedStorageClusters   []string                 `json:"excludedStorageClusters,omitempty"`
 	Diagnostics               []Diagnostic             `json:"diagnostics,omitempty"`
 	Advisories                []advice.StorageAdvisory `json:"advisories,omitempty"`
-	Environments              int                      `json:"environments"`
-	Machines                  int                      `json:"machines"`
-	MachineImages             int                      `json:"machineImages"`
-	MachineInstallProfiles    int                      `json:"machineInstallProfiles"`
-	NetworkConfigs            int                      `json:"networkConfigs"`
-	InfraProviders            int                      `json:"infraProviders"`
-	InfraComponents           int                      `json:"infraComponents"`
-	ContainerClusters         int                      `json:"containerClusters"`
-	StorageClusters           int                      `json:"storageClusters"`
-	StoragePlacementPolicies  int                      `json:"storagePlacementPolicies"`
-	StoragePools              int                      `json:"storagePools"`
-	StorageFilesystems        int                      `json:"storageFilesystems"`
-	StorageObjectGateways     int                      `json:"storageObjectGateways"`
-	StorageNFSExports         int                      `json:"storageNFSExports"`
-	StorageExports            int                      `json:"storageExports"`
-	ClusterAddons             int                      `json:"clusterAddons"`
-	Profiles                  int                      `json:"clusterAddonProfiles"`
-	ExtensionBindings         int                      `json:"clusterAddonBindings"`
-	CustomPlaybooks           int                      `json:"customPlaybooks"`
+	stateCensus
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {
@@ -193,25 +213,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		ExcludedContainerClusters: exclusions.ContainerClusters,
 		ExcludedStorageClusters:   exclusions.StorageClusters,
 		Advisories:                advice.StorageAdvisories(state),
-		Environments:              len(state.Environments),
-		Machines:                  len(state.Machines),
-		MachineImages:             len(state.MachineImages),
-		MachineInstallProfiles:    len(state.MachineInstallProfiles),
-		NetworkConfigs:            len(state.NetworkConfigs),
-		InfraProviders:            len(state.InfraProviders),
-		InfraComponents:           len(state.InfraComponents),
-		ContainerClusters:         len(state.ContainerClusters),
-		StorageClusters:           len(state.StorageClusters),
-		StoragePlacementPolicies:  len(state.StoragePlacementPolicies),
-		StoragePools:              len(state.StoragePools),
-		StorageFilesystems:        len(state.StorageFilesystems),
-		StorageObjectGateways:     len(state.StorageObjectGateways),
-		StorageNFSExports:         len(state.StorageNFSExports),
-		StorageExports:            len(state.StorageExports),
-		ClusterAddons:             len(state.ClusterAddons),
-		Profiles:                  len(state.ClusterAddonProfiles),
-		ExtensionBindings:         len(state.ClusterAddonBindings),
-		CustomPlaybooks:           len(state.CustomPlaybooks),
+		stateCensus:               newStateCensus(state),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
@@ -257,32 +259,14 @@ func syntaxDiagnosticChecks(err error, rerun, source string) []preflightCheck {
 }
 
 func stateCountFields(state v1alpha1.State) []cliout.Field {
-	counts := []cliout.Field{
-		{Key: "Environments", Value: fmt.Sprint(len(state.Environments))},
-		{Key: "Machines", Value: fmt.Sprint(len(state.Machines))},
-		{Key: "MachineImages", Value: fmt.Sprint(len(state.MachineImages))},
-		{Key: "MachineInstallProfiles", Value: fmt.Sprint(len(state.MachineInstallProfiles))},
-		{Key: "NetworkConfigs", Value: fmt.Sprint(len(state.NetworkConfigs))},
-		{Key: "InfraProviders", Value: fmt.Sprint(len(state.InfraProviders))},
-		{Key: "InfraComponents", Value: fmt.Sprint(len(state.InfraComponents))},
-		{Key: "ContainerClusters", Value: fmt.Sprint(len(state.ContainerClusters))},
-		{Key: "StorageClusters", Value: fmt.Sprint(len(state.StorageClusters))},
-		{Key: "StoragePlacementPolicies", Value: fmt.Sprint(len(state.StoragePlacementPolicies))},
-		{Key: "StoragePools", Value: fmt.Sprint(len(state.StoragePools))},
-		{Key: "StorageFilesystems", Value: fmt.Sprint(len(state.StorageFilesystems))},
-		{Key: "StorageObjectGateways", Value: fmt.Sprint(len(state.StorageObjectGateways))},
-		{Key: "StorageNFSExports", Value: fmt.Sprint(len(state.StorageNFSExports))},
-		{Key: "StorageExports", Value: fmt.Sprint(len(state.StorageExports))},
-		{Key: "ClusterAddons", Value: fmt.Sprint(len(state.ClusterAddons))},
-		{Key: "ClusterAddonProfiles", Value: fmt.Sprint(len(state.ClusterAddonProfiles))},
-		{Key: "ClusterAddonBindings", Value: fmt.Sprint(len(state.ClusterAddonBindings))},
-		{Key: "CustomPlaybooks", Value: fmt.Sprint(len(state.CustomPlaybooks))},
-	}
-	declared := make([]cliout.Field, 0, len(counts))
-	for _, field := range counts {
-		if field.Value != "0" {
-			declared = append(declared, field)
+	accessors := v1alpha1.AuthoredKindAccessors()
+	declared := make([]cliout.Field, 0, len(accessors))
+	for _, accessor := range accessors {
+		count := len(accessor.Names(state))
+		if count == 0 {
+			continue
 		}
+		declared = append(declared, cliout.Field{Key: accessor.StateField, Value: fmt.Sprint(count)})
 	}
 	return declared
 }

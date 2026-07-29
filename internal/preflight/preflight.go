@@ -122,7 +122,7 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 
 func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir, clustersDir, runtimeDir string, deps Deps, hostTrustScope map[string]bool, secretScope *SecretScope) []Check {
 	var checks []Check
-	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateHasAddonPlaybookHooks(state)
+	addonsNeedAnsible := phaseInScope("add-ons", selected, hasState) && stateHasAddonPlaybookSteps(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(workspace.AnsibleVenvDir(), "bin")}, "bootwright bastion setup", deps),
@@ -182,10 +182,10 @@ func selectedNeedsAnsible(selected []Phase) bool {
 	return false
 }
 
-func stateHasAddonPlaybookHooks(state v1alpha1.State) bool {
+func stateHasAddonPlaybookSteps(state v1alpha1.State) bool {
 	for _, addon := range state.ClusterAddons {
-		for _, hook := range addon.Spec.Steps {
-			if hook.Playbook != "" {
+		for _, step := range addon.Spec.Steps {
+			if step.Playbook != "" {
 				return true
 			}
 		}

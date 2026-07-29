@@ -52,7 +52,7 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	machineRecords, cnameRecords := nodeHostRecords(state, entryName)
 	hostRecords = append(hostRecords, machineRecords...)
 	hostRecords = append(hostRecords, gatewayHostRecords(state, entryName)...)
-	hostRecords = append(hostRecords, managementHostRecords(state, entryName)...)
+	hostRecords = append(hostRecords, mgmtGatewayHostRecords(state, entryName)...)
 	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords), dnsmasqRecordVars(cnameRecords)
 }
 
@@ -103,14 +103,14 @@ func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord 
 	return records
 }
 
-func managementHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
+func mgmtGatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
 	var records []dnsmasqRecord
 	for _, sc := range state.StorageClusters {
-		if sc.Spec.Ceph == nil || sc.Spec.Ceph.Management == nil {
+		if sc.Spec.Ceph == nil || sc.Spec.Ceph.MgmtGateway == nil {
 			continue
 		}
-		mgmt := sc.Spec.Ceph.Management
-		dnsName := stateview.StorageManagementFQDN(state, sc)
+		mgmt := sc.Spec.Ceph.MgmtGateway
+		dnsName := stateview.StorageMgmtGatewayFQDN(state, sc)
 		if dnsName == "" || mgmt.Ingress.Address == "" {
 			continue
 		}

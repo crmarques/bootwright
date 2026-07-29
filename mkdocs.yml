@@ -131,6 +131,7 @@ nav:
       - Architecture: contributing/architecture.md
 
 copyright: >-
-  Bootwright is an open-source desired-state cloud-platform orchestrator.
+  Bootwright is a desired-state cloud-platform orchestrator released under the
+  <a href="https://github.com/crmarques/bootwright/blob/main/LICENSE">Apache License 2.0</a>.
   Binding contracts live under
   <a href="https://github.com/crmarques/bootwright/tree/main/specs"><code>/specs/</code></a>.

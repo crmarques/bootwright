@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-type hookTargetMachine struct {
+type stepTargetMachine struct {
 	label           string
 	machine         v1alpha1.Machine
 	sshUser         string
@@ -18,10 +18,10 @@ type hookTargetMachine struct {
 	sudoPasswordRef v1alpha1.SecretRef
 }
 
-func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddonStep) ([]hookTargetMachine, error) {
-	target := hook.Target
-	var out []hookTargetMachine
-	add := func(more []hookTargetMachine) { out = append(out, more...) }
+func (e *addonStepExecutor) resolveStepTargetMachines(step v1alpha1.ClusterAddonStep) ([]stepTargetMachine, error) {
+	target := step.Target
+	var out []stepTargetMachine
+	add := func(more []stepTargetMachine) { out = append(out, more...) }
 
 	if target.BoundCluster != nil {
 		machines, err := e.containerClusterMachines(e.plan.Cluster)
@@ -41,13 +41,13 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 		for _, name := range target.Static.Machines {
 			machine, ok := stateview.Machine(e.state, name)
 			if !ok {
-				return nil, fmt.Errorf("hook %s target machine %q not found", hook.Name, name)
+				return nil, fmt.Errorf("step %s target machine %q not found", step.Name, name)
 			}
-			add([]hookTargetMachine{machineHookTarget("Machine/"+name, machine)})
+			add([]stepTargetMachine{machineStepTarget("Machine/"+name, machine)})
 		}
 	}
 	if target.FromInput != nil {
-		machines, err := e.fromInputMachines(hook, *target.FromInput)
+		machines, err := e.fromInputMachines(step, *target.FromInput)
 		if err != nil {
 			return nil, err
 		}
@@ -56,37 +56,37 @@ func (e *addonHookExecutor) resolveHookTargetMachines(hook v1alpha1.ClusterAddon
 	return dedupeTargetMachines(out), nil
 }
 
-func (e *addonHookExecutor) fromInputMachines(hook v1alpha1.ClusterAddonStep, from v1alpha1.ClusterAddonStepInputTarget) ([]hookTargetMachine, error) {
+func (e *addonStepExecutor) fromInputMachines(step v1alpha1.ClusterAddonStep, from v1alpha1.ClusterAddonStepInputTarget) ([]stepTargetMachine, error) {
 	refKind, ok := e.inputRefKind(from.Input)
 	if !ok {
-		return nil, fmt.Errorf("hook %s fromInput %s is not a resourceRef input", hook.Name, from.Input)
+		return nil, fmt.Errorf("step %s fromInput %s is not a resourceRef input", step.Name, from.Input)
 	}
 	name := e.inputValue(from.Input)
 	if name == "" {
-		return nil, fmt.Errorf("hook %s fromInput %s has no value", hook.Name, from.Input)
+		return nil, fmt.Errorf("step %s fromInput %s has no value", step.Name, from.Input)
 	}
 	switch refKind {
-	case hooks.RefKindStorageExport:
+	case steps.RefKindStorageExport:
 		export, ok := stateview.ExportByName(e.state, name)
 		if !ok {
-			return nil, fmt.Errorf("hook %s fromInput references unknown StorageExport %q", hook.Name, name)
+			return nil, fmt.Errorf("step %s fromInput references unknown StorageExport %q", step.Name, name)
 		}
 		return e.storageClusterMachines(export.Spec.StorageClusterRef.Name)
-	case hooks.RefKindStorageCluster:
+	case steps.RefKindStorageCluster:
 		return e.storageClusterMachines(name)
-	case hooks.RefKindContainerCluster:
+	case steps.RefKindContainerCluster:
 		return e.containerClusterMachines(name)
-	case hooks.RefKindMachine:
+	case steps.RefKindMachine:
 		machine, ok := stateview.Machine(e.state, name)
 		if !ok {
-			return nil, fmt.Errorf("hook %s fromInput references unknown Machine %q", hook.Name, name)
+			return nil, fmt.Errorf("step %s fromInput references unknown Machine %q", step.Name, name)
 		}
-		return []hookTargetMachine{machineHookTarget("Machine/"+name, machine)}, nil
+		return []stepTargetMachine{machineStepTarget("Machine/"+name, machine)}, nil
 	}
-	return nil, fmt.Errorf("hook %s fromInput refKind %q is not supported", hook.Name, refKind)
+	return nil, fmt.Errorf("step %s fromInput refKind %q is not supported", step.Name, refKind)
 }
 
-func (e *addonHookExecutor) clusterMachines(name string) ([]hookTargetMachine, error) {
+func (e *addonStepExecutor) clusterMachines(name string) ([]stepTargetMachine, error) {
 	if _, ok := stateview.ClusterByName(e.state, name); ok {
 		return e.storageClusterMachines(name)
 	}
@@ -95,10 +95,10 @@ func (e *addonHookExecutor) clusterMachines(name string) ([]hookTargetMachine, e
 			return e.containerClusterMachines(name)
 		}
 	}
-	return nil, fmt.Errorf("hook target cluster %q not found", name)
+	return nil, fmt.Errorf("step target cluster %q not found", name)
 }
 
-func (e *addonHookExecutor) containerClusterMachines(name string) ([]hookTargetMachine, error) {
+func (e *addonStepExecutor) containerClusterMachines(name string) ([]stepTargetMachine, error) {
 	var cluster v1alpha1.ContainerCluster
 	found := false
 	for _, c := range e.state.ContainerClusters {
@@ -110,18 +110,18 @@ func (e *addonHookExecutor) containerClusterMachines(name string) ([]hookTargetM
 	if !found {
 		return nil, fmt.Errorf("container cluster %q not found", name)
 	}
-	var out []hookTargetMachine
+	var out []stepTargetMachine
 	for _, node := range cluster.Spec.Nodes {
 		machine, ok := stateview.Machine(e.state, node.MachineRef.Name)
 		if !ok {
 			continue
 		}
-		out = append(out, machineHookTarget("ContainerCluster/"+name+" node/"+node.MachineRef.Name, machine))
+		out = append(out, machineStepTarget("ContainerCluster/"+name+" node/"+node.MachineRef.Name, machine))
 	}
 	return out, nil
 }
 
-func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMachine, error) {
+func (e *addonStepExecutor) storageClusterMachines(name string) ([]stepTargetMachine, error) {
 	cluster, ok := stateview.ClusterByName(e.state, name)
 	if !ok || cluster.Spec.Ceph == nil {
 		return nil, fmt.Errorf("storage cluster %q not found or not a Ceph cluster", name)
@@ -134,13 +134,13 @@ func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMac
 			break
 		}
 	}
-	var out []hookTargetMachine
+	var out []stepTargetMachine
 	for _, node := range ordered {
 		machine, ok := topology.NodeMachine(e.state, cluster, node.Name)
 		if !ok {
 			continue
 		}
-		target := machineHookTarget("StorageCluster/"+name+" node/"+node.Name, machine)
+		target := machineStepTarget("StorageCluster/"+name+" node/"+node.Name, machine)
 		target.sshUser = v1alpha1.StorageClusterCephadmSSHUser(cluster)
 		if ref := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name; ref != "" {
 			target.sshKeyRef = v1alpha1.SecretRef{Name: ref}
@@ -150,8 +150,8 @@ func (e *addonHookExecutor) storageClusterMachines(name string) ([]hookTargetMac
 	return out, nil
 }
 
-func machineHookTarget(label string, machine v1alpha1.Machine) hookTargetMachine {
-	target := hookTargetMachine{label: label, machine: machine}
+func machineStepTarget(label string, machine v1alpha1.Machine) stepTargetMachine {
+	target := stepTargetMachine{label: label, machine: machine}
 	if machine.Spec.Access.SSH != nil {
 		target.sshUser = machine.Spec.Access.SSH.User
 		target.sshKeyRef = v1alpha1.MachineSSHKeyRef(machine)
@@ -161,7 +161,7 @@ func machineHookTarget(label string, machine v1alpha1.Machine) hookTargetMachine
 	return target
 }
 
-func (e *addonHookExecutor) inputRefKind(input string) (string, bool) {
+func (e *addonStepExecutor) inputRefKind(input string) (string, bool) {
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
 		if accepted.Name != input {
 			continue
@@ -173,7 +173,7 @@ func (e *addonHookExecutor) inputRefKind(input string) (string, bool) {
 	return "", false
 }
 
-func hookConnectionSecretNames(machines []hookTargetMachine) []string {
+func stepConnectionSecretNames(machines []stepTargetMachine) []string {
 	seen := map[string]bool{}
 	var names []string
 	add := func(name string) {
@@ -194,9 +194,9 @@ func hookConnectionSecretNames(machines []hookTargetMachine) []string {
 	return names
 }
 
-func dedupeTargetMachines(in []hookTargetMachine) []hookTargetMachine {
+func dedupeTargetMachines(in []stepTargetMachine) []stepTargetMachine {
 	seen := map[string]bool{}
-	var out []hookTargetMachine
+	var out []stepTargetMachine
 	for _, m := range in {
 		if m.machine.Metadata.Name == "" || seen[m.machine.Metadata.Name] {
 			continue

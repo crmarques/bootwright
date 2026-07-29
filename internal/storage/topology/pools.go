@@ -21,7 +21,7 @@ const (
 	SingleHostReplicatedPoolSize = SingleHostMinimumOSDs
 	SingleHostReplicatedMinSize  = 1
 
-	CephManagementDefaultPort = 8443
+	CephMgmtGatewayDefaultPort = 8443
 
 	CephAdminConfigPath  = "/etc/ceph/ceph.conf"
 	CephAdminKeyringPath = "/etc/ceph/ceph.client.admin.keyring"

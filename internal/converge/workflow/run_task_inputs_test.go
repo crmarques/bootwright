@@ -297,10 +297,10 @@ func TestSweepStaleRuntimeSecretsMatchesTheLiveTaskLayoutAndSkipsSweptRuns(t *te
 	if err := os.WriteFile(filepath.Join(liveSecretsDir, "ceph-node-ssh"), []byte("plaintext\n"), 0o600); err != nil {
 		t.Fatalf("write stale plaintext: %v", err)
 	}
-	hookSecrets := filepath.Join(taskRoot, taskHooksDirName, "install", hookSecretsDirName)
-	hookConnection := filepath.Join(taskRoot, taskHooksDirName, "install", hookConnectionSecretsDirName)
+	stepSecrets := filepath.Join(taskRoot, taskStepsDirName, "install", stepSecretsDirName)
+	stepConnection := filepath.Join(taskRoot, taskStepsDirName, "install", stepConnectionSecretsDirName)
 	keep := filepath.Join(taskRoot, taskRenderedDirName)
-	for _, dir := range []string{hookSecrets, hookConnection, keep} {
+	for _, dir := range []string{stepSecrets, stepConnection, keep} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("mkdir %s: %v", dir, err)
 		}
@@ -311,7 +311,7 @@ func TestSweepStaleRuntimeSecretsMatchesTheLiveTaskLayoutAndSkipsSweptRuns(t *te
 
 	sweepStaleRuntimeSecrets(opts.RunsDir, "run-live")
 
-	for _, gone := range []string{liveSecretsDir, hookSecrets, hookConnection} {
+	for _, gone := range []string{liveSecretsDir, stepSecrets, stepConnection} {
 		if _, err := os.Stat(gone); !os.IsNotExist(err) {
 			t.Fatalf("sweep left plaintext at %s (err=%v)", gone, err)
 		}

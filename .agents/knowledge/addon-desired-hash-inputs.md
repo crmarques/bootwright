@@ -14,7 +14,7 @@ Subscription and on the CSV before custom resources) use `CatalogResources` +
 byte-identical to `OLMResources`, or recorded hashes drift from what applies.
 
 **Binding inputs:** `ExtensionPlan.Inputs` (the binding-supplied values) are
-part of desired state because hooks and effects resolve against them — editing
+part of desired state because steps and effects resolve against them — editing
 an input re-applies an otherwise-ready add-on. The `Inputs` field is json
 `omitempty` in the hash payload specifically to keep previously recorded
 hashes stable for add-ons whose bindings supply no inputs.
@@ -34,13 +34,13 @@ Profile cycles are rejected upstream by state/desired (the cycle authority),
 so the in-walk break is unreachable on valid state; the duplicated shape
 exists to keep the two traversals from drifting apart.
 
-**Hook content digest:** `hooks.ContentDigest` is a best-effort sha256 over a
-hook's shipped content — the playbook file, the vendored `roles/` and
+**Step content digest:** `steps.ContentDigest` is a best-effort sha256 over a
+step's shipped content — the playbook file, the vendored `roles/` and
 `collections/` trees, and every manifest template; missing files contribute
 nothing (validation separately requires them for a real apply).
-`render.DesiredHash` folds a per-add-on `hookContentDigest` (hook name +
+`render.DesiredHash` folds a per-add-on `stepContentDigest` (step name +
 `ContentDigest` per `spec.steps` entry) into the desired hash even though the
-Extension field already serializes the hook specs, so editing a shipped
+Extension field already serializes the step specs, so editing a shipped
 playbook without touching the add-on YAML still moves the hash and re-runs the
-add-on. The same digest also feeds the per-hook record for `run: onChange`
+add-on. The same digest also feeds the per-step record for `run: onChange`
 skipping.

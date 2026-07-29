@@ -10,7 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -151,7 +151,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
-	hookDigest, err := hookContentDigest(extension)
+	stepDigest, err := stepContentDigest(extension)
 	if err != nil {
 		return "", err
 	}
@@ -162,7 +162,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
 		Resources  []map[string]any                    `json:"resources,omitempty"`
 		Manifests  []manifestFile                      `json:"manifests,omitempty"`
-		HookDigest string                              `json:"hookDigest,omitempty"`
+		StepDigest string                              `json:"stepDigest,omitempty"`
 	}{
 		APIVersion: v1alpha1.APIVersion,
 		Extension:  extension,
@@ -173,7 +173,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPoli
 			ContinueOnError: policy.ContinueOnError,
 		},
 		Inputs:     inputs,
-		HookDigest: hookDigest,
+		StepDigest: stepDigest,
 	}
 	switch extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLM:
@@ -255,17 +255,17 @@ func stringValue(value any) string {
 	return s
 }
 
-func hookContentDigest(extension v1alpha1.ClusterAddon) (string, error) {
+func stepContentDigest(extension v1alpha1.ClusterAddon) (string, error) {
 	if len(extension.Spec.Steps) == 0 {
 		return "", nil
 	}
 	sum := sha256.New()
-	for _, hook := range extension.Spec.Steps {
-		digest, err := hooks.ContentDigest(extension.SourcePath, hook)
+	for _, step := range extension.Spec.Steps {
+		digest, err := steps.ContentDigest(extension.SourcePath, step)
 		if err != nil {
-			return "", fmt.Errorf("ClusterAddon/%s hook %s: %w", extension.Metadata.Name, hook.Name, err)
+			return "", fmt.Errorf("ClusterAddon/%s step %s: %w", extension.Metadata.Name, step.Name, err)
 		}
-		sum.Write([]byte(hook.Name))
+		sum.Write([]byte(step.Name))
 		sum.Write([]byte{0})
 		sum.Write([]byte(digest))
 		sum.Write([]byte{0})

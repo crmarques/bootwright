@@ -147,7 +147,7 @@ boundaries, and idempotency? Find one unsafe shell task (missing `changed_when`,
 are not safe to re-run unattended and either defend or flag them. Confirm the
 runtime-materialized bundle (`internal/converge/bundle/ansible_bundle.zip`, built
 by `make sync-bundle`) is reachable in a disconnected lab, and that
-operator-supplied provisioning playbooks (ADR 0005) and add-on hook playbooks
+operator-supplied provisioning playbooks (ADR 0005) and add-on step playbooks
 compose with it without breaking the embedded collection.
 
 **Drift and evolution.** Pick two non-trivial validation rules from `specs/` and

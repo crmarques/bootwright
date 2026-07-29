@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 )
 
 func validateClusterAddonSteps(state v1alpha1.State, extension v1alpha1.ClusterAddon) []string {
@@ -180,8 +180,8 @@ func validateHookInputRef(prefix string, extension v1alpha1.ClusterAddon, from v
 	if accepted.ResourceRef == nil {
 		return []string{fmt.Sprintf("%s.input %q must name a resourceRef input", prefix, from.Input)}
 	}
-	if !slices.Contains(hooks.SupportedTargetRefKinds(), accepted.ResourceRef.Kind) {
-		return []string{fmt.Sprintf("%s.input %q resourceRef kind %q is not a supported target kind %v", prefix, from.Input, accepted.ResourceRef.Kind, hooks.SupportedTargetRefKinds())}
+	if !slices.Contains(steps.SupportedTargetRefKinds(), accepted.ResourceRef.Kind) {
+		return []string{fmt.Sprintf("%s.input %q resourceRef kind %q is not a supported target kind %v", prefix, from.Input, accepted.ResourceRef.Kind, steps.SupportedTargetRefKinds())}
 	}
 	if accepted.ResourceRef.Kind == v1alpha1.KindStorageExport && !inputHasStorageExportAttachment(accepted) {
 		return []string{fmt.Sprintf("%s targets a StorageExport through input %q, so that input must declare a storageExportAttachment effect; without it the export's Ceph cluster and nodes are not pulled into the add-on's apply scope and the step fails at apply time with an unresolved-reference error", prefix, from.Input)}
@@ -248,12 +248,12 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 			errs = append(errs, fmt.Sprintf("%s.path %q could not be read: %v", owner, manifest.Path, err))
 			continue
 		}
-		tokens, err := hooks.ExtractTokens(raw)
+		tokens, err := steps.ExtractTokens(raw)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s.path %q is not a valid manifest: %v", owner, manifest.Path, err))
 			continue
 		}
-		if stray, err := hooks.StrayTokenScalars(raw); err == nil {
+		if stray, err := steps.StrayTokenScalars(raw); err == nil {
 			for _, value := range stray {
 				errs = append(errs, fmt.Sprintf("%s.path %q has a scalar %q that looks like a token but is not the entire value; a token must be the whole scalar (e.g. \"{{ output foo }}\", not embedded in other text) or it is applied as literal text", owner, manifest.Path, value))
 			}
@@ -271,23 +271,23 @@ func validateHookManifests(prefix, baseDir string, extension v1alpha1.ClusterAdd
 	return errs
 }
 
-func tokenConsumesOutput(token hooks.Token) bool {
-	return token.Kind == hooks.TokenOutput
+func tokenConsumesOutput(token steps.Token) bool {
+	return token.Kind == steps.TokenOutput
 }
 
-func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep, token hooks.Token, outputs, secretRefs map[string]bool) []string {
+func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alpha1.ClusterAddonStep, token steps.Token, outputs, secretRefs map[string]bool) []string {
 	switch token.Kind {
-	case hooks.TokenCluster:
+	case steps.TokenCluster:
 		return nil
-	case hooks.TokenOutput:
+	case steps.TokenOutput:
 		if !outputs[token.Arg] {
 			return []string{fmt.Sprintf("%s references undeclared output %q", owner, token.Arg)}
 		}
-	case hooks.TokenSecret:
+	case steps.TokenSecret:
 		if !secretRefs[token.Arg] {
 			return []string{fmt.Sprintf("%s references secret %q not listed in the step's secretRefs", owner, token.Arg)}
 		}
-	case hooks.TokenInput, hooks.TokenExportDetails:
+	case steps.TokenInput, steps.TokenExportDetails:
 		return validateHookInputToken(owner, extension, token)
 	default:
 		return []string{fmt.Sprintf("%s has unknown token kind %q", owner, token.Kind)}
@@ -295,12 +295,12 @@ func validateHookToken(owner string, extension v1alpha1.ClusterAddon, hook v1alp
 	return nil
 }
 
-func validateHookInputToken(owner string, extension v1alpha1.ClusterAddon, token hooks.Token) []string {
+func validateHookInputToken(owner string, extension v1alpha1.ClusterAddon, token steps.Token) []string {
 	accepted, ok := acceptedInputByName(extension, token.Arg)
 	if !ok {
 		return []string{fmt.Sprintf("%s references undeclared input %q", owner, token.Arg)}
 	}
-	if token.Kind == hooks.TokenExportDetails && (accepted.ResourceRef == nil || accepted.ResourceRef.Kind != v1alpha1.KindStorageExport) {
+	if token.Kind == steps.TokenExportDetails && (accepted.ResourceRef == nil || accepted.ResourceRef.Kind != v1alpha1.KindStorageExport) {
 		return []string{fmt.Sprintf("%s exportDetails token must reference a StorageExport resourceRef input", owner)}
 	}
 	return nil

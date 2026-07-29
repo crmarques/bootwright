@@ -69,10 +69,10 @@ func validateStorageIngressVRRPCollisions(state v1alpha1.State) []string {
 		}
 	}
 	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
+		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.MgmtGateway == nil {
 			continue
 		}
-		ingress := cluster.Spec.Ceph.Management.Ingress
+		ingress := cluster.Spec.Ceph.MgmtGateway.Ingress
 		declarations = append(declarations, storageIngressVRRPDeclaration{
 			cluster:  cluster.Metadata.Name,
 			owner:    fmt.Sprintf("StorageCluster/%s spec.ceph.management.ingress", cluster.Metadata.Name),

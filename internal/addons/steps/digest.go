@@ -1,4 +1,4 @@
-package hooks
+package steps
 
 import (
 	"crypto/sha256"
@@ -13,8 +13,8 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonStep) (string, error) {
-	base := StepContentRoot(addonSourcePath, hook)
+func ContentDigest(addonSourcePath string, step v1alpha1.ClusterAddonStep) (string, error) {
+	base := ContentRoot(addonSourcePath, step)
 	sum := sha256.New()
 	digestPath := func(rel string) error {
 		if strings.TrimSpace(rel) == "" {
@@ -26,14 +26,14 @@ func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonStep) (stri
 		}
 		return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
-				return fmt.Errorf("scan hook content %s: %w", path, err)
+				return fmt.Errorf("scan step content %s: %w", path, err)
 			}
 			if entry.IsDir() {
 				return nil
 			}
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
-				return fmt.Errorf("read hook content %s: %w", path, readErr)
+				return fmt.Errorf("read step content %s: %w", path, readErr)
 			}
 			relPath, _ := filepath.Rel(root, path)
 			sum.Write([]byte(relPath))
@@ -43,8 +43,8 @@ func ContentDigest(addonSourcePath string, hook v1alpha1.ClusterAddonStep) (stri
 			return nil
 		})
 	}
-	paths := []string{hook.Playbook, hook.RolesPath, hook.CollectionsPath}
-	for _, manifest := range hook.Manifests {
+	paths := []string{step.Playbook, step.RolesPath, step.CollectionsPath}
+	for _, manifest := range step.Manifests {
 		paths = append(paths, manifest.Path)
 	}
 	for _, rel := range paths {

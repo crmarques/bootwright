@@ -14,13 +14,6 @@ var validMachineCapabilities = map[string]bool{
 	v1alpha1.MachineCapabilityOpenShiftNode:    true,
 	v1alpha1.MachineCapabilityLibvirt:          true,
 	v1alpha1.MachineCapabilityContainerRuntime: true,
-	v1alpha1.MachineCapabilityArtifactServer:   true,
-	v1alpha1.MachineCapabilityLoadBalancer:     true,
-	v1alpha1.MachineCapabilityProxy:            true,
-	v1alpha1.MachineCapabilityNameResolution:   true,
-	v1alpha1.MachineCapabilityNTP:              true,
-	v1alpha1.MachineCapabilityRegistry:         true,
-	v1alpha1.MachineCapabilityCephAdmin:        true,
 	v1alpha1.MachineCapabilityCephNode:         true,
 }
 

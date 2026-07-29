@@ -51,10 +51,10 @@ state, validate it, render tool inputs, converge, observe.
   domain leaves — desired topology resolution (nodes, pools, OSDs), product,
   registry and release derivation, live-state decoding, desired-vs-live
   comparison, and the `diff --adopt` write-back.
-- `addons/{plan,render,oc,records,hooks,inputs,nativecatalog}`: cluster add-on
+- `addons/{plan,render,oc,records,steps,inputs,nativecatalog}`: cluster add-on
   expansion and ordering, generated-resource rendering, in-cluster apply
   through the `oc` command boundary, per-cluster add-on records, add-on-shipped
-  hooks and outputs, binding-scoped input values, and the embedded built-in
+  steps and outputs, binding-scoped input values, and the embedded built-in
   catalog plus its machine-local store.
 - `entitlements`, `nmstate`: small leaves (RHSM entitlements, NMState
   template rendering).

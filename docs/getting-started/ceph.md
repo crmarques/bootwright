@@ -153,7 +153,7 @@ own substrate binding, OS mode, durable addresses, and SSH access — never inst
 intent.
 
 - `bastion`: the local workstation/libvirt host. `os.provided: true`,
-  `capabilities` (`container-runtime`, `libvirt`, `name-resolution`), addresses
+  `capabilities` (`container-runtime`, `libvirt`), addresses
   `ssh: localhost` and `cluster-lan: 192.168.140.1`, SSH key `bastion-host-ssh`.
 - `ceph-1`, `ceph-2`, `ceph-3`: the Ceph nodes (`capabilities: [ceph-node]`).
   Each binds the libvirt provider (`ceph-1`/`ceph-2` use profile `ceph-full`,
@@ -209,7 +209,7 @@ block sets `distribution: ibm`, `release: "9.9.1.0"`, `ibm.callHome: disabled`,
 `entitlementRef: ibm-storage-ceph`,
 FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap node
 (`node-01`), the public/cluster networks, the HA dashboard
-(`management` → mgmt-gateway with a `keepalive_only` ingress VIP on `.81`), and
+(`mgmtGateway` → mgmt-gateway with a `keepalive_only` ingress VIP on `.81`), and
 the `topology.nodes` that assign roles and OSD devices per node.
 
 The surrounding objects fill in the pools and services:
@@ -242,7 +242,7 @@ environment differs.
 | `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`). Any product version installs; its leading component selects the stream. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
-| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `management.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `mgmtGateway.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsLabel` and `spec.ceph.ingresses[].address` | The RGW endpoint label and ingress VIP, if you changed the network. |
 
 If you change the `192.168.140.*` network, update every place it appears:

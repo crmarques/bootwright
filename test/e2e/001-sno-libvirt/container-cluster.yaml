@@ -24,12 +24,6 @@ spec:
     nodeSSH:
       keyPairRef: sno-libvirt-cluster-admin-ssh-key
 
-  controlPlane:
-    replicas: 1
-
-  compute:
-    - replicas: 0
-
   nodes:
     - name: master-0
       role: master

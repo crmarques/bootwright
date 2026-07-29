@@ -192,7 +192,7 @@ learned; this file records what it still owes.
 - Problem: removing a `ClusterAddonBinding` entry (or the whole binding) from
   desired state is a silent no-op on `apply` — the add-on's OLM install
   (CatalogSource/Namespace/OperatorGroup/Subscription/CSV), any
-  `customResources`, and hook-applied manifests (e.g. the Data Foundation
+  `customResources`, and step-applied manifests (e.g. the Data Foundation
   `rook-ceph-external-cluster-details` Secret, `ocs-external-storagecluster`
   StorageCluster CR) all remain live and Bootwright-unmanaged.
   `internal/addons/oc/execute.go` has no delete verb at all, and
@@ -205,24 +205,24 @@ learned; this file records what it still owes.
 - Related: internal/addons/oc/execute.go, internal/addons/records/records.go,
   internal/converge/workflow/apply_plan.go
 
-## B-020 — Hook firstReachable retry cannot distinguish "unreachable" from "task failed"
+## B-020 — Step firstReachable retry cannot distinguish "unreachable" from "task failed"
 - Status: open
-- Area: addons / hooks
+- Area: addons / steps
 - Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
 - Problem: a `ClusterAddonStep` target with the default `limit: firstReachable`
   retries the next candidate machine on ANY error from the playbook run, not
   only a connection failure — `internal/converge/ansible` only surfaces a bare
   process-exit error, with no parsing of Ansible's per-host unreachable/failed
-  stats. A hook whose task fails for a real reason (bad input, a genuine
+  stats. A step whose task fails for a real reason (bad input, a genuine
   Ceph/API error) gets silently retried against a second (and third) machine
   before finally failing, risking partial side effects and an N-times
-  timeout. The shipped Data Foundation exporter hook (multi-node Ceph
+  timeout. The shipped Data Foundation exporter step (multi-node Ceph
   clusters) is exposed to this.
 - Exit: thread Ansible's per-host stats/callback result (or at least a
   distinct "unreachable" signal) through `internal/converge/ansible.Runner` so
-  the hook-retry loop stops after the first REACHABLE machine's task fails,
+  the step-retry loop stops after the first REACHABLE machine's task fails,
   retrying only on genuine unreachability.
-- Related: internal/converge/workflow/apply_addon_hooks_run.go,
+- Related: internal/converge/workflow/apply_addon_steps_run.go,
   internal/converge/ansible/runner.go
 
 ## B-021 — Environment.spec.resources can permanently deadlock once add-ons/_store is populated
@@ -315,14 +315,14 @@ learned; this file records what it still owes.
 - Status: open
 - Area: addons / security
 - Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: the exporter hook (`run: always`, root-privileged, executes against
+- Problem: the exporter step (`run: always`, root-privileged, executes against
   the live Ceph cluster on every apply) fetches its script at runtime from the
   operator-published `rook-ceph-external-cluster-script-config` ConfigMap;
-  neither the hook digest nor the HookRecord captures any checksum/identity of
+  neither the step digest nor the StepRecord captures any checksum/identity of
   the fetched script, so there is no record of exactly which code ran on a
   given apply.
 - Exit: persist the fetched script's SHA-256 (or the ConfigMap's
-  resourceVersion) into the HookRecord on every run, for audit purposes;
+  resourceVersion) into the StepRecord on every run, for audit purposes;
   optionally support an add-on-declared expected checksum later.
 - Related: add-ons/openshift-data-foundation/4.21/playbooks/export-external-details.yaml,
   internal/addons/records/records.go

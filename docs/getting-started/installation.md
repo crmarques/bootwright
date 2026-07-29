@@ -161,9 +161,10 @@ practical notes it does not carry:
 - Remove a context you no longer need with
   `bootwright context delete --name lab --purge`. `--purge` is not optional —
   without it the command exits 1. Destroy any resources the context still owns
-  first: `--force` deletes it anyway, abandoning running infrastructure and
-  discarding its ownership records and install-captured credentials
-  (kubeconfigs, kubeadmin password).
+  first: `--abandon-resources` deletes it anyway, leaving running infrastructure
+  behind and discarding its ownership records and install-captured credentials
+  (kubeconfigs, kubeadmin password). It is deliberately not called `--force`,
+  which on `destroy` authorizes destruction rather than abandonment.
 
 ### Secrets
 

@@ -121,7 +121,7 @@ func validateHookPlaybookAgainstExternalStorage(prefix string, effect addoninput
 		if hook.Playbook == "" || hook.Target.FromInput == nil || hook.Target.FromInput.Input != effect.Input.Name {
 			continue
 		}
-		errs = append(errs, fmt.Sprintf("%s hook %q runs playbook %q against Ceph nodes, but StorageExport/%s targets StorageCluster/%s which is spec.management=external (no Bootwright-managed Ceph nodes to run it against); bind a ClusterAddon whose hooks are manifest-only and consume externalDetails.fromSecretRef instead", prefix, hook.Name, hook.Playbook, export.Metadata.Name, cluster.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("%s step %q runs playbook %q against Ceph nodes, but StorageExport/%s targets StorageCluster/%s which is spec.management=external (no Bootwright-managed Ceph nodes to run it against); bind a ClusterAddon whose steps are manifest-only and consume externalDetails.fromSecretRef instead", prefix, hook.Name, hook.Playbook, export.Metadata.Name, cluster.Metadata.Name))
 	}
 	return errs
 }

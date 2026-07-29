@@ -163,7 +163,7 @@ func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alp
 	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.VirtualInterfaceNetworks}, true
 }
 
-func ManagementIngressEndpoint(ingress v1alpha1.StorageCephManagementIngress) (v1alpha1.Endpoint, bool) {
+func MgmtGatewayIngressEndpoint(ingress v1alpha1.StorageCephMgmtGatewayIngress) (v1alpha1.Endpoint, bool) {
 	if ingress.Address == "" {
 		return v1alpha1.Endpoint{}, false
 	}

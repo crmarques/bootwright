@@ -443,16 +443,17 @@ Rules:
   after the `sshd` reload. Node access state is recorded on the machine at
   `/etc/bootwright/access-marker.json` (mode `0644`, non-secret). See ADR 0019
   and `security.md`.
-- `spec.capabilities[]` is a closed vocabulary of eleven values:
-  `openshift-node`, `ceph-node`, `ceph-admin`, `container-runtime`,
-  `artifact-server`, `load-balancer`, `proxy`, `name-resolution`, `ntp`,
-  `registry`, and `libvirt`. An unknown, empty, or duplicated entry fails
-  validation naming the `Machine` and the accepted set. Some values assert a
-  property of the machine itself — `container-runtime` (it runs containers) and
-  `libvirt` (it is a libvirt hypervisor host); others restate a binding a
-  reference already declares (`openshift-node` for a `ContainerCluster` node,
-  `ceph-node` for a `StorageCluster` topology node) and are cross-checked
-  against it.
+- `spec.capabilities[]` is a closed vocabulary of four values:
+  `openshift-node`, `ceph-node`, `container-runtime`, and `libvirt`. Every value
+  is enforced somewhere; there are no inventory-only labels. An unknown, empty,
+  or duplicated entry fails validation naming the `Machine` and the accepted
+  set. Two values assert a property of the machine itself —
+  `container-runtime` (it runs containers, required of every containerised
+  `InfraComponent` host) and `libvirt` (it is a libvirt hypervisor host); the
+  other two restate a binding a reference already declares (`openshift-node`
+  for a `ContainerCluster` node, `ceph-node` for a `StorageCluster` topology
+  node) and are cross-checked against it. A component host is never tagged with
+  a capability named after its service.
 
 ## MachineImage
 
@@ -878,7 +879,14 @@ Rules:
     `api`, `api-int`, and `ingress` slots.
   - `source.componentRef` and `source.bindAddressRef` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
-    or `source.type: infraComponent`.
+    or `source.type: infraComponent`. On a **VIP-bearing slot** — `api`,
+    `api-int`, or `ingress` on a multi-machine cluster whose install platform is
+    `baremetal` or `vsphere`, the combination that renders `apiVIPs`/`ingressVIPs`
+    into install-config — `dnsName` alone does not satisfy that one-of: the slot
+    must set `address` or `source.type: infraComponent`, or the VIP list would
+    render empty from a name Bootwright cannot resolve to an address. `dnsName`
+    alone stays legal wherever no VIP is rendered (platform `none` or `external`,
+    and single-node clusters, which render platform `none`).
 - `spec.nodes[].machineRef` is required and references a `Machine` with
   `openshift-node` capability and `os.provided: false`. No default is derived
   from the `name`: node names are cluster-local while `Machine` names are
@@ -971,16 +979,13 @@ Rules:
   (each `key` required, optional `value`, `effect` one of `NoSchedule`,
   `PreferNoSchedule`, or `NoExecute`) are day-2-owned node intent applied after
   install — reconcilable-in-place drift, not install-config/agent-config identity.
-- `spec.controlPlane.replicas`, when set, must equal the number of `master`
-  nodes. `spec.compute[]` declare worker machine pools; their summed `replicas`
-  must equal the number of `worker` plus `infra` nodes (an `infra` node installs
-  in the worker pool, per the role rule above). Both are an optional redundant
-  assertion of the node roster — they never scale the cluster — so a single
-  all-`master` topology omits both.
-  `replicas` is the only machine-pool field: the agent installer renders
-  a single default-architecture `master`/`worker` pool, so the other
-  install-config machine-pool fields (`architecture`, `hyperthreading`,
-  `platform`, `name`) are not authorable.
+- There are no authorable machine pools. `spec.nodes[].role` is the single
+  source of the roster: the renderer derives the control-plane and compute
+  replica counts from it, and the agent installer renders one
+  default-architecture `master` pool and one `worker` pool. Strict decode
+  rejects `spec.controlPlane` and `spec.compute[]` along with every other
+  install-config machine-pool field (`replicas`, `architecture`,
+  `hyperthreading`, `platform`, `name`).
 - Single-node topologies render installer platform `none` unless
   `platform.type: external` is explicit.
 
@@ -1219,7 +1224,7 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   service spec: `port`, `networks[]` (CIDRs the daemon binds), and (prometheus
   only) `retentionTime`/`retentionSize` as `retention_time`/`retention_size`. An
   authored service must resolve to at least one host.
-- `spec.ceph.management`, when set, publishes the cephadm mgmt-gateway (the HA
+- `spec.ceph.mgmtGateway`, when set, publishes the cephadm mgmt-gateway (the HA
   front door to the Ceph dashboard/Grafana). `ingress` is required; `dnsLabel`
   is the leftmost label only, never an FQDN, and the published name is always
   composed as `<dnsLabel>.<StorageCluster.metadata.name>.<domains.storageClusters>`
@@ -1464,7 +1469,7 @@ Rules:
   `spec.public.dnsLabel` is the leftmost label only, never an FQDN, and the
   published name is always composed as
   `<dnsLabel>.<StorageCluster.metadata.name>.<domains.storageClusters>`
-  (ADR 0018) — the same composition `spec.ceph.management.dnsLabel` feeds, with
+  (ADR 0018) — the same composition `spec.ceph.mgmtGateway.dnsLabel` feeds, with
   the cluster arm taken from `spec.storageClusterRef`. `dnsLabel` defaults to the
   gateway's own `metadata.name`, so multiple gateways on one cluster never
   collide, and must be a valid DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) — a
@@ -1499,18 +1504,18 @@ Rules:
   all explicitly site-scoped need only cover the sites they name. Two ingress
   groups anywhere on the same `StorageCluster` — RGW, NFS
   (`StorageNFSExport.spec.ceph.ingresses[]`), or
-  `spec.ceph.management.ingress` — that declare the same `firstVirtualRouterID`
+  `spec.ceph.mgmtGateway.ingress` — that declare the same `firstVirtualRouterID`
   **and** an overlapping `virtualInterfaceNetworks` entry are rejected: two
   keepalived VRRP instances with the same router ID on the same L2 segment
   conflict. Groups on disjoint networks (the per-site-subnet pattern) may
   reuse an ID freely; the check only fires on a declared, overlapping network.
   Each ingress's optional `tls` supplies the HAProxy frontend certificate
   through `certificateRef`+`keyRef`, each of which must name a
-  `tlsCertificate` Secret — unlike `spec.ceph.management.tls` (two separate
+  `tlsCertificate` Secret — unlike `spec.ceph.mgmtGateway.tls` (two separate
   cephadm fields), the cephadm ingress spec takes one combined `ssl_cert`
   field, so Bootwright concatenates the certificate and key PEM content at
   apply time. Without `tls`, cephadm serves its own self-signed certificate
-  on the ingress VIP, the same fallback `spec.ceph.management.tls` has.
+  on the ingress VIP, the same fallback `spec.ceph.mgmtGateway.tls` has.
 - Optional `spec.ceph.realm`/`zoneGroup`/`zone` bind the RGW to a named
   multisite realm (rendered as `rgw_realm`/`rgw_zonegroup`/`rgw_zone`); all three
   are set together, and Bootwright creates them and commits the period before the
@@ -1558,11 +1563,11 @@ Rules:
   `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and
   same-cluster. When set, the `openshift-data-foundation`/`fusion-data-foundation`
-  add-ons' external-cluster-details exporter hook passes the referenced
+  add-ons' external-cluster-details exporter step passes the referenced
   `StorageObjectGateway`'s composed public name and `spec.public.port` as
   `--rgw-endpoint`, so ODF external mode also provisions S3/object storage;
-  omitted, the export covers RBD and CephFS only. The hook reads that name from
-  the resolved `objectGateway.publicFQDN` key the hook-ref carries alongside the
+  omitted, the export covers RBD and CephFS only. The step reads that name from
+  the resolved `objectGateway.publicFQDN` key the step-ref carries alongside the
   serialized gateway — the spec itself holds only the label.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
@@ -1570,8 +1575,8 @@ Rules:
   which must resolve to a declared `Secret` holding the operator-supplied
   external-cluster-details JSON. A managed-`StorageCluster` export may omit
   `externalDetails` entirely: the consuming add-on then produces the payload
-  itself — its hook runs the exporter on a Ceph node of the export's cluster
-  and captures the JSON as a hook output.
+  itself — its step runs the exporter on a Ceph node of the export's cluster
+  and captures the JSON as a step output.
 
 ## ClusterAddon
 
@@ -1629,7 +1634,7 @@ Rules:
   the scope machinery reads the scalar input value to pull the referenced Ceph
   cluster into the add-on's task state. The attachment itself (the
   external-details payload and consumer manifests) is applied by the add-on's own
-  hooks.
+  steps.
 - A `globalPullSecretMerge` effect requires `registry` and `username` under the
   `globalPullSecretMerge` arm, and the input must declare `secretRef: {}`. Before
   the add-on's resources apply, the referenced secret's value is merged into the
@@ -1674,7 +1679,7 @@ Rules:
     cluster's post-install `cephadm.clusterSSH` user and key; container-cluster
     and direct Machine targets use the Machine's `access.ssh` identity.
   - `steps[].secretRefs[]` name `Secret`s materialized into the step's scoped
-    per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
+    per-run secrets directory (`bootwright_step_secrets_dir`) — only the declared
     secrets, never the whole store. `steps[].extraVars` is a free-form map handed
     to the playbook as one JSON `-e` value. It MUST NOT carry a connection or
     privilege-escalation key (`ansible_user`, `ansible_ssh_user`, `ansible_host`,
@@ -1695,7 +1700,7 @@ Rules:
     apply) or `continue` (record the failure and proceed); a step whose manifests
     consume its outputs must be `fail`.
   - `steps[].outputs[]` declare files the playbook writes under
-    `{{ bootwright_hook_outputs_dir }}`, captured after the run: `name` (the
+    `{{ bootwright_step_outputs_dir }}`, captured after the run: `name` (the
     manifest token), `file` (relative to the outputs directory), optional
     `secret` (persisted `0600` under `clusters/<cluster>/secrets/addons/...` and
     reclaimed from run history; non-secret outputs persist under
@@ -1801,6 +1806,7 @@ spec:
     tuned_profile: throughput-performance
   secretRefs:
     - vault-token
+  timeout: 10m             # optional Go duration (default 10m)
   run: onChange            # onChange (default) | always
   onFailure: fail          # fail (default) | continue
 ```
@@ -1871,6 +1877,12 @@ Rules:
   — are unchanged since the last reconcile; `always` re-runs every apply.
 - `spec.onFailure` is `fail` (default: a failed playbook blocks the anchor
   phase) or `continue` (the failure is recorded and the phase proceeds).
+- `spec.timeout` caps a single playbook run, as a Go duration string
+  (`90s`, `45m`, `2h`); it must parse and be greater than zero. It defaults to
+  `10m`, the same shape and default as `ClusterAddon.spec.steps[].timeout`, so a
+  hung playbook fails its task instead of wedging the apply forever. It is an
+  execution bound, not declared input: changing it alone does not re-run an
+  `onChange` playbook.
 - `spec.enabled` defaults true; `enabled: false` keeps the object but skips it.
 
 A playbook is planned only when its anchor phase is in the run's phase set (the
@@ -2068,12 +2080,15 @@ verbs that reach machines.
   selection.
 - `context delete --name <name>` requires `--purge` (contexts live in shared
   root state, so there is no partial delete) and fails closed while the context
-  still owns ownership records or installed clusters. `--force` authorizes
-  deleting it anyway: the infrastructure keeps running, and the ownership
-  records plus install-captured credentials — kubeconfigs, the kubeadmin
-  password — are permanently lost. It is also what proceeds when ownership
-  records cannot be read at all. `destroy --context <name>` first is the
-  non-abandoning path.
+  still owns ownership records or installed clusters. `--abandon-resources`
+  authorizes deleting it anyway: the infrastructure keeps running, and the
+  ownership records plus install-captured credentials — kubeconfigs, the
+  kubeadmin password — are permanently lost. It is also what proceeds when
+  ownership records cannot be read at all. `destroy --context <name>` first is
+  the non-abandoning path. The flag is deliberately **not** spelled `--force`:
+  on `destroy` that word authorizes destroying resources, while here it
+  authorizes walking away from them, and one spelling for two opposite
+  outcomes is a foot-gun. There is no `--force` alias on `context delete`.
 - An input directory that is missing, unreadable, or not a directory is a named
   failure at context resolution/readiness time that names the context and the
   input directory and points at `context update --name <name> -f` (or `context init
@@ -2511,6 +2526,18 @@ verbs that reach machines.
   that stays up, so routing it through `destroy` would demand a strictly larger
   destruction (the whole Ceph cluster) to recover a smaller one. The refusal
   names the flag that authorizes it.
+- `bootwright validate --output json` reports a declared-state census: one count
+  key per authored kind, named as the lower-camel form of the kind's plural
+  (`environments`, `entitlements`, `machines`, `machineImages`,
+  `machineInstallProfiles`, `networkConfigs`, `infraProviders`,
+  `infraComponents`, `containerClusters`, `storageClusters`,
+  `storagePlacementPolicies`, `storagePools`, `storageFilesystems`,
+  `storageObjectGateways`, `storageNFSExports`, `storageExports`,
+  `clusterAddons`, `clusterAddonProfiles`, `clusterAddonBindings`,
+  `customPlaybooks`, `secrets`). The census covers **every** kind in the Kinds
+  table — no authored kind may be missing from it — and each key is always
+  present, including at zero. The human `Objects` block of `validate`, `status`,
+  and `render effective` reports the same census, omitting the zero counts.
 - `bootwright machine trust` records SSH server-key trust for declared machines.
   It remains the scriptable pre-recording path for automation: non-interactive
   runs never record trust on first use, so pipelines record it with `machine

@@ -83,12 +83,12 @@ func TestValidateStorageIngressVIP(t *testing.T) {
 	}
 }
 
-func TestValidateManagementIngressStretchCoverage(t *testing.T) {
+func TestValidateMgmtGatewayIngressStretchCoverage(t *testing.T) {
 	cluster := storageValidationState().StorageClusters[0]
-	mgmtWith := func(sites []string) *v1alpha1.StorageCephManagement {
-		return &v1alpha1.StorageCephManagement{
+	mgmtWith := func(sites []string) *v1alpha1.StorageCephMgmtGateway {
+		return &v1alpha1.StorageCephMgmtGateway{
 			DNSLabel: "dash",
-			Ingress: v1alpha1.StorageCephManagementIngress{
+			Ingress: v1alpha1.StorageCephMgmtGatewayIngress{
 				Name:         "dash",
 				Address:      "10.0.0.9",
 				PrefixLength: 24,
@@ -96,12 +96,12 @@ func TestValidateManagementIngressStretchCoverage(t *testing.T) {
 			},
 		}
 	}
-	cluster.Spec.Ceph.Management = mgmtWith([]string{"dc1"})
-	if got := strings.Join(validateStorageCephManagement("spec.ceph.management", cluster, v1alpha1.State{}), "; "); !strings.Contains(got, "data site \"dc2\"") {
+	cluster.Spec.Ceph.MgmtGateway = mgmtWith([]string{"dc1"})
+	if got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.management", cluster, v1alpha1.State{}), "; "); !strings.Contains(got, "data site \"dc2\"") {
 		t.Fatalf("mgmt ingress narrowed to one site should fail stretch coverage, got %q", got)
 	}
-	cluster.Spec.Ceph.Management = mgmtWith([]string{"dc1", "dc2"})
-	if got := validateStorageCephManagement("spec.ceph.management", cluster, v1alpha1.State{}); len(got) != 0 {
+	cluster.Spec.Ceph.MgmtGateway = mgmtWith([]string{"dc1", "dc2"})
+	if got := validateStorageCephMgmtGateway("spec.ceph.management", cluster, v1alpha1.State{}); len(got) != 0 {
 		t.Fatalf("mgmt ingress covering both data sites must pass, got %v", got)
 	}
 }

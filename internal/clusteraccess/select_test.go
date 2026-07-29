@@ -220,12 +220,6 @@ func cliServiceMachine() v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{
 				v1alpha1.MachineCapabilityContainerRuntime,
-				v1alpha1.MachineCapabilityArtifactServer,
-				v1alpha1.MachineCapabilityLoadBalancer,
-				v1alpha1.MachineCapabilityNameResolution,
-				v1alpha1.MachineCapabilityNTP,
-				v1alpha1.MachineCapabilityProxy,
-				v1alpha1.MachineCapabilityRegistry,
 			},
 			OS: v1alpha1.MachineOSSpec{
 				Provided: v1alpha1.BoolPtr(true),

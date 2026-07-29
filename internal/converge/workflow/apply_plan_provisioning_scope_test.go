@@ -22,7 +22,7 @@ func cephManagedOSExampleState(t *testing.T) v1alpha1.State {
 func TestPlaybookMachineScopeNarrowsStorageClusterTarget(t *testing.T) {
 	state := cephManagedOSExampleState(t)
 	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
-		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		provisioningPlaybook("node-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 			v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "ceph-0"), state)
@@ -30,7 +30,7 @@ func TestPlaybookMachineScopeNarrowsStorageClusterTarget(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	task := assertTaskPresent(t, tasks, "playbook.node-hook")
+	task := assertTaskPresent(t, tasks, "playbook.node-step")
 	wantLimit := strings.Join(render.MachineInventoryHosts(state, "ceph-0"), ":")
 	if task.Limit != wantLimit {
 		t.Fatalf("machine-scoped playbook limit = %q, want %q (only the selected machine's hosts)", task.Limit, wantLimit)
@@ -50,7 +50,7 @@ func TestPlaybookMachineScopeNarrowsStorageClusterTarget(t *testing.T) {
 func TestPlaybookMachineScopeNarrowsContainerClusterTarget(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
 	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
-		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		provisioningPlaybook("node-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 			v1alpha1.CustomPlaybookTarget{Clusters: []string{"3-nodes-ocp-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "master-1"), state)
@@ -58,7 +58,7 @@ func TestPlaybookMachineScopeNarrowsContainerClusterTarget(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	task := assertTaskPresent(t, tasks, "playbook.node-hook")
+	task := assertTaskPresent(t, tasks, "playbook.node-step")
 	wantLimit := strings.Join(render.MachineInventoryHosts(state, "master-1"), ":")
 	if task.Limit != wantLimit {
 		t.Fatalf("machine-scoped playbook limit = %q, want %q (only the selected machine's hosts)", task.Limit, wantLimit)
@@ -71,20 +71,20 @@ func TestPlaybookMachineScopeNarrowsContainerClusterTarget(t *testing.T) {
 func TestPlaybookMachineScopeSkipsPlaybookWithoutSelectedHost(t *testing.T) {
 	state := cephManagedOSExampleState(t)
 	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
-		provisioningPlaybook("other-node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		provisioningPlaybook("other-node-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 			v1alpha1.CustomPlaybookTarget{Machines: []string{"ceph-2"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(machineScopedApplyTarget(state, "ceph-0"), state)
 	if err != nil {
 		t.Fatalf("a playbook targeting machines outside the selection must be skipped, not an error: %v", err)
 	}
-	assertTaskMissing(t, tasks, "playbook.other-node-hook")
+	assertTaskMissing(t, tasks, "playbook.other-node-step")
 }
 
 func TestPlaybookWithoutMachineScopeKeepsClusterGroupLimit(t *testing.T) {
 	state := cephManagedOSExampleState(t)
 	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
-		provisioningPlaybook("node-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		provisioningPlaybook("node-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 			v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
@@ -92,7 +92,7 @@ func TestPlaybookWithoutMachineScopeKeepsClusterGroupLimit(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	task := assertTaskPresent(t, tasks, "playbook.node-hook")
+	task := assertTaskPresent(t, tasks, "playbook.node-step")
 	if task.Limit != render.StorageClusterGroupName("ceph-libvirt") {
 		t.Fatalf("unscoped playbook limit = %q, want the cluster group %q", task.Limit, render.StorageClusterGroupName("ceph-libvirt"))
 	}

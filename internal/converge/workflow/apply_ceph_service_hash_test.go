@@ -23,7 +23,7 @@ func TestStatelessCephServicesDeclareStructuralProjection(t *testing.T) {
 	}
 }
 
-func TestCephManagementEditIsStructurallyReconcilable(t *testing.T) {
+func TestCephMgmtGatewayEditIsStructurallyReconcilable(t *testing.T) {
 	proj := func(s v1alpha1.State) string {
 		b, err := json.Marshal(storageClusterStructuralHashVars(s, "ceph-bm"))
 		if err != nil {
@@ -35,7 +35,7 @@ func TestCephManagementEditIsStructurallyReconcilable(t *testing.T) {
 	want := proj(base)
 
 	withMgmt := bareMetalManagedOSState()
-	withMgmt.StorageClusters[0].Spec.Ceph.Management = &v1alpha1.StorageCephManagement{}
+	withMgmt.StorageClusters[0].Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{}
 	if proj(withMgmt) != want {
 		t.Fatal("enabling the mgmt-gateway must not move the structural hash")
 	}

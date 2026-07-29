@@ -217,8 +217,6 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 		return []string{fmt.Sprintf("ContainerCluster/%s spec.nodes is required", ocp.Metadata.Name)}
 	}
 	master := 0
-	worker := 0
-	infra := 0
 	seenHostnames := map[string]string{}
 	for i, node := range ocp.Spec.Nodes {
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.nodes[%d]", ocp.Metadata.Name, i)
@@ -234,10 +232,7 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 		switch node.Role {
 		case v1alpha1.NodeRoleMaster:
 			master++
-		case v1alpha1.NodeRoleWorker:
-			worker++
-		case v1alpha1.NodeRoleInfra:
-			infra++
+		case v1alpha1.NodeRoleWorker, v1alpha1.NodeRoleInfra:
 		default:
 			errs = append(errs, fmt.Sprintf("%s.role %q must be master, worker, or infra", prefix, node.Role))
 		}
@@ -255,18 +250,6 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	}
 	if master == 0 {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.nodes requires at least one master", ocp.Metadata.Name))
-	}
-	if ocp.Spec.ControlPlane != nil && ocp.Spec.ControlPlane.Replicas != 0 && ocp.Spec.ControlPlane.Replicas != master {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.controlPlane.replicas %d does not match master node count %d",
-			ocp.Metadata.Name, ocp.Spec.ControlPlane.Replicas, master))
-	}
-	workerReplicas := 0
-	for _, pool := range ocp.Spec.Compute {
-		workerReplicas += pool.Replicas
-	}
-	if computeNodes := worker + infra; len(ocp.Spec.Compute) > 0 && workerReplicas != computeNodes {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.compute worker replicas %d does not match worker+infra node count %d",
-			ocp.Metadata.Name, workerReplicas, computeNodes))
 	}
 	return errs
 }

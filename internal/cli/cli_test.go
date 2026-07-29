@@ -2076,21 +2076,29 @@ func TestContextDeletePurgeRefusesLiveEstate(t *testing.T) {
 	if code == 0 {
 		t.Fatal("context delete --purge must refuse while an installed cluster record stands")
 	}
-	for _, want := range []string{"still owns", "bootwright destroy --context test", "--force"} {
+	for _, want := range []string{"still owns", "bootwright destroy --context test", "--abandon-resources"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("live-estate refusal missing %q: %q", want, stderr)
 		}
+	}
+	if strings.Contains(stderr, "--force") {
+		t.Fatalf("context delete must not name --force, which means the opposite on destroy: %q", stderr)
 	}
 	if _, err := os.Stat(ctx.BaseDir); err != nil {
 		t.Fatalf("refused purge must leave the context intact: %v", err)
 	}
 
 	_, stderr, code = runCLI(t, "context", "delete", "--name", "test", "--purge", "--yes", "--force")
+	if code == 0 {
+		t.Fatalf("context delete must reject the removed --force flag, exited 0 stderr=%q", stderr)
+	}
+
+	_, stderr, code = runCLI(t, "context", "delete", "--name", "test", "--purge", "--yes", "--abandon-resources")
 	if code != 0 {
-		t.Fatalf("context delete --purge --force must proceed, exited %d stderr=%q", code, stderr)
+		t.Fatalf("context delete --purge --abandon-resources must proceed, exited %d stderr=%q", code, stderr)
 	}
 	if _, err := os.Stat(ctx.BaseDir); !os.IsNotExist(err) {
-		t.Fatalf("context delete --purge --force did not remove context dir: %v", err)
+		t.Fatalf("context delete --purge --abandon-resources did not remove context dir: %v", err)
 	}
 }
 

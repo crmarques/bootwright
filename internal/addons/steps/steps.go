@@ -1,4 +1,4 @@
-package hooks
+package steps
 
 import (
 	"path/filepath"
@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func StepContentRoot(addonSourcePath string, step v1alpha1.ClusterAddonStep) string {
+func ContentRoot(addonSourcePath string, step v1alpha1.ClusterAddonStep) string {
 	if v1alpha1.PlaybookSourceIsSet(step.Source) {
 		return step.Source.Path
 	}

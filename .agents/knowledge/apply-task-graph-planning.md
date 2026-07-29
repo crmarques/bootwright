@@ -68,13 +68,13 @@ literals (`provisioningControllerGroups` vs render/inventory's
 import render — sync manually. Vendored roles/collections dirs must not be
 named `vendor` or `node_modules`: context-init's input-tree copy skips those
 names and the content silently vanishes (`validateContainedDir` rejects them).
-The apply task graph collapses the per-(cluster, hook) provisioning-playbook
+The apply task graph collapses the per-(cluster, anchor) provisioning-playbook
 tasks into one generic apply line — a cluster running several custom playbooks
-at a single hook shows one collapsed apply step, not a distinct labelled node
+at a single anchor shows one collapsed apply step, not a distinct labelled node
 per playbook.
 
-**Cross-cluster hook edges:** `hooks.TargetClusters` is a pure state walk (no
-secrets) resolving a hook's target to container/storage cluster names so the
+**Cross-cluster step edges:** `steps.TargetClusters` is a pure state walk (no
+secrets) resolving a step's target to container/storage cluster names so the
 planner can add the `storage.<ceph>` / `wait.<ocp>` dependency edges at plan
 time. A `fromInput` target dereferences the accepted input's `refKind`
 (StorageExport, StorageCluster, ContainerCluster, Machine); StorageExport

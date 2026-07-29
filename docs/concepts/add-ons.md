@@ -13,7 +13,7 @@ provider-owned resources; add-ons are desired-state objects the
 the target cluster is installed and reachable.
 
 An add-on applies only after its cluster is installed, and everything it does —
-its declarative Kubernetes objects and the [steps](#hooks) it ships, which may
+its declarative Kubernetes objects and the [steps](#steps) it ships, which may
 run Ansible against machines — is bound to that add-on's install. Work that
 belongs to a provisioning phase instead, including any phase before a cluster
 exists, is a [custom playbook](custom-playbooks.md).
@@ -107,7 +107,7 @@ discriminated union arm whose key is byte-identical to the `type` value.
 | `spec.olm` | For `type: olm` | — | OLM resources and optional custom resources. |
 | `spec.manifestSet` | For `type: manifestSet` | — | Ordered manifest file list. |
 | `spec.readiness` | No | — | Readiness timeout and checks. |
-| `spec.steps[]` | No | — | Lifecycle steps the add-on ships: playbooks and/or templated manifests. See [Hooks](#hooks). |
+| `spec.steps[]` | No | — | Lifecycle steps the add-on ships: playbooks and/or templated manifests. See [Steps](#steps). |
 
 !!! note "Union arm must match the type"
     Exactly one of `olm` or `manifestSet` is set and it must match `spec.type`.
@@ -296,7 +296,7 @@ value.
 
 The shipped OpenShift Data Foundation add-on is the worked example of an
 advertised capability paired with an export attachment; its full YAML is under
-[Hooks](#hooks).
+[Steps](#steps).
 
 ### Readiness
 
@@ -331,18 +331,18 @@ Each readiness check must set exactly one arm:
 | `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` |
 | `resourceExists` | `apiVersion`, `kind`, `name` |
 
-### Hooks
+### Steps
 
 `spec.steps` let an add-on ship its own imperative integration logic — Ansible
 playbooks and/or templated Kubernetes manifests — instead of that logic being
-compiled into Bootwright. A hook runs at a lifecycle point of the add-on apply,
+compiled into Bootwright. A step runs at a lifecycle point of the add-on apply,
 optionally against fleet machines resolved from a binding input, captures
 declared outputs, and applies templated manifests to the bound cluster. This is
 how, for example, the OpenShift Data Foundation add-on gathers external Ceph
 cluster details and applies the Rook `Secret` + `StorageCluster` itself.
 
 The add-on directory is self-contained: the add-on YAML plus `playbooks/`,
-`roles/`, `collections/`, and `manifests/` subtrees. Hook paths are relative to
+`roles/`, `collections/`, and `manifests/` subtrees. Step paths are relative to
 the add-on file and travel with the input tree through `context init`. The
 `manifests/` name is load-bearing, not a convention: shipped Kubernetes
 manifests must live under a directory literally named `manifests`, because the
@@ -356,14 +356,14 @@ everywhere else in the input tree.
 | `steps[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
 | `steps[].source.path` | No | — | Absolute directory outside the input tree holding the Ansible content; `playbook`, `rolesPath` and `collectionsPath` then resolve against it. `source.git` is rejected here — a step's content ships with its add-on. See [custom playbooks](custom-playbooks.md#external-ansible-content). |
 | `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
-| `steps[].target` | For a playbook hook | — | Machines the playbook runs against (see below). |
-| `steps[].secretRefs[]` | No | — | `Secret` names materialized into the hook's scoped secrets directory — only these, never the whole store. |
+| `steps[].target` | For a playbook step | — | Machines the playbook runs against (see below). |
+| `steps[].secretRefs[]` | No | — | `Secret` names materialized into the step's scoped secrets directory — only these, never the whole store. |
 | `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. Connection and `become` keys (`ansible_user`, `ansible_host`, `ansible_connection`, `ansible_ssh_*`, `ansible_become*`, …) are rejected: an extra var outranks the inventory, so one would repoint the identity Bootwright connects as for every host in the run. |
 | `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
 | `steps[].run` | No | `onChange` | `onChange` skips a step whose content and inputs are unchanged; `always` re-runs every apply. |
 | `steps[].onFailure` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A step whose manifests consume its outputs must be `fail`. |
-| `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_hook_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the hook; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
-| `steps[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the hook succeeds. |
+| `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_step_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the step; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
+| `steps[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the step succeeds. |
 | `steps[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
 | `steps[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
 
@@ -373,7 +373,7 @@ binding input's `resourceRef` value to its object, then to that object's nodes �
 a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), or
 `static` — a literal `{clusters: [...], machines: [...]}` list keyed the same way
 as `boundCluster`/`fromInput`, with **at least one** of the two lists non-empty.
-`target.limit` is `firstReachable` (default) or `all`. A hook can never target
+`target.limit` is `firstReachable` (default) or `all`. A step can never target
 the controller/localhost.
 
 ```yaml
@@ -384,17 +384,17 @@ target:
   limit: all
 ```
 
-A hook run receives scoped variables: `bootwright_step_name`,
+A step run receives scoped variables: `bootwright_step_name`,
 `bootwright_step_anchor`, `bootwright_addon_name`,
-`bootwright_bound_cluster`, `bootwright_hook_outputs_dir`,
-`bootwright_hook_secrets_dir` (only the declared `secretRefs`),
-`bootwright_hook_inputs` (input name → scalar value), `bootwright_hook_refs`
+`bootwright_bound_cluster`, `bootwright_step_outputs_dir`,
+`bootwright_step_secrets_dir` (only the declared `secretRefs`),
+`bootwright_step_inputs` (input name → scalar value), `bootwright_step_refs`
 (input name → resolved ref object), and `bootwright_kubeconfig` (the bound
 cluster's kubeconfig). The play runs against the resolved target machines
 (each inventory host carries its Machine name in `bootwright_host_name`), but
 the outputs directory, secrets directory, and kubeconfig are controller-local
 paths: read and write them from `delegate_to: localhost` tasks. That is also
-how a hook drives the bound cluster's API — the shipped Data Foundation
+how a step drives the bound cluster's API — the shipped Data Foundation
 add-ons, for example, run `oc --kubeconfig {{ bootwright_kubeconfig }}` on the
 controller to fetch the exporter script the operator publishes before staging
 and running it on a Ceph node. A storage-cluster target uses that cluster's
@@ -492,13 +492,13 @@ stringData:
   external_cluster_details: "{{ output externalDetails }}"
 ```
 
-A hook that ships no playbook (`manifests` only) applies templated manifests
+A step that ships no playbook (`manifests` only) applies templated manifests
 using values already available — binding inputs, secrets, the
 `{{ exportDetails … }}` payload the operator supplied — without running
 anything on a machine. The two Data Foundation shapes follow from this: a
-managed-Ceph export uses the exporter-playbook hook above (the add-on produces
+managed-Ceph export uses the exporter-playbook step above (the add-on produces
 the payload), while an imported-Ceph export with `externalDetails.fromSecretRef`
-uses a manifest-only hook whose Secret template consumes
+uses a manifest-only step whose Secret template consumes
 `{{ exportDetails external-storage }}`.
 
 For imperative work that is not tied to an add-on's lifecycle, use a

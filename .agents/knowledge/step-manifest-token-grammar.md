@@ -1,7 +1,7 @@
-# Add-on hook manifest token grammar (whole-scalar only)
+# Add-on step manifest token grammar (whole-scalar only)
 
-**Whole-scalar tokens, no interpolation.** Hook manifest templates use a
-whole-scalar token grammar (`internal/addons/hooks/tokens.go`): a token —
+**Whole-scalar tokens, no interpolation.** Step manifest templates use a
+whole-scalar token grammar (`internal/addons/steps/tokens.go`): a token —
 kinds `cluster`, `output`, `input`, `secret`, `exportDetails` — must be the
 *entire* YAML scalar value `"{{ kind arg }}"`. Interpolation into a larger
 string is deliberately rejected: `tokenRe` anchors `^...$` after trimming.

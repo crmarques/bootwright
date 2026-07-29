@@ -80,6 +80,12 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		}
 	}
 	runner := runnerFactory(stdout, stderr)
+	runCtx := ctx
+	if task.Timeout > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(ctx, task.Timeout)
+		defer cancel()
+	}
 	now := time.Now()
 	_, isInstallStartKind := clusterInstallTaskStartPhase(task.Entry.Kind)
 	restorable := isInstallStartKind && task.Entry.Cluster != "" && stateHasContainerCluster(task.State, task.Entry.Cluster)
@@ -95,9 +101,12 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
-	result, err := Run(ctx, taskOpts, runner, nil)
+	result, err := Run(runCtx, taskOpts, runner, nil)
 	now = time.Now()
 	if err != nil {
+		if task.Timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			err = fmt.Errorf("playbook timed out after %s; raise spec.timeout if the work legitimately takes longer", task.Timeout)
+		}
 		if recordErr := MarkClusterInstallTaskFailed(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}

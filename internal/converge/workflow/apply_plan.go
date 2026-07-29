@@ -117,15 +117,15 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 			extension := extension
 			id := "addon." + binding.Cluster + "." + extension.Name
 			provides := append(addonProvidedCapabilities(binding.Cluster, extension.Extension), addonAppliedCapability(binding.Cluster, extension.Name))
-			hookDeps := hookCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
-			addonDeps := appendUniqueStrings(append([]string(nil), clusterDeps...), hookDeps...)
+			stepDeps := stepCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
+			addonDeps := appendUniqueStrings(append([]string(nil), clusterDeps...), stepDeps...)
 			for _, key := range addonExclusiveOLMKeys(binding.Cluster, extension.Extension) {
 				if previous := exclusiveOLMOwner[key]; previous != "" {
 					addonDeps = appendUniqueStrings(addonDeps, previous)
 				}
 				exclusiveOLMOwner[key] = id
 			}
-			hookStateContainers, hookStateStorage := hookReferencedClusters(state, binding, extension.Name, extension.Extension)
+			stepStateContainers, stepStateStorage := stepReferencedClusters(state, binding, extension.Name, extension.Extension)
 			if err := graph.Add(Activity{
 				ID:                   id,
 				Requires:             addonRequiredCapabilities(binding.Cluster, extension.Extension),
@@ -141,7 +141,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 						ResourceKeys: addonSharedResourceKeys(binding.Cluster, extension),
 						Status:       TaskStatusPending,
 					},
-					State:     stategraph.FilterStateToApplyClusterRoots(state, hookStateContainers, hookStateStorage),
+					State:     stategraph.FilterStateToApplyClusterRoots(state, stepStateContainers, stepStateStorage),
 					Extension: &extension,
 				},
 			}); err != nil {

@@ -43,10 +43,10 @@ type Record struct {
 	AppliedAt         *time.Time            `json:"appliedAt,omitempty"`
 	ObservedResources []string              `json:"observedResources,omitempty"`
 	LastObserved      string                `json:"lastObserved,omitempty"`
-	Hooks             map[string]HookRecord `json:"hooks,omitempty"`
+	Steps             map[string]StepRecord `json:"steps,omitempty"`
 }
 
-type HookRecord struct {
+type StepRecord struct {
 	Lifecycle string       `json:"lifecycle"`
 	Status    RecordStatus `json:"status"`
 	Digest    string       `json:"digest,omitempty"`
@@ -54,9 +54,9 @@ type HookRecord struct {
 	LastError string       `json:"lastError,omitempty"`
 }
 
-func (r Record) HasFailedHook() bool {
-	for _, hook := range r.Hooks {
-		if hook.Status == RecordStatusFailed {
+func (r Record) HasFailedStep() bool {
+	for _, step := range r.Steps {
+		if step.Status == RecordStatusFailed {
 			return true
 		}
 	}
@@ -84,9 +84,9 @@ func LoadRecord(clustersDir, cluster, extension string) (Record, bool, error) {
 }
 
 func SaveRecord(clustersDir string, record Record) error {
-	if record.Hooks == nil {
+	if record.Steps == nil {
 		if existing, found, err := LoadRecord(clustersDir, record.Cluster, record.Extension); err == nil && found {
-			record.Hooks = existing.Hooks
+			record.Steps = existing.Steps
 		}
 	}
 	return writeRecord(clustersDir, record)
@@ -105,7 +105,7 @@ func writeRecord(clustersDir string, record Record) error {
 	return nil
 }
 
-func SetHook(clustersDir, cluster, extension, name string, hook HookRecord) error {
+func SetStep(clustersDir, cluster, extension, name string, step StepRecord) error {
 	record, found, err := LoadRecord(clustersDir, cluster, extension)
 	if err != nil {
 		return err
@@ -113,9 +113,9 @@ func SetHook(clustersDir, cluster, extension, name string, hook HookRecord) erro
 	if !found {
 		record = Record{Cluster: cluster, Extension: extension}
 	}
-	if record.Hooks == nil {
-		record.Hooks = map[string]HookRecord{}
+	if record.Steps == nil {
+		record.Steps = map[string]StepRecord{}
 	}
-	record.Hooks[name] = hook
+	record.Steps[name] = step
 	return writeRecord(clustersDir, record)
 }

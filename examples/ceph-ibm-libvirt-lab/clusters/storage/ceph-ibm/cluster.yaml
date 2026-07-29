@@ -34,7 +34,7 @@ spec:
       clusterCIDRs:
         - 192.168.140.0/24
 
-    management:
+    mgmtGateway:
       dnsLabel: dashboard
       ingress:
         name: lab

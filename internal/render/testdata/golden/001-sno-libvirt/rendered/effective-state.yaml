@@ -35,10 +35,6 @@ machines:
         capabilities:
             - container-runtime
             - libvirt
-            - load-balancer
-            - proxy
-            - name-resolution
-            - ntp
         os:
             provided: true
         addresses:
@@ -233,10 +229,6 @@ containerClusters:
             pullSecretRef: openshift-pull-secret
             nodeSSH:
                 keyPairRef: sno-libvirt-cluster-admin-ssh-key
-        controlPlane:
-            replicas: 1
-        compute:
-            - {}
         networking:
             clusterNetwork:
                 - cidr: 10.128.0.0/14

@@ -205,7 +205,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
 		}
-		if management := storageManagementVars(cluster, env, paths); management != nil {
+		if management := storageMgmtGatewayVars(cluster, env, paths); management != nil {
 			entry["management"] = management
 		}
 		if rgwIngressTLS := storageRGWIngressTLSVars(state, cluster, paths); len(rgwIngressTLS) > 0 {
@@ -249,12 +249,12 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	return out
 }
 
-func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
-	if !cephrender.ManagementHasSecrets(cluster) {
+func storageMgmtGatewayVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
+	if !cephrender.MgmtGatewayHasSecrets(cluster) {
 		return nil
 	}
-	mgmt := cluster.Spec.Ceph.Management
-	endpoint, ok := topology.ManagementIngressEndpoint(mgmt.Ingress)
+	mgmt := cluster.Spec.Ceph.MgmtGateway
+	endpoint, ok := topology.MgmtGatewayIngressEndpoint(mgmt.Ingress)
 	if !ok {
 		return nil
 	}
@@ -264,7 +264,7 @@ func storageManagementVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Enviro
 	}
 	port := mgmt.Port
 	if port == 0 {
-		port = topology.CephManagementDefaultPort
+		port = topology.CephMgmtGatewayDefaultPort
 	}
 	out := map[string]any{
 		"port":       port,

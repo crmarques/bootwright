@@ -94,7 +94,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
-	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster, state)...)
+	errs = append(errs, validateStorageCephMgmtGateway(prefix+".management", cluster, state)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, machines, storageSiteRequirement(state, cluster))...)
 	errs = append(errs, validateStorageCephOSDDrivegroups(prefix+".topology.osdDrivegroups", cluster)...)
@@ -425,8 +425,8 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 	return errs
 }
 
-func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
-	mgmt := cluster.Spec.Ceph.Management
+func validateStorageCephMgmtGateway(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
+	mgmt := cluster.Spec.Ceph.MgmtGateway
 	if mgmt == nil {
 		return nil
 	}

@@ -16,20 +16,20 @@ import (
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 )
 
-type recordingHookRunner struct {
+type recordingStepRunner struct {
 	runner *sequencingRunner
 	calls  []string
 }
 
-func (h *recordingHookRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
+func (h *recordingStepRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
 	h.calls = append(h.calls, lifecycle)
 	if h.runner != nil {
-		h.runner.events = append(h.runner.events, "hook:"+lifecycle)
+		h.runner.events = append(h.runner.events, "step:"+lifecycle)
 	}
 	return nil, nil
 }
 
-func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
+func TestApplyStepTriggersCSVGateWithoutCustomResources(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
@@ -64,10 +64,10 @@ func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 		Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"},
 	}
 	runner := &sequencingRunner{}
-	hookRunner := &recordingHookRunner{runner: runner}
+	stepRunner := &recordingStepRunner{runner: runner}
 	if _, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
-		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Steps: stepRunner,
 	}, plan); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -79,22 +79,22 @@ func TestApplyHookTriggersCSVGateWithoutCustomResources(t *testing.T) {
 		}
 		return -1
 	}
-	preApply := idx("hook:apply")
+	preApply := idx("step:apply")
 	namespace := idx("apply:Namespace")
 	gate := idx("get:csv")
-	postOp := idx("hook:operatorReady")
+	postOp := idx("step:operatorReady")
 	if preApply < 0 || namespace < 0 || gate < 0 || postOp < 0 {
 		t.Fatalf("missing event; events=%v", runner.events)
 	}
 	if !(preApply < namespace) {
-		t.Errorf("preApply hook must run before operator install; events=%v", runner.events)
+		t.Errorf("preApply step must run before operator install; events=%v", runner.events)
 	}
 	if !(gate < postOp) {
-		t.Errorf("postOperatorReady hook must run after the CSV gate; events=%v", runner.events)
+		t.Errorf("postOperatorReady step must run after the CSV gate; events=%v", runner.events)
 	}
 }
 
-func TestApplyHookErrorRecordsHookSummary(t *testing.T) {
+func TestApplyStepErrorRecordsStepSummary(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
@@ -111,28 +111,28 @@ func TestApplyHookErrorRecordsHookSummary(t *testing.T) {
 	plan := extensionplan.ExtensionPlan{Name: "odf", Cluster: "metal-ocp", Extension: extension, Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"}}
 	_, err := Apply(context.Background(), &sequencingRunner{}, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),
-		Hooks: failingHookRunner{},
+		Steps: failingStepRunner{},
 	}, plan)
 	if err == nil || !strings.Contains(err.Error(), "prep") {
-		t.Fatalf("expected hook failure naming the hook, got %v", err)
+		t.Fatalf("expected step failure naming the step, got %v", err)
 	}
 }
 
-type failingHookRunner struct{}
+type failingStepRunner struct{}
 
-func (failingHookRunner) Run(context.Context, string) ([]string, error) {
-	return nil, &HookError{Hook: "prep", Lifecycle: v1alpha1.ClusterAddonStepGateApply, Detail: "boom"}
+func (failingStepRunner) Run(context.Context, string) ([]string, error) {
+	return nil, &StepError{Step: "prep", Lifecycle: v1alpha1.ClusterAddonStepGateApply, Detail: "boom"}
 }
 
-type observingHookRunner struct {
+type observingStepRunner struct {
 	observed map[string][]string
 }
 
-func (h observingHookRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
+func (h observingStepRunner) Run(_ context.Context, lifecycle string) ([]string, error) {
 	return h.observed[lifecycle], nil
 }
 
-func TestApplyRecordsHookObservedResources(t *testing.T) {
+func TestApplyRecordsStepObservedResources(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
@@ -147,12 +147,12 @@ func TestApplyRecordsHookObservedResources(t *testing.T) {
 		},
 	}
 	plan := extensionplan.ExtensionPlan{Name: "odf", Cluster: "metal-ocp", Extension: extension, Policy: addons.ClusterAddonPolicy{FieldManager: "bootwright"}}
-	hookRunner := observingHookRunner{observed: map[string][]string{
+	stepRunner := observingStepRunner{observed: map[string][]string{
 		v1alpha1.ClusterAddonStepGateApply: {"Secret/openshift-storage/rook-ceph-external-cluster-details"},
 	}}
 	if _, err := Apply(context.Background(), &sequencingRunner{}, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),
-		Hooks: hookRunner,
+		Steps: stepRunner,
 	}, plan); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestApplyRecordsHookObservedResources(t *testing.T) {
 	}
 	want := []string{"Secret/openshift-storage/rook-ceph-external-cluster-details"}
 	if !reflect.DeepEqual(record.ObservedResources, want) {
-		t.Fatalf("ObservedResources = %v, want %v (hook-applied resources must be recorded like OLM-rendered ones)", record.ObservedResources, want)
+		t.Fatalf("ObservedResources = %v, want %v (step-applied resources must be recorded like OLM-rendered ones)", record.ObservedResources, want)
 	}
 }
 
@@ -209,7 +209,7 @@ func (r *callRecordingRunner) gatesTouched() []string {
 	return out
 }
 
-func alwaysHookReadyPlan() extensionplan.ExtensionPlan {
+func alwaysStepReadyPlan() extensionplan.ExtensionPlan {
 	plan := readyExtensionPlan()
 	plan.Extension.Spec.Steps = []v1alpha1.ClusterAddonStep{
 		{Name: "prep", Gates: v1alpha1.ClusterAddonStepGateApply},
@@ -222,47 +222,47 @@ func alwaysHookReadyPlan() extensionplan.ExtensionPlan {
 	return plan
 }
 
-func writeConvergedHookRecords(t *testing.T, dir string, plan extensionplan.ExtensionPlan) {
+func writeConvergedStepRecords(t *testing.T, dir string, plan extensionplan.ExtensionPlan) {
 	t.Helper()
 	writeReadyExtensionRecord(t, dir, plan)
-	for _, hook := range plan.Extension.Spec.Steps {
-		if v1alpha1.ClusterAddonStepRun(hook) == v1alpha1.PlaybookRunAlways {
+	for _, step := range plan.Extension.Spec.Steps {
+		if v1alpha1.ClusterAddonStepRun(step) == v1alpha1.PlaybookRunAlways {
 			continue
 		}
-		anchor, _ := v1alpha1.ClusterAddonStepAnchor(hook)
-		if err := extensionrecords.SetHook(dir, plan.Cluster, plan.Name, hook.Name, extensionrecords.HookRecord{
+		anchor, _ := v1alpha1.ClusterAddonStepAnchor(step)
+		if err := extensionrecords.SetStep(dir, plan.Cluster, plan.Name, step.Name, extensionrecords.StepRecord{
 			Lifecycle: anchor,
 			Status:    extensionrecords.RecordStatusReady,
 		}); err != nil {
-			t.Fatalf("SetHook %s: %v", hook.Name, err)
+			t.Fatalf("SetStep %s: %v", step.Name, err)
 		}
 	}
 }
 
-func TestApplyRunsOnlyAlwaysHooksWhenAddonIsAlreadyReady(t *testing.T) {
+func TestApplyRunsOnlyAlwaysStepsWhenAddonIsAlreadyReady(t *testing.T) {
 	dir := t.TempDir()
-	plan := alwaysHookReadyPlan()
-	writeConvergedHookRecords(t, dir, plan)
+	plan := alwaysStepReadyPlan()
+	writeConvergedStepRecords(t, dir, plan)
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
 	runner := &callRecordingRunner{}
-	hookRunner := &recordingHookRunner{}
+	stepRunner := &recordingStepRunner{}
 
 	result, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
-		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Steps: stepRunner,
 	}, plan)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if result.Skipped {
-		t.Fatalf("an always hook must still run; result = %+v", result)
+		t.Fatalf("an always step must still run; result = %+v", result)
 	}
-	wantHooks := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
-	if !reflect.DeepEqual(hookRunner.calls, wantHooks) {
-		t.Fatalf("hook lifecycles = %v, want %v", hookRunner.calls, wantHooks)
+	wantSteps := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
+	if !reflect.DeepEqual(stepRunner.calls, wantSteps) {
+		t.Fatalf("step lifecycles = %v, want %v", stepRunner.calls, wantSteps)
 	}
 	if len(runner.applies) != 0 {
 		t.Fatalf("a converged add-on must not re-apply catalog, operator or custom resources; applied %v", runner.applies)
@@ -275,17 +275,17 @@ func TestApplyRunsOnlyAlwaysHooksWhenAddonIsAlreadyReady(t *testing.T) {
 		t.Fatalf("LoadRecord: found=%v err=%v", found, err)
 	}
 	if record.Status != extensionrecords.RecordStatusWaiting || record.Phase != extensionrecords.RecordPhaseApplied {
-		t.Fatalf("record = %s/%s, want waiting/applied so Wait re-proves readiness after the hook", record.Status, record.Phase)
+		t.Fatalf("record = %s/%s, want waiting/applied so Wait re-proves readiness after the step", record.Status, record.Phase)
 	}
 	if record.AppliedAt == nil {
-		t.Fatal("record.AppliedAt must be stamped by the hook-only apply")
+		t.Fatal("record.AppliedAt must be stamped by the step-only apply")
 	}
 }
 
-func TestApplyConvergedHooksKeepPriorObservedResources(t *testing.T) {
+func TestApplyConvergedStepsKeepPriorObservedResources(t *testing.T) {
 	dir := t.TempDir()
-	plan := alwaysHookReadyPlan()
-	writeConvergedHookRecords(t, dir, plan)
+	plan := alwaysStepReadyPlan()
+	writeConvergedStepRecords(t, dir, plan)
 	record, _, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
 	if err != nil {
 		t.Fatalf("LoadRecord: %v", err)
@@ -298,7 +298,7 @@ func TestApplyConvergedHooksKeepPriorObservedResources(t *testing.T) {
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
-	hookRunner := observingHookRunner{observed: map[string][]string{
+	stepRunner := observingStepRunner{observed: map[string][]string{
 		v1alpha1.ClusterAddonStepFollowsOperatorReady: {
 			"Namespace/installed",
 			"StorageCluster/installed/ocs-external-storagecluster",
@@ -306,7 +306,7 @@ func TestApplyConvergedHooksKeepPriorObservedResources(t *testing.T) {
 	}}
 	if _, err := Apply(context.Background(), &callRecordingRunner{}, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
-		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Steps: stepRunner,
 	}, plan); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -324,10 +324,10 @@ func TestApplyConvergedHooksKeepPriorObservedResources(t *testing.T) {
 	}
 }
 
-func TestApplyNotReadyAddonWithAlwaysHookTakesFullPath(t *testing.T) {
+func TestApplyNotReadyAddonWithAlwaysStepTakesFullPath(t *testing.T) {
 	dir := t.TempDir()
-	plan := alwaysHookReadyPlan()
-	writeConvergedHookRecords(t, dir, plan)
+	plan := alwaysStepReadyPlan()
+	writeConvergedStepRecords(t, dir, plan)
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
@@ -335,11 +335,11 @@ func TestApplyNotReadyAddonWithAlwaysHookTakesFullPath(t *testing.T) {
 	runner := &callRecordingRunner{failGet: func(args []string) bool {
 		return strings.Contains(strings.Join(args, " "), "Namespace")
 	}}
-	hookRunner := &recordingHookRunner{}
+	stepRunner := &recordingStepRunner{}
 
 	if _, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
-		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Steps: stepRunner,
 	}, plan); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -358,36 +358,36 @@ func TestApplyNotReadyAddonWithAlwaysHookTakesFullPath(t *testing.T) {
 	if gates := runner.gatesTouched(); len(gates) == 0 {
 		t.Fatalf("a live-unready add-on must still run the CSV gate; gets %v", runner.gets)
 	}
-	wantHooks := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
-	if !reflect.DeepEqual(hookRunner.calls, wantHooks) {
-		t.Fatalf("hook lifecycles = %v, want %v", hookRunner.calls, wantHooks)
+	wantSteps := []string{v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady}
+	if !reflect.DeepEqual(stepRunner.calls, wantSteps) {
+		t.Fatalf("step lifecycles = %v, want %v", stepRunner.calls, wantSteps)
 	}
 }
 
-func TestApplyStillSkipsReadyAddonWithOnChangeHooks(t *testing.T) {
+func TestApplyStillSkipsReadyAddonWithOnChangeSteps(t *testing.T) {
 	dir := t.TempDir()
-	plan := alwaysHookReadyPlan()
+	plan := alwaysStepReadyPlan()
 	plan.Extension.Spec.Steps[1].Run = v1alpha1.PlaybookRunOnChange
-	writeConvergedHookRecords(t, dir, plan)
+	writeConvergedStepRecords(t, dir, plan)
 	kubeconfig := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
 	runner := &callRecordingRunner{}
-	hookRunner := &recordingHookRunner{}
+	stepRunner := &recordingStepRunner{}
 
 	result, err := Apply(context.Background(), runner, RunConfig{
 		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
-		StartedAt: time.Now(), PollInterval: time.Millisecond, Hooks: hookRunner,
+		StartedAt: time.Now(), PollInterval: time.Millisecond, Steps: stepRunner,
 	}, plan)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if !result.Skipped {
-		t.Fatalf("a converged add-on with no always hook must still skip entirely; result = %+v", result)
+		t.Fatalf("a converged add-on with no always step must still skip entirely; result = %+v", result)
 	}
-	if len(hookRunner.calls) != 0 {
-		t.Fatalf("skipped apply must not run hooks; calls = %v", hookRunner.calls)
+	if len(stepRunner.calls) != 0 {
+		t.Fatalf("skipped apply must not run steps; calls = %v", stepRunner.calls)
 	}
 }
 

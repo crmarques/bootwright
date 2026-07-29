@@ -1,7 +1,7 @@
 # Ansible conditionals require boolean expressions
 
 Ansible rejects a `when` expression whose result is a mapping, list, string, or
-other value even when that value would traditionally be truthy. Hook references
+other value even when that value would traditionally be truthy. Step references
 arrive through the JSON extra-vars object and retain their mapping type, so a
 guard such as `when: bootwright_gateway` fails when the gateway exists.
 

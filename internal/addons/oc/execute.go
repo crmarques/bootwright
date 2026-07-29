@@ -12,27 +12,27 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 )
 
-type HookRunner interface {
+type StepRunner interface {
 	Run(ctx context.Context, lifecycle string) ([]string, error)
 }
 
-type HookError struct {
-	Hook      string
+type StepError struct {
+	Step      string
 	Lifecycle string
 	Detail    string
 }
 
-func (e *HookError) Error() string {
-	return fmt.Sprintf("hook %q (%s) failed: %s", e.Hook, e.Lifecycle, e.Detail)
+func (e *StepError) Error() string {
+	return fmt.Sprintf("step %q (%s) failed: %s", e.Step, e.Lifecycle, e.Detail)
 }
 
-func (e *HookError) summary() string { return e.Error() }
+func (e *StepError) summary() string { return e.Error() }
 
 type EffectRunner interface {
 	Run(ctx context.Context) error
@@ -62,7 +62,7 @@ type RunConfig struct {
 	StartedAt    time.Time
 	PollInterval time.Duration
 	ReadRunner   OCRunner
-	Hooks        HookRunner
+	Steps        StepRunner
 	Effects      EffectRunner
 	Progress     io.Writer
 }
@@ -74,11 +74,11 @@ func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
 	return fallback
 }
 
-func (c RunConfig) runHooks(ctx context.Context, lifecycle string) ([]string, error) {
-	if c.Hooks == nil {
+func (c RunConfig) runSteps(ctx context.Context, lifecycle string) ([]string, error) {
+	if c.Steps == nil {
 		return nil, nil
 	}
-	return c.Hooks.Run(ctx, lifecycle)
+	return c.Steps.Run(ctx, lifecycle)
 }
 
 func (c RunConfig) runEffects(ctx context.Context) error {
@@ -127,7 +127,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		return TaskResult{}, err
 	}
-	if converged && !hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
+	if converged && !steps.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
 		return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 	}
 	now := time.Now().UTC()
@@ -150,7 +150,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	var observed []string
 	var failedID string
 	if converged {
-		observed, err = applyConvergedHooks(ctx, cfg, plan, convergedRecord.ObservedResources)
+		observed, err = applyConvergedSteps(ctx, cfg, plan, convergedRecord.ObservedResources)
 	} else {
 		observed, failedID, err = applyExtension(ctx, runner, cfg, plan)
 	}
@@ -161,15 +161,15 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		record.Status = extensionrecords.RecordStatusFailed
 		var gate *csvGateError
 		var catalogGate *catalogGateError
-		var hookErr *HookError
+		var stepErr *StepError
 		var effectErr *EffectError
 		switch {
 		case errors.As(err, &gate):
 			record.LastObserved = gate.summary()
 		case errors.As(err, &catalogGate):
 			record.LastObserved = catalogGate.summary()
-		case errors.As(err, &hookErr):
-			record.LastObserved = hookErr.summary()
+		case errors.As(err, &stepErr):
+			record.LastObserved = stepErr.summary()
 		case errors.As(err, &effectErr):
 			record.LastObserved = effectErr.summary()
 		default:
@@ -202,8 +202,8 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		return TaskResult{}, err
 	}
 	if found && completeReadyRecord(record, hash) &&
-		hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) &&
-		!hooks.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) {
+		stepsReady(record, plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) &&
+		!steps.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) {
 		ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		if err == nil && ready {
 			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
@@ -234,13 +234,13 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		}
 		return TaskResult{}, err
 	}
-	postReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsReady)
+	postReadyObserved, err := cfg.runSteps(ctx, v1alpha1.ClusterAddonStepFollowsReady)
 	record.ObservedResources = append(record.ObservedResources, postReadyObserved...)
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
-		var hookErr *HookError
-		if errors.As(err, &hookErr) {
-			record.LastObserved = hookErr.summary()
+		var stepErr *StepError
+		if errors.As(err, &stepErr) {
+			record.LastObserved = stepErr.summary()
 		}
 		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
 			err = errors.Join(err, saveErr)
@@ -268,15 +268,15 @@ func convergedApplyRecord(ctx context.Context, runner OCRunner, cfg RunConfig, p
 		return false, extensionrecords.Record{}, err
 	}
 	if !found || !completeReadyRecord(record, hash) ||
-		!hooksReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
+		!stepsReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
 		return false, extensionrecords.Record{}, nil
 	}
 	return true, record, nil
 }
 
-func applyConvergedHooks(ctx context.Context, cfg RunConfig, plan extensionplan.ExtensionPlan, observed []string) ([]string, error) {
+func applyConvergedSteps(ctx context.Context, cfg RunConfig, plan extensionplan.ExtensionPlan, observed []string) ([]string, error) {
 	merged := append([]string(nil), observed...)
-	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepGateApply)
+	preApplyObserved, err := cfg.runSteps(ctx, v1alpha1.ClusterAddonStepGateApply)
 	merged = appendUnseen(merged, preApplyObserved...)
 	if err != nil {
 		return merged, err
@@ -284,7 +284,7 @@ func applyConvergedHooks(ctx context.Context, cfg RunConfig, plan extensionplan.
 	if plan.Extension.Spec.Type != v1alpha1.ClusterAddonTypeOLM {
 		return merged, nil
 	}
-	postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
+	postOperatorReadyObserved, err := cfg.runSteps(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
 	merged = appendUnseen(merged, postOperatorReadyObserved...)
 	return merged, err
 }
@@ -310,13 +310,13 @@ func completeReadyRecord(record extensionrecords.Record, hash string) bool {
 		record.Phase == extensionrecords.RecordPhaseComplete
 }
 
-func hooksReady(record extensionrecords.Record, extension v1alpha1.ClusterAddon, lifecycles ...string) bool {
+func stepsReady(record extensionrecords.Record, extension v1alpha1.ClusterAddon, lifecycles ...string) bool {
 	for _, lifecycle := range lifecycles {
-		for _, hook := range hooks.At(extension, lifecycle) {
-			if v1alpha1.ClusterAddonStepRun(hook) == v1alpha1.PlaybookRunAlways {
+		for _, step := range steps.At(extension, lifecycle) {
+			if v1alpha1.ClusterAddonStepRun(step) == v1alpha1.PlaybookRunAlways {
 				continue
 			}
-			item, ok := record.Hooks[hook.Name]
+			item, ok := record.Steps[step.Name]
 			if !ok || item.Status != extensionrecords.RecordStatusReady {
 				return false
 			}
@@ -330,7 +330,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 	if err := cfg.runEffects(ctx); err != nil {
 		return observed, "", err
 	}
-	preApplyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepGateApply)
+	preApplyObserved, err := cfg.runSteps(ctx, v1alpha1.ClusterAddonStepGateApply)
 	observed = append(observed, preApplyObserved...)
 	if err != nil {
 		return observed, "", err
@@ -367,7 +367,7 @@ func applyExtension(ctx context.Context, runner OCRunner, cfg RunConfig, plan ex
 		if err := waitCSVSucceeded(ctx, cfg.readRunner(runner), kubeconfig, subscriptionOLM.Namespace.Name, subscriptionOLM.Subscription.Name, plan.Extension.Spec.Readiness.Timeout, cfg.PollInterval, cfg.Progress); err != nil {
 			return observed, "", err
 		}
-		postOperatorReadyObserved, err := cfg.runHooks(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
+		postOperatorReadyObserved, err := cfg.runSteps(ctx, v1alpha1.ClusterAddonStepFollowsOperatorReady)
 		observed = append(observed, postOperatorReadyObserved...)
 		if err != nil {
 			return observed, "", err

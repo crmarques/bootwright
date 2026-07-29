@@ -382,12 +382,12 @@ func nodeFQDN(name, fqdn, clusterName, baseDomain string) string {
 func normalizeStorageDNSAliases(state *v1alpha1.State) {
 	for i := range state.StorageClusters {
 		cluster := &state.StorageClusters[i]
-		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
+		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.MgmtGateway == nil {
 			continue
 		}
-		mgmt := cluster.Spec.Ceph.Management
+		mgmt := cluster.Spec.Ceph.MgmtGateway
 		if mgmt.DNSLabel == "" {
-			mgmt.DNSLabel = v1alpha1.StorageCephManagementDefaultDNSLabel
+			mgmt.DNSLabel = v1alpha1.StorageCephMgmtGatewayDefaultDNSLabel
 		}
 	}
 	for i := range state.StorageObjectGateways {

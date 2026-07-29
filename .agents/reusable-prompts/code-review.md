@@ -157,12 +157,12 @@ handlers that fire unpredictably; roles blurring provider, shared-service,
 cluster-infra, or OpenShift responsibilities; unused or duplicated roles/tasks/
 vars/templates that should be deleted or centralized.
 
-**Add-on catalog and hooks.** The embedded catalog (`add-ons/catalog.yaml`,
-per-add-on `add-on.yaml`, hook playbooks and manifests) ships content that
+**Add-on catalog and steps.** The embedded catalog (`add-ons/catalog.yaml`,
+per-add-on `add-on.yaml`, step playbooks and manifests) ships content that
 `add-ons add` snapshots into the root-owned store under `/var/lib/bootwright`
-and that hook execution applies to installed clusters. Audit loader strictness
+and that step execution applies to installed clusters. Audit loader strictness
 against store snapshots, required/optional input handling, digest coverage of
-everything that changes hook behavior (inputs, extra vars, manifests, outputs),
+everything that changes step behavior (inputs, extra vars, manifests, outputs),
 manifest templating boundaries, workspace lifecycle and cleanup on failure, and
 parity between catalog entries and the examples that consume them.
 

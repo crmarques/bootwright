@@ -30,6 +30,7 @@ type CustomPlaybookSpec struct {
 	ExtraVars  map[string]any `yaml:"extraVars,omitempty" json:"extraVars,omitempty"`
 	SecretRefs []SecretRef    `yaml:"secretRefs,omitempty" json:"secretRefs,omitempty"`
 
+	Timeout   string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 	Run       string `yaml:"run,omitempty" json:"run,omitempty"`
 	OnFailure string `yaml:"onFailure,omitempty" json:"onFailure,omitempty"`
 
@@ -61,6 +62,13 @@ func CustomPlaybookAnchor(p CustomPlaybook) (anchor string, gating bool) {
 		return p.Spec.Gates, true
 	}
 	return p.Spec.Follows, false
+}
+
+func CustomPlaybookTimeout(p CustomPlaybook) string {
+	if p.Spec.Timeout == "" {
+		return DefaultCustomPlaybookTimeout
+	}
+	return p.Spec.Timeout
 }
 
 func CustomPlaybookRunMode(p CustomPlaybook) string {

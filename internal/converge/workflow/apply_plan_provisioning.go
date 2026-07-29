@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
@@ -132,6 +133,7 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 				ExtraVarPairs:     extraVarPairs,
 				Tags:              p.Spec.Tags,
 				SkipTags:          p.Spec.SkipTags,
+				Timeout:           provisioningPlaybookTimeout(p),
 				State:             state,
 				DesiredHashVars:   hashVars,
 				SkipWhenConverged: v1alpha1.CustomPlaybookRunMode(p) == v1alpha1.PlaybookRunOnChange,
@@ -426,6 +428,14 @@ func machineOwningClusters(state v1alpha1.State, machine string) []string {
 		}
 	}
 	return owners
+}
+
+func provisioningPlaybookTimeout(p v1alpha1.CustomPlaybook) time.Duration {
+	d, err := time.ParseDuration(v1alpha1.CustomPlaybookTimeout(p))
+	if err != nil || d <= 0 {
+		return 10 * time.Minute
+	}
+	return d
 }
 
 func provisioningPlaybookLabel(p v1alpha1.CustomPlaybook, anchor string, gating bool) string {

@@ -70,8 +70,8 @@ func TestProvisioningPlaybookAfterDepsAnchorsOnStorageClusterPrereqs(t *testing.
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	hook := taskByID(t, tasks, "playbook.post-deps")
-	assertDependsOn(t, hook, "storageinfra.ceph-libvirt")
+	step := taskByID(t, tasks, "playbook.post-deps")
+	assertDependsOn(t, step, "storageinfra.ceph-libvirt")
 }
 
 func TestProvidedOSStorageClusterKeepsMachineServiceDependencies(t *testing.T) {

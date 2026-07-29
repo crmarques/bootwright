@@ -71,6 +71,7 @@ spec:
   extraVars:
     tuned_profile: throughput-performance
   secretRefs: [vault-token]
+  timeout: 10m
   run: onChange
   onFailure: fail
 ```
@@ -98,6 +99,7 @@ spec:
 | `spec.order` | No | `0` | Tie-break within the anchor bucket; lower runs first. |
 | `spec.provides[]` | No | — | Capabilities this playbook satisfies within its bucket. |
 | `spec.requires[]` | No | — | Capabilities another playbook in the same bucket must provide. |
+| `spec.timeout` | No | `10m` | Go duration capping one run; must parse and be greater than zero. |
 | `spec.run` | No | `onChange` | `onChange` or `always`. |
 | `spec.onFailure` | No | `fail` | `fail` or `continue`; `continue` is rejected with `gates`. |
 | `spec.enabled` | No | `true` | `false` keeps the object in desired state and plans no run. |
@@ -311,10 +313,12 @@ for the normative rules.
 - Several playbooks in the same `(anchor, gates/follows)` bucket run concurrently
   unless ordered by `spec.order` (a tie-break) or `spec.provides`/`spec.requires`
   (capability edges within the bucket, like add-on capabilities).
-- A custom playbook run is **unbounded by design**: Bootwright applies no
-  timeout, so the playbook owns any it needs (a `ClusterAddon` step, by
-  contrast, defaults to `timeout: 10m`). A playbook that hangs holds its anchor
-  phase open for the whole run.
+- A run is bounded by **`spec.timeout`**, a Go duration defaulting to `10m` —
+  the same shape and default as a `ClusterAddon` step. Exceeding it fails the
+  task with a timeout message rather than holding the anchor phase open forever.
+  Raise it for legitimately long work (`timeout: 2h`); the bound is an execution
+  cap, not declared input, so changing it alone does not re-run an `onChange`
+  playbook.
 
 ## Relationship to add-ons
 

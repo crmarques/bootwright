@@ -30,7 +30,7 @@ spec:
       clusterCIDRs:
         - 10.20.30.0/24
 
-    management:
+    mgmtGateway:
       dnsLabel: dashboard
       ingress:
         name: mgmt

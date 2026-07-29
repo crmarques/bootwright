@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -39,6 +40,7 @@ func validateCustomPlaybooks(state v1alpha1.State) []string {
 		if p.Spec.OnFailure != "" && p.Spec.OnFailure != v1alpha1.PlaybookFailureFail && p.Spec.OnFailure != v1alpha1.PlaybookFailureContinue {
 			errs = append(errs, fmt.Sprintf("%s.onFailure %q must be %q or %q", prefix, p.Spec.OnFailure, v1alpha1.PlaybookFailureFail, v1alpha1.PlaybookFailureContinue))
 		}
+		errs = append(errs, validateCustomPlaybookTimeout(prefix, p)...)
 
 		errs = append(errs, validatePlaybookSource(prefix, p.Spec.Source, secrets)...)
 		if v1alpha1.PlaybookSourceIsSet(p.Spec.Source) {
@@ -64,6 +66,20 @@ func validateCustomPlaybooks(state v1alpha1.State) []string {
 
 	errs = append(errs, validateCustomPlaybookOrdering(state.CustomPlaybooks)...)
 	return errs
+}
+
+func validateCustomPlaybookTimeout(prefix string, p v1alpha1.CustomPlaybook) []string {
+	if p.Spec.Timeout == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(p.Spec.Timeout)
+	if err != nil {
+		return []string{fmt.Sprintf("%s.timeout %q is not a valid duration", prefix, p.Spec.Timeout)}
+	}
+	if d <= 0 {
+		return []string{fmt.Sprintf("%s.timeout %q must be greater than 0", prefix, p.Spec.Timeout)}
+	}
+	return nil
 }
 
 func validateCustomPlaybookAnchor(prefix string, p v1alpha1.CustomPlaybook) []string {

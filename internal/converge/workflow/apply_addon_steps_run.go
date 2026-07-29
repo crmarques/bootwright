@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/host/safefs"
@@ -22,41 +22,41 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.ClusterAddonStep, hookRoot string) (map[string]string, error) {
-	machines, err := e.resolveHookTargetMachines(hook)
+func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.ClusterAddonStep, stepRoot string) (map[string]string, error) {
+	machines, err := e.resolveStepTargetMachines(step)
 	if err != nil {
 		return nil, err
 	}
 	if len(machines) == 0 {
-		return nil, fmt.Errorf("hook %s target resolved to no machines", hook.Name)
+		return nil, fmt.Errorf("step %s target resolved to no machines", step.Name)
 	}
 
-	connectionDir := filepath.Join(hookRoot, "connection-secrets")
-	hookSecretsDir := filepath.Join(hookRoot, "secrets")
-	outputsDir := filepath.Join(hookRoot, "outputs")
-	for _, dir := range []string{connectionDir, hookSecretsDir, outputsDir} {
+	connectionDir := filepath.Join(stepRoot, "connection-secrets")
+	stepSecretsDir := filepath.Join(stepRoot, "secrets")
+	outputsDir := filepath.Join(stepRoot, "outputs")
+	for _, dir := range []string{connectionDir, stepSecretsDir, outputsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
 	}
 	store := secret.NewContextStore(effectiveContextName(e.opts.ContextName), e.opts.SecretsDir)
-	if err := store.MaterializeSelected(connectionDir, hookConnectionSecretNames(machines)); err != nil {
+	if err := store.MaterializeSelected(connectionDir, stepConnectionSecretNames(machines)); err != nil {
 		return nil, err
 	}
-	if err := store.MaterializeSelected(hookSecretsDir, hookSecretNames(hook)); err != nil {
+	if err := store.MaterializeSelected(stepSecretsDir, stepSecretNames(step)); err != nil {
 		return nil, err
 	}
 
 	idx := secret.NewIndex(e.state)
-	targets := make([]hookSSHTarget, 0, len(machines))
+	targets := make([]stepSSHTarget, 0, len(machines))
 	for i, m := range machines {
 		address := stateview.MachineConnectionAddress(e.state, m.machine)
 		if m.machine.Spec.Access.SSH == nil || address == "" {
-			return nil, fmt.Errorf("hook %s target machine %s has no resolvable SSH access", hook.Name, m.machine.Metadata.Name)
+			return nil, fmt.Errorf("step %s target machine %s has no resolvable SSH access", step.Name, m.machine.Metadata.Name)
 		}
-		targets = append(targets, hookSSHTarget{
+		targets = append(targets, stepSSHTarget{
 			label:            m.label,
-			inventoryName:    "hook_" + strconv.Itoa(i),
+			inventoryName:    "step_" + strconv.Itoa(i),
 			address:          address,
 			user:             m.sshUser,
 			operatorIdentity: v1alpha1.MachineUsesOperatorIdentity(m.machine),
@@ -68,9 +68,9 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 		})
 	}
 
-	inventoryPath := filepath.Join(hookRoot, "inventory.yaml")
-	varsPath := filepath.Join(hookRoot, "vars.yaml")
-	if err := writeHookInventory(inventoryPath, targets, e.opts.PreferredIdentityFile, e.opts.SSHUser); err != nil {
+	inventoryPath := filepath.Join(stepRoot, "inventory.yaml")
+	varsPath := filepath.Join(stepRoot, "vars.yaml")
+	if err := writeStepInventory(inventoryPath, targets, e.opts.PreferredIdentityFile, e.opts.SSHUser); err != nil {
 		return nil, err
 	}
 	if err := writeWorkflowYAML(varsPath, map[string]any{}, 0o600); err != nil {
@@ -78,35 +78,35 @@ func (e *addonHookExecutor) runHookPlaybook(ctx context.Context, hook v1alpha1.C
 	}
 
 	var outputs map[string]string
-	extraVars, err := hookExtraVarPairs(hook, e.plan.Name, e.plan.Cluster, outputsDir, hookSecretsDir, e.kubeconfig, e.resolveHookRefs(), e.inputs)
+	extraVars, err := stepExtraVarPairs(step, e.plan.Name, e.plan.Cluster, outputsDir, stepSecretsDir, e.kubeconfig, e.resolveStepRefs(), e.inputs)
 	if err != nil {
 		return nil, err
 	}
-	timeout := hookTimeout(hook)
-	if err := e.runHookAnsible(ctx, hook, inventoryPath, varsPath, hookRoot, targets, extraVars, timeout); err != nil {
+	timeout := stepTimeout(step)
+	if err := e.runStepAnsible(ctx, step, inventoryPath, varsPath, stepRoot, targets, extraVars, timeout); err != nil {
 		return nil, err
 	}
-	outputs, err = e.captureHookOutputs(hook, outputsDir)
+	outputs, err = e.captureStepOutputs(step, outputsDir)
 	if err != nil {
 		return nil, err
 	}
 	return outputs, nil
 }
 
-func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.ClusterAddonStep, inventoryPath, varsPath, hookRoot string, targets []hookSSHTarget, extraVars []string, timeout time.Duration) error {
+func (e *addonStepExecutor) runStepAnsible(ctx context.Context, step v1alpha1.ClusterAddonStep, inventoryPath, varsPath, stepRoot string, targets []stepSSHTarget, extraVars []string, timeout time.Duration) error {
 	runner := ansible.Runner(ansible.CommandRunner{})
 	if e.runnerFactory != nil {
 		runner = e.runnerFactory(e.stdout, e.stderr)
 	}
-	stepRoot := hooks.StepContentRoot(e.plan.Addon.SourcePath, hook)
-	playbookPath := filepath.Join(stepRoot, hook.Playbook)
+	contentRoot := steps.ContentRoot(e.plan.Addon.SourcePath, step)
+	playbookPath := filepath.Join(contentRoot, step.Playbook)
 	collectionsPath := filepath.Join(e.opts.BundleDir, bundle.CollectionsRelPath)
-	if hook.CollectionsPath != "" {
-		collectionsPath = collectionsPath + string(os.PathListSeparator) + filepath.Join(stepRoot, hook.CollectionsPath)
+	if step.CollectionsPath != "" {
+		collectionsPath = collectionsPath + string(os.PathListSeparator) + filepath.Join(contentRoot, step.CollectionsPath)
 	}
 	rolesPath := ""
-	if hook.RolesPath != "" {
-		rolesPath = filepath.Join(stepRoot, hook.RolesPath)
+	if step.RolesPath != "" {
+		rolesPath = filepath.Join(contentRoot, step.RolesPath)
 	}
 	newSpec := func(limit string, index int) ansible.RunSpec {
 		return ansible.RunSpec{
@@ -119,28 +119,28 @@ func (e *addonHookExecutor) runHookAnsible(ctx context.Context, hook v1alpha1.Cl
 			Limit:              limit,
 			ExtraVars:          varsPath,
 			ExtraVarPairs:      extraVars,
-			ArtifactsDir:       filepath.Join(hookRoot, "artifacts", strconv.Itoa(index)),
+			ArtifactsDir:       filepath.Join(stepRoot, "artifacts", strconv.Itoa(index)),
 			OutputLogPath:      e.logPath,
 			AskBecomePass:      e.opts.AskBecomePass,
 			BecomePasswordFile: e.opts.BecomePasswordFile,
 			UseControllingTTY:  e.opts.UseControllingTTY,
 		}
 	}
-	if v1alpha1.ClusterAddonStepTargetLimit(hook) == v1alpha1.ClusterAddonStepTargetLimitAll {
-		return e.runOneHookAnsible(ctx, runner, newSpec("", 0), timeout)
+	if v1alpha1.ClusterAddonStepTargetLimit(step) == v1alpha1.ClusterAddonStepTargetLimitAll {
+		return e.runOneStepAnsible(ctx, runner, newSpec("", 0), timeout)
 	}
 	var failures []string
 	for i, target := range targets {
-		if err := e.runOneHookAnsible(ctx, runner, newSpec(target.inventoryName, i), timeout); err != nil {
+		if err := e.runOneStepAnsible(ctx, runner, newSpec(target.inventoryName, i), timeout); err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", target.label, err))
 			continue
 		}
 		return nil
 	}
-	return fmt.Errorf("hook %s failed on all targets: %v", hook.Name, failures)
+	return fmt.Errorf("step %s failed on all targets: %v", step.Name, failures)
 }
 
-func (e *addonHookExecutor) runOneHookAnsible(ctx context.Context, runner ansible.Runner, spec ansible.RunSpec, timeout time.Duration) error {
+func (e *addonStepExecutor) runOneStepAnsible(ctx context.Context, runner ansible.Runner, spec ansible.RunSpec, timeout time.Duration) error {
 	runCtx := ctx
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -149,28 +149,28 @@ func (e *addonHookExecutor) runOneHookAnsible(ctx context.Context, runner ansibl
 	}
 	if err := runner.Run(runCtx, spec); err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("hook playbook timed out after %s", timeout)
+			return fmt.Errorf("step playbook timed out after %s", timeout)
 		}
 		return err
 	}
 	return nil
 }
 
-func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonStep, outputsDir string) (map[string]string, error) {
+func (e *addonStepExecutor) captureStepOutputs(step v1alpha1.ClusterAddonStep, outputsDir string) (map[string]string, error) {
 	values := map[string]string{}
-	for _, output := range hook.Outputs {
+	for _, output := range step.Outputs {
 		path := filepath.Join(outputsDir, output.File)
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("hook %s did not produce declared output %q (%s): %w", hook.Name, output.Name, output.File, err)
+			return nil, fmt.Errorf("step %s did not produce declared output %q (%s): %w", step.Name, output.Name, output.File, err)
 		}
 		if v1alpha1.ClusterAddonStepOutputFormatValue(output) == v1alpha1.ClusterAddonStepOutputFormatJSON {
 			var probe any
 			if err := json.Unmarshal(data, &probe); err != nil {
-				return nil, fmt.Errorf("hook %s output %q is not valid JSON: %w", hook.Name, output.Name, err)
+				return nil, fmt.Errorf("step %s output %q is not valid JSON: %w", step.Name, output.Name, err)
 			}
 		}
-		dest := hooks.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, output)
+		dest := steps.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, output)
 		if err := safefs.WriteFileEnsuringDir(dest, data, 0o600); err != nil {
 			return nil, err
 		}
@@ -179,20 +179,20 @@ func (e *addonHookExecutor) captureHookOutputs(hook v1alpha1.ClusterAddonStep, o
 	return values, nil
 }
 
-func (e *addonHookExecutor) reclaimSecretHookOutputs(hook v1alpha1.ClusterAddonStep) error {
-	for _, output := range hook.Outputs {
+func (e *addonStepExecutor) reclaimSecretStepOutputs(step v1alpha1.ClusterAddonStep) error {
+	for _, output := range step.Outputs {
 		if !output.Secret {
 			continue
 		}
-		path := hooks.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, hook.Name, output)
+		path := steps.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, output)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("reclaim secret hook output %q: %w", output.Name, err)
+			return fmt.Errorf("reclaim secret step output %q: %w", output.Name, err)
 		}
 	}
 	return nil
 }
 
-func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error) {
+func (e *addonStepExecutor) resolveExportDetailsToken(arg string) (string, error) {
 	var exportName string
 	for _, in := range e.inputs {
 		if in.Name == arg {
@@ -208,7 +208,7 @@ func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error
 	}
 	details := export.Spec.ExternalDetails
 	if details == nil || details.FromSecretRef.Name == "" {
-		return "", fmt.Errorf("StorageExport %q supplies no externalDetails secret; have a hook produce the details and consume them via {{ output <name> }}", exportName)
+		return "", fmt.Errorf("StorageExport %q supplies no externalDetails secret; have a step produce the details and consume them via {{ output <name> }}", exportName)
 	}
 	store := secret.NewContextStore(effectiveContextName(e.opts.ContextName), e.opts.SecretsDir)
 	data, err := store.Read(secret.MaterialKey{Name: details.FromSecretRef.Name, Role: secret.MaterialPrimary})
@@ -222,7 +222,7 @@ func (e *addonHookExecutor) resolveExportDetailsToken(arg string) (string, error
 	return string(data), nil
 }
 
-func (e *addonHookExecutor) resolveHookRefs() map[string]any {
+func (e *addonStepExecutor) resolveStepRefs() map[string]any {
 	refs := map[string]any{}
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
 		if accepted.ResourceRef == nil {
@@ -239,7 +239,7 @@ func (e *addonHookExecutor) resolveHookRefs() map[string]any {
 	return refs
 }
 
-func (e *addonHookExecutor) inputValue(input string) string {
+func (e *addonStepExecutor) inputValue(input string) string {
 	for _, in := range e.inputs {
 		if in.Name == input {
 			return in.Value
@@ -248,9 +248,9 @@ func (e *addonHookExecutor) inputValue(input string) string {
 	return ""
 }
 
-func (e *addonHookExecutor) resolveRefObject(refKind, name string) map[string]any {
+func (e *addonStepExecutor) resolveRefObject(refKind, name string) map[string]any {
 	switch refKind {
-	case hooks.RefKindStorageExport:
+	case steps.RefKindStorageExport:
 		export, ok := stateview.ExportByName(e.state, name)
 		if !ok {
 			return nil
@@ -269,17 +269,17 @@ func (e *addonHookExecutor) resolveRefObject(refKind, name string) map[string]an
 			}
 		}
 		return object
-	case hooks.RefKindStorageCluster:
+	case steps.RefKindStorageCluster:
 		if object, ok := stateview.ClusterByName(e.state, name); ok {
 			return objectToMap(object)
 		}
-	case hooks.RefKindContainerCluster:
+	case steps.RefKindContainerCluster:
 		for _, cluster := range e.state.ContainerClusters {
 			if cluster.Metadata.Name == name {
 				return objectToMap(cluster)
 			}
 		}
-	case hooks.RefKindMachine:
+	case steps.RefKindMachine:
 		if object, ok := stateview.Machine(e.state, name); ok {
 			return objectToMap(object)
 		}
@@ -299,15 +299,15 @@ func objectToMap(value any) map[string]any {
 	return out
 }
 
-func hookTimeout(hook v1alpha1.ClusterAddonStep) time.Duration {
-	d, err := time.ParseDuration(v1alpha1.ClusterAddonStepTimeout(hook))
+func stepTimeout(step v1alpha1.ClusterAddonStep) time.Duration {
+	d, err := time.ParseDuration(v1alpha1.ClusterAddonStepTimeout(step))
 	if err != nil {
 		return 10 * time.Minute
 	}
 	return d
 }
 
-func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityFile, sshUser string) error {
+func writeStepInventory(path string, targets []stepSSHTarget, preferredIdentityFile, sshUser string) error {
 	hostsMap := map[string]any{}
 	for _, target := range targets {
 		host := map[string]any{
@@ -329,10 +329,10 @@ func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityF
 			host["ansible_ssh_private_key_file"] = target.keyPath
 		}
 		if target.passwordPath != "" {
-			host["ansible_password"] = hookPasswordLookup(target.passwordPath)
+			host["ansible_password"] = stepPasswordLookup(target.passwordPath)
 		}
 		if target.sudoPasswordPath != "" {
-			host["ansible_become_password"] = hookPasswordLookup(target.sudoPasswordPath)
+			host["ansible_become_password"] = stepPasswordLookup(target.sudoPasswordPath)
 		}
 		hostsMap[target.inventoryName] = host
 	}
@@ -340,7 +340,7 @@ func writeHookInventory(path string, targets []hookSSHTarget, preferredIdentityF
 	return writeWorkflowYAML(path, document, 0o600)
 }
 
-type hookSSHTarget struct {
+type stepSSHTarget struct {
 	label            string
 	inventoryName    string
 	address          string
@@ -353,7 +353,7 @@ type hookSSHTarget struct {
 	knownHostsPath   string
 }
 
-func hookPasswordLookup(path string) string {
+func stepPasswordLookup(path string) string {
 	return "{{ lookup('ansible.builtin.file', '" + path + "') | trim }}"
 }
 

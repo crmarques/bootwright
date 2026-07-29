@@ -44,6 +44,8 @@ func TestValidatePlaybook(t *testing.T) {
 		}, "gates cannot be combined with onFailure continue"},
 		{"bad-run", func(p *v1alpha1.CustomPlaybook) { p.Spec.Run = "sometimes" }, "run \"sometimes\" must be"},
 		{"bad-failure", func(p *v1alpha1.CustomPlaybook) { p.Spec.OnFailure = "retry" }, "onFailure \"retry\" must be"},
+		{"bad-timeout", func(p *v1alpha1.CustomPlaybook) { p.Spec.Timeout = "forever" }, "timeout \"forever\" is not a valid duration"},
+		{"zero-timeout", func(p *v1alpha1.CustomPlaybook) { p.Spec.Timeout = "0s" }, "timeout \"0s\" must be greater than 0"},
 		{"empty-target", func(p *v1alpha1.CustomPlaybook) { p.Spec.Target = v1alpha1.CustomPlaybookTarget{} }, "target must select at least one"},
 		{"unknown-cluster", func(p *v1alpha1.CustomPlaybook) {
 			p.Spec.Target = v1alpha1.CustomPlaybookTarget{Clusters: []string{"ghost"}}

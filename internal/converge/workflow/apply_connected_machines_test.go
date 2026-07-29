@@ -124,7 +124,7 @@ func TestApplyTaskConnectedMachinesDepsIncludesArbiter(t *testing.T) {
 	}
 }
 
-func TestHookReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
+func TestStepReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
 	state := hostTrustScopePlanningState()
 	state.ClusterAddons[0].Spec.Steps = []v1alpha1.ClusterAddonStep{{
 		Name:    "seed-export",
@@ -135,12 +135,12 @@ func TestHookReferencedClustersPullsCrossClusterStorageIntoScope(t *testing.T) {
 	}}
 	binding := extensionplan.BindingPlan{Binding: "ceph-binding", Cluster: "demo"}
 
-	containers, storage := hookReferencedClusters(state, binding, "odf", state.ClusterAddons[0])
+	containers, storage := stepReferencedClusters(state, binding, "odf", state.ClusterAddons[0])
 	if !slices.Contains(containers, "demo") {
 		t.Fatalf("the bound container cluster must stay in the addon task scope, got %v", containers)
 	}
 	if !slices.Contains(storage, "ceph") {
-		t.Fatalf("a hook fromInput -> StorageExport must pull its storage cluster into the addon task scope so target resolution does not silently drop it, got %v", storage)
+		t.Fatalf("a step fromInput -> StorageExport must pull its storage cluster into the addon task scope so target resolution does not silently drop it, got %v", storage)
 	}
 }
 

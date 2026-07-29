@@ -87,8 +87,8 @@ alongside its cluster. Machines own substrate binding, OS mode, durable
 addresses, and SSH access — never install intent.
 
 - `bastion` (`infra/machines/bastion.yaml`): the service host. It declares
-  `capabilities` (`libvirt`, `container-runtime`, `load-balancer`,
-  `name-resolution`, `ntp`), `os.provided: true` (bootwright does not install its
+  `capabilities` (`libvirt`, `container-runtime`), `os.provided: true`
+  (bootwright does not install its
   OS), its `addresses` (`ssh` and `cluster-lan`), and `access.ssh` (which secret
   key and which address to connect over).
 - `my-sno-lab-master-0` (`clusters/container/my-sno-lab/cluster-machines.yaml`):

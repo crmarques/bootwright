@@ -413,7 +413,6 @@ bootwright_machines:
           name: fqdn
       capabilities:
         - container-runtime
-        - artifact-server
       name: bastion
       sshAddress: bastion.bootwright.test
       sshAddressName: ssh

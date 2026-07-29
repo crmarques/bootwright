@@ -71,17 +71,17 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 	return docs
 }
 
-func ManagementHasSecrets(cluster v1alpha1.StorageCluster) bool {
-	mgmt := cluster.Spec.Ceph.Management
+func MgmtGatewayHasSecrets(cluster v1alpha1.StorageCluster) bool {
+	mgmt := cluster.Spec.Ceph.MgmtGateway
 	return mgmt != nil && (mgmt.TLS != nil || mgmt.OAuth2Proxy != nil)
 }
 
-func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
-	mgmt := cluster.Spec.Ceph.Management
+func cephadmMgmtGatewaySpecs(cluster v1alpha1.StorageCluster) []any {
+	mgmt := cluster.Spec.Ceph.MgmtGateway
 	if mgmt == nil {
 		return nil
 	}
-	endpoint, ok := topology.ManagementIngressEndpoint(mgmt.Ingress)
+	endpoint, ok := topology.MgmtGatewayIngressEndpoint(mgmt.Ingress)
 	if !ok {
 		return nil
 	}
@@ -91,10 +91,10 @@ func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
 	}
 	port := mgmt.Port
 	if port == 0 {
-		port = topology.CephManagementDefaultPort
+		port = topology.CephMgmtGatewayDefaultPort
 	}
 	var docs []any
-	if !ManagementHasSecrets(cluster) {
+	if !MgmtGatewayHasSecrets(cluster) {
 		gatewaySpec := map[string]any{
 			"port":       port,
 			"virtual_ip": endpoint.Address,

@@ -489,7 +489,7 @@ func assertOperationIdempotency(t *testing.T, ops []any, name, kind, resourceNam
 	t.Fatalf("operation %s not found in %#v", name, ops)
 }
 
-func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
+func TestCephadmLateServicesRendersMgmtGatewayHA(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
 		Spec: v1alpha1.StorageClusterSpec{
@@ -501,9 +501,9 @@ func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
 						{Name: "ceph-2.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-2"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
 					},
 				},
-				Management: &v1alpha1.StorageCephManagement{
+				MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 					DNSLabel: "dashboard",
-					Ingress: v1alpha1.StorageCephManagementIngress{
+					Ingress: v1alpha1.StorageCephMgmtGatewayIngress{
 						Name:                     "lab",
 						Address:                  "192.168.140.81",
 						PrefixLength:             24,

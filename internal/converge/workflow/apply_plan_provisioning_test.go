@@ -54,17 +54,17 @@ func TestPlanPlaybookAfterBaseWaitsForClusterInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	hook := taskByID(t, tasks, "playbook.post-install")
-	assertDependsOn(t, hook, "wait.sno-libvirt")
-	assertDependsOn(t, hook, "boot.sno-libvirt")
-	if hook.Entry.Cluster != "sno-libvirt" {
-		t.Fatalf("hook cluster = %q, want sno-libvirt", hook.Entry.Cluster)
+	step := taskByID(t, tasks, "playbook.post-install")
+	assertDependsOn(t, step, "wait.sno-libvirt")
+	assertDependsOn(t, step, "boot.sno-libvirt")
+	if step.Entry.Cluster != "sno-libvirt" {
+		t.Fatalf("step cluster = %q, want sno-libvirt", step.Entry.Cluster)
 	}
-	if !hook.SkipWhenConverged {
+	if !step.SkipWhenConverged {
 		t.Fatal("default run: onChange should set SkipWhenConverged")
 	}
-	if hook.Limit == "" {
-		t.Fatal("hook limit must not be empty (empty --limit targets every host)")
+	if step.Limit == "" {
+		t.Fatal("step limit must not be empty (empty --limit targets every host)")
 	}
 }
 
@@ -80,18 +80,18 @@ func TestPlanPlaybookBeforeDepsGatesDepsTasks(t *testing.T) {
 	}
 	iso := taskByID(t, tasks, "iso.sno-libvirt")
 	assertDependsOn(t, iso, "playbook.pre-deps")
-	hook := taskByID(t, tasks, "playbook.pre-deps")
-	if len(hook.Entry.Dependencies) == 0 {
-		t.Fatal("before: deps hook should depend on the previous machines-stage tasks")
+	step := taskByID(t, tasks, "playbook.pre-deps")
+	if len(step.Entry.Dependencies) == 0 {
+		t.Fatal("before: deps step should depend on the previous machines-stage tasks")
 	}
 }
 
 func TestPlanPlaybookGatesAlwaysHardDependsOnTheStage(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	hook := provisioningPlaybook("pre-deps", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
+	step := provisioningPlaybook("pre-deps", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
 		v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}})
-	hook.Spec.OnFailure = v1alpha1.PlaybookFailureFail
-	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{hook}
+	step.Spec.OnFailure = v1alpha1.PlaybookFailureFail
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{step}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
@@ -110,14 +110,14 @@ func TestPlanPlaybookGatesAlwaysHardDependsOnTheStage(t *testing.T) {
 func TestPlanPlaybookSkippedOutOfStage(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{
-		provisioningPlaybook("machines-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+		provisioningPlaybook("machines-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 			v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}}),
 	}
 	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskMissing(t, tasks, "playbook.machines-hook")
+	assertTaskMissing(t, tasks, "playbook.machines-step")
 }
 
 func TestPlanPlaybookErrorsWhenTargetResolvesToNoHosts(t *testing.T) {
@@ -136,7 +136,7 @@ func TestPlanPlaybookErrorsWhenTargetResolvesToNoHosts(t *testing.T) {
 }
 
 func TestResolveProvisioningTargetDefersOutOfScopeStorageCluster(t *testing.T) {
-	playbook := provisioningPlaybook("ceph-hook", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
+	playbook := provisioningPlaybook("ceph-step", v1alpha1.CustomPlaybookAnchorDeps, anchorKeyGates,
 		v1alpha1.CustomPlaybookTarget{Clusters: []string{"ceph-a"}})
 	target := ApplyTarget{Name: "all", StorageClusterNames: []string{"ceph-b"}}
 
@@ -151,7 +151,7 @@ func TestResolveProvisioningTargetDefersOutOfScopeStorageCluster(t *testing.T) {
 }
 
 func TestResolveProvisioningTargetErrorsOnMachineWithoutInventoryHost(t *testing.T) {
-	playbook := provisioningPlaybook("bastion-hook", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
+	playbook := provisioningPlaybook("bastion-step", v1alpha1.CustomPlaybookAnchorMachines, anchorKeyFollows,
 		v1alpha1.CustomPlaybookTarget{Machines: []string{"bastion-01"}})
 
 	_, _, _, _, err := resolveProvisioningTarget(v1alpha1.State{}, applyAllTarget(), playbook,
@@ -166,11 +166,11 @@ func TestResolveProvisioningTargetErrorsOnMachineWithoutInventoryHost(t *testing
 
 func TestPlanPlaybookDisabledNotPlanned(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
-	hook := provisioningPlaybook("disabled", v1alpha1.CustomPlaybookAnchorBase, anchorKeyFollows,
+	step := provisioningPlaybook("disabled", v1alpha1.CustomPlaybookAnchorBase, anchorKeyFollows,
 		v1alpha1.CustomPlaybookTarget{Clusters: []string{"sno-libvirt"}})
 	disabled := false
-	hook.Spec.Enabled = &disabled
-	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{hook}
+	step.Spec.Enabled = &disabled
+	state.CustomPlaybooks = []v1alpha1.CustomPlaybook{step}
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)

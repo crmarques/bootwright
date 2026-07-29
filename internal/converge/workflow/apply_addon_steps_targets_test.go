@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func addonHookStorageTargetState() v1alpha1.State {
+func addonStepStorageTargetState() v1alpha1.State {
 	machine := v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "ceph-1"},
 		Spec: v1alpha1.MachineSpec{
@@ -47,8 +47,8 @@ func addonHookStorageTargetState() v1alpha1.State {
 	}
 }
 
-func TestStorageClusterHookTargetsUsePostInstallSSHIdentity(t *testing.T) {
-	executor := &addonHookExecutor{state: addonHookStorageTargetState()}
+func TestStorageClusterStepTargetsUsePostInstallSSHIdentity(t *testing.T) {
+	executor := &addonStepExecutor{state: addonStepStorageTargetState()}
 	targets, err := executor.storageClusterMachines("ceph")
 	if err != nil {
 		t.Fatalf("storageClusterMachines: %v", err)
@@ -63,19 +63,19 @@ func TestStorageClusterHookTargetsUsePostInstallSSHIdentity(t *testing.T) {
 	if target.sshKeyRef.Name != "cluster-ssh" {
 		t.Fatalf("target ssh key = %q, want post-install clusterSSH key", target.sshKeyRef.Name)
 	}
-	secrets := hookConnectionSecretNames(targets)
+	secrets := stepConnectionSecretNames(targets)
 	if !slices.Contains(secrets, "cluster-ssh") || !slices.Contains(secrets, "machine-known-hosts") {
-		t.Fatalf("hook connection secrets = %v, want cluster key and machine trust", secrets)
+		t.Fatalf("step connection secrets = %v, want cluster key and machine trust", secrets)
 	}
 	if slices.Contains(secrets, "machine-ssh") {
-		t.Fatalf("hook connection secrets = %v, machine install key must not be materialized when clusterSSH.keyRef is set", secrets)
+		t.Fatalf("step connection secrets = %v, machine install key must not be materialized when clusterSSH.keyRef is set", secrets)
 	}
 }
 
-func TestStorageClusterHookTargetsFallBackToMachineSSHKey(t *testing.T) {
-	state := addonHookStorageTargetState()
+func TestStorageClusterStepTargetsFallBackToMachineSSHKey(t *testing.T) {
+	state := addonStepStorageTargetState()
 	state.StorageClusters[0].Spec.Ceph.Cephadm.ClusterSSH.KeyRef = v1alpha1.LocalObjectReference{}
-	executor := &addonHookExecutor{state: state}
+	executor := &addonStepExecutor{state: state}
 	targets, err := executor.storageClusterMachines("ceph")
 	if err != nil {
 		t.Fatalf("storageClusterMachines: %v", err)
@@ -85,10 +85,10 @@ func TestStorageClusterHookTargetsFallBackToMachineSSHKey(t *testing.T) {
 	}
 }
 
-func TestMachineHookTargetKeepsMachineSSHIdentity(t *testing.T) {
-	state := addonHookStorageTargetState()
-	target := machineHookTarget("Machine/ceph-1", state.Machines[0])
+func TestMachineStepTargetKeepsMachineSSHIdentity(t *testing.T) {
+	state := addonStepStorageTargetState()
+	target := machineStepTarget("Machine/ceph-1", state.Machines[0])
 	if target.sshUser != "root" || target.sshKeyRef.Name != "machine-ssh" {
-		t.Fatalf("machine hook target identity = %s/%s, want root/machine-ssh", target.sshUser, target.sshKeyRef.Name)
+		t.Fatalf("machine step target identity = %s/%s, want root/machine-ssh", target.sshUser, target.sshKeyRef.Name)
 	}
 }

@@ -157,7 +157,7 @@ type StorageClusterCephSpec struct {
 	Config            map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
 	MgrModules        []string                     `yaml:"mgrModules,omitempty" json:"mgrModules,omitempty"`
 	Monitoring        *StorageCephMonitoring       `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
-	Management        *StorageCephManagement       `yaml:"management,omitempty" json:"management,omitempty"`
+	MgmtGateway       *StorageCephMgmtGateway      `yaml:"mgmtGateway,omitempty" json:"mgmtGateway,omitempty"`
 	Services          []StorageCephService         `yaml:"services,omitempty" json:"services,omitempty"`
 	Topology          StorageCephTopology          `yaml:"topology" json:"topology"`
 }
@@ -352,16 +352,16 @@ type StorageCephDevicePath struct {
 	CrushDeviceClass string `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
 }
 
-type StorageCephManagement struct {
-	DNSLabel    string                       `yaml:"dnsLabel,omitempty" json:"dnsLabel,omitempty"`
-	Port        int                          `yaml:"port,omitempty" json:"port,omitempty"`
-	EnableAuth  *bool                        `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
-	TLS         *StorageCephManagementTLS    `yaml:"tls,omitempty" json:"tls,omitempty"`
-	OAuth2Proxy *StorageCephOAuth2Proxy      `yaml:"oauth2Proxy,omitempty" json:"oauth2Proxy,omitempty"`
-	Ingress     StorageCephManagementIngress `yaml:"ingress" json:"ingress"`
+type StorageCephMgmtGateway struct {
+	DNSLabel    string                        `yaml:"dnsLabel,omitempty" json:"dnsLabel,omitempty"`
+	Port        int                           `yaml:"port,omitempty" json:"port,omitempty"`
+	EnableAuth  *bool                         `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
+	TLS         *StorageCephMgmtGatewayTLS    `yaml:"tls,omitempty" json:"tls,omitempty"`
+	OAuth2Proxy *StorageCephOAuth2Proxy       `yaml:"oauth2Proxy,omitempty" json:"oauth2Proxy,omitempty"`
+	Ingress     StorageCephMgmtGatewayIngress `yaml:"ingress" json:"ingress"`
 }
 
-type StorageCephManagementTLS struct {
+type StorageCephMgmtGatewayTLS struct {
 	CertificateRef LocalObjectReference `yaml:"certificateRef" json:"certificateRef"`
 	KeyRef         LocalObjectReference `yaml:"keyRef" json:"keyRef"`
 }
@@ -377,7 +377,7 @@ type StorageCephOAuth2Proxy struct {
 	CookieSecretRef     LocalObjectReference `yaml:"cookieSecretRef,omitempty" json:"cookieSecretRef,omitempty"`
 }
 
-type StorageCephManagementIngress struct {
+type StorageCephMgmtGatewayIngress struct {
 	Name                     string           `yaml:"name" json:"name"`
 	Address                  string           `yaml:"address" json:"address"`
 	PrefixLength             int              `yaml:"prefixLength" json:"prefixLength"`

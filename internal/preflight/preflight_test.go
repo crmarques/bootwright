@@ -989,7 +989,7 @@ func checkNames(checks []Check) []string {
 	return out
 }
 
-func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
+func TestPreflightChecksAddonPlaybookStepsNeedAnsible(t *testing.T) {
 	deps := Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
@@ -1018,7 +1018,7 @@ func TestPreflightChecksAddonPlaybookHooksNeedAnsible(t *testing.T) {
 	checks = CollectChecks(state, []Phase{{Name: "add-ons"}}, true, "test", "/context/secrets", "/host-state", "/runs", deps, nil, nil)
 	for _, name := range []string{"ansible-playbook", "python3"} {
 		if checkPresent(checks, name) {
-			t.Errorf("add-ons run without playbook hooks must not require %s: %+v", name, checkNames(checks))
+			t.Errorf("add-ons run without playbook steps must not require %s: %+v", name, checkNames(checks))
 		}
 	}
 }

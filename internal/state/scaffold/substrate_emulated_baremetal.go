@@ -44,9 +44,6 @@ spec:
   capabilities:
     - libvirt
     - container-runtime
-    - load-balancer
-    - name-resolution
-    - ntp
   os:
     provided: true
   addresses:

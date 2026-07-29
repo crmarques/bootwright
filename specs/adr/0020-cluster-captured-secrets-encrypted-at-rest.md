@@ -23,7 +23,7 @@ cluster also never removed its captured `dashboard-password` — a gap that sat
 next to this one since nothing else touched that file's lifecycle either.
 
 `kubeconfig` is not purely a display value like the other two: `oc`/`kubectl`,
-several internal Go call sites, and Ansible add-on hooks all need a real
+several internal Go call sites, and Ansible add-on steps all need a real
 plaintext file to point `--kubeconfig` at, both during the same apply run that
 installs the cluster and on every later reconciliation check against an
 already-installed cluster.
@@ -55,7 +55,7 @@ This conversion is part of the capture boundary. Normal cluster-secret reads
 accept only encrypted envelopes and never migrate plaintext implicitly.
 
 Captured `kubeconfig` is additionally consumed programmatically. Add-on
-apply/wait, node-config apply, the pull-secret merge effect, Ansible hook
+apply/wait, node-config apply, the pull-secret merge effect, Ansible step
 extra-vars, every plan-time `ClusterAvailabilityChecker.Available` probe, and
 KubeVirt `hostClusterRef` preflight all perform a strict encrypted read through
 the owning per-cluster store. A file-based consumer receives a fresh `0600`

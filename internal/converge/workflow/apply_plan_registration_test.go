@@ -114,7 +114,7 @@ func TestPlanPlaybookAfterMachinesAnchorsOnRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	hook := taskByID(t, tasks, "playbook.corporate-rhsm")
-	assertDependsOn(t, hook, "registration.ceph-ibm")
-	assertDependsOn(t, hook, "osinstall.ceph-ibm")
+	step := taskByID(t, tasks, "playbook.corporate-rhsm")
+	assertDependsOn(t, step, "registration.ceph-ibm")
+	assertDependsOn(t, step, "osinstall.ceph-ibm")
 }

@@ -61,8 +61,6 @@ spec:
 | `spec.distribution` | No | `type: openshift` | OpenShift or OKD release selection. Optional in shape only: an omitted block defaults `type: openshift`, which then requires `release.version` or `release.image`, so an absent or empty `distribution` fails validation. See [Distribution](#distribution). |
 | `spec.install` | No | — | Install method, mode, platform, endpoints, artifact access, trust, serving certificates, and node SSH. |
 | `spec.security` | No | — | Cluster security posture. Today: FIPS mode. See [Security](#security). |
-| `spec.controlPlane.replicas` | No | — | Control-plane replica count; when set, must equal the master node count. |
-| `spec.compute[].replicas` | No | — | Worker replica count per pool; their sum must equal the worker+infra node count when any compute pool is declared (infra nodes install as workers). |
 | `spec.networking` | No | Defaulted networks (see [Networking](#networking)) | Cluster and service networks and the OpenShift network type. |
 | `spec.nodes[]` | Yes | — | Node-to-machine bindings for the agent install. |
 
@@ -330,24 +328,13 @@ network type. The whole block and any field within it may be omitted.
 
 ## Machine pools
 
-`spec.controlPlane` and `spec.compute[]` carry only replica counts. The agent
-installer renders a single default-architecture master pool and worker pool, so
-the other install-config machine-pool fields (`architecture`, `hyperthreading`,
-`platform`, `name`) are not authorable — strict decode rejects them with the
-offending line.
-
-| Field | Required | Default | Description |
-| --- | --- | --- | --- |
-| `controlPlane.replicas` | No | — | Control-plane replica count. |
-| `compute[].replicas` | No | — | Worker replica count for this pool. |
-
-!!! note "Replica counts cross-check the node roles"
-    `controlPlane.replicas`, when set (non-zero), must equal the number of
-    `master` nodes in `spec.nodes[]`; omitting it or setting `0` skips the
-    check. The sum of `compute[].replicas` must equal the number of `worker`
-    plus `infra` nodes when any compute pool is declared (infra nodes install in
-    the worker pool). These fields restate the node roster rather than scaling
-    it independently.
+There are none to author. `spec.nodes[].role` is the whole roster: Bootwright
+derives the control-plane and compute replica counts from it, and the agent
+installer renders one default-architecture master pool and one worker pool (an
+`infra` node installs in the worker pool). Strict decode rejects
+`spec.controlPlane` and `spec.compute[]`, along with the other install-config
+machine-pool fields (`replicas`, `architecture`, `hyperthreading`, `platform`,
+`name`), naming the offending line.
 
 ## Nodes
 

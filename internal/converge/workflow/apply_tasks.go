@@ -134,6 +134,7 @@ type ApplyTask struct {
 	ExtraVarPairs      []string
 	Tags               []string
 	SkipTags           []string
+	Timeout            time.Duration
 	RolesPath          string
 	CollectionsPath    string
 	SkipWhenConverged  bool

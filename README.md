@@ -270,3 +270,8 @@ test/       Test fixtures and end-to-end cases
 Versioned content (specs, docs, fixtures) must stay safe to commit: no
 kubeconfigs, pull secrets, private keys, tokens, plaintext credentials,
 personal usernames, or private absolute paths.
+
+## License
+
+Bootwright is licensed under the Apache License 2.0. The full text is in
+[`LICENSE`](LICENSE), and it ships in every release tarball.

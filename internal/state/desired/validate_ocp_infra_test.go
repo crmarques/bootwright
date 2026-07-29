@@ -35,18 +35,6 @@ func TestValidateNodesAcceptsInfraRole(t *testing.T) {
 	}
 }
 
-func TestValidateNodesComputeReplicasIncludeInfra(t *testing.T) {
-	ocp, machines := infraValidationCluster()
-	ocp.Spec.Compute = []v1alpha1.MachinePoolSpec{{Replicas: 2}}
-	if errs := validateNodes(ocp, machines); len(errs) != 0 {
-		t.Fatalf("compute replicas should count worker+infra, got: %v", errs)
-	}
-	ocp.Spec.Compute = []v1alpha1.MachinePoolSpec{{Replicas: 1}}
-	if errs := validateNodes(ocp, machines); !containsSubstring(errs, "worker+infra node count") {
-		t.Fatalf("expected worker+infra replica mismatch, got: %v", errs)
-	}
-}
-
 func TestValidateNodesRejectsUnknownRole(t *testing.T) {
 	ocp, machines := infraValidationCluster()
 	ocp.Spec.Nodes[2].Role = "edge"

@@ -641,54 +641,54 @@ creation, OS install, SSH wait, and trust recording run in Ansible host fanout.
 Managed storage prereq tasks run against the storage-node inventory group and
 reserve seed-only cephadm work for the final storage task.
 
-## Add-On Hook Vars
+## Add-On Step Vars
 
-Add-on hooks (`ClusterAddon.spec.steps[]`) run through a separate, narrower engine
+Add-on steps (`ClusterAddon.spec.steps[]`) run through a separate, narrower engine
 than the core layer tasks and `CustomPlaybook`s above
-(`internal/converge/workflow`, `runHookAnsible`). A hook playbook does **not**
+(`internal/converge/workflow`, `runStepAnsible`). A step playbook does **not**
 receive the full `bootwright_*` vars contract documented in this file — there is
 no `bootwright_environment`, `bootwright_machines`, `bootwright_clusters`, or any
-other top-level fact. It runs against an ad-hoc inventory of only the hook's
+other top-level fact. It runs against an ad-hoc inventory of only the step's
 resolved target machines, with an empty `vars.yaml`, and a small curated set of
 extra vars.
 
-### Hook inventory
+### Step inventory
 
-The engine writes a one-off inventory (`writeHookInventory`) holding only the
-machines the hook's `target` resolved to — never the rendered fleet inventory.
+The engine writes a one-off inventory (`writeStepInventory`) holding only the
+machines the step's `target` resolved to — never the rendered fleet inventory.
 Each host carries just its SSH connection facts:
 
 | Host var | Shape |
 | --- | --- |
 | `ansible_host` | The target machine's resolved SSH address. |
-| `bootwright_host_name` | The target `Machine` name (the hook's per-host label). |
+| `bootwright_host_name` | The target `Machine` name (the step's per-host label). |
 | `ansible_user` | A storage target's post-install `cephadm.clusterSSH.user`; otherwise the machine's `access.ssh.user`, when set. |
 | `ansible_ssh_private_key_file` | Path to the storage target's materialized `cephadm.clusterSSH.keyRef` private key, falling back to the Machine access key when omitted; other targets use the Machine access key. |
 | `ansible_ssh_common_args` | `-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<trusted known_hosts>`. |
 
-The `vars.yaml` handed to the run is empty (`{}`); every hook fact arrives as an
+The `vars.yaml` handed to the run is empty (`{}`); every step fact arrives as an
 `-e` extra var instead.
 
-### Hook extra vars
+### Step extra vars
 
-`hookExtraVarPairs` projects exactly these facts (and nothing else):
+`stepExtraVarPairs` projects exactly these facts (and nothing else):
 
 | Fact | Shape |
 | --- | --- |
-| `bootwright_step_name` | The hook's `name`. |
+| `bootwright_step_name` | The step's `name`. |
 | `bootwright_step_anchor` | The step's anchor value — its `gates` (`apply`) or its `follows` (`operatorReady`, `ready`). |
 | `bootwright_addon_name` | The bound `ClusterAddon` name. |
 | `bootwright_bound_cluster` | The bound `ContainerCluster` name. |
-| `bootwright_hook_outputs_dir` | Controller-local directory the playbook writes its declared `outputs[]` files into. |
-| `bootwright_hook_secrets_dir` | Controller-local directory holding only the hook's declared `secretRefs` (never the whole store). |
+| `bootwright_step_outputs_dir` | Controller-local directory the playbook writes its declared `outputs[]` files into. |
+| `bootwright_step_secrets_dir` | Controller-local directory holding only the step's declared `secretRefs` (never the whole store). |
 | `bootwright_kubeconfig` | Controller-local path to the bound cluster's kubeconfig. |
-| `bootwright_hook_refs` | JSON: resolved `refKind` input objects keyed by property name (e.g. `exportRef` → the referenced `StorageExport` object), so a play can read `bootwright_hook_refs.exportRef.spec...`. |
-| `bootwright_hook_inputs` | JSON: binding input name → its values map. |
+| `bootwright_step_refs` | JSON: resolved `refKind` input objects keyed by property name (e.g. `exportRef` → the referenced `StorageExport` object), so a play can read `bootwright_step_refs.exportRef.spec...`. |
+| `bootwright_step_inputs` | JSON: binding input name → its values map. |
 
-The hook's own `extraVars` map, when set, is appended as one additional JSON `-e`
+The step's own `extraVars` map, when set, is appended as one additional JSON `-e`
 value. The outputs directory, secrets directory, and kubeconfig are
 **controller-local** paths, not readable on the target hosts: read and write them
-from `delegate_to: localhost` tasks. That is also how a hook drives the bound
+from `delegate_to: localhost` tasks. That is also how a step drives the bound
 cluster's API — for example `oc --kubeconfig {{ bootwright_kubeconfig }}` runs on
 the controller.
 
@@ -701,8 +701,8 @@ the controller.
   succeeds (the exporter admin-node pattern); it fails only when every host fails.
 - `all` runs one play against every resolved host with no `--limit`.
 
-Each run is bounded by the hook's `timeout` (a Go duration, default `10m`); a run
-that exceeds it is cancelled and the hook fails. Declared `outputs[]` are captured
-from `bootwright_hook_outputs_dir` after the run (secret outputs persisted `0600`
+Each run is bounded by the step's `timeout` (a Go duration, default `10m`); a run
+that exceeds it is cancelled and the step fails. Declared `outputs[]` are captured
+from `bootwright_step_outputs_dir` after the run (secret outputs persisted `0600`
 under the cluster secrets area, non-secret under runtime); see
 `docs/concepts/add-ons.md` for the manifest-token surface that consumes them.

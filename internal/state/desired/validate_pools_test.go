@@ -12,52 +12,26 @@ func TestRemovedMachinePoolFieldsRejectUnknown(t *testing.T) {
 		want string
 	}{
 		{
-			name: "compute-architecture",
+			name: "compute",
 			body: `apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
 metadata: { name: demo }
 spec:
   compute:
     - replicas: 3
-      architecture: arm64
 `,
-			want: "field architecture not found",
+			want: "field compute not found",
 		},
 		{
-			name: "compute-hyperthreading",
-			body: `apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
-metadata: { name: demo }
-spec:
-  compute:
-    - replicas: 3
-      hyperthreading: Disabled
-`,
-			want: "field hyperthreading not found",
-		},
-		{
-			name: "control-plane-platform",
+			name: "control-plane",
 			body: `apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
 metadata: { name: demo }
 spec:
   controlPlane:
     replicas: 3
-    platform: {}
 `,
-			want: "field platform not found",
-		},
-		{
-			name: "compute-name",
-			body: `apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
-metadata: { name: demo }
-spec:
-  compute:
-    - replicas: 3
-      name: custom
-`,
-			want: "field name not found",
+			want: "field controlPlane not found",
 		},
 	}
 	for _, tc := range cases {

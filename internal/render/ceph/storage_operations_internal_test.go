@@ -866,15 +866,15 @@ func TestLokiPromtailRenderAndDashboardWiring(t *testing.T) {
 	}
 }
 
-func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
-	mk := func(tls *v1alpha1.StorageCephManagementTLS) v1alpha1.StorageCluster {
+func TestMgmtGatewayWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
+	mk := func(tls *v1alpha1.StorageCephMgmtGatewayTLS) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-				Management: &v1alpha1.StorageCephManagement{
+				MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 					DNSLabel: "dash",
 					TLS:      tls,
-					Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+					Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
 				},
 				Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
 					Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
@@ -886,7 +886,7 @@ func TestManagementWithSecretsSkipsStaticGatewayDoc(t *testing.T) {
 	if !hasServiceType(CephadmLateServicesSpec(v1alpha1.State{}, plain), "mgmt-gateway") {
 		t.Fatal("a secret-free management gateway must render in late services")
 	}
-	withTLS := mk(&v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}})
+	withTLS := mk(&v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}})
 	docs := CephadmLateServicesSpec(v1alpha1.State{}, withTLS)
 	if hasServiceType(docs, "mgmt-gateway") {
 		t.Fatal("a TLS management gateway must NOT render in static late services (secrets would leak)")
@@ -1207,16 +1207,16 @@ func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
 	}
 }
 
-func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
-	mgmt := &v1alpha1.StorageCephManagement{
+func TestApplyScriptWarnsOnSecretBearingMgmtGateway(t *testing.T) {
+	mgmt := &v1alpha1.StorageCephMgmtGateway{
 		DNSLabel: "dash",
-		TLS:      &v1alpha1.StorageCephManagementTLS{},
-		Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+		TLS:      &v1alpha1.StorageCephMgmtGatewayTLS{},
+		Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
 	}
 	cluster := v1alpha1.StorageCluster{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
 		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Management: mgmt,
+			MgmtGateway: mgmt,
 			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
 				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"},
 			}}},
@@ -1229,7 +1229,7 @@ func TestApplyScriptWarnsOnSecretBearingManagementGateway(t *testing.T) {
 	}
 
 	plainCluster := cluster
-	plainCluster.Spec.Ceph.Management = &v1alpha1.StorageCephManagement{DNSLabel: "dash", Ingress: mgmt.Ingress}
+	plainCluster.Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{DNSLabel: "dash", Ingress: mgmt.Ingress}
 	plain := mustApplyScript(t, v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{plainCluster}}, plainCluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
 	if strings.Contains(plain, "[todo]") && strings.Contains(plain, "mgmt-gateway") {
 		t.Fatalf("no warning must fire when the gateway is secret-free and in the bundle:\n%s", plain)

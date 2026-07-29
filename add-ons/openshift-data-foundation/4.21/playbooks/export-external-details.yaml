@@ -8,8 +8,8 @@
     bootwright_exporter_namespace: openshift-storage
     bootwright_exporter_use_cephadm_shell: true
     bootwright_exporter_staged_path: "/tmp/bootwright-ceph-external-cluster-details-exporter-{{ bootwright_bound_cluster }}.py"
-    bootwright_df: "{{ bootwright_hook_refs['external-storage'].spec.dataFoundation }}"
-    bootwright_gateway: "{{ bootwright_hook_refs['external-storage'].objectGateway | default(None) }}"
+    bootwright_df: "{{ bootwright_step_refs['external-storage'].spec.dataFoundation }}"
+    bootwright_gateway: "{{ bootwright_step_refs['external-storage'].objectGateway | default(None) }}"
     bootwright_exporter_args:
       - --format
       - json
@@ -117,7 +117,7 @@
     - name: Capture the declared externalDetails output
       ansible.builtin.copy:
         content: "{{ bootwright_external_details.stdout }}"
-        dest: "{{ bootwright_hook_outputs_dir }}/external-cluster-details.json"
+        dest: "{{ bootwright_step_outputs_dir }}/external-cluster-details.json"
         mode: "0600"
       delegate_to: localhost
       become: false

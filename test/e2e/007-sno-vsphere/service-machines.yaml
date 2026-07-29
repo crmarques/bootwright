@@ -5,8 +5,6 @@ metadata:
 spec:
   capabilities:
     - container-runtime
-    - load-balancer
-    - name-resolution
 
   os:
     provided: true

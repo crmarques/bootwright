@@ -72,10 +72,10 @@ func loadNativeCatalogAddOns(t *testing.T) map[string]nativeCatalogAddOn {
 	return out
 }
 
-var hookRefDotToken = regexp.MustCompile(`bootwright_hook_refs\.([A-Za-z_][A-Za-z0-9_]*)`)
-var hookRefBracketToken = regexp.MustCompile(`bootwright_hook_refs\[['"]([^'"]+)['"]\]`)
+var stepRefDotToken = regexp.MustCompile(`bootwright_step_refs\.([A-Za-z_][A-Za-z0-9_]*)`)
+var stepRefBracketToken = regexp.MustCompile(`bootwright_step_refs\[['"]([^'"]+)['"]\]`)
 
-func TestNativeCatalogHookRefTokensResolveToAcceptedInputs(t *testing.T) {
+func TestNativeCatalogStepRefTokensResolveToAcceptedInputs(t *testing.T) {
 	root := repoRoot(t)
 	for key, addon := range loadNativeCatalogAddOns(t) {
 		refInputs := map[string]bool{}
@@ -84,26 +84,26 @@ func TestNativeCatalogHookRefTokensResolveToAcceptedInputs(t *testing.T) {
 				refInputs[input.Name] = true
 			}
 		}
-		for _, hook := range addon.Spec.Steps {
-			if hook.Playbook == "" {
+		for _, step := range addon.Spec.Steps {
+			if step.Playbook == "" {
 				continue
 			}
-			playbookPath := filepath.Join(root, "add-ons", strings.SplitN(key, "/", 2)[0], strings.SplitN(key, "/", 2)[1], hook.Playbook)
+			playbookPath := filepath.Join(root, "add-ons", strings.SplitN(key, "/", 2)[0], strings.SplitN(key, "/", 2)[1], step.Playbook)
 			data, err := os.ReadFile(playbookPath)
 			if err != nil {
-				t.Fatalf("%s: read hook %q playbook %s: %v", key, hook.Name, hook.Playbook, err)
+				t.Fatalf("%s: read step %q playbook %s: %v", key, step.Name, step.Playbook, err)
 			}
 			text := string(data)
 			seen := map[string]bool{}
-			for _, m := range hookRefDotToken.FindAllStringSubmatch(text, -1) {
+			for _, m := range stepRefDotToken.FindAllStringSubmatch(text, -1) {
 				seen[m[1]] = true
 			}
-			for _, m := range hookRefBracketToken.FindAllStringSubmatch(text, -1) {
+			for _, m := range stepRefBracketToken.FindAllStringSubmatch(text, -1) {
 				seen[m[1]] = true
 			}
 			for name := range seen {
 				if !refInputs[name] {
-					t.Errorf("%s: hook %q playbook %s references bootwright_hook_refs key %q, which is not a resourceRef-typed accepted input (valid keys: %v)", key, hook.Name, hook.Playbook, name, sortedKeys(refInputs))
+					t.Errorf("%s: step %q playbook %s references bootwright_step_refs key %q, which is not a resourceRef-typed accepted input (valid keys: %v)", key, step.Name, step.Playbook, name, sortedKeys(refInputs))
 				}
 			}
 		}
@@ -118,7 +118,7 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-func TestNativeCatalogODFFDFHookContentParity(t *testing.T) {
+func TestNativeCatalogODFFDFStepContentParity(t *testing.T) {
 	root := repoRoot(t)
 	odf := filepath.Join(root, "add-ons", "openshift-data-foundation", "4.21")
 	fdf := filepath.Join(root, "add-ons", "fusion-data-foundation", "4.21")
@@ -143,7 +143,7 @@ func TestNativeCatalogODFFDFHookContentParity(t *testing.T) {
 			t.Fatalf("read fusion-data-foundation %s: %v", rel, err)
 		}
 		if string(a) != string(b) {
-			t.Errorf("openshift-data-foundation and fusion-data-foundation %s have drifted apart; they are documented as sharing identical hook content (ADR 0013) -- if the divergence is deliberate, update this test's expectations", rel)
+			t.Errorf("openshift-data-foundation and fusion-data-foundation %s have drifted apart; they are documented as sharing identical step content (ADR 0013) -- if the divergence is deliberate, update this test's expectations", rel)
 		}
 	}
 
@@ -195,8 +195,8 @@ func TestNativeCatalogManifestAddonAnnotationMatchesOwnName(t *testing.T) {
 			t.Fatalf("%s: add-on.yaml has no metadata.name", key)
 		}
 		dir := filepath.Join(root, "add-ons", strings.SplitN(key, "/", 2)[0], strings.SplitN(key, "/", 2)[1])
-		for _, hook := range addon.Spec.Steps {
-			for _, manifest := range hook.Manifests {
+		for _, step := range addon.Spec.Steps {
+			for _, manifest := range step.Manifests {
 				data, err := os.ReadFile(filepath.Join(dir, manifest.Path))
 				if err != nil {
 					t.Fatalf("%s: read manifest %s: %v", key, manifest.Path, err)

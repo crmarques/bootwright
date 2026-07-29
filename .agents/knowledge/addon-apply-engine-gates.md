@@ -1,13 +1,13 @@
 # Add-on apply engine: gates, skip semantics, and preflight
 
 **Constraint:** The add-on apply engine (`internal/addons/oc`) depends on exactly
-two seams — `HookRunner.Run(ctx, lifecycle)` and `EffectRunner.Run(ctx)` — whose
+two seams — `StepRunner.Run(ctx, lifecycle)` and `EffectRunner.Run(ctx)` — whose
 concrete implementations live in `internal/converge/workflow` because they need
 ansible, secrets, and state, which `internal/addons/oc` must not import. A nil
-`HookRunner` or `EffectRunner` is a defined no-op, so add-ons without
-hooks/effects and unit tests need not wire one. "Hook" is the internal name for
+`StepRunner` or `EffectRunner` is a defined no-op, so add-ons without
+steps/effects and unit tests need not wire one. "Step" is the internal name for
 an authored `ClusterAddon spec.steps[]` entry; the Go identifiers, Ansible vars
-(`bootwright_hook_*`), and packages keep it. Hooks fire at exactly three
+(`bootwright_step_*`), and packages keep it. Steps fire at exactly three
 lifecycles, spelled in authored YAML as `gates: apply`,
 `follows: operatorReady`, and `follows: ready`.
 
@@ -21,27 +21,27 @@ idempotent). Pinned by `TestApplyReAppliesChecklessAddonDespiteReadyRecord`.
 **Short-circuit blockers:** Three things disable the already-ready pre-check:
 
 - zero readiness checks (above);
-- a `run: always` hook at `gates: apply` or `follows: operatorReady` —
-  `hooks.HasAlwaysAt` exists for the engine to consult; the apply then re-runs
-  idempotently and the hook executor still skips unchanged `run: onChange`
-  hooks via their own per-hook digest;
+- a `run: always` step at `gates: apply` or `follows: operatorReady` —
+  `steps.HasAlwaysAt` exists for the engine to consult; the apply then re-runs
+  idempotently and the step executor still skips unchanged `run: onChange`
+  steps via their own per-step digest;
 - a `globalPullSecretMerge` effect on an accepted input — registry credentials
   must converge on every apply (the merge is idempotent and cheap);
   `hasGlobalPullSecretMergeEffect` gates this.
 
 **Effect ordering:** Input effects run first in `applyExtension`, before
-`gates: apply` hooks and before any resource applies, because a global
+`gates: apply` steps and before any resource applies, because a global
 pull-secret merge must land before anything pulls images — the shipped catalog
-image, the operator, or `gates: apply` hook workloads. `oc/effects_test.go`
+image, the operator, or `gates: apply` step workloads. `oc/effects_test.go`
 proves the effect executes before the first resource apply and that no resource
 applies after an effect failure.
 
 **CSV gate trigger:** The OLM CSV gate (wait for the operator CSV to reach
 `Succeeded`, establishing the operator's CRDs) runs when the add-on has custom
-resources OR any `follows: operatorReady` hook — such a hook also needs the CRDs
-established (e.g. the hook producing the external-cluster Secret +
-StorageCluster). `TestApplyHookTriggersCSVGateWithoutCustomResources` proves an
-add-on with a `follows: operatorReady` hook and zero `customResources` still
+resources OR any `follows: operatorReady` step — such a step also needs the CRDs
+established (e.g. the step producing the external-cluster Secret +
+StorageCluster). `TestApplyStepTriggersCSVGateWithoutCustomResources` proves an
+add-on with a `follows: operatorReady` step and zero `customResources` still
 waits, and that `gates: apply` runs before the operator install. Without the
 gate, custom resources race the operator install and fail with
 `no matches for kind`.
@@ -76,6 +76,6 @@ add-ons` instead of letting each task fail later at `requireKubeconfig`. A full
 apply with base in scope produces the kubeconfig mid-run and is deliberately
 not gated (`TestAddonsStageGatesMissingKubeconfig`). The add-ons phase needs
 the controller Ansible runtime (ansible-playbook + python3 checks) only when
-some add-on ships a playbook hook (`spec.steps[].playbook` non-empty);
+some add-on ships a playbook step (`spec.steps[].playbook` non-empty);
 manifest-only add-ons need no ansible
-(`TestPreflightChecksAddonPlaybookHooksNeedAnsible`).
+(`TestPreflightChecksAddonPlaybookStepsNeedAnsible`).

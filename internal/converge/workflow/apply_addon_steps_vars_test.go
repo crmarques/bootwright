@@ -6,47 +6,47 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/addons/hooks"
+	"github.com/crmarques/bootwright/internal/addons/steps"
 )
 
-func TestHookExtraVarPairsCarryScopedRuntimeVars(t *testing.T) {
-	hook := v1alpha1.ClusterAddonStep{Name: "attach", Follows: v1alpha1.ClusterAddonStepFollowsOperatorReady}
+func TestStepExtraVarPairsCarryScopedRuntimeVars(t *testing.T) {
+	step := v1alpha1.ClusterAddonStep{Name: "attach", Follows: v1alpha1.ClusterAddonStepFollowsOperatorReady}
 	inputs := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "ceph-export"}}
-	pairs, err := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"external-storage": map[string]any{"kind": "StorageExport"}}, inputs)
+	pairs, err := stepExtraVarPairs(step, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", map[string]any{"external-storage": map[string]any{"kind": "StorageExport"}}, inputs)
 	if err != nil {
-		t.Fatalf("hookExtraVarPairs: %v", err)
+		t.Fatalf("stepExtraVarPairs: %v", err)
 	}
 	for _, want := range []string{
 		"bootwright_step_name=attach",
 		"bootwright_step_anchor=operatorReady",
 		"bootwright_addon_name=odf",
 		"bootwright_bound_cluster=metal-ocp",
-		"bootwright_hook_outputs_dir=/runs/outputs",
-		"bootwright_hook_secrets_dir=/runs/secrets",
+		"bootwright_step_outputs_dir=/runs/outputs",
+		"bootwright_step_secrets_dir=/runs/secrets",
 		"bootwright_kubeconfig=/clusters/metal-ocp/secrets/kubeconfig",
 	} {
 		if !slices.Contains(pairs, want) {
-			t.Fatalf("hookExtraVarPairs missing %q in %v", want, pairs)
+			t.Fatalf("stepExtraVarPairs missing %q in %v", want, pairs)
 		}
 	}
 	joined := strings.Join(pairs, "\n")
-	if !strings.Contains(joined, "bootwright_hook_refs") || !strings.Contains(joined, "bootwright_hook_inputs") {
-		t.Fatalf("hookExtraVarPairs missing refs/inputs JSON vars: %v", pairs)
+	if !strings.Contains(joined, "bootwright_step_refs") || !strings.Contains(joined, "bootwright_step_inputs") {
+		t.Fatalf("stepExtraVarPairs missing refs/inputs JSON vars: %v", pairs)
 	}
 }
 
-func TestHookExtraVarPairsPropagatesMarshalError(t *testing.T) {
-	hook := v1alpha1.ClusterAddonStep{
+func TestStepExtraVarPairsPropagatesMarshalError(t *testing.T) {
+	step := v1alpha1.ClusterAddonStep{
 		Name:      "attach",
 		Follows:   v1alpha1.ClusterAddonStepFollowsOperatorReady,
 		ExtraVars: map[string]any{"bad": make(chan int)},
 	}
-	_, err := hookExtraVarPairs(hook, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", nil, nil)
+	_, err := stepExtraVarPairs(step, "odf", "metal-ocp", "/runs/outputs", "/runs/secrets", "/clusters/metal-ocp/secrets/kubeconfig", nil, nil)
 	if err == nil {
-		t.Fatal("hookExtraVarPairs did not report an unmarshalable extraVars value")
+		t.Fatal("stepExtraVarPairs did not report an unmarshalable extraVars value")
 	}
 	if !strings.Contains(err.Error(), "attach") {
-		t.Fatalf("hookExtraVarPairs error %q does not name the failing hook", err)
+		t.Fatalf("stepExtraVarPairs error %q does not name the failing step", err)
 	}
 }
 
@@ -92,9 +92,9 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 			},
 		},
 	}
-	executor := &addonHookExecutor{state: state}
+	executor := &addonStepExecutor{state: state}
 
-	withRGW := executor.resolveRefObject(hooks.RefKindStorageExport, "with-rgw")
+	withRGW := executor.resolveRefObject(steps.RefKindStorageExport, "with-rgw")
 	gw, ok := withRGW["objectGateway"].(map[string]any)
 	if !ok {
 		t.Fatalf("resolveRefObject did not embed objectGateway for an export with objectGatewayRef set: %v", withRGW)
@@ -105,16 +105,16 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 		t.Fatalf("embedded objectGateway.spec.public.dnsLabel = %v, want rgw-dc1", public["dnsLabel"])
 	}
 	if gw["publicFQDN"] != "rgw-dc1.ceph.example.test" {
-		t.Fatalf("embedded objectGateway.publicFQDN = %v, want the composed rgw-dc1.ceph.example.test the exporter hook reads", gw["publicFQDN"])
+		t.Fatalf("embedded objectGateway.publicFQDN = %v, want the composed rgw-dc1.ceph.example.test the exporter step reads", gw["publicFQDN"])
 	}
 
-	withoutRGW := executor.resolveRefObject(hooks.RefKindStorageExport, "no-rgw")
+	withoutRGW := executor.resolveRefObject(steps.RefKindStorageExport, "no-rgw")
 	if _, ok := withoutRGW["objectGateway"]; ok {
 		t.Fatalf("resolveRefObject must not embed objectGateway when objectGatewayRef is unset: %v", withoutRGW)
 	}
 }
 
-func TestHookManifestResourceIDExtractsKindNamespaceName(t *testing.T) {
+func TestStepManifestResourceIDExtractsKindNamespaceName(t *testing.T) {
 	cases := []struct {
 		name   string
 		object map[string]any
@@ -139,8 +139,8 @@ func TestHookManifestResourceIDExtractsKindNamespaceName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := hookManifestResourceID(tc.object); got != tc.want {
-				t.Fatalf("hookManifestResourceID = %q, want %q", got, tc.want)
+			if got := stepManifestResourceID(tc.object); got != tc.want {
+				t.Fatalf("stepManifestResourceID = %q, want %q", got, tc.want)
 			}
 		})
 	}

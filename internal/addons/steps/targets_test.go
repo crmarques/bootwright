@@ -1,4 +1,4 @@
-package hooks
+package steps
 
 import (
 	"testing"
@@ -27,13 +27,13 @@ func TestTargetClustersFromInputStorageExport(t *testing.T) {
 			Spec:     v1alpha1.StorageExportSpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"}},
 		}},
 	}
-	hook := v1alpha1.ClusterAddonStep{
+	step := v1alpha1.ClusterAddonStep{
 		Target: v1alpha1.ClusterAddonStepTarget{
 			FromInput: &v1alpha1.ClusterAddonStepInputTarget{Input: "external-storage"},
 		},
 	}
 	inputs := []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "odf-export"}}
-	containers, storage := TargetClusters(state, dfAddon(), "metal-ocp", hook, inputs)
+	containers, storage := TargetClusters(state, dfAddon(), "metal-ocp", step, inputs)
 	if len(containers) != 0 {
 		t.Errorf("containers = %v want none", containers)
 	}
@@ -43,8 +43,8 @@ func TestTargetClustersFromInputStorageExport(t *testing.T) {
 }
 
 func TestTargetClustersBoundCluster(t *testing.T) {
-	hook := v1alpha1.ClusterAddonStep{Target: v1alpha1.ClusterAddonStepTarget{BoundCluster: &v1alpha1.ClusterAddonStepBoundTarget{}}}
-	containers, storage := TargetClusters(v1alpha1.State{}, dfAddon(), "metal-ocp", hook, nil)
+	step := v1alpha1.ClusterAddonStep{Target: v1alpha1.ClusterAddonStepTarget{BoundCluster: &v1alpha1.ClusterAddonStepBoundTarget{}}}
+	containers, storage := TargetClusters(v1alpha1.State{}, dfAddon(), "metal-ocp", step, nil)
 	if len(containers) != 1 || containers[0] != "metal-ocp" {
 		t.Errorf("containers = %v want [metal-ocp]", containers)
 	}
@@ -54,12 +54,12 @@ func TestTargetClustersBoundCluster(t *testing.T) {
 }
 
 func TestTargetClustersFromInputMissingValueNoPanic(t *testing.T) {
-	hook := v1alpha1.ClusterAddonStep{
+	step := v1alpha1.ClusterAddonStep{
 		Target: v1alpha1.ClusterAddonStepTarget{
 			FromInput: &v1alpha1.ClusterAddonStepInputTarget{Input: "external-storage"},
 		},
 	}
-	containers, storage := TargetClusters(v1alpha1.State{}, dfAddon(), "metal-ocp", hook, nil)
+	containers, storage := TargetClusters(v1alpha1.State{}, dfAddon(), "metal-ocp", step, nil)
 	if len(containers) != 0 || len(storage) != 0 {
 		t.Errorf("unresolved fromInput should yield no clusters, got %v %v", containers, storage)
 	}

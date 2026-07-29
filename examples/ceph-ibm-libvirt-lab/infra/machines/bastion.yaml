@@ -6,7 +6,6 @@ spec:
   capabilities:
     - container-runtime
     - libvirt
-    - name-resolution
 
   os:
     provided: true

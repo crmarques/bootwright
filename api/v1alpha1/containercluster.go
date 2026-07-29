@@ -18,8 +18,6 @@ type ContainerClusterSpec struct {
 	Distribution DistributionSpec         `yaml:"distribution,omitempty" json:"distribution,omitempty"`
 	Install      OCPInstallSpec           `yaml:"install,omitempty" json:"install,omitempty"`
 	Security     ContainerClusterSecurity `yaml:"security,omitempty" json:"security,omitempty"`
-	ControlPlane *MachinePoolSpec         `yaml:"controlPlane,omitempty" json:"controlPlane,omitempty"`
-	Compute      []MachinePoolSpec        `yaml:"compute,omitempty" json:"compute,omitempty"`
 	Networking   *OCPNetworkingSpec       `yaml:"networking,omitempty" json:"networking,omitempty"`
 	Nodes        []OCPNodeSpec            `yaml:"nodes,omitempty" json:"nodes,omitempty"`
 }
@@ -104,10 +102,6 @@ type ReleaseSpec struct {
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
 	Image   string `yaml:"image,omitempty" json:"image,omitempty"`
-}
-
-type MachinePoolSpec struct {
-	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
 }
 
 type OCPNetworkingSpec struct {

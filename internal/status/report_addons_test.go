@@ -30,7 +30,7 @@ func TestBuildAddonsSurfacesLastObservedForFailedRecord(t *testing.T) {
 		Status:       extensionrecords.RecordStatusFailed,
 		Phase:        extensionrecords.RecordPhaseApplying,
 		UpdatedAt:    time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
-		LastObserved: `hook "attach-external-storage" (postOperatorReady) failed: boom`,
+		LastObserved: `step "attach-external-storage" (postOperatorReady) failed: boom`,
 	}
 	if err := extensionrecords.SaveRecord(dir, record); err != nil {
 		t.Fatalf("SaveRecord: %v", err)

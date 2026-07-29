@@ -98,7 +98,7 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 	}
 	docs = append(docs, cephadmMonitoringSpecs(cluster)...)
-	docs = append(docs, cephadmManagementSpecs(cluster)...)
+	docs = append(docs, cephadmMgmtGatewaySpecs(cluster)...)
 	for _, service := range cluster.Spec.Ceph.Services {
 		hosts := topology.ResolvePlacement(cluster, service.Placement, "")
 		spec := map[string]any{}

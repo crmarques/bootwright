@@ -495,10 +495,6 @@ bootwright_machines:
       capabilities:
         - container-runtime
         - libvirt
-        - load-balancer
-        - proxy
-        - name-resolution
-        - ntp
       name: bastion
       sshAddress: localhost
       sshAddressName: ssh

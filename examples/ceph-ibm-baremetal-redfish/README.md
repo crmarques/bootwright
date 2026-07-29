@@ -61,7 +61,7 @@ Edit these to match your site (search-and-replace `example.com` and the
 ### 0a. A current `bootwright` binary
 
 This example uses fields on `main` (`spec.ceph.release`, the `mgmt-gateway`
-`management` block, external proxy/NTP/DNS catalog entries). Build and use the
+`mgmtGateway` block, external proxy/NTP/DNS catalog entries). Build and use the
 repo's binary:
 
 ```bash

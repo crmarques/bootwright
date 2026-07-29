@@ -26,9 +26,9 @@ const (
 	runTaskDirName                = "tasks"
 	taskRenderedDirName           = "rendered"
 	taskArtifactsDirName          = "artifacts"
-	taskHooksDirName              = "hooks"
-	hookSecretsDirName            = "secrets"
-	hookConnectionSecretsDirName  = "connection-secrets"
+	taskStepsDirName              = "steps"
+	stepSecretsDirName            = "secrets"
+	stepConnectionSecretsDirName  = "connection-secrets"
 )
 
 type RunOptions struct {
@@ -431,7 +431,7 @@ func removeRuntimeSecretDirs(runRoot string) {
 		for _, target := range taskRuntimeSecretDirs(taskRoot) {
 			_ = os.RemoveAll(target)
 		}
-		for _, target := range taskHookSecretDirs(taskRoot) {
+		for _, target := range taskStepSecretDirs(taskRoot) {
 			_ = os.RemoveAll(target)
 		}
 	}
@@ -449,9 +449,9 @@ func taskRuntimeSecretDirs(taskRoot string) []string {
 	return targets
 }
 
-func taskHookSecretDirs(taskRoot string) []string {
-	hooksRoot := filepath.Join(taskRoot, taskHooksDirName)
-	entries, err := os.ReadDir(hooksRoot)
+func taskStepSecretDirs(taskRoot string) []string {
+	stepsRoot := filepath.Join(taskRoot, taskStepsDirName)
+	entries, err := os.ReadDir(stepsRoot)
 	if err != nil {
 		return nil
 	}
@@ -460,8 +460,8 @@ func taskHookSecretDirs(taskRoot string) []string {
 		if !entry.IsDir() {
 			continue
 		}
-		hookRoot := filepath.Join(hooksRoot, entry.Name())
-		targets = append(targets, filepath.Join(hookRoot, hookSecretsDirName), filepath.Join(hookRoot, hookConnectionSecretsDirName))
+		stepRoot := filepath.Join(stepsRoot, entry.Name())
+		targets = append(targets, filepath.Join(stepRoot, stepSecretsDirName), filepath.Join(stepRoot, stepConnectionSecretsDirName))
 	}
 	return targets
 }

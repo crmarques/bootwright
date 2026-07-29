@@ -276,7 +276,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "registry-host"},
 			Spec: v1alpha1.MachineSpec{
-				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime, v1alpha1.MachineCapabilityRegistry},
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 				OS: v1alpha1.MachineOSSpec{
 					Provided: v1alpha1.BoolPtr(true),
 				},

@@ -283,7 +283,7 @@ func TestFilterStateToClustersExcludesUnconsumedInfraComponentMachines(t *testin
 	state.Machines = append(state.Machines, v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "unused-service-host"},
 		Spec: v1alpha1.MachineSpec{
-			Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime, v1alpha1.MachineCapabilityProxy},
+			Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 			OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
 		},
 	})
@@ -498,12 +498,6 @@ func serviceMachine() v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{
 				v1alpha1.MachineCapabilityContainerRuntime,
-				v1alpha1.MachineCapabilityLoadBalancer,
-				v1alpha1.MachineCapabilityNameResolution,
-				v1alpha1.MachineCapabilityNTP,
-				v1alpha1.MachineCapabilityProxy,
-				v1alpha1.MachineCapabilityRegistry,
-				v1alpha1.MachineCapabilityArtifactServer,
 			},
 			OS: v1alpha1.MachineOSSpec{
 				Provided: v1alpha1.BoolPtr(true),

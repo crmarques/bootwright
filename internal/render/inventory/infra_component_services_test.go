@@ -89,7 +89,7 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "bastion"},
 			Spec: v1alpha1.MachineSpec{
-				Capabilities: []string{v1alpha1.MachineCapabilityNameResolution},
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 				OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
 				Addresses:    []v1alpha1.MachineAddress{{Name: "cluster-lan", Address: "192.168.134.1"}},
 			},

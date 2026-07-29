@@ -59,7 +59,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		ceph.PackageVersion = ""
 		ceph.Topology.Nodes = nil
 		ceph.Topology.OSDDrivegroups = nil
-		ceph.Management = nil
+		ceph.MgmtGateway = nil
 		ceph.Services = nil
 		ceph.Config = nil
 		ceph.MgrModules = nil

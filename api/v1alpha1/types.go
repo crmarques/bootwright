@@ -40,13 +40,6 @@ const (
 	MachineCapabilityOpenShiftNode    = "openshift-node"
 	MachineCapabilityLibvirt          = "libvirt"
 	MachineCapabilityContainerRuntime = "container-runtime"
-	MachineCapabilityArtifactServer   = "artifact-server"
-	MachineCapabilityLoadBalancer     = "load-balancer"
-	MachineCapabilityProxy            = "proxy"
-	MachineCapabilityNameResolution   = "name-resolution"
-	MachineCapabilityNTP              = "ntp"
-	MachineCapabilityRegistry         = "registry"
-	MachineCapabilityCephAdmin        = "ceph-admin"
 	MachineCapabilityCephNode         = "ceph-node"
 	MachineInstallOSFamilyRHEL        = "rhel"
 	MachineImageMediaTypeDVD          = "dvd"
@@ -81,7 +74,7 @@ const (
 
 	StorageCephadmDefaultSSHUser = "cephadm"
 
-	StorageCephManagementDefaultDNSLabel = "mgr"
+	StorageCephMgmtGatewayDefaultDNSLabel = "mgr"
 
 	NodeAccessSudoersDir    = "/etc/sudoers.d"
 	NodeAccessSudoersPrefix = "60-bootwright-"
@@ -242,6 +235,7 @@ const (
 	ClusterAddonStepOutputFormatJSON = "json"
 
 	DefaultClusterAddonStepTimeout = "10m"
+	DefaultCustomPlaybookTimeout   = "10m"
 
 	StorageClusterTypeCeph = "ceph"
 

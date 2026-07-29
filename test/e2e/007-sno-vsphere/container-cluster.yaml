@@ -30,12 +30,6 @@ spec:
     nodeSSH:
       keyPairRef: sno-vsphere-cluster-admin-ssh-key
 
-  controlPlane:
-    replicas: 1
-
-  compute:
-    - replicas: 0
-
   networking:
     clusterNetwork:
       - cidr: 10.128.0.0/14

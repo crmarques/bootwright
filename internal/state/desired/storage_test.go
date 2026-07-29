@@ -182,9 +182,9 @@ func TestStorageIngressVRRPCollisionOnSharedL2Rejected(t *testing.T) {
 		VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
 		FirstVirtualRouterID:     51,
 	}}
-	state.StorageClusters[0].Spec.Ceph.Management = &v1alpha1.StorageCephManagement{
+	state.StorageClusters[0].Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{
 		DNSLabel: "mgr",
-		Ingress: v1alpha1.StorageCephManagementIngress{
+		Ingress: v1alpha1.StorageCephMgmtGatewayIngress{
 			Name: "mgmt", Address: "192.168.140.81", PrefixLength: 24,
 			VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
 			FirstVirtualRouterID:     51,
@@ -1226,7 +1226,7 @@ func TestStorageValidationRejectsSingleHostWithOneStaticOSD(t *testing.T) {
 	}
 }
 
-func TestStorageManagementAuthGate(t *testing.T) {
+func TestStorageMgmtGatewayAuthGate(t *testing.T) {
 	on := true
 	off := false
 	state := v1alpha1.State{Secrets: []v1alpha1.Secret{
@@ -1234,31 +1234,31 @@ func TestStorageManagementAuthGate(t *testing.T) {
 		{Metadata: v1alpha1.Metadata{Name: "key"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
 		{Metadata: v1alpha1.Metadata{Name: "client"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeToken}},
 	}}
-	clusterWith := func(mgmt *v1alpha1.StorageCephManagement) v1alpha1.StorageCluster {
+	clusterWith := func(mgmt *v1alpha1.StorageCephMgmtGateway) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-			Management: mgmt,
-			Topology:   v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+			MgmtGateway: mgmt,
+			Topology:    v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
 		}}}
 	}
-	baseIngress := v1alpha1.StorageCephManagementIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24}
+	baseIngress := v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24}
 	validOAuth := &v1alpha1.StorageCephOAuth2Proxy{ProviderDisplayName: "Corp", ClientID: "id", ClientSecretRef: v1alpha1.LocalObjectReference{Name: "client"}, OIDCIssuerURL: "https://idp"}
 
 	cases := []struct {
 		name string
-		mgmt *v1alpha1.StorageCephManagement
+		mgmt *v1alpha1.StorageCephMgmtGateway
 		want string
 	}{
-		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
-		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
-		{name: "valid-auth", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
-		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "d", TLS: &v1alpha1.StorageCephManagementTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" is not a declared Secret`},
-		{name: "dns-label-fqdn", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "dash.example.test", Ingress: baseIngress}, want: `dnsLabel "dash.example.test" is not a valid DNS label`},
-		{name: "dns-label-uppercase", mgmt: &v1alpha1.StorageCephManagement{DNSLabel: "Dash", Ingress: baseIngress}, want: `dnsLabel "Dash" is not a valid DNS label`},
-		{name: "dns-label-omitted", mgmt: &v1alpha1.StorageCephManagement{Ingress: baseIngress}},
+		{name: "auth-without-oauth2", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "d", EnableAuth: &on, Ingress: baseIngress}, want: "enableAuth requires oauth2Proxy"},
+		{name: "oauth2-without-auth", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "d", EnableAuth: &off, OAuth2Proxy: validOAuth, Ingress: baseIngress}, want: "oauth2Proxy requires enableAuth"},
+		{name: "valid-auth", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "d", EnableAuth: &on, OAuth2Proxy: validOAuth, Ingress: baseIngress}},
+		{name: "tls-bad-ref", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "d", TLS: &v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "missing"}, KeyRef: v1alpha1.LocalObjectReference{Name: "key"}}, Ingress: baseIngress}, want: `"missing" is not a declared Secret`},
+		{name: "dns-label-fqdn", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "dash.example.test", Ingress: baseIngress}, want: `dnsLabel "dash.example.test" is not a valid DNS label`},
+		{name: "dns-label-uppercase", mgmt: &v1alpha1.StorageCephMgmtGateway{DNSLabel: "Dash", Ingress: baseIngress}, want: `dnsLabel "Dash" is not a valid DNS label`},
+		{name: "dns-label-omitted", mgmt: &v1alpha1.StorageCephMgmtGateway{Ingress: baseIngress}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Join(validateStorageCephManagement("spec.ceph.management", clusterWith(tc.mgmt), state), "; ")
+			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.management", clusterWith(tc.mgmt), state), "; ")
 			if tc.want == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)

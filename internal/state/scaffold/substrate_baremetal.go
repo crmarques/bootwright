@@ -28,7 +28,6 @@ metadata:
 spec:
   capabilities:
     - container-runtime
-    - artifact-server
   os:
     provided: true
   addresses:

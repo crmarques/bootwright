@@ -365,14 +365,14 @@ ceph:
 
 ## The management gateway and HA dashboard
 
-`spec.ceph.management` renders a native cephadm **management gateway**
+`spec.ceph.mgmtGateway` renders a native cephadm **management gateway**
 (`mgmt-gateway`) fronted by a `keepalive_only` ingress, giving the Ceph
 dashboard a single highly-available VIP that floats across the mgr hosts instead
 of pinning operators to the active mgr's address. The VIP and its DNS name show
 up in `bootwright cluster info`, and a managed `nameResolution` component
 should publish that name.
 
-You do not spell that name out. `spec.ceph.management.dnsLabel` is the leftmost
+You do not spell that name out. `spec.ceph.mgmtGateway.dnsLabel` is the leftmost
 label only — Bootwright composes the published name as
 `<dnsLabel>.<StorageCluster name>.<domains.storageClusters>`, the same
 composition that gives Ceph nodes their FQDNs. `dnsLabel` defaults to `mgr`, so
@@ -381,14 +381,14 @@ untouched, and `dnsLabel: dashboard` publishes
 `dashboard.ceph-ibm.example.com`. A dotted value is rejected: the cluster and
 domain arms are not overridable per cluster.
 
-`management.ingress` is **required** whenever the block is present — it is the
+`mgmtGateway.ingress` is **required** whenever the block is present — it is the
 `keepalive_only` VIP itself, so `name`, `address`, and `prefixLength` must all be
 set (`virtualInterfaceNetworks[]`, `placement`, and `firstVirtualRouterID` are
 optional, and follow the RGW ingress rules below):
 
 ```yaml
 ceph:
-  management:
+  mgmtGateway:
     dnsLabel: dashboard
     ingress:
       name: lab
@@ -402,12 +402,12 @@ dashboard end to end.
 
 Two optional blocks secure the gateway:
 
-- `spec.ceph.management.tls` (`certificateRef` + `keyRef`, both required
+- `spec.ceph.mgmtGateway.tls` (`certificateRef` + `keyRef`, both required
   together) supplies a real certificate for the gateway frontend (cephadm
   `ssl_certificate` / `ssl_certificate_key`). Without it the composed name
   serves a self-signed cert that browsers reject.
-- `spec.ceph.management.enableAuth: true` puts the dashboard behind SSO and
-  **requires** `spec.ceph.management.oauth2Proxy` — Bootwright deploys the
+- `spec.ceph.mgmtGateway.enableAuth: true` puts the dashboard behind SSO and
+  **requires** `spec.ceph.mgmtGateway.oauth2Proxy` — Bootwright deploys the
   cephadm `oauth2-proxy` daemon (`providerDisplayName`, `clientId`,
   `clientSecretRef`, `oidcIssuerUrl`, optional `redirectUrl`, `httpsAddress`,
   `allowlistDomains`, `cookieSecretRef`). `enableAuth` without `oauth2Proxy`, or
@@ -462,7 +462,7 @@ wire export-to-ODF for imported and managed Ceph respectively. The export object
 model is in the [storage reference](../concepts/storage.md#storageexport).
 
 `spec.dataFoundation.objectGatewayRef` names the `StorageObjectGateway` ODF's
-object storage should use; set it and the exporter hook passes that gateway's
+object storage should use; set it and the exporter step passes that gateway's
 public endpoint as `--rgw-endpoint`, so external mode also gets S3 alongside
 RBD and CephFS. Leave it unset for a block/file-only export. Each ODF cluster
 should get its own `StorageExport` naming its own site-local gateway, so
@@ -504,7 +504,7 @@ password. The seed login is the cluster's own account (`cephadm` by default,
 
 When `spec.domains.storageClusters` is set, the dashboard URL is
 `https://mgr.<cluster>.<domains.storageClusters>` instead of the seed node's
-bare address, even without an explicit `spec.ceph.management` block — the same
+bare address, even without an explicit `spec.ceph.mgmtGateway` block — the same
 `mgr.` alias convention the HA gateway uses below. Bootwright does not publish
 that DNS record itself outside the HA gateway case; without a `nameResolution`
 component (or another record) pointing it at the active mgr, resolve it

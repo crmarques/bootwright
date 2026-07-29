@@ -14,17 +14,17 @@ func StorageClustersDomain(state v1alpha1.State) string {
 	return strings.TrimSpace(env.Spec.Domains.StorageClustersDomain())
 }
 
-func StorageManagementFQDN(state v1alpha1.State, cluster v1alpha1.StorageCluster) string {
-	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Management == nil {
+func StorageMgmtGatewayFQDN(state v1alpha1.State, cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.MgmtGateway == nil {
 		return ""
 	}
 	domain := StorageClustersDomain(state)
 	if domain == "" {
 		return ""
 	}
-	label := cluster.Spec.Ceph.Management.DNSLabel
+	label := cluster.Spec.Ceph.MgmtGateway.DNSLabel
 	if label == "" {
-		label = v1alpha1.StorageCephManagementDefaultDNSLabel
+		label = v1alpha1.StorageCephMgmtGatewayDefaultDNSLabel
 	}
 	return ComposeFQDN(label, cluster.Metadata.Name, domain)
 }

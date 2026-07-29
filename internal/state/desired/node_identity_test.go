@@ -284,7 +284,7 @@ func TestNormalizeKeepsBareNodeHostnamesWithoutBaseDomain(t *testing.T) {
 	}
 }
 
-func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
+func TestNormalizeDefaultsCephMgmtGatewayAndGatewayDNSNames(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -298,8 +298,8 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Management: &v1alpha1.StorageCephManagement{
-						Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "192.168.0.1", PrefixLength: 24},
+					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
+						Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "192.168.0.1", PrefixLength: 24},
 					},
 				},
 			},
@@ -308,9 +308,9 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Management: &v1alpha1.StorageCephManagement{
+					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 						DNSLabel: "dashboard",
-						Ingress:  v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "192.168.0.2", PrefixLength: 24},
+						Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "192.168.0.2", PrefixLength: 24},
 					},
 				},
 			},
@@ -334,16 +334,16 @@ func TestNormalizeDefaultsCephManagementAndGatewayDNSNames(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.StorageClusters[0].Spec.Ceph.Management.DNSLabel; got != "mgr" {
+	if got := state.StorageClusters[0].Spec.Ceph.MgmtGateway.DNSLabel; got != "mgr" {
 		t.Fatalf("management dnsLabel = %q, want the mgr default", got)
 	}
-	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[0]); got != "mgr.ceph.ceph.cloud.example.net" {
+	if got := stateview.StorageMgmtGatewayFQDN(state, state.StorageClusters[0]); got != "mgr.ceph.ceph.cloud.example.net" {
 		t.Fatalf("management fqdn = %q, want mgr.ceph.ceph.cloud.example.net", got)
 	}
-	if got := state.StorageClusters[1].Spec.Ceph.Management.DNSLabel; got != "dashboard" {
+	if got := state.StorageClusters[1].Spec.Ceph.MgmtGateway.DNSLabel; got != "dashboard" {
 		t.Fatalf("declared management dnsLabel = %q, want dashboard kept verbatim", got)
 	}
-	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[1]); got != "dashboard.ceph-east.ceph.cloud.example.net" {
+	if got := stateview.StorageMgmtGatewayFQDN(state, state.StorageClusters[1]); got != "dashboard.ceph-east.ceph.cloud.example.net" {
 		t.Fatalf("management fqdn = %q, want dashboard.ceph-east.ceph.cloud.example.net", got)
 	}
 	if got := state.StorageObjectGateways[0].Spec.Public.DNSLabel; got != "rgw" {
@@ -367,8 +367,8 @@ func TestNormalizeKeepsCephDNSNamesEmptyWithoutStorageDomain(t *testing.T) {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Management: &v1alpha1.StorageCephManagement{
-						Ingress: v1alpha1.StorageCephManagementIngress{Name: "mgmt", Address: "192.168.0.1", PrefixLength: 24},
+					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
+						Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "192.168.0.1", PrefixLength: 24},
 					},
 				},
 			},
@@ -383,7 +383,7 @@ func TestNormalizeKeepsCephDNSNamesEmptyWithoutStorageDomain(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := stateview.StorageManagementFQDN(state, state.StorageClusters[0]); got != "" {
+	if got := stateview.StorageMgmtGatewayFQDN(state, state.StorageClusters[0]); got != "" {
 		t.Fatalf("management fqdn = %q, want empty without an Environment storage domain", got)
 	}
 	if got := stateview.StorageGatewayFQDN(state, state.StorageObjectGateways[0]); got != "" {

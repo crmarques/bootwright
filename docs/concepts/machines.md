@@ -65,8 +65,8 @@ The tables below describe only `spec`.
 ### Capabilities
 
 `spec.capabilities[]` tags the roles a machine fulfills. Each entry must come
-from the canonical set of eleven; an unknown, empty, or duplicate capability
-fails validation. Four of them gate a reference:
+from the canonical set of four; an unknown, empty, or duplicate capability
+fails validation. Every one of them gates something:
 
 | Capability | Required by |
 | --- | --- |
@@ -77,11 +77,7 @@ fails validation. Four of them gate a reference:
 
 An `InfraComponent` host needs `container-runtime` — **not** a capability named
 after the service. Tagging a proxy host `capabilities: [proxy]` and nothing else
-is rejected.
-
-The remaining seven — `ceph-admin`, `load-balancer`, `proxy`, `name-resolution`,
-`ntp`, `registry`, `artifact-server` — are accepted as inventory labels but gate
-nothing today.
+is rejected — `proxy` is not a capability at all.
 
 ### OS mode
 

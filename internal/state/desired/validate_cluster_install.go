@@ -61,7 +61,7 @@ func validateClusterEndpoints(owner string, ci v1alpha1.ClusterInstall, componen
 			errs = append(errs, fmt.Sprintf("%s.endpoints.%s is not a consumed endpoint; accepted keys are {%s, %s, %s}",
 				owner, name, v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress))
 		}
-		errs = append(errs, validateClusterEndpoint(owner+".endpoints."+name, ci, components, endpoint, networkConfigs)...)
+		errs = append(errs, validateClusterEndpoint(owner+".endpoints."+name, name, ci, components, endpoint, networkConfigs)...)
 		if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent && endpoint.Source.ComponentRef.Name != "" && endpoint.Source.BindAddressRef.Name != "" {
 			if loadBalancerRefs[endpoint.Source.ComponentRef.Name] == nil {
 				loadBalancerRefs[endpoint.Source.ComponentRef.Name] = map[string]bool{}
@@ -79,7 +79,7 @@ func validateClusterEndpoints(owner string, ci v1alpha1.ClusterInstall, componen
 	return errs
 }
 
-func validateClusterEndpoint(prefix string, ci v1alpha1.ClusterInstall, components map[string]v1alpha1.InfraComponent, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterEndpoint(prefix, name string, ci v1alpha1.ClusterInstall, components map[string]v1alpha1.InfraComponent, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	if endpoint.Address != "" {
 		ip := net.ParseIP(endpoint.Address)
@@ -121,10 +121,33 @@ func validateClusterEndpoint(prefix string, ci v1alpha1.ClusterInstall, componen
 		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s}",
 			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
 	}
-	if endpoint.Address == "" && endpoint.DNSName == "" && endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent {
+	switch {
+	case endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent:
+	case endpointSlotRendersVIP(ci, name):
+		if endpoint.Address == "" {
+			errs = append(errs, prefix+" must set address or source.type=infraComponent; this slot renders a platform VIP into install-config, and dnsName alone would render an empty VIP list")
+		}
+	case endpoint.Address == "" && endpoint.DNSName == "":
 		errs = append(errs, prefix+" must set address, dnsName, or source.type=infraComponent")
 	}
 	return errs
+}
+
+func endpointSlotRendersVIP(ci v1alpha1.ClusterInstall, name string) bool {
+	switch name {
+	case v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress:
+	default:
+		return false
+	}
+	if len(ci.Machines) < 2 {
+		return false
+	}
+	switch ci.Platform.Type {
+	case v1alpha1.PlatformTypeBareMetal, v1alpha1.PlatformTypeVSphere:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInstall, networkConfigs map[string]v1alpha1.NetworkConfig, address string, ip net.IP) []string {

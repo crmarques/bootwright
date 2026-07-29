@@ -69,6 +69,7 @@ jobs:
           artifact="bootwright_${TAG_NAME}_linux_amd64"
           mkdir -p "dist/$artifact"
           install -m 0755 bin/bootwright-linux-amd64 "dist/$artifact/bootwright"
+          install -m 0644 LICENSE "dist/$artifact/LICENSE"
           tar -C dist -czf "dist/$artifact.tar.gz" "$artifact"
           rm -rf "dist/$artifact"
           (cd dist && sha256sum "$artifact.tar.gz" > "$artifact.tar.gz.sha256")

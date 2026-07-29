@@ -93,7 +93,6 @@ func TestPlanApplyClusterScopeExcludesUnconsumedFabricHost(t *testing.T) {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{
 				v1alpha1.MachineCapabilityContainerRuntime,
-				v1alpha1.MachineCapabilityProxy,
 			},
 			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
 		},

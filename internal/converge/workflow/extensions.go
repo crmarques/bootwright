@@ -40,7 +40,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 			PollInterval: 0,
 			ReadRunner:   readRunner,
 			Progress:     progress,
-			Hooks:        newAddonHookExecutor(stdout, stderr, runsDir, runID, kubeconfig, opts, task, runnerFactory),
+			Steps:        newAddonStepExecutor(stdout, stderr, runsDir, runID, kubeconfig, opts, task, runnerFactory),
 			Effects:      newAddonEffectExecutor(stdout, stderr, runsDir, runID, opts, task),
 		}
 		switch task.Entry.Kind {

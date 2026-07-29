@@ -107,7 +107,7 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 	}
 }
 
-func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
+func TestStorageAccessSummaryUsesMgmtGatewayVIPDashboardURL(t *testing.T) {
 	managementCluster := func(label string, port int) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
@@ -115,10 +115,10 @@ func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
 				Type:       v1alpha1.StorageClusterTypeCeph,
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Management: &v1alpha1.StorageCephManagement{
+					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 						DNSLabel: label,
 						Port:     port,
-						Ingress: v1alpha1.StorageCephManagementIngress{
+						Ingress: v1alpha1.StorageCephMgmtGatewayIngress{
 							Name: "lab", Address: "192.168.140.81", PrefixLength: 24,
 						},
 					},

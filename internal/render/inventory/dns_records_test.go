@@ -88,9 +88,9 @@ func storageDNSRecordsState(baseDomain string) v1alpha1.State {
 							Roles:      []string{v1alpha1.StorageCephRoleMON},
 						}},
 					},
-					Management: &v1alpha1.StorageCephManagement{
+					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 						DNSLabel: "dashboard",
-						Ingress:  v1alpha1.StorageCephManagementIngress{Name: "lab", Address: "192.168.140.81"},
+						Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "lab", Address: "192.168.140.81"},
 					},
 				},
 			},
@@ -280,7 +280,7 @@ func dnsRecordsState() v1alpha1.State {
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "host"},
 			Spec: v1alpha1.MachineSpec{
-				Capabilities: []string{v1alpha1.MachineCapabilityNameResolution},
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 				OS: v1alpha1.MachineOSSpec{
 					Provided: v1alpha1.BoolPtr(true),
 				},

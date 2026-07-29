@@ -58,7 +58,7 @@ spec, `StorageExport` spec, and `StoragePool` `spec.ceph`. Two carve-outs:
   `spec.management`. An external cluster carries `externalDetails`
   (operator-supplied payload via `fromSecretRef`) and leaves `dataFoundation`
   empty; a managed cluster carries `dataFoundation` and may omit
-  `externalDetails` (the consuming add-on's hook produces the payload).
+  `externalDetails` (the consuming add-on's step produces the payload).
 - `Entitlement` `spec.type` selects a **set** of required arms rather than a
   single populated arm, so it is neither a plain discriminated nor a
   presence union:
@@ -109,7 +109,9 @@ The word `type` is reserved API-wide for kind-of-thing discriminators; the
 who-runs-it axis is spelled `management` (`external` | `managed`), and
 generated-parameter fields avoid `type` (`keyType` on generated sshKeyPair).
 `none` is a reserved component name/ref sentinel and never a `management`
-value.
+value. `management` is reserved exclusively for that who-runs-it axis: no other
+field may be spelled `management`, so a block naming a component is named after
+what it renders (`spec.ceph.mgmtGateway` for cephadm's `mgmt-gateway`).
 
 ## Consequences
 

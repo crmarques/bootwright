@@ -125,7 +125,7 @@ spec:
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
-| `ceph.management` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it, and `management.ingress` is then required. See [Management gateway](#management-gateway). |
+| `ceph.mgmtGateway` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it, and `mgmtGateway.ingress` is then required. See [Management gateway](#management-gateway). |
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
 | `ceph.topology` | Yes | — | Nodes, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
 
@@ -401,7 +401,7 @@ that — change `clusterSSH.user` to `root` as a separate, deliberate step.
 
 ### Management gateway
 
-`ceph.management` is presence-enabled: authoring the block deploys cephadm's
+`ceph.mgmtGateway` is presence-enabled: authoring the block deploys cephadm's
 native `mgmt-gateway` in front of the dashboard behind a VIP. `ingress` is
 required whenever the block is present — the gateway exists to be highly
 available, so it has no meaning without one. The walkthrough is in
@@ -409,21 +409,21 @@ available, so it has no meaning without one. The walkthrough is in
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `management.dnsLabel` | No | `mgr` | Leftmost label only; the published name is `<dnsLabel>.<cluster>.<domains.storageClusters>`. A dotted value is rejected. |
-| `management.port` | No | `8443` | Gateway listening port; `0..65535`. |
-| `management.enableAuth` | No | `false` | `true` puts the dashboard behind `oauth2Proxy`, which then becomes required (and is rejected when auth is off). |
-| `management.tls.certificateRef` / `.keyRef` | Both, within `tls` | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. Omit the block for cephadm's self-signed certificate. |
-| `management.oauth2Proxy.providerDisplayName` | With `oauth2Proxy` | — | Provider name shown on the login page. |
-| `management.oauth2Proxy.clientId` | With `oauth2Proxy` | — | OIDC client ID. |
-| `management.oauth2Proxy.clientSecretRef` | With `oauth2Proxy` | — | `Secret` holding the OIDC client secret. |
-| `management.oauth2Proxy.oidcIssuerUrl` | With `oauth2Proxy` | — | OIDC issuer URL. |
-| `management.oauth2Proxy.redirectUrl` / `httpsAddress` / `allowlistDomains[]` / `cookieSecretRef` | No | — | Optional oauth2-proxy tuning. |
-| `management.ingress.name` | Yes | — | cephadm ingress service name. |
-| `management.ingress.address` | Yes | — | The VIP the gateway answers on. |
-| `management.ingress.prefixLength` | Yes | — | Prefix length of that VIP. |
-| `management.ingress.virtualInterfaceNetworks[]` | No | — | CIDRs whose interface keepalived binds the VIP to. |
-| `management.ingress.firstVirtualRouterID` | No | cephadm default | VRRP router ID; must not collide with another ingress on an overlapping network in the same cluster. |
-| `management.ingress.placement` | No | every `ingress`-role host | See [Shared placement](#shared-placement). Under stretch it must cover both data sites. |
+| `mgmtGateway.dnsLabel` | No | `mgr` | Leftmost label only; the published name is `<dnsLabel>.<cluster>.<domains.storageClusters>`. A dotted value is rejected. |
+| `mgmtGateway.port` | No | `8443` | Gateway listening port; `0..65535`. |
+| `mgmtGateway.enableAuth` | No | `false` | `true` puts the dashboard behind `oauth2Proxy`, which then becomes required (and is rejected when auth is off). |
+| `mgmtGateway.tls.certificateRef` / `.keyRef` | Both, within `tls` | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. Omit the block for cephadm's self-signed certificate. |
+| `mgmtGateway.oauth2Proxy.providerDisplayName` | With `oauth2Proxy` | — | Provider name shown on the login page. |
+| `mgmtGateway.oauth2Proxy.clientId` | With `oauth2Proxy` | — | OIDC client ID. |
+| `mgmtGateway.oauth2Proxy.clientSecretRef` | With `oauth2Proxy` | — | `Secret` holding the OIDC client secret. |
+| `mgmtGateway.oauth2Proxy.oidcIssuerUrl` | With `oauth2Proxy` | — | OIDC issuer URL. |
+| `mgmtGateway.oauth2Proxy.redirectUrl` / `httpsAddress` / `allowlistDomains[]` / `cookieSecretRef` | No | — | Optional oauth2-proxy tuning. |
+| `mgmtGateway.ingress.name` | Yes | — | cephadm ingress service name. |
+| `mgmtGateway.ingress.address` | Yes | — | The VIP the gateway answers on. |
+| `mgmtGateway.ingress.prefixLength` | Yes | — | Prefix length of that VIP. |
+| `mgmtGateway.ingress.virtualInterfaceNetworks[]` | No | — | CIDRs whose interface keepalived binds the VIP to. |
+| `mgmtGateway.ingress.firstVirtualRouterID` | No | cephadm default | VRRP router ID; must not collide with another ingress on an overlapping network in the same cluster. |
+| `mgmtGateway.ingress.placement` | No | every `ingress`-role host | See [Shared placement](#shared-placement). Under stretch it must cover both data sites. |
 
 ### Monitoring
 
@@ -868,8 +868,8 @@ OpenShift Data Foundation external mode. The export name is what an
 !!! note "Cross-field rules"
     - For a **managed** `storageClusterRef`, `dataFoundation` is required and
       `externalDetails` must be empty: the consuming add-on produces the
-      external-cluster details itself — its hook runs the exporter on a Ceph
-      node of the export's cluster and captures the payload as a hook output.
+      external-cluster details itself — its step runs the exporter on a Ceph
+      node of the export's cluster and captures the payload as a step output.
     - For an **external** `storageClusterRef`, `externalDetails` is required and
       `dataFoundation` must be empty.
     - `spec.type` may be omitted only when `dataFoundation` is set (it then
@@ -877,7 +877,7 @@ OpenShift Data Foundation external mode. The export name is what an
       explicitly.
 
 A managed export wiring the RBD pool and CephFS filesystem (the consuming
-add-on's exporter hook reads these refs):
+add-on's exporter step reads these refs):
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -912,7 +912,7 @@ spec:
 | --- | --- | --- | --- |
 | `dataFoundation.rbdPoolRef` | Yes | — | RBD `StoragePool` (same cluster). |
 | `dataFoundation.filesystemRef` | Yes | — | CephFS `StorageFilesystem` (same cluster). |
-| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter hook passes that gateway's composed public name and `public.port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
+| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter step passes that gateway's composed public name and `public.port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
 
 ### External details
 
@@ -924,10 +924,10 @@ spec:
     The export itself never gathers credentials. Either the operator supplies
     the external-cluster-details JSON as a secret (`fromSecretRef` — the only
     option for external Ceph, where Bootwright manages no nodes), or the
-    consuming [add-on](add-ons.md) ships a hook that fetches Rook's
+    consuming [add-on](add-ons.md) ships a step that fetches Rook's
     external-cluster-details exporter from the installed operator, runs it on a
     node of the managed Ceph cluster, and consumes the captured output. See the
-    add-ons page for the hook shapes.
+    add-ons page for the step shapes.
 
 ## Where to go next
 
