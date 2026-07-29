@@ -118,7 +118,7 @@
       terminal (rc={{ bootwright_node_access_privilege_probe.rc | default('unknown') }})
       and again with one (rc={{ bootwright_node_access_tty_probe.rc | default('unknown') }}:
       {{ bootwright_node_access_tty_diagnostic }}).
-      {% if bootwright_node_access_password_attempted | bool %}
+      {% if (bootwright_node_access_askpass_install.rc | default(1) | int) == 0 %}
       Answering sudo with the password --ssh-ask-sudo-password collected failed too
       (rc={{ bootwright_node_access_password_probe.rc | default('unknown') }} without a
       terminal, rc={{ bootwright_node_access_password_tty_probe.rc | default('unknown') }}
@@ -137,8 +137,6 @@
       sshd. A sudoers requiretty policy alone needs no change, Bootwright allocates the
       terminal itself. Then re-apply.
   vars:
-    bootwright_node_access_password_attempted: >-
-      {{ (bootwright_node_access_askpass_install.rc | default(1) | int) == 0 }}
     bootwright_node_access_tty_diagnostic: >-
       {{
         ((bootwright_node_access_tty_probe | default({}, true)).stdout | default('', true) | trim)
