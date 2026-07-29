@@ -70,13 +70,17 @@ rather than silently changing nothing.
 ### On the channel that has no `become`, the password is answered by `SUDO_ASKPASS`
 
 `privilege.yml` gains a third and fourth probe, run only after the two `sudo -n`
-probes have both failed and only when a password is available. Bootwright
-resolves the borrowed account's home, writes a helper directory there — the
-password in a `0600` file, a `0700` script that `cat`s it — and probes
-`SUDO_ASKPASS=<helper> sudo -A true` without a terminal, then with one. The
-refusal is still fail-closed and still precedes `account.yml`, so a node that
-cannot escalate is left with no account, no sudoers file, and root SSH
-untouched.
+probes have both failed and only when a password is available. Bootwright writes
+a helper directory under the borrowed account's home — the password in a `0600`
+file, a `0700` script that `cat`s it — and probes `SUDO_ASKPASS=<helper> sudo -A
+true` without a terminal, then with one. The refusal is still fail-closed and
+still precedes `account.yml`, so a node that cannot escalate is left with no
+account, no sudoers file, and root SSH untouched.
+
+The helper path is written as `"$HOME"/…` for the node's own shell to expand,
+never read back over `ssh` first. A login profile that writes to standard output
+on a non-interactive shell would prefix whatever a home probe returned, and the
+password would then be redirected to a path Bootwright never cleans up.
 
 `SUDO_ASKPASS` is the mechanism rather than `sudo -S` because it composes with
 what this role already does and `-S` does not. Every privileged payload in the
@@ -91,6 +95,20 @@ The password is written over the terminal-free connection, on standard input,
 under `no_log`. It is never interpolated into a remote command string: that
 string becomes the argv of the node's shell, which any local account can read
 from `ps`.
+
+### The refusal distinguishes no password from an undelivered one
+
+Three states end at the same gate, and each has a different remedy: no password
+was collected, one was collected but this machine does not qualify for it, and
+one was collected for a machine that qualifies but the helper never reached the
+node. The gate reads them from `bootwright_node_access.sudoPasswordEnv` (a
+password exists for *this* machine) and `sudoPasswordOffered` (the run collected
+one at all), not from whether the helper install returned `0` — deciding on the
+install alone reports a helper that failed to write as a password that was never
+collected, and sends an operator who passed `--ssh-ask-sudo-password` back to
+the flag already on their command line. The install task is `no_log`, so the
+refusal also carries its return code and standard error: nothing else in the run
+reports them.
 
 ### The helper is removed even when the run fails
 

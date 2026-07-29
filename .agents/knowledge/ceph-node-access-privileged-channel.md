@@ -73,13 +73,28 @@ prompt. `rc=1` twice is the password axis; `rc=0` on the second is `requiretty`;
 distinguishable only by that pair of return codes.
 
 **Fix / rule (ADR 0029):** when both `sudo -n` probes fail and
-`bootwright_node_access.sudoPasswordEnv` is set, `privilege.yml` resolves the
-borrowed account's home, writes `<home>/.bootwright-sudo-askpass/` (`pw` 0600
-holding the password, `ask` 0700 `cat`ing it), and probes
-`SUDO_ASKPASS=<…>/ask sudo -A true` pty-free then with `-tt`. The prefix becomes
-`bootwright_node_access_sudo`, so every downstream privileged task inherits it
-unchanged. `verify.yml:45` resets it to `sudo -n`, so it cannot leak past the
-borrowed window.
+`bootwright_node_access.sudoPasswordEnv` is set, `privilege.yml` writes
+`"$HOME"/.bootwright-sudo-askpass/` (`pw` 0600 holding the password, `ask` 0700
+`cat`ing it), and probes `SUDO_ASKPASS="$HOME/…/ask" sudo -A true` pty-free then
+with `-tt`. The prefix becomes `bootwright_node_access_sudo`, so every downstream
+privileged task inherits it unchanged. `verify.yml:45` resets it to `sudo -n`, so
+it cannot leak past the borrowed window.
+
+**`$HOME` is expanded by the node, never round-tripped.** The path is a shell
+expression carried unquoted into every remote command, so `| quote` on it is a
+bug — it would write the password to a literal `$HOME` directory the cleanup then
+misses. An earlier revision read the home directory back with `printf %s "$HOME"`
+and parsed stdout; any login profile that prints on a non-interactive shell
+prefixes that value, and the redirect lands somewhere unclean-up-able.
+
+**Three states end at the gate, and its message must tell them apart.** No
+password collected; one collected but withheld from this machine (it declares its
+own login, so only `sudoPasswordOffered` is set, not `sudoPasswordEnv`); one
+collected and applicable but the helper never installed. Deciding on
+`bootwright_node_access_askpass_install.rc` alone — as the message did between
+`d9ca3d9a` and this fix — reports the third state as the first, and tells an
+operator who passed `--ssh-ask-sudo-password` to pass it. The install task is
+`no_log`, so if the refusal does not print its `rc` and `stderr`, nothing does.
 
 **Why `SUDO_ASKPASS` and not `sudo -S`.** `sudo`'s stdin is already the payload
 pipe in five tasks (§ 4), and under `-tt` a pty delivers no EOF and echoes what

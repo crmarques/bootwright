@@ -39,7 +39,7 @@
         argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_install_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
-          rm -rf {{ bootwright_node_access_askpass_dir | quote }}
+          rm -rf {{ bootwright_node_access_askpass_dir }}
       delegate_to: localhost
       become: false
       changed_when: true

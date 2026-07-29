@@ -2407,9 +2407,13 @@ func TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt(t *testing.T) {
 		}
 	}
 
-	homeIdx := findAnsibleTask(t, privilege, "Resolve the storage node borrowed identity home directory")
-	if homeIdx > installIdx {
-		t.Fatal("the borrowed identity home must be resolved before the helper is written, or the password lands on a path Bootwright cannot clean up")
+	resolveIdx := findAnsibleTask(t, privilege, "Resolve the storage node sudo askpass helper for the borrowed identity")
+	if resolveIdx > installIdx {
+		t.Fatal("the helper path must be resolved before the helper is written, or the password lands on a path Bootwright cannot clean up")
+	}
+	resolved := fmt.Sprint(privilege[resolveIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(resolved, "$HOME") {
+		t.Fatalf("the helper path must be expanded by the node's own shell: reading the home directory back over ssh first makes any login profile that writes to stdout redirect the password to a path Bootwright never cleans up, got %v", privilege[resolveIdx]["ansible.builtin.set_fact"])
 	}
 
 	main := readAnsibleTasks(t, base+"main.yml")
@@ -2420,6 +2424,29 @@ func TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt(t *testing.T) {
 	removal := fmt.Sprint(always)
 	if !strings.Contains(removal, "bootwright_node_access_askpass_dir") || !strings.Contains(removal, "rm -rf") {
 		t.Fatalf("the always section must remove the askpass helper directory holding the password, got %v", always)
+	}
+	if strings.Contains(removal, "bootwright_node_access_askpass_dir | quote") {
+		t.Fatalf("the helper path carries $HOME for the node's shell to expand, so quoting it removes the password from nothing, got %v", always)
+	}
+}
+
+func TestStorageNodeAccessSeparatesNoPasswordFromAnUndeliveredOne(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	privilege := readAnsibleTasks(t, base+"privilege.yml")
+	assertIdx := findAnsibleTask(t, privilege, "Require privileged execution on the storage node before provisioning")
+	assertion, ok := privilege[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatal("the privilege gate must be an assert")
+	}
+	msg := fmt.Sprint(assertion["fail_msg"])
+	if !strings.Contains(msg, "sudoPasswordEnv") {
+		t.Fatalf("the refusal must decide whether a password existed for this machine from bootwright_node_access.sudoPasswordEnv, not from whether the helper install succeeded: a helper that failed to install reports as a password never collected and sends the operator to a flag they already passed, got %s", msg)
+	}
+	if !strings.Contains(msg, "sudoPasswordOffered") {
+		t.Fatalf("the refusal must tell an operator who passed --ssh-ask-sudo-password that it does not reach a machine which declares its own login, rather than asking them to pass it again, got %s", msg)
+	}
+	if !strings.Contains(msg, "bootwright_node_access_askpass_install.rc") {
+		t.Fatalf("the refusal must report the return code of the helper install: the task is no_log, so a failure there produces no other output anywhere in the run, got %s", msg)
 	}
 }
 

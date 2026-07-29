@@ -66,4 +66,17 @@ func TestNodeAccessChannelOmitsTheEnvironmentForADeclaredLogin(t *testing.T) {
 	if _, ok := access["sudoPasswordEnv"]; ok {
 		t.Fatal("the prompted password must not reach a node whose install login is declared; Bootwright reaches that account with the credential its Secret names")
 	}
+	if access["sudoPasswordOffered"] != true {
+		t.Fatalf("sudoPasswordOffered = %v, want true; the node-access channel must be able to tell an operator who passed --ssh-ask-sudo-password that it does not reach this machine apart from one who never passed it, or its refusal names a flag that is already on the command line", access["sudoPasswordOffered"])
+	}
+}
+
+func TestNodeAccessChannelMarksARunThatCollectedNoPassword(t *testing.T) {
+	state, cluster := nodeAccessState("cephadm", v1alpha1.MachineRootLoginRevoke)
+	node := cluster.Spec.Ceph.Topology.Nodes[0]
+	entry := storageNodeInventoryEntry(state, cluster, node, nil, PathOptions{SecretsDir: "/ctx/secrets"}, locality.Policy{})
+	access := entry["bootwright_node_access"].(map[string]any)
+	if _, ok := access["sudoPasswordOffered"]; ok {
+		t.Fatalf("sudoPasswordOffered is set on a run that never prompted, so the refusal would withhold the one remedy that applies, got %v", access["sudoPasswordOffered"])
+	}
 }

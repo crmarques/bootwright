@@ -162,6 +162,9 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if paths.PreferredIdentityFile != "" {
 		out["preferredIdentityPath"] = paths.PreferredIdentityFile
 	}
+	if paths.AskSSHSudoPassword {
+		out["sudoPasswordOffered"] = true
+	}
 	if sshSudoPasswordApplies(machine, paths) {
 		out["sudoPasswordEnv"] = v1alpha1.SSHSudoPasswordEnv
 	}
