@@ -47,7 +47,7 @@ const (
 
 	flagDryRunUsage            = "render artifacts and print the plan; change nothing remote"
 	flagAskBecomePassUsage     = "prompt for the Ansible become password (default: false as root, true otherwise)"
-	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --yes or --output json)"
+	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
 	flagContextUsage           = "context to operate in (default: current context)"
 	flagSSHPreferredIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
 	flagSSHUserUsage           = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected, and apply/destroy/preflight refuse when no selected machine uses that arm"

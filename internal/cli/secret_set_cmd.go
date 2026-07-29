@@ -65,7 +65,7 @@ provides. Use --generate for test fixtures.`,
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to a PEM TLS private key file")
 	cmd.Flags().StringVar(&rawFile, "raw-file", "", "path to a file containing arbitrary secret bytes")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "path to a file containing one line: username:password")
-	cmd.Flags().StringVar(&username, "username", "", "username (required with --password-stdin or --generate)")
+	cmd.Flags().StringVar(&username, "username", "", "username (required with --password-stdin; defaults to admin with --generate)")
 	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read the password from stdin")
 	cmd.Flags().BoolVar(&generate, "generate", false, "generate a strong random password (intended for test fixtures)")
 	addYesFlag(cmd, &yes, "overwrite")
@@ -295,7 +295,7 @@ func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer
 	}
 	message := fmt.Sprintf("%s encrypted credentials under %s (user %q)", action, secretsDir, resolvedUser)
 	if generate {
-		message += " — password generated; copy it from the file above before sharing"
+		message += fmt.Sprintf(" — password generated; reveal it with `bootwright secret show --name %s`", name)
 	}
 	p := output.New(stdout)
 	p.Command("secret set")

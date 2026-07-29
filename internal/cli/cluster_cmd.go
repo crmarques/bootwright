@@ -174,7 +174,7 @@ the command that reveals them ('cluster info --secrets') is shown instead.`,
   bootwright cluster kubectl --name managed-01 get pods -A`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name to inspect (default: all)")
-	cmd.Flags().BoolVar(&showSecrets, "secrets", false, "also print secret values (kubeadmin and Ceph dashboard passwords), not just their paths")
+	cmd.Flags().BoolVar(&showSecrets, "secrets", false, "print secret values (kubeadmin and Ceph dashboard passwords) inline instead of the command that reveals them")
 	addOutputFlag(cmd, &outputFormat)
 	registerAccessClusterNameCompletion(cmd)
 	cf := addCommonFlags()

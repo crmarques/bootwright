@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-const flagMachinesUsage = "comma-separated Machine names to provision (default: apply whole clusters); mutually exclusive with --clusters, runs only the fabric and machines phases"
+const flagMachinesUsage = "comma-separated Machine names to target (default: whole clusters); mutually exclusive with --clusters, limits the run to the fabric and machines phases"
 
 const flagMachinesDestroyUsage = "comma-separated Machine names to tear down (default: destroy whole clusters); mutually exclusive with --clusters, tears down only the machine substrate"
 
