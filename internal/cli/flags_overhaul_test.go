@@ -90,6 +90,11 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 		{[]string{"--ssh-user", "operator", "apply"}, []string{"apply"}},
 		{[]string{"--ssh-preferred-id-key=/k", "--ssh-user=operator", "--context", "lab", "apply"}, []string{"apply"}},
 		{[]string{"--ssh-user"}, nil},
+		{[]string{"--ssh-ask-sudo-password", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-ask-sudo-password=true", "--ssh-user", "operator", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-ask-sudo-password"}, nil},
+		{[]string{"--ssh-user-for-provisioned", "--ssh-user", "operator", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-user-for-provisioned=true", "destroy"}, []string{"destroy"}},
 		{nil, nil},
 	}
 	for _, tc := range cases {
@@ -110,5 +115,8 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 	}
 	if !argsHaveUnusableSSHUser([]string{"--ssh-user", "root@evil", "apply"}) {
 		t.Fatal("a leading unusable --ssh-user must keep the gate rootless so cobra reports the flag error")
+	}
+	if !argsNeedLocalRoot(stripLeadingGlobalFlags([]string{"--ssh-ask-sudo-password", "apply"})) {
+		t.Fatal("`--ssh-ask-sudo-password apply` should be rootful; a leading boolean global flag takes no value and must not swallow the subcommand")
 	}
 }

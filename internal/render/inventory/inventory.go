@@ -5,11 +5,9 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/ownership"
 	secret "github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/sshtrust"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -183,6 +181,9 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 	if path := secret.ResolvePath(h.Spec.Access.SSH.SudoPasswordRef.Name, paths.SecretIndex, paths.SecretsDir); path != "" {
 		entry["ansible_become_password"] = passwordLookup(path)
 	}
+	if sshSudoPasswordApplies(h, paths) {
+		entry["ansible_become_password"] = envLookup(v1alpha1.SSHSudoPasswordEnv)
+	}
 	if path := machineKnownHostsPath(h, paths); path != "" {
 		passwordAuth := v1alpha1.MachineSSHPasswordRef(h).Name != ""
 		entry["ansible_ssh_common_args"] = sshCommonArgs(path, passwordAuth, paths.PreferredIdentityFile)
@@ -191,48 +192,6 @@ func machineInventoryEntry(state v1alpha1.State, h v1alpha1.Machine, env *v1alph
 		}
 	}
 	return entry
-}
-
-func sshUserApplies(machine v1alpha1.Machine, paths PathOptions) bool {
-	return paths.SSHUser != "" && v1alpha1.MachineUsesOperatorIdentity(machine)
-}
-
-func connectionUser(machine v1alpha1.Machine, paths PathOptions) string {
-	if sshUserApplies(machine, paths) {
-		return paths.SSHUser
-	}
-	if machine.Spec.Access.SSH == nil {
-		return ""
-	}
-	return machine.Spec.Access.SSH.User
-}
-
-func passwordLookup(path string) string {
-	return "{{ lookup('ansible.builtin.file', '" + path + "') | trim }}"
-}
-
-func machineKnownHostsPath(h v1alpha1.Machine, paths PathOptions) string {
-	return sshtrust.MachineKnownHostsPath(h, paths.SecretIndex, paths.SecretsDir, sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir()))
-}
-
-func sshCommonArgs(knownHostsPath string, passwordAuth bool, preferredIdentityFile string) string {
-	return shellquote.QuoteWords(SSHCommonArgWords(knownHostsPath, passwordAuth, preferredIdentityFile))
-}
-
-func SSHCommonArgWords(knownHostsPath string, passwordAuth bool, preferredIdentityFile string) []string {
-	words := []string{}
-	if preferredIdentityFile != "" {
-		words = append(words, "-o", "IdentityFile="+preferredIdentityFile)
-	}
-	if !passwordAuth {
-		words = append(words, "-o", "BatchMode=yes")
-	}
-	return append(words,
-		"-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile="+knownHostsPath,
-		"-o", "ServerAliveInterval=15",
-		"-o", "ServerAliveCountMax=3",
-	)
 }
 
 func localmachineInventoryEntry() map[string]any {

@@ -190,7 +190,7 @@ decided by `spec.os.provided` alone:
 | `access.ssh.port` | No | `22` | TCP port for SSH. |
 | `access.ssh.user` | No | See below | Login account on the machine you already own. Required with `passwordRef`. |
 | `access.ssh.auth` | Yes (when `access.ssh` is set) | — | How Bootwright authenticates. Exactly one arm; see below. |
-| `access.ssh.sudoPasswordRef` | No | — | `usernamePassword` Secret supplying the `sudo` password. Bootwright escalates with `become`, so an account without passwordless `sudo` needs this. |
+| `access.ssh.sudoPasswordRef` | No | — | `usernamePassword` Secret supplying the `sudo` password. Bootwright escalates with `become`, so an account without passwordless `sudo` needs this. It is stored in the context and shared with everyone who holds that context; for your **own** login password use [`--ssh-ask-sudo-password`](#answering-a-sudo-that-asks-for-a-password) instead, which prompts per run and stores nothing. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
 | `access.rootLogin` | No | `keep` | `keep` or `revoke`. `revoke` is accepted only on an `os.provided: true` machine that declares `access.ssh` **and** that a managed Ceph `StorageCluster` lists in `spec.ceph.topology.nodes` under a non-root `clusterSSH.user` — that account is the replacement login. Anywhere else it is rejected. See [Storage → The Ceph node login](storage.md#the-ceph-node-login). |
 
@@ -310,6 +310,68 @@ $ bootwright machine exec --name ceph-0 --ssh-user cephadm -- id
 
 Like `--ssh-preferred-id-key`, the value never enters desired state or an
 ownership record, and it is refused unless it is a valid POSIX user name.
+
+#### Using your account everywhere
+
+By default `--ssh-user` stops at the machines you already administer. The
+machines Bootwright installed are reached as `bootwright`, and a machine whose
+login a `Secret` names is reached as that login. `--ssh-user-for-provisioned`
+widens the override to **every** machine in the run:
+
+```console
+$ bootwright apply --ssh-user carmj --ssh-user-for-provisioned \
+    --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
+```
+
+It is a boolean and defaults to `false`; it requires `--ssh-user`, and is
+refused without it — there would be no account to widen. It changes only the
+account Bootwright logs in as. The account a managed Ceph cluster creates and
+hands to cephadm is not affected, and neither is anything in desired state: the
+declared login still travels into the ownership record.
+
+!!! warning "The account has to exist, with `sudo`, on those machines"
+    The machines Bootwright installs carry `bootwright` with a `NOPASSWD` grant
+    written by the kickstart; nothing guarantees your account exists there at
+    all. The managed-OS ownership probe authenticates as whatever account is in
+    force, so a machine that does not answer as the widened account fails that
+    probe closed. Pair it with `--ssh-ask-sudo-password` when the account's
+    `sudo` asks for one.
+
+#### Answering a `sudo` that asks for a password
+
+`--ssh-ask-sudo-password` completes the trio. Your account exists and your key
+works, but its `sudo` grant is not `NOPASSWD` — the common shape when site
+policy owns the account and you cannot weaken it. The flag prompts **once,
+before the run starts**, and Bootwright answers `sudo` with that password on the
+machines that declare `auth.operatorIdentity`:
+
+```console
+$ bootwright apply --clusters ceph-prd-01 --ssh-user operator \
+    --ssh-preferred-id-key ~/.ssh/id_ed25519 --ssh-ask-sudo-password --yes
+SSH sudo password:
+```
+
+It takes no value, so the password never appears in your shell history or in
+`ps`. It is held in memory for the run, reaches `ansible-playbook` through an
+environment variable, and is **never** written to the context secret store, the
+rendered inventory, or the run log. It is not desired state: nothing is
+recorded, and the converge hash does not change. Where a password must persist
+across runs and be shared with other operators, declare
+[`access.ssh.sudoPasswordRef`](#the-auth-arms) instead — that is a `Secret` the
+store holds; this flag deliberately is not.
+
+Like `--ssh-user`, it applies only to `operatorIdentity` machines and is refused
+when no machine in the run declares that arm. The account Bootwright creates and
+hands to cephadm is unaffected: it is granted passwordless `sudo` and proved
+without a password and without a terminal, because that is the channel cephadm's
+manager uses. See [ADR 0029](../../specs/adr/0029-answering-a-sudo-password-for-the-borrowed-identity.md).
+
+!!! note "On a Ceph topology node the password lives on the node, briefly"
+    The Ceph node-access channel builds its own `ssh` invocation and cannot use
+    Ansible `become`, so it writes a `sudo` askpass helper holding the password
+    in a `0600` file under the borrowed account's home for the length of the
+    provisioning window, and removes it before it leaves the node — including
+    when the run fails. Nothing is ever placed in a command line.
 
 #### The `bootwright` service account
 

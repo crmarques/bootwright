@@ -2350,13 +2350,16 @@ func TestStorageNodeAccessProvesPasswordlessSudoWithoutATerminal(t *testing.T) {
 func TestStorageNodeAccessPrivilegedCommandsUseThePrivilegedInvocation(t *testing.T) {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
 	exempt := map[string]bool{
-		"Probe privileged execution on the storage node without a terminal": true,
-		"Probe privileged execution on the storage node with a terminal":    true,
+		"Probe privileged execution on the storage node without a terminal":                 true,
+		"Probe privileged execution on the storage node with a terminal":                    true,
+		"Probe privileged execution with a password on the storage node without a terminal": true,
+		"Probe privileged execution with a password on the storage node with a terminal":    true,
 	}
 	for _, file := range []string{"account.yml", "sudoers.yml", "authorize.yml", "verify.yml", "revoke.yml", "restore.yml", "marker.yml", "privilege.yml"} {
 		for _, task := range flattenNodeAccessTasks(t, readAnsibleTasks(t, base+file)) {
 			cmd, ok := task["ansible.builtin.command"].(map[string]any)
-			if !ok || !strings.Contains(fmt.Sprint(task["vars"]), "bootwright_node_access_sudo") {
+			vars := fmt.Sprint(task["vars"])
+			if !ok || !(strings.Contains(vars, "bootwright_node_access_sudo") || strings.Contains(vars, "bootwright_node_access_askpass_sudo")) {
 				continue
 			}
 			name := fmt.Sprint(task["name"])
@@ -2367,6 +2370,56 @@ func TestStorageNodeAccessPrivilegedCommandsUseThePrivilegedInvocation(t *testin
 				t.Fatalf("%s%s task %q escalates with bootwright_node_access_sudo but not over bootwright_node_access_privileged_argv, so it fails on a node whose sudoers sets requiretty; argv=%v", base, file, name, cmd["argv"])
 			}
 		}
+	}
+}
+
+func TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	privilege := readAnsibleTasks(t, base+"privilege.yml")
+
+	installIdx := findAnsibleTask(t, privilege, "Install the storage node sudo askpass helper for the borrowed identity")
+	install := privilege[installIdx]
+	cmd, ok := install["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatal("the askpass helper task must run a command")
+	}
+	stdin := fmt.Sprint(cmd["stdin"])
+	if !strings.Contains(stdin, "sudoPasswordEnv") {
+		t.Fatalf("the askpass helper must receive the password on stdin from the environment the CLI set, got stdin=%v", cmd["stdin"])
+	}
+	if strings.Contains(fmt.Sprint(install["vars"]), "sudoPasswordEnv") {
+		t.Fatalf("the password must never reach the remote command string: it becomes the argv of the node's shell and any local account can read it from ps, got vars=%v", install["vars"])
+	}
+	if install["no_log"] != true {
+		t.Fatal("the askpass helper task must set no_log, or the operator password is written to the terminal and the run log")
+	}
+	if !strings.Contains(fmt.Sprint(cmd["argv"]), "bootwright_node_access_ssh_argv") {
+		t.Fatalf("the askpass helper must be written over the terminal-free argv: a pseudo-terminal never delivers EOF, so the cat that receives the password would never return, got argv=%v", cmd["argv"])
+	}
+
+	for _, name := range []string{
+		"Probe privileged execution with a password on the storage node without a terminal",
+		"Probe privileged execution with a password on the storage node with a terminal",
+	} {
+		idx := findAnsibleTask(t, privilege, name)
+		if idx < installIdx {
+			t.Fatalf("task %q runs before the askpass helper exists (probe=%d install=%d)", name, idx, installIdx)
+		}
+	}
+
+	homeIdx := findAnsibleTask(t, privilege, "Resolve the storage node borrowed identity home directory")
+	if homeIdx > installIdx {
+		t.Fatal("the borrowed identity home must be resolved before the helper is written, or the password lands on a path Bootwright cannot clean up")
+	}
+
+	main := readAnsibleTasks(t, base+"main.yml")
+	always, ok := main[0]["always"].([]any)
+	if !ok || len(always) == 0 {
+		t.Fatal("the node access block must carry an always section, or a failed run leaves the operator password on the node")
+	}
+	removal := fmt.Sprint(always)
+	if !strings.Contains(removal, "bootwright_node_access_askpass_dir") || !strings.Contains(removal, "rm -rf") {
+		t.Fatalf("the always section must remove the askpass helper directory holding the password, got %v", always)
 	}
 }
 

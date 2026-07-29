@@ -88,6 +88,8 @@ const (
 	NodeAccessSSHDDropIn    = "/etc/ssh/sshd_config.d/01-bootwright-access.conf"
 	NodeAccessMarkerPath    = "/etc/bootwright/access-marker.json"
 
+	SSHSudoPasswordEnv = "BOOTWRIGHT_SSH_SUDO_PASSWORD"
+
 	InstallModeConnected    = "connected"
 	InstallModeDisconnected = "disconnected"
 

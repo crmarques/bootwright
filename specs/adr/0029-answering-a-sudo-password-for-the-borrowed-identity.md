@@ -1,0 +1,150 @@
+# ADR 0029: Answering a `sudo` Password for the Borrowed Identity
+
+## Status
+
+Accepted
+
+## Context
+
+ADR 0028 separated two ways a borrowed login can fail to escalate and fixed one
+of them. It named the other and left it: *"This is the terminal axis, not the
+password axis. ADR 0024's `ssh.sudoPasswordRef` answers a `sudo` that asks for a
+password."*
+
+That sentence is true of every path that escalates through Ansible `become` —
+the renderer emits `sudoPasswordRef` as `ansible_become_password` — and false of
+the one path ADR 0028 is about. `storage_node_access` builds its own `ssh` argv,
+runs every task `delegate_to: localhost` with `become: false`, and hardcodes its
+privilege prefix to `sudo -n` (`probe.yml`). No connection plugin is in that
+path, so no `become` variable reaches it. A `Machine` could name a
+`sudoPasswordRef` and the Ceph node-access channel would still refuse the node.
+
+The gap is reachable exactly where ADR 0028 said onboarding should now work: an
+`os.provided: true` topology node under `operatorIdentity`, reached as the
+operator's own account. An operator who holds `sudo` on that node under site
+policy — with a password, as most policies require — had no way to give
+Bootwright that privilege, and the refusal did not even name the cause. Its
+diagnostic read the `-tt` probe's `stderr`, but a pseudo-terminal binds the
+remote command's `stderr` to the pty slave and returns it on `stdout`; the
+client's own `Connection to <host> closed.` is what lands on `stderr` and is
+never empty, so it shadowed `sudo: a password is required` on every run.
+
+Requiring the operator to grant themselves `NOPASSWD` is the alternative ADR
+0028 already rejected for the terminal axis, for the same reason: Bootwright's
+first act on a fleet should not be a demand to weaken a hardening control on an
+account it does not own, to work around a window that closes when the account it
+does own exists.
+
+## Decision
+
+### The password is prompted, per invocation, and never stored
+
+`--ssh-ask-sudo-password` is a global boolean flag beside `--ssh-user` and
+`--ssh-preferred-id-key`. It prompts once, before the run starts, and holds the
+answer in memory for that process only. It takes no value, so the password
+enters neither shell history nor `ps`.
+
+It MUST NOT be written to the context secret store, the rendered inventory, the
+run log, or any ownership record, and it is not part of the converge hash. The
+store is shared with other operators and outlives the run; a personal login
+password belongs to neither. `access.ssh.sudoPasswordRef` remains the way to
+declare a `sudo` password that must persist and be shared — a service account's,
+not a person's. The two are deliberately different mechanisms for deliberately
+different secrets.
+
+The password reaches `ansible-playbook` through an environment variable
+(`BOOTWRIGHT_SSH_SUDO_PASSWORD`). The renderer emits a *lookup* of that variable
+as `ansible_become_password`, and the *name* of that variable to the node-access
+channel — never the value. A rendered inventory left on disk therefore names
+where the password was, and never what it was.
+
+### Its scope is the identity `--ssh-user` names
+
+The flag applies to machines that declare `auth.operatorIdentity`, and to no
+others. A login Bootwright installed holds a proved `NOPASSWD` grant, and a
+login a `Secret` names carries its own credential; offering a person's password
+to either would be offering it to an account it does not belong to. Like
+`--ssh-user`, the flag is refused when no machine in the run declares that arm,
+rather than silently changing nothing.
+
+### On the channel that has no `become`, the password is answered by `SUDO_ASKPASS`
+
+`privilege.yml` gains a third and fourth probe, run only after the two `sudo -n`
+probes have both failed and only when a password is available. Bootwright
+resolves the borrowed account's home, writes a helper directory there — the
+password in a `0600` file, a `0700` script that `cat`s it — and probes
+`SUDO_ASKPASS=<helper> sudo -A true` without a terminal, then with one. The
+refusal is still fail-closed and still precedes `account.yml`, so a node that
+cannot escalate is left with no account, no sudoers file, and root SSH
+untouched.
+
+`SUDO_ASKPASS` is the mechanism rather than `sudo -S` because it composes with
+what this role already does and `-S` does not. Every privileged payload in the
+role produces its content on the node and pipes it into `sudo` (`printf … |
+sudo tee …`), so `sudo`'s standard input is already spoken for; and under `-tt`
+a pty never delivers EOF and echoes what is written to it, which would put the
+password in captured output. An environment-variable prefix on the remote
+command composes inside pipelines, inside `$(…)`, and with or without a
+terminal, and never reaches an argv.
+
+The password is written over the terminal-free connection, on standard input,
+under `no_log`. It is never interpolated into a remote command string: that
+string becomes the argv of the node's shell, which any local account can read
+from `ps`.
+
+### The helper is removed even when the run fails
+
+The node-access block carries an `always` section that removes the helper
+directory. A password Bootwright put on a node is Bootwright's to take off it,
+on the failure path as much as the success path.
+
+### The created account is untouched by any of this
+
+The three proofs that the orchestration account holds passwordless `sudo` —
+`probe.yml`, `verify.yml`, and the re-proof in `revoke.yml` — keep running
+`sudo -n true` on the terminal-free argv, with no password and no terminal.
+`verify.yml` resets the privilege prefix to `sudo -n` when it switches identity,
+so the askpass form cannot leak past the borrowed window. cephadm's manager
+`sudo`-wraps every remote command over a connection that has neither a terminal
+nor a password, and that is the channel the account must be proved on. Pinned by
+`TestStorageNodeAccessProvesPasswordlessSudoWithoutATerminal` and
+`TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt`.
+
+## Consequences
+
+- The two axes are now symmetric: a terminal is detected by differential probe
+  and allocated for the borrowed identity only; a password is prompted for and
+  answered for the borrowed identity only. Both are per-run connection details,
+  neither is authored, and neither perturbs the converge hash.
+- The refusal names which of the two it hit, and what to do about each. Its
+  terminal diagnostic now reads the `-tt` probe's `stdout`, where a pty puts the
+  remote `stderr`, falling back to `stderr` for the client-side failures — an
+  `rc=255` PTY allocation failure still surfaces.
+- A fleet whose policy grants the operator password `sudo` is onboarded without
+  changing that policy, and the account Bootwright leaves behind needs no
+  password at all.
+- The window in which a personal password exists on a node is bounded by the
+  provisioning window and by an `always` removal. It is a real exposure, stated
+  rather than hidden: on a node that already carries the orchestration account,
+  the earlier probe succeeds and no password is ever sent.
+
+### Alternatives rejected
+
+- **Making `sudoPasswordRef` reach this channel.** It would put a person's
+  login password in the context secret store, where it is shared with every
+  operator of that context and outlives the run. The field stays what ADR 0024
+  made it: a declared credential for a declared service account.
+- **Feeding the password to `sudo -S` on standard input.** `sudo`'s stdin is
+  already the payload pipe in five tasks, and under `-tt` there is no EOF and
+  the pty echoes the password into captured output.
+- **Interpolating the password into the remote command.** The command string is
+  the argv of the node's shell and is world-readable through `ps`.
+- **Rewriting the role onto Ansible `become`.** Rejected in ADR 0028 and still
+  rejected: the role connects as an account that is not `ansible_user`, before
+  that account exists, and switches identity mid-role.
+- **Priming `sudo`'s credential cache once and relying on the timestamp.** The
+  cache is per-tty and time-limited, both of which vary per node and per policy;
+  the role would work on some fleets and mysteriously stop on others.
+- **Writing a `NOPASSWD` grant for the operator's account.** ADR 0028 forbids
+  Bootwright authoring sudo policy for an account it does not own, and this ADR
+  does not reopen it.

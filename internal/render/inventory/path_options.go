@@ -9,6 +9,8 @@ type PathOptions struct {
 	SecretIndex                 secret.Index
 	PreferredIdentityFile       string
 	SSHUser                     string
+	SSHUserForProvisioned       bool
+	AskSSHSudoPassword          bool
 }
 
 func (p PathOptions) trustSecretsDir() string {

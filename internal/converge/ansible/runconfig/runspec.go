@@ -36,6 +36,7 @@ type RunSpecConfig struct {
 	AskBecomePass      bool
 	BecomePasswordFile string
 	UseControllingTTY  bool
+	ExtraEnv           map[string]string
 }
 
 func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
@@ -109,6 +110,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		AskBecomePass:      cfg.AskBecomePass,
 		BecomePasswordFile: cfg.BecomePasswordFile,
 		UseControllingTTY:  cfg.UseControllingTTY,
+		ExtraEnv:           cfg.ExtraEnv,
 	}, nil
 }
 

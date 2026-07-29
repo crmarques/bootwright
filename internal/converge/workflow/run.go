@@ -41,6 +41,8 @@ type RunOptions struct {
 	SecretsDir                 string
 	PreferredIdentityFile      string
 	SSHUser                    string
+	SSHSudoPassword            string
+	SSHUserForProvisioned      bool
 	ManagedServicesDir         string
 	ProviderStateDir           string
 	OwnershipDir               string
@@ -143,6 +145,13 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	return result, err
 }
 
+func sshSudoPasswordEnv(password string) map[string]string {
+	if password == "" {
+		return nil
+	}
+	return map[string]string{v1alpha1.SSHSudoPasswordEnv: password}
+}
+
 func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, contextName, runSecretsDir, ownershipDir string, ownershipRecords []ownership.ResourceRecord, kubeVirtHostKubeconfigPaths map[string]string, runner ansible.Runner, reporter Reporter) (RunResult, error) {
 	paths := render.PathOptions{
 		SecretsDir:                  runSecretsDir,
@@ -150,6 +159,8 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		KubeVirtHostKubeconfigPaths: kubeVirtHostKubeconfigPaths,
 		PreferredIdentityFile:       opts.PreferredIdentityFile,
 		SSHUser:                     opts.SSHUser,
+		SSHUserForProvisioned:       opts.SSHUserForProvisioned,
+		AskSSHSudoPassword:          opts.SSHSudoPassword != "",
 	}
 	perTask := strings.TrimSpace(opts.RenderDir) != ""
 	var result render.Result
@@ -205,6 +216,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		AskBecomePass:      opts.AskBecomePass,
 		BecomePasswordFile: opts.BecomePasswordFile,
 		UseControllingTTY:  opts.UseControllingTTY,
+		ExtraEnv:           sshSudoPasswordEnv(opts.SSHSudoPassword),
 	})
 	if err != nil {
 		return RunResult{Render: result}, err

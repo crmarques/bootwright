@@ -11,8 +11,14 @@ import (
 
 var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-preferred-id-key"}
 
+var globalBoolFlags = []string{"--ssh-ask-sudo-password", "--ssh-user-for-provisioned"}
+
 func stripLeadingGlobalFlags(args []string) []string {
 	for len(args) > 0 {
+		if leadingGlobalBoolFlag(args[0]) {
+			args = args[1:]
+			continue
+		}
 		flag, ok := leadingGlobalValueFlag(args[0])
 		if !ok {
 			return args
@@ -27,6 +33,15 @@ func stripLeadingGlobalFlags(args []string) []string {
 		args = args[1:]
 	}
 	return args
+}
+
+func leadingGlobalBoolFlag(arg string) bool {
+	for _, flag := range globalBoolFlags {
+		if arg == flag || strings.HasPrefix(arg, flag+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 func leadingGlobalValueFlag(arg string) (string, bool) {
@@ -45,13 +60,15 @@ const (
 	flagOutputUsage       = "output format (text|json)"
 	flagOutputDryRunUsage = "output format (text|json); json requires --dry-run"
 
-	flagDryRunUsage            = "render artifacts and print the plan; change nothing remote"
-	flagAskBecomePassUsage     = "prompt for the Ansible become password (default: false as root, true otherwise)"
-	flagTrustOnFirstUseUsage   = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
-	flagContextUsage           = "context to operate in (default: current context)"
-	flagSSHPreferredIDKeyUsage = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
-	flagSSHUserUsage           = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected, and apply/plan/destroy refuse when no selected machine uses that arm"
-	flagVerboseUsage           = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
+	flagDryRunUsage                = "render artifacts and print the plan; change nothing remote"
+	flagAskBecomePassUsage         = "prompt for the Ansible become password (default: false as root, true otherwise)"
+	flagTrustOnFirstUseUsage       = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
+	flagContextUsage               = "context to operate in (default: current context)"
+	flagSSHPreferredIDKeyUsage     = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
+	flagSSHUserUsage               = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected unless --ssh-user-for-provisioned widens it, and apply/plan/destroy refuse when no selected machine uses that arm"
+	flagSSHAskSudoPasswordUsage    = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
+	flagSSHUserForProvisionedUsage = "widen --ssh-user to every machine in the run, including the ones Bootwright installed and reaches as \"" + v1alpha1.BootwrightSSHUser + "\"; requires --ssh-user, and the named account must exist with sudo on those machines too, because the managed-OS ownership probe authenticates as whatever account is in force"
+	flagVerboseUsage               = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 
 func validateOutputFormat(value string) error {
@@ -92,6 +109,9 @@ func addVerboseFlag(cmd *cobra.Command, p *bool) {
 func resolveSSHUser() (string, error) {
 	user := strings.TrimSpace(sshUserOverride)
 	if user == "" {
+		if sshUserForProvisioned {
+			return "", fmt.Errorf("--ssh-user-for-provisioned widens --ssh-user to the machines Bootwright installed, but no --ssh-user was given, so there is no account to widen. Pass --ssh-user <name>, or drop the flag")
+		}
 		return "", nil
 	}
 	if !v1alpha1.ValidPOSIXUserName(user) {

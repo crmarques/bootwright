@@ -264,6 +264,24 @@ the identity Bootwright **creates** and hands to cephadm, whose `sudo -n true`
 acceptance test must never gain one. Bootwright writes sudo policy only for the
 account it owns and never relaxes tty policy for the operator's account.
 
+A `sudo` password is asymmetric by the same rule (ADR 0029). The borrowed
+identity may be granted one, and only for the provisioning window; the created
+identity may never need one, because the channel cephadm orchestrates over
+cannot answer a prompt. Where the borrowed login is the operator's own
+(`auth.operatorIdentity`), `--ssh-ask-sudo-password` prompts once per invocation
+and holds the answer in memory: it is never written to the context secret store,
+the rendered inventory, an ownership record, or the run log, and it is not part
+of the converge hash. It reaches `ansible-playbook` through an environment
+variable; the inventory carries a lookup of that variable's name, never its
+value. On the Ceph node-access channel, which builds its own `ssh` invocation
+and has no `become` to carry a password, the value is written to the node over
+the terminal-free connection on standard input — never into a command string,
+which is the argv of the node's shell and readable through `ps` — into a `0600`
+file under the borrowed account's home, and removed before the play leaves the
+node on the failure path as well as the success path. `access.ssh.sudoPasswordRef`
+remains the declared, stored form, for a service account's password rather than
+a person's.
+
 Node access state is recorded on the machine in an access marker, specified
 under § Generated Artifacts with every other path Bootwright writes.
 

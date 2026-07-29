@@ -25,44 +25,157 @@
   failed_when: false
   when: (bootwright_node_access_privilege_probe.rc | default(0) | int) != 0
 
+- name: Resolve the storage node borrowed identity home directory
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: >-
+      printf %s "$HOME"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_home_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - (bootwright_node_access_privilege_probe.rc | default(0) | int) != 0
+    - (bootwright_node_access_tty_probe.rc | default(1) | int) != 0
+    - (bootwright_node_access.sudoPasswordEnv | default('') | length) > 0
+
+- name: Resolve the storage node sudo askpass helper for the borrowed identity
+  ansible.builtin.set_fact:
+    bootwright_node_access_askpass_dir: >-
+      {{ (bootwright_node_access_home_probe.stdout | trim) ~ '/' ~ bootwright_node_access_askpass_dir_name }}
+    bootwright_node_access_askpass_sudo: >-
+      SUDO_ASKPASS={{ ((bootwright_node_access_home_probe.stdout | trim) ~ '/'
+      ~ bootwright_node_access_askpass_dir_name ~ '/ask') | quote }} sudo -A
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when:
+    - (bootwright_node_access_home_probe.rc | default(1) | int) == 0
+    - (bootwright_node_access_home_probe.stdout | default('') | trim | length) > 0
+
+- name: Install the storage node sudo askpass helper for the borrowed identity
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+    stdin: "{{ lookup('ansible.builtin.env', bootwright_node_access.sudoPasswordEnv) }}"
+  vars:
+    bootwright_node_access_command: >-
+      umask 077
+      && rm -rf {{ bootwright_node_access_askpass_dir | quote }}
+      && mkdir -p {{ bootwright_node_access_askpass_dir | quote }}
+      && cat > {{ bootwright_node_access_askpass_dir | quote }}/pw
+      && printf '%s\n' '#!/bin/sh' 'exec cat "$(dirname "$0")/pw"'
+      > {{ bootwright_node_access_askpass_dir | quote }}/ask
+      && chmod 0700 {{ bootwright_node_access_askpass_dir | quote }}/ask
+      && chmod 0600 {{ bootwright_node_access_askpass_dir | quote }}/pw
+  delegate_to: localhost
+  become: false
+  no_log: true
+  register: bootwright_node_access_askpass_install
+  changed_when: true
+  failed_when: false
+  when: (bootwright_node_access_askpass_dir | default('') | length) > 0
+
+- name: Probe privileged execution with a password on the storage node without a terminal
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: "{{ bootwright_node_access_askpass_sudo }} true"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_password_probe
+  changed_when: false
+  failed_when: false
+  when: (bootwright_node_access_askpass_install.rc | default(1) | int) == 0
+
+- name: Probe privileged execution with a password on the storage node with a terminal
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_access_ssh_tty_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
+  vars:
+    bootwright_node_access_command: "{{ bootwright_node_access_askpass_sudo }} true"
+  delegate_to: localhost
+  become: false
+  register: bootwright_node_access_password_tty_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - (bootwright_node_access_askpass_install.rc | default(1) | int) == 0
+    - (bootwright_node_access_password_probe.rc | default(1) | int) != 0
+
 - name: Require privileged execution on the storage node before provisioning
   ansible.builtin.assert:
     that:
       - >-
         (bootwright_node_access_privilege_probe.rc | default(0) | int) == 0
         or (bootwright_node_access_tty_probe.rc | default(1) | int) == 0
+        or (bootwright_node_access_password_probe.rc | default(1) | int) == 0
+        or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0
     fail_msg: >-
       Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} answered as
       {{ bootwright_node_access_endpoint }}, but that account cannot run a privileged
       command: "{{ bootwright_node_access_sudo }} true" failed without a controlling
       terminal (rc={{ bootwright_node_access_privilege_probe.rc | default('unknown') }})
       and again with one (rc={{ bootwright_node_access_tty_probe.rc | default('unknown') }}:
-      {{ bootwright_node_access_tty_diagnostic }}). Bootwright refuses to start creating
-      {{ bootwright_node_access.user }} with a privilege it has not proved, so no account
-      was created, no sudoers file was written and root SSH is untouched. rc=255 with a
-      failed PTY allocation means sshd sets PermitTTY no for that account; set PermitTTY
-      yes in an sshd_config drop-in and reload sshd. Otherwise grant
-      {{ bootwright_node_access_install_account }} passwordless sudo on the node out of
-      band — a sudoers requiretty policy alone needs no change, Bootwright allocates the
+      {{ bootwright_node_access_tty_diagnostic }}).
+      {% if bootwright_node_access_password_attempted | bool %}
+      Answering sudo with the password --ssh-ask-sudo-password collected failed too
+      (rc={{ bootwright_node_access_password_probe.rc | default('unknown') }} without a
+      terminal, rc={{ bootwright_node_access_password_tty_probe.rc | default('unknown') }}
+      with one: {{ bootwright_node_access_password_diagnostic }}), so either that password
+      is wrong or {{ bootwright_node_access_install_account }} carries no sudo grant at
+      all. Run sudo -l on the node as that account to see which.
+      {% else %}
+      Bootwright offered no password: rerun with --ssh-ask-sudo-password to be prompted
+      once for {{ bootwright_node_access_install_account }}'s sudo password, or grant that
+      account passwordless sudo out of band.
+      {% endif %}
+      Bootwright refuses to start creating {{ bootwright_node_access.user }} with a
+      privilege it has not proved, so no account was created, no sudoers file was written
+      and root SSH is untouched. rc=255 with a failed PTY allocation means sshd sets
+      PermitTTY no for that account; set PermitTTY yes in an sshd_config drop-in and reload
+      sshd. A sudoers requiretty policy alone needs no change, Bootwright allocates the
       terminal itself. Then re-apply.
   vars:
+    bootwright_node_access_password_attempted: >-
+      {{ (bootwright_node_access_askpass_install.rc | default(1) | int) == 0 }}
     bootwright_node_access_tty_diagnostic: >-
       {{
-        ((bootwright_node_access_tty_probe | default({}, true)).stderr | default('', true) | trim)
-        | default(((bootwright_node_access_tty_probe | default({}, true)).stdout | default('', true) | trim), true)
+        ((bootwright_node_access_tty_probe | default({}, true)).stdout | default('', true) | trim)
+        | default(((bootwright_node_access_tty_probe | default({}, true)).stderr | default('', true) | trim), true)
+        | default('no output', true)
+      }}
+    bootwright_node_access_password_diagnostic: >-
+      {{
+        ((bootwright_node_access_password_tty_probe | default({}, true)).stdout | default('', true) | trim)
+        | default(((bootwright_node_access_password_tty_probe | default({}, true)).stderr | default('', true) | trim), true)
         | default('no output', true)
       }}
   delegate_to: localhost
   become: false
 
+- name: Select the password-answering privilege prefix on the storage node
+  ansible.builtin.set_fact:
+    bootwright_node_access_sudo: "{{ bootwright_node_access_askpass_sudo }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: >-
+    (bootwright_node_access_password_probe.rc | default(1) | int) == 0
+    or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0
+
 - name: Resolve the storage node privileged SSH invocation
   ansible.builtin.set_fact:
     bootwright_node_access_tty_required: >-
-      {{ (bootwright_node_access_tty_probe.rc | default(1) | int) == 0 }}
+      {{
+        (bootwright_node_access_tty_probe.rc | default(1) | int) == 0
+        or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0
+      }}
     bootwright_node_access_privileged_argv: >-
       {{
         bootwright_node_access_ssh_tty_argv
-        if ((bootwright_node_access_tty_probe.rc | default(1) | int) == 0)
+        if ((bootwright_node_access_tty_probe.rc | default(1) | int) == 0
+            or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0)
         else bootwright_node_access_ssh_argv
       }}
   delegate_to: localhost
@@ -81,3 +194,19 @@
       {{ bootwright_node_access.sudoersPath }}, because cephadm's manager runs sudo without
       a terminal; that exemption is proved without one before root SSH is revoked.
   when: bootwright_node_access_tty_required | bool
+
+- name: Report that the storage node escalates with a prompted sudo password
+  ansible.builtin.debug:
+    msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} refuses
+      passwordless sudo as {{ bootwright_node_access_install_account }}, so Bootwright
+      answers its sudo prompt with the password --ssh-ask-sudo-password collected, for the
+      length of the provisioning window only. That password is held on the node in a 0600
+      file under {{ bootwright_node_access_askpass_dir | default('the borrowed account home') }},
+      readable by that account and root alone, and is removed before the play leaves this
+      node. The {{ bootwright_node_access.user }} account Bootwright creates is granted
+      passwordless sudo instead, and is proved without a password and without a terminal
+      before root SSH is revoked, because that is the channel cephadm's manager uses.
+  when:
+    - (bootwright_node_access_password_probe.rc | default(1) | int) == 0
+      or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0

@@ -41,4 +41,5 @@ below.
 | [0025](0025-composed-names-are-labels-plus-explicit-overrides.md) | Composed Names Are Labels Plus Explicit Overrides | refines 0017 |
 | [0026](0026-custom-playbook-kind-name.md) | The Operator-Supplied Playbook Kind Is `CustomPlaybook` | renames the kind of 0005, 0021 |
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024 |
-| [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | |
+| [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
+| [0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md) | Answering a `sudo` Password for the Borrowed Identity | extends 0028 |

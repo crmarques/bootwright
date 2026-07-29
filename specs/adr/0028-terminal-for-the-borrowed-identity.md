@@ -105,9 +105,11 @@ from the probe.
 - Whether a node needs a terminal is a per-run connection detail, not desired
   state: it is not authored, not in the converge hash, and not in the access
   marker.
-- This is the terminal axis, not the password axis. ADR 0024's
-  `ssh.sudoPasswordRef` answers a `sudo` that asks for a password; `requiretty`
-  is refused before authentication and is unaffected by it.
+- This is the terminal axis, not the password axis. `requiretty` is refused
+  before authentication, so neither a password nor `NOPASSWD` affects it. The
+  password axis is answered separately: ADR 0024's `ssh.sudoPasswordRef` covers
+  every path that escalates through Ansible `become`, and ADR 0029 covers this
+  channel, which has no `become` to carry it.
 - A fleet whose hardening sets `requiretty` globally is onboarded without
   changing that policy, and the account Bootwright leaves behind carries its own
   scoped exemption.

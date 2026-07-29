@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,6 +109,7 @@ type RunSpec struct {
 	AskBecomePass      bool
 	BecomePasswordFile string
 	UseControllingTTY  bool
+	ExtraEnv           map[string]string
 }
 
 type Runner interface {
@@ -194,6 +196,7 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	if extra := sudoUserSitePackages(); extra != "" {
 		env = appendPythonPath(env, extra)
 	}
+	env = appendExtraEnv(env, spec.ExtraEnv)
 	return RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
 }
 
@@ -404,6 +407,21 @@ func realDirOwnedByEUID(path string) bool {
 		return false
 	}
 	return stat.Uid == uint32(os.Geteuid())
+}
+
+func appendExtraEnv(env []string, extra map[string]string) []string {
+	if len(extra) == 0 {
+		return env
+	}
+	keys := make([]string, 0, len(extra))
+	for key := range extra {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = append(env, key+"="+extra[key])
+	}
+	return env
 }
 
 func appendSystemTempEnv(env []string) []string {

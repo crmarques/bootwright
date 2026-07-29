@@ -57,8 +57,51 @@ sudo: sorry, you must have a tty to run sudo
 ```
 
 sudoers(5) on the flag: *"If set, sudo will only run when the user is logged in
-to a real tty."* This is the terminal axis, not the password axis — ADR 0024's
-`ssh.sudoPasswordRef` is irrelevant to it.
+to a real tty."* This is the terminal axis, not the password axis — no password
+setting affects it.
+
+**The password axis is answered separately, in the same file** (§ 2b). Note that
+`ssh.sudoPasswordRef` does **not** reach this channel at all: it renders as
+`ansible_become_password`, and every task here is `become: false`.
+
+## 2b. The password axis: `SUDO_ASKPASS`, never `sudo -S`, never an argv
+
+**Root cause:** a borrowed login whose `sudo` grant is not `NOPASSWD` fails both
+probes in § 2 with `rc=1` — `sudo` ran and refused, because `-n` forbids the
+prompt. `rc=1` twice is the password axis; `rc=0` on the second is `requiretty`;
+`rc=255` with a failed PTY allocation is `PermitTTY no`. The three are
+distinguishable only by that pair of return codes.
+
+**Fix / rule (ADR 0029):** when both `sudo -n` probes fail and
+`bootwright_node_access.sudoPasswordEnv` is set, `privilege.yml` resolves the
+borrowed account's home, writes `<home>/.bootwright-sudo-askpass/` (`pw` 0600
+holding the password, `ask` 0700 `cat`ing it), and probes
+`SUDO_ASKPASS=<…>/ask sudo -A true` pty-free then with `-tt`. The prefix becomes
+`bootwright_node_access_sudo`, so every downstream privileged task inherits it
+unchanged. `verify.yml:45` resets it to `sudo -n`, so it cannot leak past the
+borrowed window.
+
+**Why `SUDO_ASKPASS` and not `sudo -S`.** `sudo`'s stdin is already the payload
+pipe in five tasks (§ 4), and under `-tt` a pty delivers no EOF and echoes what
+is written to it, which would put the password in captured output. An
+environment-variable prefix composes inside pipelines, inside `$(…)`, and with
+or without a terminal.
+
+**Why the password is fed on stdin and not templated into the command.** The
+remote command string becomes the argv of the node's shell; any local account
+reads it from `ps`. `privilege.yml`'s helper-install task therefore carries it
+in `stdin:` under `no_log`, over the **terminal-free** argv — a pty would never
+deliver the EOF the receiving `cat` needs. Pinned by
+`TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt`, which fails if the
+password reaches `vars`, if `no_log` is dropped, or if `main.yml` loses the
+`always` block that removes the helper on the failure path.
+
+**The diagnostic reads `stdout`, not `stderr`.** Under `-tt` the remote command's
+`stderr` is bound to the pty slave and returns on the client's **stdout**; what
+lands on `stderr` is ssh's own `Connection to <host> closed.`, which is never
+empty. Reading `stderr` first shadowed `sudo: a password is required` on every
+run and sent operators to `PermitTTY`. The fallback to `stderr` stays, because
+an `rc=255` PTY allocation failure produces no remote output at all.
 
 **Constraint:** the requirement cannot be read off the node. `sudo -n -l` and
 `sudo -n -v` are themselves blocked by the same policy, and the message is
