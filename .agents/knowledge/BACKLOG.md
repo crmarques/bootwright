@@ -461,37 +461,6 @@ learned; this file records what it still owes.
   is the supported answer and document it in troubleshooting.
 - Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)
 
-## B-040 — Which key authorizes the orchestration account is asserted three different ways
-- Status: open
-- Area: ceph / node-access / keys
-- Origin: node-access requiretty fix 2026-07-28
-- Severity: high
-- Problem: three sources disagree about what lands in the `cephadm` account's
-  `authorized_keys`. `authorize.yml:26,39` writes
-  `bootwright_node_access_public_key`, which is `accountPublicKeyPath` — the
-  **cluster** key from `clusterSSH.keyRef`
-  (`internal/render/inventory/storage_ansible.go:135` -> `:151`) — and
-  `docs/concepts/storage.md:331` agrees. But `specs/security.md:157-158`,
-  `specs/state-model.md:1011-1012` and ADR 0019:101 all say the **machine access
-  public key** is authorized for that account, and the destroy path removes
-  *both* (`storage_cluster_cephadm/tasks/revoke_node_access.yml:48-57` removes
-  `installPublicKeyPath`, `:59-69` removes `clusterSSH.publicKeyPath`). The
-  second-order question is which key authenticates the three terminal-free
-  `sudo -n true` proofs ADR 0028 makes normative: `context.yml:43-57` offers only
-  `preferredIdentityPath` and `installPrivateKeyPath` — the *machine* private key
-  — and adds `IdentitiesOnly=yes` whenever the latter resolves, so on a cluster
-  whose `clusterSSH.keyRef` names a Secret distinct from the machine key nothing
-  offered matches what `authorize.yml` authorized. Pre-existing and untouched by
-  the requiretty change, but that change is what makes apply reach `verify.yml`
-  on a fleet that previously failed at `useradd`, so it is now reachable. No test
-  pins either side.
-- Exit: decide the boundary, then make one side true — either correct
-  `specs/security.md`, `specs/state-model.md` and ADR 0019 to say the cluster key
-  is authorized, or change `authorize.yml` to use
-  `bootwright_node_access_install_public_key`. Either way add the private half of
-  whichever key is authorized to the node-access argv, and pin the pairing with a
-  test so the three proofs cannot silently lose their credential.
-- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md)
 
 ## B-041 — The bootstrap-wait resume path is unvalidated without a hardware soak
 - Status: open

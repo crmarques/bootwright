@@ -150,6 +150,9 @@ func storageNodeAccessVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if publicPath := secret.ResolveSSHPublicKeyPath(accountKey, paths.SecretIndex, paths.SecretsDir); publicPath != "" {
 		out["accountPublicKeyPath"] = publicPath
 	}
+	if privatePath := secret.ResolveSSHPrivateKeyPath(accountKey, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
+		out["accountPrivateKeyPath"] = privatePath
+	}
 	if privatePath := secret.ResolveSSHPrivateKeyPath(machineKey, paths.SecretIndex, paths.SecretsDir); privatePath != "" {
 		out["installPrivateKeyPath"] = privatePath
 	}

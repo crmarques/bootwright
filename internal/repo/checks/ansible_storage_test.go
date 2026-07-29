@@ -2325,6 +2325,32 @@ func flattenNodeAccessTasks(t *testing.T, tasks []map[string]any) []map[string]a
 	return out
 }
 
+func TestStorageNodeAccessConnectsWithTheKeyItAuthorizes(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+
+	authorize := readAnsibleTasks(t, base+"authorize.yml")
+	idx := findAnsibleTask(t, authorize, "Authorize the machine access key for the storage node orchestration account")
+	authorized := fmt.Sprint(authorize[idx]["vars"])
+	if !strings.Contains(authorized, "bootwright_node_access_public_key") {
+		t.Fatalf("the orchestration account must be authorized with the cluster key Bootwright resolved, got vars=%v", authorize[idx]["vars"])
+	}
+
+	context := readAnsibleTasks(t, base+"context.yml")
+	argvIdx := findAnsibleTask(t, context, "Resolve storage node access SSH options")
+	argv := fmt.Sprint(context[argvIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(argv, "accountPrivateKeyPath") {
+		t.Fatalf("the ssh argv must offer the private half of the key authorize.yml authorizes: every proof made as the orchestration account (probe.yml, verify.yml, the re-proof in revoke.yml) otherwise presents only the machine key, and sshd refuses the login with publickey before sudo is ever consulted, got %v", context[argvIdx]["ansible.builtin.set_fact"])
+	}
+	if !strings.Contains(argv, "installPrivateKeyPath") {
+		t.Fatalf("the ssh argv must still offer the machine key for the install-window identity, got %v", context[argvIdx]["ansible.builtin.set_fact"])
+	}
+
+	public := fmt.Sprint(context[findAnsibleTask(t, context, "Resolve storage node access endpoints")]["ansible.builtin.set_fact"])
+	if !strings.Contains(public, "accountPublicKeyPath") {
+		t.Fatalf("the authorized key must come from accountPublicKeyPath, the public half of the same Secret as accountPrivateKeyPath, got %v", public)
+	}
+}
+
 func TestStorageNodeAccessProvesPasswordlessSudoWithoutATerminal(t *testing.T) {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
 	for _, proof := range []struct{ file, task string }{

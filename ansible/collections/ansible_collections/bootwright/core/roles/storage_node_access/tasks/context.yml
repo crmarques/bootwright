@@ -51,6 +51,11 @@
           else []
         )
         + (
+          ['-i', bootwright_node_access.accountPrivateKeyPath]
+          if (bootwright_node_access.accountPrivateKeyPath | default('') | length) > 0
+          else []
+        )
+        + (
           ['-o', 'IdentitiesOnly=yes']
           if (bootwright_node_access.installPrivateKeyPath | default('') | length) > 0
           else []

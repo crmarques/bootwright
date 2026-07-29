@@ -18,11 +18,22 @@
       passwordless sudo after the account was provisioned
       (rc={{ bootwright_node_access_verify.rc | default('unknown') }}:
       {{ bootwright_node_access_verify.stderr | default('') | trim }}). Root SSH was NOT
-      revoked and the node is otherwise untouched, so it stays reachable. Check on the
-      node that {{ bootwright_node_access.sudoersPath }} is present and 0440 root:root,
-      that {{ bootwright_node_access.user }} owns a 0700 ~/.ssh with a 0600
-      authorized_keys holding the Machine access public key, and that SELinux labels on
-      that directory are correct (restorecon -R), then re-apply. Bootwright proves this
+      revoked and the node is otherwise untouched, so it stays reachable.
+      {% if 'Permission denied' in (bootwright_node_access_verify.stderr | default('')) %}
+      That is sshd refusing the login, not sudo refusing the command: nothing Bootwright
+      offered matched a key {{ bootwright_node_access.user }} authorizes. Bootwright
+      authorizes the public half of spec.ceph.cephadm.clusterSSH.keyRef for that account,
+      because that is the key cephadm's own manager orchestrates with, and it connects with
+      the private half of the same Secret
+      ({{ bootwright_node_access.accountPrivateKeyPath | default('which the context store could not serve — bootwright secret check names the half that is missing') }}).
+      Check that {{ bootwright_node_access.user }} owns a 0700 ~/.ssh with a 0600
+      authorized_keys holding that public half, that SELinux labels on it are correct
+      (restorecon -R), and that sshd is not excluding the account through AllowUsers,
+      AllowGroups, or a Match block. Nothing about sudo has been reached yet.
+      {% else %}
+      Check on the node that {{ bootwright_node_access.sudoersPath }} is present and 0440
+      root:root, and that SELinux labels on the account's ~/.ssh are correct
+      (restorecon -R), then re-apply. Bootwright proves this
       without a controlling terminal on purpose, because cephadm's manager runs sudo that
       way; a node whose sudo policy reaches {{ bootwright_node_access.user }} only from an
       interactive session cannot be orchestrated. If
@@ -36,6 +47,7 @@
       /etc/sudoers and every drop-in outright, in which case the grant must come from
       the directory, not from this node. Run
       sudo -ll -U {{ bootwright_node_access.user }} on the node to see which policy wins.
+      {% endif %}
   delegate_to: localhost
   become: false
 

@@ -1149,7 +1149,7 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   (which never permits a root login), or authors a non-root `access.ssh.user`.
   When it resolves to a non-root name, Bootwright provisions that
   account on every topology node — locked password, no `wheel` membership, the
-  machine access public key authorized, and a per-user sudoers drop-in at
+  public half of `clusterSSH.keyRef` authorized, and a per-user sudoers drop-in at
   `/etc/sudoers.d/60-bootwright-<user>` carrying `Defaults:<user> !requiretty`
   and `<user> ALL=(ALL) NOPASSWD: ALL`. The drop-in is necessary but not
   sufficient and is proved rather than assumed: apply proves the account answers

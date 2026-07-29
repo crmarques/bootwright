@@ -164,6 +164,14 @@ cluster-scoped because cephadm holds exactly one such value per cluster. It
 defaults to `cephadm` on a managed `StorageCluster` and to `root` on an
 external one.
 
+One `Secret` owns that account's credential: `clusterSSH.keyRef`. Bootwright
+authorizes its public half in the account's `authorized_keys` and offers its
+private half on every connection made as that account, because the same key is
+what cephadm's manager orchestrates the fleet with — an account authorized with
+anything else would be an account cephadm cannot reach. The machine access key
+stays the install-window credential and is never a substitute: the two identities
+are separate, and so are their keys.
+
 The two identities are layered, not merged. On a node Bootwright installs the
 substrate creates `bootwright` and the cluster provisions `clusterSSH.user` on
 top of it day-2; the node never accepts a root login at any point in its life.

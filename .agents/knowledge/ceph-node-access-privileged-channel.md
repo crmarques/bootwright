@@ -167,6 +167,17 @@ Three tasks are that acceptance test and run `sudo -n true` on the base pty-free
 Proving the account under a terminal certifies a cluster cephadm cannot
 orchestrate. Pinned by
 `TestStorageNodeAccessProvesPasswordlessSudoWithoutATerminal`
+
+**All three authenticate with `accountPrivateKeyPath`, the private half of
+`clusterSSH.keyRef` — the same Secret `authorize.yml` authorizes** (B-040,
+resolved 2026-07-29). That key is authoritative for the account because cephadm's
+manager uses it; the machine key stays the install-window credential. Read the
+return code before reading the message: `rc=255` with
+`Permission denied (publickey,…)` is sshd refusing the login and says nothing
+about sudo, while `rc=1` is sudo. Before the fix the argv offered only the machine
+key plus `IdentitiesOnly=yes`, so every proof failed at authentication on a
+cluster whose `clusterSSH.keyRef` differs from the machine key — and the refusal
+sent operators into sudoers parse order.
 (`internal/repo/checks/ansible_storage_test.go`), which fails on the substrings
 `privileged_argv` and `tty` in those three argvs.
 
