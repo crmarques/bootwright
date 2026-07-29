@@ -99,8 +99,5 @@ destroy.
   stamped on the next apply, including the verified-installed skip path.
 - Worst-case wall clock for a stuck install is now two waits rather than one;
   the bootstrap wait has its own timeout, defaulting to the install timeout.
-- This is unvalidated without a hardware soak. Whether `agent wait-for
-  bootstrap-complete` returns promptly on a cluster whose bootstrap completed
-  under an earlier release (no marker file, assisted-service already gone) is
-  not proven by any test in this repository; only a real install and a real
-  resumed install exercise it.
+- The resume path is unvalidated without a hardware soak, tracked as B-041 in
+  [`BACKLOG.md`](../../.agents/knowledge/BACKLOG.md).

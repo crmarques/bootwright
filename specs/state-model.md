@@ -1,7 +1,7 @@
 # Desired-State Model
 
-Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and
-twenty-one user-authored kinds. The schema intentionally tracks the inputs
+Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and a fixed
+set of user-authored kinds. The schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs, Bootwright-managed machine
 OS installation, and cephadm for external Ceph storage.
 
@@ -10,20 +10,20 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Kinds
 
-The twenty-one kinds and the fact each owns are listed in `domain.md` (Operating
-Model). This document specifies each kind's fields, validation, and the CLI
-contract. Per-field Required/Default tables live in `docs/concepts/<kind>.md`;
-this document owns the normative rules, and the docs pages link back to it.
+The kinds and the fact each owns are listed in `domain.md` (Operating Model).
+This document specifies each kind's fields, validation, and the CLI contract.
+Per-field Required/Default tables live in `docs/concepts/<kind>.md`; this
+document owns the normative rules, and the docs pages link back to it.
 
 Every object carries the same envelope: `apiVersion`, `kind`, and `metadata`.
 `metadata.name` is required and must be a DNS label
 (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`). `metadata.labels` is an optional string map.
 
 Block-style collections are a repository-asset convention, not a constraint on
-operator-authored input: examples, e2e inputs, loader fixtures, and
-`bootwright example init` output use block style — no flow-style mapping braces,
-inline lists, or empty inline maps — and a repository check enforces it over
-those trees. The loader accepts either style from any input.
+operator-authored input: shipped add-ons, examples, e2e inputs, loader fixtures,
+and `bootwright example init` output use block style — no flow-style mapping
+braces, inline lists, or empty inline maps — and a repository check enforces it
+over those trees. The loader accepts either style from any input.
 
 Authored input keeps one object per file, with two exceptions: a cluster root
 lives in `cluster.yaml`, and a tree's `Secret` objects are grouped into a single

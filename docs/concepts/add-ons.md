@@ -294,44 +294,9 @@ value.
     from an entitled registry (an IBM entitlement key for `cp.icr.io`) becomes
     installable without manual pull-secret surgery.
 
-A Data Foundation add-on advertising the capability and accepting an export
-attachment:
-
-```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterAddon
-metadata:
-  name: openshift-data-foundation
-spec:
-  type: olm
-  provides:
-    - dataFoundation
-  accepts:
-    inputs:
-      - name: external-storage
-        resourceRef:
-          kind: StorageExport
-        effects:
-          - storageExportAttachment: {}
-  olm:
-    namespace:
-      name: openshift-storage
-      create: true
-    operatorGroup:
-      name: openshift-storage
-      targetNamespaces:
-        - openshift-storage
-    subscription:
-      name: odf-operator
-      package: odf-operator
-      channel: stable-4.21
-      source: redhat-operators
-  readiness:
-    checks:
-      - csvSucceeded:
-          namespace: openshift-storage
-          subscription: odf-operator
-```
+The shipped OpenShift Data Foundation add-on is the worked example of an
+advertised capability paired with an export attachment; its full YAML is under
+[Hooks](#hooks).
 
 ### Readiness
 

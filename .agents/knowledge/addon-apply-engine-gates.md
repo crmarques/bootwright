@@ -21,7 +21,7 @@ idempotent). Pinned by `TestApplyReAppliesChecklessAddonDespiteReadyRecord`.
 **Short-circuit blockers:** Three things disable the already-ready pre-check:
 
 - zero readiness checks (above);
-- a `run: always` hook at `preApply` or `postOperatorReady` —
+- a `run: always` hook at `gates: apply` or `follows: operatorReady` —
   `hooks.HasAlwaysAt` exists for the engine to consult; the apply then re-runs
   idempotently and the hook executor still skips unchanged `run: onChange`
   hooks via their own per-hook digest;
@@ -30,20 +30,21 @@ idempotent). Pinned by `TestApplyReAppliesChecklessAddonDespiteReadyRecord`.
   `hasGlobalPullSecretMergeEffect` gates this.
 
 **Effect ordering:** Input effects run first in `applyExtension`, before
-`preApply` hooks and before any resource applies, because a global pull-secret
-merge must land before anything pulls images — the shipped catalog image, the
-operator, or preApply-hook workloads. `oc/effects_test.go` proves the effect
-executes before the first resource apply and that no resource applies after an
-effect failure.
+`gates: apply` hooks and before any resource applies, because a global
+pull-secret merge must land before anything pulls images — the shipped catalog
+image, the operator, or `gates: apply` hook workloads. `oc/effects_test.go`
+proves the effect executes before the first resource apply and that no resource
+applies after an effect failure.
 
 **CSV gate trigger:** The OLM CSV gate (wait for the operator CSV to reach
 `Succeeded`, establishing the operator's CRDs) runs when the add-on has custom
-resources OR any `postOperatorReady` hook — such a hook also needs the CRDs
+resources OR any `follows: operatorReady` hook — such a hook also needs the CRDs
 established (e.g. the hook producing the external-cluster Secret +
 StorageCluster). `TestApplyHookTriggersCSVGateWithoutCustomResources` proves an
-add-on with a `postOperatorReady` hook and zero `customResources` still waits,
-and that `preApply` runs before the operator install. Without the gate, custom
-resources race the operator install and fail with `no matches for kind`.
+add-on with a `follows: operatorReady` hook and zero `customResources` still
+waits, and that `gates: apply` runs before the operator install. Without the
+gate, custom resources race the operator install and fail with
+`no matches for kind`.
 
 **Gate timeouts are typed, not apply failures:** `catalogGateError` means the
 CatalogSource applied but its registry never reported

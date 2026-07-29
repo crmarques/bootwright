@@ -198,10 +198,10 @@ no terminal; on a machine the operator owns nothing guarantees it, which is
 what the differential probe below decides.
 
 For a non-root orchestration account Bootwright provisions that account on
-every topology node with a locked password, no `wheel` membership, the machine
-access public key in its `authorized_keys`, and a per-user sudoers drop-in at
-`/etc/sudoers.d/60-bootwright-<user>` containing exactly
-`Defaults:<user> !requiretty` and `<user> ALL=(ALL) NOPASSWD: ALL`.
+every topology node with a locked password, no `wheel` membership, the cluster
+identity's public key (`clusterSSH.keyRef`) in its `authorized_keys`, and a
+per-user sudoers drop-in at `/etc/sudoers.d/60-bootwright-<user>` containing
+exactly `Defaults:<user> !requiretty` and `<user> ALL=(ALL) NOPASSWD: ALL`.
 
 That drop-in is necessary but not sufficient, so Bootwright proves the grant
 rather than assuming it. It is evaluated only if the node reads `/etc/sudoers`
@@ -264,10 +264,8 @@ the identity Bootwright **creates** and hands to cephadm, whose `sudo -n true`
 acceptance test must never gain one. Bootwright writes sudo policy only for the
 account it owns and never relaxes tty policy for the operator's account.
 
-Node access state is recorded on the machine at
-`/etc/bootwright/access-marker.json` with mode `0644`. It is non-secret —
-account name, root-login posture, and the paths Bootwright owns — and carries
-no key material.
+Node access state is recorded on the machine in an access marker, specified
+under § Generated Artifacts with every other path Bootwright writes.
 
 ## Installer Trust
 

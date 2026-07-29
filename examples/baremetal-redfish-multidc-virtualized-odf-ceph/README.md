@@ -14,7 +14,7 @@ This reference example shows the full canonical layout with:
 Like the smaller examples, the YAML is lean and relies on documented defaults; references such as `attachmentRef` are authored only where validation requires an explicit choice (the bare-metal provider declares one attachment per data center).
 
 > **This tree is also a shared test fixture.** Beyond the
-> every-example-validates guard, it carries content-level assertions across ~16
+> every-example-validates guard, it carries content-level assertions across six
 > internal packages — several pin its cluster names (`dc1-metal-ocp`,
 > `dc2-metal-ocp`, `dc1-child-ocp`, `dc2-child-ocp`), its
 > `openshift-data-foundation` add-on, and its `ceph-storage` storage cluster by

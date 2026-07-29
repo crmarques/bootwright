@@ -24,8 +24,8 @@ as plain name strings. In Go they are wrapped in `LocalObjectReference` (or
 `SecretRef`, which resolves to a `Secret` by `metadata.name`): the wrapper
 exists only so the resolution namespace stays distinct from ordinary strings
 and every reference rejects the `{name: ...}` object form with one shared
-error. The field comment-free schema relies on `specs/state-model.md` to
-state each reference's resolution namespace.
+error. The field comment-free schema relies on `specs/state-model.md` or the
+kind's `docs/concepts/` page to state each reference's resolution namespace.
 
 Deliberate exceptions:
 

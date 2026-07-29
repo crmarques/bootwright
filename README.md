@@ -223,9 +223,10 @@ dependency checks run under `preflight bastion`. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
 and tears down the whole context for `destroy` (clusters then infra).
 [specs/state-model.md](specs/state-model.md#cli-contract) is the formal contract
-for contexts (`init`/`update`), the convergence verbs (`apply`, `plan`,
-`destroy`, `diff`), `machine trust`, and `add-ons`; the remaining verbs are
-specified by their own `--help` and taught under [`docs/`](docs/).
+for the global flags, contexts (`init`/`update`/`delete`), the convergence verbs
+(`apply`, `plan`, `destroy`, `diff`), `machine trust`, and `add-ons`; the
+remaining verbs are specified by their own `--help` and taught under
+[`docs/`](docs/).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright cluster info` prints

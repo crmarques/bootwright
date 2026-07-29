@@ -4,6 +4,6 @@
 
 **Root cause:** `bootwright secret generate` is idempotent — it reuses an existing cert file without regenerating it. If the desired `SelfSignedCertificateSpec` changed (different `commonName`, `dnsNames`, or `ipAddresses`) after the cert was first generated, the on-disk cert no longer matches. Ansible trusts the cert and attempts the push, only to discover the SAN mismatch at TLS handshake time deep inside the play.
 
-**Fix:** `generatedSelfSignedDriftChecks` in `internal/cli/preflight.go` catches this at preflight and instructs the user to regenerate the stale cert pair with `bootwright secret generate --renew`.
+**Fix:** `generatedSelfSignedDriftChecks` in `internal/preflight/secrets.go` catches this at preflight and instructs the user to regenerate the stale cert pair with `bootwright secret generate --renew`.
 
 **Remediation:** Run `bootwright secret generate --renew` to regenerate the cert pair (or remove `<secretsDir>/<name>` and `<secretsDir>/<name>.key`, then run `bootwright secret generate`).

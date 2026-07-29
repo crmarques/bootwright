@@ -212,5 +212,5 @@ After this, return to the bastion doc you used:
 
 - [bastion.md](bastion.md#tear-down--bastion-state) — clean per-case state
   dirs on the bastion.
-- [containerized-bastion.md](containerized-bastion.md#tear-down--container-and-host-state)
-  — remove the container and per-case host state.
+- [containerized-bastion.md](containerized-bastion.md#tear-down--container-and-machine-state)
+  — remove the container and per-case machine state.

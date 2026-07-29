@@ -130,11 +130,9 @@ be built and discarded ahead of execution, and that has not been tried.
   unified diff.
 - Interactive terminals get in-place redraw; piped/CI output gets
   append-only transition lines with no ANSI cursor control.
-- Exit codes are contract: 0 success, 1 run/load failure, 2 usage
-  error, and `diff` exits 3 when out of sync while still printing a
-  parsable report. The commands that hand control to a child process —
-  `cluster oc`/`kubectl` and `machine`/`cluster` `rsh`/`exec` — propagate that
-  child's exit status verbatim and are outside the contract.
+- Exit codes are contract, including the carve-out for the commands that
+  hand control to a child process; specified in
+  [`state-model.md`](../state-model.md) ("CLI Contract").
 - Raw ansible output routes to per-run/per-task logs by default; `-v` /
   `--verbose` tees the full Ansible task output to the terminal AND the run
   log and un-censors values normally hidden as "censored due to no_log", so a

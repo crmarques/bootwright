@@ -10,35 +10,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 	"go.yaml.in/yaml/v3"
 )
 
+var spelledKindCounts = map[int]string{
+	5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+	11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+	15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+	19: "nineteen", 20: "twenty", 21: "twenty-one", 22: "twenty-two",
+	23: "twenty-three", 24: "twenty-four", 25: "twenty-five",
+}
+
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
-	required := []string{
-		"twenty-one kinds",
-		"`Entitlement`",
-		"`Machine`",
-		"`MachineImage`",
-		"`MachineInstallProfile`",
-		"`NetworkConfig`",
-		"`InfraProvider`",
-		"`InfraComponent`",
-		"`ContainerCluster`",
-		"`StorageCluster`",
-		"`StoragePlacementPolicy`",
-		"`StoragePool`",
-		"`StorageFilesystem`",
-		"`StorageObjectGateway`",
-		"`StorageNFSExport`",
-		"`StorageExport`",
-		"`ClusterAddon`",
-		"`ClusterAddonProfile`",
-		"`ClusterAddonBinding`",
-		"`CustomPlaybook`",
-		"`Secret`",
-		"`Environment`",
+	kinds := v1alpha1.AuthoredKindAccessors()
+	spelled, ok := spelledKindCounts[len(kinds)]
+	if !ok {
+		t.Fatalf("no spelled-out form for %d authored kinds; extend spelledKindCounts", len(kinds))
+	}
+	required := []string{spelled + " kinds"}
+	for _, kind := range kinds {
+		required = append(required, "`"+kind.Kind+"`")
 	}
 	for _, phrase := range required {
 		if !strings.Contains(readme, phrase) {
@@ -46,21 +40,17 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		}
 	}
 	rejected := []string{
-		"five kinds",
-		"six kinds",
-		"seven kinds",
-		"ten kinds",
-		"sixteen kinds",
-		"seventeen kinds",
-		"eighteen kinds",
-		"nineteen kinds",
-		"twenty kinds",
 		"`Host`",
 		"`ClusterInfra`",
 		"`StorageClusterBinding`",
 		"`HostPool`",
 		"`Playbook`",
 		"providerRefs",
+	}
+	for count, word := range spelledKindCounts {
+		if count != len(kinds) {
+			rejected = append(rejected, word+" kinds")
+		}
 	}
 	for _, phrase := range rejected {
 		if strings.Contains(readme, phrase) {

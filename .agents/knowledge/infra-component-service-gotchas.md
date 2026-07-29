@@ -19,7 +19,7 @@ deferring removal is safe at run time.
 **Squid runtime UID:** the openEuler Squid 7.5 image refuses to run as root;
 the container must run as the image's baked-in squid user (UID/GID 1000,
 `bootwright_squid_runtime_uid`/`gid`). This value must stay in sync with the
-squid image pin in `internal/render/components.go` — a new image pin can
+squid image pin in `internal/roles/registry.go` — a new image pin can
 change the baked-in UID.
 
 **VIP detach must tolerate already-gone addresses:** frontends sharing one

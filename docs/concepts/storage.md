@@ -374,7 +374,7 @@ that — change `clusterSSH.user` to `root` as a separate, deliberate step.
     action and no sudoers change: Bootwright retries its own borrowed-login
     connection with a terminal, while the `cephadm` account's proof stays
     terminal-less on purpose. The asymmetry is argued in
-    [ADR 0028](https://github.com/crmarques/bootwright/blob/main/specs/adr/0028-ceph-node-access-terminal.md).
+    [ADR 0028](https://github.com/crmarques/bootwright/blob/main/specs/adr/0028-terminal-for-the-borrowed-identity.md).
 
 !!! note "Changing `clusterSSH.user` on a live cluster"
     The orchestration account is not the node's install-window identity — that

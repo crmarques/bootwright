@@ -10,7 +10,6 @@ Load only the specs needed for the task.
 | Secrets, credentials, OCP install trust, supply chain | `security.md` |
 | Designing or changing behavior in a decided area | `adr/README.md` decision table |
 
-When in doubt, start with `domain.md` and `state-model.md`. The current
-desired-state API is defined in `state-model.md`; specs carry the current
-contract when a previous decision has been revised by implementation.
-Architecture decisions live under [`adr/`](adr/README.md).
+When in doubt, start with `domain.md` and `state-model.md`. Architecture
+decisions live under [`adr/`](adr/README.md), which owns how specs and ADRs
+relate.

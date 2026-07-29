@@ -64,6 +64,6 @@ policy is enforced by guard tests in
   field reference, and `specs/state-model.md` plus `docs/concepts/` carry that
   contract instead (see [ADR 0014](0014-api-grammar.md)). Cobra help text,
   being string literals, is unaffected.
-- Stripping changed file bytes of add-on hook content and operator
-  provisioning playbooks, so `run: onChange` hooks re-run once on existing
+- Stripping changed file bytes of add-on step content and operator
+  provisioning playbooks, so `run: onChange` re-runs once on existing
   contexts after upgrading past the migration.

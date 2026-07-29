@@ -414,7 +414,8 @@ the CUDN/UDN/NAD and any OVS bridge-mapping policy out of band. See
 [References](index.md#references), the
 [`baremetal-redfish-multidc-virtualized-odf-ceph`](../advanced/examples.md)
 example, [KubeVirt nested clusters](../advanced/kubevirt.md), and
-[Networking & load balancing](../advanced/networking.md) for the static-IP rule.
+[KubeVirt child networks](../advanced/networking.md#kubevirt-child-networks) for
+the localnet topology and the static-IP rule.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -614,10 +615,6 @@ spec:
             dhcp: false
           ipv6:
             enabled: false
-      dns-resolver:
-        config:
-          server:
-            - 192.168.132.1
       routes:
         config:
           - destination: 0.0.0.0/0

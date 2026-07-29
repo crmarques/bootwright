@@ -63,7 +63,8 @@ a reference field takes the `Ref`/`Refs` suffix and is authored and rendered as
 a plain name string (never the `{name: ...}` object form), a selection list
 stays suffix-free, a union discriminator value stays byte-identical to its arm
 key, and an optional feature block picks the enablement shape that ADR records.
-State the resolution namespace of a new reference in `specs/state-model.md`.
+State the resolution namespace of a new reference in `specs/state-model.md` or
+on the kind's [concepts page](../concepts/index.md).
 
 ### Strict decode and no backward compatibility
 
