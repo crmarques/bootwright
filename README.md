@@ -191,55 +191,45 @@ add-on inputs. IPMI is not apply-supported today.
 
 ## CLI
 
+The end-to-end path is the command list under
+[The problem it solves](#the-problem-it-solves). Beyond it, the CLI narrows,
+inspects, and tears down:
+
 ```text
-bootwright example init --name lab --output-dir ./lab-input
-bootwright validate -f ./lab-input
-bootwright context init --name lab -f ./lab-input
+# Inspect without touching anything
 bootwright context current
-bootwright cluster list
-bootwright cluster info
-bootwright cluster info --name demo-ocp
-bootwright secret list
-bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-bootwright secret generate
-bootwright secret check
-bootwright machine trust
-bootwright secret list
-bootwright validate
-bootwright bastion setup --yes
-bootwright preflight all
-bootwright render effective
-bootwright plan
-bootwright apply --yes
-bootwright status --watch
-bootwright cluster info
 bootwright preflight all --dry-run
-bootwright apply --stage infra --dry-run
-bootwright apply --stage infra --yes
-bootwright render installer --clusters demo-ocp
-bootwright render storage --clusters ceph-stretch
+bootwright render effective                                       # normalized desired state
+bootwright render installer --clusters demo-ocp                   # install/agent-config.yaml
+bootwright render storage --clusters ceph-stretch                 # cephadm inputs
 bootwright render --output-dir ./rendered --clusters demo-ocp --sensitive
-bootwright apply --stage clusters --clusters ceph-stretch --yes
-bootwright apply --stage clusters --yes
-bootwright apply --through base --yes
-bootwright preflight add-ons
-bootwright status
-bootwright destroy --yes
-bootwright destroy --stage clusters --yes
+bootwright diff                                                   # desired vs live
+bootwright diff --recorded                                        # desired vs last apply, offline
+bootwright cluster list
+bootwright cluster info --name demo-ocp
+
+# Converge a slice instead of the whole graph
+bootwright apply --stage infra --dry-run
+bootwright apply --stage infra --yes                              # one stage family
+bootwright apply --through base --yes                             # everything up to base
+bootwright apply --stage clusters --clusters ceph-stretch --yes   # one cluster
+
+# Tear down
+bootwright destroy --yes                                          # the whole context
+bootwright destroy --stage clusters --yes                         # keep machine substrate
 bootwright destroy --stage infra --yes
 bootwright destroy --stage infra --clusters artifact-server --yes
 ```
 
-The CLI is organized into domain command groups (Setup, Resource, Inspect,
-Lifecycle, General). `bastion setup` remains a
-separate prerequisite command; its read-only dependency checks run under
-`preflight bastion`. Graph apply and destroy use
+The CLI is organized into domain command groups (Setup, Inspect, Lifecycle,
+Resource, General). Top-level commands are `validate`, `context`, `machine`,
+`bastion`, `cluster`, `example`, `media`, `secret`, `add-ons`, `preflight`,
+`status`, `diff`, `plan`, `render`, `apply`, `destroy`, and `version`.
+`bastion setup` remains a separate prerequisite command; its read-only
+dependency checks run under `preflight bastion`. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
-and tears down the whole context for `destroy` (clusters then infra). Top-level
-groups are `validate`,
-`context`, `machine`, `bastion`, `cluster`, `example`,
-`media`, `secret`, `add-ons`, `preflight`, `status`, `diff`, `plan`,
-`render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
+and tears down the whole context for `destroy` (clusters then infra). The formal
+CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
