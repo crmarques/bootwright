@@ -365,9 +365,15 @@ manager uses. See [ADR 0029](../../specs/adr/0029-answering-a-sudo-password-for-
 !!! note "On a Ceph topology node the password lives on the node, briefly"
     The Ceph node-access channel builds its own `ssh` invocation and cannot use
     Ansible `become`, so it writes a `sudo` askpass helper holding the password
-    in a `0600` file under the borrowed account's home for the length of the
-    provisioning window, and removes it before it leaves the node — including
-    when the run fails. Nothing is ever placed in a command line.
+    in a `0600` file for the length of the provisioning window. The node picks
+    where: an unguessable `0700` directory from `mktemp`, preferring
+    memory-backed storage (`$XDG_RUNTIME_DIR`, then `/dev/shm`) over its home
+    directory or `/tmp`, so on most nodes the password never touches a disk.
+    Bootwright removes it before it leaves the node — including when the run
+    fails — and confirms it is gone. Independently, the node erases it on a
+    timer it starts *before* the password is written, so no failure of the run,
+    the network, or the controller can leave it there. Nothing is ever placed in
+    a command line.
 
 #### The `bootwright` service account
 

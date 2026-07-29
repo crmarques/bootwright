@@ -277,10 +277,24 @@ value. On the Ceph node-access channel, which builds its own `ssh` invocation
 and has no `become` to carry a password, the value is written to the node over
 the terminal-free connection on standard input — never into a command string,
 which is the argv of the node's shell and readable through `ps` — into a `0600`
-file under the borrowed account's home, and removed before the play leaves the
-node on the failure path as well as the success path. `access.ssh.sudoPasswordRef`
-remains the declared, stored form, for a service account's password rather than
-a person's.
+file inside a `0700` directory the node itself creates under an unguessable
+name. The node chooses that directory and reports it back: `$XDG_RUNTIME_DIR`,
+then `/dev/shm`, then the account's home, then its temporary directory, taking
+the first from which an empty helper both writes and executes. Memory-backed
+storage therefore wins wherever it is available, and a `noexec` mount is
+rejected while the file is still empty. If no candidate qualifies, nothing is
+written and the password never leaves the controller.
+
+Its removal does not depend on this product continuing to run. Before the
+password is written, the node starts a detached timer that removes the directory
+after `bootwright_node_access_askpass_ttl` seconds, so a killed run, a lost
+network, or a crashed controller cannot leave it behind. Bootwright still
+removes it before the play leaves the node, on the failure path as well as the
+success path, and **verifies** the removal rather than trusting `rm`'s exit
+status, failing the run when it cannot confirm it.
+
+`access.ssh.sudoPasswordRef` remains the declared, stored form, for a service
+account's password rather than a person's.
 
 Node access state is recorded on the machine in an access marker, specified
 under § Generated Artifacts with every other path Bootwright writes.

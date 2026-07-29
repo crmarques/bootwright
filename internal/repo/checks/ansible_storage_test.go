@@ -2407,13 +2407,44 @@ func TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt(t *testing.T) {
 		}
 	}
 
-	resolveIdx := findAnsibleTask(t, privilege, "Resolve the storage node sudo askpass helper for the borrowed identity")
-	if resolveIdx > installIdx {
-		t.Fatal("the helper path must be resolved before the helper is written, or the password lands on a path Bootwright cannot clean up")
+	command := fmt.Sprint(install["vars"])
+	if !strings.Contains(command, "mktemp -d") {
+		t.Fatalf("the helper directory must be created by the node with mktemp: a path Bootwright picks may be one the borrowed account cannot write, and a predictable one in a shared temporary directory can be pre-created by another local account that would then read the password out of it, got vars=%v", install["vars"])
+	}
+	for _, candidate := range []string{`"${XDG_RUNTIME_DIR:-}"`, "/dev/shm"} {
+		if !strings.Contains(command, candidate) {
+			t.Fatalf("the helper must prefer memory-backed storage (%s) over any disk: a password written to a home directory or /tmp survives in backups, snapshots and forensic images long after the run, got vars=%v", candidate, install["vars"])
+		}
+	}
+	passwordIdx := strings.Index(command, `cat > "$d/pw"`)
+	markerIdx := strings.Index(command, "bootwright_node_access_askpass_marker")
+	watchdogIdx := strings.Index(command, "bootwright_node_access_askpass_ttl")
+	if passwordIdx < 0 || markerIdx < 0 || markerIdx > passwordIdx {
+		t.Fatalf("the node must report the directory it chose before the password is written into it, or a chain that fails midway leaves the password somewhere Bootwright never learned the name of, got vars=%v", install["vars"])
+	}
+	if watchdogIdx < 0 || watchdogIdx > passwordIdx {
+		t.Fatalf("the node must arm its own timed removal before the password is written, not after: every guarantee that depends on this run finishing is void if the controller is killed, loses the network, or crashes, got vars=%v", install["vars"])
+	}
+	if !strings.Contains(command, "nohup") || !strings.Contains(command, "rm -rf") {
+		t.Fatalf("the timed removal must outlive the ssh session that armed it, got vars=%v", install["vars"])
+	}
+	if !strings.Contains(command, `"$c/ask" >/dev/null 2>&1`) {
+		t.Fatalf("each candidate directory must be proved executable with an empty helper before the password is written into it, or a noexec mount surfaces much later as a password that looks wrong, got vars=%v", install["vars"])
+	}
+	if !strings.Contains(command, `: > "$c/pw"`) || strings.Index(command, `: > "$c/pw"`) > passwordIdx {
+		t.Fatalf("the password file must be created empty under umask 077 before it holds anything, so it is never briefly readable, got vars=%v", install["vars"])
+	}
+
+	resolveIdx := findAnsibleTask(t, privilege, "Resolve the storage node sudo askpass helper the borrowed identity created")
+	if resolveIdx < installIdx {
+		t.Fatal("the helper directory is whatever the node reported, so it can only be resolved after the install ran")
 	}
 	resolved := fmt.Sprint(privilege[resolveIdx]["ansible.builtin.set_fact"])
-	if !strings.Contains(resolved, "$HOME") {
-		t.Fatalf("the helper path must be expanded by the node's own shell: reading the home directory back over ssh first makes any login profile that writes to stdout redirect the password to a path Bootwright never cleans up, got %v", privilege[resolveIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(resolved, "regex_search") {
+		t.Fatalf("the directory must be extracted from a delimited marker: a login profile that prints on a non-interactive shell shares that stdout, got %v", privilege[resolveIdx]["ansible.builtin.set_fact"])
+	}
+	if got := fmt.Sprint(privilege[resolveIdx]["when"]); !strings.Contains(got, "skipped") {
+		t.Fatalf("the directory must be resolved whenever the install ran, including when it failed, or the always section cannot remove a password the node already holds, got when=%v", privilege[resolveIdx]["when"])
 	}
 
 	main := readAnsibleTasks(t, base+"main.yml")
@@ -2425,8 +2456,17 @@ func TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt(t *testing.T) {
 	if !strings.Contains(removal, "bootwright_node_access_askpass_dir") || !strings.Contains(removal, "rm -rf") {
 		t.Fatalf("the always section must remove the askpass helper directory holding the password, got %v", always)
 	}
-	if strings.Contains(removal, "bootwright_node_access_askpass_dir | quote") {
-		t.Fatalf("the helper path carries $HOME for the node's shell to expand, so quoting it removes the password from nothing, got %v", always)
+	if !strings.Contains(removal, "bootwright_node_access_askpass_dir | quote") {
+		t.Fatalf("the helper path is whatever mktemp returned under a directory Bootwright does not control, so it must be quoted for the node's shell, got %v", always)
+	}
+	if !strings.Contains(removal, "test ! -e") {
+		t.Fatalf("removing the password must be verified, not attempted: rm reports success for a path it could not even look at, got %v", always)
+	}
+	if !strings.Contains(removal, "Require the storage node sudo askpass helper to be gone") {
+		t.Fatalf("a removal that could not be confirmed must fail the run, not pass quietly, got %v", always)
+	}
+	if !strings.Contains(removal, "ansible_failed_task is not defined") {
+		t.Fatalf("the removal assert must stand down when the block already failed, or it replaces the diagnosis the operator needs with a cleanup error, got %v", always)
 	}
 }
 

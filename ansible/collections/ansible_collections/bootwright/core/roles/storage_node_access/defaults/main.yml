@@ -7,4 +7,5 @@ bootwright_node_access_ssh_tty_options:
   - '-tt'
   - '-o'
   - LogLevel=ERROR
-bootwright_node_access_askpass_dir_name: .bootwright-sudo-askpass
+bootwright_node_access_askpass_marker: BOOTWRIGHT_ASKPASS_DIR
+bootwright_node_access_askpass_ttl: 900

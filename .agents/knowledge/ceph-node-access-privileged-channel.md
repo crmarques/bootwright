@@ -73,19 +73,29 @@ prompt. `rc=1` twice is the password axis; `rc=0` on the second is `requiretty`;
 distinguishable only by that pair of return codes.
 
 **Fix / rule (ADR 0029):** when both `sudo -n` probes fail and
-`bootwright_node_access.sudoPasswordEnv` is set, `privilege.yml` writes
-`"$HOME"/.bootwright-sudo-askpass/` (`pw` 0600 holding the password, `ask` 0700
-`cat`ing it), and probes `SUDO_ASKPASS="$HOME/…/ask" sudo -A true` pty-free then
-with `-tt`. The prefix becomes `bootwright_node_access_sudo`, so every downstream
+`bootwright_node_access.sudoPasswordEnv` is set, `privilege.yml` has the node
+create the helper directory itself (`pw` 0600 holding the password, `ask` 0700
+`cat`ing it) and probes `SUDO_ASKPASS=<dir>/ask sudo -A true` pty-free then with
+`-tt`. The prefix becomes `bootwright_node_access_sudo`, so every downstream
 privileged task inherits it unchanged. `verify.yml:45` resets it to `sudo -n`, so
 it cannot leak past the borrowed window.
 
-**`$HOME` is expanded by the node, never round-tripped.** The path is a shell
-expression carried unquoted into every remote command, so `| quote` on it is a
-bug — it would write the password to a literal `$HOME` directory the cleanup then
-misses. An earlier revision read the home directory back with `printf %s "$HOME"`
-and parsed stdout; any login profile that prints on a non-interactive shell
-prefixes that value, and the redirect lands somewhere unclean-up-able.
+**The node picks the directory, memory first, and never Bootwright.** The install
+command walks `$XDG_RUNTIME_DIR`, `/dev/shm`, `$HOME`, `${TMPDIR:-/tmp}`;
+`mktemp -d` in each, writes an **empty** helper, executes it, and keeps the first
+that survives — so `noexec` is rejected before the password exists, and the first
+two put it in RAM. The name comes back in a `BOOTWRIGHT_ASKPASS_DIR<<<…>>>`
+marker on stdout (parsed with `regex_search`, immune to login-profile chatter);
+it is a real path, so it **must** be `| quote`d in every command. Do not
+reintroduce a fixed path: a real fleet's borrowed login had `$HOME=/root` that it
+could not write, and a predictable name in a shared `/tmp` can be pre-created by
+another local account that would then own the file the password lands in.
+
+**Order inside that one command is load-bearing.** Marker before the password, so
+a chain that dies midway is still cleanable; `nohup sleep <ttl>; rm -rf` armed
+before the password, so no failure of the controller can leave it on the node;
+the executable-check on an *empty* helper, so a rejected candidate never held
+anything. Pinned by `TestStorageNodeAccessAnswersASudoPasswordWithoutExposingIt`.
 
 **Three states end at the gate, and its message must tell them apart.** No
 password collected; one collected but withheld from this machine (it declares its

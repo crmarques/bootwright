@@ -71,16 +71,65 @@ rather than silently changing nothing.
 
 `privilege.yml` gains a third and fourth probe, run only after the two `sudo -n`
 probes have both failed and only when a password is available. Bootwright writes
-a helper directory under the borrowed account's home — the password in a `0600`
-file, a `0700` script that `cat`s it — and probes `SUDO_ASKPASS=<helper> sudo -A
-true` without a terminal, then with one. The refusal is still fail-closed and
-still precedes `account.yml`, so a node that cannot escalate is left with no
-account, no sudoers file, and root SSH untouched.
+a helper directory the borrowed account owns — the password in a `0600` file, a
+`0700` script that `cat`s it — and probes `SUDO_ASKPASS=<helper> sudo -A true`
+without a terminal, then with one. The refusal is still fail-closed and still
+precedes `account.yml`, so a node that cannot escalate is left with no account,
+no sudoers file, and root SSH untouched.
 
-The helper path is written as `"$HOME"/…` for the node's own shell to expand,
-never read back over `ssh` first. A login profile that writes to standard output
-on a non-interactive shell would prefix whatever a home probe returned, and the
-password would then be redirected to a path Bootwright never cleans up.
+### The node chooses the directory, memory first, and says which one it chose
+
+Bootwright names no path. The install command walks `$XDG_RUNTIME_DIR`,
+`/dev/shm`, the account's home, then its temporary directory; for each it runs
+`mktemp -d`, writes an **empty** helper, and executes it. The first candidate
+that survives that is the one used, and its name is reported in a delimited
+marker on standard output.
+
+The order is deliberate. The first two are `tmpfs`: a password there is in RAM,
+reaches no backup, no snapshot and no forensic image, and does not survive a
+reboot; `/run/user/<uid>` is additionally `0700` per-user and destroyed by
+systemd when that account's last session ends. Disk is the fallback, not the
+default. `mktemp -d` rather than a fixed name because a predictable path in a
+shared directory can be pre-created by another local account, which would then
+own the directory the password lands in. And a *marker* rather than reading the
+home directory back, because any login profile that prints on a non-interactive
+shell shares that standard output — a real fleet's borrowed login also resolved
+`$HOME` to `/root`, which it could not write, so a fixed path under `$HOME`
+fails outright.
+
+Executing an empty helper before choosing the directory means a `noexec` mount
+is rejected while the file is still worthless, with `Permission denied` on the
+helper, rather than surfacing later as a password that looks wrong. If no
+candidate qualifies the command exits non-zero having written **nothing**: the
+password never leaves the controller.
+
+### The node erases the password on a timer it arms itself
+
+Before the password is written, and in the same command, the node starts a
+detached `sleep <ttl>; rm -rf <dir>`. Cleanup therefore does not depend on the
+controller surviving: a killed process, a lost network, a crashed run, an
+operator's `Ctrl-C` — none of them can leave the password on the node for longer
+than `bootwright_node_access_askpass_ttl` (900s). The `always` section is still
+the normal path, and it now *verifies* the removal (`rm -rf … && test ! -e …`)
+and fails the run when it cannot confirm it, because `rm` reports success for a
+path it was never able to look at. When the block already failed, the check
+degrades to a warning so it cannot replace the diagnosis the operator needs.
+
+### What this design does not defend against
+
+`root` on the node can read the helper — but `root` is the privilege being
+borrowed, so it is not a boundary this can hold. `tmpfs` pages can reach swap on
+a node with unencrypted swap. A node with `KillUserProcesses=yes` in
+`logind.conf` kills the timer when the session ends; there it also destroys
+`/run/user/<uid>`, which is why that is the first candidate, but a run that fell
+through to `/tmp` on such a node is left with only the `always` removal. All
+three are documented rather than mitigated.
+
+Two alternatives that would remove the on-node secret entirely were considered
+and rejected. `sudo -S` fails for the reason given below. Priming `sudo`'s
+credential cache once and deleting the helper immediately fails because
+`tty_tickets` is the default and every task opens its own connection, so no
+later `sudo` would ever see that timestamp.
 
 `SUDO_ASKPASS` is the mechanism rather than `sudo -S` because it composes with
 what this role already does and `-S` does not. Every privileged payload in the
@@ -110,11 +159,9 @@ the flag already on their command line. The install task is `no_log`, so the
 refusal also carries its return code and standard error: nothing else in the run
 reports them.
 
-### The helper is removed even when the run fails
-
-The node-access block carries an `always` section that removes the helper
-directory. A password Bootwright put on a node is Bootwright's to take off it,
-on the failure path as much as the success path.
+A password Bootwright put on a node is Bootwright's to take off it, on the
+failure path as much as the success path — and, since the node holds the timer,
+on the path where Bootwright is no longer running at all.
 
 ### The created account is untouched by any of this
 

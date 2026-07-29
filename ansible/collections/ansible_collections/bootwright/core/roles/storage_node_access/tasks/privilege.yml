@@ -25,18 +25,6 @@
   failed_when: false
   when: (bootwright_node_access_privilege_probe.rc | default(0) | int) != 0
 
-- name: Resolve the storage node sudo askpass helper for the borrowed identity
-  ansible.builtin.set_fact:
-    bootwright_node_access_askpass_dir: '"$HOME"/{{ bootwright_node_access_askpass_dir_name }}'
-    bootwright_node_access_askpass_sudo: 'SUDO_ASKPASS="$HOME/{{ bootwright_node_access_askpass_dir_name }}/ask" sudo -A'
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  when:
-    - (bootwright_node_access_privilege_probe.rc | default(0) | int) != 0
-    - (bootwright_node_access_tty_probe.rc | default(1) | int) != 0
-    - (bootwright_node_access.sudoPasswordEnv | default('') | length) > 0
-
 - name: Install the storage node sudo askpass helper for the borrowed identity
   ansible.builtin.command:
     argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
@@ -44,19 +32,55 @@
   vars:
     bootwright_node_access_command: >-
       umask 077
-      && rm -rf {{ bootwright_node_access_askpass_dir }}
-      && mkdir -p {{ bootwright_node_access_askpass_dir }}
-      && cat > {{ bootwright_node_access_askpass_dir }}/pw
-      && printf '%s\n' '#!/bin/sh' 'exec cat "$(dirname "$0")/pw"'
-      > {{ bootwright_node_access_askpass_dir }}/ask
-      && chmod 0700 {{ bootwright_node_access_askpass_dir }}/ask
-      && chmod 0600 {{ bootwright_node_access_askpass_dir }}/pw
+      && d=""
+      && for t in "${XDG_RUNTIME_DIR:-}" /dev/shm "$HOME" "${TMPDIR:-/tmp}"; do
+      [ -n "$t" ] && [ -d "$t" ] && [ -w "$t" ] || continue;
+      c=$(TMPDIR="$t" mktemp -d 2>/dev/null) || continue;
+      printf '%s\n' '#!/bin/sh' 'exec cat "$(dirname "$0")/pw"' > "$c/ask" 2>/dev/null
+      && chmod 0700 "$c/ask"
+      && : > "$c/pw"
+      && chmod 0600 "$c/pw"
+      && "$c/ask" >/dev/null 2>&1
+      && d="$c" && break;
+      rm -rf "$c";
+      done
+      && [ -n "$d" ]
+      && printf '{{ bootwright_node_access_askpass_marker }}<<<%s>>>\n' "$d"
+      && { nohup sh -c 'sleep {{ bootwright_node_access_askpass_ttl }}; rm -rf "$0"' "$d"
+      >/dev/null 2>&1 </dev/null & }
+      && cat > "$d/pw"
+      && "$d/ask" >/dev/null
   delegate_to: localhost
   become: false
   no_log: true
   register: bootwright_node_access_askpass_install
   changed_when: true
   failed_when: false
+  when:
+    - (bootwright_node_access_privilege_probe.rc | default(0) | int) != 0
+    - (bootwright_node_access_tty_probe.rc | default(1) | int) != 0
+    - (bootwright_node_access.sudoPasswordEnv | default('') | length) > 0
+
+- name: Resolve the storage node sudo askpass helper the borrowed identity created
+  ansible.builtin.set_fact:
+    bootwright_node_access_askpass_dir: >-
+      {{
+        bootwright_node_access_askpass_install.stdout | default('', true)
+        | regex_search(bootwright_node_access_askpass_marker ~ '<<<.*>>>')
+        | default('', true)
+        | regex_replace('^' ~ bootwright_node_access_askpass_marker ~ '<<<(.*)>>>$', '\1')
+      }}
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: not (bootwright_node_access_askpass_install.skipped | default(false) | bool)
+
+- name: Resolve the storage node password-answering privilege prefix
+  ansible.builtin.set_fact:
+    bootwright_node_access_askpass_sudo: "SUDO_ASKPASS={{ (bootwright_node_access_askpass_dir ~ '/ask') | quote }} sudo -A"
+  delegate_to: localhost
+  become: false
+  changed_when: false
   when: (bootwright_node_access_askpass_dir | default('') | length) > 0
 
 - name: Probe privileged execution with a password on the storage node without a terminal
@@ -69,7 +93,9 @@
   register: bootwright_node_access_password_probe
   changed_when: false
   failed_when: false
-  when: (bootwright_node_access_askpass_install.rc | default(1) | int) == 0
+  when:
+    - (bootwright_node_access_askpass_install.rc | default(1) | int) == 0
+    - (bootwright_node_access_askpass_dir | default('') | length) > 0
 
 - name: Probe privileged execution with a password on the storage node with a terminal
   ansible.builtin.command:
@@ -83,6 +109,7 @@
   failed_when: false
   when:
     - (bootwright_node_access_askpass_install.rc | default(1) | int) == 0
+    - (bootwright_node_access_askpass_dir | default('') | length) > 0
     - (bootwright_node_access_password_probe.rc | default(1) | int) != 0
 
 - name: Require privileged execution on the storage node before provisioning
@@ -108,16 +135,25 @@
       is wrong or {{ bootwright_node_access_install_account }} carries no sudo grant at
       all. Run sudo -l on the node as that account to see which.
       {% elif (bootwright_node_access.sudoPasswordEnv | default('') | length) > 0 %}
-      Bootwright held the password --ssh-ask-sudo-password collected but never got to offer
-      it: writing the sudo askpass helper to
-      {{ bootwright_node_access_askpass_dir | default('the borrowed account home') }} over
-      that same connection exited
-      rc={{ bootwright_node_access_askpass_install.rc | default('unknown') }}
-      ({{ bootwright_node_access_askpass_diagnostic }}). That write is an ordinary command
-      to the account which just answered twice, so the condition is on the node: a home
-      directory that is full, read-only or absent, or a login profile that fails for a
-      non-interactive shell. Clear that and re-apply, or grant
-      {{ bootwright_node_access_install_account }} passwordless sudo out of band.
+      Bootwright held the password --ssh-ask-sudo-password collected but never offered it:
+      preparing the sudo askpass helper
+      {{ 'under ' ~ bootwright_node_access_askpass_dir if (bootwright_node_access_askpass_dir | default('') | length) > 0 else 'on the node' }}
+      exited rc={{ bootwright_node_access_askpass_install.rc | default('unknown') }}
+      ({{ bootwright_node_access_askpass_diagnostic }}). Bootwright asks the node for a
+      directory {{ bootwright_node_access_install_account }} may both write and execute,
+      trying $XDG_RUNTIME_DIR, then /dev/shm, then that account's home, then its temporary
+      directory, and it runs an empty helper from each candidate before choosing it — a
+      noexec mount fails there with Permission denied.
+      {% if (bootwright_node_access_askpass_dir | default('') | length) > 0 %}
+      One did pass, so the password may have reached that directory: the node was already
+      holding a timer to erase it, armed before the write, and Bootwright removed it on the
+      way out of this node.
+      {% else %}
+      None passed, and the password is written only after one does, so it never left this
+      machine.
+      {% endif %}
+      Give that account one directory it may write and execute, or grant it passwordless
+      sudo out of band, and re-apply.
       {% elif bootwright_node_access.sudoPasswordOffered | default(false) | bool %}
       You did pass --ssh-ask-sudo-password, but it does not reach this machine: it answers
       for a login you already administer, which a Machine declares as
@@ -207,12 +243,16 @@
       passwordless sudo as {{ bootwright_node_access_install_account }}, so Bootwright
       answers its sudo prompt with the password --ssh-ask-sudo-password collected, for the
       length of the provisioning window only. That password is held on the node in a 0600
-      file under {{ bootwright_node_access_askpass_dir | default('the borrowed account home') }}
-      in that account's home directory, readable by it and root alone, and is removed before
-      the play leaves this node. The {{ bootwright_node_access.user }} account Bootwright
-      creates is granted passwordless sudo instead, and is proved without a password and
-      without a terminal before root SSH is revoked, because that is the channel cephadm's
-      manager uses.
+      file inside {{ bootwright_node_access_askpass_dir }}, a directory the node itself
+      created 0700 under an unguessable name, preferring memory-backed storage that no
+      backup and no reboot carries forward. It is readable by that account and root alone,
+      Bootwright removes it before the play leaves this node and confirms it is gone, and
+      the node erases it unprompted {{ bootwright_node_access_askpass_ttl }} seconds after
+      it was written — a timer armed before the password was, so no failure of this run can
+      leave it there. The {{ bootwright_node_access.user }} account Bootwright creates is
+      granted passwordless sudo instead, and is proved without a password and without a
+      terminal before root SSH is revoked, because that is the channel cephadm's manager
+      uses.
   when:
     - (bootwright_node_access_password_probe.rc | default(1) | int) == 0
       or (bootwright_node_access_password_tty_probe.rc | default(1) | int) == 0

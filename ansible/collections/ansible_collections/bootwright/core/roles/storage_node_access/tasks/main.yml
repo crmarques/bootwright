@@ -39,9 +39,56 @@
         argv: "{{ bootwright_node_access_ssh_argv + [bootwright_node_access_install_endpoint, bootwright_node_access_command] }}"
       vars:
         bootwright_node_access_command: >-
-          rm -rf {{ bootwright_node_access_askpass_dir }}
+          rm -rf {{ bootwright_node_access_askpass_dir | quote }}
+          && test ! -e {{ bootwright_node_access_askpass_dir | quote }}
       delegate_to: localhost
       become: false
+      register: bootwright_node_access_askpass_removal
       changed_when: true
       failed_when: false
       when: (bootwright_node_access_askpass_dir | default('') | length) > 0
+
+    - name: Require the storage node sudo askpass helper to be gone
+      ansible.builtin.assert:
+        that:
+          - (bootwright_node_access_askpass_removal.rc | default(0) | int) == 0
+        fail_msg: >-
+          Bootwright could not confirm that it removed the sudo askpass helper it wrote to
+          {{ bootwright_node_access_askpass_dir }} on Machine
+          {{ bootwright_storage_node_name | default(inventory_hostname) }}: the removal
+          exited rc={{ bootwright_node_access_askpass_removal.rc | default('unknown') }}
+          ({{ (bootwright_node_access_askpass_removal.stderr | default('', true) | trim) | default('no output', true) }}).
+          That directory holds {{ bootwright_node_access_install_account }}'s sudo password
+          in a 0600 file. The node erases it on its own within
+          {{ bootwright_node_access_askpass_ttl }} seconds of it being written — that timer
+          was armed before the password was, and does not depend on this run — but confirm
+          it is gone, and treat the password as exposed to anything that could read that
+          account's files until then.
+        success_msg: >-
+          The sudo askpass helper Bootwright wrote to
+          {{ bootwright_node_access_askpass_dir }} is gone from Machine
+          {{ bootwright_storage_node_name | default(inventory_hostname) }}.
+      delegate_to: localhost
+      become: false
+      when:
+        - (bootwright_node_access_askpass_dir | default('') | length) > 0
+        - ansible_failed_task is not defined
+
+    - name: Warn that the storage node sudo askpass helper may still hold the password
+      ansible.builtin.debug:
+        msg: >-
+          This node failed with the sudo askpass helper still on it: removing
+          {{ bootwright_node_access_askpass_dir }} from Machine
+          {{ bootwright_storage_node_name | default(inventory_hostname) }} exited
+          rc={{ bootwright_node_access_askpass_removal.rc | default('unknown') }}, so
+          {{ bootwright_node_access_install_account }}'s sudo password may still be in a
+          0600 file there. The node erases it on its own within
+          {{ bootwright_node_access_askpass_ttl }} seconds of it being written, on a timer
+          armed before the password was written and independent of this run. The failure
+          reported above is the one to fix.
+      delegate_to: localhost
+      become: false
+      when:
+        - (bootwright_node_access_askpass_dir | default('') | length) > 0
+        - ansible_failed_task is defined
+        - (bootwright_node_access_askpass_removal.rc | default(0) | int) != 0
