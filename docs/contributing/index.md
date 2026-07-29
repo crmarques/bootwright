@@ -21,10 +21,11 @@ stand up clusters, start with the
 
 ## In this section
 
-- **[API](api.md)** — the desired-state API and its extension points: where the
-  kinds and fields live, the strict-decode and no-backward-compat rule, where
-  validation and normalization sit, and how to add a substrate adapter, a managed
-  service, or a CLI verb without breaking the contracts.
+- **[API](api.md)** — the desired-state API and every extension walkthrough:
+  where the kinds and fields live, the strict-decode and no-backward-compat rule,
+  where validation and normalization sit, and the step-by-step checklists for
+  adding a substrate adapter, a managed service, or a CLI verb without breaking
+  the contracts.
 - **[Architecture](architecture.md)** — the execution internals: the render
   pipeline, execution identities, resource locks, cluster install scheduling, the
   four-outcome convergence classifier, the three apply modes, the rendering

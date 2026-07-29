@@ -83,26 +83,45 @@ names. The existing arms are machine profiles for `libvirt`, `vsphere`, and
 adding a capability arm, validation, renderer support, and an apply adapter —
 and it must never move physical facts into cluster intent.
 
-1.  **Add the capability arm and validation** in `api/v1alpha1` and the
-    desired-state validators. Use a machine-profile arm for virtual substrates,
-    or explicit `Machine.spec.hardware` inventory for physical ones.
+Role dispatch is table-driven through `internal/roles`, but the rest of the
+desired-state layer switches on the `Provisioner*` constant, so every step below
+is required — skipping the render, planner, or scaffold steps yields a substrate
+that validates and then fails at apply time.
+
+1.  **Add the capability arm and its constants.** `api/v1alpha1/infraprovider.go`
+    for the arm, `helpers.go` to add the constant to `Provisioners`, and
+    `types.go` for the `Provisioner*` constant itself. Use a machine-profile arm
+    for virtual substrates, or explicit `Machine.spec.hardware` inventory for
+    physical ones.
 2.  **Register the dispatch triplet** (`substrateRole`, `bmcRole`, `bootRole`)
-    and its `RoleContract` in `internal/roles`. A registered backend carries
-    status `supported`; an unregistered or schema-only triplet resolves through
-    `LookupDispatch` to `StatusUnknown`, and `DispatchSupport.ApplySupported()`
-    treats only `supported` as apply-supported. No-op arms resolve to the
-    explicit `*_none` roles so dispatch stays visible rather than silently
-    absent.
-3.  **Add the converging roles** under the matching families in
+    and its `RoleContract` in `internal/roles`, wired into
+    `LookupProfileProvisioner` or `LookupMachineProvisioner`. A registered
+    backend carries status `supported`; an unregistered or schema-only triplet
+    resolves through `LookupDispatch` to `StatusUnknown`, and
+    `DispatchSupport.ApplySupported()` treats only `supported` as
+    apply-supported. No-op arms resolve to the explicit `*_none` roles so
+    dispatch stays visible rather than silently absent.
+3.  **Add the provider and machine validation** in `state/desired`.
+4.  **Wire the resolution, render, and planning layers**: the substrate resolver
+    (`state/view`), the network-attachment render vars (`render/inventory`), and
+    the per-provider resource-lock keys in the `converge/workflow` planner.
+5.  **Add scaffolding and the CLI substrate display** (`state/scaffold`), so
+    `example init` reports the new backend and its real apply support.
+6.  **Add the converging roles** under the matching families in
     `ansible/collections/ansible_collections/bootwright/core/roles/`:
     `machine_substrate_*`, `provider_service_bmc_*`, `container_cluster_boot_*`,
-    and the optional media hook. The renderer projects their exact names; roles
-    must never branch on the dispatch discriminators themselves.
-4.  **Map the installer platform render mode** where it applies. This is the
+    and the optional media hook, plus the `internal/repo/checks` provider tests.
+    The renderer projects their exact names; roles must never branch on the
+    dispatch discriminators themselves.
+7.  **Map the installer platform render mode** where it applies. This is the
     installer *platform render mode*, not the substrate type — substrate
     ownership stays on the `Machine` and `InfraProvider`. See
     [platform render mode and substrate type](../concepts/index.md#platform-render-mode-and-substrate-type)
     for how the mode is derived.
+
+`TestEveryProvisionerDispatchesToSupportedRoles` fails if a provisioner in
+`Provisioners` has no supported role contract, so the registry cannot silently
+lag the schema. It does not cover steps 3–5 — follow the list.
 
 !!! note "Schema-accepts is not apply-supported"
     The schema can accept provider facts for a substrate before an apply adapter
@@ -126,12 +145,31 @@ genuinely cannot express.
 
 ## Adding a managed service
 
-If you are adding a machine-bound shared service rather than a substrate, it *is*
-a typed kind. Keep the service path orthogonal to substrate dispatch: add a typed
-`InfraComponent`/`Environment` arm, register its role, image, and defaults in
-`internal/roles`, add its consumer discovery to the service graph, project the
-resolved graph into Ansible vars, and place the converging role under
-`ansible/collections/ansible_collections/bootwright/core/roles/infra_component_*`.
+A machine-bound shared service (an artifact server, load balancer, proxy, name
+resolution, NTP, or a new peer such as a syslog relay) is *not* a substrate: it
+is an `InfraComponent` arm, a typed kind. Keep the service path orthogonal to
+substrate dispatch. The runtime layer is data-driven — Ansible role dispatch,
+task scheduling, and host grouping do not change — but the desired-state layer is
+a hand-enumerated arm union. Touch, in order:
+
+1. `api/v1alpha1/infracomponent.go` — the arm struct and its field on
+   `InfraComponentSpec`, the `ComponentSlot*` constant reference in `SetSlots`,
+   and the constant in `InfraComponentSlots`.
+2. `api/v1alpha1/types.go` — the `ComponentSlot*` and service-type constants and
+   any `Default*Port`.
+3. `internal/roles` — the `serviceSupport` registry entry (apply/destroy role,
+   host capabilities, image pin, default port).
+4. `state/desired` — the arm validation.
+5. `render/inventory` — the arm in the infra-component vars projection.
+6. `state/graph` — classify the slot in the self-contained shared-service set so
+   scoped apply reasons about it correctly.
+7. The `infra_component_*` Ansible role and its var contract.
+8. Docs and an example under `examples/`.
+
+Two guards catch the easiest omissions: `TestInfraComponentSlotsCoverArmUnion`
+(the arm, `SetSlots`, and `InfraComponentSlots` must agree) and
+`TestEveryComponentSlotHasSupportedService` (every slot needs a registry entry).
+They do not cover steps 4–8 — follow the list.
 
 ## Adding a CLI verb
 
