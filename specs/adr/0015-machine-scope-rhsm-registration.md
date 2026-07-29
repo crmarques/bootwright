@@ -48,7 +48,7 @@ reconfigure-only under `--converge-drifted` (ADR 0007 taxonomy).
 - The arm must carry only `management`: `organizationRef`, `activationKeyRef`,
   `satellite`, and `connectToInsights` are validation errors, so no RHSM
   secrets are demanded (preflight included).
-- The operator supplies registration as a `Playbook` at
+- The operator supplies registration as a `CustomPlaybook` at
   `stage: deps, timing: before` — it runs after the machines phase (OS in
   place) and the default `failureMode: fail` hard-gates the deps-phase Ceph
   work on it. A `machines`/`after` anchor runs at the same point in time but

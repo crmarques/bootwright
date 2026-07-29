@@ -169,14 +169,17 @@ cluster only partly torn down, Go stamps `destroyStatus=partial` onto that
 StorageCluster's ownership record so it is not treated as fully gone. Run,
 install, and convergence-safety ledgers remain Go-written.
 
-`diff --recorded` and orphan reporting are additive-first: they enumerate only the
-resources the loaded desired state currently declares, and orphan correlation is
-machine-, cluster-, component-, and provider-grained. An object removed from
-desired state after an apply is therefore neither drift nor orphan — it falls out
-of enumeration rather than being flagged — so out-of-band removal is an explicit
-`destroy` step, not a `diff --recorded` outcome. A later same-name re-declaration can
-classify `match` against the stale pre-destroy evidence until it is re-applied.
-This is the documented additive-only posture, not a gap.
+Classification is additive-first: `diff --recorded` classifies only the resources
+the loaded desired state currently declares, so an object removed from desired
+state produces no `missing`/`match`/`drift`/`foreign` entry at all. It is not
+invisible. A complementary orphan pass walks the ownership records and reports
+every Bootwright-owned record whose machine, cluster, infra component, or
+provider is no longer declared as `undeclared`. That report is advisory: it does
+not make the report out of sync and does not change the exit code, because
+`apply` never deletes. Removing an object from desired state asks Bootwright to
+stop managing it; reclaiming what it left behind is an explicit `destroy`. A
+later same-name re-declaration can classify `match` against the stale
+pre-destroy evidence until it is re-applied.
 
 The default `diff` compares desired state against live reality rather than the
 recorded evidence (`diff --recorded` is the offline classifier above). A

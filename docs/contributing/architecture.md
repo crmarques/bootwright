@@ -124,8 +124,9 @@ user-facing overview is in
 the behavioral contract is:
 
 - **bare `apply` = reconcile (default):** creates missing objects, skips objects
-  whose recorded desired state matches current, and fails closed on `drift` or
-  `foreign` ownership before any mutation.
+  whose recorded desired state matches current, converges drift that is
+  reconcilable in place, and fails closed on structural
+  (destructive-identity) drift or `foreign` ownership before any mutation.
 - **`apply --expect-new`:** additionally refuses to proceed when any selected
   object already exists — a greenfield assertion.
 - **`apply --converge-drifted`:** command-scoped break-glass past Bootwright-owned

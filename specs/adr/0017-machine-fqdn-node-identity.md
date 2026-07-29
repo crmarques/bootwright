@@ -30,16 +30,23 @@ Machine names stay DNS labels; the machine's FQDN becomes a first-class
 address entry; nodes carry independent names; DNS binds the two; clusters and
 every cluster-facing surface reference node names only.
 
+This decision was taken when `Environment` carried a single
+`spec.baseDomain`. [ADR 0018](0018-environment-domain-model.md) later split
+that into per-class zones, so the placeholders below name the zone the
+composition draws from: `<domains.machines>` for machine FQDNs and
+`<clusterDomain>` for `domains.containerClusters` or `domains.storageClusters`
+by cluster kind.
+
 ### The implicit `fqdn` machine address
 
 Every Machine's `spec.addresses` list implicitly contains
 
 ```yaml
 - name: fqdn
-  address: <metadata.name>.<baseDomain>
+  address: <metadata.name>.<domains.machines>
 ```
 
-injected during normalization when the Environment declares a `baseDomain` and
+injected during normalization when the Environment declares the zone and
 the machine does not already declare an entry named `fqdn`. A declared
 `fqdn` entry overrides the default verbatim (it must be a DNS subdomain;
 it may live in a foreign zone). `metadata.name` keeps the DNS-label
@@ -59,7 +66,7 @@ all (no resolver is declared that could answer).
 ### Independent node names
 
 A cluster node's `name` field names the node, not the machine. A bare
-label composes to `<name>.<cluster>.<baseDomain>`; a dotted value is an
+label composes to `<name>.<cluster>.<clusterDomain>`; a dotted value is an
 explicit FQDN used verbatim. The node name is required and declared
 explicitly (`topology.nodes[].name` for storage, `spec.nodes[].name` for
 OpenShift); it is never inferred from the machine name or list position, so

@@ -184,17 +184,18 @@ bootwright apply --stage infra --clusters dc1-ocp --yes
 bootwright apply --stage clusters --clusters dc1-ocp --yes
 ```
 
-`apply` and `plan` additionally accept the single-phase sub-phases
+`apply`, `plan`, and `diff` additionally accept the single-phase sub-phases
 (`fabric`, `machines`, `deps`, `base`, `add-ons`) for even tighter reruns;
 `destroy` accepts only the two families. The full stage model — families versus
 sub-phases — is on [Concepts → Apply stages](../concepts/index.md).
 
 `--stage` and `--through` together select an inclusive **range** of stages:
 `--stage` is the first phase to run, `--through` is the last. `--stage` alone
-runs exactly one phase; `--through` alone runs every phase **from the beginning
-up to and including** that stage (a cumulative build-out); `--through end` runs
-through to the final phase. Use them to converge a fleet incrementally up to a
-checkpoint, or to replay a contiguous mid-graph slice:
+runs exactly what it names — one phase for a sub-phase name, that family's
+phases for `infra` or `clusters`; `--through` alone runs every phase **from the
+beginning up to and including** that stage (a cumulative build-out);
+`--through end` runs through to the final phase. Use them to converge a fleet
+incrementally up to a checkpoint, or to replay a contiguous mid-graph slice:
 
 ```text
 bootwright apply --through machines --clusters dc1-ocp --yes

@@ -205,10 +205,10 @@ values `destroy --stage` accepts.
 State fabric and machine work live within the `infra` family; storage-cluster,
 container-cluster, and add-on work live within the `clusters` family.
 
-### Surgical sub-phases (apply / plan only)
+### Surgical sub-phases (apply / plan / diff)
 
-`apply` and `plan` additionally accept five single-phase sub-phases for targeted
-reruns. They are not stage families and `destroy` does not accept them.
+`apply`, `plan`, and `diff` additionally accept five single-phase sub-phases for
+targeted reruns. They are not stage families and `destroy` does not accept them.
 
 | Sub-phase | Family | Includes |
 | --- | --- | --- |
@@ -217,6 +217,32 @@ reruns. They are not stage families and `destroy` does not accept them.
 | `deps` | `clusters` | Cluster-stage prerequisites. |
 | `base` | `clusters` | Container and storage cluster base install. |
 | `add-ons` | `clusters` | Post-install add-ons. |
+
+The five sub-phases are the graph's real execution order: `fabric` → `machines`
+→ `deps` → `base` → `add-ons`. A family is just a name for a contiguous slice of
+it — `infra` is `fabric`..`machines`, `clusters` is `deps`..`add-ons`.
+
+### Stage ranges with `--stage` and `--through`
+
+On `apply`, `plan`, and `diff`, the two flags select an inclusive **range** over
+that order. Both accept any family or sub-phase name; `--through` also accepts
+`end` for the final phase.
+
+| Form | Runs |
+| --- | --- |
+| neither flag | The full graph. |
+| `--stage X` | Exactly what `X` names: one phase for a sub-phase, that family's phases for `infra` or `clusters`. |
+| `--through X` | Every phase from the beginning up to and including `X` — a cumulative build-out. A family means through its last phase, so `--through infra` equals `--through machines`. |
+| `--stage X --through Y` | The contiguous `X`..`Y` slice, inclusive. |
+
+```text
+bootwright apply --through machines --yes      # build out as far as machines
+bootwright apply --stage deps --through base --yes   # replay a mid-graph slice
+bootwright apply --stage deps --through end --yes    # deps to the end
+```
+
+A range that starts past the first phase assumes the earlier phases already
+applied, and the run reports which ones it skipped on that assumption.
 
 ### Selecting clusters
 
@@ -261,7 +287,8 @@ prepared and skips their setup.
 `apply` reconciles by default. The two modifier flags are mutually exclusive:
 
 - **bare `apply`** — reconcile: create what is missing, skip objects whose
-  recorded desired state matches current, and fail closed on drift or foreign
+  recorded desired state matches current, converge drift that is reconcilable in
+  place, and fail closed on structural (destructive-identity) drift or foreign
   ownership before any mutation.
 - **`apply --expect-new`** — greenfield assertion: additionally refuse to
   proceed if any selected object already exists.

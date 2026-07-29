@@ -17,7 +17,9 @@ against machines.
 
 ## Decision
 
-Introduce a declarative kind, `Playbook`, that runs one
+Introduce a declarative kind, `CustomPlaybook` (named `Playbook` when this
+decision was taken; renamed by [ADR 0026](0026-custom-playbook-kind-name.md)),
+that runs one
 operator-supplied Ansible playbook (with optional vendored roles/collections)
 against machines, anchored to one of the five provisioning sub-phases
 (`fabric`, `machines`, `deps`, `base`, `add-ons`) with `before`/`after` timing.

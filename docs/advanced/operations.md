@@ -291,7 +291,8 @@ maintenance.
 
 - **A range of stages with `--stage` and `--through`.** `--stage` names the
   first stage of a run and `--through` names the last; together they run every
-  phase in that inclusive range. `--stage` alone runs exactly that one phase;
+  phase in that inclusive range. `--stage` alone runs exactly what it names — a
+  sub-phase name runs that one phase, a family name runs that family's phases;
   `--through` alone runs from the very beginning up to and including the named
   phase (a cumulative build-out); `--through end` runs through to the last phase.
   They are accepted by `apply`, `plan`, and `diff` (not `destroy`) and take the
@@ -309,9 +310,9 @@ maintenance.
   bootwright apply --stage deps --through end --yes
   ```
 
-- **A surgical sub-phase rerun.** `apply` and `plan` additionally accept the
-  single-phase selectors `fabric`, `machines`, `deps`, `base`, and `add-ons` for
-  surgical reruns within a family. These are reruns, not peers of the `infra`
+- **A surgical sub-phase rerun.** `apply`, `plan`, and `diff` additionally accept
+  the single-phase selectors `fabric`, `machines`, `deps`, `base`, and `add-ons`
+  for surgical reruns within a family. These are reruns, not peers of the `infra`
   and `clusters` families; `destroy` does not accept them.
 
 - **One machine.** `--machines <names>` narrows the run to individual `Machine`s

@@ -64,7 +64,8 @@ is the moment data is lost and still crosses the data-loss acknowledgment.
 The safety mode is a single extra-var, `bootwright_apply_mode`
 (`create` | `continue` | `override`), stamped by plan composition (it replaced
 a legacy boolean `bootwright_install_override`). The Go object preflight
-enforces it against recorded state (default reconcile refuses drift/foreign,
+enforces it against recorded state (default reconcile refuses structural
+drift and foreign but converges reconcilable-in-place drift,
 `--expect-new` refuses pre-existing, `--converge-drifted` refuses only foreign); the
 per-role Ansible apply-mode gates enforce the identical contract against live
 existence and ownership. Defense in depth is intentional: Go decides from
