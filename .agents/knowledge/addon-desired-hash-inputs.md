@@ -39,7 +39,7 @@ hook's shipped content — the playbook file, the vendored `roles/` and
 `collections/` trees, and every manifest template; missing files contribute
 nothing (validation separately requires them for a real apply).
 `render.DesiredHash` folds a per-add-on `hookContentDigest` (hook name +
-`ContentDigest` per `spec.hooks` entry) into the desired hash even though the
+`ContentDigest` per `spec.steps` entry) into the desired hash even though the
 Extension field already serializes the hook specs, so editing a shipped
 playbook without touching the add-on YAML still moves the hash and re-runs the
 add-on. The same digest also feeds the per-hook record for `run: onChange`

@@ -1499,31 +1499,34 @@ Rules:
   `manifests[].path` are relative paths resolved against the `ClusterAddon` file
   (the `manifestSet.path` rules); the loader skips the `playbooks/`, `roles/`,
   and `collections/` subtrees as Ansible content.
-  - `hooks[].name` is required and unique within the add-on. `steps[].gates` / `steps[].follows`
-    is required: `preApply` (before the operator install), `postOperatorReady`
-    (after the operator CSV reaches `Succeeded`, before `olm.customResources`;
-    olm add-ons only), or `postReady` (after the readiness checks pass). Hooks
-    run in that lifecycle order.
-  - A hook ships a `playbook`, `manifests[]`, or both. A manifest-only hook (no
+  - `steps[].name` is required and unique within the add-on. Exactly one of
+    `steps[].gates` or `steps[].follows` is required and anchors the step to a
+    lifecycle point: `gates: apply` (before the operator install, blocking it
+    until the step succeeds), `follows: operatorReady` (after the operator CSV
+    reaches `Succeeded`, before `olm.customResources`; olm add-ons only), or
+    `follows: ready` (after the readiness checks pass). Steps run in that
+    lifecycle order. `gates` cannot be combined with `onFailure: continue` — a
+    gate that lets the add-on proceed on failure is not a gate.
+  - A step ships a `playbook`, `manifests[]`, or both. A manifest-only step (no
     `playbook`) applies templated manifests from values already available to the
-    add-on and ignores `target`/`outputs`; a playbook hook additionally runs
+    add-on and ignores `target`/`outputs`; a playbook step additionally runs
     imperative work against resolved machines and captures outputs.
-  - `hooks[].target` selects the machines a playbook runs against and is required
-    for a playbook hook. It is a presence union — exactly one of `boundCluster`
+  - `steps[].target` selects the machines a playbook runs against and is required
+    for a playbook step. It is a presence union — exactly one of `boundCluster`
     (the bound `ContainerCluster`'s nodes), `fromInput` (an accepted
     `resourceRef` input dereferenced to its object, then mapped to nodes:
     `StorageExport` → its `storageClusterRef` Ceph nodes, `StorageCluster` → its
     Ceph nodes, `ContainerCluster` → its agent nodes, `Machine` → the machine),
-    or static `clusters`/`machines` lists. A hook carries no `hostGroups` and can
+    or static `clusters`/`machines` lists. A step carries no `hostGroups` and can
     never resolve to the controller/localhost. `target.limit` is `firstReachable`
     (default: run against the first machine that answers) or `all` (run against
     every resolved machine). Storage-cluster targets connect through the
     cluster's post-install `cephadm.clusterSSH` user and key (falling back to
     the Machine access key when `clusterSSH.keyRef` is omitted); container-cluster
     and direct Machine targets use the Machine's `access.ssh` identity.
-  - `hooks[].secretRefs[]` name `Secret`s materialized into the hook's scoped
+  - `steps[].secretRefs[]` name `Secret`s materialized into the step's scoped
     per-run secrets directory (`bootwright_hook_secrets_dir`) — only the declared
-    secrets, never the whole store. `hooks[].extraVars` is a free-form map handed
+    secrets, never the whole store. `steps[].extraVars` is a free-form map handed
     to the playbook as one JSON `-e` value. It MUST NOT carry a connection or
     privilege-escalation key (`ansible_user`, `ansible_ssh_user`, `ansible_host`,
     `ansible_ssh_host`, `ansible_port`, `ansible_ssh_port`, `ansible_connection`,
@@ -1536,22 +1539,22 @@ Rules:
     run, past the declared access, the recorded host-key trust, and the
     `--ssh-user` override. The same restriction applies to
     `CustomPlaybook.spec.extraVars`. Validation rejects it.
-  - `hooks[].timeout` bounds the playbook run (a Go duration; default `10m`).
-    `hooks[].run` is `onChange` (default: skip a hook whose content and resolved
+  - `steps[].timeout` bounds the playbook run (a Go duration; default `10m`).
+    `steps[].run` is `onChange` (default: skip a step whose content and resolved
     inputs are unchanged since the last reconcile) or `always`.
-    `steps[].onFailure` is `fail` (default: a failing hook blocks the add-on
-    apply) or `continue` (record the failure and proceed); a hook whose manifests
+    `steps[].onFailure` is `fail` (default: a failing step blocks the add-on
+    apply) or `continue` (record the failure and proceed); a step whose manifests
     consume its outputs must be `fail`.
-  - `hooks[].outputs[]` declare files the playbook writes under
+  - `steps[].outputs[]` declare files the playbook writes under
     `{{ bootwright_hook_outputs_dir }}`, captured after the run: `name` (the
     manifest token), `file` (relative to the outputs directory), optional
     `secret` (persisted `0600` under `clusters/<cluster>/secrets/addons/...` and
     reclaimed from run history; non-secret outputs persist under
     `runtime/addons/...`), and `format` `text` (default) or `json` (validates the
     captured bytes parse as JSON). A declared output the playbook did not write
-    fails the hook; `outputs` require a `playbook`.
-  - `hooks[].manifests[]` are templated manifests applied to the bound cluster
-    (`oc apply --server-side`, in declared order) after the hook succeeds. Each
+    fails the step; `outputs` require a `playbook`.
+  - `steps[].manifests[]` are templated manifests applied to the bound cluster
+    (`oc apply --server-side`, in declared order) after the step succeeds. Each
     entry requires `path`; `reclaimRendered` removes the rendered plaintext once
     applied (for manifests embedding secret outputs). Manifest tokens —
     `{{ cluster }}`, `{{ output <name> }}`, `{{ input <in>.<prop> }}`,

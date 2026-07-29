@@ -42,13 +42,14 @@ races the catalog registry startup; the add-on must subscribe to the catalog
 it ships. The operator-install set (Namespace, OperatorGroup, Subscription)
 then applies, and the engine waits for the operator's CSV to reach
 `Succeeded` — establishing the operator's CRDs — before applying
-`spec.olm.customResources` or running any `postOperatorReady` hook. Gate
+`spec.olm.customResources` or running any `follows: operatorReady` step. Gate
 timeouts are typed (`catalogGateError`, `csvGateError`) and never recorded as
 failed applies of the already-applied resources.
 
-**Hook lifecycle.** `ClusterAddon spec.hooks` wire add-on-shipped playbooks
-and templated manifests into three lifecycle points: `preApply`,
-`postOperatorReady`, `postReady`. Hooks default to `run: onChange`, keyed on a
+**Step lifecycle.** `ClusterAddon spec.steps` wire add-on-shipped playbooks
+and templated manifests into three lifecycle points, named by the anchor field
+the step sets: `gates: apply`, `follows: operatorReady`, and `follows: ready`.
+Steps default to `run: onChange`, keyed on a
 digest of shipped content plus resolved inputs and target; `run: always`
 exists for integrations that must converge every apply (the Data Foundation
 exporter hook, so rotated Ceph mon endpoints/keys keep landing). The desired

@@ -50,7 +50,7 @@ unchanged.
 Scope of the rename:
 
 - `kind: Playbook` becomes `kind: CustomPlaybook`.
-- `State.playbooks` becomes `State.customPlaybooks`, and the `check --output
+- `State.playbooks` becomes `State.customPlaybooks`, and the `validate --output
   json` count `provisioningPlaybooks` becomes `customPlaybooks`.
 - Validation messages are prefixed `CustomPlaybook/<name>`.
 - `PlaybookSource` and the `run`/`onFailure` vocabulary keep their names: they
@@ -67,7 +67,7 @@ kind, consistent with how every prior schema rename landed.
 - Breaking for inputs that declare `kind: Playbook`. The migration is one
   mechanical edit per file, and the loader's unknown-kind error names the
   offending document.
-- Breaking for anything parsing `check --output json`: the count key moved from
+- Breaking for anything parsing `validate --output json`: the count key moved from
   `provisioningPlaybooks` to `customPlaybooks`.
 - The API now has one word for the operator's Ansible content and a different
   one for the runtime's, so `spec.playbook` inside a `CustomPlaybook` no longer

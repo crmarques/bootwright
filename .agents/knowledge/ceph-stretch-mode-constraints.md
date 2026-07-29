@@ -85,7 +85,7 @@ tie-breaking monitor: with one OSD host down, I/O pauses but mon quorum (3
 mons) survives — quorum HA, not data HA across sites.
 
 **Behavior:** The tiebreaker may be authored later. When
-`spec.ceph.topology.stretch` is set but `tiebreaker.host` and `tiebreaker.site`
+`spec.ceph.topology.stretch` is set but `tiebreaker.node` and `tiebreaker.site`
 are both empty, validation does NOT hard-fail the tiebreaker requirements — it
 passes with a `Stretch tiebreaker` WARN advisory (arbiter-less stretch is an
 incomplete, not-recommended setup: a data-site outage loses mon quorum). This

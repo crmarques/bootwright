@@ -350,7 +350,7 @@ that task is in its log under
   resolved but the operator's ClusterServiceVersion never installed. Check the
   Subscription's `installPlanApproval` (a `Manual` plan needs approving) and
   the operator namespace's events/pod status for image pull or RBAC errors.
-- **`hook "<name>" (<lifecycle>) failed`** — a `spec.hooks` playbook or
+- **`hook "<name>" (<lifecycle>) failed`** — a `spec.steps` playbook or
   manifest apply failed. The task log contains the full Ansible or `oc apply`
   output; a hook whose `target.fromInput` resolves to a Ceph `StorageExport`
   needs the referenced `StorageCluster` reachable over SSH (or, for external

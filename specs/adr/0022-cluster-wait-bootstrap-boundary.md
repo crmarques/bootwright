@@ -93,7 +93,7 @@ destroy.
   moves the cluster install record — only install-complete may mark a cluster
   installed.
 - On a fleet installed before this change the new activity has no
-  converge-safety record, so the first `bootwright check state` reports it as
+  converge-safety record, so the first `bootwright diff --recorded` reports it as
   missing under its own object key. The `ContainerCluster` object keeps its
   recorded classification, `apply` refuses nothing extra, and the record is
   stamped on the next apply, including the verified-installed skip path.

@@ -5,8 +5,11 @@ two seams — `HookRunner.Run(ctx, lifecycle)` and `EffectRunner.Run(ctx)` — w
 concrete implementations live in `internal/converge/workflow` because they need
 ansible, secrets, and state, which `internal/addons/oc` must not import. A nil
 `HookRunner` or `EffectRunner` is a defined no-op, so add-ons without
-hooks/effects and unit tests need not wire one. Hooks fire at exactly three
-lifecycles: `preApply`, `postOperatorReady`, `postReady`.
+hooks/effects and unit tests need not wire one. "Hook" is the internal name for
+an authored `ClusterAddon spec.steps[]` entry; the Go identifiers, Ansible vars
+(`bootwright_hook_*`), and packages keep it. Hooks fire at exactly three
+lifecycles, spelled in authored YAML as `gates: apply`,
+`follows: operatorReady`, and `follows: ready`.
 
 **Skip semantics:** Only a check-backed `Ready()` counts as evidence an add-on
 is still live on-cluster. With zero `spec.readiness.checks` `Ready()` is
@@ -72,6 +75,6 @@ add-ons` instead of letting each task fail later at `requireKubeconfig`. A full
 apply with base in scope produces the kubeconfig mid-run and is deliberately
 not gated (`TestAddonsStageGatesMissingKubeconfig`). The add-ons phase needs
 the controller Ansible runtime (ansible-playbook + python3 checks) only when
-some add-on ships a playbook hook (`spec.hooks[].playbook` non-empty);
+some add-on ships a playbook hook (`spec.steps[].playbook` non-empty);
 manifest-only add-ons need no ansible
 (`TestPreflightChecksAddonPlaybookHooksNeedAnsible`).
