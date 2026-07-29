@@ -193,7 +193,7 @@ is not sufficient.
 
 - **`restore.yml` and `revoke.yml` operate on the *install* account, so they must
   use the install key.** `bootwright_node_access_install_public_key`
-  (`context.yml:97-102`, guarded non-empty) is the machine access key
+  (`context.yml:122-127`, guarded non-empty) is the machine access key
   (`internal/render/inventory/storage_ansible.go:134` → `:157`).
   `bootwright_node_access_public_key` is the cephadm **cluster** key
   (`storage_ansible.go:135` ← `clusterSSH.keyRef` → `:151`) and belongs only to
@@ -204,6 +204,17 @@ is not sufficient.
   `restore.yml` always runs — and the destroy path
   (`storage_cluster_cephadm/tasks/revoke_node_access.yml:30,51`, already correct)
   never removed it.
+- **The install key is optional twice over: the path may be empty, and the path
+  may name material the context store does not hold.** The renderer emits
+  `installPublicKeyPath` from the secret index, which resolves a path for every
+  declared `sshKeyPair` whether or not its public half was ever generated, so a
+  bare `lookup('ansible.builtin.file', …)` in `context.yml` aborted the whole
+  play — including teardown, which never needs that key. `context.yml:88-95`
+  stats the path first and resolves the fact to `''` when nothing backs it, and
+  every consumer keeps its `| length > 0` guard. Teardown then degrades
+  (`revoke_node_access.yml` reuses the resolved fact rather than looking the file
+  up a second time); apply does not — `revoke.yml`'s assert refuses to report a
+  narrowed access surface it could not narrow.
 - Whether a node needs a terminal is a per-run connection detail: not authored,
   not in the converge hash, not in the access marker. Cost is one extra
   read-only round trip on a healthy first apply and zero on a converged re-apply.

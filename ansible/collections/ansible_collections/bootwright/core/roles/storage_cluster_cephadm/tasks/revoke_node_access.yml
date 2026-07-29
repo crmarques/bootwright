@@ -27,12 +27,12 @@
 - name: Reauthorize the machine access key for the storage node install account
   ansible.posix.authorized_key:
     user: "{{ bootwright_node_access.installUser }}"
-    key: "{{ lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) }}"
+    key: "{{ bootwright_node_access_install_public_key }}"
     state: present
     manage_dir: true
   when:
     - bootwright_node_access is defined
-    - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+    - (bootwright_node_access_install_public_key | default('') | length) > 0
 
 - name: Probe the storage node orchestration account before deauthorizing keys
   ansible.builtin.command:
@@ -48,12 +48,12 @@
 - name: Deauthorize the machine access key for the storage node orchestration account
   ansible.posix.authorized_key:
     user: "{{ bootwright_node_access.user }}"
-    key: "{{ lookup('ansible.builtin.file', bootwright_node_access.installPublicKeyPath) }}"
+    key: "{{ bootwright_node_access_install_public_key }}"
     state: absent
     manage_dir: false
   when:
     - bootwright_node_access is defined
-    - bootwright_node_access.installPublicKeyPath | default('') | length > 0
+    - (bootwright_node_access_install_public_key | default('') | length) > 0
     - (bootwright_node_access_destroy_account_probe.rc | default(1) | int) == 0
 
 - name: Deauthorize the cephadm cluster key for the storage node orchestration account

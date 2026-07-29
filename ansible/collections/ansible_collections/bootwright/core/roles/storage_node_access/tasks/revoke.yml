@@ -102,6 +102,21 @@
   delegate_to: localhost
   become: false
 
+- name: Require the storage node install public key material before deauthorizing it
+  ansible.builtin.assert:
+    that:
+      - (bootwright_node_access_install_public_key | length) > 0
+    fail_msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} declares its
+      machine access key at {{ bootwright_node_access.installPublicKeyPath }}, but that
+      public half is absent, so Bootwright cannot tell which line to strip from the install
+      account's authorized_keys. Revoking root login while leaving that key authorized
+      would report a narrowed access surface it did not narrow. Run bootwright secret
+      check, restore the key pair with bootwright secret generate, then re-apply.
+  delegate_to: localhost
+  become: false
+  when: (bootwright_node_access.installPublicKeyPath | default('') | length) > 0
+
 - name: Probe the storage node install account authorized key
   ansible.builtin.command:
     argv: "{{ bootwright_node_access_privileged_argv + [bootwright_node_access_endpoint, bootwright_node_access_command] }}"
