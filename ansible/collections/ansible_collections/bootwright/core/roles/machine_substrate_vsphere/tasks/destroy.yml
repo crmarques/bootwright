@@ -80,20 +80,20 @@
       {{ bootwright_vsphere.server }}: it carries no Bootwright ownership
       marker for this context/cluster/machine, so it may be a foreign VM
       that happens to match the naming. Verify the VM before removing it
-      manually, then retry, or pass --include-unowned to delete it anyway.
+      manually, then retry, or pass --authorize unowned-vms to delete it anyway.
   when:
     - bootwright_vsphere_vm_present | bool
-    - not (bootwright_destroy_force_unowned | default(false) | bool)
+    - not (bootwright_destroy_authorize_unowned_vms | default(false) | bool)
 
 - name: Warn before force-deleting an unowned vSphere VM
   ansible.builtin.debug:
     msg: >-
-      --include-unowned: deleting vSphere VM {{ bootwright_vsphere_vm_name }} on
+      --authorize unowned-vms: deleting vSphere VM {{ bootwright_vsphere_vm_name }} on
       {{ bootwright_vsphere.server }} despite a missing or mismatched Bootwright
       ownership marker for this context/cluster/machine.
   when:
     - bootwright_vsphere_vm_present | bool
-    - bootwright_destroy_force_unowned | default(false) | bool
+    - bootwright_destroy_authorize_unowned_vms | default(false) | bool
     - not (bootwright_vsphere_destroy_owned | default(false) | bool)
 
 - name: Delete vSphere VM

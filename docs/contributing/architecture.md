@@ -114,7 +114,7 @@ Two contributor-facing subtleties are easy to get backwards:
     markers, provider metadata, and storage comparison results. Cluster install
     reconcile probes live availability, skips completed installs, resumes only
     from known-safe phases, and fails closed on missing or different inputs after
-    node boot unless a command-scoped `--converge-drifted` is given.
+    node boot unless a command-scoped `--mode rebuild` is given.
 
 ## The three apply modes
 
@@ -123,24 +123,26 @@ user-facing overview is in
 [The desired-state model → Convergence and drift](../concepts/index.md#convergence-and-drift);
 the behavioral contract is:
 
-- **bare `apply` = reconcile (default):** creates missing objects, skips objects
+- **`apply --mode reconcile` (default):** creates missing objects, skips objects
   whose recorded desired state matches current, converges drift that is
   reconcilable in place, and fails closed on structural
   (destructive-identity) drift or `foreign` ownership before any mutation.
-- **`apply --expect-new`:** additionally refuses to proceed when any selected
+- **`apply --mode create`:** additionally refuses to proceed when any selected
   object already exists — a greenfield assertion.
-- **`apply --converge-drifted`:** command-scoped break-glass past Bootwright-owned
+- **`apply --mode rebuild`:** command-scoped break-glass past Bootwright-owned
   unsafe-mismatch checks that have an explicit override path (bypass the
   skip-if-complete install check, reinstall a managed-OS machine, cleanly rebuild
   a Bootwright-owned managed Ceph cluster — a foreign or co-resident cluster
   fails closed). It must **not** bypass active-run leases, validation, secret
   checks, or foreign-resource ownership failures.
 
-`--expect-new` and `--converge-drifted` are mutually exclusive. Under
-`Environment.spec.safety.destroyProtection: requiredOverride`,
-`apply --converge-drifted` fails closed before any mutation: that destruction
-must cross the destroy authorization boundary (`destroy --force` for the scope,
-then re-apply). See
+`--mode` is single-valued, so those three are one choice rather than a
+combination. A rebuild that destroys data additionally needs
+`--authorize data-loss`. Under
+`Environment.spec.safety.destroyProtection: protected`,
+`apply --mode rebuild` fails closed before any mutation: that destruction
+must cross the destroy authorization boundary
+(`destroy --authorize protected` for the scope, then re-apply). See
 [Operations and Recovery](../advanced/operations.md) for the recovery patterns.
 
 ## The rendering contract

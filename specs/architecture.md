@@ -155,7 +155,7 @@ every kind. Drift that is reconcilable in place converges on a bare `apply`, so
 plain `apply` never destructively rebuilds and never touches foreign state. The
 classification is not itself a per-task execution-time skip gate.
 
-Once a run proceeds — a clean run, reconcilable drift, or `--converge-drifted` —
+Once a run proceeds — a clean run, reconcilable drift, or `--mode rebuild` —
 most provider-service and infra-component config tasks have no reliable external
 probe: they re-run and rely on idempotent execution, and their record is marked
 `unknown` (recorded but not classified) as durable evidence rather than an
@@ -167,14 +167,14 @@ storage comparison results. Cluster install reconcile reads per-cluster install
 records and probes live cluster availability, skips completed installs, resumes
 only from known-safe phases, and fails closed when install state exists for
 missing or different inputs after node boot unless a command-scoped
-`--converge-drifted` is given. Destroy requires `--force` when selected state
-sets `Environment.spec.safety.destroyProtection: requiredOverride`.
+`--mode rebuild` is given. Destroy requires `--authorize protected` when selected state
+sets `Environment.spec.safety.destroyProtection: protected`.
 
 Ownership evidence is a named cross-boundary contract: executing collection
 roles write ownership through `bootwright.core.ownership_record` at mutation
 time; Go reads those records for destroy scoping, host package removal gating,
 orphan reporting, and `diff --recorded`, and stamps destroy-status attributes. The one
-Go write is the partial-destroy path: after `--skip-unreachable` leaves a storage
+Go write is the partial-destroy path: after `--authorize unreachable-nodes` leaves a storage
 cluster only partly torn down, Go stamps `destroyStatus=partial` onto that
 StorageCluster's ownership record so it is not treated as fully gone. Run,
 install, and convergence-safety ledgers remain Go-written.

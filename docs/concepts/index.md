@@ -288,7 +288,7 @@ prepared and skips their setup.
   `fabric` then `machines`; it also composes with `--stage fabric`,
   `--stage machines`, or `--stage infra`.
 - **On `destroy`**, only the named machines' substrate is torn down. It refuses
-  a node of an installed cluster unless `--force`, never removes shared
+  a node of an installed cluster unless `--authorize installed-cluster-node`, never removes shared
   per-cluster networking or services other machines still rely on, and leaves
   the rest of the cluster standing.
 - A named machine that is neither a cluster node nor a shared provider or
@@ -297,22 +297,28 @@ prepared and skips their setup.
 
 ## Apply modes
 
-`apply` reconciles by default. The two modifier flags are mutually exclusive:
+`apply --mode` is one single-valued axis stating the run's intent:
 
-- **bare `apply`** — reconcile: create what is missing, skip objects whose
-  recorded desired state matches current, converge drift that is reconcilable in
-  place, and fail closed on structural (destructive-identity) drift or foreign
-  ownership before any mutation.
-- **`apply --expect-new`** — greenfield assertion: additionally refuse to
-  proceed if any selected object already exists.
-- **`apply --converge-drifted`** — break-glass recovery for Bootwright-owned drift it
+- **`--mode reconcile`** (the default) — create what is missing, skip objects
+  whose recorded desired state matches current, converge drift that is
+  reconcilable in place, and fail closed on structural
+  (destructive-identity) drift or foreign ownership before any mutation.
+- **`--mode create`** — greenfield assertion: additionally refuse to proceed if
+  any selected object already exists.
+- **`--mode rebuild`** — break-glass recovery for Bootwright-owned drift it
   knows how to rebuild (managed-OS reinstall, owned-Ceph wipe-and-rebuild,
   drifted owned-object rebuild). It never touches foreign objects, leases,
   validation, or secret checks.
 
-!!! note "`--expect-new` and `--converge-drifted` cannot be combined"
-    On a destroy-protected `Environment`, `apply --converge-drifted` fails closed and
-    directs you to `destroy --force` first; see
+A rebuild that would wipe disks or zap OSDs additionally needs
+`--authorize data-loss` (or the interactive data-loss prompt); the mode states
+intent, the token accepts the risk.
+
+!!! note "Intent is one choice, not a combination"
+    `--mode` is single-valued, so a run cannot ask for both a greenfield
+    assertion and a rebuild. On a destroy-protected `Environment`,
+    `apply --mode rebuild` fails closed and directs you to
+    `destroy --authorize protected` first; see
     [Convergence and drift](#convergence-and-drift) and
     [Operations, recovery and teardown](../advanced/operations.md).
 
@@ -342,13 +348,13 @@ no-`--stage` default differs from `apply`: it is a **full lifecycle** teardown,
 the inverse of build-up, and unscoped it also sweeps context-owned VM artifacts
 and orphan ownership records. `--clusters` narrows that lifecycle to the named
 roots; `--machines` tears down only those machines' substrate and refuses an
-installed cluster's node without `--force`. The per-invocation matrix, the
+installed cluster's node without `--authorize installed-cluster-node`. The per-invocation matrix, the
 teardown order and what each stage retains are in
 [Operations, recovery and teardown](../advanced/operations.md#tearing-down-with-destroy).
 
 `Environment.spec.safety.destroyProtection` and `spec.safety.protectedKinds[]`
-both gate teardown: with either in force, `destroy` requires `--force` — the
-same flag an installed cluster's node needs. See
+both gate teardown: with either in force, `destroy` requires
+`--authorize protected`. See
 [Destroy protection](../advanced/operations.md#destroy-protection-and-the-authorization-boundary).
 
 !!! note "No stage means full lifecycle"

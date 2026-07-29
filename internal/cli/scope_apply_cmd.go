@@ -39,11 +39,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		dryRun          = options.defaultPlan
 		askBecomePass   bool
 		yes             bool
-		override        bool
-		allowDestroy    bool
-		expectNew       bool
 		trustOnFirstUse bool
 		verbose         bool
+		modeFlag        string
+		authorizeFlag   []string
 		stage           string
 		through         string
 		reclaimDevices  string
@@ -89,11 +88,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	}
 	addVerboseFlag(cmd, &verbose)
-	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
-	if converge.ScopeTargetsContainerInstall(scope) {
-		cmd.Flags().BoolVar(&override, "converge-drifted", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
-		cmd.Flags().BoolVar(&allowDestroy, "confirm-data-loss", false, "authorize a destructive --converge-drifted rebuild (machine reinstall with disks wiped, Ceph OSD zap) — required alongside --yes for such a rebuild, and pre-accepts the interactive data-loss prompt; --yes alone never authorizes data loss")
-	}
+	addModeFlag(cmd, &modeFlag, action)
+	addAuthorizeFlag(cmd, &authorizeFlag)
 	if usesAnsible {
 		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
 	}
@@ -119,7 +115,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 	}
 	if options.hideExecFlags {
-		for _, name := range []string{"reclaim-devices", "confirm-data-loss", "ask-become-pass", "verbose"} {
+		for _, name := range []string{"reclaim-devices", "ask-become-pass", "verbose"} {
 			_ = cmd.Flags().MarkHidden(name)
 		}
 	}
@@ -130,16 +126,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if options.defaultPlan && !dryRun {
 			return failErr(2, errors.New("plan is always read-only"))
 		}
-		if expectNew && override {
-			return failErr(2, errors.New("--expect-new and --converge-drifted are mutually exclusive: --expect-new asserts nothing exists yet, --converge-drifted rebuilds drift"))
+		mode, err := parseApplyMode(modeFlag)
+		if err != nil {
+			return failErr(2, err)
 		}
-		mode := workflow.ApplyModeContinue
-		switch {
-		case override:
-			mode = workflow.ApplyModeOverride
-		case expectNew:
-			mode = workflow.ApplyModeCreate
+		auth, err := parseAuthorizations(authorizeFlag)
+		if err != nil {
+			return failErr(2, err)
 		}
+		override := mode == workflow.ApplyModeRebuild
 		runScope := scope
 		runCommandLabel := commandLabel
 		if options.stageSelector {
@@ -203,8 +198,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		if mode == workflow.ApplyModeOverride && converge.ScopeSkipsStorageDeviceGate(runScope) && converge.OverrideStorageDeviceGateApplies(sel.Active, sel.WorkStorageClusters, sel.RenderState) {
-			return failErr(2, errors.New("--converge-drifted --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --converge-drifted --through base (runs the gate then the rebuild) or the full graph"))
+		if mode == workflow.ApplyModeRebuild && converge.ScopeSkipsStorageDeviceGate(runScope) && converge.OverrideStorageDeviceGateApplies(sel.Active, sel.WorkStorageClusters, sel.RenderState) {
+			return failErr(2, errors.New("--mode rebuild --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --mode rebuild --through base (runs the gate then the rebuild) or the full graph"))
 		}
 		plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, askBecomePass, dryRun)
 		if err != nil {
@@ -233,7 +228,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
 			var jsonReinstallDrift []string
-			if mode == workflow.ApplyModeOverride {
+			if mode == workflow.ApplyModeRebuild {
 				jsonReinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			}
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
@@ -276,7 +271,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			destructiveOverride = append(destructiveOverride, converge.KubeVirtTenantDestroyDescriptors(state, clustersDir, rebuiltHosts)...)
 			if reclaimDevices != "" {
 				ownedReclaim := converge.OwnedStorageClusters(objects)
-				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, override); err != nil {
+				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, auth.has(authorizeDataLoss)); err != nil {
 					return failErr(1, err)
 				}
 				if len(ownedReclaim) > 0 {
@@ -286,15 +281,19 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				}
 				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
 			}
+			allowDestroy := auth.has(authorizeDataLoss)
 			if override && allowDestroy {
 				destructiveOverride = append(destructiveOverride, filterReclaimDestructiveDescriptors(filterReclaimAuthorizedClusters(plan.State, objects))...)
+			}
+			if len(destructiveOverride) > 0 {
+				auth.note(authorizeDataLoss)
 			}
 			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
 			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)
 			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy)
-			noteIneffectiveAllowDestroy(stdout, allowDestroy, false, destructiveOverride)
+			warnUnusedAuthorizations(stdout, auth, false)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -317,7 +316,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 		}
 		if !dryRun && !yes && !plan.NoRemoteWork {
-			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(destructiveOverride, allowDestroy)) {
+			if !confirm(stdin, stdout, destructiveApplyConfirmPrompt(destructiveOverride, auth.has(authorizeDataLoss))) {
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
@@ -348,19 +347,19 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
-				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by the data-loss acknowledgement (--confirm-data-loss or interactive confirm)")
+				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by --authorize "+authorizeDataLoss+" or the interactive data-loss confirm")
 			}
 			planEntries := workflow.TaskLedgerEntries(dryRunTasks)
 			reporter.DryRunTasks(runCommandLabel, planEntries, limits, applyPlanGroups(planEntries, buildClusterDisplays(state)))
 			var reinstallDrift []string
-			if mode == workflow.ApplyModeOverride {
+			if mode == workflow.ApplyModeRebuild {
 				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, reclaimDevices, sel, reinstallDrift, ownershipRecords)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, reinstallDrift, ownershipRecords)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
-			noteIneffectiveAllowDestroy(stdout, allowDestroy, true, nil)
+			warnUnusedAuthorizations(stdout, auth, true)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printPlaybookDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)

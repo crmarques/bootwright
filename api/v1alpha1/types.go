@@ -135,8 +135,8 @@ const (
 	ComponentRoleOwner     = "owner"
 	ComponentRoleReference = "reference"
 
-	EnvironmentDestroyProtectionAllow            = "allow"
-	EnvironmentDestroyProtectionRequiredOverride = "requiredOverride"
+	EnvironmentDestroyProtectionAllow     = "allow"
+	EnvironmentDestroyProtectionProtected = "protected"
 
 	SecretStorageModeSource  = "source"
 	SecretStorageModeContext = "context"

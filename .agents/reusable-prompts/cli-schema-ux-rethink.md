@@ -66,7 +66,7 @@ verify their current form in `specs/`. Schema/UX-specific additions:
   comparing selected desired state with the recorded last apply. Do not accept a UX where
   users must infer drift from `apply`, `destroy`, logs, or generated files.
   Evaluate behavior both with and without the destructive-override flags (apply
-  `--converge-drifted` / destroy `--force`) for commands that support them; they
+  `--mode rebuild` / destroy `--force`) for commands that support them; they
   must never make the `diff` command mutate or hide drift.
 
 ## Posture
@@ -175,7 +175,7 @@ showing why larger changes do not buy enough UX, safety, clarity, or elegance.
   provider neutrality, understandable binding, lower risk, or no real gain from
   alternatives.
 - To change the CLI, define the mutation boundary, automation behavior, and
-  recovery path. Include the destructive-override flags (apply `--converge-drifted`
+  recovery path. Include the destructive-override flags (apply `--mode rebuild`
   / destroy `--force`) vs. their absence where relevant. To add or rename a
   desired-vs-real state-comparison command, define its non-mutating
   contract, report granularity, exit codes, JSON shape, and how it differs from
@@ -250,7 +250,7 @@ change that creates the most clarity for the least risk.
   be without hiding bindings.
 - Require a non-mutating state-comparison UX that reports absence at the right
   level and detailed drift only when live roots exist; do not let the
-  destructive-override flags (apply `--converge-drifted` / destroy `--force`)
+  destructive-override flags (apply `--mode rebuild` / destroy `--force`)
   change read-only behavior.
 - Every recommendation must pass the Aggregation test. Prefer fewer, stronger
   recommendations, and say plainly when the current state should stand.

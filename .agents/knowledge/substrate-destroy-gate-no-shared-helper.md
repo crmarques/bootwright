@@ -8,7 +8,7 @@ shared `foreign_gate.yml` helper was evaluated (2026-07-21) and rejected:
 - The gates are not actually uniform. KubeVirt runs two guards — a VM guard on
   a resolved ownership fact and a per-DataVolume loop guard asserting on live
   `kubectl` stdout; vSphere interleaves the gate with reachability and
-  `--skip-unreachable` handling; anaconda has three distinct refusal paths.
+  `--authorize unreachable-nodes` handling; anaconda has three distinct refusal paths.
 - Each `fail_msg` names the resource-specific ownership marker (domain XML
   context tags, `bootwright.io/managed-by` label, VM annotation) and its
   remediation. A parameterized helper genericizes exactly the text an operator

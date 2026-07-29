@@ -31,7 +31,7 @@ func TestClassifyApplyObjectsGroupsContainerInstall(t *testing.T) {
 		t.Fatalf("unexpected object key %q", o.ObjectKey)
 	}
 	if !o.Recorded() {
-		t.Fatal("a partially applied object must be Recorded (--expect-new must refuse it)")
+		t.Fatal("a partially applied object must be Recorded (--mode create must refuse it)")
 	}
 	if o.HasDrift() || o.HasForeign() {
 		t.Fatalf("partial-but-matching object must not be drift/foreign, got class %q", o.Class)

@@ -57,9 +57,9 @@ ledger/lease error, or Ctrl-C cancelling the context), the scheduler must stop
 launching newly-ready tasks. A task freed while a killed task's failure event
 drains would start under the dead ctx: `runOneApplyTask` stamps its
 cluster-install record started, `exec.CommandContext` kills ansible instantly,
-and a phantom started→failed record for work that never ran forces `--converge-drifted`
+and a phantom started→failed record for work that never ran forces `--mode rebuild`
 on the next apply. Running tasks drain; unstarted ones terminalize as blocked.
 
-**--converge-drifted never preempts:** with another run in flight, `apply --converge-drifted`
+**--mode rebuild never preempts:** with another run in flight, `apply --mode rebuild`
 fails closed before contacting any host — override authorizes destructive
 rebuilds, not lease preemption.

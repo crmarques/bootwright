@@ -13,14 +13,14 @@
   failed_when: false
   when:
     - (bootwright_ceph_batch_files | default([])) | length > 0
-    - (bootwright_apply_mode | default('continue')) != 'override'
+    - (bootwright_apply_mode | default('reconcile')) != 'rebuild'
 
 - name: Decide whether the rendered Ceph operations run one container per phase
   ansible.builtin.set_fact:
     bootwright_ceph_batch_enabled: >-
       {{
         ((bootwright_ceph_batch_files | default([])) | length > 0)
-        and ((bootwright_apply_mode | default('continue')) != 'override')
+        and ((bootwright_apply_mode | default('reconcile')) != 'rebuild')
         and ((bootwright_ceph_batch_probe.rc | default(1) | int) == 0)
       }}
   changed_when: false
@@ -31,8 +31,8 @@
       Running the rendered Ceph operations for
       {{ bootwright_selected_storage_cluster.name }} one cephadm shell per operation:
       {{
-        'the --converge-drifted rebuild path evaluates every operation against the live cluster'
-        if (bootwright_apply_mode | default('continue')) == 'override'
+        'the --mode rebuild rebuild path evaluates every operation against the live cluster'
+        if (bootwright_apply_mode | default('reconcile')) == 'rebuild'
         else (
           'the Ceph container has no python3 on PATH, so the batched operation scripts cannot guard themselves'
           if ((bootwright_ceph_batch_files | default([])) | length > 0)

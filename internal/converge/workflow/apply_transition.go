@@ -34,9 +34,9 @@ func applyTransitionAction(o ObjectClassification, mode ApplyMode) ApplyTransiti
 		return ApplyTransitionRefuse
 	case o.HasStructuralDrift():
 		switch {
-		case mode == ApplyModeOverride && isOverrideDestructive(o):
+		case mode == ApplyModeRebuild && isOverrideDestructive(o):
 			return ApplyTransitionRebuild
-		case mode == ApplyModeOverride:
+		case mode == ApplyModeRebuild:
 			return ApplyTransitionReconcile
 		default:
 			return ApplyTransitionRefuse

@@ -17,7 +17,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 		ApplyTaskKindPlaybook:               true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
-		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --converge-drifted taxonomy", len(overrideReconfigureOnlyKinds), len(want))
+		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --mode rebuild taxonomy", len(overrideReconfigureOnlyKinds), len(want))
 	}
 	for kind := range want {
 		if !overrideReconfigureOnlyKinds[kind] {
@@ -26,7 +26,7 @@ func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 	}
 	for kind := range overrideReconfigureOnlyKinds {
 		if !want[kind] {
-			t.Errorf("overrideReconfigureOnlyKinds has unpublished kind %q; add it to the specs/state-model.md --converge-drifted taxonomy", kind)
+			t.Errorf("overrideReconfigureOnlyKinds has unpublished kind %q; add it to the specs/state-model.md --mode rebuild taxonomy", kind)
 		}
 	}
 }
@@ -57,8 +57,8 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 	if err == nil {
 		t.Fatal("create must refuse when objects already exist")
 	}
-	if !strings.Contains(err.Error(), "--expect-new") {
-		t.Fatalf("create error must name --expect-new: %v", err)
+	if !strings.Contains(err.Error(), "--mode create") {
+		t.Fatalf("create error must name --mode create: %v", err)
 	}
 	missing := classifyTask("addon.demo.new", "clusterAddon", "demo")
 	objs2, err := ClassifyApplyObjects([]ApplyTask{missing}, t.TempDir())
@@ -82,7 +82,7 @@ func TestEvaluateApplyModePreflightContinueFailsStructuralDriftAndForeign(t *tes
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
-	err = EvaluateApplyModePreflight(ApplyModeContinue, objs)
+	err = EvaluateApplyModePreflight(ApplyModeReconcile, objs)
 	if err == nil {
 		t.Fatal("continue must refuse foreign and destructive structural drift")
 	}
@@ -106,7 +106,7 @@ func TestEvaluateApplyModePreflightContinueReconcilesReconfigureOnlyDrift(t *tes
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
-	if err := EvaluateApplyModePreflight(ApplyModeContinue, objs); err != nil {
+	if err := EvaluateApplyModePreflight(ApplyModeReconcile, objs); err != nil {
 		t.Fatalf("continue over reconfigure-only drift must reconcile in place, got %v", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestEvaluateApplyModePreflightContinueAllMatchProceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
-	if err := EvaluateApplyModePreflight(ApplyModeContinue, objs); err != nil {
+	if err := EvaluateApplyModePreflight(ApplyModeReconcile, objs); err != nil {
 		t.Fatalf("continue over an all-match set must proceed (and no-op), got %v", err)
 	}
 }
@@ -180,7 +180,7 @@ func TestOverrideDestructiveMachineSubstrate(t *testing.T) {
 
 func TestEvaluateApplyModePreflightOverrideOnlyFailsForeign(t *testing.T) {
 	objs := preflightObjects(t, t.TempDir())
-	err := EvaluateApplyModePreflight(ApplyModeOverride, objs)
+	err := EvaluateApplyModePreflight(ApplyModeRebuild, objs)
 	if err == nil {
 		t.Fatal("override must refuse foreign objects")
 	}

@@ -104,7 +104,7 @@ func InfraComponentDestroyBlockError(blocks []InfraComponentDestroyBlock) error 
 		}
 		parts = append(parts, fmt.Sprintf("%s (%s context(s): %s)", block.Name, detail, strings.Join(block.Contexts, ", ")))
 	}
-	return fmt.Errorf("refusing to tear down shared infra-component(s) that other contexts own or reference: %s; destroy or detach them from the owning context first, or re-run with --force to tear them down regardless", strings.Join(parts, "; "))
+	return fmt.Errorf("refusing to tear down shared infra-component(s) that other contexts own or reference: %s; destroy or detach them from the owning context first, or re-run with --authorize shared-infra to tear them down regardless", strings.Join(parts, "; "))
 }
 
 func mergeUniqueSorted(a, b []string) []string {

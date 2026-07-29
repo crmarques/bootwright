@@ -41,11 +41,18 @@ const (
 	destroyLeavesOrphanHint   = "a full `bootwright destroy` does not reclaim this record — destroy it while it is still declared, or clean it up manually"
 )
 
-func destroyConfirmPrompt(storagePlanned bool) string {
-	if storagePlanned {
+func destroyConfirmPrompt(dataLossUnauthorized bool) string {
+	if dataLossUnauthorized {
 		return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
 	}
 	return "Continue with destroy? [y/N] (default: no): "
+}
+
+func destroyDataLossYesGuard(storageClusters []string, yes, allowDestroy bool) error {
+	if allowDestroy || !yes {
+		return nil
+	}
+	return fmt.Errorf("destroy would destroy data: storage cluster(s) %s are torn down with cephadm rm-cluster --zap-osds and their declared devices wiped. --yes does not authorize data loss: re-run `bootwright destroy --authorize %s --yes` with the same --stage/--clusters selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with --clusters to narrow the work set", strings.Join(storageClusters, ", "), authorizeDataLoss)
 }
 
 func destroySweepReclaims(kind string) bool {
@@ -68,7 +75,7 @@ func printSkippedOwnershipRecords(w io.Writer, warnings []error) {
 	}
 }
 
-func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraComponentDestroyDecision, override bool) {
+func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraComponentDestroyDecision, authorized bool) {
 	if len(decision.Blocks) == 0 && len(decision.Warnings) == 0 {
 		return
 	}
@@ -85,10 +92,10 @@ func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraCompon
 				relation = "owned (no ownership record in this context) by "
 			}
 			detail := relation + strings.Join(block.Contexts, ", ")
-			if override {
-				detail += "; WILL BE TORN DOWN because --force was supplied"
+			if authorized {
+				detail += "; WILL BE TORN DOWN because --authorize " + authorizeSharedInfra + " was supplied"
 			} else {
-				detail += "; refused unless --force"
+				detail += "; refused unless --authorize " + authorizeSharedInfra
 			}
 			p.Status(output.StatusWarn, label, detail)
 		}

@@ -106,9 +106,9 @@ type DryRunAddonPlan struct {
 }
 
 type DryRunDestroySafety struct {
-	OverrideRequired bool     `json:"overrideRequired"`
-	Override         bool     `json:"override"`
-	Reasons          []string `json:"reasons"`
+	AuthorizationRequired bool     `json:"authorizationRequired"`
+	Authorized            bool     `json:"authorized"`
+	Reasons               []string `json:"reasons"`
 }
 
 func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, executable string, bundleDir string, scope Scope, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *DryRunDestroySafety, transitions *DryRunTransitions, forks int) (DryRunReport, error) {

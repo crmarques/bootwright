@@ -138,11 +138,11 @@ func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
 			Remediation: remediation,
 			Message:     message,
 		}, true
-	case "StorageCephManagement":
+	case "StorageCephMgmtGateway":
 		if field != "dnsName" {
 			return Diagnostic{}, false
 		}
-		return renamedToDNSLabel(message, "StorageCluster", "spec.ceph.management", "StorageCluster name"), true
+		return renamedToDNSLabel(message, "StorageCluster", "spec.ceph.mgmtGateway", "StorageCluster name"), true
 	case "StorageObjectGatewayPublic":
 		if field != "dnsName" {
 			return Diagnostic{}, false

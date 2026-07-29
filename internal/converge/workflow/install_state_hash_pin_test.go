@@ -49,10 +49,10 @@ func TestClusterInstallHashesPinnedPayload(t *testing.T) {
 		pinnedStructural = "sha256:c547d9a0f49e761a9b9855d9dee7bedaff62bddc54a8363e21f2ee8c5bba89bb"
 	)
 	if desired != pinnedDesired {
-		t.Fatalf("cluster install desired hash moved: got %s want %s; the payload is persisted in every cluster install record, so a reordering invalidates install-inputs matching, --expect-new and the --converge-drifted reinstall guard on every installed fleet", desired, pinnedDesired)
+		t.Fatalf("cluster install desired hash moved: got %s want %s; the payload is persisted in every cluster install record, so a reordering invalidates install-inputs matching, --mode create and the --mode rebuild reinstall guard on every installed fleet", desired, pinnedDesired)
 	}
 	if structural != pinnedStructural {
-		t.Fatalf("cluster install structural hash moved: got %s want %s; the payload is persisted in every cluster install record, so a reordering invalidates install-inputs matching, --expect-new and the --converge-drifted reinstall guard on every installed fleet", structural, pinnedStructural)
+		t.Fatalf("cluster install structural hash moved: got %s want %s; the payload is persisted in every cluster install record, so a reordering invalidates install-inputs matching, --mode create and the --mode rebuild reinstall guard on every installed fleet", structural, pinnedStructural)
 	}
 }
 

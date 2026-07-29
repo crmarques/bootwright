@@ -93,7 +93,7 @@
       {{
         'The cluster is reachable: if you trust it, re-stamp the marker with that fsid to adopt it.'
         if (bootwright_ceph_override_reachable | default(false) | bool)
-        else 'The cluster is unreachable and its bootstrap never completed: re-run with --converge-drifted to rebuild it.'
+        else 'The cluster is unreachable and its bootstrap never completed: re-run with --mode rebuild to rebuild it.'
       }}
   when:
     - (bootwright_ceph_override_conf | default({})).content is defined
@@ -101,7 +101,7 @@
     - (bootwright_ceph_override_owned_fsid | default('') | length == 0)
     - >-
       (bootwright_ceph_override_reachable | default(false) | bool)
-      or ((bootwright_apply_mode | default('continue')) != 'override')
+      or ((bootwright_apply_mode | default('reconcile')) != 'rebuild')
 
 - name: Enforce apply mode for the Ceph cluster
   ansible.builtin.include_role:
@@ -130,7 +130,7 @@
   ansible.builtin.set_fact:
     bootwright_ceph_rebuild_cleanup_required: >-
       {{
-        (bootwright_apply_mode | default('continue')) == 'override'
+        (bootwright_apply_mode | default('reconcile')) == 'rebuild'
         and (bootwright_ceph_override_fsid | default('') | length > 0)
         and
         (

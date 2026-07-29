@@ -18,9 +18,9 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(existing) > 0 {
-			return fmt.Errorf("apply --expect-new requires a greenfield environment and these objects already exist: %s; drop --expect-new to reconcile them, or run `bootwright apply --converge-drifted` to rebuild drifted objects", summarizeApplyObjects(existing))
+			return fmt.Errorf("apply --mode create requires a greenfield environment and these objects already exist: %s; use --mode reconcile to reconcile them, or run `bootwright apply --mode rebuild` to rebuild drifted objects", summarizeApplyObjects(existing))
 		}
-	case ApplyModeContinue:
+	case ApplyModeReconcile:
 		var drifted, foreign []ObjectClassification
 		for _, o := range objects {
 			switch {
@@ -33,7 +33,7 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 		if len(drifted)+len(foreign) > 0 {
 			return continueDriftRefusal(drifted, foreign)
 		}
-	case ApplyModeOverride:
+	case ApplyModeRebuild:
 		var foreign []ObjectClassification
 		for _, o := range objects {
 			if o.HasForeign() {
@@ -41,7 +41,7 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(foreign) > 0 {
-			return fmt.Errorf("apply --converge-drifted never rebuilds objects recorded by another manager: %s; resolve ownership before retrying", summarizeApplyObjects(foreign))
+			return fmt.Errorf("apply --mode rebuild never rebuilds objects recorded by another manager: %s; resolve ownership before retrying", summarizeApplyObjects(foreign))
 		}
 	}
 	return nil
@@ -55,7 +55,7 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 			items = append(items, fmt.Sprintf("%s (would %s)", o.Label, structuralRebuildConsequence(o)))
 		}
 		sort.Strings(items)
-		parts = append(parts, fmt.Sprintf("apply refuses this change to %s: it is not a safe in-place reconcile. To proceed, revert the change to match the recorded desired state, or — if you intend the rebuild — re-run with `bootwright apply --converge-drifted` (a destructive rebuild additionally needs `--confirm-data-loss`, or on a protected environment a `bootwright destroy` for that scope first)", strings.Join(items, ", ")))
+		parts = append(parts, fmt.Sprintf("apply refuses this change to %s: it is not a safe in-place reconcile. To proceed, revert the change to match the recorded desired state, or — if you intend the rebuild — re-run with `bootwright apply --mode rebuild` (a destructive rebuild additionally needs `--authorize data-loss`, or on a protected environment a `bootwright destroy` for that scope first)", strings.Join(items, ", ")))
 	}
 	if len(foreign) > 0 {
 		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; resolve ownership before retrying (foreign objects are never rebuilt)", summarizeApplyObjects(foreign)))

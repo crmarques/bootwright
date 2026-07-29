@@ -81,7 +81,7 @@ verify their current form in `specs/`. Prompt-specific additions:
   non-mutating command to compare selected desired state with the recorded last apply. The
   spec/UX must distinguish this from `status`, `render`, `apply`, `destroy`, and
   dry-run, and define how the destructive-override flags (currently apply
-  `--converge-drifted` / destroy `--force`) behave or are rejected without
+  `--mode rebuild` / destroy `--force`) behave or are rejected without
   mutation.
 
 ## Posture
@@ -171,7 +171,7 @@ Per issue: **Severity** (Critical/High/Medium/Low), **Evidence** (command, help,
 spec, doc, example path), **Problem**, **User impact**, **Recommendation**. Cover
 help text, dry-run, scoping, destructive-action confirmation, non-interactive use,
 output locations, error actionability, secret/trust handling, desired-vs-real
-state checking, the destructive-override flags (apply `--converge-drifted` /
+state checking, the destructive-override flags (apply `--mode rebuild` /
 destroy `--force`) vs. their absence, and generated-output boundaries.
 
 ## 6. Swap and Evolution Invariants
@@ -212,6 +212,6 @@ follow-up change.
 - Require a non-mutating state-comparison contract with a good command name and
   objective reports: succinct root absence, granular drift for existing roots,
   and no mutation or report suppression from the destructive-override flags
-  (apply `--converge-drifted` / destroy `--force`).
+  (apply `--mode rebuild` / destroy `--force`).
 - Every recommendation must pass the Aggregation test. Prefer fewer, stronger
   recommendations; when something is already right, say so briefly and move on.

@@ -161,7 +161,7 @@ the rule:
 
 ```text
 bootwright apply --machines dc1-master-1 --yes
-bootwright destroy --machines dc1-master-1 --force
+bootwright destroy --machines dc1-master-1 --authorize installed-cluster-node
 ```
 
 Two consequences matter in a fleet. The narrowing covers operator-supplied
@@ -211,7 +211,7 @@ bootwright apply --stage deps --through base --clusters dc1-ocp --yes
 
 ## See also
 
-- [Operations & recovery](operations.md) — destroy stages, `--force`, and
+- [Operations & recovery](operations.md) — destroy stages, `--authorize` tokens, and
   recovery patterns for a fleet.
 - [Reference examples](examples.md) — `baremetal-redfish-fleet` and the larger
   multi-DC platform tree.

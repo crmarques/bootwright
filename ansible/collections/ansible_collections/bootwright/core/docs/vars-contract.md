@@ -629,7 +629,7 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_machine_task_cluster_name` | ContainerCluster or managed OS group name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
 | `bootwright_machine_task_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
 | `bootwright_machine_task_provider_host_name` | Provider host name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
-| `bootwright_apply_mode` | Apply mode from the CLI: `create`, `continue` (default), or `override`. `override` authorizes Bootwright-owned reconfigure/rebuild; roles gate destructive resets on it |
+| `bootwright_apply_mode` | Apply intent from the CLI `--mode` flag: `create`, `reconcile` (default), or `rebuild`. `rebuild` authorizes Bootwright-owned reconfigure/rebuild; roles gate destructive resets on it |
 | `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 
 The OpenShift agent role uses those vars to create and publish one cluster ISO,

@@ -48,15 +48,15 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
 	releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 	var substrateReset []string
-	if mode == workflow.ApplyModeOverride {
+	if mode == workflow.ApplyModeRebuild {
 		if len(ocpReinstalls) > 0 {
-			cliout.NewContinuation(stdout).Warning("converge-drifted", "reinstalls ContainerCluster(s) — node disks wiped: "+strings.Join(ocpReinstalls, "; "))
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls ContainerCluster(s) — node disks wiped: "+strings.Join(ocpReinstalls, "; "))
 		}
 		if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
-			cliout.NewContinuation(stdout).Warning("converge-drifted", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
 		}
 		if rebuilt := converge.OverrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
-			cliout.NewContinuation(stdout).Warning("converge-drifted", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type/erasure profile, or a CephFS metadata or default data pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type/erasure profile, or a CephFS metadata or default data pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
 		}
 		converge.ApplyReconcilableOnlyStorageExtraVar(plan, converge.ReconcilableOnlyStorageClusters(objects))
 		converge.ApplyRebuildAuthorizedStorageExtraVar(plan, converge.RebuildAuthorizedStorageClusters(objects))
@@ -74,7 +74,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 						extra = append(extra, key)
 					}
 				}
-				cliout.NewContinuation(stdout).Warning("confirm-data-loss", "additionally authorizes destructive rebuild of storage sub-objects whose records match but whose LIVE structural identity may have drifted out of band: "+strings.Join(extra, ", ")+". Each is rebuilt (its data destroyed) only if its live pool/filesystem identity mismatches the declaration; an in-sync object is untouched.")
+				cliout.NewContinuation(stdout).Warning("authorize data-loss", "additionally authorizes destructive rebuild of storage sub-objects whose records match but whose LIVE structural identity may have drifted out of band: "+strings.Join(extra, ", ")+". Each is rebuilt (its data destroyed) only if its live pool/filesystem identity mismatches the declaration; an in-sync object is untouched.")
 			}
 			subObjectKeys = widened
 		}
@@ -86,7 +86,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 			}
 		}
 		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
-			cliout.NewContinuation(stdout).Warning("converge-drifted", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
 			substrateReset = reset
 		}
 	}
@@ -193,19 +193,6 @@ func reclaimUnmatchedError(unmatched, owned, declared []string) error {
 	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of owned Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
 }
 
-func noteIneffectiveAllowDestroy(stdout io.Writer, allowDestroy, dryRun bool, destructive []string) {
-	if !allowDestroy {
-		return
-	}
-	if dryRun {
-		cliout.NewContinuation(stdout).Warning("dry-run", "--confirm-data-loss is not consumed by a dry-run; the data-loss acknowledgement applies only to a real run")
-		return
-	}
-	if len(destructive) == 0 {
-		cliout.NewContinuation(stdout).Warning("confirm-data-loss", "--confirm-data-loss had no effect: this apply plans no data-destroying action (no destructive --converge-drifted rebuild, no owned-cluster device reclaim)")
-	}
-}
-
 func warnDestructiveApply(stdout io.Writer, destructive []string) {
 	if len(destructive) == 0 {
 		return
@@ -224,5 +211,5 @@ func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool) e
 	if len(destructive) == 0 || allowDestroy || !yes {
 		return nil
 	}
-	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: add --confirm-data-loss to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set", strings.Join(destructive, ", "))
+	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: re-run `bootwright apply --authorize %s --yes` with the same --stage/--clusters selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set", strings.Join(destructive, ", "), authorizeDataLoss)
 }

@@ -7,13 +7,14 @@ import (
 )
 
 const (
-	InfraDestroyContextSweepExtraVar = "bootwright_infra_destroy_context_sweep"
-	DestroyClusterScopeExtraVar      = "bootwright_destroy_cluster_scope"
-	DestroyForceUnownedExtraVar      = "bootwright_destroy_force_unowned"
-	DestroySkipUnreachableExtraVar   = "bootwright_destroy_skip_unreachable"
+	InfraDestroyContextSweepExtraVar    = "bootwright_infra_destroy_context_sweep"
+	DestroyClusterScopeExtraVar         = "bootwright_destroy_cluster_scope"
+	DestroyAuthorizeUnownedVMsExtraVar  = "bootwright_destroy_authorize_unowned_vms"
+	DestroyAuthorizeUnownedNetsExtraVar = "bootwright_destroy_authorize_unowned_networks"
+	DestroySkipUnreachableExtraVar      = "bootwright_destroy_skip_unreachable"
 )
 
-func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, forceUnowned bool, skipUnreachable bool) {
+func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, unownedVMs bool, unownedNetworks bool, skipUnreachable bool) {
 	switch {
 	case len(machineScope) > 0:
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.DestroyMachineScopeExtraVar+"="+strings.Join(machineScope, ","))
@@ -27,8 +28,11 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 	if plan.StorageWorkNames != nil {
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.DestroyStorageScopeExtraVar+"="+strings.Join(plan.StorageWorkNames, ","))
 	}
-	if forceUnowned {
-		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyForceUnownedExtraVar+"=true")
+	if unownedVMs {
+		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyAuthorizeUnownedVMsExtraVar+"=true")
+	}
+	if unownedNetworks {
+		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyAuthorizeUnownedNetsExtraVar+"=true")
 	}
 	if skipUnreachable {
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroySkipUnreachableExtraVar+"=true")

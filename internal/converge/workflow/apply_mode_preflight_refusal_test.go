@@ -16,7 +16,7 @@ func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
-	err = EvaluateApplyModePreflight(ApplyModeContinue, objs)
+	err = EvaluateApplyModePreflight(ApplyModeReconcile, objs)
 	if err == nil {
 		t.Fatal("continue must refuse structural drift")
 	}
@@ -24,7 +24,7 @@ func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	for _, want := range []string{
 		"os.demo", "disks wiped",
 		"StorageCluster/demo", "OSD data",
-		"revert", "--converge-drifted",
+		"revert", "--mode rebuild",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("refusal must contain %q: %v", want, msg)

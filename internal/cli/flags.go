@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-preferred-id-key"}
@@ -91,7 +92,20 @@ func addOutputFlagDryRun(cmd *cobra.Command, p *string) {
 }
 
 func addYesFlag(cmd *cobra.Command, p *bool, action string) {
-	cmd.Flags().BoolVar(p, "yes", false, "skip the "+action+" confirmation prompt")
+	cmd.Flags().BoolVar(p, "yes", false, "answer the ordinary "+action+" confirmation prompt; it never authorizes data loss or any other named risk (see --authorize)")
+}
+
+func addModeFlag(cmd *cobra.Command, p *string, action string) {
+	cmd.Flags().StringVar(p, "mode", string(workflow.ApplyModeReconcile), "intent of this "+action+" ("+strings.Join(workflow.ApplyModeNames(), "|")+"): create asserts a greenfield run and fails if any selected object already exists; reconcile creates what is missing, skips what matches, and fails closed on drift; rebuild authorizes Bootwright-owned destructive rebuilds of drifted owned objects (a rebuild that destroys data additionally needs --authorize "+authorizeDataLoss+")")
+	registerFlagCompletion(cmd, "mode", workflow.ApplyModeNames())
+}
+
+func parseApplyMode(value string) (workflow.ApplyMode, error) {
+	mode := workflow.ApplyMode(strings.TrimSpace(value))
+	if !mode.Valid() {
+		return "", fmt.Errorf("--mode must be one of %s", strings.Join(workflow.ApplyModeNames(), ", "))
+	}
+	return mode, nil
 }
 
 func addAskBecomePassFlag(cmd *cobra.Command, p *bool) {

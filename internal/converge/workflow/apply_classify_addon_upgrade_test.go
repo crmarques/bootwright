@@ -89,13 +89,13 @@ func TestAddonPullSecretResourceKeyUpgradeIsNotARefusal(t *testing.T) {
 			t.Fatalf("%s: add-on drift caused only by the added pull-secret resource key must be reconcilable, not a rebuild", o.Label)
 		}
 		if o.HasStructuralDrift() {
-			t.Fatalf("%s: add-on drift must never present as structural drift; apply would refuse until the operator passes --converge-drifted", o.Label)
+			t.Fatalf("%s: add-on drift must never present as structural drift; apply would refuse until the operator passes --mode rebuild", o.Label)
 		}
 	}
 	if seen == 0 {
 		t.Fatal("no add-on objects classified")
 	}
-	if err := EvaluateApplyModePreflight(ApplyModeContinue, objects); err != nil {
+	if err := EvaluateApplyModePreflight(ApplyModeReconcile, objects); err != nil {
 		t.Fatalf("plain apply must not refuse an installed fleet whose add-on records predate the pull-secret resource key: %v", err)
 	}
 	if labels := OverrideDestructiveDriftedObjects(objects); len(labels) != 0 {

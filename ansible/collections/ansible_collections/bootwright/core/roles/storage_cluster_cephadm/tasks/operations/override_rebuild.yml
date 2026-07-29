@@ -17,7 +17,7 @@
   failed_when: false
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Resolve live Ceph pool for structural override rebuild
   ansible.builtin.set_fact:
@@ -27,7 +27,7 @@
           | list | first | default({})) }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide Ceph pool structural override rebuild
   ansible.builtin.set_fact:
@@ -41,7 +41,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide whether the controller acknowledged destroying this Ceph pool
   ansible.builtin.set_fact:
@@ -55,7 +55,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Refuse unacknowledged Ceph pool destroy for override rebuild
   ansible.builtin.assert:
@@ -66,20 +66,20 @@
     fail_msg: >-
       Ceph pool {{ bootwright_ceph_op_idempotency_name }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
-      cluster but its destructive rebuild was not acknowledged — --yes/--converge-drifted alone
+      cluster but its destructive rebuild was not acknowledged — --yes and --mode rebuild alone
       never authorize data loss (the live pool no longer matches the recorded state,
       e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --converge-drifted --confirm-data-loss --clusters
+      `bootwright apply --mode rebuild --authorize data-loss --clusters
       {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
       recreating the pool, or align the desired spec with the live pool.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Rebuild structurally drifted Ceph pool for override
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_pool_recreate | default(false) | bool
     - bootwright_ceph_op_pool_rebuild_acked | default(false) | bool
   block:
@@ -133,11 +133,11 @@
       - bootwright_ceph_op_pool_rm.rc | default(1) == 0
     fail_msg: >-
       Failed to delete structurally drifted Ceph pool
-      {{ bootwright_ceph_op_idempotency_name }} for an --converge-drifted rebuild; refusing to
+      {{ bootwright_ceph_op_idempotency_name }} for an --mode rebuild rebuild; refusing to
       continue with the pool partly removed.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_pool_recreate | default(false) | bool
     - bootwright_ceph_op_pool_rebuild_acked | default(false) | bool
 
@@ -157,7 +157,7 @@
   failed_when: false
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Resolve live CephFS for structural override rebuild
   ansible.builtin.set_fact:
@@ -167,7 +167,7 @@
           | list | first | default({})) }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Inspect existing CephFS detail for default-data-pool override rebuild
   ansible.builtin.command:
@@ -186,7 +186,7 @@
   failed_when: false
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Inspect Ceph pools for CephFS default-data-pool resolution
   ansible.builtin.command:
@@ -206,7 +206,7 @@
   failed_when: false
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Resolve live CephFS default data pool for structural override rebuild
   ansible.builtin.set_fact:
@@ -218,7 +218,7 @@
          | map(attribute='pool_name') | list | first | default('') }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide CephFS structural override rebuild
   ansible.builtin.set_fact:
@@ -240,7 +240,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide whether the controller acknowledged destroying this CephFS
   ansible.builtin.set_fact:
@@ -254,7 +254,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Refuse unacknowledged CephFS destroy for override rebuild
   ansible.builtin.assert:
@@ -265,20 +265,20 @@
     fail_msg: >-
       CephFS {{ bootwright_ceph_op_idempotency_name }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
-      cluster but its destructive rebuild was not acknowledged — --yes/--converge-drifted alone
+      cluster but its destructive rebuild was not acknowledged — --yes and --mode rebuild alone
       never authorize data loss (the live filesystem no longer matches the recorded
       state, e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --converge-drifted --confirm-data-loss --clusters
+      `bootwright apply --mode rebuild --authorize data-loss --clusters
       {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
       recreating the filesystem, or align the desired spec with the live filesystem.
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Rebuild structurally drifted CephFS for override
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_fs_recreate | default(false) | bool
     - bootwright_ceph_op_fs_rebuild_acked | default(false) | bool
   block:
@@ -327,7 +327,7 @@
   failed_when: false
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Resolve live Ceph erasure-code profile for structural override rebuild
   ansible.builtin.set_fact:
@@ -336,7 +336,7 @@
           | default('{}', true)) | from_json }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide Ceph erasure-code profile structural override rebuild
   ansible.builtin.set_fact:
@@ -350,7 +350,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Decide whether the controller acknowledged destroying the erasure-coded pool
   ansible.builtin.set_fact:
@@ -364,7 +364,7 @@
       }}
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Refuse unacknowledged erasure-coded pool destroy for override rebuild
   ansible.builtin.assert:
@@ -376,19 +376,19 @@
       Erasure-code profile {{ bootwright_ceph_op.structural.profile }} on storage cluster
       {{ bootwright_selected_storage_cluster.name }} structurally drifted on the live
       cluster but destroying its dependent pool {{ bootwright_ceph_op.structural.pool }}
-      was not acknowledged — --yes/--converge-drifted alone never authorize data loss (the live
+      was not acknowledged — --yes and --mode rebuild alone never authorize data loss (the live
       profile no longer matches the recorded state, e.g. it changed out-of-band or the
-      converge records were lost). Re-run `bootwright apply --converge-drifted --confirm-data-loss
+      converge records were lost). Re-run `bootwright apply --mode rebuild --authorize data-loss
       --clusters {{ bootwright_selected_storage_cluster.name }}` to authorize destroying
       and recreating the pool, or align the desired spec with the live profile.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
 
 - name: Rebuild structurally drifted erasure-coded pool for override
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_ec_recreate | default(false) | bool
     - bootwright_ceph_op_ec_rebuild_acked | default(false) | bool
   block:
@@ -443,10 +443,10 @@
     fail_msg: >-
       Failed to delete pool {{ bootwright_ceph_op.structural.pool }} that uses the
       structurally drifted erasure-code profile {{ bootwright_ceph_op.structural.profile }}
-      for an --converge-drifted rebuild; refusing to continue with the pool partly removed.
+      for an --mode rebuild rebuild; refusing to continue with the pool partly removed.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_ec_recreate | default(false) | bool
     - bootwright_ceph_op_ec_rebuild_acked | default(false) | bool
 
@@ -466,6 +466,6 @@
   failed_when: bootwright_ceph_op_ec_profile_rm.rc != 0
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
-    - (bootwright_apply_mode | default('continue')) == 'override'
+    - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
     - bootwright_ceph_op_ec_recreate | default(false) | bool
     - bootwright_ceph_op_ec_rebuild_acked | default(false) | bool

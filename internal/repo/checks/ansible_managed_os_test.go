@@ -15,7 +15,7 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 	foreign := probe[findAnsibleTask(t, probe, "Refuse foreign or unmarked reachable managed OS")]
 	foreignWhen := fmt.Sprint(foreign["when"])
 	if strings.Contains(foreignWhen, "override") {
-		t.Fatalf("foreign managed-OS refusal must fail closed regardless of apply_mode (no --converge-drifted escape), got when=%v", foreign["when"])
+		t.Fatalf("foreign managed-OS refusal must fail closed regardless of apply_mode (no --mode rebuild escape), got when=%v", foreign["when"])
 	}
 	if !strings.Contains(foreignWhen, "bootwright_os_pre_marker_owned") || !strings.Contains(foreignWhen, "bootwright_managed_os_already_ready") {
 		t.Fatalf("foreign refusal must fire for a reachable host that is not Bootwright-owned, got when=%v", foreign["when"])
@@ -23,8 +23,8 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 
 	drifted := probe[findAnsibleTask(t, probe, "Refuse drifted Bootwright-owned managed OS without override")]
 	driftedWhen := fmt.Sprint(drifted["when"])
-	if !strings.Contains(driftedWhen, "override") {
-		t.Fatalf("drifted owned managed-OS refusal must be relaxed by --converge-drifted, got when=%v", drifted["when"])
+	if !strings.Contains(driftedWhen, "'rebuild'") {
+		t.Fatalf("drifted owned managed-OS refusal must be relaxed by --mode rebuild, got when=%v", drifted["when"])
 	}
 	if !strings.Contains(driftedWhen, "bootwright_os_pre_marker_owned") {
 		t.Fatalf("drifted refusal must apply only to a Bootwright-owned host, got when=%v", drifted["when"])

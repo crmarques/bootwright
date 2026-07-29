@@ -158,13 +158,13 @@ dnsmasq and you maintain it by hand.
 
 ## Tear down
 
-This environment sets `safety.destroyProtection: requiredOverride`, so `destroy`
-refuses to run without `--force` — a routine `destroy --yes` cannot tear it
+This environment sets `safety.destroyProtection: protected`, so `destroy`
+refuses to run without `--authorize protected` — a routine `destroy --yes` cannot tear it
 down by accident.
 
 ```bash
-bootwright destroy --stage clusters --force --yes   # remove Ceph services/records
-bootwright destroy --stage infra --force --yes      # remove VMs, network, services
+bootwright destroy --stage clusters --authorize protected,data-loss --yes   # remove Ceph services/records
+bootwright destroy --stage infra --authorize protected --yes               # remove VMs, network, services
 ```
 
 ---

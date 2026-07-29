@@ -37,7 +37,7 @@
     bootwright_libvirt_domain_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_libvirt_managed_os_reset: >-
       {{ (bootwright_component.osManaged | default(false) | bool)
-         and ((bootwright_apply_mode | default('continue')) == 'override')
+         and ((bootwright_apply_mode | default('reconcile')) == 'rebuild')
          and (bootwright_current_cluster.name
               in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)) }}
     bootwright_libvirt_data_disks: "{{ bootwright_component.profile.dataDisks | default([]) }}"

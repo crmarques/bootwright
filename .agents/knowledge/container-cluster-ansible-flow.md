@@ -7,7 +7,7 @@ OpenShift agent install state — the generated ISO, manifests, and per-cluster
 artifacts — lives on the controller, not on the cluster nodes, so there is no
 managed host to reach and no device to wipe. A never-provisioned cluster has
 no controller state to remove and its destroy is a clean no-op. There is no
-node reachability to classify on this layer, so `--skip-unreachable` has no
+node reachability to classify on this layer, so `--authorize unreachable-nodes` has no
 effect here; the play still plumbs the gate var through only for uniformity
 with the storage/machine teardown plays that do classify real nodes.
 

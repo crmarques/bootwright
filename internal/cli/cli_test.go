@@ -143,9 +143,9 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, want := range []string{"--converge-drifted", "reinstall", "wipe-and-rebuild"} {
+	for _, want := range []string{"--mode", "create|reconcile|rebuild", "--authorize", "data-loss", "unowned-networks"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("apply --converge-drifted help must name its destructive scope, missing %q:\n%s", want, stdout)
+			t.Fatalf("apply help must name the intent and authorization axes, missing %q:\n%s", want, stdout)
 		}
 	}
 	for _, reject := range []string{"--scope ", "--cluster ", "--scoped-validation", "--check", "--stream-ansible", "--ansible-playbook", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
@@ -862,15 +862,66 @@ func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testi
 	}
 }
 
-func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
+func TestDestroyUnownedAuthorizationsEmitSeparateExtraVars(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 
 	help, stderr, code := runCLI(t, "destroy", "--help")
 	if code != 0 {
 		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(help, "--include-unowned") {
-		t.Fatalf("destroy help must document --include-unowned:\n%s", help)
+	for _, want := range []string{"unowned-vms", "unowned-networks"} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("destroy help must document the %s authorization:\n%s", want, help)
+		}
+	}
+
+	extraVars := func(t *testing.T, args ...string) []string {
+		t.Helper()
+		stdout, stderr, code := runCLI(t, args...)
+		if code != 0 {
+			t.Fatalf("%v exited %d, stderr=%q", args, code, stderr)
+		}
+		var report scopeDryRunReport
+		if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+			t.Fatalf("decode json: %v\n%s", err, stdout)
+		}
+		return report.ExtraVars
+	}
+
+	base := []string{"destroy", "--stage", "infra", "--dry-run", "--output", "json", "--ask-become-pass=false"}
+	plain := extraVars(t, base...)
+	for _, unwanted := range []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true"} {
+		if slices.Contains(plain, unwanted) {
+			t.Fatalf("destroy without an unowned authorization must not emit %s: %#v", unwanted, plain)
+		}
+	}
+
+	vms := extraVars(t, append(append([]string{}, base...), "--authorize", "unowned-vms")...)
+	if !slices.Contains(vms, "bootwright_destroy_authorize_unowned_vms=true") {
+		t.Fatalf("--authorize unowned-vms must emit the VM gate: %#v", vms)
+	}
+	if slices.Contains(vms, "bootwright_destroy_authorize_unowned_networks=true") {
+		t.Fatalf("--authorize unowned-vms must not authorize unowned networks, whose blast radius reaches another context: %#v", vms)
+	}
+
+	networks := extraVars(t, append(append([]string{}, base...), "--authorize", "unowned-networks")...)
+	if !slices.Contains(networks, "bootwright_destroy_authorize_unowned_networks=true") {
+		t.Fatalf("--authorize unowned-networks must emit the network gate: %#v", networks)
+	}
+	if slices.Contains(networks, "bootwright_destroy_authorize_unowned_vms=true") {
+		t.Fatalf("--authorize unowned-networks must not authorize unowned VMs: %#v", networks)
+	}
+}
+
+func TestDestroyUnreachableNodesAuthorizationEmitsExtraVar(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	help, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(help, "unreachable-nodes") {
+		t.Fatalf("destroy help must document the unreachable-nodes authorization:\n%s", help)
 	}
 
 	stdout, stderr, code := runCLI(t,
@@ -887,92 +938,27 @@ func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
-	if slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
-		t.Fatalf("destroy without --include-unowned must not emit the force extra-var: %#v", report.ExtraVars)
-	}
-
-	stdout, stderr, code = runCLI(t,
-		"destroy",
-		"--stage", "infra",
-		"--include-unowned",
-		"--dry-run",
-		"--output", "json",
-		"--ask-become-pass=false",
-	)
-	if code != 0 {
-		t.Fatalf("destroy --stage infra --include-unowned dry-run exited %d, stderr=%q", code, stderr)
-	}
-	report = scopeDryRunReport{}
-	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-		t.Fatalf("decode json: %v\n%s", err, stdout)
-	}
-	if !slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
-		t.Fatalf("destroy --include-unowned must emit the force extra-var: %#v", report.ExtraVars)
-	}
-}
-
-func TestDestroySkipUnreachableRequiresOverrideAndEmitsExtraVar(t *testing.T) {
-	initTestContext(t, "001-sno-libvirt")
-
-	help, stderr, code := runCLI(t, "destroy", "--help")
-	if code != 0 {
-		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
-	}
-	if !strings.Contains(help, "--skip-unreachable") {
-		t.Fatalf("destroy help must document --skip-unreachable:\n%s", help)
-	}
-
-	_, stderr, code = runCLI(t,
-		"destroy",
-		"--stage", "infra",
-		"--skip-unreachable",
-		"--dry-run",
-		"--ask-become-pass=false",
-	)
-	if code != 2 {
-		t.Fatalf("destroy --skip-unreachable without --force must exit 2, got %d stderr=%q", code, stderr)
-	}
-	if !strings.Contains(stderr, "--skip-unreachable requires --force") {
-		t.Fatalf("destroy --skip-unreachable without --force must explain the requirement, got stderr=%q", stderr)
-	}
-
-	stdout, stderr, code := runCLI(t,
-		"destroy",
-		"--stage", "infra",
-		"--force",
-		"--dry-run",
-		"--output", "json",
-		"--ask-become-pass=false",
-	)
-	if code != 0 {
-		t.Fatalf("destroy --stage infra --force dry-run exited %d, stderr=%q", code, stderr)
-	}
-	var report scopeDryRunReport
-	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-		t.Fatalf("decode json: %v\n%s", err, stdout)
-	}
 	if slices.Contains(report.ExtraVars, "bootwright_destroy_skip_unreachable=true") {
-		t.Fatalf("destroy without --skip-unreachable must not emit the skip extra-var: %#v", report.ExtraVars)
+		t.Fatalf("destroy without --authorize unreachable-nodes must not emit the skip extra-var: %#v", report.ExtraVars)
 	}
 
 	stdout, stderr, code = runCLI(t,
 		"destroy",
 		"--stage", "infra",
-		"--skip-unreachable",
-		"--force",
+		"--authorize", "unreachable-nodes",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy --skip-unreachable --force dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --authorize unreachable-nodes dry-run exited %d, stderr=%q", code, stderr)
 	}
 	report = scopeDryRunReport{}
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
 	if !slices.Contains(report.ExtraVars, "bootwright_destroy_skip_unreachable=true") {
-		t.Fatalf("destroy --skip-unreachable --force must emit the skip extra-var: %#v", report.ExtraVars)
+		t.Fatalf("--authorize unreachable-nodes must emit the skip extra-var with no second flag: %#v", report.ExtraVars)
 	}
 }
 
@@ -1162,7 +1148,7 @@ func TestProtectedDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("protected destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	for _, want := range []string{"destroyProtection=requiredOverride", "requires --force"} {
+	for _, want := range []string{"destroyProtection=protected", "--authorize protected"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("protected destroy stderr missing %q:\n%s", want, stderr)
 		}
@@ -1182,7 +1168,7 @@ func TestProtectedFullDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("protected full destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	for _, want := range []string{"destroyProtection=requiredOverride", "requires --force"} {
+	for _, want := range []string{"destroyProtection=protected", "--authorize protected"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("protected full destroy stderr missing %q:\n%s", want, stderr)
 		}
@@ -1215,10 +1201,10 @@ func TestProtectedDestroyDryRunReportsProtection(t *testing.T) {
 	if report.DestroySafety == nil {
 		t.Fatalf("dry-run report missing destroy safety: %+v", report)
 	}
-	if !report.DestroySafety.OverrideRequired || report.DestroySafety.Override {
+	if !report.DestroySafety.AuthorizationRequired || report.DestroySafety.Authorized {
 		t.Fatalf("destroy safety = %+v, want required without override", report.DestroySafety)
 	}
-	if got := strings.Join(report.DestroySafety.Reasons, "\n"); !strings.Contains(got, "destroyProtection=requiredOverride") {
+	if got := strings.Join(report.DestroySafety.Reasons, "\n"); !strings.Contains(got, "destroyProtection=protected") {
 		t.Fatalf("destroy safety reasons = %q", got)
 	}
 }
@@ -1231,7 +1217,7 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 		"--clusters", "sno-libvirt",
 		"--dry-run",
 		"--output", "json",
-		"--force",
+		"--authorize", "protected",
 		"--yes",
 		"--ask-become-pass=false",
 	)
@@ -1245,7 +1231,7 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 	if report.DestroySafety == nil {
 		t.Fatalf("dry-run report missing destroy safety: %+v", report)
 	}
-	if report.DestroySafety.OverrideRequired || !report.DestroySafety.Override {
+	if report.DestroySafety.AuthorizationRequired || !report.DestroySafety.Authorized {
 		t.Fatalf("destroy safety = %+v, want override supplied and no requirement remaining", report.DestroySafety)
 	}
 	if slices.Contains(report.ExtraVars, "bootwright_destroy_override=true") {
@@ -1259,16 +1245,16 @@ func TestProtectedApplyOverrideGreenfieldNotGatedByProtection(t *testing.T) {
 		"apply",
 		"--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--converge-drifted",
+		"--mode", "rebuild",
 		"--yes",
 		"--ask-become-pass=false",
 	)
 	if code == 0 {
-		t.Fatalf("apply --converge-drifted unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --mode rebuild unexpectedly succeeded (no real infra)\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	for _, unwanted := range []string{"destroy-protected", "destructively rebuild"} {
 		if strings.Contains(stderr, unwanted) {
-			t.Fatalf("greenfield apply --converge-drifted must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
+			t.Fatalf("greenfield apply --mode rebuild must not be blocked by destroy protection; stderr contained %q:\n%s", unwanted, stderr)
 		}
 	}
 }
@@ -1279,19 +1265,19 @@ func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
 		"apply",
 		"--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--converge-drifted",
+		"--mode", "rebuild",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("protected apply --converge-drifted --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+		t.Fatalf("protected apply --mode rebuild --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
-	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=override") {
+	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=rebuild") {
 		t.Fatalf("dry-run preview should still carry the override apply mode: %+v", report.ExtraVars)
 	}
 }
@@ -4554,7 +4540,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 
 func TestApplyClustersOverrideDryRunPassesApplyMode(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--converge-drifted")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--mode", "rebuild")
 	if code != 0 {
 		t.Fatalf("apply --stage clusters override dry-run exited %d, stderr=%q", code, stderr)
 	}
@@ -4562,10 +4548,10 @@ func TestApplyClustersOverrideDryRunPassesApplyMode(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
 	}
-	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=override") {
+	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=rebuild") {
 		t.Fatalf("extra vars missing override apply mode: %+v", report.ExtraVars)
 	}
-	if !slices.Contains(report.Command, "bootwright_apply_mode=override") {
+	if !slices.Contains(report.Command, "bootwright_apply_mode=rebuild") {
 		t.Fatalf("command missing override apply mode: %+v", report.Command)
 	}
 }
@@ -4584,18 +4570,18 @@ func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
 	stdout, stderr, code := runCLI(t,
 		"apply", "--stage", "clusters",
 		"--clusters", "sno-libvirt",
-		"--converge-drifted",
+		"--mode", "rebuild",
 		"--yes",
 		"--ask-become-pass=false",
 	)
 	if code == 0 {
-		t.Fatalf("apply --converge-drifted unexpectedly bypassed the active run lease\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --mode rebuild unexpectedly bypassed the active run lease\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "apply run apply-active is still running") {
-		t.Fatalf("apply --converge-drifted stderr missing active-run error:\n%s", stderr)
+		t.Fatalf("apply --mode rebuild stderr missing active-run error:\n%s", stderr)
 	}
 	if strings.Contains(stdout, "Bundle") || strings.Contains(stdout, "Workflow") {
-		t.Fatalf("apply --converge-drifted progressed to workflow despite the active lease\nstdout:\n%s", stdout)
+		t.Fatalf("apply --mode rebuild progressed to workflow despite the active lease\nstdout:\n%s", stdout)
 	}
 }
 
@@ -4834,7 +4820,7 @@ func initProtectedTestContext(t *testing.T, fixtureName string) workspace.Contex
 	}
 	body := strings.Replace(string(data),
 		"  domains:",
-		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionRequiredOverride+"\n  domains:", 1)
+		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionProtected+"\n  domains:", 1)
 	if body == string(data) {
 		t.Fatal("environment fixture did not contain spec.domains")
 	}

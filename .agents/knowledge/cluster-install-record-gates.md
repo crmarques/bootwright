@@ -7,11 +7,11 @@ Silently stamping today's hashes as the install baseline would absorb real
 install-input drift as "installed and in sync" — the change would never be
 applied and every later gate would compare against a forged baseline. The
 operator chooses explicitly: rebuild (`apply --stage clusters --clusters
-<name> --converge-drifted --confirm-data-loss --yes`) or restore `clusters/<name>/runtime/install-record.json`
+<name> --mode rebuild --authorize data-loss --yes`) or restore `clusters/<name>/runtime/install-record.json`
 if the running cluster genuinely matches. A record-less cluster whose
 kubeconfig does not report Available=True fails with
 `has existing kubeconfig but does not report Available=True; refusing to
-regenerate installer inputs without --converge-drifted`. A fresh cluster (no
+regenerate installer inputs without --mode rebuild`. A fresh cluster (no
 kubeconfig at all) installs normally. See `guardUnrecordedCluster` in
 `internal/converge/workflow/install_state.go`.
 
@@ -30,28 +30,28 @@ so `CheckApplyRenameOrphan` reads its rename evidence from the
 field) — same signature, same restore-then-destroy remedy, different evidence
 store.
 
-**Semantics (override healthy-skip):** `apply --converge-drifted` does **not**
+**Semantics (override healthy-skip):** `apply --mode rebuild` does **not**
 reinstall a healthy cluster. A cluster whose record matches the desired
 install inputs, is `installed`, and whose kubeconfig probe reports
 Available=True has its install tasks skipped:
-`cluster already installed and Available=True for desired install inputs; --converge-drifted rebuilds only drifted objects, not a healthy in-sync cluster`.
-This protects healthy clusters caught in a scoped `apply --converge-drifted` aimed at
+`cluster already installed and Available=True for desired install inputs; --mode rebuild rebuilds only drifted objects, not a healthy in-sync cluster`.
+This protects healthy clusters caught in a scoped `apply --mode rebuild` aimed at
 some other drifted object.
 
 **Constraint (a failed probe is not a rebuild authorization):** a probe
 **error** on a cluster whose record matches the desired install inputs (`oc`
 missing from PATH, an unreadable/undecryptable kubeconfig, a network blip, an
 API timeout) is a fail-closed refusal in **every** mode, including
-`--converge-drifted`. `OverrideRebuildInstalledClusters` returns an error naming
+`--mode rebuild`. `OverrideRebuildInstalledClusters` returns an error naming
 each unprovable cluster, the probe error, and three remedies (restore
 reachability, exclude it with `--clusters`, or `bootwright destroy --clusters
 <name> --yes` then re-apply); the run stops before any mutation. It previously
-scheduled the reinstall instead, so `--converge-drifted --confirm-data-loss
+scheduled the reinstall instead, so `--mode rebuild --authorize data-loss
 --yes` could wipe the node disks of a healthy cluster whose API was momentarily
 unreachable. A *successful* probe reporting `Available=False` is different
 evidence — the cluster answered — and still authorizes the override rebuild,
 gated by the data-loss acknowledgment. That is the single sanctioned case of
-`--converge-drifted` acting on an object whose recorded desired state matches
+`--mode rebuild` acting on an object whose recorded desired state matches
 (evaluated and kept 2026-07-26; rationale in ADR 0007, "Ownership is the
 authorization boundary"). Do not re-propose routing it through `destroy`:
 the cluster supplied the evidence itself, the object matches its declaration but

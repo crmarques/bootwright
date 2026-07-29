@@ -131,7 +131,7 @@
             else (' (recorded devices: '
                   ~ (bootwright_ceph_recorded_osd_devices | default([]) | join(', ')) ~ ')'))
          ~ '. Re-apply to re-record OSD devices, or verify and wipe it manually.'
-         ~ ' (--include-unowned does not relax this device data-safety gate.)')
+         ~ ' (--authorize unowned-vms does not relax this device data-safety gate.)')
       }}
     quiet: true
   loop: "{{ bootwright_ceph_destroy_signatures.results | default([]) }}"

@@ -63,12 +63,12 @@ clusters; see [Operations](operations.md#comparing-against-live-cluster-state)):
 | --- | --- | --- |
 | `missing` | No record exists | Create it |
 | `match` | Recorded desired hash equals current | Skip (when a concrete probe supports it) |
-| `drift` | Recorded desired hash differs | Reconcilable-in-place drift converges on a bare `apply`; structural (destructive-identity) drift fails closed — needs `--converge-drifted` (reconfigure-only kinds re-apply in place; machines/clusters rebuild destructively) |
+| `drift` | Recorded desired hash differs | Reconcilable-in-place drift converges on a bare `apply`; structural (destructive-identity) drift fails closed — needs `--mode rebuild` (reconfigure-only kinds re-apply in place; machines/clusters rebuild destructively) |
 | `foreign` | Record carries a non-Bootwright owner | Fail closed — never touched |
 
-Under `--converge-drifted`, the consequence depends on the object kind: for the
+Under `--mode rebuild`, the consequence depends on the object kind: for the
 reconfigure-only kinds — enumerated in the
-[`--converge-drifted` taxonomy](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract),
+[`--mode rebuild` taxonomy](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract),
 for example cluster add-ons and machine RHSM registration — it is an idempotent
 in-place re-apply that touches no data, OS, or VM; for a
 machine (managed-OS reinstall, disks wiped) or a container/storage cluster
@@ -83,7 +83,7 @@ the destructive kinds cross the destroy-protection boundary (below).
     container intent — converges on a bare `apply`; what plain `apply` never
     does is destructively rebuild, or touch what it does not own. Once a run
     proceeds (a clean run, reconcilable drift, or
-    `--converge-drifted`), execution-time behavior differs by task: many provider-service
+    `--mode rebuild`), execution-time behavior differs by task: many provider-service
     and component-config tasks have no reliable external probe, so they **re-run
     and rely on idempotent execution** rather than being skipped — their record is
     durable evidence, not a skip decision. Concrete-probe sites — cluster install
@@ -92,7 +92,7 @@ the destructive kinds cross the destroy-protection boundary (below).
     Cluster install reconcile reads the per-cluster install record, probes live
     cluster availability, skips completed installs, resumes only from known-safe
     phases, and refuses to proceed when install state exists for different inputs
-    after node boot — unless you pass `--converge-drifted`.
+    after node boot — unless you pass `--mode rebuild`.
 
 The practical consequence: an interrupted `apply` is resumable, and a completed
 `apply` re-run is a near-no-op. You do not get a destructive surprise from simply
@@ -118,41 +118,41 @@ run *before* any mutation if its precondition is not met:
    overwrites a resource it does not own.
 5. **Concrete-probe gating.** Install, add-on, managed-OS, provider, and storage
    sites refuse to reinstall or rebuild over existing state without an explicit
-   `--converge-drifted`.
+   `--mode rebuild`.
 6. **Destroy protection.** When desired state sets `destroyProtection`, even
-   `apply --converge-drifted` fails closed on protected rebuilds (see below).
+   `apply --mode rebuild` fails closed on protected rebuilds (see below).
 7. **Render as a second enforcement line.** Rendering fails before writing any
    tool input when an endpoint load-balancer bind or a managed Ceph topology host
    address does not resolve, instead of emitting empty values.
 
 ## Apply modes and what they protect
 
-`apply` has three modes — bare `apply` (reconcile), `--expect-new` (assert a
-greenfield build), and `--converge-drifted` (break-glass rebuild) — described in
-full under [Apply modes](../concepts/index.md#apply-modes). What matters here is
-how each treats resources Bootwright does **not** own:
+`apply --mode` has three values — `create` (assert a greenfield build),
+`reconcile` (the default) and `rebuild` (break-glass) — described in full under
+[Apply modes](../concepts/index.md#apply-modes). What matters here is how each
+treats resources Bootwright does **not** own:
 
-- Bare `apply` and `--expect-new` are non-destructive. Bare `apply` converges
-  reconcilable-in-place drift and fails closed on structural drift or foreign
-  ownership; `--expect-new` additionally refuses if any selected object already
-  exists — a guardrail for first builds, so a stale context or a name collision
-  fails loudly instead of half-converging.
-- `--converge-drifted` is the only mode that destroys, and only over resources a
+- `--mode reconcile` and `--mode create` are non-destructive. `reconcile`
+  converges reconcilable-in-place drift and fails closed on structural drift or
+  foreign ownership; `create` additionally refuses if any selected object
+  already exists — a guardrail for first builds, so a stale context or a name
+  collision fails loudly instead of half-converging.
+- `--mode rebuild` is the only mode that destroys, and only over resources a
   Bootwright ownership marker proves it created (see below).
 
-!!! danger "`--converge-drifted` can destroy data"
-    `apply --converge-drifted` is the only `apply` form that destroys. It may reinstall a
+!!! danger "`--mode rebuild` can destroy data"
+    `apply --mode rebuild` is the only `apply` form that destroys. It may reinstall a
     managed-OS machine (the substrate VM is undefined, **disks are wiped**, then
     rebuilt) and cleanly rebuild a managed Ceph cluster via
     `cephadm rm-cluster --zap-osds` — and only when a Bootwright ownership marker
     proves the live cluster is the one Bootwright created. It **never** touches
-    foreign objects, run leases, validation, or secret checks. Beyond
-    `--converge-drifted` itself there is a **separate** data-loss confirmation
-    gate: a destructive rebuild is authorized only by the interactive data-loss
-    prompt, or by `--confirm-data-loss` paired with `--yes` for automation —
-    `--yes` alone does **not** authorize data loss (see
-    [Operations](operations.md#the-fail-closed-converge-drifted-contract)). Always
-    `plan`/`--dry-run` an override first and read exactly what it intends to
+    foreign objects, run leases, validation, or secret checks. Beyond the mode
+    itself there is a **separate** data-loss gate: a destructive rebuild is
+    authorized only by the interactive data-loss prompt, or by
+    `--authorize data-loss` paired with `--yes` for automation — `--yes` alone
+    does **not** authorize data loss (see
+    [Operations](operations.md#the-fail-closed-mode-rebuild-contract)). Always
+    `plan`/`--dry-run` a rebuild first and read exactly what it intends to
     rebuild.
 
 ## Avoiding accidental destruction
@@ -160,7 +160,7 @@ how each treats resources Bootwright does **not** own:
 A few habits keep operators on the safe side of these guardrails:
 
 - **Re-running `apply` is safe — lean on it.** It never silently destroys. Only
-  `apply --converge-drifted` and `destroy` mutate destructively, and both are gated.
+  `apply --mode rebuild` and `destroy` mutate destructively, and both are gated.
 - **Preview first.** Run `bootwright plan` (or `apply --dry-run`) and read the
   graph before any override or teardown. `diff` shows drift without
   touching hosts.
@@ -178,12 +178,12 @@ A few habits keep operators on the safe side of these guardrails:
     ```yaml
     spec:
       safety:
-        destroyProtection: requiredOverride
+        destroyProtection: protected
     ```
 
-    With this set, `apply --converge-drifted` fails closed on protected resources and
-    directs you to run `destroy --force` for the affected scope first — a
-    second, explicit decision.
+    With this set, `apply --mode rebuild` fails closed on protected resources and
+    directs you to run `destroy --authorize protected` for the affected scope
+    first — a second, explicit decision.
 
 - **Know what `destroy` does.** Omitting `--stage` requests a full lifecycle
   teardown: `destroy` covers the context and `destroy --clusters <names>`
@@ -191,8 +191,9 @@ A few habits keep operators on the safe side of these guardrails:
   bare-metal hardware and its installed OS are retained. Use `--stage clusters`
   to keep machine substrate. Disk cleanup is bounded to provider-owned disks or
   declared Bootwright-managed devices — Bootwright never wipes arbitrary visible
-  disks — and `--include-unowned` / `--skip-unreachable` are explicit opt-ins,
-  never defaults. See [Operations, recovery & teardown](operations.md).
+  disks — and the `unowned-vms`, `unowned-networks` and `unreachable-nodes`
+  `--authorize` tokens are explicit opt-ins, never defaults. `--yes` grants
+  none of them; a teardown that zaps OSDs needs `--authorize data-loss`. See [Operations, recovery & teardown](operations.md).
 - **Keep state safe to commit.** Desired state names secrets but never carries
   bytes; keep pull secrets, keys, and kubeconfigs out of Git
   ([Secrets & entitlements](../concepts/secrets.md)).

@@ -269,7 +269,7 @@ bootwright destroy --yes
 `destroy` is scoped the same way `apply` is, so `--stage clusters` keeps the
 machine substrate and `--clusters <name>` tears down one component. See
 [Operations, recovery & teardown](../advanced/operations.md#tearing-down-with-destroy)
-for the ownership gates, `--force`, and partial teardown.
+for the ownership gates, the `--authorize` tokens, and partial teardown.
 
 ## Next steps
 

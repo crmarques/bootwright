@@ -105,11 +105,11 @@ verify their current form in `specs/`. Prompt-specific additions:
   explicit `--adopt` YAML/history write, and that it neither explodes an absent root
   into noisy child diffs nor hides missing/undeclared live resources once the root
   exists.
-- **Converge/force pair.** `apply --converge-drifted` and `destroy --force`
+- **Converge/force pair.** `apply --mode rebuild` and `destroy --force`
   authorize Bootwright-owned destructive rebuilds (drifted-owned rebuild,
   managed-OS reinstall, owned-Ceph wipe-and-rebuild, protected destroy);
-  `--confirm-data-loss` and `--skip-unreachable` gate the data-loss cases,
-  `--expect-new` is the greenfield opposite. Confirm neither flag touches foreign
+  `--authorize data-loss` and `--authorize unreachable-nodes` gate the data-loss cases,
+  `--mode create` is the greenfield opposite. Confirm neither flag touches foreign
   objects, skips objects already matching desired state, and never turns a
   read-only inspect into a mutation.
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
@@ -142,8 +142,8 @@ Walk each reviewed flow in order, then record it in the matrix below:
    succinctly, but reports granular drift when roots exist, such as missing declared
    resources or undeclared live Ceph pools, add-ons, VMs, services, endpoints, or
    storage exports; and that only `--adopt` writes (to desired YAML plus history).
-9. **Converge/force pair.** For `apply --converge-drifted` and `destroy --force`
-   (and the `--confirm-data-loss`/`--skip-unreachable`/`--expect-new` gates), trace
+9. **Converge/force pair.** For `apply --mode rebuild` and `destroy --force`
+   (and the `--authorize data-loss`/`--authorize unreachable-nodes`/`--mode create` gates), trace
    the same scenario with and without them. Confirm only the documented
    unsafe-mismatch behavior changes, the flag skips already-matching and foreign
    objects, and no read-only flow mutates or suppresses drift.
@@ -227,7 +227,7 @@ example that could not be traced, with the reason.
 ## 2. Flow Trace
 The trace matrix for each reviewed flow — compact but complete enough to show how
 intent reaches final output. Include desired-vs-real `diff` behavior and
-converge/force behavior (`apply --converge-drifted` / `destroy --force`) vs. its
+converge/force behavior (`apply --mode rebuild` / `destroy --force`) vs. its
 absence when supported. Call out silent behavior changes and spec/code
 disagreements as you go.
 
@@ -257,7 +257,7 @@ sequencing, a short design pass, or broader coverage), **Later** (larger cleanup
 that should follow evidence from earlier fixes). Per item: affected artifacts,
 approach, validation, and **Risk** (Low/Medium/High). Include tests for
 non-mutating desired-vs-real checks, absent-root reporting, granular drift
-reporting, and `--converge-drifted`/`--force` pairs when relevant. End with any open
+reporting, and `--mode rebuild`/`--force` pairs when relevant. End with any open
 question that blocks a safe fix or changes prioritization.
 
 ## Fix Mode (only if the user explicitly requests fixes)

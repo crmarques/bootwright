@@ -20,7 +20,7 @@ gate (reachable with no `knownHostsPath` refuses) → primary auth as
 `osInstall.ssh.fallbackUser` (only when the primary was rejected and the
 render emitted one) → fail-closed unverifiable refusal (reachable, neither
 identity authenticated, machine not released) → marker read as whichever
-identity authenticated (`bootwright_os_probe_user`) → `--expect-new` live gate
+identity authenticated (`bootwright_os_probe_user`) → `--mode create` live gate
 (apply mode `create` refuses a host that already runs an OS, owned or not,
 unless released) → foreign/drifted mode gates (all suppressed for a released
 machine) → release force-rebuild.
@@ -57,10 +57,10 @@ root.
 
 **Ownership and match are separate predicates:** a Bootwright-owned marker is
 one whose owner == bootwright, regardless of whether its hash still matches
-desired. `--converge-drifted` may rebuild an OWNED host whose hash drifted, but must
+desired. `--mode rebuild` may rebuild an OWNED host whose hash drifted, but must
 NEVER adopt, reinstall, or wipe a host Bootwright does not own — a reachable
 host without a Bootwright-owned marker is foreign (or manually prepared) and
-fails closed even under `--converge-drifted`.
+fails closed even under `--mode rebuild`.
 
 **Override rebuild is driven, not merely permitted:** the drifted-owned refusal
 only suppresses the fail; a separate `bootwright_managed_os_force_rebuild` fact
@@ -90,7 +90,7 @@ machine-granular: the cluster must appear in
 the release record carries no machine list for that cluster (a cluster-scoped
 destroy released everything) or the `<cluster>/<machine>` pair appears in
 `bootwright_substrate_reset_machines` (written by `destroy --machines`); an
-uncovered sibling machine keeps its normal gates. With `--skip-unreachable`, a
+uncovered sibling machine keeps its normal gates. With `--authorize unreachable-nodes`, a
 managed storage cluster receives the release only when the storage completion
 report proves that no node was skipped; partial storage and teardown paths
 without equivalent per-node proof withhold it, so skipped nodes keep failing
@@ -138,7 +138,7 @@ touches their convergence records, so pointing a blocked managed-OS machine at
 the clusters destroy loops forever (destroy, re-apply, blocked again).
 `overrideDestroyRemedy` therefore emits
 `bootwright destroy --stage infra --clusters <affected> --force`, and hints
-`--skip-unreachable` because a machine whose host substrate was never
+`--authorize unreachable-nodes` because a machine whose host substrate was never
 provisioned or is powered off (e.g. a nested cluster on a host cluster that
 never came up) would otherwise fail closed at the infra destroy.
 `OverrideDestructiveMachineSubstrate` reports the distinct clusters so the

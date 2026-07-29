@@ -231,9 +231,9 @@ func TestStorageOperationBatchesNeverReplaceTheOverridePath(t *testing.T) {
 		t.Fatalf("batch enablement must be a set_fact, got %v", decide)
 	}
 	enabled := fmt.Sprint(facts["bootwright_ceph_batch_enabled"])
-	for _, want := range []string{"!= 'override'", "bootwright_ceph_batch_probe.rc", "bootwright_ceph_batch_files"} {
+	for _, want := range []string{"!= 'rebuild'", "bootwright_ceph_batch_probe.rc", "bootwright_ceph_batch_files"} {
 		if !strings.Contains(enabled, want) {
-			t.Fatalf("batching must be withheld from the --converge-drifted rebuild path and from a container without python3 (missing %q), got %v", want, enabled)
+			t.Fatalf("batching must be withheld from the --mode rebuild rebuild path and from a container without python3 (missing %q), got %v", want, enabled)
 		}
 	}
 
@@ -658,7 +658,7 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 			t.Fatalf("pool rebuild decision must compare live pool to desired structural %q, got %s", want, expr)
 		}
 	}
-	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ceph-pool") || !strings.Contains(got, "'override'") {
+	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ceph-pool") || !strings.Contains(got, "'rebuild'") {
 		t.Fatalf("pool rebuild decision must be gated on the ceph-pool op under override, got %v", decide["when"])
 	}
 
@@ -682,8 +682,8 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_pool_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
 		t.Fatalf("pool destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
-		t.Fatalf("pool destroy refusal must name the --confirm-data-loss remedy, got %v", refuse["fail_msg"])
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+		t.Fatalf("pool destroy refusal must name the --authorize data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
 	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")
@@ -727,8 +727,8 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(fsRefuse["that"]); !strings.Contains(got, "bootwright_ceph_op_fs_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_fs_recreate") {
 		t.Fatalf("CephFS destroy refusal must fail closed on recreate-without-acknowledgement, got %v", fsRefuse["that"])
 	}
-	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
-		t.Fatalf("CephFS destroy refusal must name the --confirm-data-loss remedy, got %v", fsRefuse["fail_msg"])
+	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+		t.Fatalf("CephFS destroy refusal must name the --authorize data-loss remedy, got %v", fsRefuse["fail_msg"])
 	}
 	fsRebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")
 	if !(fsRefuseIdx < fsRebuildIdx) {
@@ -784,7 +784,7 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 			t.Fatalf("ec-profile rebuild decision must compare live profile to desired structural %q, got %s", want, expr)
 		}
 	}
-	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ec-profile") || !strings.Contains(got, "'override'") {
+	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ec-profile") || !strings.Contains(got, "'rebuild'") {
 		t.Fatalf("ec-profile rebuild decision must be gated on the ec-profile op under override, got %v", decide["when"])
 	}
 
@@ -807,8 +807,8 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
 		t.Fatalf("ec-profile destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--confirm-data-loss") {
-		t.Fatalf("ec-profile destroy refusal must name the --confirm-data-loss remedy, got %v", refuse["fail_msg"])
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+		t.Fatalf("ec-profile destroy refusal must name the --authorize data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
 	rebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted erasure-coded pool for override")
@@ -1266,7 +1266,7 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	selectIdx := findAnsibleTask(t, tasks, "Select storage node teardown connection")
 	probeIdx := findAnsibleTask(t, tasks, "Probe storage host reachability before teardown")
 	recordIdx := findAnsibleTask(t, tasks, "Record storage host unreachable when no node identity answers")
-	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --skip-unreachable")
+	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --authorize unreachable-nodes")
 	seedIdx := findAnsibleTask(t, tasks, "Require the Ceph seed host to be reachable before any device wipe")
 	wipeIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
 	if !(selectIdx < probeIdx && probeIdx < recordIdx && recordIdx < reachableIdx && reachableIdx < seedIdx) {

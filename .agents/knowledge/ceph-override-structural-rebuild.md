@@ -1,8 +1,8 @@
-# Ceph --converge-drifted structural rebuilds: identity, fail-safes, and EC pools
+# Ceph --mode rebuild structural rebuilds: identity, fail-safes, and EC pools
 
 **Semantics:** A rendered create operation carries the sub-object's IMMUTABLE
 identity in a `structural` block — the only desired-state difference that
-warrants a data-destroying `--converge-drifted` rebuild, because Ceph cannot change it
+warrants a data-destroying `--mode rebuild` rebuild, because Ceph cannot change it
 in place. For a pool that is `type` plus the full erasure profile (every
 authored field including opaque `parameters`, keyed by their
 `erasure-code-profile get` JSON spellings, stringified); for a CephFS it is the
@@ -10,7 +10,7 @@ metadata pool AND the default data pool. Replica size/min-size, CRUSH rule,
 application, quota, compression, and autoscale are NOT structural — they
 reconcile in place via the `set-*` operations and are never destroyed.
 
-**Semantics:** A rebuild runs only under `--converge-drifted` AND on a proven
+**Semantics:** A rebuild runs only under `--mode rebuild` AND on a proven
 structural mismatch against the LIVE cluster (op `structural` vs the probed
 live object). `create`/`continue` never reach the branch. Fail-safe rules
 throughout: an unreadable live value never triggers a destructive rebuild (an
@@ -54,7 +54,7 @@ the hash, because `ceph orch apply` reconciles it in place): scaling out by
 adding an OSD host, rebalancing mon/mgr/mds daemons by editing host roles,
 enabling the mgmt-gateway/dashboard HA, and editing a cephadm service
 passthrough. A change to cluster identity (e.g. the public network) must still
-move it — otherwise apply refuses the edit or `--converge-drifted` wipes the cluster's
+move it — otherwise apply refuses the edit or `--mode rebuild` wipes the cluster's
 OSDs for a reconcilable change. RGW gateways, NFS exports, and StorageExports
 are stateless services: a config or placement edit classifies as reconcilable
 drift (non-empty, stable structural hash), never a structural rebuild.

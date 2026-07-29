@@ -446,7 +446,7 @@ across both data centers; that shape does not give per-site backend locality.
 `StoragePlacementPolicy` holds reusable CRUSH placement plus replicated-pool
 defaults that pools select with `placementPolicyRef`. The pool's structural
 identity is its `type` and erasure profile: changing it is the only desired-state
-change that rebuilds a live pool (data-destroying, `--converge-drifted` only); replicas,
+change that rebuilds a live pool (data-destroying, `--mode rebuild` only); replicas,
 CRUSH rule, and application reconcile in place. The full field tables are in the
 [storage reference](../concepts/storage.md#storagepool).
 
@@ -479,7 +479,7 @@ running `bootwright apply` reconciles cleanly while the live pool, filesystem, o
 service keeps running — remove it on the cluster with the `ceph`/`cephadm` CLI
 when you mean it.
 
-`--converge-drifted` does not prune undeclared objects either: it rebuilds only
+`--mode rebuild` does not prune undeclared objects either: it rebuilds only
 still-declared objects whose structural identity changed: a pool's `type` and
 erasure profile, or a CephFS metadata pool — changing the metadata pool is a
 data-destroying `ceph fs rm` recreate, not an in-place reconcile. See
@@ -541,5 +541,5 @@ cluster:
   plan for the rebalance.
 
 For the destructive rebuild paths (managed-OS reinstall, owned-Ceph
-wipe-and-rebuild) and the `--converge-drifted` authorization model, see
+wipe-and-rebuild) and the `--mode rebuild` authorization model, see
 [Operations and recovery](operations.md).

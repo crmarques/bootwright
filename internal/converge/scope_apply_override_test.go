@@ -46,7 +46,7 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 
 	authorized := RebuildAuthorizedStorageClusters(objects)
 	if len(authorized) == 0 {
-		t.Fatal("RebuildAuthorizedStorageClusters must positively authorize the structurally-drifted StorageCluster's --converge-drifted wipe")
+		t.Fatal("RebuildAuthorizedStorageClusters must positively authorize the structurally-drifted StorageCluster's --mode rebuild wipe")
 	}
 	wiped := OverrideDestructiveStorageClusters(objects)
 	if len(authorized) != len(wiped) {

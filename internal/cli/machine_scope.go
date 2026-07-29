@@ -69,7 +69,7 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots []st
 		return nil
 	}
 	sort.Strings(installed)
-	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --force to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","))
+	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --authorize installed-cluster-node to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","))
 }
 
 func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, purgeHistory, skipUnreachable bool) error {

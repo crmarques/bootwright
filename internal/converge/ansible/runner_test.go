@@ -573,7 +573,7 @@ func TestSummarizeFailureExtractsTaskAndReason(t *testing.T) {
 }
 
 func TestSummarizeFailureExtractsAnsibleMessage(t *testing.T) {
-	const overrideMsg = "managed OS at 10.7.7.129 is Bootwright-owned but /etc/bootwright/install-marker.json does not match desired hash sha256:d04dffb4; rerun with --converge-drifted to rebuild it."
+	const overrideMsg = "managed OS at 10.7.7.129 is Bootwright-owned but /etc/bootwright/install-marker.json does not match desired hash sha256:d04dffb4; rerun with --mode rebuild to rebuild it."
 	cases := map[string]string{
 		"classic fatal json": "TASK [Refuse drifted Bootwright-owned managed OS without override] *\n" +
 			"fatal: [srv4200]: FAILED! => {\"changed\": false, \"msg\": \"" + overrideMsg + "\"}\n" +
@@ -595,8 +595,8 @@ func TestSummarizeFailureExtractsAnsibleMessage(t *testing.T) {
 			if !strings.Contains(got, "  failure: "+overrideMsg) {
 				t.Fatalf("summary must carry the actionable msg on the failure line:\n%s", got)
 			}
-			if !strings.Contains(got, "rerun with --converge-drifted to rebuild it.") {
-				t.Fatalf("summary must preserve the --converge-drifted hint:\n%s", got)
+			if !strings.Contains(got, "rerun with --mode rebuild to rebuild it.") {
+				t.Fatalf("summary must preserve the --mode rebuild hint:\n%s", got)
 			}
 		})
 	}

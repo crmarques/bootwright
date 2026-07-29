@@ -4,6 +4,11 @@
 
 Accepted
 
+The destructive-gating clause is revised by
+[ADR 0030](0030-one-intent-flag-and-named-authorizations.md), which replaces the
+per-risk boolean flags with one intent flag and one named-authorization
+vocabulary. The rest of this ADR is unchanged.
+
 ## Context
 
 The Bootwright context — rendered state, secrets, run history, live
@@ -12,7 +17,7 @@ state, and the media and add-ons stores — lives under the root-owned
 sudo. Without a single policy, escalation, flag naming, destructive-
 command gating, and human output each drifted per command: a typo could
 cost a sudo password prompt before failing, overwrite acknowledgment
-varied between `--force` and `--yes` dances, the `--stage` vocabulary
+varied between a separate force flag and `--yes` dances, the `--stage` vocabulary
 was restated in error text, help, and completion, and frame output was
 written from many files. This ADR records the conventions that now
 govern all four.
@@ -101,20 +106,26 @@ be built and discarded ahead of execution, and that has not been tried.
 - Destructive paths are fail-closed by default; a marker or drift
   mismatch refuses rather than proceeding.
 - Overwriting stored material is acknowledged by a single gate — one
-  `--yes` or one interactive `y`, never a separate `--force` plus
+  `--yes` or one interactive `y`, never a second boolean plus a
   confirmation dance (`media add` replace matches `secret set`).
-- `--converge-drifted` is the uniform remedy that authorizes Bootwright-owned
-  destructive re-convergence (managed-OS reinstall of a drifted node,
-  Ceph wipe-and-rebuild), and its help text must name that scope.
-  Failure summaries preserve the exact remedy command (middle-ellipsis
-  shortening keeps the `--converge-drifted` tail).
+- The destructive surface is exactly two axes, per
+  [ADR 0030](0030-one-intent-flag-and-named-authorizations.md): `--mode
+  create|reconcile|rebuild` states intent, and a repeatable `--authorize
+  <token>` states which named risk the operator accepts. `--mode rebuild` is
+  the uniform remedy that authorizes Bootwright-owned destructive
+  re-convergence (managed-OS reinstall of a drifted node, Ceph
+  wipe-and-rebuild), and `--authorize data-loss` authorizes the disk wipe such
+  a rebuild performs. Both help texts must name that scope, and failure
+  summaries preserve the exact remedy command (middle-ellipsis shortening keeps
+  the `--mode rebuild --authorize data-loss` tail).
 - A destroy-time Ceph marker recovery carries the identity being confirmed in
   `--recover-ceph-ownership <StorageCluster>=<fsid>` rather than a boolean
   bypass: naming the exact identity is an attestation only an operator can
   make, where a boolean would authorize whatever happens to be on the host.
   The agreement checks it performs, and the gates it does not relax, are
-  specified in [`state-model.md`](../state-model.md) ("CLI Contract"). The
-  ordinary destroy confirmation remains the one data-loss acknowledgment.
+  specified in [`state-model.md`](../state-model.md) ("CLI Contract"). It
+  authorizes no named risk of its own: a teardown that destroys data still
+  needs `--authorize data-loss` or the interactive data-loss confirmation.
 - Destructive selection stays unambiguous by reservation: the cluster
   name `artifact-server` is reserved so `destroy --stage infra
   --clusters artifact-server` can only mean the generated artifact
@@ -149,10 +160,11 @@ be built and discarded ahead of execution, and that has not been tried.
 - New commands must be classified in the root gate and must reuse the
   shared flag help registrars; new stage-like vocabularies must derive
   from one accessor so validation, help, and completion cannot drift.
-- New destructive behavior reuses an existing gate wherever one fits. A new
-  flag is justified only when it carries an identity or a scope the existing
-  gates cannot express — as `--recover-ceph-ownership` does — never as a
-  second spelling of `--yes` or `--converge-drifted`.
+- New destructive behavior names its risk as an `--authorize` token in the one
+  vocabulary; it never adds a flag. A new flag is justified only when it
+  carries an identity, a value, or a scope a token cannot express — as
+  `--reclaim-devices` and `--recover-ceph-ownership` do — never as a second
+  spelling of `--yes`, `--mode`, or an existing token.
 - Frame byte output stays testable and consistent because it is
   confined to the output package; automation can gate on the exit-code
   contract and on color-free piped output.

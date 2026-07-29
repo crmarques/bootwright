@@ -42,8 +42,8 @@ func TestReconcileApplyClusterInstallStateExpectNewRefusesExistingRecord(t *test
 			if err == nil || !strings.Contains(err.Error(), "requires a greenfield environment") {
 				t.Fatalf("expect-new against an existing install record must fail closed, got %v", err)
 			}
-			if !strings.Contains(err.Error(), "--expect-new") || !strings.Contains(err.Error(), cluster) {
-				t.Fatalf("refusal must name --expect-new and the cluster, got %v", err)
+			if !strings.Contains(err.Error(), "--mode create") || !strings.Contains(err.Error(), cluster) {
+				t.Fatalf("refusal must name --mode create and the cluster, got %v", err)
 			}
 		})
 	}

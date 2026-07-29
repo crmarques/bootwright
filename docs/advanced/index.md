@@ -23,7 +23,7 @@ will need from the first apply onward.
 | [KubeVirt nested clusters](kubevirt.md) | A child `ContainerCluster` whose machines come from a KubeVirt `InfraProvider`, and the parent/child apply ordering. |
 | [Networking & load balancing](networking.md) | `NetworkConfig` templates, provider attachments, endpoints, VIPs, DNS, and NTP. |
 | [Ownership, idempotency & safety](ownership-and-safety.md) | How Bootwright tracks ownership, what makes re-running `apply` safe, the fail-closed checkpoints, and how to avoid accidentally destroying clusters. |
-| [Operations & recovery](operations.md) | Destroy stages, `destroyProtection`, `--force`, and focused `--stage`/`--clusters` recovery. |
+| [Operations & recovery](operations.md) | Destroy stages, `destroyProtection`, the `--mode`/`--authorize` axes, and focused `--stage`/`--clusters` recovery. |
 | [Reference examples](examples.md) | Choosing the right complete example tree before authoring a real environment. |
 
 !!! note "Where the object model lives"

@@ -29,18 +29,16 @@ type scopeDestroyOptions struct {
 
 func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
-		flags           scopeCommonFlags
-		dryRun          bool
-		askBecomePass   bool
-		yes             bool
-		override        bool
-		forceUnowned    bool
-		skipUnreachable bool
-		cephRecovery    string
-		purgeHistory    bool
-		verbose         bool
-		stage           string
-		machinesScope   string
+		flags         scopeCommonFlags
+		dryRun        bool
+		askBecomePass bool
+		yes           bool
+		authorizeFlag []string
+		cephRecovery  string
+		purgeHistory  bool
+		verbose       bool
+		stage         string
+		machinesScope string
 	)
 	use := "destroy"
 	if options.use != "" {
@@ -66,10 +64,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addAskBecomePassFlag(cmd, &askBecomePass)
 	addYesFlag(cmd, &yes, "destroy")
-	cmd.Flags().BoolVar(&override, "force", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
-	cmd.Flags().BoolVar(&forceUnowned, "include-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Also lifts the same refusal for the cluster's libvirt network and KubeVirt DataVolumes — an unowned network may still be in use by another context's VMs. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
-	cmd.Flags().BoolVar(&skipUnreachable, "skip-unreachable", false, "tolerate powered-off/unreachable nodes during teardown: skip them (their devices are NOT wiped and local state remains) and continue, leaving the cluster partially destroyed. Requires --force. Storage teardown still fails closed if a cluster's Ceph seed host is unreachable, so ownership stays proven before any device wipe")
-	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks or imply --force or --yes")
+	addAuthorizeFlag(cmd, &authorizeFlag)
+	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks and authorizes no named risk of its own")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
@@ -88,8 +84,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
 		}
-		if skipUnreachable && !override {
-			return failErr(2, errors.New("--skip-unreachable requires --force"))
+		auth, err := parseAuthorizations(authorizeFlag)
+		if err != nil {
+			return failErr(2, err)
 		}
 		runScope := scope
 		runCommandLabel := commandLabel
@@ -108,8 +105,10 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
-		if forceUnowned && !converge.ScopeTearsMachineLayer(runScope) {
-			return failErr(2, errors.New("--include-unowned relaxes machine-substrate ownership refusals, which run only in the infra stage; re-run with --stage infra (optionally with --clusters) or as a full destroy"))
+		forceUnowned, forceUnownedNetworks := false, false
+		if converge.ScopeTearsMachineLayer(runScope) {
+			forceUnowned = auth.allows(authorizeUnownedVMs)
+			forceUnownedNetworks = auth.allows(authorizeUnownedNetworks)
 		}
 		confirmedCephFSIDs, err := converge.ParseDestroyCephOwnershipRecovery(cephRecovery)
 		if err != nil {
@@ -145,12 +144,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
-		if len(ownershipSkipped) > 0 && !override && !dryRun {
+		if len(ownershipSkipped) > 0 && !dryRun && !auth.allows(authorizeUnreadableRecords) {
 			details := make([]string, 0, len(ownershipSkipped))
 			for _, warning := range ownershipSkipped {
 				details = append(details, warning.Error())
 			}
-			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run with --force to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; ")))
+			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run `bootwright destroy --authorize %s` to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; "), authorizeUnreadableRecords))
 		}
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
@@ -177,15 +176,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				if runScope.Name != "infra" {
 					return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
 				}
-				if !override {
-					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --force to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts)))
+				if !auth.allows(authorizeSharedInfra) {
+					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --authorize %s to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), authorizeSharedInfra))
 				}
-				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --force was supplied"
+				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied"
 			}
 		}
-		if sel.MachineSelection && !override {
+		if sel.MachineSelection {
 			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots); err != nil {
-				return failErr(1, err)
+				if !auth.allows(authorizeInstalledClusterNode) {
+					return failErr(1, err)
+				}
 			}
 		}
 		playbook := runScope.DestroyPlaybook
@@ -199,10 +200,10 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				blocksState = state
 			}
 			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
-			if blocksErr != nil && !override {
-				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --force to tear down regardless", blocksErr))
+			if blocksErr != nil && !auth.allows(authorizeSharedInfra) {
+				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --authorize %s to tear them down regardless", blocksErr, authorizeSharedInfra))
 			}
-			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !override {
+			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !auth.allows(authorizeSharedInfra) {
 				return failErr(1, err)
 			}
 			componentDecision = decision
@@ -225,7 +226,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if infraScope && sel.Active {
 			resolvedClusterRoots = sel.AllRoots
 		}
-		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, skipUnreachable)
+		skipUnreachable := auth.has(authorizeUnreachableNodes)
+		if skipUnreachable && !plan.NoRemoteWork {
+			auth.note(authorizeUnreachableNodes)
+		}
+		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, forceUnownedNetworks, skipUnreachable)
 		if err := converge.ApplyDestroyCephOwnershipRecoveryExtraVar(&plan, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
 		}
@@ -235,7 +240,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			safetyScope.TearsMachines = converge.ScopeTearsMachineLayer(runScope)
 			safetyScope.TearsClusters = converge.ScopeTearsClusterLayer(runScope)
 		}
-		destroySafety := workflow.EvaluateDestroySafety(plan.State, override, plan.StorageWorkNames, safetyScope)
+		authorizedProtected := auth.has(authorizeProtected)
+		destroySafety := workflow.EvaluateDestroySafety(plan.State, authorizedProtected, plan.StorageWorkNames, safetyScope)
+		if len(destroySafety.Reasons) > 0 {
+			auth.note(authorizeProtected)
+		}
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
@@ -245,19 +254,19 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				if terr != nil {
 					return failErr(1, terr)
 				}
-				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, override))
+				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), nil, 0)
 		}
-		if !dryRun && destroySafety.RequiredOverride {
-			return failErr(1, fmt.Errorf("%s requires --force for destroy", destroySafety.Summary()))
+		if !dryRun && destroySafety.RequiresAuthorization {
+			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))
 		}
 		if !dryRun {
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
 		}
-		printDestroySafety(stdout, destroySafety, override, dryRun)
+		printDestroySafety(stdout, destroySafety, authorizedProtected, dryRun)
 		if storageConsumerOverrideNotice != "" {
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
 		}
@@ -271,18 +280,27 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames)
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
-		printInfraComponentDestroyBlocks(stdout, componentDecision, override)
+		printInfraComponentDestroyBlocks(stdout, componentDecision, auth.has(authorizeSharedInfra))
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
 		storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
-		if !dryRun && !yes && !plan.NoRemoteWork {
-			if storagePlanned {
-				cliout.NewContinuation(stdout).Warning("data loss", "destroying storage cluster(s) "+strings.Join(storageScopeNames, ", ")+": cephadm rm-cluster --zap-osds destroys ALL OSD DATA and declared devices are wiped (wipefs + sgdisk --zap-all). This is irreversible.")
+		dataLossPlanned := storagePlanned && !dryRun && !plan.NoRemoteWork
+		allowDestroy := auth.has(authorizeDataLoss)
+		if dataLossPlanned {
+			auth.note(authorizeDataLoss)
+			cliout.NewContinuation(stdout).Warning("data loss", "destroying storage cluster(s) "+strings.Join(storageScopeNames, ", ")+": cephadm rm-cluster --zap-osds destroys ALL OSD DATA and declared devices are wiped (wipefs + sgdisk --zap-all). This is irreversible.")
+		}
+		warnUnusedAuthorizations(stdout, auth, dryRun)
+		if dataLossPlanned {
+			if err := destroyDataLossYesGuard(storageScopeNames, yes, allowDestroy); err != nil {
+				return failErr(1, err)
 			}
+		}
+		if !dryRun && !yes && !plan.NoRemoteWork {
 			if purgeHistory {
 				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' installer working directory, install records, kubeconfig, and per-run task/flow logs under runs/ — this history is not recoverable")
 			}
-			if !confirm(stdin, stdout, destroyConfirmPrompt(storagePlanned)) {
+			if !confirm(stdin, stdout, destroyConfirmPrompt(storagePlanned && !allowDestroy)) {
 				return failErr(1, errors.New("destroy aborted"))
 			}
 		}
@@ -332,7 +350,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
-				partialErr = fmt.Errorf("the storage teardown ran with --skip-unreachable but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
+				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
 			}
 			resetPartial := partial.Clusters
 			if partialErr != nil {

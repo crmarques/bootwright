@@ -53,22 +53,22 @@
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}:
       it carries no Bootwright ownership marker for this context/cluster/machine,
       so it may be a foreign domain that happens to match the naming. Verify the
-      domain before removing it manually, then retry, or pass --include-unowned to
+      domain before removing it manually, then retry, or pass --authorize unowned-vms to
       tear it down anyway.
   when:
     - bootwright_libvirt_domain_present | bool
-    - not (bootwright_destroy_force_unowned | default(false) | bool)
+    - not (bootwright_destroy_authorize_unowned_vms | default(false) | bool)
 
 - name: Warn before force-destroying an unowned libvirt domain
   ansible.builtin.debug:
     msg: >-
-      --include-unowned: destroying libvirt domain
+      --authorize unowned-vms: destroying libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
       despite a missing or mismatched Bootwright ownership marker for this
       context/cluster/machine.
   when:
     - bootwright_libvirt_domain_present | bool
-    - bootwright_destroy_force_unowned | default(false) | bool
+    - bootwright_destroy_authorize_unowned_vms | default(false) | bool
     - not (bootwright_libvirt_destroy_owned | default(false) | bool)
 
 - name: Stop libvirt domain

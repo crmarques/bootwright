@@ -54,7 +54,7 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 		{"interactive falls through to confirm", objs, false, false, false},
 		{"no destructive objects proceeds", nil, true, false, false},
 		{"allow with no yes proceeds", objs, false, true, false},
-		{"reinstall descriptor with yes refuses", []string{"reinstall ContainerCluster/dc1-ocp (live cluster with no install record; --converge-drifted reinstalls it and wipes its node disks)"}, true, false, true},
+		{"reinstall descriptor with yes refuses", []string{"reinstall ContainerCluster/dc1-ocp (live cluster with no install record; --mode rebuild reinstalls it and wipes its node disks)"}, true, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,8 +68,8 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 						t.Fatalf("refusal must name %q: %v", obj, err)
 					}
 				}
-				if !strings.Contains(err.Error(), "--confirm-data-loss") {
-					t.Fatalf("refusal must point at --confirm-data-loss: %v", err)
+				if !strings.Contains(err.Error(), "--authorize data-loss") {
+					t.Fatalf("refusal must point at --authorize data-loss: %v", err)
 				}
 				if !strings.Contains(err.Error(), "--clusters") {
 					t.Fatalf("refusal must name the --clusters escape to narrow the destructive set: %v", err)
@@ -80,7 +80,7 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 }
 
 func TestWarnDestructiveApplyDisclosesOnEveryAcceptedPath(t *testing.T) {
-	destructive := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --converge-drifted reinstalls it and wipes its node disks)"}
+	destructive := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --mode rebuild reinstalls it and wipes its node disks)"}
 
 	var out bytes.Buffer
 	warnDestructiveApply(&out, destructive)
@@ -97,7 +97,7 @@ func TestWarnDestructiveApplyDisclosesOnEveryAcceptedPath(t *testing.T) {
 	}
 
 	if got := destructiveApplyConfirmPrompt(destructive, true); strings.Contains(got, "DESTRUCTIVE") {
-		t.Fatalf("--confirm-data-loss pre-accepts the escalated prompt, got %q", got)
+		t.Fatalf("--authorize data-loss pre-accepts the escalated prompt, got %q", got)
 	}
 	if got := destructiveApplyConfirmPrompt(destructive, false); !strings.Contains(got, "DESTRUCTIVE") {
 		t.Fatalf("interactive destructive apply must escalate the prompt, got %q", got)
@@ -160,44 +160,44 @@ func TestEmitApplyDataLossWarningsAuthorizeDriftedSubObjects(t *testing.T) {
 
 	var out bytes.Buffer
 	plan := &converge.WorkflowPlan{}
-	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeOverride, objects, nil, plan, "", nil, "", nil, false)
+	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, objects, nil, plan, "", nil, "", nil, false)
 	vars := strings.Join(plan.ExtraVarPairs, "\n")
 	if !strings.Contains(vars, "bootwright_ceph_subobject_rebuild_authorized=ceph-a/rbd") {
 		t.Fatalf("record-classified drifted sub-object must be authorized for its acked rebuild, got %v", plan.ExtraVarPairs)
 	}
 	if strings.Contains(vars, "ceph-b/rbd") {
-		t.Fatalf("an undrifted sub-object must NOT be authorized without --confirm-data-loss, got %v", plan.ExtraVarPairs)
+		t.Fatalf("an undrifted sub-object must NOT be authorized without --authorize data-loss, got %v", plan.ExtraVarPairs)
 	}
 	if !strings.Contains(out.String(), "StoragePool/ceph-a.rbd") {
 		t.Fatalf("data-loss warning must name the drifted sub-object, got %q", out.String())
 	}
 
 	allowPlan := &converge.WorkflowPlan{}
-	emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeOverride, objects, nil, allowPlan, "", nil, "", nil, true)
+	emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeRebuild, objects, nil, allowPlan, "", nil, "", nil, true)
 	allowVars := strings.Join(allowPlan.ExtraVarPairs, "\n")
 	if !strings.Contains(allowVars, "ceph-a/rbd") || !strings.Contains(allowVars, "ceph-b/rbd") {
-		t.Fatalf("--confirm-data-loss must authorize every selected cluster's sub-objects so live-only drift has the documented path forward, got %v", allowPlan.ExtraVarPairs)
+		t.Fatalf("--authorize data-loss must authorize every selected cluster's sub-objects so live-only drift has the documented path forward, got %v", allowPlan.ExtraVarPairs)
 	}
 
 	continuePlan := &converge.WorkflowPlan{}
-	emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeContinue, objects, nil, continuePlan, "", nil, "", nil, true)
+	emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeReconcile, objects, nil, continuePlan, "", nil, "", nil, true)
 	if strings.Contains(strings.Join(continuePlan.ExtraVarPairs, "\n"), "bootwright_ceph_subobject_rebuild_authorized") {
 		t.Fatalf("non-override apply must never authorize sub-object destroys, got %v", continuePlan.ExtraVarPairs)
 	}
 }
 
 func TestEmitApplyDataLossWarningsNamesOCPReinstalls(t *testing.T) {
-	reinstalls := []string{"reinstall ContainerCluster/dc1-ocp (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --converge-drifted reinstalls the cluster and wipes its node disks)"}
+	reinstalls := []string{"reinstall ContainerCluster/dc1-ocp (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --mode rebuild reinstalls the cluster and wipes its node disks)"}
 
 	var out bytes.Buffer
 	plan := &converge.WorkflowPlan{}
-	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeOverride, nil, nil, plan, "", nil, "", reinstalls, false)
+	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, plan, "", nil, "", reinstalls, false)
 	if !strings.Contains(out.String(), "reinstall ContainerCluster/dc1-ocp") || !strings.Contains(out.String(), "node disks wiped") {
 		t.Fatalf("override reinstall warning must name the reinstalled cluster(s), got %q", out.String())
 	}
 
 	out.Reset()
-	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeOverride, nil, nil, &converge.WorkflowPlan{}, "", nil, "", nil, false)
+	emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, &converge.WorkflowPlan{}, "", nil, "", nil, false)
 	if strings.Contains(out.String(), "reinstall ContainerCluster/") {
 		t.Fatalf("no reinstall descriptors must print no reinstall warning, got %q", out.String())
 	}

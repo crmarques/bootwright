@@ -201,7 +201,7 @@ func TestSkipUnreachableCompleteStorageDestroyRecordsSubstrateRelease(t *testing
 	}
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || strings.Join(released, ",") != "ceph-bm" {
-		t.Fatalf("a completed storage teardown must authorize reinstall even when --skip-unreachable was enabled, got %v err=%v", released, err)
+		t.Fatalf("a completed storage teardown must authorize reinstall even when --authorize unreachable-nodes was enabled, got %v err=%v", released, err)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestSkipUnreachableInfraDestroyWithholdsSubstrateRelease(t *testing.T) {
 	}
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
-		t.Fatalf("an infra-only --skip-unreachable destroy has no storage completion report and must not authorize reinstall, got %v err=%v", released, err)
+		t.Fatalf("an infra-only --authorize unreachable-nodes destroy has no storage completion report and must not authorize reinstall, got %v err=%v", released, err)
 	}
 }
 
@@ -261,7 +261,7 @@ func TestMachineScopedDestroyRecordsMachineRelease(t *testing.T) {
 	}
 	records, err = workflow.ConsumableSubstrateReleases(runsDir, mustPlanMachineTasks(t, st))
 	if err != nil || len(records) != 1 || strings.Join(records[0].Machines, ",") != "ceph-1" {
-		t.Fatalf("a --skip-unreachable machine destroy must not widen the release, got %v err=%v", records, err)
+		t.Fatalf("a --authorize unreachable-nodes machine destroy must not widen the release, got %v err=%v", records, err)
 	}
 }
 

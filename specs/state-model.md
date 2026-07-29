@@ -107,14 +107,15 @@ Rules:
   nothing" but would otherwise select the whole fleet, so an accidentally-emptied
   (for example templated) list cannot silently widen apply/destroy scope.
 - `safety.destroyProtection`, when set, must be `allow` or
-  `requiredOverride`. Empty means `allow`. Bootwright never infers protection
+  `protected`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.
 - `safety.protectedKinds`, when set, lists object kinds — `ContainerCluster`,
-  `StorageCluster`, or `Machine` — that require `--force` on `destroy` even when
-  `destroyProtection` is `allow`. `apply` takes no `--force`: a destructive
-  `apply --converge-drifted` rebuild of a protected kind instead fails closed,
-  routing the operator through `destroy --force` for the affected scope followed
-  by a re-apply. It is the granular tightening: protect the fleet's Ceph and
+  `StorageCluster`, or `Machine` — that require `destroy --authorize protected`
+  even when `destroyProtection` is `allow`. `apply` has no protected-teardown
+  authorization: a destructive `apply --mode rebuild` of a protected kind
+  instead fails closed, routing the operator through
+  `destroy --authorize protected` for the affected scope followed by a
+  re-apply. It is the granular tightening: protect the fleet's Ceph and
   machines without blanket friction on scratch container clusters. An unknown kind
   fails validation naming the object and the allowed set.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
@@ -1018,7 +1019,7 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   `monitoring`, the `services[]` passthrough, and the `StoragePool`/
   `StorageFilesystem`/`StorageObjectGateway` kinds: `apply` creates and converges
   declared objects and never removes a live Ceph object whose declaration was
-  deleted; `--converge-drifted` rebuilds only still-declared pools whose structural
+  deleted; `--mode rebuild` rebuilds only still-declared pools whose structural
   identity changed, never prunes. This is the Ceph instance of the product-wide
   additive-apply rule in the [CLI Contract](#cli-contract): removal crosses the
   `destroy` authorization boundary or is performed out of band.
@@ -1400,7 +1401,7 @@ Rules:
   (`rbd` → `rbd`, `cephfs-*` → `cephfs`, `rgw` → `rgw`);
   `spec.ceph.application` overrides the inference.
 - The pool's structural identity is its `type` (and erasure profile): the only
-  desired-state change that rebuilds a live pool (data-destroying, `--converge-drifted`
+  desired-state change that rebuilds a live pool (data-destroying, `--mode rebuild`
   only). Replicas, crush rule, and application reconcile in place.
 - `spec.ceph.mirroring`, when set, enables RBD mirroring on the pool: `mode` is
   `image` (mirror only images with the mirror flag set) or `pool` (mirror every
@@ -1429,7 +1430,7 @@ Rules:
 - `spec.cephfs.metadataPoolRef` is required and must reference a
   `StoragePool` on the same `StorageCluster`. The metadata pool is part of the
   filesystem's structural identity — Ceph cannot move a live CephFS to a
-  different metadata pool — so changing it is a data-destroying, `--converge-drifted`-only
+  different metadata pool — so changing it is a data-destroying, `--mode rebuild`-only
   recreate (`ceph fs rm` then recreate), never an in-place reconcile.
 - `spec.cephfs.dataPoolRefs[]` is required; each entry is a plain pool name
   (a single entry becomes the default automatically) or `{name, default}` to
@@ -1437,7 +1438,7 @@ Rules:
   `StoragePool` on the same `StorageCluster`, must differ from the metadata
   pool, and exactly one must be the default. The default data pool is also part
   of the filesystem's structural identity: changing which data pool is the
-  default is the same data-destroying, `--converge-drifted`-only recreate as the metadata
+  default is the same data-destroying, `--mode rebuild`-only recreate as the metadata
   pool (Ceph cannot move a live CephFS to a different default data pool in place).
 - `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
   role; `sites`/`hosts` narrow the selection and must resolve to at least one
@@ -2151,8 +2152,8 @@ verbs that reach machines.
   treated as degrading, so a newly added one fails safe. The remedy is to widen
   `--clusters` to cover every consumer.
 - A scoped `destroy` fails closed the same way on shared provider-service
-  conflicts. `--force` does not widen the selection there; the remedy is to
-  widen or narrow `--clusters`.
+  conflicts. No `--authorize` token widens the selection there; the remedy is
+  to widen or narrow `--clusters`.
 - `--machines`, on `apply`/`plan`/`destroy`, is the per-machine alternative to
   `--clusters` and is mutually exclusive with it: a comma-separated list of
   `Machine` names. On `apply`/`plan` the scope is limited to the `fabric` and
@@ -2163,7 +2164,16 @@ verbs that reach machines.
   so teardown (or provisioning) of a standalone managed-OS machine that belongs
   to no cluster is fail-closed (Bootwright installs a managed OS only on
   cluster-member machines). Destroying a machine that is a node of an installed
-  cluster fails closed unless `--force`.
+  cluster fails closed unless `--authorize installed-cluster-node`.
+- `--mode`, on `apply`/`plan`, is the single-valued intent axis:
+  `create` asserts a greenfield run and fails if any selected object already
+  exists; `reconcile` (the default) creates what is missing, skips what matches,
+  and fails closed on drift; `rebuild` authorizes Bootwright-owned destructive
+  re-convergence of drifted owned objects and never adopts a foreign one. The
+  value is stamped verbatim into the `bootwright_apply_mode` extra-var, so the
+  CLI, plan composition, and the per-role Ansible gates share one vocabulary.
+  An unrecognized value is a usage error (exit 2) listing the three.
+  `destroy` has no `--mode`: teardown has one intent.
 - `--stage` accepts two family names, `infra` and `clusters`, which decompose
   into five ordered sub-phases; `--stage`/`--through` accept a sub-phase name as
   well as a family name. The `infra` family is `fabric` then `machines`; the
@@ -2256,45 +2266,38 @@ verbs that reach machines.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
-- `destroy --force` is required — with or without `--stage`, so the default
-  unscoped full-lifecycle form included — when selected state
-  contains `Environment.spec.safety.destroyProtection: requiredOverride`, or when
-  the scope-filtered teardown covers an object of a kind listed in
-  `Environment.spec.safety.protectedKinds` (the granular gate — a protected kind
-  absent from the scope does not require `--force`).
-  `--yes` never implies `--force`.
-- `--force` additionally authorizes three fail-closed gates that are otherwise
-  refusals, and nothing else:
-  - ownership records under the context's ownership directory that cannot be
-    read, whose resources would silently be left standing;
-  - a `--stage infra` teardown of a storage cluster still consumed by a
-    `ContainerCluster` outside the selection (it destroys the storage machine
-    substrate and its OSD data);
-  - infra components owned or referenced by another context, including the case
-    where that cross-context check cannot be evaluated at all.
+- The destructive surface is exactly two orthogonal axes (ADR 0030): `--mode`
+  states intent on `apply`/`plan`, and `--authorize <token>` states which named
+  risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
+  repeatable and comma-separated. An unknown token is a usage error (exit 2)
+  listing the valid set; a token the run never consumed is a non-fatal warning
+  naming it. Under `--dry-run` no token is consumed and every one is reported as
+  such. Exactly these tokens exist, and each unblocks exactly one refusal:
 
-  It also authorizes the `--machines` installed-cluster-node gate stated above.
-  It does **not** widen `--clusters`, relax device data-safety, relax the
-  shared-provider-service scope conflict, or relax the KubeVirt tenant gate.
-- On `destroy`, the confirmation prompt **is** the data-loss acknowledgment
-  ("accept data loss", naming the storage clusters whose OSDs will be zapped),
-  so `--yes` authorizes the `cephadm rm-cluster --zap-osds`. There is no
-  `--confirm-data-loss` on `destroy`; that flag exists only on `apply`, where
-  the routine confirmation and the data-loss acknowledgment are separate gates.
-- `destroy --include-unowned` relaxes the machine-substrate teardown ownership
-  gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
-  VM that matches the Bootwright `<cluster>-<machine>` naming but carries a
-  missing or mismatched ownership marker — the recovery path when the
-  desired-state names changed after the resources were applied. The same
-  relaxation covers the substrate resources those VMs own or share: the
-  cluster's libvirt network and its KubeVirt DataVolumes. The network is the
-  widest surface it lifts — removing an unowned libvirt network can strand VMs
-  of another context that use it — so the flag is scoped to the machine layer
-  and refused outside it. It is orthogonal
-  to `--force` (it neither authorizes protected-environment teardown nor is
-  authorized by it), does not relax the Ceph cluster or OSD-device ownership
-  gates, never relaxes the device data-safety checks (a mounted, in-use, or
-  unprobeable device still fails closed), and does not imply `--yes`.
+  | token | authorizes |
+  | --- | --- |
+  | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
+  | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token) |
+  | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster |
+  | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker |
+  | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
+  | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
+  | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
+  | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
+
+  No token widens `--clusters`, relaxes device data-safety, relaxes the
+  shared-provider-service scope conflict, or relaxes the KubeVirt tenant gate.
+  `unowned-vms`/`unowned-networks` apply only where those refusals run (the
+  machine layer); outside it they are reported as having had no effect. Neither
+  relaxes the Ceph cluster or OSD-device ownership gates, and neither relaxes
+  the device data-safety checks (a mounted, in-use, or unprobeable device still
+  fails closed).
+- `--yes` has one meaning on both verbs: it answers the ordinary confirmation
+  prompt and authorizes no named risk. On `destroy`, a teardown that zaps OSDs
+  requires `--authorize data-loss`; without it, a `--yes` run fails closed
+  naming the token, and an interactive run gets the data-loss confirmation
+  ("accept data loss", naming the storage clusters whose OSDs will be zapped)
+  instead of the routine one. This is the same contract `apply` enforces.
 - `destroy --recover-ceph-ownership
   <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
   seed whose controller ownership record or
@@ -2310,22 +2313,23 @@ verbs that reach machines.
   with the on-disk fsid; it is a contradiction check, never the source of
   authorization. Contradictory controller or live evidence is never
   overwritten or acted on. The flag does not relax the OSD-device ownership or
-  data-safety gates, is accepted only when the clusters stage runs, and implies
-  neither `--force` nor `--yes`.
-- `destroy --skip-unreachable` tolerates powered-off or unreachable nodes during
-  teardown: it skips them — their devices are NOT wiped and their local state
-  remains — and continues, leaving the cluster partially destroyed. It requires
-  `--force`. Storage teardown still fails closed when a cluster's Ceph seed
-  host is unreachable, so ownership stays proven before any device wipe. A
-  KubeVirt host-cluster API holding a recorded guest is not a skippable node:
-  when it is unreachable Bootwright cannot prove the guest VM and DataVolumes
-  absent, so destroy fails closed and retains their ownership and cluster
-  runtime records even with `--skip-unreachable`.
+  data-safety gates, is accepted only when the clusters stage runs, and
+  authorizes no `--authorize` token and no `--yes`.
+- `destroy --authorize unreachable-nodes` tolerates powered-off or unreachable
+  nodes during teardown: it skips them — their devices are NOT wiped and their
+  local state remains — and continues, leaving the cluster partially destroyed.
+  It stands alone and needs no second flag. Storage teardown still fails closed
+  when a cluster's Ceph seed host is unreachable, so ownership stays proven
+  before any device wipe. A KubeVirt host-cluster API holding a recorded guest
+  is not a skippable node: when it is unreachable Bootwright cannot prove the
+  guest VM and DataVolumes absent, so destroy fails closed and retains their
+  ownership and cluster runtime records even with the token.
 - Destroying a KubeVirt host cluster while an installed nested cluster is left
-  outside the selected work set fails before mutation. `--force` does not widen
-  `--clusters`; the nested cluster must be selected in the same full-lifecycle
-  destroy or destroyed first. The same gate binds a *scoped* `apply` that would
-  rebuild a host cluster's machine substrate — a `--converge-drifted` rebuild or
+  outside the selected work set fails before mutation. No `--authorize` token
+  widens `--clusters`; the nested cluster must be selected in the same
+  full-lifecycle destroy or destroyed first. The same gate binds a *scoped*
+  `apply` that would rebuild a host cluster's machine substrate — a
+  `--mode rebuild` rebuild or
   a release-authorized reinstall — and it keys on the run's selected work set,
   so a `--machines` selection is gated exactly like a `--clusters` one: the
   nested cluster must be inside the selection or already destroyed. An unscoped
@@ -2347,7 +2351,7 @@ verbs that reach machines.
   honors the release only for covered machines. A release is consumed only for
   the machines an apply actually covered: a `--machines`-scoped apply shrinks
   the record to the still-released remainder and clears it when none remain,
-  and an unscoped apply clears it. With `destroy --skip-unreachable`, a managed
+  and an unscoped apply clears it. With `destroy --authorize unreachable-nodes`, a managed
   storage cluster receives the release only when its teardown completion report
   proves that no topology node was skipped. A partially destroyed storage
   cluster withholds it, as do infra-only, machine-scoped, and non-storage
@@ -2359,7 +2363,7 @@ verbs that reach machines.
   therefore the moment data is actually lost, and a release-authorized apply
   covering bare-metal managed-OS machines counts as a destructive action in
   apply's data-loss gate: an interactive run confirms it at the destructive
-  prompt, and a non-interactive run (`--yes`) must pass `--confirm-data-loss`.
+  prompt, and a non-interactive run (`--yes`) must pass `--authorize data-loss`.
 - `destroy --purge-history` deletes retained per-component history once a
   cluster's or machine's teardown actually succeeds: the `ContainerCluster`
   installer working directory and install/connection records under
@@ -2367,7 +2371,7 @@ verbs that reach machines.
   per-run task and flow logs under `runs/history/<run-id>/`. Scope tracks
   `--clusters`/`--machines` exactly (the whole context on an unscoped destroy)
   and never a component outside it. A cluster left partially destroyed by
-  `--skip-unreachable` keeps its history so the operator can still diagnose and
+  `--authorize unreachable-nodes` keeps its history so the operator can still diagnose and
   retry. A run whose tasks span both a purged and a still-live component keeps
   its ledger and shared run log — only the purged component's task directories
   and per-cluster log are removed — so history for the surviving component is
@@ -2389,8 +2393,9 @@ verbs that reach machines.
   edit confined to day-2-owned intent (node labels/taints, cluster add-ons)
   rather than install-config/agent-config identity; and any drift on a
   reconfigure-only kind (whose re-apply is idempotent and non-destructive).
-  `apply --expect-new` additionally refuses to proceed when any selected object
-  already exists. `--expect-new` and `--converge-drifted` are mutually exclusive.
+  `apply --mode create` additionally refuses to proceed when any selected
+  object already exists. `--mode` is single-valued, so intent cannot be
+  self-contradictory.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `diff --recorded`.
 - Before a managed-OS install mutates a host, the install probe classifies the
@@ -2405,7 +2410,7 @@ verbs that reach machines.
   remedies: restore key access for the machine's `access.ssh` identity;
   `bootwright machine trust --replace <machine>` when an authorized
   out-of-band rebuild changed the host key; `bootwright destroy --stage infra
-  --machines <machine> --force` (or `--clusters <cluster>`) then re-apply to
+  --machines <machine>` (or `--clusters <cluster>`) then re-apply to
   rebuild it; power off a truly unused host. Only coverage by the machine's
   substrate-release record authorizes reclaiming the host — destroy remains
   the consent moment. A changed host key fails the same way: the probe never
@@ -2416,10 +2421,10 @@ verbs that reach machines.
   `bootwright` service account for the whole of its life: no posture change and
   no cluster binding removes it, so the account the probe authenticates as is
   always the account the install created.
-- `apply --expect-new` is also enforced against live state at the managed-OS
+- `apply --mode create` is also enforced against live state at the managed-OS
   probe: a reachable host that already runs an OS — Bootwright-owned or not —
-  fails closed under `--expect-new` unless the machine's substrate release
-  covers it, so recorded state alone can never make `--expect-new` treat a
+  fails closed under `--mode create` unless the machine's substrate release
+  covers it, so recorded state alone can never make `--mode create` treat a
   live host as greenfield.
 - The rename signature fails closed for both cluster kinds. When an apply would
   provision a new `ContainerCluster` or `StorageCluster` while a provisioned
@@ -2446,20 +2451,20 @@ verbs that reach machines.
   `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
   `waiting` skip the ISO and boot and resume the install wait; `complete` is a
   no-op. The `booting` phase fails closed — node-boot completion is uncertain, so
-  Bootwright refuses to reboot without `--converge-drifted` (which recreates the agent
+  Bootwright refuses to reboot without `--mode rebuild` (which recreates the agent
   ISO and reboots the nodes; no completed cluster is destroyed). An unrecognized
   phase also fails closed.
 - A cluster whose availability cannot be probed is never treated as a rebuild
   candidate. When a `ContainerCluster` whose recorded install inputs match
   desired state cannot be probed at all — no reachable API, no usable
-  kubeconfig, no `oc` — `apply --converge-drifted` fails closed before any
+  kubeconfig, no `oc` — `apply --mode rebuild` fails closed before any
   mutation, naming each unprovable cluster, the probe error, and the remedies
   (restore reachability and re-run; exclude it with `--clusters`; or
   `destroy --clusters <name>` then re-apply to rebuild it deliberately). A
   probe that succeeds and reports `Available=False` is different evidence — the
-  cluster answered — and still authorizes the `--converge-drifted` rebuild under
+  cluster answered — and still authorizes the `--mode rebuild` under
   the data-loss acknowledgment.
-- `apply --converge-drifted` authorizes every destructive rebuild in the run's
+- `apply --mode rebuild` authorizes every destructive rebuild in the run's
   selected scope; it cannot be narrowed to an individual object. Narrow the
   destructive set with `--clusters` or `--machines` before using it.
   It may continue past Bootwright-owned
@@ -2471,7 +2476,7 @@ verbs that reach machines.
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
-- `--converge-drifted`'s consequence depends on the object kind, and this split gates
+- `--mode rebuild`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
   provisioning, cluster add-ons, machine RHSM registration, machine repository
@@ -2482,31 +2487,31 @@ verbs that reach machines.
   is a destructive rebuild. A kind is destructive unless it is on the
   reconfigure-only allowlist, so a newly added kind fails safe.
 - When selected state contains `Environment.spec.safety.destroyProtection:
-  requiredOverride`, `apply --converge-drifted` fails closed before any mutation when the
+  protected`, `apply --mode rebuild` fails closed before any mutation when the
   drift it would resolve is a destructive rebuild (a machine or cluster), rather
   than rebuilding protected resources: that destruction must cross the destroy
-  authorization boundary, so the operator runs `destroy --force` for the
-  affected scope and then re-applies. Drift confined to reconfigure-only kinds is
+  authorization boundary, so the operator runs `destroy --authorize protected`
+  for the affected scope and then re-applies. Drift confined to reconfigure-only kinds is
   an in-place re-apply and does not trip the protection gate. `protectedKinds`
   narrows this to specific kinds: on an `allow`-default environment, a destructive
-  `apply --converge-drifted` rebuild of a protected kind still fails closed the same way,
+  `apply --mode rebuild` of a protected kind still fails closed the same way,
   while an unprotected kind rebuilds. Dry-run/plan still previews the override plan.
-- `apply --converge-drifted` never reimages, in place, a machine that is a node
+- `apply --mode rebuild` never reimages, in place, a machine that is a node
   of a managed-RHSM `StorageCluster`: an in-place reinstall would strand the
   Satellite consumer, and the reused host DMI UUID would then block
   re-registration. Such a rebuild fails closed naming the affected clusters and
-  the remedy — `destroy --stage infra --clusters <cluster> --force`, then
+  the remedy — `destroy --stage infra --clusters <cluster> --authorize protected`, then
   re-apply — because destroy unregisters the node from RHSM before wiping it.
   This refusal is independent of `destroyProtection` and `protectedKinds`: it
   fires on an unprotected environment too.
-- Independent of `destroyProtection`, a destructive `apply --converge-drifted` rebuild (a
+- Independent of `destroyProtection`, a destructive `apply --mode rebuild` (a
   managed-OS or substrate machine reinstall with disks wiped, or a container/Ceph
   cluster wipe-and-rebuild) requires an explicit data-loss acknowledgment even on an
-  unprotected environment, so a mis-scoped `--converge-drifted` never silently destroys. An
+  unprotected environment, so a mis-scoped `--mode rebuild` never silently destroys. An
   interactive run confirms it at a distinct data-loss prompt naming the objects; a
-  non-interactive run must pass `--confirm-data-loss`. `--yes` skips the routine apply
+  non-interactive run must pass `--authorize data-loss`. `--yes` answers the routine apply
   confirmation but never authorizes data loss (mirroring how `--yes` never implies
-  `--converge-drifted`). A reconfigure-only or reconcilable-in-place override touches nothing
+  `--mode rebuild`). A reconfigure-only or reconcilable-in-place rebuild touches nothing
   destructive and reaches neither gate.
 - `apply --reclaim-devices <paths>` takes a comma-separated list of block-device
   paths to WIPE in-band before a managed-Ceph apply — the recovery path for an
@@ -2518,9 +2523,9 @@ verbs that reach machines.
   cluster is recorded Bootwright-owned nothing is reclaimed. The wipe runs in the
   `deps` phase, so the run scope must include it (`--stage deps`, `--through
   base`, or the full graph), and it is gated by the same data-loss acknowledgment
-  (`--confirm-data-loss` or an interactive confirm). On a protected environment
-  (or with `StorageCluster` in `protectedKinds`) it additionally requires
-  `--converge-drifted` as the explicit protected-data-loss authorization. That
+  (`--authorize data-loss` or an interactive confirm). On a protected environment
+  (or with `StorageCluster` in `protectedKinds`) `--authorize data-loss` is also
+  the explicit protected-data-loss authorization. That
   is a deliberate exception to the rule that a protected destructive rebuild
   crosses the `destroy` boundary: reclaim recovers named devices of a cluster
   that stays up, so routing it through `destroy` would demand a strictly larger
@@ -2578,7 +2583,7 @@ verbs that reach machines.
   note, never a fatal error. Under the storage additive-only rule an object on the
   cluster but not declared is reported as `real-only` (an `--adopt` candidate), not
   a deletion. `diff` accepts `--stage`, `--clusters`, and `--output` like the other
-  selection commands and rejects `--converge-drifted` (it neither mutates cluster state nor
+  selection commands and rejects `--mode rebuild` (it neither mutates cluster state nor
   suppresses its report).
 - In **both** modes, `diff` also reports `undeclared` ("Owned but no longer
   declared") resources: Bootwright ownership records — at `Machine`, cluster,
@@ -2653,5 +2658,5 @@ verbs that reach machines.
   next step is instead the exact scoped retry command (`apply` with the failed
   run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an
-  operator reaching for `--converge-drifted` or `destroy`.
+  operator reaching for `--mode rebuild` or `destroy`.
 - Rendered effective state must not include secret bytes.

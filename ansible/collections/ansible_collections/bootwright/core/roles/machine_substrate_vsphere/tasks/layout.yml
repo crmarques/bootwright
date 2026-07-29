@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     bootwright_vsphere_managed_os_reset: >-
       {{ (bootwright_component.osManaged | default(false) | bool)
-         and ((bootwright_apply_mode | default('continue')) == 'override')
+         and ((bootwright_apply_mode | default('reconcile')) == 'rebuild')
          and (bootwright_current_cluster.name
               in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)) }}
     bootwright_vsphere_disks: >-

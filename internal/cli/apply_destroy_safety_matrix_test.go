@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
@@ -21,6 +22,7 @@ const (
 	verdictAccepted   safetyVerdict = "accepted (no gate refusal)"
 	verdictOutOfSync  safetyVerdict = "read-only out-of-sync report"
 	verdictAuthorized safetyVerdict = "authorized mutation (no gate refusal)"
+	verdictPrompted   safetyVerdict = "held at the interactive confirmation"
 )
 
 var gateRefusalMarkers = []string{"refusing to", "refuses to", "fails closed", "does not authorize data loss"}
@@ -64,6 +66,10 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 					t.Fatalf("want the read-only out-of-sync exit code 3, got exit %d\n%s", code, out)
 				}
 				assertNoRuntimeRecords(t, ctx)
+			case verdictPrompted:
+				if code == 0 {
+					t.Fatalf("want the run held at an interactive confirmation, got exit 0\n%s", out)
+				}
 			case verdictAuthorized:
 				for _, marker := range gateRefusalMarkers {
 					if strings.Contains(out, marker) {
@@ -86,18 +92,59 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 }
 
 func safetyMatrixCases() []safetyCase {
-	return append(append(
+	return append(append(append(
 		safetyFlagCoherenceCases(),
+		safetyAuthorizationTokenCases()...),
 		safetyScopeClosureCases()...),
 		safetyStartingStateCases()...)
 }
 
 func safetyFlagCoherenceCases() []safetyCase {
 	return []safetyCase{{
-		name:    "apply/expect-new+converge-drifted/greenfield/full",
-		args:    []string{"apply", "--expect-new", "--converge-drifted", "--yes", "--ask-become-pass=false"},
+		name:    "apply/retired --expect-new is an unknown flag/greenfield/full",
+		args:    []string{"apply", "--expect-new", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"mutually exclusive"},
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "apply/retired --converge-drifted is an unknown flag/greenfield/full",
+		args:    []string{"apply", "--converge-drifted", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "apply/retired --confirm-data-loss is an unknown flag/greenfield/full",
+		args:    []string{"apply", "--confirm-data-loss", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "destroy/retired --force is an unknown flag/any/full",
+		args:    []string{"destroy", "--force", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "destroy/retired --include-unowned is an unknown flag/any/full",
+		args:    []string{"destroy", "--include-unowned", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "destroy/retired --skip-unreachable is an unknown flag/any/full",
+		args:    []string{"destroy", "--skip-unreachable", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"unknown flag"},
+	}, {
+		name:    "apply/retired --mode value/greenfield/full",
+		args:    []string{"apply", "--mode", "override", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--mode must be one of", "create", "reconcile", "rebuild"},
+	}, {
+		name:    "apply/unknown --authorize token/greenfield/full",
+		args:    []string{"apply", "--authorize", "force", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"is not an authorization token", "data-loss", "shared-infra"},
+	}, {
+		name:    "destroy/unknown --authorize token in a comma list/any/full",
+		args:    []string{"destroy", "--authorize", "data-loss,everything", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"is not an authorization token"},
 	}, {
 		name:    "apply/machines+clusters/greenfield/mixed",
 		args:    []string{"apply", "--machines", "dc1-metal-master-0", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
@@ -109,15 +156,10 @@ func safetyFlagCoherenceCases() []safetyCase {
 		verdict: verdictUsageError,
 		want:    []string{"deps phase", "--stage deps"},
 	}, {
-		name:    "destroy/skip-unreachable without force/any/full",
-		args:    []string{"destroy", "--skip-unreachable", "--yes", "--ask-become-pass=false"},
+		name:    "apply/rebuild skipping the device gate/greenfield/stage base",
+		args:    []string{"apply", "--mode", "rebuild", "--stage", "base", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"--skip-unreachable requires --force"},
-	}, {
-		name:    "destroy/include-unowned outside the machine layer/any/stage clusters",
-		args:    []string{"destroy", "--stage", "clusters", "--include-unowned", "--yes", "--ask-become-pass=false"},
-		verdict: verdictUsageError,
-		want:    []string{"--stage infra"},
+		want:    []string{"--mode rebuild --through base"},
 	}, {
 		name:    "destroy/sub-phase stage/any/fabric",
 		args:    []string{"destroy", "--stage", "fabric", "--yes", "--ask-become-pass=false"},
@@ -133,6 +175,80 @@ func safetyFlagCoherenceCases() []safetyCase {
 		args:    []string{"apply", "--output", "json", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
 		want:    []string{"--dry-run"},
+	}}
+}
+
+func safetyAuthorizationTokenCases() []safetyCase {
+	return []safetyCase{{
+		name:    "destroy/data-loss: --yes alone no longer authorizes an OSD zap",
+		args:    []string{"destroy", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"ceph-storage", "--yes does not authorize data loss", "--authorize data-loss"},
+	}, {
+		name:    "destroy/data-loss: the interactive data-loss prompt still stands without --yes",
+		args:    []string{"destroy", "--ask-become-pass=false"},
+		verdict: verdictPrompted,
+		want:    []string{"Confirm this DESTRUCTIVE action (accept data loss)?"},
+		deny:    []string{"--yes does not authorize data loss"},
+	}, {
+		name:    "destroy/data-loss: the token clears the data-loss refusal and the prompt",
+		args:    []string{"destroy", "--authorize", "data-loss", "--ask-become-pass=false"},
+		verdict: verdictPrompted,
+		want:    []string{"Continue with destroy?"},
+		deny:    []string{"--yes does not authorize data loss", "Confirm this DESTRUCTIVE action"},
+	}, {
+		name:    "apply/data-loss: an unused token is a warning, never an authorization",
+		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--authorize", "data-loss", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize data-loss had no effect"},
+		deny:    []string{"will DESTROY data"},
+	}, {
+		name:    "destroy/protected: a protected Environment refuses and names its token",
+		seed:    seedProtectedEnvironment,
+		args:    []string{"destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"destroyProtection=protected", "--authorize protected"},
+	}, {
+		name:    "destroy/protected: data-loss does not stand in for protected",
+		seed:    seedProtectedEnvironment,
+		args:    []string{"destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--authorize", "data-loss", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize protected"},
+	}, {
+		name: "destroy/installed-cluster-node: a node of an installed cluster refuses and names its token",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedInstalledCluster(t, ctx, "dc1-metal-ocp")
+		},
+		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"dc1-metal-ocp", "--authorize installed-cluster-node"},
+	}, {
+		name:    "destroy/unreadable-records: a corrupt ownership record refuses and names its token",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"could not be read", "--authorize unreadable-records"},
+	}, {
+		name:    "destroy/shared-infra: a storage consumer conflict refuses and names its token",
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"ceph-storage", "--authorize shared-infra"},
+	}, {
+		name:    "destroy/unowned-vms: the token is inert outside the machine layer and says so",
+		args:    []string{"destroy", "--stage", "clusters", "--authorize", "unowned-vms", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize unowned-vms had no effect"},
+	}, {
+		name:    "destroy/unowned-networks: authorizing VMs never authorizes networks",
+		args:    []string{"destroy", "--stage", "infra", "--authorize", "unowned-vms", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_destroy_authorize_unowned_vms=true"},
+		deny:    []string{"bootwright_destroy_authorize_unowned_networks=true"},
+	}, {
+		name:    "destroy/unreachable-nodes: the token alone arms the skip, with no second flag",
+		args:    []string{"destroy", "--stage", "infra", "--authorize", "unreachable-nodes", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_destroy_skip_unreachable=true"},
 	}}
 }
 
@@ -169,13 +285,13 @@ func safetyScopeClosureCases() []safetyCase {
 		},
 		args:    []string{"destroy", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"dc1-child-ocp", "--force does not widen"},
+		want:    []string{"dc1-child-ocp", "no --authorize token widens"},
 	}, {
 		name: "destroy/machines of a host cluster while its nested guest is installed",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-child-ocp")
 		},
-		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--force", "--yes", "--ask-become-pass=false"},
+		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--authorize", "installed-cluster-node", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"dc1-child-ocp"},
 	}}
@@ -183,19 +299,13 @@ func safetyScopeClosureCases() []safetyCase {
 
 func safetyStartingStateCases() []safetyCase {
 	return []safetyCase{{
-		name: "apply/expect-new over an existing install record",
+		name: "apply/mode create over an existing install record",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp")
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--expect-new", "--yes", "--ask-become-pass=false"},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--mode", "create", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"dc1-metal-ocp"},
-	}, {
-		name:    "apply/confirm-data-loss alone authorizes nothing on a greenfield run",
-		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--confirm-data-loss", "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"--confirm-data-loss had no effect"},
-		deny:    []string{"will DESTROY data"},
 	}, {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -320,5 +430,35 @@ func seedStorageOwnership(t *testing.T, ctx workspace.Context, cluster string) {
 		UpdatedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("SaveResource(%s): %v", cluster, err)
+	}
+}
+
+func seedProtectedEnvironment(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	path := filepath.Join(ctx.InputDir, "environment.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read context environment: %v", err)
+	}
+	body := strings.Replace(string(data),
+		"  domains:",
+		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionProtected+"\n  domains:", 1)
+	if body == string(data) {
+		t.Fatal("context environment did not contain spec.domains")
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write protected environment: %v", err)
+	}
+}
+
+func seedUnreadableOwnershipRecord(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedStorageOwnership(t, ctx, "ceph-storage")
+	corrupt := filepath.Join(ctx.OwnershipDir, ownership.ResourceDirName, "corrupt.json")
+	if err := os.MkdirAll(filepath.Dir(corrupt), 0o700); err != nil {
+		t.Fatalf("mkdir ownership resources dir: %v", err)
+	}
+	if err := os.WriteFile(corrupt, []byte("{ not json"), 0o600); err != nil {
+		t.Fatalf("write corrupt ownership record: %v", err)
 	}
 }

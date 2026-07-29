@@ -25,16 +25,16 @@ func TestDiagnosticsMapRemovedInstallField(t *testing.T) {
 }
 
 func TestDiagnosticsMapRenamedCephManagementDNSName(t *testing.T) {
-	err := errors.New("decode /tmp/input/cluster.yaml document 1: yaml: unmarshal errors:\n  line 24: field dnsName not found in type v1alpha1.StorageCephManagement")
+	err := errors.New("decode /tmp/input/cluster.yaml document 1: yaml: unmarshal errors:\n  line 24: field dnsName not found in type v1alpha1.StorageCephMgmtGateway")
 	diagnostics := diagnosticsFromError(err)
 	if len(diagnostics) != 1 {
 		t.Fatalf("Diagnostics returned %d entries, want 1", len(diagnostics))
 	}
 	got := diagnostics[0]
-	if got.Object != "StorageCluster" || got.Field != "spec.ceph.management.dnsName" {
-		t.Fatalf("diagnostic owner = (%q, %q), want StorageCluster spec.ceph.management.dnsName", got.Object, got.Field)
+	if got.Object != "StorageCluster" || got.Field != "spec.ceph.mgmtGateway.dnsName" {
+		t.Fatalf("diagnostic owner = (%q, %q), want StorageCluster spec.ceph.mgmtGateway.dnsName", got.Object, got.Field)
 	}
-	if !strings.Contains(got.Remediation, "spec.ceph.management.dnsLabel") {
+	if !strings.Contains(got.Remediation, "spec.ceph.mgmtGateway.dnsLabel") {
 		t.Fatalf("remediation = %q, want the dnsLabel successor named", got.Remediation)
 	}
 }

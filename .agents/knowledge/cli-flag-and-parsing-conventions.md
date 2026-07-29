@@ -21,12 +21,27 @@ error wording; `TestStageFlagCompletionOffersCanonicalValues` pins that
 apply/plan/diff complete the full vocabulary while destroy completes
 families only. A drift here means one surface fell behind.
 
-**Constraint: `--converge-drifted` help must name the destructive scope it
-authorizes.** Managed-OS VM reinstall and Ceph wipe-and-rebuild — never
-understated as "install-mismatch checks". The guarding test matches
-single tokens so the assertion survives cobra's help line wrapping, and a
-companion assertion matches the removed `--scope` flag at its token
-boundary (trailing space) so a resurrected `--scope` is still rejected.
+**Constraint: the destructive surface is `--mode` plus `--authorize`, and
+both derive from one accessor.** `--mode` values come from
+`workflow.ApplyModeNames()` and are the `bootwright_apply_mode` extra-var
+values verbatim (`create`/`reconcile`/`rebuild`), so validation text,
+help, completion, and the Ansible gates cannot drift. `--authorize`
+values come from `authorizationTokens` in `internal/cli/authorize.go`,
+which owns the token names, the help text, and the "had no effect"
+reasons; `addAuthorizeFlag` registers completion from the same list.
+Help for both must name the destructive scope they authorize — managed-OS
+VM reinstall and Ceph wipe-and-rebuild — never understated as
+"install-mismatch checks". The guarding test matches single tokens so the
+assertion survives cobra's help line wrapping, and a companion assertion
+matches the removed `--scope` flag at its token boundary (trailing space)
+so a resurrected `--scope` is still rejected.
+
+**Gotcha: `--authorize` bookkeeping needs `has` vs `allows`.** A gate that
+only sometimes fires must consult `auth.has(token)` (pure) and call
+`auth.note(token)` when the gate was actually relevant; `auth.allows(token)`
+does both and is only correct at a site reached exclusively when the refusal
+applies. Getting this wrong either suppresses the "had no effect" warning or
+emits it on a run that did consume the token.
 
 **Gotcha: dispatcher wiring rules (`requireSubcommand`).**
 (1) `FParseErrWhitelist.UnknownFlags` is required, or pflag bails on a

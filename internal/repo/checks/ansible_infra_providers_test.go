@@ -52,7 +52,7 @@ func TestInfraDestroyPlaysHonorSkipUnreachable(t *testing.T) {
 		for i, play := range plays {
 			ignoreUnreachable, ok := play["ignore_unreachable"].(string)
 			if !ok || !strings.Contains(ignoreUnreachable, "bootwright_destroy_skip_unreachable") {
-				t.Fatalf("%s play %d must template ignore_unreachable from bootwright_destroy_skip_unreachable so --skip-unreachable reaches the infra stage, got %v", path, i, play["ignore_unreachable"])
+				t.Fatalf("%s play %d must template ignore_unreachable from bootwright_destroy_skip_unreachable so --authorize unreachable-nodes reaches the infra stage, got %v", path, i, play["ignore_unreachable"])
 			}
 		}
 	}
@@ -824,8 +824,8 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_libvirt_destroy_owned") {
 		t.Fatalf("libvirt destroy guard must require the decided ownership fact, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("libvirt destroy guard must be skipped under --include-unowned, got when=%v", tasks[refuseIdx]["when"])
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("libvirt destroy guard must be skipped under --authorize unowned-vms, got when=%v", tasks[refuseIdx]["when"])
 	}
 }
 
@@ -847,7 +847,7 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	}
 	gateWhen := fmt.Sprint(topTasks[gateIdx]["when"])
 	if strings.Contains(gateWhen, "bootwright_destroy_skip_unreachable") {
-		t.Fatalf("host-reachability gate must not let --skip-unreachable discard a recorded guest, got when=%v", topTasks[gateIdx]["when"])
+		t.Fatalf("host-reachability gate must not let --authorize unreachable-nodes discard a recorded guest, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if !strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
 		t.Fatalf("host-reachability gate must only fail closed for a recorded guest, got when=%v", topTasks[gateIdx]["when"])
@@ -855,7 +855,7 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
 	}
-	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--skip-unreachable cannot prove the guest absent") {
+	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--authorize unreachable-nodes cannot prove the guest absent") {
 		t.Fatalf("host-reachability refusal must explain why skipping cannot release guest ownership, got %v", topTasks[gateIdx])
 	}
 	kubeconfigGateIdx := findAnsibleTask(t, topTasks, "Require a captured kubeconfig for the recorded KubeVirt guest")
@@ -874,7 +874,7 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		t.Fatalf("a host cluster with no captured kubeconfig must only fail closed for a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
 	}
 	if strings.Contains(kubeconfigGateWhen, "bootwright_destroy_skip_unreachable") {
-		t.Fatalf("the captured-kubeconfig gate must not let --skip-unreachable discard a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
+		t.Fatalf("the captured-kubeconfig gate must not let --authorize unreachable-nodes discard a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
 	}
 	if got := fmt.Sprint(topTasks[gateIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_kubeconfig_available") {
 		t.Fatalf("the reachability gate must defer to the captured-kubeconfig gate when no kubeconfig exists, got when=%v", topTasks[gateIdx]["when"])
@@ -908,8 +908,8 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(refuse["fail_msg"]), "managed-by") {
 		t.Fatalf("kubevirt delete guard message must name the managed-by ownership label, got %v", refuse["fail_msg"])
 	}
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("kubevirt delete guard must be skipped under --include-unowned, got when=%v", tasks[refuseIdx]["when"])
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("kubevirt delete guard must be skipped under --authorize unowned-vms, got when=%v", tasks[refuseIdx]["when"])
 	}
 
 	for _, task := range tasks {
@@ -965,8 +965,11 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(dvRefuse["fail_msg"]), "managed-by") {
 		t.Fatalf("kubevirt DataVolume delete guard message must name the managed-by label, got %v", dvRefuse["fail_msg"])
 	}
-	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("kubevirt DataVolume delete guard must be skipped under --include-unowned, got when=%v", tasks[dvRefuseIdx]["when"])
+	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_authorize_unowned_networks") {
+		t.Fatalf("kubevirt DataVolume delete guard must be skipped only under --authorize unowned-networks, whose blast radius reaches another context, got when=%v", tasks[dvRefuseIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); strings.Contains(got, "bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("kubevirt DataVolume delete guard must not be lifted by the VM authorization, got when=%v", tasks[dvRefuseIdx]["when"])
 	}
 
 	bootTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml")

@@ -21,13 +21,13 @@
   failed_when: false
   when:
     - bootwright_prior_kubeconfig_stat.stat.exists
-    - (bootwright_apply_mode | default('continue')) != 'override'
+    - (bootwright_apply_mode | default('reconcile')) != 'rebuild'
 
 - name: Determine whether install can be skipped
   ansible.builtin.set_fact:
     bootwright_install_already_complete: >-
       {{
-        (bootwright_apply_mode | default('continue')) != 'override'
+        (bootwright_apply_mode | default('reconcile')) != 'rebuild'
         and bootwright_prior_kubeconfig_stat.stat.exists
         and (bootwright_install_cluster_available.stdout | default('') | trim) == 'True'
       }}

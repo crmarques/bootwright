@@ -147,10 +147,10 @@ func TestBootstrapWaitAdditionLeavesInstalledClusterConverged(t *testing.T) {
 		t.Fatalf("unrecorded bootstrap wait classifies as %q recorded=%v, want missing and unrecorded", bootstrap.Class, bootstrap.Recorded())
 	}
 
-	if err := EvaluateApplyModePreflight(ApplyModeContinue, objects); err != nil {
+	if err := EvaluateApplyModePreflight(ApplyModeReconcile, objects); err != nil {
 		t.Fatalf("continue-mode preflight on a pre-upgrade installed cluster refused: %v", err)
 	}
-	if err := EvaluateApplyModePreflight(ApplyModeOverride, objects); err != nil {
+	if err := EvaluateApplyModePreflight(ApplyModeRebuild, objects); err != nil {
 		t.Fatalf("converge-drifted preflight on a pre-upgrade installed cluster refused: %v", err)
 	}
 	err = EvaluateApplyModePreflight(ApplyModeCreate, objects)

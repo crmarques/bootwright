@@ -56,10 +56,10 @@ before the post-bootstrap marker still leaves the controller-side record.
 Reachable markerless clusters fail closed on normal apply; destroy recovery
 requires the operator-confirmed fsid path above. An unreachable incomplete
 bootstrap remains eligible for the separately authorized
-`apply --converge-drifted` rebuild. Successful apply refreshes the fsid marker
+`apply --mode rebuild` rebuild. Successful apply refreshes the fsid marker
 and enriched ownership record.
 
-**Semantics:** `--converge-drifted` does not always wipe. The controller classifies a
+**Semantics:** `--mode rebuild` does not always wipe. The controller classifies a
 cluster whose only drift is an OSD-device add as reconcilable in place and
 names it in `bootwright_ceph_reconcilable_only_clusters`; for such a cluster
 override must NOT zap — `ceph orch apply` adds the new OSD additively. An
@@ -75,7 +75,7 @@ rebuild), never over-authorize. This gate is independent of, and additional
 to, the ownership and reconcilable-only checks.
 
 **Semantics:** When destroy skipped a node as unreachable
-(`--skip-unreachable`), the cluster's controller-side ownership record is KEPT
+(`--authorize unreachable-nodes`), the cluster's controller-side ownership record is KEPT
 and re-stamped as partially destroyed from the destroy-result file — the
 cluster is only partially torn down and must not read as fully gone. A normal
 teardown (no skipped nodes) removes the record.

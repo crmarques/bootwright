@@ -20,10 +20,10 @@ below.
 | [0004](0004-cross-cluster-substrate-dependencies.md) | Cross-Cluster Substrate Dependencies | |
 | [0005](0005-provisioning-playbooks.md) | Operator-Supplied Provisioning Playbooks | delivery revised by 0021; kind renamed by 0026 |
 | [0006](0006-no-prose-comments-knowledge-catalog.md) | Source Knowledge Lives in the Indexed Catalog, Not Comments | |
-| [0007](0007-apply-destroy-safety-model.md) | Apply/Destroy Safety Model | teardown ordering revised by 0023 |
+| [0007](0007-apply-destroy-safety-model.md) | Apply/Destroy Safety Model | teardown ordering revised by 0023; gate surface revised by 0029 |
 | [0008](0008-ceph-declarative-cephadm-compat.md) | Declarative Ceph API on cephadm Native Concepts | |
 | [0009](0009-renderer-owns-listening-surface.md) | The Renderer Owns the Listening Surface and Dispatch | |
-| [0010](0010-cli-gate-and-flag-conventions.md) | CLI Gate and Flag Conventions | |
+| [0010](0010-cli-gate-and-flag-conventions.md) | CLI Gate and Flag Conventions | destructive-gate flags revised by 0029 |
 | [0011](0011-bmc-vmedia-boot-flow.md) | Redfish BMC Virtual-Media Boot Flow | |
 | [0012](0012-proxy-fanout-per-directive.md) | Proxy Fan-Out, Per-Directive Bypass, and TLS-Inspection Trust | |
 | [0013](0013-addon-catalog-and-hooks.md) | Add-on Catalog, Step Lifecycle, and OLM Readiness Gating | |
@@ -43,3 +43,4 @@ below.
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024 |
 | [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
 | [0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md) | Answering a `sudo` Password for the Borrowed Identity | extends 0028 |
+| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010 |

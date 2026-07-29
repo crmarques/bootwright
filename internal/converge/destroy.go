@@ -40,14 +40,14 @@ func DestroyStageCommandLabel(stage, defaultLabel string) string {
 	return strings.TrimSpace(stage) + " destroy"
 }
 
-func DestroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override bool) *DryRunDestroySafety {
+func DestroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, authorized bool) *DryRunDestroySafety {
 	if len(decision.Reasons) == 0 {
 		return nil
 	}
 	return &DryRunDestroySafety{
-		OverrideRequired: decision.RequiredOverride,
-		Override:         override,
-		Reasons:          append([]string(nil), decision.Reasons...),
+		AuthorizationRequired: decision.RequiresAuthorization,
+		Authorized:            authorized,
+		Reasons:               append([]string(nil), decision.Reasons...),
 	}
 }
 

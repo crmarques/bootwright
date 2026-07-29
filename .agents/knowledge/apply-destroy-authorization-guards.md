@@ -12,7 +12,7 @@ so a new kind cannot be added without entering the guards below.
 **Every kind is classified.**
 `TestEveryApplyTaskKindHasAnOverrideClassification` asserts each registered kind
 is exactly one of reconfigure-only (`overrideReconfigureOnlyKinds`) or
-destructive under `--converge-drifted`, and that a destructive kind has refusal
+destructive under `--mode rebuild`, and that a destructive kind has refusal
 consequence text (`structuralRebuildConsequence`) — a refusal must be able to say
 what it would do. The allowlist fails safe (unlisted = destructive), so a new
 kind is destructive by default; the guard makes that a deliberate choice rather
@@ -35,10 +35,16 @@ record-schema change could silently flip every record — or orphan the refusal.
 
 **The scenario matrix.** `internal/cli/apply_destroy_safety_matrix_test.go` is
 table-driven over (command, flag combination, starting state, selected scope) and
-asserts the expected verdict: usage error, fail-closed refusal, accepted, or the
-read-only out-of-sync report. Every refusal case additionally asserts the message
-names a `bootwright …` command, so remedial guidance cannot regress into a bare
-"not allowed". It runs against the advanced baseline example
+asserts the expected verdict: usage error, fail-closed refusal, accepted, held at
+the interactive confirmation, or the read-only out-of-sync report. It carries one
+case per `--authorize` token (ADR 0030), a case per retired flag proving it is now
+an unknown flag, and the headline case that `destroy --yes` alone no longer
+authorizes an OSD zap. Every refusal case additionally asserts the message names a
+`bootwright …` command, so remedial guidance cannot regress into a bare
+"not allowed"; a case whose expected outcome is the interactive data-loss prompt
+uses `verdictPrompted` instead, because declining a prompt is not a refusal.
+
+It runs against the advanced baseline example
 (`examples/baremetal-redfish-multidc-virtualized-odf-ceph`: two DCs, a stretched
 Ceph arbitrated across both, one bare-metal OCP per DC, one nested virtualized
 OCP per DC) so cross-DC scope closure and host-to-guest substrate ordering are

@@ -4,14 +4,14 @@ Substrate VM names (`<cluster>-<machine>`) carry no context component, so a
 second Bootwright context or a foreign owner can hold a same-named object.
 Every destructive touch verifies a live ownership marker first.
 
-**Apply-side guard (no --include-unowned escape):** before the override reset
+**Apply-side guard (no --authorize unowned-vms escape):** before the override reset
 destroys/undefines a libvirt domain, or a plain apply redefines it, the apply
 path requires the Bootwright ownership marker for THIS context/cluster/machine
 in the domain XML (`machine_substrate_libvirt/tasks/machine.yml`; vSphere has
 the identical guard on its override reset via the VM annotation in
 `machine_substrate_vsphere/tasks/probe.yml`). An absent domain fails the probe
 and skips the guard, so first apply still creates. Apply fails closed with NO
-`--include-unowned` escape — that flag exists only on destroy.
+`--authorize unowned-vms` escape — that flag exists only on destroy.
 
 **Destroy-side verification per substrate:** libvirt reads the domain-XML
 marker; vSphere asserts the vCenter annotation (`bootwright:context=`,
@@ -19,7 +19,7 @@ marker; vSphere asserts the vCenter annotation (`bootwright:context=`,
 KubeVirt re-verifies the `bootwright.io/managed-by` label on the
 VirtualMachine and each DataVolume (the namespace may host foreign workloads).
 Assert and delete are gated on object presence so destroy stays idempotent; a
-missing/mismatched marker fails closed and `bootwright_destroy_force_unowned`
+missing/mismatched marker fails closed and `bootwright_destroy_authorize_unowned_vms`
 is the explicit recovery relaxation (per-VM refusals only — never Ceph
 ownership or device data-safety gates).
 

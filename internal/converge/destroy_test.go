@@ -45,7 +45,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("classify before reset: %v", err)
 	}
-	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeContinue, objects); err == nil || !strings.Contains(err.Error(), "StorageCluster/ceph-ibm") {
+	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeReconcile, objects); err == nil || !strings.Contains(err.Error(), "StorageCluster/ceph-ibm") {
 		t.Fatalf("precondition: expected storage drift, got %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("classify after reset: %v", err)
 	}
-	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeContinue, objects); err != nil {
+	if err := workflow.EvaluateApplyModePreflight(workflow.ApplyModeReconcile, objects); err != nil {
 		t.Fatalf("apply after infra destroy should rebuild missing objects, got %v", err)
 	}
 	if _, found, err := workflow.LoadClusterInstallRecord(clustersDir, "ocp"); err != nil || found {
@@ -173,10 +173,10 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 
 	err = workflow.EvaluateApplyModePreflight(workflow.ApplyModeCreate, objects)
 	if err == nil || !strings.Contains(err.Error(), "ceph-a") {
-		t.Fatalf("apply --expect-new must refuse the partially-destroyed ceph-a, got %v", err)
+		t.Fatalf("apply --mode create must refuse the partially-destroyed ceph-a, got %v", err)
 	}
 	if strings.Contains(err.Error(), "StorageCluster/ceph-b") {
-		t.Fatalf("apply --expect-new must not refuse the fully-destroyed ceph-b, got %v", err)
+		t.Fatalf("apply --mode create must not refuse the fully-destroyed ceph-b, got %v", err)
 	}
 }
 

@@ -53,13 +53,13 @@ func validateEnvironments(state v1alpha1.State) []string {
 func validateEnvironmentSafety(env v1alpha1.Environment) []string {
 	var errs []string
 	switch env.Spec.Safety.DestroyProtection {
-	case "", v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride:
+	case "", v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionProtected:
 	default:
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.safety.destroyProtection %q must be one of {%s, %s}",
 			env.Metadata.Name,
 			env.Spec.Safety.DestroyProtection,
 			v1alpha1.EnvironmentDestroyProtectionAllow,
-			v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
+			v1alpha1.EnvironmentDestroyProtectionProtected))
 	}
 	for _, kind := range env.Spec.Safety.ProtectedKinds {
 		switch kind {

@@ -253,12 +253,12 @@ step 0c.
 
 ## 7. Tear down
 
-This environment sets `safety.destroyProtection: requiredOverride`, so `destroy`
-refuses to run without `--force`.
+This environment sets `safety.destroyProtection: protected`, so `destroy`
+refuses to run without `--authorize protected`.
 
 ```bash
-bootwright destroy --stage clusters --force --yes   # remove Ceph services
-bootwright destroy --stage infra    --force --yes   # power off / deprovision nodes
+bootwright destroy --stage clusters --authorize protected,data-loss --yes   # remove Ceph services
+bootwright destroy --stage infra    --authorize protected --yes             # power off / deprovision nodes
 ```
 
 ---

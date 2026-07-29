@@ -27,7 +27,7 @@ E2E_ANSIBLE_FLAGS = $(if $(ANSIBLE_PLAYBOOK),--ansible-playbook $(ANSIBLE_PLAYBO
 E2E_APPLY_ALL ?= $(BIN_DIR)/$(BINARY) apply --yes
 E2E_APPLY_FLAGS ?=
 E2E_CLEAN ?= sudo rm -rf
-DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md test add-ons $(wildcard examples)
+DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md specs/adr test add-ons $(wildcard examples)
 
 ANSIBLE_SRC_DIR = ansible
 EMBED_BUNDLE_ARCHIVE = internal/converge/bundle/ansible_bundle.zip

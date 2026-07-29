@@ -25,7 +25,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		hasMachine := len(machineLabels) > 0
 		hasCluster := len(destructive) > len(machineLabels)
 		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, workflow.OverrideDestructiveClusterScope(objects))
-		return fmt.Errorf("apply --converge-drifted would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --converge-drifted reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+		return fmt.Errorf("apply --mode rebuild would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --mode rebuild reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
 	}
 	protectedKinds := workflow.ProtectedKindSet(state)
 	blocked := workflow.OverrideDestructiveKindProtected(objects, protectedKinds)
@@ -35,7 +35,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
 	if rhsmClusters := managedRegistrationClustersInScope(state, machineClusters); len(rhsmClusters) > 0 {
 		remedy := overrideDestroyRemedy(true, false, rhsmClusters, nil)
-		return fmt.Errorf("apply --converge-drifted would reimage managed-RHSM storage node(s) of Ceph cluster(s) %s in place, stranding their Satellite registration so the reused host DMI UUID blocks re-registration; %s, then re-apply — destroy unregisters the node from RHSM before wiping it", strings.Join(rhsmClusters, ", "), remedy)
+		return fmt.Errorf("apply --mode rebuild would reimage managed-RHSM storage node(s) of Ceph cluster(s) %s in place, stranding their Satellite registration so the reused host DMI UUID blocks re-registration; %s, then re-apply — destroy unregisters the node from RHSM before wiping it", strings.Join(rhsmClusters, ", "), remedy)
 	}
 	if len(blocked) == 0 {
 		return nil
@@ -44,7 +44,7 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 	clusterNames := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
 	hasCluster := len(clusterNames) > 0 || (protectedKinds[v1alpha1.KindContainerCluster] && len(reinstallDescriptors) > 0)
 	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, clusterNames)
-	return fmt.Errorf("apply --converge-drifted would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
+	return fmt.Errorf("apply --mode rebuild would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
 }
 
 func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string, ownershipRecords []ownership.ResourceRecord) error {
@@ -138,17 +138,17 @@ func managedRegistrationClustersInScope(state v1alpha1.State, machineClusters []
 }
 
 func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, clusterNames []string) string {
-	infra := "bootwright destroy --stage infra --force"
+	infra := "bootwright destroy --stage infra --authorize protected"
 	if len(machineClusters) > 0 {
-		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --force"
+		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --authorize protected"
 	}
-	cluster := "bootwright destroy --force"
+	cluster := "bootwright destroy --authorize protected"
 	clusterScoped := false
 	if len(clusterNames) > 0 {
-		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --force"
+		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --authorize protected"
 		clusterScoped = true
 	}
-	skipHint := " (add --skip-unreachable if a machine's host substrate was never provisioned or is powered off)"
+	skipHint := " (add --authorize unreachable-nodes if a machine's host substrate was never provisioned or is powered off)"
 	switch {
 	case hasMachine && !hasCluster:
 		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first" + skipHint
@@ -158,7 +158,7 @@ func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, cluster
 		if clusterScoped {
 			return "run `" + cluster + "` first"
 		}
-		return "run `bootwright destroy --force` for that scope first"
+		return "run `bootwright destroy --authorize protected` for that scope first"
 	}
 }
 
@@ -167,10 +167,10 @@ func CheckReclaimDestroyProtection(state v1alpha1.State, ownedClusters []string,
 		return nil
 	}
 	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
-		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s in Environment %s with spec.safety.destroyProtection=%s; add --converge-drifted to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "), strings.Join(protected, ", "), v1alpha1.EnvironmentDestroyProtectionRequiredOverride)
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s in Environment %s with spec.safety.destroyProtection=%s; add --authorize data-loss to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "), strings.Join(protected, ", "), v1alpha1.EnvironmentDestroyProtectionProtected)
 	}
 	if workflow.ProtectedKindSet(state)[v1alpha1.KindStorageCluster] {
-		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s, protected by spec.safety.protectedKinds; add --converge-drifted to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "))
+		return fmt.Errorf("--reclaim-devices would wipe declared OSD device(s) of Ceph cluster(s) %s, protected by spec.safety.protectedKinds; add --authorize data-loss to authorize this protected data-loss operation", strings.Join(ownedClusters, ", "))
 	}
 	return nil
 }

@@ -128,11 +128,11 @@ warnings do not make the desired topology unusable.
 **Constraint (all-devices OSD auto-reclaim):** A host authored by filter renders
 `devices: []`, so the Pass-1 static gate/reclaim/marker no-op for it and a
 reinstall onto disks carrying a prior Ceph signature fails at the readiness poll
-with zero OSDs. `apply --converge-drifted --confirm-data-loss` closes that FOR `all: true`
+with zero OSDs. `apply --mode rebuild --authorize data-loss` closes that FOR `all: true`
 hosts ONLY: the CLI emits `bootwright_ceph_filter_reclaim_clusters` for in-scope
 clusters that have a host whose OSD selection is `data_devices.all=true`
 (`topology.ClusterHasAllDevicesOSDHost`, mirrored per host by the rendered
-`osdReclaimAll` flag) — never under `--converge-drifted` alone, `--yes` alone, or
+`osdReclaimAll` flag) — never under `--mode rebuild` alone, `--yes` alone, or
 dry-run. Narrowing filters (`model`/`size`/`rotational`/`vendor`/`limit`) are
 DELIBERATELY excluded: the ansible layer only knows the boolean flag, not the
 predicate (which lives solely in `core-services.yaml`), so auto-zapping every
@@ -166,7 +166,7 @@ are wiped with `ceph orch device zap <host> <path> --force`. Static-path hosts,
 non-`all:true` clusters, and unauthorized runs are never touched. KNOWN
 LIMITATION: a co-resident FOREIGN live Ceph cluster's OSDs are absent from THIS
 cluster's `osd_ids`/`ceph osd metadata` and, being raw bluestore, unmounted — so
-under `all: true` + `--converge-drifted --confirm-data-loss` their disks would be zapped.
+under `all: true` + `--mode rebuild --authorize data-loss` their disks would be zapped.
 `all: true` asserts every disk on the host belongs to this cluster; the CLI
 warning states this explicitly (do not use `all: true` on a host shared with
 another Ceph cluster or holding data to keep). The unreliable-diagnostic

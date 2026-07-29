@@ -164,7 +164,7 @@
           always a residual on-disk signature (filesystem/LVM/bluestore) that ceph-volume
           refuses. Confirm each disk is disposable, then clean it
           (wipefs --all / sgdisk --zap-all) and re-apply, or re-apply with
-          --converge-drifted --confirm-data-loss to auto-reclaim it. Disks:
+          --mode rebuild --authorize data-loss to auto-reclaim it. Disks:
           {{ bootwright_ceph_coverage_residual | map(attribute='host')
              | zip(bootwright_ceph_coverage_residual | map(attribute='path'))
              | map('join', ':') | list | join(', ') }}

@@ -259,9 +259,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			return out, installedMatching, err
 		}
 		if mode == ApplyModeCreate && found && record.Status != ClusterInstallStatusDestroyed {
-			return out, installedMatching, fmt.Errorf("apply --expect-new requires a greenfield environment and ContainerCluster/%s already has an install record (status %s); drop --expect-new to reconcile it, or run bootwright destroy --stage clusters --clusters %s --yes first", name, record.Status, name)
+			return out, installedMatching, fmt.Errorf("apply --mode create requires a greenfield environment and ContainerCluster/%s already has an install record (status %s); use --mode reconcile to reconcile it, or run bootwright destroy --stage clusters --clusters %s --yes first", name, record.Status, name)
 		}
-		if mode == ApplyModeOverride {
+		if mode == ApplyModeRebuild {
 			if !found || record.Status != ClusterInstallStatusInstalled {
 				continue
 			}
@@ -269,7 +269,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				if acked[name] {
 					continue
 				}
-				return out, installedMatching, fmt.Errorf("ContainerCluster/%s recorded install inputs differ from current desired inputs but its reinstall was not acknowledged when this apply was confirmed; re-run bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes to acknowledge the reinstall", name, name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s recorded install inputs differ from current desired inputs but its reinstall was not acknowledged when this apply was confirmed; re-run bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes to acknowledge the reinstall", name, name)
 			}
 			var available bool
 			availErr := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
@@ -278,7 +278,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				return err
 			})
 			if availErr == nil && available {
-				out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --converge-drifted rebuilds only drifted objects, not a healthy in-sync cluster", now)
+				out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --mode rebuild rebuilds only drifted objects, not a healthy in-sync cluster", now)
 				installedMatching = append(installedMatching, name)
 				continue
 			}
@@ -286,12 +286,12 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				continue
 			}
 			if availErr != nil {
-				return out, installedMatching, fmt.Errorf("ContainerCluster/%s was Available=True when this apply was confirmed but availability could not be verified at execution: %w; re-run bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes to acknowledge the reinstall", name, availErr, name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s was Available=True when this apply was confirmed but availability could not be verified at execution: %w; re-run bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes to acknowledge the reinstall", name, availErr, name)
 			}
-			return out, installedMatching, fmt.Errorf("ContainerCluster/%s was Available=True when this apply was confirmed but does not report Available=True at execution; re-run bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes to acknowledge the reinstall", name, name)
+			return out, installedMatching, fmt.Errorf("ContainerCluster/%s was Available=True when this apply was confirmed but does not report Available=True at execution; re-run bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes to acknowledge the reinstall", name, name)
 		}
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
-			return out, installedMatching, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes after resetting target machines", name, name, name)
+			return out, installedMatching, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes after resetting target machines", name, name, name)
 		}
 		if !found {
 			if err := guardUnrecordedCluster(ctx, contextName, clustersDir, name, checker); err != nil {
@@ -308,10 +308,10 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				return availErr
 			})
 			if err != nil {
-				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w; if the cluster is unreachable, rebuild it with bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes (or bootwright destroy --stage clusters --clusters %s --yes first)", name, err, name, name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but availability could not be verified: %w; if the cluster is unreachable, rebuild it with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes (or bootwright destroy --stage clusters --clusters %s --yes first)", name, err, name, name)
 			}
 			if !available {
-				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; to keep its data, repair the cluster to Available=True and re-run apply, or rebuild it with bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes", name, name)
+				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; to keep its data, repair the cluster to Available=True and re-run apply, or rebuild it with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes", name, name)
 			}
 			out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs", now)
 			installedMatching = append(installedMatching, name)
@@ -389,18 +389,18 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 		}
 		if !found {
 			if clusterKubeconfigExists(clustersDir, name) {
-				out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (live cluster with no install record; --converge-drifted reinstalls it and wipes its node disks)", name)})
+				out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (live cluster with no install record; --mode rebuild reinstalls it and wipes its node disks)", name)})
 			}
 			continue
 		}
 		if record.Status != ClusterInstallStatusInstalled {
 			if clusterInstallPhaseMayHaveBooted(record.Phase) {
-				out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (incomplete install record at phase %q — its nodes may already have booted the installer; --converge-drifted reinstalls it and wipes its node disks)", name, record.Phase)})
+				out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (incomplete install record at phase %q — its nodes may already have booted the installer; --mode rebuild reinstalls it and wipes its node disks)", name, record.Phase)})
 			}
 			continue
 		}
 		if !installInputsMatch(record, hash, structuralHash) {
-			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --converge-drifted reinstalls the cluster and wipes its node disks)", name)})
+			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --mode rebuild reinstalls the cluster and wipes its node disks)", name)})
 			continue
 		}
 		var available bool
@@ -414,7 +414,7 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 			unverifiable = append(unverifiable, name)
 			unverifiableDetails = append(unverifiableDetails, fmt.Sprintf("%s/%s (%v)", ObjectKindContainerCluster, name, availErr))
 		case !available:
-			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --converge-drifted reinstalls it and wipes its node disks)", name)})
+			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --mode rebuild reinstalls it and wipes its node disks)", name)})
 		}
 	}
 	if len(unverifiable) > 0 {
@@ -434,11 +434,11 @@ func unverifiableOverrideProbeError(unverifiable, details, planned []string) err
 			remaining = append(remaining, name)
 		}
 	}
-	exclude := "drop --converge-drifted so apply reconciles without a rebuild"
+	exclude := "use --mode reconcile so apply reconciles without a rebuild"
 	if len(remaining) > 0 {
-		exclude = "exclude it with bootwright apply --clusters " + strings.Join(remaining, ",") + " --converge-drifted"
+		exclude = "exclude it with bootwright apply --clusters " + strings.Join(remaining, ",") + " --mode rebuild"
 	}
-	return fmt.Errorf("apply --converge-drifted refuses to act on ContainerCluster(s) whose recorded install inputs match desired state but whose availability could not be probed: %s; an unprovable cluster is not a drifted one, so bootwright will not wipe its node disks on a failed probe — restore API reachability (and oc on PATH) and re-run, %s, or tear it down deliberately with bootwright destroy --clusters %s --yes and re-apply to rebuild it",
+	return fmt.Errorf("apply --mode rebuild refuses to act on ContainerCluster(s) whose recorded install inputs match desired state but whose availability could not be probed: %s; an unprovable cluster is not a drifted one, so bootwright will not wipe its node disks on a failed probe — restore API reachability (and oc on PATH) and re-run, %s, or tear it down deliberately with bootwright destroy --clusters %s --yes and re-apply to rebuild it",
 		strings.Join(details, ", "), exclude, strings.Join(unverifiable, ","))
 }
 
@@ -486,7 +486,7 @@ func guardStaleAgentISOBoot(tasks []ApplyTask, name string, record ClusterInstal
 		return fmt.Errorf("ContainerCluster/%s: this scope boots nodes from the previously published agent ISO, but no install record proves an ISO was created from the current desired inputs; run bootwright apply --through base --clusters %s (or the full graph) to regenerate the ISO and boot", name, name)
 	case !hashMatches:
 		if clusterInstallPhaseMayHaveBooted(record.Phase) {
-			return fmt.Errorf("ContainerCluster/%s: install inputs changed after nodes booted from the published agent ISO; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes after resetting target machines", name, name, name)
+			return fmt.Errorf("ContainerCluster/%s: install inputs changed after nodes booted from the published agent ISO; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes after resetting target machines", name, name, name)
 		}
 		return fmt.Errorf("ContainerCluster/%s: install inputs changed after the published agent ISO was created; booting it would install the cluster from stale inputs while recording the current ones; run bootwright apply --through base --clusters %s (or the full graph) to regenerate the ISO first", name, name)
 	case record.Status != ClusterInstallStatusInstalled && record.Phase != ClusterInstallPhaseISOCreated && !clusterInstallPhaseMayHaveBooted(record.Phase):
@@ -522,9 +522,9 @@ func guardUnrecordedCluster(ctx context.Context, contextName, clustersDir, name 
 		return fmt.Errorf("ContainerCluster/%s has existing kubeconfig but availability could not be verified: %w", name, err)
 	}
 	if !available {
-		return fmt.Errorf("ContainerCluster/%s has existing kubeconfig but does not report Available=True; refusing to regenerate installer inputs without --converge-drifted", name)
+		return fmt.Errorf("ContainerCluster/%s has existing kubeconfig but does not report Available=True; refusing to regenerate installer inputs without --mode rebuild", name)
 	}
-	return fmt.Errorf("ContainerCluster/%s has a reachable kubeconfig but no install record; bootwright cannot confirm it was installed from the current desired inputs and will not adopt it silently. Rebuild it from the desired state with bootwright apply --stage clusters --clusters %s --converge-drifted --confirm-data-loss --yes, or restore clusters/%s/runtime/%s if the running cluster already matches", name, name, name, ClusterInstallRecordFileName)
+	return fmt.Errorf("ContainerCluster/%s has a reachable kubeconfig but no install record; bootwright cannot confirm it was installed from the current desired inputs and will not adopt it silently. Rebuild it from the desired state with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes, or restore clusters/%s/runtime/%s if the running cluster already matches", name, name, name, ClusterInstallRecordFileName)
 }
 
 func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, name string, now time.Time) ([]ApplyTask, error) {
@@ -536,11 +536,11 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	case "", ClusterInstallPhaseCreatingISO:
 		return tasks, nil
 	case ClusterInstallPhaseBooting:
-		return tasks, fmt.Errorf("ContainerCluster/%s has prior install state at phase %s; node boot completion is uncertain, refusing to reboot without --converge-drifted", name, record.Phase)
+		return tasks, fmt.Errorf("ContainerCluster/%s has prior install state at phase %s; node boot completion is uncertain, refusing to reboot without --mode rebuild", name, record.Phase)
 	case ClusterInstallPhaseComplete:
 		return tasks, nil
 	default:
-		return tasks, fmt.Errorf("ContainerCluster/%s has unrecognized install phase %q; refusing to continue without --converge-drifted", name, record.Phase)
+		return tasks, fmt.Errorf("ContainerCluster/%s has unrecognized install phase %q; refusing to continue without --mode rebuild", name, record.Phase)
 	}
 }
 

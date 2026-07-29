@@ -56,14 +56,14 @@
         - bootwright_node_access is defined
         - not (bootwright_node_access_connection_available | default(false) | bool)
 
-    - name: Require storage hosts reachable unless --skip-unreachable
+    - name: Require storage hosts reachable unless --authorize unreachable-nodes
       ansible.builtin.assert:
         that:
           - not (bootwright_storage_reachable_probe.unreachable | default(false) | bool)
         fail_msg: >-
           Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
           for storage cluster {{ bootwright_storage_cluster_name }} is unreachable:
-          power it on and retry, or re-run with --force --skip-unreachable to tear it
+          power it on and retry, or re-run with --authorize unreachable-nodes to tear it
           down as already-absent.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
@@ -137,7 +137,7 @@
         fail_msg: >-
           Ceph seed host {{ bootwright_storage_seed_host_name }} for storage cluster
           {{ bootwright_storage_cluster_name }} is unreachable: power it on and retry.
-          --skip-unreachable cannot skip the seed — it proves cluster ownership before
+          --authorize unreachable-nodes cannot skip the seed — it proves cluster ownership before
           any node wipes its OSD devices.
       when: bootwright_destroy_skip_unreachable | default(false) | bool
 

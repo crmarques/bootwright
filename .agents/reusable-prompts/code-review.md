@@ -119,8 +119,8 @@ joins, temp-file handling, cleanup, or permissions; shell invocation where direc
 leaks and misplaced `defer`; CLI commands embedding domain logic that belongs in
 loaders, renderers, orchestrators, or roles; non-mutating surfaces (`validate`,
 `preflight`, `plan`, `diff`, `status`) drifting from the selected graph that
-apply/destroy actually load; `apply --converge-drifted` changing more than the
-narrow documented safety barrier (with `--confirm-data-loss` gating data loss);
+apply/destroy actually load; `apply --mode rebuild` changing more than the
+narrow documented safety barrier (with `--authorize data-loss` gating data loss);
 tests needing real infrastructure where a fake would prove the behavior.
 
 **Go↔Ansible drift.** Go mutating hosts or the bastion directly instead of
@@ -189,7 +189,7 @@ absence succinctly, and report granular drift when roots exist, including
 missing declared resources and undeclared live resources such as Ceph pools,
 filesystems, gateways, add-ons, VMs, services, endpoints, or storage exports.
 Check text and JSON output, drift exit codes, permission/root behavior, behavior
-with and without apply's `--converge-drifted` (and `--confirm-data-loss`), and
+with and without apply's `--mode rebuild` (and `--authorize data-loss`), and
 that no probe or `--adopt` path mutates a live system.
 
 **Duplication and dead code.** One domain rule in multiple packages or roles; one
@@ -214,7 +214,7 @@ rendered installer, Ansible, or lock-file output; command construction and exter
 process failure; filesystem permissions/cleanup/path validation; secret redaction
 and sensitive-output gates; script dry-run/preflight; Ansible idempotency and
 generated-variable shape; non-mutating desired-vs-real state checks;
-`--converge-drifted`/`--confirm-data-loss` vs. plain-`apply` behavior; objective
+`--mode rebuild`/`--authorize data-loss` vs. plain-`apply` behavior; objective
 drift reports for absent roots and partially
 present resources; and a regression test for each high-confidence finding.
 

@@ -339,7 +339,7 @@ func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/skip_guard.yml")
 	for _, want := range []string{
-		"(bootwright_apply_mode | default('continue')) != 'override'",
+		"(bootwright_apply_mode | default('reconcile')) != 'rebuild'",
 		"bootwright_install_already_complete",
 		"bootwright_install_cluster_available.stdout",
 	} {

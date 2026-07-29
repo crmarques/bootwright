@@ -8,14 +8,14 @@ import (
 )
 
 type DestroySafetyDecision struct {
-	RequiredOverride bool
-	Reasons          []string
+	RequiresAuthorization bool
+	Reasons               []string
 }
 
 func ProtectedEnvironments(state v1alpha1.State) []string {
 	var names []string
 	for _, env := range state.Environments {
-		if env.Spec.Safety.DestroyProtection != v1alpha1.EnvironmentDestroyProtectionRequiredOverride {
+		if env.Spec.Safety.DestroyProtection != v1alpha1.EnvironmentDestroyProtectionProtected {
 			continue
 		}
 		names = append(names, env.Metadata.Name)
@@ -63,14 +63,14 @@ func storageInTeardown(state v1alpha1.State, storageWorkNames []string) bool {
 func EvaluateDestroySafety(state v1alpha1.State, override bool, storageWorkNames []string, scope DestroySafetyScope) DestroySafetyDecision {
 	var reasons []string
 	for _, name := range ProtectedEnvironments(state) {
-		reasons = append(reasons, fmt.Sprintf("Environment/%s spec.safety.destroyProtection=%s", name, v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
+		reasons = append(reasons, fmt.Sprintf("Environment/%s spec.safety.destroyProtection=%s", name, v1alpha1.EnvironmentDestroyProtectionProtected))
 	}
 	for _, kind := range protectedKindsPresent(state, storageWorkNames, scope) {
 		reasons = append(reasons, fmt.Sprintf("spec.safety.protectedKinds includes %s and this teardown covers one", kind))
 	}
 	return DestroySafetyDecision{
-		RequiredOverride: len(reasons) > 0 && !override,
-		Reasons:          reasons,
+		RequiresAuthorization: len(reasons) > 0 && !override,
+		Reasons:               reasons,
 	}
 }
 

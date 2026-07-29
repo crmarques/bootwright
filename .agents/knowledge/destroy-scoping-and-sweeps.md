@@ -6,7 +6,7 @@
 (whole-context / unscoped-infra destroy) tells the infra teardown to reclaim
 EVERY recorded ownership orphan, not only objects still in desired state;
 `bootwright_destroy_cluster_scope=<roots>` limits recorded-resource cleanup to
-the selected cluster roots; `bootwright_destroy_force_unowned=true` relaxes only
+the selected cluster roots; `bootwright_destroy_authorize_unowned_vms=true` relaxes only
 the per-VM ownership-marker refusals; `bootwright_destroy_skip_unreachable=true`
 lets node-targeting plays skip powered-off hosts — but storage teardown STILL
 fails closed when a cluster's Ceph seed is unreachable, so ownership stays
@@ -109,7 +109,7 @@ TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped.
 
 **An unreachable KubeVirt host is not an absent guest:** a recorded
 `kubevirt-machine` requires a successful host API probe even when
-`--skip-unreachable` is set. Unlike a node-local cleanup, host-cluster
+`--authorize unreachable-nodes` is set. Unlike a node-local cleanup, host-cluster
 unreachability gives no evidence that the VirtualMachine or DataVolumes are
 gone. The machine-infra task therefore fails before removing the ownership
 record; the full-lifecycle hard dependency blocks container runtime cleanup, so
@@ -157,12 +157,12 @@ complete before an unrelated later task fails the run; (2) the partial set is
 resolved BEFORE `ResetConvergeRecordsAfterDestroy`, which is best-effort,
 mirrors `storageWorkNames`, resets storage sub-object records too
 (`cephadm rm-cluster --zap-osds` removed them all), and KEEPS records for
-partially-destroyed clusters so a later `apply --expect-new` fails closed atop
+partially-destroyed clusters so a later `apply --mode create` fails closed atop
 residual Ceph state instead of re-bootstrapping. Guarded by
 TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster. `status`
 surfaces the partial-destroy marker kept on the ownership record.
 
-**`--skip-unreachable` release authorization follows the completion report,
+**`--authorize unreachable-nodes` release authorization follows the completion report,
 not flag presence:** a successful managed-storage teardown always writes
 `storage-destroy-result.json`, including an empty skipped-node set when every
 topology node completed. `ResetConvergeRecordsAfterDestroy` may record a
@@ -173,7 +173,7 @@ successfully stamped or no controller owner record existed. An infra-only or
 machine-scoped destroy, a non-storage cluster, or a failed storage task still
 withholds the release because no equivalent per-node completion proof exists.
 This prevents a harmless defensive
-`--skip-unreachable` from stranding a fully destroyed root-revoked Ceph fleet:
+`--authorize unreachable-nodes` from stranding a fully destroyed root-revoked Ceph fleet:
 the next apply can legitimately find the old OS reachable without a usable
 probe identity after teardown, and then needs the positive release to authorize
 its reinstall.
@@ -243,7 +243,7 @@ address entry under a `flock`; it never scans a new key or names a host-key
 algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
 client. Existing canonical entries and explicit `knownHostsRef` content are
 never rewritten. If neither identity answers, storage destroy feeds that result
-through its normal fail-closed/`--skip-unreachable` classification, while the
+through its normal fail-closed/`--authorize unreachable-nodes` classification, while the
 best-effort deregistration and final revoke plays end that host.
 
 The final revoke treats an already-absent orchestration account as a completed
@@ -295,7 +295,7 @@ under-destroying), and `input-history/` (the unrelated `context
 update`/`diff --adopt` rollback mechanism documented in
 `context-input-ownership.md` — capped at 20 whole-tree snapshots, not
 component-scoped, and not part of a destroyed component's runtime history).
-A partially-destroyed cluster (`--skip-unreachable`) keeps its history for the
+A partially-destroyed cluster (`--authorize unreachable-nodes`) keeps its history for the
 same reason its convergence records survive: the next destroy retry, or a
 human troubleshooting the skip, needs it. Ordering matters: the purge call
 sits inside `printDestroyRecordReset`, AFTER `RecordPartialStorageDestroy`

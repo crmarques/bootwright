@@ -21,14 +21,14 @@ func TestArtifactServerProvisionSkipRecords(t *testing.T) {
 		{RecordName: "InfraComponent-busy", RefClusters: []string{"installed", "installing"}},
 		{RecordName: "InfraComponent-noconsumer", RefClusters: nil},
 	}
-	skip, err := ArtifactServerProvisionSkipRecords(targets, dir, workflow.ApplyModeContinue)
+	skip, err := ArtifactServerProvisionSkipRecords(targets, dir, workflow.ApplyModeReconcile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(skip) != 1 || skip[0] != "InfraComponent-settled" {
 		t.Fatalf("continue skip = %v; want [InfraComponent-settled]", skip)
 	}
-	overrideSkip, err := ArtifactServerProvisionSkipRecords(targets, dir, workflow.ApplyModeOverride)
+	overrideSkip, err := ArtifactServerProvisionSkipRecords(targets, dir, workflow.ApplyModeRebuild)
 	if err != nil {
 		t.Fatal(err)
 	}

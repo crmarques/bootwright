@@ -40,14 +40,14 @@ func TestClassifyApplyTransitions(t *testing.T) {
 		}
 	}
 
-	check(ApplyModeContinue, map[string]ApplyTransitionAction{
+	check(ApplyModeReconcile, map[string]ApplyTransitionAction{
 		"addon.new":     ApplyTransitionCreate,
 		"addon.match":   ApplyTransitionUnchanged,
 		"addon.drift":   ApplyTransitionReconcile,
 		"addon.foreign": ApplyTransitionRefuse,
 		"os.demo":       ApplyTransitionRefuse,
 	})
-	check(ApplyModeOverride, map[string]ApplyTransitionAction{
+	check(ApplyModeRebuild, map[string]ApplyTransitionAction{
 		"addon.drift":   ApplyTransitionReconcile,
 		"addon.foreign": ApplyTransitionRefuse,
 		"os.demo":       ApplyTransitionRebuild,

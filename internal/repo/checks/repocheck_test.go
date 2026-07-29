@@ -126,7 +126,7 @@ func TestCephFSMetadataPoolDestructiveChangeDocumented(t *testing.T) {
 	for _, path := range surfaces {
 		data := readRepoFile(t, path)
 		if !note.MatchString(data) {
-			t.Fatalf("%s must document that changing a CephFS metadata pool is a data-destroying --converge-drifted recreate (ceph fs rm)", path)
+			t.Fatalf("%s must document that changing a CephFS metadata pool is a data-destroying --mode rebuild recreate (ceph fs rm)", path)
 		}
 	}
 }

@@ -4,6 +4,13 @@
 
 Accepted
 
+The teardown ordering clause is revised by
+[ADR 0023](0023-teardown-is-the-inverse-of-buildup.md). The gate *surface* — the
+flag names that authorize each refusal, and the apply-mode vocabulary — is
+revised by
+[ADR 0030](0030-one-intent-flag-and-named-authorizations.md); the model below is
+otherwise unchanged and still governs.
+
 ## Context
 
 Bootwright's converge loop mutates real infrastructure: it reimages machines,
@@ -34,8 +41,8 @@ out-of-band live divergence is deliberately invisible here and belongs to the
 per-role Ansible reconcile gates and `diff` (live). Records are written only on
 task success; destroy removes them (including storage sub-object records) so
 torn-down objects reclassify as missing, and a partial teardown
-(`--skip-unreachable`) keeps them so `apply --expect-new` fails closed atop
-residual state.
+(`--authorize unreachable-nodes`) keeps them so `apply --mode create` fails
+closed atop residual state.
 
 Destruction also leaves a positive re-authorization trail. On destroy,
 Bootwright writes a per-cluster substrate release that records that the
@@ -55,14 +62,14 @@ crosses the data-loss acknowledgment.
 ### One explicit mode variable, enforced on both sides
 
 The safety mode is a single extra-var, `bootwright_apply_mode`
-(`create` | `continue` | `override`), stamped by plan composition (it replaced
-a legacy boolean `bootwright_install_override`). The Go object preflight
-enforces it against recorded state (default reconcile refuses structural
-drift and foreign but converges reconcilable-in-place drift,
-`--expect-new` refuses pre-existing, `--converge-drifted` refuses only foreign); the
-per-role Ansible apply-mode gates enforce the identical contract against live
-existence and ownership. Defense in depth is intentional: Go decides from
-records, roles from the host.
+(`create` | `reconcile` | `rebuild`), stamped by plan composition from the
+`--mode` value with no translation (it replaced a legacy boolean
+`bootwright_install_override`). The Go object preflight enforces it against
+recorded state (`reconcile`, the default, refuses structural drift and foreign
+but converges reconcilable-in-place drift; `create` refuses pre-existing;
+`rebuild` refuses only foreign); the per-role Ansible apply-mode gates enforce
+the identical contract against live existence and ownership. Defense in depth is
+intentional: Go decides from records, roles from the host.
 
 ### Ownership is the authorization boundary for destruction
 
@@ -70,7 +77,7 @@ No destructive action proceeds without proof that Bootwright created its
 target: ownership records on the controller, substrate markers (libvirt domain
 XML, vSphere annotations, KubeVirt labels, managed-OS install markers), and
 live container provenance labels for shared bastion services. Foreign fails
-closed in every mode; `--converge-drifted` rebuilds owned drift but never adopts.
+closed in every mode; `--mode rebuild` rebuilds owned drift but never adopts.
 Unprovable is not absent: a live host that answers SSH but rejects every probe
 identity (or presents a changed host key) cannot prove ownership either way,
 so the managed-OS install fails closed on it exactly as on a foreign host —
@@ -78,13 +85,13 @@ only the machine's substrate release, written by a destroy, authorizes
 reclaiming it. The same rule governs cluster-level probes: a *failed* probe is
 unknown state, never a rebuild authorization. A `ContainerCluster` whose
 recorded install inputs match desired state but whose availability cannot be
-probed at all fails closed in every mode including `--converge-drifted`, while a
+probed at all fails closed in every mode including `--mode rebuild`, while a
 probe that succeeds and answers `Available=False` is real evidence and may
 authorize the rebuild. Destroying a matching-but-dead object is the operator's
 explicit `destroy` decision, not an inference an apply flag draws from a
 timeout.
 
-Rebuilding that probed-unavailable cluster is the one place `--converge-drifted`
+Rebuilding that probed-unavailable cluster is the one place `--mode rebuild`
 acts on an object whose recorded desired state still matches, and it is
 deliberate: the object matches its *declaration* but not its recorded
 *condition*, the cluster itself supplied that evidence, and repairing a dead
@@ -95,17 +102,19 @@ rebuild of a matching object remains `destroy` then `apply`.
 Destructive authority flows through positive, fail-safe tokens — e.g. the
 storage role wipes only clusters named in
 `bootwright_ceph_rebuild_authorized_clusters`, so an absent or stale value can
-only under-authorize. Relaxations are narrow and explicit: on destroy,
-`--include-unowned` lifts the machine-substrate marker refusals — per-VM
-markers plus the cluster's libvirt network and its KubeVirt DataVolumes — and
-nothing relaxes device data-safety checks. A lost Ceph cluster marker is
+only under-authorize. Relaxations are narrow, explicit,
+and named one risk at a time: on destroy, `--authorize unowned-vms` lifts the
+per-VM marker refusals and `--authorize unowned-networks` lifts the refusals on
+the cluster's libvirt network and its KubeVirt DataVolumes (a wider blast radius,
+so a separate word), and nothing relaxes device data-safety checks. A lost Ceph cluster marker is
 recovered only through an operator-supplied `<StorageCluster>=<fsid>`
 confirmation, because an ownership attestation naming an exact identity is
 evidence an operator can supply and an inference cannot: Bootwright
 reconstructs the missing record only when the supplied fsid, any surviving
 controller record, and any reachable live fsid all agree, and never overwrites
-contradictory evidence. The gate list each flag does and does not relax is
-specified in [`state-model.md`](../state-model.md) ("CLI Contract").
+contradictory evidence. The full token vocabulary, and the gate each
+token does and does not relax, is specified in
+[`state-model.md`](../state-model.md) ("CLI Contract").
 
 ### Destroy is the only remover, and it fails closed
 
@@ -116,14 +125,14 @@ orphaning — for both cluster kinds, reading install records for a
 `ContainerCluster` and Bootwright-owned `storage-cluster` ownership records for
 a `StorageCluster`. `Environment.spec.safety.destroyProtection` and
 `protectedKinds` are one shared source of truth gating both `destroy` and
-destructive `apply --converge-drifted` rebuilds, enforced entirely in Go — no
-Ansible destroy role consumes an override extra-var. The single deliberate
-exception is `--reclaim-devices`, where `--converge-drifted` authorizes the
+destructive `apply --mode rebuild` rebuilds, enforced entirely in Go — no
+Ansible destroy role consumes an authorization extra-var. The single deliberate
+exception is `--reclaim-devices`, where `--authorize data-loss` authorizes the
 protected wipe in place: reclaim recovers named devices of a cluster that stays
 up, so routing it through `destroy` would require destroying strictly more to
 recover less. Independent of protection, destructive
-rebuilds require a data-loss acknowledgment; `--yes` never authorizes
-destruction. Remedies must route to the stage that actually clears the block
+rebuilds require `--authorize data-loss` (or the interactive data-loss
+confirmation); `--yes` never authorizes destruction, on either verb. Remedies must route to the stage that actually clears the block
 (machine substrate → `destroy --stage infra`), or the operator loops forever.
 Teardown is not finished until its records are: a destroy that cannot remove a
 convergence/install record or write a substrate release exits non-zero, because
@@ -157,7 +166,7 @@ managed-OS teardown fails closed, because Bootwright installs a managed OS only
 on cluster-member machines and refuses to invent per-machine teardown for a
 machine with no provisioning work.
 
-`--force` never widens a selected root set. In particular, a KubeVirt host
+No authorization token widens a selected root set. In particular, a KubeVirt host
 cluster cannot be destroyed while an installed nested cluster is left outside
 `--clusters`; the child must be selected in the same full-lifecycle destroy or
 destroyed first. The apply side of that dependency — a scoped run that would
@@ -186,7 +195,7 @@ hard dependencies, and the reason is always the same: proceeding would erase the
 evidence or the access a retry needs — deleting cluster kubeconfigs or install
 records while an owned VM remains, or deleting a KubeVirt host's substrate while
 its guests survive. An unreachable KubeVirt host holding a recorded guest fails
-closed even under `--skip-unreachable`; it is not evidence that the guest is
+closed even under `--authorize unreachable-nodes`; it is not evidence that the guest is
 absent. The decomposed task playbooks are constrained to
 split-equals-monolith: same `--limit`, same extra-vars, own `hosts:` selector.
 

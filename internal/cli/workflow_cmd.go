@@ -52,9 +52,10 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 		use:   "apply",
 		short: "Apply the provisioning graph",
 		long: "Applies the provisioning graph, reconciling desired state idempotently. It\n" +
-			"fails closed on drift or foreign ownership before mutating; --converge-drifted\n" +
-			"authorizes Bootwright-owned destructive rebuilds. Exit codes: 0 success, 2\n" +
-			"usage error, non-zero on run failure.",
+			"fails closed on drift or foreign ownership before mutating; --mode rebuild\n" +
+			"authorizes Bootwright-owned rebuilds and --authorize data-loss authorizes the\n" +
+			"disk wipes such a rebuild needs. Exit codes: 0 success, 2 usage error, non-zero\n" +
+			"on run failure.",
 		stageSelector: true,
 		commandLabel:  "apply",
 		example: `  # Preview the full graph without readiness checks
@@ -191,9 +192,10 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		use:   "destroy",
 		short: "Tear down a previously applied target",
 		long: "Tears down a previously applied target using desired state and ownership\n" +
-			"records. Destructive: --yes skips the confirmation prompt only, never implies\n" +
-			"--force; protected contexts require --force. Exit codes: 0 success, 2\n" +
-			"usage error, non-zero on teardown failure.",
+			"records. Destructive: --yes answers the ordinary confirmation only and never\n" +
+			"authorizes a named risk — a teardown that zaps OSDs needs --authorize\n" +
+			"data-loss, and a protected Environment needs --authorize protected. Exit\n" +
+			"codes: 0 success, 2 usage error, non-zero on teardown failure.",
 		stageSelector: true,
 		commandLabel:  "destroy",
 		example: `  # Tear down the full lifecycle of the whole context
@@ -209,11 +211,14 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   bootwright destroy --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
 
   # Destroy a protected environment
-  bootwright destroy --stage infra --force --yes
+  bootwright destroy --stage infra --authorize protected --yes
+
+  # Tear down storage clusters non-interactively (OSD data is zapped)
+  bootwright destroy --clusters ceph-storage --authorize data-loss --yes
 
   # Tear down VMs that match the naming but lost their ownership marker
   # (e.g. machine or cluster names changed after the last apply)
-  bootwright destroy --stage infra --clusters ceph-storage --include-unowned --yes
+  bootwright destroy --stage infra --clusters ceph-storage --authorize unowned-vms --yes
 
   # Recover a verified Ceph ownership marker and destroy that storage cluster
   bootwright destroy --clusters ceph-storage --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 --yes

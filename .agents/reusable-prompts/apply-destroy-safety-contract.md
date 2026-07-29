@@ -77,17 +77,17 @@ survives renames — bind each role to the present flag name from `--help`:
 
 - The **safe-reconcile default** (bare `apply`): create missing, skip proven
   matches without re-running, fail closed on drift and foreign ownership.
-- The **greenfield assert** (e.g. `--expect-new`): additionally fail closed if any
+- The **greenfield assert** (e.g. `--mode create`): additionally fail closed if any
   selected object already exists or shows ownership evidence.
-- The **break-glass drift rebuild** (e.g. `--converge-drifted`): rebuild only
+- The **break-glass drift rebuild** (e.g. `--mode rebuild`): rebuild only
   drifted owned objects, skip matches, never touch foreign; bypasses no
   validation, lease, secret, or protection gate.
-- The **data-loss gate** (e.g. `--confirm-data-loss`): required on top of a rebuild
+- The **data-loss gate** (e.g. `--authorize data-loss`): required on top of a rebuild
   that discards data; never implied by a confirmation-skip flag.
 - The **confirmation skip** (e.g. `--yes`): skips the prompt only; grants no
   override, scope widening, or ownership relaxation.
 - **Scope/selection** (stage, through, cluster, machine selectors) and any
-  ownership/reachability modifiers (e.g. `--include-unowned`, `--skip-unreachable`):
+  ownership/reachability modifiers (e.g. `--authorize unowned-vms`, `--authorize unreachable-nodes`):
   confirm each narrows or widens exactly as documented and cannot broaden silently.
 - `destroy` scope and `destroyProtection`: what each stage removes, what records it
   clears, and what protection refuses.

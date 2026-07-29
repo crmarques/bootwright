@@ -94,8 +94,8 @@ The catalog that ties the tree together. It sets `spec.domains.base`
 (`bootwright.test`), activates the cluster under `spec.storageClusters`, and
 selects the managed lab DNS
 under `spec.infraComponents.nameResolution`. It also sets
-`spec.safety.destroyProtection: requiredOverride`, so `destroy` refuses to run
-without `--force`.
+`spec.safety.destroyProtection: protected`, so `destroy` refuses to run
+without `--authorize protected`.
 
 `spec.machineAccess.keyRef: bootwright-machine-key` names the fleet SSH key
 authorized for the `bootwright` service account on every node this lab installs.
@@ -414,12 +414,12 @@ bootwright cluster info --name ceph-ibm --secrets
 
 ## Tear It Down
 
-This lab's `Environment` sets `safety.destroyProtection: requiredOverride`, so
-every teardown needs `--force`:
+This lab's `Environment` sets `safety.destroyProtection: protected`, so
+every teardown needs `--authorize protected`:
 
 ```bash
-bootwright destroy --stage clusters --force --yes
-bootwright destroy --stage infra --force --yes
+bootwright destroy --stage clusters --authorize protected,data-loss --yes
+bootwright destroy --stage infra --authorize protected --yes
 ```
 
 See

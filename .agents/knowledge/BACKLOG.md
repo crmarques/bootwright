@@ -33,7 +33,7 @@ learned; this file records what it still owes.
 - Area: ceph / osd-safety
 - Origin: OSD-install hardening (`--reclaim-devices`), narrowing-filter case
 - Problem: `all: true` OSD device sets auto-reclaim dirty disks under
-  `--confirm-data-loss`, but a *narrowing* device filter (paths/model/size
+  `--authorize data-loss`, but a *narrowing* device filter (paths/model/size
   selectors) still bypasses the disk-emptiness guard, so a filtered OSD apply can
   proceed against non-empty disks without the same fail-closed check.
 - Exit: extend the emptiness/reclaim guard to cover narrowing filters, or
@@ -41,11 +41,11 @@ learned; this file records what it still owes.
   OSD device-safety pins.
 - Related: [ceph-osd-device-safety.md](ceph-osd-device-safety.md)
 
-## B-003 — `--converge-drifted` vs the OSD-device-empty install gate
+## B-003 — `--mode rebuild` vs the OSD-device-empty install gate
 - Status: open
 - Area: ceph / apply-modes
 - Origin: Ceph apply-modes design (open OSD-device gate)
-- Problem: the interaction between `apply --converge-drifted` and the
+- Problem: the interaction between `apply --mode rebuild` and the
   OSD-device-empty install gate is unresolved — whether a drift-rebuild should
   be allowed to proceed against a device the install-time gate would refuse is
   still open.

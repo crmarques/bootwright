@@ -101,7 +101,7 @@ func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
 	tenants := strings.Join(kubeVirtConflictTenants(conflicts), ",")
-	b.WriteString("include the nested cluster(s) in the same selection, or destroy them first with `bootwright destroy --clusters " + tenants + " --yes`; --force does not widen the selected work set")
+	b.WriteString("include the nested cluster(s) in the same selection, or destroy them first with `bootwright destroy --clusters " + tenants + " --yes`; no --authorize token widens the selected work set")
 	return fmt.Errorf("%s", b.String())
 }
 

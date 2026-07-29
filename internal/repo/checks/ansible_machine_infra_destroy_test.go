@@ -79,8 +79,11 @@ func TestLibvirtNetworkDestroyGateIsClusterScoped(t *testing.T) {
 	if !strings.Contains(refuseWhen, "bootwright_libvirt_network_present | bool") {
 		t.Fatalf("libvirt network guard must be evaluated whenever the probe found the network, got when=%v", gate[refuseIdx]["when"])
 	}
-	if !strings.Contains(refuseWhen, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("libvirt network guard must be skipped only under --include-unowned, got when=%v", gate[refuseIdx]["when"])
+	if !strings.Contains(refuseWhen, "not (bootwright_destroy_authorize_unowned_networks") {
+		t.Fatalf("libvirt network guard must be skipped only under --authorize unowned-networks, got when=%v", gate[refuseIdx]["when"])
+	}
+	if strings.Contains(refuseWhen, "bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("libvirt network guard must not be lifted by the VM authorization: an unowned network may still carry another context's VMs, got when=%v", gate[refuseIdx]["when"])
 	}
 
 	authorize, ok := gate[authorizeIdx]["ansible.builtin.set_fact"].(map[string]any)

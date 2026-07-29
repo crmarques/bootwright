@@ -10,7 +10,7 @@ spec:
     keyRef: bootwright-machine-key
 
   safety:
-    destroyProtection: requiredOverride
+    destroyProtection: protected
 
   infraComponents:
     artifactServers:

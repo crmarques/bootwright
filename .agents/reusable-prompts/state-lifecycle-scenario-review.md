@@ -34,7 +34,7 @@ Use read-only commands first:
 ```bash
 git status --short
 rg --files AGENTS.md .agents specs docs examples test internal api ansible cmd
-rg -n 'diff|apply|destroy|converge-drifted|force|expect-new|include-unowned|skip-unreachable|destroyProtection|requiredOverride|foreign|drift|ownership|install-record|convergence|safety|orphan|undeclared|partial|stale|unsupported' specs docs cmd internal api ansible test examples
+rg -n 'diff|apply|destroy|converge-drifted|force|expect-new|include-unowned|skip-unreachable|destroyProtection|protected|foreign|drift|ownership|install-record|convergence|safety|orphan|undeclared|partial|stale|unsupported' specs docs cmd internal api ansible test examples
 rg -n 'rm -rf|wipefs|mkfs|sgdisk|parted|zap|rm-cluster|undefine|oc delete|kubectl delete|ceph .*rm|PowerState|ResetType|InsertMedia|EjectMedia|Delete|Remove|Destroy' internal ansible scripts test
 go run ./cmd/bootwright apply --help
 go run ./cmd/bootwright destroy --help
@@ -57,8 +57,8 @@ class just because the code path looks inconvenient.
 - **Starting state:** absent; owned match; owned drift; foreign; stale or missing
   records; failed before records were written; partially destroyed; live object
   deleted out of band; YAML removed; same name reused for different identity.
-- **Operations:** `diff`, `plan`, `apply`, `apply --expect-new`,
-  `apply --converge-drifted`, scoped `--stage/--through/--clusters`,
+- **Operations:** `diff`, `plan`, `apply`, `apply --mode create`,
+  `apply --mode rebuild`, scoped `--stage/--through/--clusters`,
   `destroy --stage`, full `destroy`, recreate after destroy, and `context update`.
 - **Change types:** greenfield apply; import/adoption attempt; topology change;
   provider endpoint change; machine or disk change; OpenShift topology change;
@@ -91,7 +91,7 @@ and which safety lock would prevent the surprise.
   load balancers, artifact services, or context-wide cleanup.
 - `--yes`, non-interactive mode, or automation removes the only human review of a
   destructive plan.
-- `--converge-drifted`/`--force`, `--include-unowned`, or `--skip-unreachable` is
+- `--mode rebuild`/`--force`, `--authorize unowned-vms`, or `--authorize unreachable-nodes` is
   accepted where its effect is unclear, too broad, or not shown before mutation.
 - Two contexts share a provider, BMC, VM namespace, host, disk, Ceph cluster, or
   OpenShift cluster.
@@ -120,12 +120,12 @@ rg -n 'changed_when|failed_when|check_mode|creates:|removes:|ignore_errors|no_lo
   that is reconcilable in place, and fails closed on structural
   (destructive-identity) drift, foreign ownership, destructive ambiguity, and
   unsupported states.
-- `apply --expect-new` fails closed if any selected object already exists or has
+- `apply --mode create` fails closed if any selected object already exists or has
   ownership evidence.
-- `apply --converge-drifted` is command-scoped break glass. It may cross only
+- `apply --mode rebuild` is command-scoped break glass. It may cross only
   documented Bootwright-owned drift barriers and must not bypass validation,
   leases, secret checks, foreign ownership, destroy protection, or active-run
-  safety. Data-loss rebuilds additionally require `--confirm-data-loss`.
+  safety. Data-loss rebuilds additionally require `--authorize data-loss`.
 - `destroy` is the removal boundary. `--yes` only skips prompts; it never grants
   override, ownership relaxation, scope widening, or destructive rebuild.
 - Deleting YAML is additive for `apply`; it must not delete live infrastructure.
@@ -145,7 +145,7 @@ shape, required evidence, refusal message, recovery path, and tests.
   silently.
 - **Ownership lock:** every wipe, rebuild, uninstall, VM delete, package removal,
   or Ceph zap verifies durable owner identity plus live identity where possible.
-- **Drift lock:** `apply --converge-drifted` is allowed only for classified
+- **Drift lock:** `apply --mode rebuild` is allowed only for classified
   Bootwright-owned drift with documented consequences.
 - **Protection lock:** protected roots cannot be destructively rebuilt by
   `apply`; destruction must cross `destroy` with protected-scope override.

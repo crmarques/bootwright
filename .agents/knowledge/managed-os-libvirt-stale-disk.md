@@ -27,9 +27,9 @@ own source-backed cdrom and the post-install cleanup detaches it — so do not
 re-add a static `<disk device='cdrom'>`; the `<boot dev='cdrom'/>` OS-block
 fallback must stay (the install ISO is inserted as a cdrom that this fallback
 boots). Force reinstall over a stale
-disk by wiping it, not by booting CD-first: when `bootwright apply --converge-drifted` is
+disk by wiping it, not by booting CD-first: when `bootwright apply --mode rebuild` is
 supplied for managed OS, the libvirt substrate path must stop and undefine the
 Bootwright-owned machine domain, remove only that machine's Bootwright-owned
 libvirt state/storage directories, and recreate the disks from desired state
-before booting the installer. Without `--converge-drifted`, preserve existing qcow2
+before booting the installer. Without `--mode rebuild`, preserve existing qcow2
 disks and fail closed on unsafe reachable-OS marker mismatches.

@@ -19,10 +19,10 @@ tasks. KubeVirt VMs use `runStrategy: Manual`, so a necessary declarative
 reconcile never changes the current running/stopped state. Before creating,
 reconciling, stopping, or deleting a same-name VM or DataVolume, the roles
 probe live labels and fail closed unless the exact context, cluster, and node
-identity is Bootwright-owned. `--expect-new` rejects any pre-existing live
+identity is Bootwright-owned. `--mode create` rejects any pre-existing live
 resource. A VM/root-disk delete is possible only when the controller passes an
 exact machine-substrate reset or acknowledged OpenShift reinstall token; a
-plain apply and a healthy `--converge-drifted` apply receive neither.
+plain apply and a healthy `--mode rebuild` apply receive neither.
 
 **Symptom:** A retried KubeVirt cluster boot leaves the VM running the *old*
 agent ISO (the install never picks up regenerated installer inputs), or the

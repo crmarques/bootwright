@@ -18,7 +18,7 @@ classified (`Gather facts on reachable storage hosts`).
 **Constraint: classification needs a task-level override.** Play-level
 `ignore_unreachable` is the operator gate
 (`{{ bootwright_destroy_skip_unreachable | default(false) | bool }}` — off by
-default, on under `--skip-unreachable`) and only shapes post-classification
+default, on under `--authorize unreachable-nodes`) and only shapes post-classification
 connecting tasks. The reachability probe itself
 (`Probe storage host reachability before teardown`, an `ansible.builtin.ping`
 with `register:` + `failed_when: false`) carries its own task-level
@@ -36,23 +36,23 @@ lock; this reuses established trust and does not run a host-key scan or select
 an algorithm. The selector preserves canonical `ansible_host`, changes only
 `ansible_user`, and reports a boolean availability fact. Storage destroy maps a
 false result to the same `.unreachable: true` shape used by the ordinary ping,
-so the assert and `--skip-unreachable` behavior remain one classification path.
+so the assert and `--authorize unreachable-nodes` behavior remain one classification path.
 
 **Semantics: controller-side tasks still run for unreachable hosts.**
 `assert`, `set_fact`, and `delegate_to: localhost` tasks evaluate on a host
 whose connection probes failed. That is what makes the fail-closed gate work:
-`Require storage hosts reachable unless --skip-unreachable` is an assert, so
+`Require storage hosts reachable unless --authorize unreachable-nodes` is an assert, so
 it fires with actionable guidance (power the nodes on, or re-run with
-`--force --skip-unreachable`) instead of a raw SSH error, and
+`--authorize unreachable-nodes`) instead of a raw SSH error, and
 `any_errors_fatal` turns that one failure into a whole-play abort before any
-node wipes a device. Under `--skip-unreachable` the assert is skipped and
+node wipes a device. Under `--authorize unreachable-nodes` the assert is skipped and
 `meta: end_host` drops the unreachable host instead.
 
 **Semantics: unreachable is not a failure.** `any_errors_fatal` is kept
 literally `true` so a genuine task failure (seed ownership refusal, device
 gate) aborts every host before any wipe. Unreachable hosts are tolerated only
 by the tasks that opt in with `ignore_unreachable` (the probe, and the
-deferred gather under `--skip-unreachable`, which also tolerates a host that
+deferred gather under `--authorize unreachable-nodes`, which also tolerates a host that
 flapped down after the probe). When every node was skipped, no host remains
 and the downstream wipe tasks are a clean no-op — exactly the
 never-provisioned-cluster teardown.

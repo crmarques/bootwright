@@ -3,10 +3,10 @@
   ansible.builtin.fail:
     msg: >-
       {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
-      apply --expect-new requires a greenfield environment. Re-run without
-      --expect-new to reconcile it, or with --converge-drifted to rebuild it.
+      apply --mode create requires a greenfield environment. Re-run with
+      --mode reconcile to reconcile it, or --mode rebuild to rebuild it.
   when:
-    - (bootwright_apply_mode | default('continue')) == 'create'
+    - (bootwright_apply_mode | default('reconcile')) == 'create'
     - bootwright_gate_exists | default(false) | bool
 
 - name: "Refuse to modify foreign {{ bootwright_gate_object }}"
@@ -16,6 +16,6 @@
       recognized as Bootwright-managed; refusing to modify a component Bootwright did
       not create. Remove it manually after verifying it is safe, then re-apply.
   when:
-    - (bootwright_apply_mode | default('continue')) in ['continue', 'override']
+    - (bootwright_apply_mode | default('reconcile')) in ['reconcile', 'rebuild']
     - bootwright_gate_exists | default(false) | bool
     - not (bootwright_gate_owned | default(false) | bool)

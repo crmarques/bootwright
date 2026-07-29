@@ -176,7 +176,7 @@
       {{ bootwright_selected_storage_cluster.name }}={{
       bootwright_ceph_destroy_conf_fsid | default('<fsid>') }} to reconstruct the
       controller record and host marker before teardown. Contradictory controller ownership
-      evidence is never overwritten. (--include-unowned relaxes the machine VM ownership
+      evidence is never overwritten. (--authorize unowned-vms relaxes the machine VM ownership
       markers only; it does not relax this Ceph cluster ownership gate.)
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 

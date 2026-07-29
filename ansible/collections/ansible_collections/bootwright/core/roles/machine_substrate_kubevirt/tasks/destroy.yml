@@ -75,7 +75,7 @@
     fail_msg: >-
       Cannot destroy recorded KubeVirt guest {{ bootwright_kubevirt_vm_name }}: host cluster
       {{ bootwright_kubevirt_host_cluster | default('<external>', true) }} is unreachable, and
-      --skip-unreachable cannot prove the guest absent. Power the host on and retry.
+      --authorize unreachable-nodes cannot prove the guest absent. Power the host on and retry.
   when:
     - bootwright_kubevirt_machine_recorded | default(false) | bool
     - bootwright_kubevirt_host_kubeconfig_available | bool
@@ -150,17 +150,17 @@
           Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
           {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
           bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --include-unowned to delete it anyway.
-      when: not (bootwright_destroy_force_unowned | default(false) | bool)
+          Pass --authorize unowned-vms to delete it anyway.
+      when: not (bootwright_destroy_authorize_unowned_vms | default(false) | bool)
 
     - name: Warn before force-deleting an unowned KubeVirt VirtualMachine
       ansible.builtin.debug:
         msg: >-
-          --include-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
+          --authorize unowned-vms: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
           namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
           bootwright.io/managed-by=bootwright ownership label.
       when:
-        - bootwright_destroy_force_unowned | default(false) | bool
+        - bootwright_destroy_authorize_unowned_vms | default(false) | bool
         - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
 
     - name: Delete KubeVirt VirtualMachine
@@ -230,24 +230,24 @@
           Refusing to delete DataVolume {{ item.item }} in namespace
           {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
           bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --include-unowned to delete it anyway.
+          Pass --authorize unowned-networks to delete it anyway.
         quiet: true
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:
         label: "{{ item.item }}"
-      when: not (bootwright_destroy_force_unowned | default(false) | bool)
+      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
 
     - name: Warn before force-deleting an unowned KubeVirt DataVolume
       ansible.builtin.debug:
         msg: >-
-          --include-unowned: deleting DataVolume {{ item.item }} in namespace
+          --authorize unowned-networks: deleting DataVolume {{ item.item }} in namespace
           {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
           bootwright.io/managed-by=bootwright ownership label.
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:
         label: "{{ item.item }}"
       when:
-        - bootwright_destroy_force_unowned | default(false) | bool
+        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
         - (item.rc | default(1)) == 0
         - (item.stdout | default('') | trim) != 'bootwright'
 

@@ -31,7 +31,7 @@ State it is handed, and the `--clusters` scoper (`filterStateToStorageClustersFo
 drops the container clusters that consume a StorageExport while the per-task
 `storageTaskState`/`FilterStateToStorageClusters` keeps their machines — so a
 DataFoundation attachment made a whole-cluster run and a `--clusters` run hash
-different machine sets, and the next `--clusters --converge-drifted` saw a
+different machine sets, and the next `--clusters --mode rebuild` saw a
 freshly-installed OS as structurally drifted and tripped the destroy-protection
 gate. Fix: the plan threads the unscoped desired state as `hashState`
 (`PlanApplyTasksCheckedWithHashState`) and these tasks compute their hash vars
@@ -69,7 +69,7 @@ with its task constant, and specs/docs kept naming it until the 2026-07-26
 contract review removed it from both. Every allowlist member must be a live
 `ApplyTaskKind*` constant: a retired member is silently unreachable
 defence-in-depth, and a live kind missing from the published taxonomy makes the
-spec under-state what `--converge-drifted` destroys. The allowlist is bound to
+spec under-state what `--mode rebuild` destroys. The allowlist is bound to
 the published taxonomy in specs/state-model.md and
 docs/advanced/ownership-and-safety.md by
 TestOverrideReconfigureOnlyKindsMatchPublishedContract (which also asserts every
@@ -92,7 +92,7 @@ is a positive token — `cephadm rm-cluster --force --zap-osds` runs only for
 clusters the controller named as structurally drifted; absent/empty authorizes
 NO wipe (a stale bundle can only under-authorize). Its sibling
 `bootwright_ceph_reconcilable_only_clusters` marks OSD-add-only drift that
-`--converge-drifted` must reconcile additively instead of zapping.
+`--mode rebuild` must reconcile additively instead of zapping.
 
 **Display twins:** `ApplyTransitionAction` (create/reconcile/rebuild/refuse/
 unchanged) mirrors `EvaluateApplyModePreflight` for the read-only

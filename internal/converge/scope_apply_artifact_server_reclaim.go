@@ -28,7 +28,7 @@ func ArtifactServerRecordName(componentName string) string {
 }
 
 func ArtifactServerProvisionSkipRecords(targets []ArtifactServerReclaimTarget, clustersDir string, mode workflow.ApplyMode) ([]string, error) {
-	if mode == workflow.ApplyModeOverride {
+	if mode == workflow.ApplyModeRebuild {
 		return nil, nil
 	}
 	var out []string

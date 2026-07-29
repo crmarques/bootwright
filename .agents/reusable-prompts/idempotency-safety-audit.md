@@ -43,16 +43,16 @@ description. Treat "explicit" narrowly:
     converges drift that is reconcilable in place, and **fails closed** on
     structural (destructive-identity) drift or foreign ownership before any
     mutation. A previously-successful run must run end to end mutating nothing.
-  - `apply --expect-new` is the **greenfield assert**: it additionally must
+  - `apply --mode create` is the **greenfield assert**: it additionally must
     **fail closed** (refuse, mutate nothing) if any selected object already
     exists — recorded by Bootwright or otherwise present.
-  - `apply --converge-drifted` is the only **break-glass** mode: it rebuilds
+  - `apply --mode rebuild` is the only **break-glass** mode: it rebuilds
     objects that have drifted and creates what is missing, but leaves objects that
     already match untouched (no gratuitous rebuild) and **never** rebuilds a
     foreign object. It does not bypass leases, validation, secrets,
     destroy-protection, or foreign ownership. Data-loss rebuilds (managed-OS
     reinstall, owned-Ceph wipe-and-rebuild) additionally require the separate
-    `--confirm-data-loss` gate, which `--yes` never implies.
+    `--authorize data-loss` gate, which `--yes` never implies.
 - An object that already matches is never destroyed to be recreated by any mode;
   forcing a clean recreate of a matching object is a `destroy` (which must drop it
   entirely and reset its convergence records) followed by `apply`.
@@ -83,7 +83,7 @@ blocking question when it changes the verdict:
   `ContainerCluster` and `StorageCluster` names, provider and machine roots,
   ignored-example paths when named.
 - **Command intent**: exact command, flags, context, target selection, stage,
-  non-interactive mode, `--yes`, `--converge-drifted`/`--confirm-data-loss`/
+  non-interactive mode, `--yes`, `--mode rebuild`/`--authorize data-loss`/
   `--force`, dry-run/preview flags, and any environment variables that affect
   execution.
 - **Observed environment state**: already provisioned resources, partial state,
@@ -95,7 +95,7 @@ blocking question when it changes the verdict:
 - **Destruction authorization**: yes/no, with the exact text, command, or
   environment description that authorizes it.
 - **Converge/force pair**: when the command accepts a destructive-override flag
-  (`apply --converge-drifted` or `destroy --force`), the expected behavior with
+  (`apply --mode rebuild` or `destroy --force`), the expected behavior with
   and without it, and the exact safety refusal or continuation it changes.
 
 If no scenario input file is provided and the review depends on it, ask one
@@ -151,7 +151,7 @@ Useful read-only commands:
 ```bash
 git status --short
 rg --files AGENTS.md .agents specs internal api ansible scripts test examples
-rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--converge-drifted|--confirm-data-loss|--force|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
+rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--mode rebuild|--authorize data-loss|--force|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
 rg -n 'func .*Apply|func .*Destroy|cobra.Command|RunE|PreRunE|argsNeedLocalRoot|sudo|ownership|Safety|DestroyProtection|Override|ContextSweep|Ledger|InstallRecord|Lock' internal cmd api test
 go test ./internal/...            # or narrower packages when review scope is narrow
 ansible-playbook --syntax-check <playbook>    # when the playbook is in scope and tools exist
@@ -196,7 +196,7 @@ help, examples, and tests for:
   Verify the two cannot drift apart.
 - Convergence-record lifecycle: a successful `destroy` must drop the component
   entirely AND reset its convergence records to absent (so a later `apply`
-  recreates it rather than skipping a gone object as matched, and `--expect-new`
+  recreates it rather than skipping a gone object as matched, and `--mode create`
   no longer refuses it). Audit whether destroy clears the converge-safety,
   install, and ownership records for everything it tore down.
 - Diff report quality: when a selected cluster or storage cluster is
@@ -211,12 +211,12 @@ help, examples, and tests for:
 - `destroy --stage infra|clusters` scope rules, context-wide cleanup rules,
   selected cluster behavior, ownership-record use, and `destroyProtection`.
 - Confirmation semantics: `--yes` vs. the destructive-override and data-loss gates
-  (`--converge-drifted`/`--confirm-data-loss`/`--force`), non-interactive behavior,
+  (`--mode rebuild`/`--authorize data-loss`/`--force`), non-interactive behavior,
   output that names affected context/resources before mutation, and no hidden
   broadening from environment names.
 - Converge/force semantics across flows: for every supported command, compare
   behavior with and without the destructive-override flags
-  (`--converge-drifted`/`--force`), and verify that read-only state checks ignore,
+  (`--mode rebuild`/`--force`), and verify that read-only state checks ignore,
   reject, or strictly no-op the flag rather than mutating or suppressing drift.
 - Runtime-state trust: when ownership records, install records, safety records,
   leases, generated hashes, and provider metadata are sufficient evidence, and
@@ -251,10 +251,10 @@ Walk these checkpoints:
    the graph? Are unselected resources excluded from mutation?
 3. **Authorization.** What exact command flag, environment field, or scenario
    statement authorizes destructive behavior? Are `destroyProtection`, the
-   destructive-override flags (`--converge-drifted`/`--confirm-data-loss`/
+   destructive-override flags (`--mode rebuild`/`--authorize data-loss`/
    `--force`), and confirmation prompts enforced before mutation?
 4. **Converge/force pair.** If the command supports a destructive-override flag
-   (`apply --converge-drifted` or `destroy --force`), walk the same scenario
+   (`apply --mode rebuild` or `destroy --force`), walk the same scenario
    without it and with it. Which refusal disappears, which mutations become
    allowed, and which read-only guarantees must remain unchanged?
 5. **State comparison command.** Can the operator run a clearly named,
@@ -330,23 +330,23 @@ selection.
 
 **Apply safety.** Bare `apply` skips matching objects, resumes known-safe partial
 phases, creates what is missing, and fails closed on drift or foreign ownership —
-it must never delete-and-recreate to converge. `apply --expect-new` must fail
+it must never delete-and-recreate to converge. `apply --mode create` must fail
 closed when any selected object already exists. `apply
---converge-drifted` may rebuild drifted owned objects and create missing ones, but
+--mode rebuild` may rebuild drifted owned objects and create missing ones, but
 must leave matching objects untouched and never rebuild a foreign object. A clean
 recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
 
 **Converge/force safety.** Audit `apply` under all three modes and `destroy` under
-`--force` both ways. `apply --converge-drifted` must rebuild only drifted/owned
+`--force` both ways. `apply --mode rebuild` must rebuild only drifted/owned
 objects (skipping matches, refusing foreign); without it, drift fails closed under
-bare `apply` and any pre-existing object fails closed under `--expect-new`. Neither
-`--converge-drifted` nor `--confirm-data-loss` may bypass leases, validation,
+bare `apply` and any pre-existing object fails closed under `--mode create`. Neither
+`--mode rebuild` nor `--authorize data-loss` may bypass leases, validation,
 secrets, or `destroyProtection`, turn a read-only state check into a mutating
 command, or suppress reported drift. For storage sub-objects
-(StoragePool/Filesystem/ObjectGateway/Export), `--converge-drifted` must
+(StoragePool/Filesystem/ObjectGateway/Export), `--mode rebuild` must
 destroy-and-recreate only on a structurally-immutable change (a pool's type/erasure
 profile, a CephFS's metadata pool) proven against the live cluster, and a data-loss
-recreate additionally requires `--confirm-data-loss`; reconcilable drift (replica
+recreate additionally requires `--authorize data-loss`; reconcilable drift (replica
 size/min-size, crush rule, application) must reconcile in place without data loss,
 and the destructive path must fail closed and leave no lingering permissive state
 (e.g. `mon_allow_pool_delete`).
@@ -374,8 +374,8 @@ Do not stop at guidance review. Audit the implementation surface that can affect
 the scenarios:
 
 - CLI command setup, flag parsing, pre-run validation, root/sudo handoff,
-  confirmation prompts, non-interactive behavior, `--converge-drifted`/
-  `--confirm-data-loss`/`--force` behavior, the desired-vs-real `diff` command,
+  confirmation prompts, non-interactive behavior, `--mode rebuild`/
+  `--authorize data-loss`/`--force` behavior, the desired-vs-real `diff` command,
   and output routing.
 - Desired-state selection, strict decode, normalization, validation, and scoped
   graph closure.
@@ -412,7 +412,7 @@ that clearly and name the highest residual risk.
 The scenario file(s) reviewed; each scenario extracted from them; command intent;
 current environment state; expected behavior; destruction authorization yes/no
 with evidence; expected behavior with and without the destructive-override flags
-(`--converge-drifted`/`--force`) when supported; missing facts and whether they
+(`--mode rebuild`/`--force`) when supported; missing facts and whether they
 block a verdict.
 
 ## 3. Safety Guidance Review
@@ -452,7 +452,7 @@ trace cleared them.
 Existing tests that prove safety; missing tests for each finding; useful checks
 that could not run. Include focused regression tests for no-op rerun, read-only
 commands, confirmation abort, destroy protection, foreign ownership, stale
-records, scoped destroy, `--converge-drifted`/`--force` vs. their absence,
+records, scoped destroy, `--mode rebuild`/`--force` vs. their absence,
 non-mutating desired-vs-real state checks, absent-root reporting, granular drift
 reporting, and Ansible role idempotency when relevant.
 

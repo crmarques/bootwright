@@ -9,7 +9,7 @@ description: >-
 
 This page groups the failure classes Bootwright surfaces by symptom and points
 each one at the owning YAML field or the command that resolves it. For the
-deeper recovery workflows (rebuilds, `--converge-drifted` paths, destroy-protection)
+deeper recovery workflows (rebuilds, `--mode rebuild` paths, destroy-protection)
 see [Operations and Recovery](advanced/operations.md).
 
 !!! tip "Where the logs live"
@@ -153,7 +153,7 @@ context secret store or in operator files. Two common early-workflow blockers:
 
 When `apply` exits non-zero after the run has started, the work is resumable —
 objects that already converged are recorded and skip on the next run. Do **not**
-reach for `--converge-drifted` or `destroy`; those are for drift and rebuilds, not a
+reach for `--mode rebuild` or `destroy`; those are for drift and rebuilds, not a
 resumable interruption.
 
 Run `bootwright status`: on a failed run it prints the exact scoped retry command
@@ -164,7 +164,7 @@ skip or re-run idempotently, and only the failed and pending work runs again.
 
 See [Ownership and Safety](advanced/ownership-and-safety.md) for why the rerun is
 safe, and [Operations and Recovery](advanced/operations.md) only for the drift
-and `--converge-drifted` cases.
+and `--mode rebuild` cases.
 
 ## Active apply run
 
@@ -510,6 +510,6 @@ printf 'NewStr0ngPassw0rd' | sudo tee "$P" >/dev/null
 sudo chmod 0600 "$P"
 ```
 
-A clean reinstall (`bootwright apply ... --converge-drifted`, which clears `/etc/ceph`
+A clean reinstall (`bootwright apply ... --mode rebuild`, which clears `/etc/ceph`
 and re-bootstraps) re-captures a fresh dashboard password into the stored file
 automatically.

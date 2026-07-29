@@ -36,7 +36,7 @@ security issues and propose or apply fixes.
   `preflight`/`apply` host-key trust, the default live `diff` reading cluster
   state, `diff --adopt` writing input YAML), so do not report them as defects;
   `destroyProtection` and the command-scoped gate flags — apply
-  `--converge-drifted` (with `--confirm-data-loss` for data-loss rebuilds) and
+  `--mode rebuild` (with `--authorize data-loss` for data-loss rebuilds) and
   destroy `--force` — enforced before any mutation, with `--yes` as confirmation
   only that never broadens scope; destroy acting on proven Bootwright ownership
   and the selected scope, failing closed on foreign, stale, or out-of-scope state.

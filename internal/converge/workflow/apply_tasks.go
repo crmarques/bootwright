@@ -87,16 +87,20 @@ func ApplyTaskKindIsReconfigureOnly(kind string) bool {
 type ApplyMode string
 
 const (
-	ApplyModeCreate   ApplyMode = "create"
-	ApplyModeContinue ApplyMode = "continue"
-	ApplyModeOverride ApplyMode = "override"
+	ApplyModeCreate    ApplyMode = "create"
+	ApplyModeReconcile ApplyMode = "reconcile"
+	ApplyModeRebuild   ApplyMode = "rebuild"
 )
 
-func (m ApplyMode) InstallOverride() bool { return m == ApplyModeOverride }
+func ApplyModeNames() []string {
+	return []string{string(ApplyModeCreate), string(ApplyModeReconcile), string(ApplyModeRebuild)}
+}
+
+func (m ApplyMode) InstallOverride() bool { return m == ApplyModeRebuild }
 
 func (m ApplyMode) Valid() bool {
 	switch m {
-	case ApplyModeCreate, ApplyModeContinue, ApplyModeOverride:
+	case ApplyModeCreate, ApplyModeReconcile, ApplyModeRebuild:
 		return true
 	default:
 		return false

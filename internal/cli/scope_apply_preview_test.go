@@ -12,23 +12,30 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func TestNoteIneffectiveAllowDestroy(t *testing.T) {
+func TestWarnUnusedAuthorizations(t *testing.T) {
 	cases := []struct {
-		name        string
-		allow       bool
-		dryRun      bool
-		destructive []string
-		want        string
+		name   string
+		tokens []string
+		noted  []string
+		dryRun bool
+		want   string
 	}{
-		{"real no-op", true, false, nil, "had no effect"},
-		{"dry-run", true, true, nil, "not consumed by a dry-run"},
-		{"real with descriptors stays silent", true, false, []string{"Machine/db1"}, ""},
-		{"absent stays silent", false, false, nil, ""},
+		{"real no-op names the token", []string{authorizeDataLoss}, nil, false, "--authorize data-loss had no effect"},
+		{"dry-run", []string{authorizeDataLoss}, nil, true, "not consumed by a dry-run"},
+		{"consumed stays silent", []string{authorizeDataLoss}, []string{authorizeDataLoss}, false, ""},
+		{"none given stays silent", nil, nil, false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			auth, err := parseAuthorizations(tc.tokens)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, token := range tc.noted {
+				auth.note(token)
+			}
 			var out bytes.Buffer
-			noteIneffectiveAllowDestroy(&out, tc.allow, tc.dryRun, tc.destructive)
+			warnUnusedAuthorizations(&out, auth, tc.dryRun)
 			if tc.want == "" {
 				if out.Len() != 0 {
 					t.Fatalf("expected no notice, got %q", out.String())
@@ -42,20 +49,38 @@ func TestNoteIneffectiveAllowDestroy(t *testing.T) {
 	}
 }
 
+func TestParseAuthorizationsRejectsUnknownToken(t *testing.T) {
+	if _, err := parseAuthorizations([]string{"force"}); err == nil {
+		t.Fatal("an unknown --authorize token must be rejected")
+	} else if !strings.Contains(err.Error(), authorizeDataLoss) {
+		t.Fatalf("the rejection must list the valid tokens, got %q", err.Error())
+	}
+	auth, err := parseAuthorizations([]string{authorizeDataLoss, authorizeProtected, authorizeDataLoss})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !auth.has(authorizeDataLoss) || !auth.has(authorizeProtected) || auth.has(authorizeSharedInfra) {
+		t.Fatalf("parsed set must hold exactly the given tokens, got %v", auth.all())
+	}
+	if len(auth.all()) != 2 {
+		t.Fatalf("a repeated token must be recorded once, got %v", auth.all())
+	}
+}
+
 func TestPrintApplyTransitionLedgerPromotesReinstall(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
 	runsDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyTransitionLedger(&out, tasks, runsDir, workflow.ApplyModeOverride, []string{"sno-libvirt"})
+	printApplyTransitionLedger(&out, tasks, runsDir, workflow.ApplyModeRebuild, []string{"sno-libvirt"})
 	got := out.String()
 	if !strings.Contains(got, "DESTROY & rebuild") || !strings.Contains(got, "ContainerCluster/sno-libvirt") {
 		t.Fatalf("a reinstall-input-drifted cluster must show under DESTROY & rebuild, got %q", got)
 	}
 
 	out.Reset()
-	printApplyTransitionLedger(&out, tasks, runsDir, workflow.ApplyModeOverride, nil)
+	printApplyTransitionLedger(&out, tasks, runsDir, workflow.ApplyModeRebuild, nil)
 	if strings.Contains(out.String(), "DESTROY & rebuild") {
 		t.Fatalf("without a reinstall flag the cluster must not show DESTROY & rebuild, got %q", out.String())
 	}
@@ -71,14 +96,14 @@ func TestPrintApplyGateForecastReinstallRefusal(t *testing.T) {
 	runsDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeOverride, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, nil)
 	got := out.String()
 	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "ContainerCluster/sno-libvirt") {
 		t.Fatalf("forecast must reproduce the protectedKinds reinstall refusal for a drifted cluster, got %q", got)
 	}
 
 	out.Reset()
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeOverride, "", clusteraccess.Selection{}, nil, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, "", clusteraccess.Selection{}, nil, nil)
 	if strings.Contains(out.String(), "a real run refuses before any prompt") {
 		t.Fatalf("with no reinstall drift the forecast must not raise the protection refusal, got %q", out.String())
 	}

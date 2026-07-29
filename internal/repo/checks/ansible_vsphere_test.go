@@ -25,8 +25,8 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 	if !strings.Contains(assertWhen, "bootwright_vsphere_vm_present") {
 		t.Fatalf("vsphere destroy guard must stay gated on VM presence, got when=%v", tasks[assertIdx]["when"])
 	}
-	if !strings.Contains(assertWhen, "not (bootwright_destroy_force_unowned") {
-		t.Fatalf("vsphere destroy guard must be skipped under --include-unowned, got when=%v", tasks[assertIdx]["when"])
+	if !strings.Contains(assertWhen, "not (bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("vsphere destroy guard must be skipped under --authorize unowned-vms, got when=%v", tasks[assertIdx]["when"])
 	}
 	deleteTask := tasks[deleteIdx]
 	when, _ := deleteTask["when"].(string)

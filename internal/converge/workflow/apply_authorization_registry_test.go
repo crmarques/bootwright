@@ -58,7 +58,7 @@ func TestEveryApplyTaskKindHasAnOverrideClassification(t *testing.T) {
 		}
 		destructive := isOverrideDestructive(drifted)
 		if destructive == ApplyTaskKindIsReconfigureOnly(kind) {
-			t.Errorf("apply task kind %q must be exactly one of reconfigure-only or destructive under --converge-drifted", kind)
+			t.Errorf("apply task kind %q must be exactly one of reconfigure-only or destructive under --mode rebuild", kind)
 		}
 		if !destructive {
 			continue

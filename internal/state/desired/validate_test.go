@@ -148,7 +148,7 @@ func TestEnvironmentHelmMirrorValidation(t *testing.T) {
 }
 
 func TestEnvironmentSafetyDestroyProtectionValidation(t *testing.T) {
-	for _, value := range []string{v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride} {
+	for _, value := range []string{v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionProtected} {
 		t.Run(value, func(t *testing.T) {
 			dir := t.TempDir()
 			files := newBaselineFiles()
@@ -886,7 +886,7 @@ spec:
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"    base: bootwright.test\n",
 				"    base: bootwright.test\n  safety:\n    destroyProtection: production\n", 1)},
-			wantSubstring: `spec.safety.destroyProtection "production" must be one of {allow, requiredOverride}`,
+			wantSubstring: `spec.safety.destroyProtection "production" must be one of {allow, protected}`,
 		},
 		{
 			name: "protected-kind-rejected",

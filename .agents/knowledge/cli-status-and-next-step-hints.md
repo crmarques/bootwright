@@ -12,7 +12,7 @@ of duplicating the sequencing logic.
 unknown vs `effective-state.yaml`) is the real readiness signal, and
 storage clusters get their own INFO row so a managed Ceph cluster is not
 invisible next to container clusters. Storage clusters partially
-destroyed by `--skip-unreachable` carry a marker on their kept ownership
+destroyed by `--authorize unreachable-nodes` carry a marker on their kept ownership
 record and get a WARN teardown row naming the skipped nodes.
 
 **Semantics: `diff` joins the hint spine only once applied.** The hint
