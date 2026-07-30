@@ -11,12 +11,82 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func purgeClusterRuntimeDir(clustersDir, cluster string) error {
+func purgeClusterRuntimeDir(clustersDir, cluster string, keepMachineState bool) error {
 	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
 		return nil
 	}
-	if err := os.RemoveAll(filepath.Join(clustersDir, cluster)); err != nil {
+	root := filepath.Join(clustersDir, cluster)
+	if !keepMachineState {
+		if err := os.RemoveAll(root); err != nil {
+			return fmt.Errorf("remove cluster history directory: %w", err)
+		}
+		return nil
+	}
+	if err := removeDirContentsExcept(root, workflow.ClusterProviderStateDir(clustersDir, cluster)); err != nil {
 		return fmt.Errorf("remove cluster history directory: %w", err)
+	}
+	return pruneEmptyClusterStateDirs(clustersDir, cluster)
+}
+
+func removeDirContentsExcept(root, keep string) error {
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var problems []error
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		switch {
+		case path == keep:
+		case entry.IsDir() && strings.HasPrefix(keep, path+string(os.PathSeparator)):
+			problems = append(problems, removeDirContentsExcept(path, keep))
+		default:
+			problems = append(problems, os.RemoveAll(path))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func pruneEmptyClusterStateDirs(clustersDir, cluster string) error {
+	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
+		return nil
+	}
+	if err := pruneEmptyDirs(filepath.Join(clustersDir, cluster)); err != nil {
+		return fmt.Errorf("prune emptied cluster state directories: %w", err)
+	}
+	return nil
+}
+
+func pruneEmptyDirs(root string) error {
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var problems []error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		problems = append(problems, pruneEmptyDirs(filepath.Join(root, entry.Name())))
+	}
+	if err := errors.Join(problems...); err != nil {
+		return err
+	}
+	remaining, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return nil
+	}
+	if err := os.Remove(root); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }

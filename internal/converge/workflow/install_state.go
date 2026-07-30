@@ -123,6 +123,10 @@ func ClusterSecretsDir(clustersDir, cluster string) string {
 	return filepath.Join(clustersDir, cluster, "secrets")
 }
 
+func ClusterProviderStateDir(clustersDir, cluster string) string {
+	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), "provider-state")
+}
+
 func ClusterInstallRecordPath(clustersDir, cluster string) string {
 	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterInstallRecordFileName)
 }

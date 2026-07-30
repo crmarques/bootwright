@@ -104,7 +104,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 
 func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, fabricHosts map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, purgeHistory, skipUnreachable bool) []error {
 	var problems []error
-	var purgedClusters []string
+	var purgedClusters, resetClusters []string
 	partial := make(map[string]bool, len(partialStorageClusters))
 	for _, name := range partialStorageClusters {
 		partial[name] = true
@@ -138,15 +138,13 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 				continue
 			}
 			if purgeHistory {
-				if err := purgeClusterRuntimeDir(clustersDir, name); err != nil {
-					problems = append(problems, fmt.Errorf("purge history for ContainerCluster/%s: %w", name, err))
-				}
 				purgedClusters = append(purgedClusters, name)
 				continue
 			}
 			if err := workflow.RemoveClusterInstallState(clustersDir, contextName, name); err != nil {
 				problems = append(problems, fmt.Errorf("remove install record for ContainerCluster/%s: %w", name, err))
 			}
+			resetClusters = append(resetClusters, name)
 		}
 		if ScopeTearsMachineLayer(runScope) {
 			for _, name := range workflow.MachineSubstrateClusters(tasks) {
@@ -158,9 +156,14 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 						problems = append(problems, fmt.Errorf("record substrate release for %s: %w", name, err))
 					}
 				}
+				if partial[name] {
+					continue
+				}
 				if purgeHistory {
 					purgedClusters = append(purgedClusters, name)
+					continue
 				}
+				resetClusters = append(resetClusters, name)
 			}
 		}
 	}
@@ -176,7 +179,9 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		}
 		if purgeHistory {
 			purgedClusters = append(purgedClusters, name)
+			continue
 		}
+		resetClusters = append(resetClusters, name)
 	}
 	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
 		if err := workflow.RemoveAllConvergeSafetyRecords(runsDir); err != nil {
@@ -184,11 +189,41 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		}
 	}
 	if purgeHistory && len(purgedClusters) > 0 {
+		keepMachineState := !ScopeTearsMachineLayer(runScope)
+		for _, name := range uniqueDestroyedNames(purgedClusters) {
+			if err := purgeClusterRuntimeDir(clustersDir, name, keepMachineState); err != nil {
+				problems = append(problems, fmt.Errorf("purge history for cluster %s: %w", name, err))
+			}
+		}
 		if err := purgeRunHistoryForComponents(runsDir, purgedClusters, nil); err != nil {
 			problems = append(problems, fmt.Errorf("purge run history: %w", err))
 		}
 	}
+	problems = append(problems, pruneDestroyedClusterStateDirs(clustersDir, resetClusters)...)
 	return problems
+}
+
+func pruneDestroyedClusterStateDirs(clustersDir string, clusters []string) []error {
+	var problems []error
+	for _, name := range uniqueDestroyedNames(clusters) {
+		if err := pruneEmptyClusterStateDirs(clustersDir, name); err != nil {
+			problems = append(problems, fmt.Errorf("prune emptied state directories for cluster %s: %w", name, err))
+		}
+	}
+	return problems
+}
+
+func uniqueDestroyedNames(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 func substrateReleaseConfirmed(cluster string, runScope Scope, state v1alpha1.State, storageWorkNames []string, partial map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, skipUnreachable bool) bool {
@@ -210,7 +245,7 @@ func substrateReleaseConfirmed(cluster string, runScope Scope, state v1alpha1.St
 	return false
 }
 
-func ResetMachineConvergeRecordsAfterDestroy(runsDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, purgeHistory, skipUnreachable bool) []error {
+func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, purgeHistory, skipUnreachable bool) []error {
 	include := destroyKindIncluded(succeededDestroyKinds)
 	if !include(workflow.DestroyTaskKindMachineInfra, "") {
 		return nil
@@ -252,7 +287,7 @@ func ResetMachineConvergeRecordsAfterDestroy(runsDir string, state v1alpha1.Stat
 			problems = append(problems, fmt.Errorf("purge run history: %w", err))
 		}
 	}
-	return problems
+	return append(problems, pruneDestroyedClusterStateDirs(clustersDir, workflow.MachineSubstrateClusters(tasks))...)
 }
 
 func destroyKindIncluded(succeeded workflow.DestroyOutcome) func(string, string) bool {

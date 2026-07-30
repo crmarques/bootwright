@@ -187,9 +187,9 @@
   register: bootwright_vsphere_os_install_remaining
   when: bootwright_component.osManaged | default(false) | bool
 
-- name: Remove shared per-cluster source-ISO cache after the last machine
+- name: Remove per-cluster OS-install state after the last machine
   ansible.builtin.file:
-    path: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/_source"
+    path: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}"
     state: absent
   when:
     - bootwright_component.osManaged | default(false) | bool

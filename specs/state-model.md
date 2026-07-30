@@ -2424,23 +2424,38 @@ verbs that reach machines.
   covering bare-metal managed-OS machines counts as a destructive action in
   apply's data-loss gate: an interactive run confirms it at the destructive
   prompt, and a non-interactive run (`--yes`) must pass `--authorize data-loss`.
+- A destroy leaves no directory skeleton behind. Teardown removes state file by
+  file, so the directories that held it are pruned after the run: any directory
+  under `clusters/<name>/` the teardown emptied is removed, down to
+  `clusters/<name>` itself when nothing of the component remains, and the
+  per-cluster managed-OS install tree under `provider-state/os-install/<name>/`
+  is removed once its last machine is torn down. Pruning removes only
+  directories that hold nothing — a directory that still contains state is
+  always kept, and pruning it away is never a substitute for removing the state
+  itself.
 - `destroy --purge-history` deletes retained per-component history once a
-  cluster's or machine's teardown actually succeeds: the `ContainerCluster`
-  installer working directory and install/connection records under
-  `clusters/<name>/` (kubeconfig and kubeadmin-password included), and its
-  per-run task and flow logs under `runs/history/<run-id>/`. Scope tracks
-  `--clusters`/`--machines` exactly (the whole context on an unscoped destroy)
-  and never a component outside it. A cluster left partially destroyed by
-  `--authorize unreachable-nodes` keeps its history so the operator can still diagnose and
-  retry. A run whose tasks span both a purged and a still-live component keeps
-  its ledger and shared run log — only the purged component's task directories
-  and per-cluster log are removed — so history for the surviving component is
-  never lost. It never removes the destroy-authorization substrate-release
-  record (`runs/substrate-release/`, needed so a later `apply` can reinstall
-  the released substrate) or unrelated context state (the ownership store, the
-  input-history rollback snapshots). Rejected with the artifact-server literal
-  (`--stage infra --clusters artifact-server`), which has no per-component
-  history to remove.
+  cluster's or machine's teardown actually succeeds: the destroyed cluster's
+  whole state tree under `clusters/<name>/` — installer working directory,
+  install and connection records, kubeconfig and kubeadmin-password, and
+  captured cluster secrets such as a Ceph `dashboard-password` — and its per-run
+  task and flow logs under `runs/history/<run-id>/`. The state tree is purged
+  for every cluster kind the run tore down, `StorageCluster` and
+  `ContainerCluster` alike. Scope tracks `--clusters`/`--machines` exactly (the
+  whole context on an unscoped destroy) and never a component outside it: a
+  teardown that leaves the machine layer standing (`--stage clusters`) keeps
+  that layer's provider state under
+  `clusters/<name>/runtime/provider-state/` and purges only the cluster's own
+  history. A cluster left partially destroyed by `--authorize unreachable-nodes`
+  keeps both its history and its state tree so the operator can still diagnose
+  and retry. A run whose tasks span both a purged and a still-live component
+  keeps its ledger and shared run log — only the purged component's task
+  directories and per-cluster log are removed — so history for the surviving
+  component is never lost. It never removes the destroy-authorization
+  substrate-release record (`runs/substrate-release/`, needed so a later `apply`
+  can reinstall the released substrate) or unrelated context state (the
+  ownership store, the input-history rollback snapshots). Rejected with the
+  artifact-server literal (`--stage infra --clusters artifact-server`), which
+  has no per-component history to remove.
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, converges
   drift that is reconcilable in place, and fails closed on structural

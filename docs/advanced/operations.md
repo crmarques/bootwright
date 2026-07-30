@@ -268,7 +268,12 @@ converge-safety records, install/connection records, kubeconfig — but leaves
 the rest of a destroyed component's history on disk: its installer working
 directory (`install-config.yaml`/`agent-config.yaml`, rendered manifests, the
 `openshift-install` log) and its per-run task and flow logs under
-`runs/history/`. Add `--purge-history` to also delete that once a component's
+`runs/history/`. What it never leaves is an empty skeleton: a directory under
+`clusters/<name>/` or `provider-state/` that the teardown emptied is removed
+along with its contents, down to `clusters/<name>` itself when nothing of the
+component remains. A directory that still holds state is always kept.
+
+Add `--purge-history` to also delete the retained history once a component's
 teardown actually succeeds:
 
 ```text
@@ -276,17 +281,26 @@ bootwright destroy --clusters ocp-3node --purge-history --yes
 bootwright destroy --machines ceph-osd-1 --purge-history --authorize installed-cluster-node
 ```
 
-`--purge-history` is scoped identically to `--clusters`/`--machines` — the
-whole context on an unscoped `destroy` — and never reaches a component outside
-that scope. A cluster left partially destroyed by `--authorize unreachable-nodes` keeps
-its history so you can still diagnose and retry; a run that also covers a
-still-live component keeps its shared ledger and run log, pruning only the
-purged component's own task directories and log. It leaves the destroy
-authorization trail (the substrate-release record that lets a later `apply`
-reinstall the same name) and unrelated context state (the ownership store,
-input-history rollback snapshots) untouched, and is **rejected** with the
-artifact-server literal (`--stage infra --clusters artifact-server`), which has
-no per-component history — drop the flag.
+`--purge-history` removes the destroyed component's whole state tree under
+`clusters/<name>/` — the installer working directory, install and connection
+records, kubeconfig, and captured cluster secrets such as a Ceph
+`dashboard-password` — for every kind of cluster it tore down, `StorageCluster`
+and `ContainerCluster` alike.
+
+It is scoped identically to `--clusters`/`--machines` — the whole context on an
+unscoped `destroy` — and never reaches a component outside that scope. A
+`--stage clusters` teardown leaves the machine layer standing, so it keeps that
+layer's provider state (`clusters/<name>/runtime/provider-state/`) and purges
+only the cluster's own history. A cluster left partially destroyed by
+`--authorize unreachable-nodes` keeps its history and its state tree so you can
+still diagnose and retry; a run that also covers a still-live component keeps
+its shared ledger and run log, pruning only the purged component's own task
+directories and log. It leaves the destroy authorization trail (the
+substrate-release record that lets a later `apply` reinstall the same name) and
+unrelated context state (the ownership store, input-history rollback snapshots)
+untouched, and is **rejected** with the artifact-server literal
+(`--stage infra --clusters artifact-server`), which has no per-component
+history — drop the flag.
 
 !!! warning "Not recoverable"
     Purged history is gone for good — there is no undo. Skip `--purge-history`

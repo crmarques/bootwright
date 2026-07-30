@@ -66,7 +66,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	addYesFlag(cmd, &yes, "destroy")
 	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbDestroy)
 	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks and authorizes no named risk of its own")
-	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
+	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: its whole state tree under this context's clusters/<name>/ (installer working directory, install/connection records, kubeconfig, captured cluster secrets) and its per-run task and flow logs under runs/. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, an unrelated run's shared ledger, or the provider state of a machine layer this run leaves standing (--stage clusters). Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
@@ -304,7 +304,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		if !dryRun && !yes && !plan.NoRemoteWork {
 			if purgeHistory {
-				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' installer working directory, install records, kubeconfig, and per-run task/flow logs under runs/ — this history is not recoverable")
+				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' whole state tree under clusters/ — installer working directory, install records, kubeconfig, captured cluster secrets — and their per-run task/flow logs under runs/ — this history is not recoverable")
 			}
 			if !confirm(stdin, stdout, destroyConfirmPrompt(dataLoss.Planned() && !allowDestroy)) {
 				return failErr(1, errors.New("destroy aborted"))

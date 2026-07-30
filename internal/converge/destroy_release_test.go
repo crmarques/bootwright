@@ -240,7 +240,7 @@ func TestMachineScopedDestroyRecordsMachineRelease(t *testing.T) {
 	runsDir := t.TempDir()
 	st := bareMetalCephDestroyState()
 
-	problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, st, map[string]bool{"ceph-1": true}, nil, false, false)
+	problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, t.TempDir(), st, map[string]bool{"ceph-1": true}, nil, false, false)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}
@@ -255,7 +255,7 @@ func TestMachineScopedDestroyRecordsMachineRelease(t *testing.T) {
 		t.Fatalf("release must cover only the destroyed machine, got %v", records[0].Machines)
 	}
 
-	problems = ResetMachineConvergeRecordsAfterDestroy(runsDir, st, map[string]bool{"ceph-1": true}, nil, false, true)
+	problems = ResetMachineConvergeRecordsAfterDestroy(runsDir, t.TempDir(), st, map[string]bool{"ceph-1": true}, nil, false, true)
 	if len(problems) != 0 {
 		t.Fatalf("reset problems: %v", problems)
 	}

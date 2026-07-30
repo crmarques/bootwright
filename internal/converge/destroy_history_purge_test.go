@@ -142,11 +142,85 @@ func TestPurgeClusterRuntimeDirRemovesWholeTree(t *testing.T) {
 	if err := os.WriteFile(installerFile, []byte("x"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if err := purgeClusterRuntimeDir(clustersDir, "ocp"); err != nil {
+	if err := purgeClusterRuntimeDir(clustersDir, "ocp", false); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(clustersDir, "ocp")); !os.IsNotExist(err) {
 		t.Fatalf("cluster runtime directory must be gone, stat err = %v", err)
+	}
+}
+
+func TestPurgeClusterRuntimeDirKeepsStandingMachineState(t *testing.T) {
+	clustersDir := t.TempDir()
+	installerFile := filepath.Join(clustersDir, "ocp", "runtime", "installer", "install-config.yaml")
+	if err := os.MkdirAll(filepath.Dir(installerFile), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(installerFile, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	machineState := filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ocp"), "libvirt", "machines", "node-0", "domain.xml")
+	if err := os.MkdirAll(filepath.Dir(machineState), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(machineState, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := purgeClusterRuntimeDir(clustersDir, "ocp", true); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if _, err := os.Stat(machineState); err != nil {
+		t.Fatalf("a purge that does not tear the machine layer must keep provider state: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(clustersDir, "ocp", "runtime", "installer")); !os.IsNotExist(err) {
+		t.Fatalf("cluster history must still be purged, stat err = %v", err)
+	}
+}
+
+func TestPruneEmptyClusterStateDirsRemovesEmptiedSkeleton(t *testing.T) {
+	clustersDir := t.TempDir()
+	emptied := filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ceph"), "baremetal")
+	if err := os.MkdirAll(emptied, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.MkdirAll(workflow.ClusterSecretsDir(clustersDir, "ceph"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	if err := pruneEmptyClusterStateDirs(clustersDir, "ceph"); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(clustersDir, "ceph")); !os.IsNotExist(err) {
+		t.Fatalf("a fully emptied cluster state tree must be removed, stat err = %v", err)
+	}
+}
+
+func TestPruneEmptyClusterStateDirsKeepsDirectoriesThatStillHoldState(t *testing.T) {
+	clustersDir := t.TempDir()
+	kept := filepath.Join(workflow.ClusterSecretsDir(clustersDir, "ceph"), "dashboard-password")
+	if err := os.MkdirAll(filepath.Dir(kept), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(kept, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	emptied := filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ceph"), "baremetal")
+	if err := os.MkdirAll(emptied, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	if err := pruneEmptyClusterStateDirs(clustersDir, "ceph"); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if _, err := os.Stat(kept); err != nil {
+		t.Fatalf("retained material must survive the prune: %v", err)
+	}
+	if _, err := os.Stat(emptied); !os.IsNotExist(err) {
+		t.Fatalf("emptied provider-state tree must be pruned, stat err = %v", err)
+	}
+	if _, err := os.Stat(workflow.ClusterRuntimeDir(clustersDir, "ceph")); !os.IsNotExist(err) {
+		t.Fatalf("emptied runtime tree must be pruned, stat err = %v", err)
 	}
 }
 
@@ -188,6 +262,93 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesClusterRuntimeDir(t 
 	}
 }
 
+func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesStorageClusterStateTree(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	for _, dir := range []string{
+		filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ceph-bm"), "baremetal"),
+		workflow.ClusterSecretsDir(clustersDir, "ceph-bm"),
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, true, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if _, err := os.Stat(filepath.Join(clustersDir, "ceph-bm")); !os.IsNotExist(err) {
+		t.Fatalf("--purge-history must remove a destroyed StorageCluster's state tree, not just a ContainerCluster's, stat err = %v", err)
+	}
+}
+
+func TestResetConvergeRecordsAfterDestroyPrunesEmptiedStorageClusterStateTree(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	for _, dir := range []string{
+		filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ceph-bm"), "baremetal"),
+		workflow.ClusterSecretsDir(clustersDir, "ceph-bm"),
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, false, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if _, err := os.Stat(filepath.Join(clustersDir, "ceph-bm")); !os.IsNotExist(err) {
+		t.Fatalf("a destroy that emptied a cluster's state tree must leave no directory skeleton behind, stat err = %v", err)
+	}
+}
+
+func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsStandingMachineState(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	machineState := filepath.Join(workflow.ClusterProviderStateDir(clustersDir, "ceph-bm"), "baremetal", "ceph-0.yml")
+	if err := os.MkdirAll(filepath.Dir(machineState), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(machineState, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, true, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if _, err := os.Stat(machineState); err != nil {
+		t.Fatalf("a clusters-stage --purge-history must not delete the standing machine layer's provider state: %v", err)
+	}
+}
+
+func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStorageStateTree(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+
+	secretsDir := workflow.ClusterSecretsDir(clustersDir, "ceph-bm")
+	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, nil, true, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if _, err := os.Stat(secretsDir); err != nil {
+		t.Fatalf("a partially-destroyed cluster kept for retry must keep its state tree: %v", err)
+	}
+}
+
 func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStorageHistory(t *testing.T) {
 	runsDir := t.TempDir()
 	clustersDir := t.TempDir()
@@ -226,7 +387,7 @@ func TestResetMachineConvergeRecordsAfterDestroyPurgeHistoryScopesToSelectedMach
 	touchTaskDir(t, runsDir, "run-1", "infra.lab.ceph-1")
 
 	machineProvision := map[string]bool{"ceph-0": true}
-	if problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, st, machineProvision, nil, true, false); len(problems) != 0 {
+	if problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, t.TempDir(), st, machineProvision, nil, true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 

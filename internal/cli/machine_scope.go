@@ -78,7 +78,7 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, sto
 
 func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, purgeHistory, skipUnreachable bool) error {
 	if sel.MachineSelection {
-		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, plan.State, sel.MachineProvision, succeeded, purgeHistory, skipUnreachable))
+		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, plan.State, sel.MachineProvision, succeeded, purgeHistory, skipUnreachable))
 	}
 	return printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, purgeHistory, skipUnreachable))
 }
