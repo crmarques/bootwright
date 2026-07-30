@@ -121,7 +121,15 @@ cannot promise one that does not exist. It also requires every token to appear i
 a `safetyMatrixCases()` row (a token that unblocks a refusal must be exercised),
 to declare the verbs whose gates consume it, and — for a token no `apply` gate can
 consume — to be refused on `apply`/`plan` as a usage error naming what resolves it
-there. Seven of the eight are destroy-only; only `data-loss` has an apply gate.
+there. Seven of the nine are destroy-only; `data-loss` and `unowned-devices`
+(ADR 0034) have apply gates. `unowned-devices` is reachable on `apply` only under
+`--reclaim-devices`, so its matrix row is a `--dry-run` (which by contract
+consumes no token); the real consumption path — the warning and the
+`bootwright_ceph_authorize_unowned_devices` extra var — is pinned by
+`TestWarnReclaimUnownedDevicesStatesBothReadings` and
+`TestUnownedDeviceAuthorizationExtraVarRidesOnlyTheToken` instead, because a real
+`--stage deps` apply on the baseline stops at the machine-check preflight
+(unseeded cluster secrets and host trust) long before the destructive block.
 Consumption must be recorded wherever behavior actually changes:
 `emitApplyDataLossWarningsAndVars` returns whether it consumed `data-loss`
 because widening the storage sub-object rebuild authorization is a consumption

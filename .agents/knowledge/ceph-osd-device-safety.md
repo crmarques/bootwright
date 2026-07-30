@@ -53,6 +53,51 @@ exactly the operator-named devices — gated on each being a declared OSD device
 of a controller-owned cluster and not mounted or in use — so the gate then sees
 them empty and cephadm re-creates the OSDs.
 
+**Symptom (`Refusing to reclaim <dev>: it could not be probed or is mounted/in
+use ()` — empty parentheses):** the reclaim mount gate asserted `item.rc == 0`
+AND an empty mountpoint list in one assertion, so `lsblk: <dev>: not a block
+device` (rc 32) surfaced as the mount refusal with nothing between the parens.
+The device is not mounted; it does not exist. The empty parenthesis is the
+tell. Root cause is almost always a declared device list that does not match the
+hardware — NVMe namespace numbering decides whether the data disks run
+`nvme0n1`–`nvme3n1` or `nvme1n1`–`nvme4n1`, and whether the root disk is an NVMe
+at all.
+
+**Fix:** the reclaim path now classifies presence exactly as the destroy path
+always has (`not a block device|No such file or directory` → absent), and the
+three outcomes are separate tasks: absent is **skipped and reported** as a
+declaration that does not match the hardware (nothing to wipe, and the OSD
+readiness shortfall is the real diagnosis), any other probe failure is its own
+fatal refusal, and the mount refusal keeps only the mount condition. The wipe,
+zap, and gdisk tasks loop `bootwright_ceph_reclaim_present`, not the unfiltered
+reclaim set, so an absent device is not a wipe failure either.
+
+**Constraint (orphan vs live OSD — the holders gate cannot tell, so it must
+say which case it is in):** an unmounted whole disk carrying LVM holders is the
+bluestore signature, and a **live** OSD and an **orphan** left by a destroyed
+cluster look identical to any device probe. The old refusal assumed live and
+printed a drain-first remedy (`ceph osd tree`, `ceph orch osd rm`) that is
+unactionable when `/var/lib/ceph` is gone — there is no cluster to drain from,
+and no in-product path existed for a statically named selection. The gate now
+stats `/var/lib/ceph` and branches the message on it, and ADR 0034's
+`--authorize unowned-devices` (extra var
+`bootwright_ceph_authorize_unowned_devices`, accepted by BOTH verbs) relaxes the
+ownership half of device safety. The physical half stays closed to every token:
+mounted/in-use and unprobeable still fail closed. On apply the gate is reachable
+only under `--reclaim-devices`; the wipe itself still needs `data-loss`, so the
+operator passes both.
+
+**Constraint (an authorized reclaim must take the LVM stack down, not just
+`wipefs` it):** `wipefs --all` clears the PV label but leaves active LVs mapped,
+and ceph-volume rejects a device with holders regardless of its signatures — so
+the token would have cleared the gate and still produced zero OSDs. The reclaim
+runs `vgchange --activate n` → `vgremove --force --yes` → `pvremove --force
+--yes` for exactly the devices whose holders it was authorized to destroy
+(resolved from the holders probe via `selectattr('stdout', 'search', 'lvm')`,
+VGs from `pvs --noheadings --readonly -o vg_name`), before the existing
+`wipefs`/`sgdisk` pair. dm-crypt holders are named in the refusal but only the
+LVM teardown is automated; `wipefs` handles the crypt signature itself.
+
 **Constraint:** Two validators protect the OS disk: a Ceph node must not list
 its root disk (`rootDeviceHints.deviceName`) among OSD data/db/wal paths
 (cephadm would ceph-volume it into an OSD, wiping the installed OS), and a

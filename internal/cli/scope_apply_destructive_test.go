@@ -23,6 +23,29 @@ func TestReclaimDestructiveDescriptors(t *testing.T) {
 	}
 }
 
+func TestWarnReclaimUnownedDevicesStatesBothReadings(t *testing.T) {
+	var buf bytes.Buffer
+	warnReclaimUnownedDevices(&buf, "/dev/nvme0n1")
+	got := buf.String()
+	for _, want := range []string{"/dev/nvme0n1", "unowned-devices", "orphan", "LIVE OSD", "mounted"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the unowned-devices warning must name %q: the gate can no longer tell an orphan from a live OSD for the operator, so it must state both readings and the one refusal no token relaxes. got %q", want, got)
+		}
+	}
+}
+
+func TestUnownedDeviceAuthorizationExtraVarRidesOnlyTheToken(t *testing.T) {
+	var plan converge.WorkflowPlan
+	converge.ApplyCephUnownedDeviceAuthorizationExtraVar(&plan, false)
+	if len(plan.ExtraVarPairs) != 0 {
+		t.Fatalf("an unauthorized run must send no unowned-device extra var, got %v", plan.ExtraVarPairs)
+	}
+	converge.ApplyCephUnownedDeviceAuthorizationExtraVar(&plan, true)
+	if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != converge.CephAuthorizeUnownedDevicesExtraVar+"=true" {
+		t.Fatalf("the token must reach the roles as %s=true, got %v", converge.CephAuthorizeUnownedDevicesExtraVar, plan.ExtraVarPairs)
+	}
+}
+
 func TestReclaimUnmatchedError(t *testing.T) {
 	err := reclaimUnmatchedError([]string{"/dev/disk/by-id/wwn-0x5000"}, []string{"ceph1"}, []string{"/dev/sdb"})
 	msg := err.Error()

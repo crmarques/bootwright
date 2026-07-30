@@ -278,6 +278,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					}
 				}
 				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
+				applyReclaimUnownedDevices(stdout, &plan, auth, reclaimDevices)
 			}
 			allowDestroy := auth.has(authorizeDataLoss)
 			if override && allowDestroy {

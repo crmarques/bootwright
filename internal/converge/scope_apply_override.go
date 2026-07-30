@@ -137,6 +137,13 @@ func ApplyFilterReclaimAuthorizedExtraVar(plan *WorkflowPlan, names []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_filter_reclaim_clusters="+strings.Join(names, ","))
 }
 
+func ApplyCephUnownedDeviceAuthorizationExtraVar(plan *WorkflowPlan, authorized bool) {
+	if !authorized {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, CephAuthorizeUnownedDevicesExtraVar+"=true")
+}
+
 func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, ownedClusters []string) {
 	if strings.TrimSpace(devices) == "" {
 		return

@@ -1448,6 +1448,120 @@ func TestStorageCephadmReclaimSkipsMarkerRecordedDevices(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmReclaimSeparatesAbsentFromUnprobeableAndMounted(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml"
+	tasks := readAnsibleTasks(t, path)
+	classifyIdx := findAnsibleTask(t, tasks, "Classify reclaim devices by presence")
+	unprobeableIdx := findAnsibleTask(t, tasks, "Refuse to reclaim a device that could not be probed")
+	absentIdx := findAnsibleTask(t, tasks, "Report reclaim devices absent from this host")
+	mountIdx := findAnsibleTask(t, tasks, "Refuse to reclaim a mounted or in-use device")
+	if !(classifyIdx < unprobeableIdx && unprobeableIdx < absentIdx && absentIdx < mountIdx) {
+		t.Fatalf("reclaim must classify presence before it refuses or reports (classify=%d unprobeable=%d absent=%d mount=%d)", classifyIdx, unprobeableIdx, absentIdx, mountIdx)
+	}
+	classify, ok := tasks[classifyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("reclaim presence classification must be a set_fact, got %v", tasks[classifyIdx])
+	}
+	if got := fmt.Sprint(classify["bootwright_ceph_reclaim_absent"]); !strings.Contains(got, "not a block device") {
+		t.Errorf("reclaim must recognize an absent device by the lsblk stderr the destroy path already keys on, got %v", got)
+	}
+	if _, isAssert := tasks[absentIdx]["ansible.builtin.assert"]; isAssert {
+		t.Error("an absent declared device must be skipped and reported, not refused: --reclaim-devices has nothing to wipe there, and the OSD readiness count is the real diagnosis")
+	}
+	mount, ok := tasks[mountIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the mount refusal must be an assert, got %v", tasks[mountIdx])
+	}
+	if got := fmt.Sprint(mount["that"]); strings.Contains(got, "item.rc == 0") {
+		t.Errorf("the mount refusal must not also carry the probe-failure condition: folding them together reported `lsblk: not a block device` as \"mounted/in use ()\" and sent the operator hunting a mount that never existed. got that=%v", got)
+	}
+	for _, name := range []string{"Refuse to reclaim a device that could not be probed", "Refuse to reclaim a mounted or in-use device"} {
+		idx := findAnsibleTask(t, tasks, name)
+		assertion, ok := tasks[idx]["ansible.builtin.assert"].(map[string]any)
+		if !ok {
+			t.Fatalf("%q must be an assert, got %v", name, tasks[idx])
+		}
+		if got := fmt.Sprint(assertion["that"]); strings.Contains(got, "bootwright_ceph_authorize_unowned_devices") {
+			t.Errorf("%q is physical device safety and must be closed to every --authorize token (ADR 0034), got that=%v", name, got)
+		}
+	}
+}
+
+func TestStorageCephadmUnownedDeviceTokenGatesTheHoldersRefusal(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml"
+	tasks := readAnsibleTasks(t, path)
+	holdersIdx := findAnsibleTask(t, tasks, "Refuse to reclaim a device that still backs a live OSD")
+	holders, ok := tasks[holdersIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the holders refusal must be an assert, got %v", tasks[holdersIdx])
+	}
+	that := fmt.Sprint(holders["that"])
+	if !strings.Contains(that, "bootwright_ceph_authorize_unowned_devices") {
+		t.Errorf("--authorize unowned-devices must relax the holders refusal (ADR 0034): without it an orphan LVM stack left by a destroyed cluster has no in-product remedy, got that=%v", that)
+	}
+	if !strings.Contains(that, "item.rc == 0") {
+		t.Errorf("the holders refusal must still fail closed on a failed probe, got that=%v", that)
+	}
+	msg := fmt.Sprint(holders["fail_msg"])
+	for _, want := range []string{"/var/lib/ceph", "orch osd rm", "--authorize data-loss,unowned-devices", "ORPHAN"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the holders refusal must name %q so it distinguishes a live OSD from an orphan and states the remedy for each, got fail_msg=%v", want, msg)
+		}
+	}
+	if findAnsibleTaskIndex(tasks, "Probe this node for a live Ceph daemon tree") < 0 {
+		t.Error("the holders refusal branches on whether this node runs Ceph at all; without the probe it would keep telling an operator to drain an OSD from a cluster that no longer exists")
+	}
+}
+
+func TestStorageCephadmReclaimTearsDownLVMBeforeTheWipe(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml"
+	tasks := readAnsibleTasks(t, path)
+	vgchangeIdx := findAnsibleTask(t, tasks, "Deactivate the volume groups on the reclaimed OSD devices")
+	vgremoveIdx := findAnsibleTask(t, tasks, "Remove the volume groups on the reclaimed OSD devices")
+	pvremoveIdx := findAnsibleTask(t, tasks, "Remove the physical volume labels from the reclaimed OSD devices")
+	wipeIdx := findAnsibleTask(t, tasks, "Reclaim named OSD devices by wiping signatures")
+	if !(vgchangeIdx < vgremoveIdx && vgremoveIdx < pvremoveIdx && pvremoveIdx < wipeIdx) {
+		t.Fatalf("an authorized reclaim must take the LVM stack down before wipefs: wipefs clears the PV label but leaves active LVs mapped, and ceph-volume refuses a device with holders regardless of its signatures, so the reclaim would clear the gate and still yield zero OSDs (vgchange=%d vgremove=%d pvremove=%d wipe=%d)", vgchangeIdx, vgremoveIdx, pvremoveIdx, wipeIdx)
+	}
+	for _, name := range []string{
+		"Reclaim named OSD devices by wiping signatures",
+		"Zap partition tables of reclaimed OSD devices",
+	} {
+		idx := findAnsibleTask(t, tasks, name)
+		if got := fmt.Sprint(tasks[idx]["loop"]); !strings.Contains(got, "bootwright_ceph_reclaim_present") {
+			t.Errorf("%q must wipe only the devices present on this host; looping the unfiltered reclaim set makes an absent device a wipe failure, got loop=%v", name, got)
+		}
+	}
+}
+
+func TestStorageCephadmDestroyUnownedDeviceTokenGatesTheSignatureRefusal(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/device_gates.yml"
+	tasks := readAnsibleTasks(t, path)
+	idx := findAnsibleTask(t, tasks, "Refuse to wipe present Ceph devices without a valid Bootwright OSD record")
+	gate, ok := tasks[idx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the destroy device gate must be an assert, got %v", tasks[idx])
+	}
+	that := fmt.Sprint(gate["that"])
+	if !strings.Contains(that, "bootwright_ceph_authorize_unowned_devices") {
+		t.Errorf("--authorize unowned-devices must relax the destroy signature refusal too (ADR 0034): the same orphan blocks apply and destroy, and a token that cleared only one leaves the other as a wall, got that=%v", that)
+	}
+	if !strings.Contains(that, "item.rc == 0") {
+		t.Errorf("the destroy device gate must still fail closed on a wipefs probe failure, got that=%v", that)
+	}
+	if got := fmt.Sprint(gate["fail_msg"]); !strings.Contains(got, "--authorize data-loss,unowned-devices") {
+		t.Errorf("the destroy device refusal must name the token pair that proceeds, got fail_msg=%v", got)
+	}
+	mountIdx := findAnsibleTask(t, tasks, "Refuse to wipe mounted or in-use Ceph destroy devices")
+	mount, ok := tasks[mountIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the destroy mount refusal must be an assert, got %v", tasks[mountIdx])
+	}
+	if got := fmt.Sprint(mount["that"]); strings.Contains(got, "bootwright_ceph_authorize_unowned_devices") {
+		t.Errorf("no token relaxes the mounted-device refusal on destroy either, got that=%v", got)
+	}
+}
+
 func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")

@@ -11,6 +11,10 @@ import (
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
+func destroyAuthorizesUnownedDevices(auth *authorizations, runScope converge.Scope) bool {
+	return converge.ScopeTearsClusterLayer(runScope) && auth.allows(authorizeUnownedDevices)
+}
+
 func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
 	var out []converge.InfraComponentServiceRef
 	for _, service := range stategraph.ResolveMachineServices(state).Services {

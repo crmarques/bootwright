@@ -42,13 +42,15 @@ refusal and nothing else:
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` |
 | `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
+| `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
 | `unreachable-nodes` | skipping unreachable nodes during teardown, leaving the cluster partially destroyed |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
 
 An unknown token is a usage error listing the tokens the command accepts. So is a
-token the command has no gate for: every token except `data-loss` is destroy-only,
+token the command has no gate for: every token except `data-loss` and
+`unowned-devices` is destroy-only,
 and `apply --authorize protected` is refused with the guidance that resolves it on
 `apply` rather than accepted and ignored. A token the command accepts but this run
 never used prints a warning naming it, so you learn you authorized the wrong risk
@@ -524,6 +526,41 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     - apply once with the data-carrying device **removed** from the `StorageCluster`
       declaration (this records ownership without touching the disk), then re-add
       the device and re-run the `--reclaim-devices` apply.
+
+!!! warning "Wiping an orphan the marker never recorded"
+    A reclaim refuses a device carrying LVM or dm-crypt holders, because that is
+    what a live bluestore OSD looks like — an in-use OSD has no mountpoint, so
+    the mount probe cannot catch it. When the cluster that wrote those holders is
+    **gone**, that refusal has no remedy: its advice is to drain the OSD, and
+    there is no cluster to drain it from. Bootwright detects the difference and
+    says which case you are in — the refusal reports whether the node still
+    carries a Ceph daemon tree at `/var/lib/ceph`.
+
+    For the orphan, `--authorize unowned-devices` is the token that proceeds:
+
+    ```
+    bootwright apply --clusters ceph-storage --reclaim-devices /dev/nvme0n1 --authorize data-loss,unowned-devices
+    ```
+
+    Both tokens are required and neither implies the other: `data-loss`
+    authorizes the wipe, `unowned-devices` authorizes wiping a device this node
+    holds no ownership record for. The same token clears the equivalent refusal
+    on `destroy`, where an undeclared-at-the-time device can survive teardown
+    with its signatures intact.
+
+    Confirm what the volume group actually is first — `pvs -o pv_name,vg_name`
+    and `lvs -o lv_name,vg_name,lv_tags` on the node. A `ceph-<uuid>` group whose
+    LV tags carry `ceph.osd_id=`/`ceph.cluster_fsid=` is prior-install residue.
+    On a node whose Ceph daemons are still running, this token wipes a **live**
+    OSD and its data.
+
+    What it never relaxes: a **mounted or in-use** device, and a device whose
+    probe failed for any reason other than not being present, still fail closed
+    under every token — that is what keeps a root disk out of a reclaim. A device
+    that is simply **absent** is skipped and reported rather than refused; if a
+    declared device is absent on every node, the declaration does not match the
+    hardware, and the OSD readiness check will fail later with a count short of
+    the declaration.
 
 ### Comparing against live cluster state
 

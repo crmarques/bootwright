@@ -112,6 +112,7 @@
       - (item.stdout | trim | length == 0)
         or ((bootwright_ceph_osd_marker_valid | default(false) | bool)
             and (item.item in (bootwright_ceph_recorded_osd_devices | default([]))))
+        or (bootwright_ceph_authorize_unowned_devices | default(false) | bool)
     fail_msg: >-
       {{
         ('Refusing to wipe storage device ' ~ item.item ~ ' for '
@@ -130,8 +131,11 @@
             if not (bootwright_ceph_osd_marker_valid | default(false) | bool)
             else (' (recorded devices: '
                   ~ (bootwright_ceph_recorded_osd_devices | default([]) | join(', ')) ~ ')'))
-         ~ '. Re-apply to re-record OSD devices, or verify and wipe it manually.'
-         ~ ' (--authorize unowned-vms does not relax this device data-safety gate.)')
+         ~ '. Re-apply to re-record OSD devices, verify and wipe it manually, or — once you'
+         ~ ' have confirmed the signatures are disposable — re-run this destroy with'
+         ~ ' `--authorize data-loss,unowned-devices`, the one token that wipes a device this'
+         ~ ' node has no ownership record for. (--authorize unowned-vms does not: it gates'
+         ~ ' VMs, not devices. Nothing relaxes the mounted, in-use, or unprobeable refusals.)')
       }}
     quiet: true
   loop: "{{ bootwright_ceph_destroy_signatures.results | default([]) }}"

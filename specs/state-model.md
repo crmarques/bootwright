@@ -2306,7 +2306,8 @@ verbs that reach machines.
   risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
   repeatable and comma-separated. An unknown token is a usage error (exit 2)
   listing the tokens the verb accepts; so is a token the verb has no gate for at
-  all — every token except `data-loss` is destroy-only, and passing one to
+  all — every token except `data-loss` and `unowned-devices` is destroy-only, and
+  passing one to
   `apply`/`plan` is refused with the guidance that resolves it there rather than
   silently ignored, so an operator can never believe a gate was cleared. A token
   the verb accepts but this particular run never consumed is a non-fatal warning
@@ -2321,18 +2322,28 @@ verbs that reach machines.
   | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) |
   | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker |
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
+  | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
   | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
 
-  No token widens `--clusters`, relaxes device data-safety, relaxes the
-  shared-provider-service scope conflict, or relaxes the KubeVirt tenant gate.
+  No token widens `--clusters`, relaxes the shared-provider-service scope
+  conflict, or relaxes the KubeVirt tenant gate.
   `unowned-vms`/`unowned-networks` apply only where those refusals run (the
   machine layer); outside it they are reported as having had no effect. Neither
-  relaxes the Ceph cluster or OSD-device ownership gates, and neither relaxes
-  the device data-safety checks (a mounted, in-use, or unprobeable device still
-  fails closed).
+  relaxes the Ceph cluster or OSD-device ownership gates.
+
+  Device data-safety splits in two, and only the ownership half is
+  authorizable (ADR 0034). `unowned-devices` relaxes exactly one refusal — that
+  a device carries signatures or LVM/dm-crypt holders this node has no
+  Bootwright OSD ownership record for — because that refusal has no
+  self-service remedy when the cluster that wrote them is gone. The physical
+  half is not authorizable by any token: a mounted or in-use device, and a
+  device whose probe failed for any reason other than "not present", still fail
+  closed. A device that is simply absent is neither refused nor wiped — it is
+  skipped, reported as a declaration that does not match the hardware, and left
+  to fail at OSD readiness where the count is the diagnosis.
 - `--yes` has one meaning on both verbs: it answers the ordinary confirmation
   prompt and authorizes no named risk. On `destroy`, a teardown that destroys a
   managed storage cluster's OSD data requires `--authorize data-loss`; without

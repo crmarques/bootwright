@@ -207,6 +207,18 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
 }
 
+func applyReclaimUnownedDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, reclaimDevices string) {
+	if !auth.allows(authorizeUnownedDevices) {
+		return
+	}
+	warnReclaimUnownedDevices(stdout, reclaimDevices)
+	converge.ApplyCephUnownedDeviceAuthorizationExtraVar(plan, true)
+}
+
+func warnReclaimUnownedDevices(stdout io.Writer, reclaimDevices string) {
+	cliout.NewContinuation(stdout).Warning("authorize "+authorizeUnownedDevices, "additionally wipes named device(s) "+reclaimDevices+" that carry LVM or dm-crypt holders without a Bootwright OSD ownership record for their node. Without this token such a device fails closed as a possible live bluestore OSD. It is the right token for an orphan stack left by a Ceph cluster that was destroyed or was never Bootwright's; on a node whose Ceph daemons are still running it wipes a LIVE OSD and its data. A mounted, in-use, or unprobeable device still fails closed and no token relaxes that.")
+}
+
 func reclaimUnmatchedError(unmatched, owned, declared []string) error {
 	noun, verb := "entry", "does"
 	if len(unmatched) > 1 {

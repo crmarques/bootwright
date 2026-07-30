@@ -12,9 +12,10 @@ const (
 	DestroyAuthorizeUnownedVMsExtraVar  = "bootwright_destroy_authorize_unowned_vms"
 	DestroyAuthorizeUnownedNetsExtraVar = "bootwright_destroy_authorize_unowned_networks"
 	DestroySkipUnreachableExtraVar      = "bootwright_destroy_skip_unreachable"
+	CephAuthorizeUnownedDevicesExtraVar = "bootwright_ceph_authorize_unowned_devices"
 )
 
-func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, unownedVMs bool, unownedNetworks bool, skipUnreachable bool) {
+func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, unownedVMs bool, unownedNetworks bool, skipUnreachable bool, unownedDevices bool) {
 	switch {
 	case len(machineScope) > 0:
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.DestroyMachineScopeExtraVar+"="+strings.Join(machineScope, ","))
@@ -37,4 +38,5 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 	if skipUnreachable {
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroySkipUnreachableExtraVar+"=true")
 	}
+	ApplyCephUnownedDeviceAuthorizationExtraVar(plan, unownedDevices)
 }

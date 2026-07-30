@@ -270,6 +270,22 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		want:    []string{"bootwright_destroy_authorize_unowned_vms=true"},
 		deny:    []string{"bootwright_destroy_authorize_unowned_networks=true"},
 	}, {
+		name:    "destroy/unowned-devices: the token arms the unowned-signature device wipe",
+		args:    []string{"destroy", "--stage", "clusters", "--authorize", "data-loss,unowned-devices", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_ceph_authorize_unowned_devices=true"},
+	}, {
+		name:    "destroy/unowned-devices: authorizing VMs never authorizes devices",
+		args:    []string{"destroy", "--stage", "clusters", "--authorize", "data-loss", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		deny:    []string{"bootwright_ceph_authorize_unowned_devices=true"},
+	}, {
+		name:    "apply/unowned-devices: apply accepts the token and a dry-run consumes none of it",
+		args:    []string{"apply", "--stage", "deps", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--authorize", "data-loss,unowned-devices", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize unowned-devices is not consumed by a dry-run"},
+		deny:    []string{"bootwright_ceph_authorize_unowned_devices=true"},
+	}, {
 		name:    "destroy/unreachable-nodes: the token alone arms the skip, with no second flag",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unreachable-nodes", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

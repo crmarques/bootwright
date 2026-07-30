@@ -77,6 +77,7 @@ else:
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster (either kind, per ADR 0031) |
 | `unowned-vms` | tearing down libvirt/KubeVirt/vSphere VMs that match the Bootwright naming but carry no ownership marker |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
+| `unowned-devices` | wiping a declared OSD device carrying signatures or LVM/dm-crypt holders that this node has no Bootwright OSD ownership record for (both verbs, per ADR 0034) |
 | `unreachable-nodes` | leaving a cluster partially destroyed by skipping unreachable nodes |
 | `unreadable-records` | proceeding when ownership records cannot be read, leaving their resources standing |
 | `shared-infra` | storage-consumer conflicts and shared infra components owned or referenced by another context |

@@ -523,6 +523,14 @@ the previous cluster's LVM.
     bootwright apply --clusters ceph-01 --reclaim-devices /dev/disk/by-id/wwn-0x...
     ```
 
+    If the reclaim itself refuses the device — *"it carries LVM or dm-crypt
+    holders"* — the disk still belongs to something. The refusal says which
+    something: it reports whether the node carries a Ceph daemon tree at
+    `/var/lib/ceph`. With one, drain the OSD first. Without one, the holders are
+    an orphan no `ceph orch osd rm` can reach, and
+    `--authorize data-loss,unowned-devices` is the pair that wipes it — see
+    [Wiping an orphan the marker never recorded](advanced/operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
+
     See [Reclaiming OSD disks](advanced/operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
 
 === "A narrowing filter (`model`/`size`/`rotational`/`vendor`/`limit`)"
@@ -532,6 +540,16 @@ the previous cluster's LVM.
     the filter never targets. Confirm each disk is disposable and clean it on
     its host (`wipefs --all`, `sgdisk --zap-all`), or exclude it from the
     selection, then re-apply.
+
+!!! note "A count short of the declaration means a device that is not there"
+    If readiness reports fewer OSDs than declared and the shortfall is the same
+    on every node, the declared device list names a disk the hardware does not
+    have. A reclaim run says so directly — it skips the device and reports that
+    the declaration does not match the hardware — and NVMe namespace numbering is
+    the usual cause: whether the root disk occupies `nvme0n1` decides whether the
+    data disks run `nvme0n1`–`nvme3n1` or `nvme1n1`–`nvme4n1`. Confirm with
+    `lsblk -dno NAME,SIZE,TYPE` and `findmnt -no SOURCE /` on one node before
+    editing `spec.ceph.topology.nodes[].devices`.
 
 If instead the inventory reports **zero devices** on hosts that are online but
 carry few or no daemons, the problem is not the disks: cephadm cannot run on

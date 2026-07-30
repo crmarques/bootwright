@@ -17,6 +17,7 @@ const (
 	authorizeInstalledClusterNode = "installed-cluster-node"
 	authorizeUnownedVMs           = "unowned-vms"
 	authorizeUnownedNetworks      = "unowned-networks"
+	authorizeUnownedDevices       = "unowned-devices"
 	authorizeUnreachableNodes     = "unreachable-nodes"
 	authorizeUnreadableRecords    = "unreadable-records"
 	authorizeSharedInfra          = "shared-infra"
@@ -65,6 +66,11 @@ var authorizationTokens = []authorizationToken{{
 	inert:      "this run removes no libvirt network or KubeVirt DataVolume (their ownership refusals live in the infra stage)",
 	verbs:      []string{authorizeVerbDestroy},
 	elsewhere:  "apply never removes a network or a DataVolume; only destroy does",
+}, {
+	name:       authorizeUnownedDevices,
+	authorizes: "wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders but no Bootwright OSD ownership record for this node — an orphan left by a destroyed or foreign Ceph install; on apply it needs --reclaim-devices, and it never relaxes the mounted, in-use, or unprobeable refusals",
+	inert:      "no selected node refused a declared OSD device for want of a Bootwright OSD ownership record (on apply the gate runs only under --reclaim-devices)",
+	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
 }, {
 	name:       authorizeUnreachableNodes,
 	authorizes: "leaving a cluster partially destroyed by skipping unreachable nodes",
