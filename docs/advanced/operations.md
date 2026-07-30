@@ -216,6 +216,18 @@ layer — the reinstall on a later `apply` is where those disks go, and it cross
 - **Disks.** Managed-machine disk cleanup is limited to provider-owned disks or
   devices you declared as Bootwright-managed. Bootwright never wipes arbitrary
   visible disks.
+
+    A Ceph OSD host that declares its devices through a *filter* — `data_devices.all`,
+    or a `model`/`size`/`rotational` selection — names no device path, so the
+    declared-device wipe covers none of its disks. On an `all`-devices host the
+    teardown therefore also reclaims the disks that carry a **Ceph signature**:
+    a `ceph_bluestore` filesystem, or an LVM physical volume in a `ceph-*` volume
+    group. The root disk, any disk mounted anywhere in its tree, and any disk with
+    no Ceph signature are left untouched, and a host whose local disk scan fails
+    stops the teardown rather than guessing. Without this the bluestore signatures
+    outlive the cluster and the next `apply` finds every device unavailable to
+    ceph-volume — a zero-OSD install that only
+    `apply --mode rebuild --authorize data-loss` can clear.
 - **Host packages.** A package is removed only when ownership records prove
   Bootwright installed it *and* no remaining ownership record on that host still
   requires it.

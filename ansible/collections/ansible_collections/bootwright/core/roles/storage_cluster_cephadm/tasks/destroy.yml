@@ -10,3 +10,6 @@
 
 - name: Wipe Ceph devices and remove local state
   ansible.builtin.import_tasks: destroy_steps/wipe_and_cleanup.yml
+
+- name: Reclaim Ceph-signed disks that no declared path covers
+  ansible.builtin.import_tasks: destroy_steps/filter_device_reclaim.yml

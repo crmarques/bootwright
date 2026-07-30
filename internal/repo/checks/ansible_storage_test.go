@@ -2275,7 +2275,32 @@ func storageCephDestroyTasks(t *testing.T) []map[string]any {
 		base+"device_gates.yml",
 		base+"cluster_gate.yml",
 		base+"wipe_and_cleanup.yml",
+		base+"filter_device_reclaim.yml",
 	)
+}
+
+func TestStorageCephDestroyReclaimsFilterSelectedDisks(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/filter_device_reclaim.yml"
+	reclaim := readRepoFile(t, path)
+	for _, want := range []string{
+		"osdReclaimAll",
+		"ceph_bluestore",
+		"^ceph-",
+		"findmnt",
+		"MOUNTPOINT",
+	} {
+		if !strings.Contains(reclaim, want) {
+			t.Errorf("%s must retain destroy-time reclaim bound %q; without it a filter-declared OSD host keeps its bluestore signatures through teardown", path, want)
+		}
+	}
+	chain := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	if !strings.Contains(chain, "destroy_steps/filter_device_reclaim.yml") {
+		t.Error("the Ceph destroy chain must import filter_device_reclaim.yml; a filter-declared OSD host names no device path, so the declared-device wipe covers none of its disks")
+	}
+	wipe := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/wipe_and_cleanup.yml")
+	if !strings.Contains(wipe, "bootwright_ceph_zap_tool_needed") {
+		t.Error("the declared-device wipe must resolve the zap-tool need from both declared devices and osdReclaimAll, or sgdisk is missing on a filter-declared host")
+	}
 }
 
 func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {

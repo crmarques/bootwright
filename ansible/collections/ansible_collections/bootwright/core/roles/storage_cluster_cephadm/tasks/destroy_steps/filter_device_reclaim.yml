@@ -1,0 +1,92 @@
+---
+- name: Reclaim Ceph-signed disks on filter-selected OSD hosts
+  when: bootwright_current_storage_host.osdReclaimAll | default(false) | bool
+  block:
+    - name: Resolve the disk backing the root filesystem
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          root_src=$(findmnt --noheadings --output SOURCE --target / | head -n 1);
+          lsblk --noheadings --output PKNAME --paths "$root_src" 2>/dev/null | head -n 1
+        executable: /bin/bash
+      register: bootwright_ceph_filter_destroy_root_disk
+      changed_when: false
+      failed_when: false
+
+    - name: Select unmounted Ceph-signed whole disks for reclaim
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          root_disk="{{ bootwright_ceph_filter_destroy_root_disk.stdout | default('') | trim }}";
+          lsblk --noheadings --nodeps --output PATH,TYPE --paths
+          | awk '$2 == "disk" { print $1 }'
+          | while read -r dev; do
+              [ -n "$root_disk" ] && [ "$dev" = "$root_disk" ] && continue;
+              mounts=$(lsblk --noheadings --output MOUNTPOINT "$dev" 2>/dev/null | tr -d '[:space:]');
+              [ -n "$mounts" ] && continue;
+              signature=no;
+              lsblk --noheadings --output FSTYPE "$dev" 2>/dev/null | grep -q ceph_bluestore && signature=yes;
+              pvs --noheadings --output vg_name "$dev" 2>/dev/null | tr -d ' ' | grep -q '^ceph-' && signature=yes;
+              [ "$signature" = yes ] && echo "$dev";
+            done
+        executable: /bin/bash
+      register: bootwright_ceph_filter_destroy_candidates
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse the filter reclaim when the host disk scan failed
+      ansible.builtin.assert:
+        that:
+          - (bootwright_ceph_filter_destroy_candidates.rc | default(1) | int) == 0
+        fail_msg: >-
+          Refusing to reclaim filter-selected OSD disks on
+          {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+          the local disk scan (lsblk/pvs) failed, so a Ceph OSD disk cannot be told apart
+          from a system or data disk. Failing closed rather than risk wiping the wrong device.
+          Clean the disks manually (wipefs --all / sgdisk --zap-all) or re-run once the host
+          responds to lsblk.
+
+    - name: Report filter-selected OSD disks reclaimed by this teardown
+      ansible.builtin.debug:
+        msg: >-
+          Reclaiming {{ bootwright_ceph_filter_destroy_disks | length }} Ceph-signed disk(s) on
+          {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+          {{ bootwright_ceph_filter_destroy_disks | join(', ') }}. This host declares its OSD
+          devices through a filter (all/model/size/rotational), so it names no device paths for
+          the declared-device wipe; without this step its bluestore signatures would survive the
+          teardown and the next apply would find every disk unavailable to ceph-volume. Only
+          unmounted whole disks carrying a Ceph signature (ceph_bluestore, or an LVM PV in a
+          ceph-* volume group) are reclaimed — the root disk, mounted disks, and disks with no
+          Ceph signature are left untouched.
+      when: bootwright_ceph_filter_destroy_disks | length > 0
+
+    - name: Remove filesystem signatures from filter-selected OSD disks
+      ansible.builtin.command:
+        argv:
+          - wipefs
+          - --all
+          - --force
+          - "{{ item }}"
+      register: bootwright_ceph_filter_destroy_wipefs
+      changed_when: bootwright_ceph_filter_destroy_wipefs.rc == 0
+      failed_when: bootwright_ceph_filter_destroy_wipefs.rc != 0
+      loop: "{{ bootwright_ceph_filter_destroy_disks }}"
+      loop_control:
+        label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+    - name: Zap partition tables on filter-selected OSD disks
+      ansible.builtin.command:
+        argv:
+          - sgdisk
+          - --zap-all
+          - "{{ item }}"
+      register: bootwright_ceph_filter_destroy_sgdisk
+      changed_when: bootwright_ceph_filter_destroy_sgdisk.rc == 0
+      failed_when: bootwright_ceph_filter_destroy_sgdisk.rc != 0
+      loop: "{{ bootwright_ceph_filter_destroy_disks }}"
+      loop_control:
+        label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  vars:
+    bootwright_ceph_filter_destroy_disks: >-
+      {{ bootwright_ceph_filter_destroy_candidates.stdout_lines | default([])
+         | map('trim') | reject('equalto', '') | list }}

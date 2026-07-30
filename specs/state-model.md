@@ -2224,6 +2224,16 @@ verbs that reach machines.
   reachable for its own teardown. Managed machine
   disk cleanup is limited to provider-owned disks or declared
   Bootwright-managed devices; Bootwright must not wipe arbitrary visible disks.
+  A Ceph OSD host whose devices are selected by a filter rather than by path
+  (`data_devices.all`, or a `model`/`size`/`rotational` selection) declares no
+  path for that wipe to target, so an `all`-devices host is additionally
+  reclaimed by Ceph signature: a device is wiped only when it is a whole disk,
+  is not the disk backing the root filesystem, carries no mountpoint anywhere in
+  its tree, and bears a `ceph_bluestore` filesystem or an LVM physical volume in
+  a `ceph-*` volume group. A host whose local disk scan fails must fail the
+  teardown rather than guess. Without this the bluestore signatures outlive the
+  cluster and the next `apply` observes every declared device as unavailable to
+  ceph-volume.
 - `destroy --stage clusters` removes cluster-stage runtime for selected or all
   `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
   add-on records, generated storage attachment records, managed storage
