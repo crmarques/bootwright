@@ -221,7 +221,7 @@ func goFuncBody(t *testing.T, src, signature string) string {
 
 func TestDesiredStateKindsCompleteInLoadGuards(t *testing.T) {
 	src := readRepoFile(t, "internal/state/desired/load.go")
-	emptyGuard := goFuncBody(t, src, "func loadFiles(files []string) (v1alpha1.State, error) {")
+	emptyGuard := goFuncBody(t, src, "func loadFilesCollecting(files []string, skipped *[]error) (v1alpha1.State, error) {")
 	sortBody := goFuncBody(t, src, "func sortState(state *v1alpha1.State) {")
 
 	stateType := reflect.TypeOf(v1alpha1.State{})
@@ -234,7 +234,7 @@ func TestDesiredStateKindsCompleteInLoadGuards(t *testing.T) {
 		checked++
 		ref := regexp.MustCompile(`\bstate\.` + regexp.QuoteMeta(field.Name) + `\b`)
 		if !ref.MatchString(emptyGuard) {
-			t.Errorf("v1alpha1.State field %q is missing from the \"no Bootwright YAML documents found\" emptiness guard in loadFiles(); a state of only that kind would wrongly read as empty (the StorageNFSExports drift class)", field.Name)
+			t.Errorf("v1alpha1.State field %q is missing from the \"no Bootwright YAML documents found\" emptiness guard in loadFilesCollecting(); a state of only that kind would wrongly read as empty (the StorageNFSExports drift class)", field.Name)
 		}
 		if !ref.MatchString(sortBody) {
 			t.Errorf("v1alpha1.State field %q is missing from sortState(); that kind would load in nondeterministic order", field.Name)

@@ -50,6 +50,47 @@ Current placement:
   mode belongs in `ContainerCluster.spec.install.mode`
 - node bindings belong in `ContainerCluster.spec.nodes[]`
 
+### Strict decode also gates `destroy`
+
+`destroy` plans a teardown from the context's stored input plus the ownership
+records, so it loads that input through the same strict decoder and the same
+validator `apply` uses — before it reads a single ownership record. A context
+whose stored input no longer matches the running binary's schema therefore
+cannot be torn down until the input is schema-current, and the refusal covers
+every object in the context, including ones the run would not have touched.
+This is the routine consequence of rebuilding Bootwright while a lab is still
+standing.
+
+Two remedies, in order of preference:
+
+1. Re-render or edit the input for the current schema, validate the new tree
+   offline until it is clean, then adopt it and destroy:
+
+    ```bash
+    bootwright validate -f ./lab-input
+    bootwright context update --name lab -f ./lab-input --yes
+    bootwright destroy --authorize data-loss --yes
+    ```
+
+    The
+   re-authored input must keep every applied identity — context, `Environment`,
+   `InfraProvider`, `Machine`, `ContainerCluster`, `StorageCluster`, and node
+   names — because teardown matches ownership records by those names. Dropping a
+   declaration instead of migrating it turns its records into orphans, and only
+   some kinds are reclaimable without one (see
+   [Resources no longer in desired state](#resources-no-longer-in-desired-state-orphans)).
+2. `destroy --authorize stale-input`, which skips the documents that cannot be
+   decoded or validated and reports both them and every ownership record left
+   without a declaration. `--dry-run` needs the token too, so the discovery path
+   is `destroy --dry-run` (refuses, naming the token) → `destroy --dry-run
+   --authorize stale-input` (preview the blast radius) → the real run. It relaxes
+   no other gate — see
+   [Ownership, idempotency & safety](advanced/ownership-and-safety.md#tearing-down-a-context-whose-input-no-longer-decodes).
+
+`context delete --purge --abandon-resources` is not a teardown: it loads no
+input, so it still runs, but it abandons whatever is still standing and deletes
+the kubeconfigs and kubeadmin passwords you would need to clean up by hand.
+
 ## Validation diagnostics
 
 `bootwright validate` reports desired-state validation failures by owning
@@ -384,6 +425,20 @@ To resolve one, either re-declare the object and re-apply, or run a full
 can reach a provider host even after that host was removed from desired state.
 See [Operations and Recovery](advanced/operations.md) for the full teardown and
 reclamation workflow.
+
+How far that reaches depends on the record's kind, because reclaiming a resource
+without a declaration needs a control plane the teardown can still find on the
+provider or infra host it is already talking to:
+
+| Record kind | Reclaimed by a full `destroy` without its declaration? |
+| --- | --- |
+| `libvirt-domain`, `libvirt-network`, `managed-os-install` | Yes — the host-local record sweep removes them |
+| `bmc-emulator`, `infra-component` | Yes — swept with the provider and infra-component services |
+| `kubevirt-machine`, `vsphere-machine`, `vsphere-vmedia`, `controller-name-resolver`, `storage-cluster` | No — their control plane is reached only through the declaration |
+
+For a kind in the last row, re-declare the object under its **original** names
+and destroy it while it is declared. `destroy --dry-run` lists the record names
+to match. Deleting the record file alone would strand the live resource.
 
 !!! note
     Orphan tracking is object-level. A Ceph sub-object (a `StoragePool`,

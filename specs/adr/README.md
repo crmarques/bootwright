@@ -43,5 +43,6 @@ below.
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024 |
 | [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
 | [0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md) | Answering a `sudo` Password for the Borrowed Identity | extends 0028 |
-| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031 |
+| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031; extended by 0032 |
 | [0031](0031-data-loss-follows-the-data-and-policy-is-not-drift.md) | Data-Loss Authorization Follows the Data, and Policy Is Not Drift | refines 0007, 0030 |
+| [0032](0032-tearing-down-input-a-newer-build-cannot-read.md) | Tearing Down Input a Newer Build Cannot Read | extends 0030 with the `stale-input` token |

@@ -20,6 +20,7 @@ const (
 	authorizeUnreachableNodes     = "unreachable-nodes"
 	authorizeUnreadableRecords    = "unreadable-records"
 	authorizeSharedInfra          = "shared-infra"
+	authorizeStaleInput           = "stale-input"
 )
 
 const (
@@ -82,6 +83,12 @@ var authorizationTokens = []authorizationToken{{
 	inert:      "no storage-consumer conflict and no cross-context infra-component block was found",
 	verbs:      []string{authorizeVerbDestroy},
 	elsewhere:  "a scoped apply that would degrade a shared service is resolved by widening --clusters, never by an authorization",
+}, {
+	name:       authorizeStaleInput,
+	authorizes: "planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents",
+	inert:      "every input document of this context decoded and validated",
+	verbs:      []string{authorizeVerbDestroy},
+	elsewhere:  "apply must never build from input it cannot fully read; re-render the input for the current schema and run `bootwright context update`",
 }}
 
 func authorizationTokenNames() []string {

@@ -117,7 +117,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if len(confirmedCephFSIDs) > 0 && !converge.ScopeTearsClusterLayer(runScope) {
 			return failErr(2, errors.New("--recover-ceph-ownership runs only with the clusters stage or a full destroy"))
 		}
-		ctx, err := cf.resolve()
+		ctx, localitySkipped, err := cf.resolveTolerantInput()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -125,9 +125,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
 		var state v1alpha1.State
-		state, err = loadDesiredState(cf)
+		state, stateSkipped, err := loadDesiredStateTolerant(cf)
 		if err != nil {
 			return failErr(1, err)
+		}
+		inputSkipped := mergeSkippedInputDocuments(localitySkipped, stateSkipped)
+		if len(inputSkipped) > 0 && !auth.allows(authorizeStaleInput) {
+			return failErr(1, staleInputRefusal(ctx.Name, inputSkipped))
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
 		if purgeHistory && artifactServerOnly {
@@ -273,6 +277,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if len(confirmedCephFSIDs) > 0 {
 			cliout.NewContinuation(stdout).Warning("ceph ownership recovery", "before teardown, Bootwright will reconstruct the selected cluster's controller record and host marker only where /etc/ceph/ceph.conf on the declared seed exactly matches the supplied fsid; contradictory controller ownership evidence is refused")
 		}
+		printSkippedInputDocuments(stdout, inputSkipped, auth.has(authorizeStaleInput))
 		printSkippedOwnershipRecords(stdout, ownershipSkipped)
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.State)

@@ -21,7 +21,11 @@ type resourceKey struct {
 }
 
 func selectResourceFiles(files []string) ([]string, v1alpha1.Environment, bool, error) {
-	envs, err := scanEnvironments(files)
+	return selectResourceFilesCollecting(files, nil)
+}
+
+func selectResourceFilesCollecting(files []string, skipped *[]error) ([]string, v1alpha1.Environment, bool, error) {
+	envs, err := scanEnvironmentsCollecting(files, skipped)
 	if err != nil {
 		return nil, v1alpha1.Environment{}, false, err
 	}
@@ -115,6 +119,10 @@ func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref,
 }
 
 func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
+	return scanEnvironmentsCollecting(files, nil)
+}
+
+func scanEnvironmentsCollecting(files []string, skipped *[]error) ([]v1alpha1.Environment, error) {
 	var envs []v1alpha1.Environment
 	for _, file := range files {
 		data, err := os.ReadFile(file)
@@ -132,21 +140,36 @@ func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
 				if !mayContainEnvironmentKind(data) {
 					break
 				}
-				return nil, fmt.Errorf("decode %s document %d: %w", file, index, err)
+				streamErr := fmt.Errorf("decode %s document %d: %w", file, index, err)
+				if skipped == nil {
+					return nil, streamErr
+				}
+				*skipped = append(*skipped, streamErr)
+				break
 			}
 			if isZeroNode(node) {
 				continue
 			}
 			var typeMeta v1alpha1.TypeMeta
 			if err := node.Decode(&typeMeta); err != nil {
-				return nil, fmt.Errorf("decode %s document %d metadata: %w", file, index, err)
+				metaErr := fmt.Errorf("decode %s document %d metadata: %w", file, index, err)
+				if skipped == nil {
+					return nil, metaErr
+				}
+				*skipped = append(*skipped, metaErr)
+				continue
 			}
 			if typeMeta.APIVersion != v1alpha1.APIVersion || typeMeta.Kind != v1alpha1.KindEnvironment {
 				continue
 			}
 			var env v1alpha1.Environment
 			if err := decodeKnown(node, &env); err != nil {
-				return nil, fmt.Errorf("decode %s document %d: %w", file, index, err)
+				envErr := fmt.Errorf("decode %s document %d: %w", file, index, err)
+				if skipped == nil {
+					return nil, envErr
+				}
+				*skipped = append(*skipped, envErr)
+				continue
 			}
 			env.SourcePath = file
 			envs = append(envs, env)

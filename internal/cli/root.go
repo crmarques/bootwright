@@ -147,6 +147,25 @@ func (cf *commonFlags) resolveLocalOnly() (workspace.Context, error) {
 	return cf.resolveWithLocality(false)
 }
 
+func (cf *commonFlags) resolveTolerantInput() (workspace.Context, []error, error) {
+	if cf.ctx.Name != "" {
+		return cf.ctx, nil, nil
+	}
+	ctx, err := resolveTargetContext()
+	if err != nil {
+		return workspace.Context{}, nil, err
+	}
+	if err := ensureContextReady(ctx); err != nil {
+		return workspace.Context{}, nil, err
+	}
+	skipped, err := enforceContextLocalityTolerant(ctx)
+	if err != nil {
+		return workspace.Context{}, nil, err
+	}
+	cf.ctx = ctx
+	return ctx, skipped, nil
+}
+
 func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Context, error) {
 	if cf.ctx.Name != "" {
 		return cf.ctx, nil

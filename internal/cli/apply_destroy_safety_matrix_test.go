@@ -274,7 +274,82 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unreachable-nodes", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
 		want:    []string{"bootwright_destroy_skip_unreachable=true"},
+	}, {
+		name:    "destroy/stale-input: a retired field in the stored input refuses and names its token",
+		seed:    seedRetiredFieldInStoredInput,
+		args:    []string{"destroy", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"no longer decode or validate against this build", "bootwright context update", "--authorize stale-input"},
+	}, {
+		name:    "destroy/stale-input: a retired kind in the stored input refuses and names its token",
+		seed:    seedRetiredKindInStoredInput,
+		args:    []string{"destroy", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"unsupported kind", "--authorize stale-input"},
+	}, {
+		name:    "destroy/stale-input: the token clears the refusal and discloses the skipped document",
+		seed:    seedRetiredKindInStoredInput,
+		args:    []string{"destroy", "--authorize", "stale-input,data-loss", "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		want:    []string{"Skipped input documents", "is NOT in the teardown work set"},
+	}, {
+		name:    "destroy/stale-input: a dry run refuses the stale input too, so whole-input validation still holds",
+		seed:    seedRetiredKindInStoredInput,
+		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize stale-input"},
+	}, {
+		name:    "destroy/stale-input: the token lets a dry run preview the blast radius before a real run",
+		seed:    seedRetiredKindInStoredInput,
+		args:    []string{"destroy", "--dry-run", "--authorize", "stale-input", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Skipped input documents", "is NOT in the teardown work set"},
+	}, {
+		name:    "apply/stale-input is a destroy-only token and apply refuses it by name",
+		args:    []string{"apply", "--authorize", "stale-input", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"stale-input", "context update"},
+	}, {
+		name:    "destroy/stale-input: a clean input reports the token had no effect",
+		args:    []string{"destroy", "--stage", "clusters", "--authorize", "stale-input", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize stale-input had no effect"},
 	}}
+}
+
+func seedRetiredFieldInStoredInput(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	appendStoredInputDocument(t, ctx, "apiVersion: "+v1alpha1.APIVersion+"\nkind: "+v1alpha1.KindMachineImage+"\nmetadata:\n  name: stale-image\nspec:\n  retiredFieldFromAnOlderSchema: true\n")
+}
+
+func seedRetiredKindInStoredInput(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	appendStoredInputDocument(t, ctx, "apiVersion: "+v1alpha1.APIVersion+"\nkind: Playbook\nmetadata:\n  name: retired-kind\nspec:\n  path: ./nope.yaml\n")
+}
+
+func appendStoredInputDocument(t *testing.T, ctx workspace.Context, body string) {
+	t.Helper()
+	files, err := desiredstate.LoadedInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("resolve selected input files: %v", err)
+	}
+	target := ""
+	for _, file := range files {
+		if filepath.Base(file) != "environment.yaml" {
+			target = file
+			break
+		}
+	}
+	if target == "" {
+		t.Fatalf("no non-Environment input file among %v", files)
+	}
+	existing, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read %s: %v", target, err)
+	}
+	if err := os.WriteFile(target, append(append(existing, []byte("\n---\n")...), []byte(body)...), 0o600); err != nil {
+		t.Fatalf("append stale input document to %s: %v", target, err)
+	}
 }
 
 func safetyStorageDataLossCases() []safetyCase {

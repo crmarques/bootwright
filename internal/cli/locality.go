@@ -13,6 +13,10 @@ func enforceContextLocality(ctx workspace.Context) error {
 	return converge.EnforceContextLocality(ctx, controllerLocalityPolicy)
 }
 
+func enforceContextLocalityTolerant(ctx workspace.Context) ([]error, error) {
+	return converge.EnforceContextLocalityTolerant(ctx, controllerLocalityPolicy)
+}
+
 func enforceControllerLocality(state v1alpha1.State) error {
 	return converge.EnforceControllerLocality(state, controllerLocalityPolicy)
 }

@@ -144,9 +144,13 @@ func loadSelectedFiles(files []string) (v1alpha1.State, error) {
 }
 
 func loadFiles(files []string) (v1alpha1.State, error) {
+	return loadFilesCollecting(files, nil)
+}
+
+func loadFilesCollecting(files []string, skipped *[]error) (v1alpha1.State, error) {
 	var state v1alpha1.State
 	for _, file := range files {
-		if err := loadFile(file, &state); err != nil {
+		if err := loadFileCollecting(file, &state, skipped); err != nil {
 			return v1alpha1.State{}, err
 		}
 	}
@@ -264,6 +268,10 @@ func discoverFiles(paths []string) ([]string, error) {
 }
 
 func loadFile(path string, state *v1alpha1.State) error {
+	return loadFileCollecting(path, state, nil)
+}
+
+func loadFileCollecting(path string, state *v1alpha1.State, skipped *[]error) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
@@ -276,11 +284,28 @@ func loadFile(path string, state *v1alpha1.State) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			streamErr := fmt.Errorf("decode %s document %d: %w", path, index, err)
+			if skipped == nil {
+				return streamErr
+			}
+			*skipped = append(*skipped, streamErr)
+			break
 		}
 		if isZeroNode(node) {
 			continue
 		}
+		if err := loadDocument(path, index, node, state); err != nil {
+			if skipped == nil {
+				return err
+			}
+			*skipped = append(*skipped, err)
+		}
+	}
+	return nil
+}
+
+func loadDocument(path string, index int, node yaml.Node, state *v1alpha1.State) error {
+	{
 		var typeMeta v1alpha1.TypeMeta
 		if err := node.Decode(&typeMeta); err != nil {
 			return fmt.Errorf("decode %s document %d metadata: %w", path, index, err)
@@ -290,7 +315,7 @@ func loadFile(path string, state *v1alpha1.State) error {
 		}
 		if typeMeta.APIVersion != v1alpha1.APIVersion {
 			if isExtensionManifestFile(path) {
-				continue
+				return nil
 			}
 			return fmt.Errorf("decode %s document %d: unsupported apiVersion %q (supported: %q)", path, index, typeMeta.APIVersion, v1alpha1.APIVersion)
 		}

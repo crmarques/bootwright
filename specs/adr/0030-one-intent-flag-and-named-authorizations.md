@@ -80,6 +80,7 @@ else:
 | `unreachable-nodes` | leaving a cluster partially destroyed by skipping unreachable nodes |
 | `unreadable-records` | proceeding when ownership records cannot be read, leaving their resources standing |
 | `shared-infra` | storage-consumer conflicts and shared infra components owned or referenced by another context |
+| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents (destroy only, per ADR 0032) |
 
 An unknown token is a usage error (exit 2) listing the valid set. A token the
 run never consumed is a non-fatal warning naming it and saying why it had no

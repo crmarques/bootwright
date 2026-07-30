@@ -203,6 +203,43 @@ A few habits keep operators on the safe side of these guardrails:
   bytes; keep pull secrets, keys, and kubeconfigs out of Git
   ([Secrets & entitlements](../concepts/secrets.md)).
 
+## Tearing down a context whose input no longer decodes
+
+`destroy` plans a teardown from the context's stored input *plus* the ownership
+records, so it loads that input through the same strict decoder and validator
+`apply` uses — before it reads a record or contacts a host. `v1alpha1` carries no
+aliases and no migrations, so after a breaking schema change an already-applied
+context cannot be torn down until its input is schema-current. The refusal is
+all-or-nothing: one stale document blocks the whole context, including objects
+the run would not have touched.
+
+The intended fix is to re-render the input for the current schema and adopt it
+with `bootwright context update`, keeping every applied identity — context,
+`Environment`, `InfraProvider`, `Machine`, cluster, and node names — because
+teardown matches ownership records by those names.
+
+When that is not practical, `--authorize stale-input` is the escape hatch:
+
+```text
+bootwright destroy --dry-run --authorize stale-input
+bootwright destroy --authorize stale-input --yes
+```
+
+It skips exactly the documents that fail to decode or validate, and reports both
+them and the ownership records left without a declaration — those resources are
+**not** in the work set and are left standing. Like every token it is refused by
+default, and it is registered for `destroy` only: `apply`, `plan`, `diff`, and
+`context init`/`update` reject it by name, so nothing that *creates* state can
+ever build from input it cannot fully read.
+
+!!! warning "It authorizes one refusal and nothing else"
+    `stale-input` does not relax `data-loss`, `protected`,
+    `installed-cluster-node`, `unowned-vms`/`unowned-networks`,
+    `unreachable-nodes`, `unreadable-records`, or `shared-infra`; it does not
+    relax any device data-safety check, the Ceph seed ownership proof, the
+    active-run check, or the confirmation prompt. Every one of those is still
+    evaluated against whatever *did* decode.
+
 ## Verifying ownership and safety state
 
 | Question | Command |

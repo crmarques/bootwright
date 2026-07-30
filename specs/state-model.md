@@ -2292,6 +2292,7 @@ verbs that reach machines.
   | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
+  | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
 
   No token widens `--clusters`, relaxes device data-safety, relaxes the
   shared-provider-service scope conflict, or relaxes the KubeVirt tenant gate.
@@ -2369,8 +2370,16 @@ verbs that reach machines.
   releases the whole cluster (no machine list); the managed-OS install probe
   honors the release only for covered machines. A release is consumed only for
   the machines an apply actually covered: a `--machines`-scoped apply shrinks
-  the record to the still-released remainder and clears it when none remain,
-  and an unscoped apply clears it. With `destroy --authorize unreachable-nodes`, a managed
+  the record to the still-released remainder and clears it when none remain.
+  Consumption happens at the step that completes the rebuild, not merely at the
+  step that re-creates the substrate: the managed-OS install (`managedMachineOS`,
+  a machines-phase task) for a storage machine, and `wait-for install-complete`
+  (`installWait`, a base-phase task) for a `ContainerCluster`. A `ContainerCluster`
+  plans no `managedMachineOS` task, so `apply --stage infra` and
+  `apply --through machines` re-create its machines without consuming its
+  release — by design, because the cluster is not yet reinstalled — and it keeps
+  re-arming the destroyed-substrate warning until an apply reaches the base
+  phase. With `destroy --authorize unreachable-nodes`, a managed
   storage cluster receives the release only when its teardown completion report
   proves that no topology node was skipped. A partially destroyed storage
   cluster withholds it, as do infra-only, machine-scoped, and non-storage
