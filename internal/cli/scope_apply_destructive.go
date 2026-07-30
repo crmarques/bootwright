@@ -132,6 +132,28 @@ func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) strin
 	return "cluster(s) " + strings.Join(parts, "; ")
 }
 
+func applyJSONReinstallDrift(mode workflow.ApplyMode, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) []string {
+	if mode != workflow.ApplyModeRebuild {
+		return nil
+	}
+	return workflow.OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir, state, tasks)
+}
+
+func forecastReleasedReinstallDataLoss(stdout io.Writer, dryRun bool, runsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) {
+	if !dryRun {
+		return
+	}
+	records, err := workflow.ConsumableSubstrateReleases(runsDir, tasks)
+	if err != nil {
+		return
+	}
+	forecast := releasedBareMetalReinstallDescriptors(state, records)
+	if len(forecast) == 0 {
+		return
+	}
+	cliout.NewContinuation(stdout).Warning("data loss", "a real run of this apply would "+strings.Join(forecast, "; ")+". A previous `bootwright destroy` released that substrate without wiping it, so the reinstall is where the still-running OS is lost. Under --yes it needs --authorize "+authorizeDataLoss+"; interactively it stops at the destructive prompt")
+}
+
 func releasedBareMetalReinstallDescriptors(state v1alpha1.State, records []workflow.SubstrateReleaseRecord) []string {
 	providers := make(map[string]string, len(state.InfraProviders))
 	for _, provider := range state.InfraProviders {

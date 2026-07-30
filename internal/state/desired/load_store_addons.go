@@ -54,7 +54,7 @@ func resolveRegisteredAddons(state *v1alpha1.State) error {
 		}
 		loaded, err := Load([]string{dir})
 		if err != nil {
-			return fmt.Errorf("load registered add-on %s: %w", name, err)
+			return fmt.Errorf("load registered add-on %s: %w; this is the machine-local copy under %s that `bootwright add-ons add` installed, not input you authored, so it can predate this build's schema — refresh it with `bootwright add-ons add --name %s --yes` and then re-snapshot the context with `bootwright context update`", name, err, dir, name)
 		}
 		for _, addon := range loaded.ClusterAddons {
 			if addon.Metadata.Name == name {

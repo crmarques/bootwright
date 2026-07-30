@@ -227,16 +227,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			var jsonReinstallDrift []string
-			if mode == workflow.ApplyModeRebuild {
-				jsonReinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
-			}
+			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		var destructiveOverride []string
 		var substrateResetClusters []string
 		var ocpReinstallDescriptors []string
 		var ocpReinstallAcked []string
+		forecastReleasedReinstallDataLoss(stdout, dryRun, ctx.RunsDir, plan.State, tasks)
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
