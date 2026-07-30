@@ -3,7 +3,6 @@ package inventory
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/entitlements"
@@ -287,14 +286,14 @@ func machineInstallHostname(state v1alpha1.State, machine v1alpha1.Machine) stri
 
 func machineInstallStorageVars(profile v1alpha1.MachineInstallProfile, state v1alpha1.State, m v1alpha1.InstallMachine) map[string]any {
 	storage := profile.Spec.Customizations.Storage
-	rootDevice := ""
+	rootDisk := ""
 	if storage.RootDevice.Source == v1alpha1.MachineInstallRootDeviceMachine || storage.RootDevice.Source == "" {
-		if hints := installer.MachineRootDeviceHints(state, m); hints != nil {
-			rootDevice = hints.DeviceName
+		if selector, ok := v1alpha1.AnacondaRootDiskSelector(installer.MachineRootDeviceHints(state, m)); ok {
+			rootDisk = selector
 		}
 	}
 	out := map[string]any{
-		"rootDisk": strings.TrimPrefix(rootDevice, "/dev/"),
+		"rootDisk": rootDisk,
 	}
 	return out
 }

@@ -375,10 +375,47 @@ The customization arms, by area:
 Which disk Anaconda installs to is owned by the `Machine`, under
 `spec.os.install.rootDeviceHints`. The profile's
 `customizations.storage.rootDevice.source: machineRootDeviceHints` tells Anaconda
-to honour them. Hints include `deviceName` (for example `/dev/sda`), `hctl`,
-`model`, `vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and `rotational` —
-see [Machines](../concepts/machines.md). Set the hint on the machine, point the
-profile at it, and the same profile drives nodes with different disk layouts.
+to honour them. Set the hint on the machine, point the profile at it, and the
+same profile drives nodes with different disk layouts.
+
+A kickstart names a disk; it cannot evaluate a predicate. So a managed-OS install
+honours only the two hints that *are* a name:
+
+| Hint | Managed OS (Anaconda) | Renders as |
+| --- | --- | --- |
+| `deviceName` | Yes | `/dev/sda` → `sda`; a `/dev/disk/by-id/...` value is kept as a by-id path |
+| `wwn` | Yes | `disk/by-id/wwn-<wwn>` |
+| `hctl`, `model`, `vendor`, `serialNumber`, `minSizeGigabytes`, `rotational` | **No** | — |
+
+A kickstart accepts any item under `/dev/disk` in place of a kernel device name,
+which is what makes `wwn` expressible. Give the value exactly as udev names the
+symlink — normally `0x`-prefixed, from `ID_WWN_WITH_EXTENSION`. Check it on the
+host with `ls /dev/disk/by-id/`: many NVMe namespaces publish `nvme-eui.*` and
+`nvme-<model>_<serial>` but **no** `wwn-*` symlink at all, and there is no
+symlink built from a serial number alone. When the disk has no `wwn-*` entry,
+put the by-id path you do see into `deviceName`.
+
+The remaining six are predicates that only the OpenShift agent installer can
+resolve, because it evaluates them against the live host's inventory. They stay
+valid on a `Machine` whose nodes are RHCOS; see
+[Machines](../concepts/machines.md).
+
+!!! warning "A managed-OS machine whose hints are all predicates is rejected"
+    Declaring only, say, `model` and `rotational` on a machine that installs its
+    OS is a validation error, not a silent no-op. Without a usable name the
+    kickstart falls back to `clearpart --all` plus `autopart`, which wipes and
+    LVM-spans **every** disk on the machine. Bootwright refuses instead, naming
+    the fields it cannot honour.
+
+    Omitting `rootDeviceHints` entirely stays legal and still means that
+    whole-machine `autopart` — it is the way to say "this machine has one disk
+    and I do not care which". Only declared-but-unusable hints are refused.
+
+!!! note "Ceph OSD nodes must use `deviceName`"
+    An OSD node has to name its root disk the same way its OSD devices are
+    named, so that listing the OS disk as an OSD device can be refused before
+    ceph-volume wipes it. `wwn` scopes the install correctly but cannot be
+    compared against an OSD device path, so it is rejected there.
 
 ## Staging media
 

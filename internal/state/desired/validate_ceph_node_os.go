@@ -56,6 +56,10 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 			if hints != nil && strings.TrimSpace(hints.DeviceName) != "" {
 				continue
 			}
+			if _, selectable := v1alpha1.AnacondaRootDiskSelector(hints); selectable {
+				errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) and names its root disk by a hint other than spec.os.install.rootDeviceHints.deviceName. The install itself is scoped correctly, but an OSD node must name the root disk the same way its OSD devices are named, so that declaring the OS disk as an OSD device can be refused before ceph-volume wipes it. Set deviceName to the same path form as the OSD device selection", sc.Metadata.Name, host.Name, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
+				continue
+			}
 			errs = append(errs, fmt.Sprintf("StorageCluster/%s ceph node %q (Machine/%s) carries the %q role (OSD data disks) but its managed-OS install has no spec.os.install.rootDeviceHints.deviceName; the install would clearpart --all and WIPE those OSD data disks. Set the root device so the install targets only the OS disk", sc.Metadata.Name, host.Name, host.MachineRef.Name, v1alpha1.StorageCephRoleOSD))
 		}
 	}

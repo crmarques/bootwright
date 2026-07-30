@@ -50,3 +50,18 @@ func TestValidateManagedOSCephNodeRootDisk(t *testing.T) {
 		t.Fatalf("non-OSD node must not be gated, got %v", none)
 	}
 }
+
+func TestValidateManagedOSCephNodeRootDiskStillRequiresDeviceName(t *testing.T) {
+	wwn := validateManagedOSCephNodeRootDisk(cephNodeState(&v1alpha1.RootDeviceHints{WWN: "0x5000c500"}, osdHost([]string{"/dev/sdb"}, nil), nil))
+	if len(wwn) != 1 {
+		t.Fatalf("an OSD node naming its root disk only by wwn must still refuse, got %v", wwn)
+	}
+	if strings.Contains(wwn[0], "clearpart --all") {
+		t.Errorf("a wwn hint DOES scope the install, so the refusal must not claim an all-disk wipe, got %q", wwn[0])
+	}
+	for _, want := range []string{"deviceName", "OSD device"} {
+		if !strings.Contains(wwn[0], want) {
+			t.Errorf("the refusal must explain that validateOSDDevicesExcludeRootDisk compares deviceName against the OSD device paths, naming %q; got %q", want, wwn[0])
+		}
+	}
+}

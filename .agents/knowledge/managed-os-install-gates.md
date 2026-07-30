@@ -155,3 +155,43 @@ B-001). Do not re-add a wipe toggle without actually wiring it into the
 kickstart render; `internal/render/inventory/managed_os_test.go` pins that the
 render emits no `wipe` var. Disk-wipe consent lives in the install
 authorization gates above, not in a per-profile field.
+
+**Constraint (only a NAME can select the kickstart root disk):** `rootDeviceHints`
+has eight fields and the OCP agent installer honours all eight
+(`installer.RootDeviceHintsConfig`), because it evaluates them against the live
+host's inventory. A kickstart has no such resolver — it names a disk. So
+`v1alpha1.AnacondaRootDiskSelector` maps only the two hints that ARE a name:
+`deviceName` (with `/dev/` trimmed, so a `/dev/disk/by-id/...` value survives as
+a by-id path) and `wwn` (rendered `disk/by-id/wwn-<wwn>`, matching udev's
+`SYMLINK+="disk/by-id/wwn-$env{ID_WWN_WITH_EXTENSION}"`). Both spellings of a
+by-id spec resolve — pykickstart documents `/dev/disk/by-id/...` and the RHEL
+reference documents the `/dev/`-relative form for `ignoredisk`/`clearpart` —
+and blivet's `resolve_device` accepts either, so the trimmed form is kept for
+uniformity with the pre-existing `deviceName` path. Do NOT switch the render to
+emit `/dev/`-prefixed specs: that changes the kickstart of every existing
+managed-OS machine on a disk-wiping path for no gain.
+
+Before this, `machineInstallStorageVars` read `deviceName` ALONE, so a machine
+expressing its root disk by `wwn`/`serialNumber`/`model`/… rendered `rootDisk`
+empty and dropped into `ks.cfg.j2`'s else branch — `clearpart --all` plus
+`autopart --type=lvm` across EVERY disk — while `docs/advanced/managed-os.md`
+promised all eight were honoured. Ceph OSD nodes were shielded by
+`validateManagedOSCephNodeRootDisk`; bastions, hub hosts and RHEL workers were
+not (backlog B-050). `validateAnacondaRootDeviceHintsAreUsable` now refuses a
+managed-OS machine whose declared hints resolve to no selector, naming the
+unusable fields. Absent hints stay legal — that is the deliberate single-disk
+`autopart`; only a declared hint that would be silently dropped is an error.
+Note that a serial number yields no udev symlink of its own (by-id names embed
+the model: `nvme-<model>_<serial>`, `ata-<model>_<serial>`), and many NVMe
+namespaces publish `nvme-eui.*` with no `wwn-*` at all — hence `deviceName`
+carrying a by-id path is the general escape hatch.
+
+**Constraint (a Ceph OSD node must still name its root disk with `deviceName`):**
+`validateOSDDevicesExcludeRootDisk` compares `rootDeviceHints.deviceName` against
+the OSD device paths, so a root disk named by `wwn` cannot be cross-checked and
+the OS disk could be declared as an OSD device undetected.
+`validateManagedOSCephNodeRootDisk` therefore keeps requiring `deviceName` for
+osd-role nodes, but now says WHY: a `wwn` hint scopes the install correctly, so
+the old "the install would clearpart --all and WIPE those OSD data disks" wording
+is wrong for that case, and the validator branches on `AnacondaRootDiskSelector`
+to pick the accurate message.

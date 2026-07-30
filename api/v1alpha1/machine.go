@@ -1,6 +1,9 @@
 package v1alpha1
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 type Machine struct {
 	APIVersion    string               `yaml:"apiVersion" json:"apiVersion"`
@@ -510,6 +513,42 @@ func MachineRequiresSubstrate(machine Machine) bool {
 
 func MachineInstallsOS(machine Machine) bool {
 	return MachineRequiresSubstrate(machine) && machine.Spec.OS.InstallProfileRef.Name != ""
+}
+
+func AnacondaRootDiskSelector(hints *RootDeviceHints) (string, bool) {
+	if hints == nil {
+		return "", false
+	}
+	if name := strings.TrimSpace(hints.DeviceName); name != "" {
+		return strings.TrimPrefix(name, "/dev/"), true
+	}
+	if wwn := strings.TrimSpace(hints.WWN); wwn != "" {
+		return "disk/by-id/wwn-" + strings.TrimPrefix(wwn, "wwn-"), true
+	}
+	return "", false
+}
+
+func AnacondaUnsupportedRootDeviceHints(hints *RootDeviceHints) []string {
+	if hints == nil {
+		return nil
+	}
+	var out []string
+	for _, field := range []struct {
+		name  string
+		isSet bool
+	}{
+		{"hctl", strings.TrimSpace(hints.HCTL) != ""},
+		{"model", strings.TrimSpace(hints.Model) != ""},
+		{"vendor", strings.TrimSpace(hints.Vendor) != ""},
+		{"serialNumber", strings.TrimSpace(hints.SerialNumber) != ""},
+		{"minSizeGigabytes", hints.MinSizeGigabytes > 0},
+		{"rotational", hints.Rotational != nil},
+	} {
+		if field.isSet {
+			out = append(out, field.name)
+		}
+	}
+	return out
 }
 
 func MachineHasCapability(machine Machine, want string) bool {
