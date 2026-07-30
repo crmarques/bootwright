@@ -55,9 +55,48 @@ func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestro
 	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: re-run `bootwright destroy --authorize %s --yes` with the same --stage/--clusters/--machines selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with --clusters or --machines to narrow the work set", dataLoss.Consequence(), authorizeDataLoss)
 }
 
+func mergeSkippedInputDocuments(groups ...[]error) []error {
+	seen := map[string]bool{}
+	var out []error
+	for _, group := range groups {
+		for _, err := range group {
+			if err == nil || seen[err.Error()] {
+				continue
+			}
+			seen[err.Error()] = true
+			out = append(out, err)
+		}
+	}
+	return out
+}
+
+func staleInputRefusal(contextName string, skipped []error) error {
+	details := make([]string, 0, len(skipped))
+	for _, err := range skipped {
+		details = append(details, err.Error())
+	}
+	return fmt.Errorf("%d input document(s) of context %q no longer decode or validate against this build, so destroy cannot plan a teardown from them: %s; re-render the input for the current schema and run `bootwright context update --name %s -f <dir>`, run destroy from the build that applied this context, or re-run `bootwright destroy --authorize %s` to plan the teardown without those document(s) — whatever they declared is then left standing and reported", len(skipped), contextName, strings.Join(details, "; "), contextName, authorizeStaleInput)
+}
+
+func printSkippedInputDocuments(w io.Writer, skipped []error, authorized bool) {
+	if len(skipped) == 0 {
+		return
+	}
+	p := output.NewContinuation(w)
+	p.Section("Skipped input documents")
+	for _, err := range skipped {
+		p.Status(output.StatusWarn, "input", err.Error())
+	}
+	if authorized {
+		p.Warning("stale input", "these document(s) were skipped because --authorize "+authorizeStaleInput+" was supplied: whatever they declared is NOT in the teardown work set and is left standing. Check the owned-but-no-longer-declared list below before treating this context as gone")
+	}
+}
+
 func destroySweepReclaims(kind string) bool {
 	switch kind {
 	case string(ownership.KindLibvirtDomain), string(ownership.KindLibvirtNetwork), string(ownership.KindManagedOSInstall):
+		return true
+	case string(ownership.KindBMCEmulator), string(ownership.KindInfraComponent):
 		return true
 	default:
 		return false

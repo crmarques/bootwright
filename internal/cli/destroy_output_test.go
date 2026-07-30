@@ -60,12 +60,19 @@ func TestDestroyOrphanHintScopedToSweepCoverage(t *testing.T) {
 	var buf bytes.Buffer
 	printDestroyOrphans(&buf, []workflow.UndeclaredResource{
 		{Kind: "libvirt-domain", Name: "vm-a"},
+		{Kind: "bmc-emulator", Name: "bmc-a"},
+		{Kind: "infra-component", Name: "InfraComponent-artifacts"},
 		{Kind: "kubevirt-machine", Name: "vm-b"},
 		{Kind: "storage-cluster", Name: "ceph-old"},
 	})
 	out := buf.String()
-	if !strings.Contains(out, "libvirt-domain/vm-a") || !strings.Contains(out, "a full `bootwright destroy` reclaims it") {
-		t.Fatalf("libvirt-domain orphan should promise reclaim:\n%s", out)
+	for _, line := range []string{"libvirt-domain/vm-a", "bmc-emulator/bmc-a", "infra-component/InfraComponent-artifacts"} {
+		if !strings.Contains(out, line) {
+			t.Fatalf("missing orphan %q:\n%s", line, out)
+		}
+	}
+	if strings.Count(out, "a full `bootwright destroy` reclaims it") != 3 {
+		t.Fatalf("libvirt-domain, bmc-emulator and infra-component are swept from their ownership records, so each must promise reclaim:\n%s", out)
 	}
 	for _, line := range []string{"kubevirt-machine/vm-b", "storage-cluster/ceph-old"} {
 		if !strings.Contains(out, line) {

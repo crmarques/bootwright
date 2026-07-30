@@ -45,6 +45,7 @@ refusal and nothing else:
 | `unreachable-nodes` | skipping unreachable nodes during teardown, leaving the cluster partially destroyed |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
+| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
 
 An unknown token is a usage error listing the tokens the command accepts. So is a
 token the command has no gate for: every token except `data-loss` is destroy-only,
@@ -426,7 +427,7 @@ What a deletion means depends on the kind:
 
 | You delete… | What happens | Supported removal |
 | --- | --- | --- |
-| A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file — destroy is ownership-record driven and can reach a resource already gone from desired state. |
+| A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file. Destroy is ownership-record driven for the kinds whose control plane it can reach from the provider or infra host it already contacts — `libvirt-domain`, `libvirt-network`, `managed-os-install`, `bmc-emulator`, `infra-component` — and those it reclaims even after the declaration is gone. For `kubevirt-machine`, `vsphere-machine`, `vsphere-vmedia`, `controller-name-resolver`, and `storage-cluster` it cannot: re-declare the object under its original names first. |
 | A `ContainerCluster.spec.nodes[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--mode rebuild` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
 | A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
 | A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |

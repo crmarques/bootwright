@@ -1,4 +1,15 @@
 ---
+- name: Probe for the Ceph device zap tool before any package transaction
+  ansible.builtin.command:
+    argv:
+      - command
+      - -v
+      - sgdisk
+  register: bootwright_ceph_sgdisk_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_present_devices | default([]) | length > 0
+
 - name: Ensure gdisk is present for the Ceph device zap
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -7,7 +18,9 @@
     bootwright_ownership_packages:
       - gdisk
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
-  when: bootwright_ceph_present_devices | default([]) | length > 0
+  when:
+    - bootwright_ceph_present_devices | default([]) | length > 0
+    - bootwright_ceph_sgdisk_probe.rc | default(1) != 0
 
 - name: Re-probe declared Ceph destroy devices for active mounts before wipe
   ansible.builtin.command:
