@@ -339,8 +339,14 @@
       not limited to disks that once held Ceph, so do not use it on a host that also
       carries data to keep or runs a second Ceph cluster. Two caveats: --mode rebuild
       also re-bootstraps this cluster if its identity (seedHost/monIP/network)
-      drifted, and it fails closed on a context whose safety.protectedKinds lists
-      StorageCluster — there, tear the cluster down deliberately with destroy first.
+      drifted, and it fails closed on a protected context — either
+      safety.destroyProtection=protected, which guards every kind, or
+      safety.protectedKinds listing StorageCluster — but only when the rebuild is
+      actually destructive, that is when a selected object carries structural drift.
+      A freshly bootstrapped cluster whose identity still matches its declaration
+      carries none, so the reclaim normally proceeds even under destroy protection;
+      if it does refuse, it names the protected resource, and the way through is to
+      tear the cluster down deliberately with destroy first.
     bootwright_ceph_osd_remedy_manual: >-
       Remedy: this cluster declares no data_devices.all=true host, so the automatic
       all-devices reclaim does not apply to it. For a statically named selection
