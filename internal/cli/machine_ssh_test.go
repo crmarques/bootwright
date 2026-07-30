@@ -188,38 +188,125 @@ func TestMachineSSHTargetKeepsControllerIdentityOffTheClusterAccount(t *testing.
 	}
 }
 
-func TestMachineSSHTargetUsesClusterAccountWhenTheClusterOwnsTheLogin(t *testing.T) {
+func installedStorageNodeState() v1alpha1.State {
 	state := controllerIdentityStorageNodeState()
 	state.Machines[0].Spec.OS.Provided = v1alpha1.BoolPtr(false)
+	state.Machines[0].Spec.Access.SSH.User = v1alpha1.BootwrightSSHUser
 	state.Machines[0].Spec.Access.SSH.Auth = v1alpha1.MachineSSHAuth{
-		Provision: &v1alpha1.MachineSSHProvision{KeyRef: v1alpha1.SecretRef{Name: "ceph-cluster-key"}},
+		Provision: &v1alpha1.MachineSSHProvision{KeyRef: v1alpha1.SecretRef{Name: "fleet-key"}},
 	}
+	return state
+}
+
+func TestMachineSSHTargetKeepsTheMachineIdentityOnAClusterNode(t *testing.T) {
+	target, err := machineSSHTarget(installedStorageNodeState(), "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	if target.User != v1alpha1.BootwrightSSHUser {
+		t.Fatalf("user = %q, want the machine's own login; machine rsh is machine-scoped", target.User)
+	}
+	if target.KeyRef.Name != "fleet-key" {
+		t.Fatalf("keyRef = %q, want the credential that opens that login", target.KeyRef.Name)
+	}
+}
+
+func TestClusterNodeSSHTargetUsesTheOrchestrationIdentity(t *testing.T) {
+	target, err := clusterNodeSSHTarget(installedStorageNodeState(), "ceph", "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("clusterNodeSSHTarget: %v", err)
+	}
+	if target.User != "cephadm" {
+		t.Fatalf("user = %q, want the cluster orchestration account", target.User)
+	}
+	if target.KeyRef.Name != "ceph-cluster-key" {
+		t.Fatalf("keyRef = %q, want the cluster key; the fleet key does not open that account", target.KeyRef.Name)
+	}
+	if target.Address != "10.0.0.17" {
+		t.Fatalf("address = %q, want the node's machine address", target.Address)
+	}
+}
+
+func TestSSHUserNamingTheClusterAccountCarriesItsCredential(t *testing.T) {
+	state := installedStorageNodeState()
 	target, err := machineSSHTarget(state, "ceph-arbiter")
 	if err != nil {
 		t.Fatalf("machineSSHTarget: %v", err)
 	}
-	if target.User != "cephadm" {
-		t.Fatalf("user = %q, want cephadm", target.User)
+	target, err = applySSHUser(state, "ceph-arbiter", target, "cephadm")
+	if err != nil {
+		t.Fatalf("applySSHUser: %v", err)
 	}
-	if target.KeyRef.Name != "ceph-cluster-key" {
-		t.Fatalf("key = %q, want the orchestration account's own key: switching the login to the cluster account while still offering the machine's key is a guaranteed `Permission denied (publickey)`", target.KeyRef.Name)
+	if target.User != "cephadm" || target.KeyRef.Name != "ceph-cluster-key" {
+		t.Fatalf("identity = %q/%q, want the orchestration account and its own key", target.User, target.KeyRef.Name)
+	}
+}
+
+func TestMachineSSHTargetFallsBackToTheClusterAccountOnceRootIsRevoked(t *testing.T) {
+	state := controllerIdentityStorageNodeState()
+	state.Machines[0].Spec.Access.RootLogin = v1alpha1.MachineRootLoginRevoke
+	state.Machines[0].Spec.Access.SSH.Auth = v1alpha1.MachineSSHAuth{PrivateKeyRef: v1alpha1.SecretRef{Name: "arbiter-key"}}
+	target, err := machineSSHTarget(state, "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	if target.User != "cephadm" || target.KeyRef.Name != "ceph-cluster-key" {
+		t.Fatalf("identity = %q/%q, want the surviving login and its key; root SSH is revoked on this node", target.User, target.KeyRef.Name)
+	}
+}
+
+func TestSSHUserRefusesAnAccountTwoClustersOwnDifferently(t *testing.T) {
+	state := installedStorageNodeState()
+	second := state.StorageClusters[0]
+	second.Metadata.Name = "ceph-b"
+	second.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{
+		Cephadm: v1alpha1.StorageCephadmSpec{
+			ClusterSSH: v1alpha1.StorageCephadmSSHSpec{User: "cephadm", KeyRef: v1alpha1.LocalObjectReference{Name: "ceph-b-key"}},
+		},
+		Topology: v1alpha1.StorageCephTopology{
+			Nodes: []v1alpha1.StorageCephNode{{Name: "arbiter", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-arbiter"}}},
+		},
+	}
+	state.StorageClusters = append(state.StorageClusters, second)
+	target, err := machineSSHTarget(state, "ceph-arbiter")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+	_, err = applySSHUser(state, "ceph-arbiter", target, "cephadm")
+	if err == nil {
+		t.Fatal("applySSHUser accepted an account two clusters open with different credentials")
+	}
+	if !strings.Contains(err.Error(), "ceph-cluster-key") || !strings.Contains(err.Error(), "ceph-b-key") {
+		t.Fatalf("error %v does not name both credentials", err)
 	}
 }
 
 func TestSSHUserOverridesTheDeclaredLogin(t *testing.T) {
-	target, err := machineSSHTarget(machineSSHTestState(), "ceph-0")
+	state := machineSSHTestState()
+	target, err := machineSSHTarget(state, "ceph-0")
 	if err != nil {
 		t.Fatalf("machineSSHTarget: %v", err)
 	}
 	if target.User != "root" {
 		t.Fatalf("declared user = %q, want root", target.User)
 	}
-	inv := buildSSHInvocation(overrideSSHUser(target, "operator"), "/base/secrets/ceph-key", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
+	overridden, err := applySSHUser(state, "ceph-0", target, "operator")
+	if err != nil {
+		t.Fatalf("applySSHUser: %v", err)
+	}
+	inv := buildSSHInvocation(overridden, "", "", "/base/ssh-policy", sshtrust.KnownHostsPathForContext("/base"), "ask", nil, "/usr/bin/ssh", nil)
 	if got := inv.Args[len(inv.Args)-1]; got != "operator@10.0.0.10" {
 		t.Fatalf("target = %q, want operator@10.0.0.10", got)
 	}
-	if got := overrideSSHUser(target, "").User; got != "root" {
-		t.Fatalf("empty override changed the user to %q", got)
+	if overridden.KeyRef.Name != "" {
+		t.Fatalf("keyRef = %q, want no stored credential; the declared key opens the declared account, not the one --ssh-user names", overridden.KeyRef.Name)
+	}
+	unchanged, err := applySSHUser(state, "ceph-0", target, "")
+	if err != nil {
+		t.Fatalf("applySSHUser(empty): %v", err)
+	}
+	if unchanged.User != "root" || unchanged.KeyRef.Name != "ceph-key" {
+		t.Fatalf("empty override changed the identity to %q/%q", unchanged.User, unchanged.KeyRef.Name)
 	}
 }
 

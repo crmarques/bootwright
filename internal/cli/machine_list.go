@@ -142,10 +142,7 @@ func buildMachineList(state v1alpha1.State, records []ownership.ResourceRecord, 
 			SSHAddress: v1alpha1.MachineSSHAddress(machine),
 		}
 		if machine.Spec.Access.SSH != nil {
-			entry.SSHUser = machineLoginUser(state, machine)
-			if entry.SSHUser == "" {
-				entry.SSHUser = machineSSHUser(machine)
-			}
+			entry.SSHUser = machineAccessIdentity(state, machine).User
 		}
 		if bound {
 			entry.Cluster = binding.Cluster

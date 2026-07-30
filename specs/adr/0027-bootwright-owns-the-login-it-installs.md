@@ -9,6 +9,13 @@ scope; and the install-window-identity clause and `rootLogin` validity rule of
 [ADR 0019](0019-node-root-posture-and-orchestration-identity.md), restoring the
 key separation ADR 0019 argued for. The rest of both stands.
 
+Refined by
+[ADR 0033](0033-the-login-follows-the-scope-and-carries-its-credential.md): the
+command's scope selects between the machine login this ADR fixed and a cluster's
+orchestration account, a login is never selected without its credential, and
+`--ssh-user` on `rsh`/`exec` resolves a known account name to that account's
+identity. The scoping rule below is unchanged.
+
 ## Context
 
 ADR 0024 split `Machine.spec.access.ssh.auth` into arms whose names carry mood,

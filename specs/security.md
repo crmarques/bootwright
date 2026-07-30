@@ -60,10 +60,15 @@ offered ahead of the declared credentials, with the declared credentials as
 fallback; it is refused unless the file is a regular file with no group or other
 permissions, and it is never recorded in desired state, the converge hash, or
 an install marker. `--ssh-user` names the account for `operatorIdentity`
-machines only — never a login Bootwright created or one a `Secret` names — and
+machines only — never a login Bootwright created, one a `Secret` names, or a
+cluster's orchestration account — and
 is refused both when the value is not a valid POSIX user name and, on the
 converging commands, when no machine in the run declares that arm; it is
-likewise never recorded. Neither flag reaches
+likewise never recorded. On `rsh`/`exec` it reaches any account, and there its
+ambient character is bounded: a value naming an identity the context already
+holds resolves to that identity's stored credential, and any other value offers
+no stored credential at all, so the flag never puts one account's key on the
+wire under another account's name (ADR 0033). Neither flag reaches
 an ownership record: records carry the declared connection facts, so a replayed
 record cannot inherit one operator's account or key path. All three are ambient
 by construction and must be described as such — they trade reproducibility for
@@ -331,7 +336,10 @@ Disconnected installs are cluster-scoped through
 either an external mirror URL or a managed registry component.
 
 `cluster rsh` and `cluster exec` use the private half of the selected
-`ContainerCluster.spec.install.nodeSSH` secret for container nodes. Bootwright
+`ContainerCluster.spec.install.nodeSSH` secret for container nodes, and the
+private half of `StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef` for managed
+Ceph nodes — in both cases the credential belonging to the account those
+cluster-scoped verbs log in as. Bootwright
 unlinks an owner-only temporary file before writing the decrypted key, keeps
 its descriptor open while SSH runs, and gives OpenSSH the corresponding
 `/proc/<bootwright-pid>/fd/<fd>` path. The parent closes the descriptor after

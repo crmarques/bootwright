@@ -18,11 +18,13 @@ func newMachineRshCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rsh --name <machine>",
 		Short: "Open an interactive SSH shell on a declared Machine",
-		Long: `Open an interactive remote shell on a declared Machine over SSH using the
-identity Bootwright already knows for it: the Machine's ssh address, login user,
-private key, and the context host-key trust store recorded by
-'bootwright machine trust'. Override the login account for this invocation with
---ssh-user. Run a single command instead with 'machine exec'.
+		Long: `Open an interactive remote shell on a declared Machine over SSH as the Machine's
+own login: the spec.access.ssh address, user, port, credential, and the context
+host-key trust store recorded by 'bootwright machine trust'. A Machine that a
+cluster also lists is still reached as itself here — visit the cluster's
+orchestration account with 'cluster rsh' or by naming it with --ssh-user, which
+carries that account's own credential. Run a single command instead with
+'machine exec'.
 
     bootwright machine rsh --name ceph-dc1-0`,
 		Args: cobra.ArbitraryArgs,
@@ -50,10 +52,11 @@ func newMachineExecCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exec --name <machine> -- <command>...",
 		Short: "Run a command on a declared Machine over SSH",
-		Long: `Run a single command on a declared Machine over SSH and return its output,
-using the identity Bootwright already knows for the Machine. Override the login
-account for this invocation with --ssh-user. Drop into an interactive shell
-instead with 'machine rsh'.
+		Long: `Run a single command on a declared Machine over SSH and return its output, as the
+Machine's own spec.access.ssh login. A Machine that a cluster also lists is still
+reached as itself here — visit the cluster's orchestration account with
+'cluster exec' or by naming it with --ssh-user, which carries that account's own
+credential. Drop into an interactive shell instead with 'machine rsh'.
 
     bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target`,
 		Args: cobra.ArbitraryArgs,
@@ -93,14 +96,11 @@ func execSSHToMachine(commandCtx context.Context, ctx workspace.Context, state v
 	if err != nil {
 		return failErr(1, err)
 	}
-	return execSSHTarget(commandCtx, ctx, state, overrideSSHUser(target, sshUser), cmdArgs)
-}
-
-func overrideSSHUser(target sshTarget, sshUser string) sshTarget {
-	if sshUser != "" {
-		target.User = sshUser
+	target, err = applySSHUser(state, machineName, target, sshUser)
+	if err != nil {
+		return failErr(2, err)
 	}
-	return target
+	return execSSHTarget(commandCtx, ctx, state, target, cmdArgs)
 }
 
 func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
@@ -115,56 +115,12 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	if address == "" {
 		return sshTarget{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}
-	user, keyRef := machineLoginIdentity(state, machine)
-	if keyRef.Name == "" {
-		keyRef = v1alpha1.MachineSSHKeyRef(machine)
-	}
+	identity := machineAccessIdentity(state, machine)
 	return sshTarget{
 		Address:       address,
-		User:          user,
+		User:          identity.User,
 		Port:          machine.Spec.Access.SSH.Port,
-		KeyRef:        keyRef,
+		KeyRef:        identity.KeyRef,
 		KnownHostsRef: machine.Spec.Access.SSH.KnownHostsRef,
 	}, nil
-}
-
-func machineSSHUser(machine v1alpha1.Machine) string {
-	return v1alpha1.MachineSSHUser(machine)
-}
-
-func machineLoginUser(state v1alpha1.State, machine v1alpha1.Machine) string {
-	user, _ := machineLoginIdentity(state, machine)
-	return user
-}
-
-func machineLoginIdentity(state v1alpha1.State, machine v1alpha1.Machine) (string, v1alpha1.SecretRef) {
-	if v1alpha1.MachineUsesOperatorIdentity(machine) {
-		return "", v1alpha1.SecretRef{}
-	}
-	if user, keyRef, ok := storageNodeLoginIdentity(state, machine.Metadata.Name); ok {
-		return user, keyRef
-	}
-	return v1alpha1.MachineSSHUser(machine), v1alpha1.SecretRef{}
-}
-
-func storageNodeLoginUser(state v1alpha1.State, machineName string) (string, bool) {
-	user, _, ok := storageNodeLoginIdentity(state, machineName)
-	return user, ok
-}
-
-func storageNodeLoginIdentity(state v1alpha1.State, machineName string) (string, v1alpha1.SecretRef, bool) {
-	for _, cluster := range state.StorageClusters {
-		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
-			continue
-		}
-		if !v1alpha1.StorageClusterManagesNodeAccount(cluster) {
-			continue
-		}
-		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			if node.MachineRef.Name == machineName {
-				return v1alpha1.StorageClusterCephadmSSHUser(cluster), v1alpha1.SecretRef{Name: cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name}, true
-			}
-		}
-	}
-	return "", v1alpha1.SecretRef{}, false
 }

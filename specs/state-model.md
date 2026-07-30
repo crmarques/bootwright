@@ -422,6 +422,18 @@ Rules:
   machine; the cluster provisions its own `spec.ceph.cephadm.clusterSSH.user`
   orchestration account day-2 on top of it. A topology node the cluster does not
   install authors its own `access.ssh` and keeps `rootLogin: keep` by default.
+- The **scope of the operation** selects between those two logins, and a login
+  is never selected without the credential that opens it (ADR 0033).
+  Machine-scoped work — `machine rsh`/`exec` and every `apply`, `plan` or
+  `destroy` task acting on a machine — uses the `Machine`'s own `access.ssh`
+  login and its `auth` arm. Cluster-scoped work — `cluster rsh`/`exec` and
+  cluster-scoped tasks — uses the cluster's orchestration identity
+  (`install.nodeSSH` with `core`, or `clusterSSH.user` with
+  `clusterSSH.keyRef`). Cluster-scoped apply uses both in that order: the
+  machine login is borrowed to create and verify the orchestration account
+  before the orchestrator receives it. On a machine whose own login is `root`
+  and whose `rootLogin` is `revoke`, machine scope falls back to the
+  replacement orchestration identity, credential included.
 - The persistent `--ssh-user` and `--ssh-preferred-id-key` flags override how a
   machine is reached for one invocation without entering desired state; they are
   specified in the [CLI Contract](#cli-contract) under Global flags.
@@ -937,10 +949,13 @@ Rules:
   `privateKeyRef`), the `core` user, and the node's effective primary install
   IP (falling back to its declared name). A public-only `nodeSSH` is valid
   for installation but cannot power these commands. Storage-cluster access
-  continues to use each node `Machine`'s `spec.access.ssh` key material and
-  connects to the machine's `fqdn` address per the `Machine` rules; the account
-  is the cluster's orchestration user
-  (`spec.ceph.cephadm.clusterSSH.user`) once the node is provisioned. The
+  connects to the node `Machine`'s `fqdn` address, port, and host-key trust per
+  the `Machine` rules, but authenticates as the cluster's own orchestration
+  identity — `spec.ceph.cephadm.clusterSSH.user` with the private half of
+  `clusterSSH.keyRef` — because these are the cluster-scoped verbs; the
+  `Machine`'s own login is what `machine rsh`/`exec` reaches (ADR 0033). An
+  unmanaged orchestration account (`clusterSSH.user` resolving to `root`) has
+  no cluster credential, so those nodes keep the `Machine` identity. The
   `--node` selector accepts the node name (FQDN or short label) or a
   `<role>-<ordinal>`; a machine name is rejected with guidance naming the
   node. Container-node
@@ -2046,10 +2061,17 @@ verbs that reach machines.
 - `--ssh-user <name>` names the account only for machines whose resolved auth
   arm is `operatorIdentity` — the inventory `ansible_user`, the add-on step
   targets, and the connection identity of the Ceph node-access role. It never
-  moves a login Bootwright created nor one a `Secret` names, and `apply`,
-  `plan`, and `destroy` **refuse** when no machine in the run declares that arm
-  rather than silently changing nothing. It is refused unless the value is a
-  valid POSIX user name, and is likewise never recorded.
+  moves a login Bootwright created nor one a `Secret` names, never renames a
+  cluster's orchestration account, and `apply`, `plan`, and `destroy`
+  **refuse** when no machine in the run declares that arm rather than silently
+  changing nothing. It is refused unless the value is a valid POSIX user name,
+  and is likewise never recorded. On `machine rsh`/`exec` and
+  `cluster rsh`/`exec` it keeps `ssh(1)` semantics and reaches any account: a
+  value naming an identity Bootwright holds — the `Machine`'s own login, or the
+  orchestration account of a cluster listing that machine — is opened with that
+  identity's credential; any other value offers no stored credential, leaving
+  the operator's own identities to authenticate. A name two clusters own with
+  different credentials is refused, naming both (ADR 0033).
 - Neither SSH flag reaches an ownership record. A record captures the
   **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
   reach a host that has left desired state cannot inherit one operator's account

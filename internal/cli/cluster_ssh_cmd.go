@@ -21,12 +21,13 @@ func newClusterRshCmd() *cobra.Command {
 		Use:   "rsh --name <cluster> --node <node>",
 		Short: "Open an interactive SSH shell on a cluster node",
 		Long: `Open an interactive remote shell on a node of a container or storage cluster over
-SSH. Container cluster nodes use the cluster's install.nodeSSH private key and
-the core user; storage cluster nodes use the backing Machine's SSH identity.
-Override the login account for this invocation with --ssh-user. Select the node
-by its node name, its FQDN, or its <role>-<ordinal> (e.g. master-0); on a
-single-node cluster --node may be omitted. Run a single command instead with
-'cluster exec'.
+SSH, as the cluster's own orchestration identity: the core user with the
+cluster's install.nodeSSH private key on a container cluster, and
+spec.ceph.cephadm.clusterSSH (user and key) on a managed storage cluster. Reach
+the node as its own login instead with 'machine rsh'. Override the login account
+for this invocation with --ssh-user. Select the node by its node name, its FQDN,
+or its <role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be
+omitted. Run a single command instead with 'cluster exec'.
 
     bootwright cluster rsh --name managed-01 --node master-0`,
 		Args: cobra.ArbitraryArgs,
@@ -65,10 +66,11 @@ func newClusterExecCmd() *cobra.Command {
 		Use:   "exec --name <cluster> --node <node> -- <command>...",
 		Short: "Run a command on a cluster node over SSH",
 		Long: `Run a single command on a node of a container or storage cluster over SSH and
-return its output. Override the login account for this invocation with
---ssh-user. Select the node by its node name, its FQDN, or its <role>-<ordinal>
-(e.g. master-0); on a single-node cluster --node may be omitted. Drop into an
-interactive shell instead with 'cluster rsh'.
+return its output, as the cluster's own orchestration identity. Reach the node as
+its own login instead with 'machine exec'. Override the login account for this
+invocation with --ssh-user. Select the node by its node name, its FQDN, or its
+<role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be omitted.
+Drop into an interactive shell instead with 'cluster rsh'.
 
     bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet`,
 		Args: cobra.ArbitraryArgs,
@@ -103,14 +105,35 @@ func execSSHToClusterNode(commandCtx context.Context, ctx workspace.Context, sta
 	if err != nil {
 		return failErr(1, err)
 	}
-	return execSSHTarget(commandCtx, ctx, state, overrideSSHUser(target, sshUser), cmdArgs)
+	target, err = applySSHUser(state, machineName, target, sshUser)
+	if err != nil {
+		return failErr(2, err)
+	}
+	return execSSHTarget(commandCtx, ctx, state, target, cmdArgs)
 }
 
 func clusterNodeSSHTarget(state v1alpha1.State, clusterName, machineName string) (sshTarget, error) {
-	cluster, ok := stateview.ContainerCluster(state, clusterName)
-	if !ok {
-		return machineSSHTarget(state, machineName)
+	if cluster, ok := stateview.ContainerCluster(state, clusterName); ok {
+		return containerNodeSSHTarget(state, cluster, machineName)
 	}
+	target, err := machineSSHTarget(state, machineName)
+	if err != nil {
+		return sshTarget{}, err
+	}
+	cluster, ok := stateview.ClusterByName(state, clusterName)
+	if !ok {
+		return target, nil
+	}
+	identity, ok := storageClusterIdentity(cluster)
+	if !ok {
+		return target, nil
+	}
+	target.User, target.KeyRef = identity.User, identity.KeyRef
+	return target, nil
+}
+
+func containerNodeSSHTarget(state v1alpha1.State, cluster v1alpha1.ContainerCluster, machineName string) (sshTarget, error) {
+	clusterName := cluster.Metadata.Name
 	privateRef := cluster.Spec.Install.NodeSSH.PrivateMaterialRef()
 	if privateRef.Name == "" {
 		return sshTarget{}, fmt.Errorf("ContainerCluster %q install.nodeSSH has no private key; set keyPairRef or privateKeyRef for cluster SSH access", clusterName)

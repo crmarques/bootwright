@@ -323,8 +323,11 @@ instead, or `auth.passwordRef` for a machine that only accepts a password. See
 
 The cluster's `cephadm` account is the identity cephadm orchestrates with; it
 is not the account Bootwright logs in as here. `machine rsh --name ceph-arbiter`
-connects as you, not as `cephadm` — pass `--ssh-user cephadm` when you want that
-account instead.
+connects as you, not as `cephadm`, because it names a `Machine`. Reach the
+orchestration account by naming the cluster —
+`bootwright cluster rsh --name <cluster> --node ceph-arbiter` — or with
+`--ssh-user cephadm`, which carries the cluster key with it. See
+[Which login a command uses](machines.md#which-login-a-command-uses).
 
 On apply Bootwright connects with that identity, creates `cephadm`, authorizes
 the cluster key for it, writes the sudoers drop-in, and proves the account

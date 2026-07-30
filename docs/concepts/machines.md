@@ -298,11 +298,14 @@ spec.access.ssh.auth.operatorIdentity, and no machine in this run does.
 
 `machine rsh` / `exec` and `cluster rsh` / `exec` are the exception: they open
 an interactive session and nothing converges, so `--ssh-user` there means what
-it means in `ssh(1)` and reaches any account:
+it means in `ssh(1)` and reaches any account. An account Bootwright already
+holds a credential for is opened with *that* credential:
 
 ```console
 $ bootwright machine exec --name ceph-0 --ssh-user cephadm -- id
 ```
+
+See [Which login a command uses](#which-login-a-command-uses).
 
 Like `--ssh-preferred-id-key`, the value never enters desired state or an
 ownership record, and it is refused unless it is a valid POSIX user name.
@@ -526,14 +529,13 @@ To provision or tear down individual machines rather than whole clusters, pass
 [Selecting machines](index.md#selecting-machines).
 
 `bootwright machine rsh --name <machine>` opens an interactive SSH shell on a
-`Machine` using the identity Bootwright already knows for it — the machine's
+`Machine` as **that machine's own login** — the machine's
 [`fqdn` connection address](#the-fqdn-address) (falling back to the
-`access.ssh` IP for the carve-outs described there), the login Bootwright
-resolved for that machine (`bootwright` on a machine it installed, the cluster's
-`clusterSSH.user` on a managed-Ceph node, your own account under
-`operatorIdentity`, and the authored `access.ssh.user` — default `root` —
-otherwise), the corresponding key, and the context host-key trust store recorded
-by `bootwright machine trust`. `machine exec` runs
+`access.ssh` IP for the carve-outs described there), the login `spec.access.ssh`
+resolves to (`bootwright` on a machine Bootwright installed, your own account
+under `operatorIdentity`, the authored `access.ssh.user` — default `root` —
+otherwise), the credential that opens *that* login, and the context host-key
+trust store recorded by `bootwright machine trust`. `machine exec` runs
 a single command on the `Machine` instead of opening a shell. An unknown server
 key prompts for explicit acceptance on an interactive first connection; verify
 it out of band first. Use `machine trust --machines <machine>` to pre-record it,
@@ -548,15 +550,45 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 Add `--ssh-user <name>` to log in as a different account for that one
 invocation, and `--ssh-preferred-id-key <path>` to offer your own key first.
 
+#### Which login a command uses
+
+A machine a cluster runs on carries more than one login: its own, and the
+account that cluster's orchestrator drives every node as. **The command's scope
+picks between them**, and the credential always travels with the account:
+
+| Command | Login | Credential |
+| --- | --- | --- |
+| `machine rsh` / `machine exec`, and every `apply` / `plan` / `destroy` task that acts on a machine | The `Machine`'s own `spec.access.ssh` login | The `auth` arm that opens it |
+| `cluster rsh` / `cluster exec`, and cluster-scoped work | The cluster's orchestration account — `core` on a `ContainerCluster`, [`clusterSSH.user`](storage.md#the-ceph-node-login) on a managed Ceph `StorageCluster` | `install.nodeSSH` / `clusterSSH.keyRef` |
+
+```console
+$ bootwright machine rsh --name ceph-dc1-0                       # bootwright@…, fleet key
+$ bootwright cluster rsh --name ceph-dc1 --node ceph-dc1-0       # cephadm@…, cluster key
+```
+
+Cluster-scoped *apply* is the one place both appear at once, and in that order:
+Bootwright reaches a topology node as the machine's own login in order to
+**create** the orchestration account, verifies it, and only then hands it to
+cephadm. A node whose own login has been revoked
+([`access.rootLogin: revoke`](storage.md#nodes-the-cluster-does-not-install)) has
+nothing left to borrow, so `machine rsh` there falls back to the surviving
+account — with that account's key.
+
+`--ssh-user` overrides the login on either command. When it names an account
+Bootwright already holds a credential for — the machine's own login, or the
+orchestration account of a cluster this machine belongs to — that account's
+credential is used. Any other name is a plain `ssh(1)` override: no stored key is
+offered, so your agent, `~/.ssh` defaults, or `--ssh-preferred-id-key` apply.
+
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
 for a one-off command); the node selector accepts the node name (FQDN or
 its short label) or a `<role>-<ordinal>` such as `master-0` — a Machine name is
 rejected with a hint naming the node. Container-cluster access
 uses `install.nodeSSH`, the `core` user, and the node's primary install IP, so
-its backing Machine does not need `access.ssh`. Storage-cluster access keeps
-using the Machine SSH identity. An unknown node key prompts for explicit
-acceptance on an interactive first connection; a changed key fails closed.
+its backing Machine does not need `access.ssh`. An unknown node key prompts for
+explicit acceptance on an interactive first connection; a changed key fails
+closed.
 
 ## MachineImage
 

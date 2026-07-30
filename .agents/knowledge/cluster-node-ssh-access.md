@@ -1,13 +1,28 @@
 # Cluster node SSH access: identity ownership and private-key handoff
 
-**Container ownership:** `cluster rsh` and `cluster exec` for a
-`ContainerCluster` must not delegate to the Machine-only SSH path. Canonical
-OpenShift node Machines intentionally omit `spec.access.ssh`: the installed
-node identity is the cluster's normalized `spec.install.nodeSSH` private
-material, the login user is `core`, and the address is the effective agent
-network's primary IP with the declared node hostname as fallback. A split
-`nodeSSH` with only `publicKeyRef` can install but cannot support direct node
-access. Storage-cluster access remains Machine-owned.
+**Cluster ownership:** `cluster rsh` and `cluster exec` must not delegate to the
+Machine-only SSH path. Canonical OpenShift node Machines intentionally omit
+`spec.access.ssh`: the installed node identity is the cluster's normalized
+`spec.install.nodeSSH` private material, the login user is `core`, and the
+address is the effective agent network's primary IP with the declared node
+hostname as fallback. A split `nodeSSH` with only `publicKeyRef` can install but
+cannot support direct node access. A managed Ceph `StorageCluster` is the same
+shape with different fields: the login is `spec.ceph.cephadm.clusterSSH.user`
+and the credential is `clusterSSH.keyRef`, while the address, port and host-key
+trust still come from the node `Machine` (ADR 0033). Only an unmanaged
+orchestration account (`clusterSSH.user` resolving to `root`) leaves the whole
+identity Machine-owned.
+
+**The user name is not the identity.** Every regression in this area has been
+one half of a pair moving without the other, and it always presents as
+`Permission denied (publickey)` on a node that is otherwise healthy — the
+inventory selector that switched `ansible_user` to `cephadm` without offering
+`accountPrivateKeyPath` (`670dabaf`), and `machine rsh` resolving the cluster
+account name while keeping the machine's key under `IdentitiesOnly=yes`
+(ADR 0033). Validation *forbids* `clusterSSH.keyRef` from being the fleet key,
+so on any valid configuration the two never coincide and the mismatch is a
+guaranteed denial, not an intermittent one. Resolve a login and its credential
+as one value; never set one field.
 
 **Encrypted material:** Context-local and generated secret files are encrypted
 envelopes, not files OpenSSH can consume. Direct SSH commands read the selected

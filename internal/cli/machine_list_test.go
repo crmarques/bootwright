@@ -106,8 +106,8 @@ func TestBuildMachineListDerivesStateOSAndCluster(t *testing.T) {
 	if ceph.Cluster != "ceph-dc1" || ceph.ClusterKind != "storage" || ceph.Role != "mon,osd" {
 		t.Fatalf("ceph-0 cluster = %q/%q role=%q", ceph.Cluster, ceph.ClusterKind, ceph.Role)
 	}
-	if ceph.SSHUser != "cephadm" || ceph.SSHAddress != "10.0.0.10" {
-		t.Fatalf("ceph-0 ssh = %q@%q, want the orchestration account machine exec actually logs in as — listing the machine's own declared user here is the disagreement that sends operators at a login the CLI never uses", ceph.SSHUser, ceph.SSHAddress)
+	if ceph.SSHUser != "root" || ceph.SSHAddress != "10.0.0.10" {
+		t.Fatalf("ceph-0 ssh = %q@%q, want the login machine rsh/exec actually uses — machine list is machine-scoped, so it reports the Machine's own login, not the orchestration account cluster rsh reaches", ceph.SSHUser, ceph.SSHAddress)
 	}
 
 	ocp := byName["ocp-0"]
