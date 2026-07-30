@@ -414,12 +414,23 @@ bootwright cluster info --name ceph-ibm --secrets
 
 ## Tear It Down
 
-This lab's `Environment` sets `safety.destroyProtection: protected`, so
-every teardown needs `--authorize protected`:
+This lab's `Environment` sets `safety.destroyProtection: protected`, so every
+teardown needs `--authorize protected`. Its OSD hosts are libvirt VMs whose disks
+hold the OSD data, so every stage that deletes them also crosses the data-loss
+gate — the gate follows the data, not the stage, so `--authorize data-loss`
+belongs on both lines too.
+
+Teardown inverts the apply order internally, so one command is enough:
+
+```bash
+bootwright destroy --authorize protected,data-loss --yes
+```
+
+Stage by stage, when you want the VMs left standing in between:
 
 ```bash
 bootwright destroy --stage clusters --authorize protected,data-loss --yes
-bootwright destroy --stage infra --authorize protected --yes
+bootwright destroy --stage infra --authorize protected,data-loss --yes
 ```
 
 See

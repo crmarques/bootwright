@@ -160,11 +160,20 @@ dnsmasq and you maintain it by hand.
 
 This environment sets `safety.destroyProtection: protected`, so `destroy`
 refuses to run without `--authorize protected` — a routine `destroy --yes` cannot tear it
-down by accident.
+down by accident. The OSD hosts are libvirt VMs whose disks hold the OSD data, so
+both stages also cross the data-loss gate and need `--authorize data-loss`.
+
+One command tears down the whole lab in the inverse of the apply order:
+
+```bash
+bootwright destroy --authorize protected,data-loss --yes
+```
+
+Stage by stage, when you want to keep the VMs standing between teardowns:
 
 ```bash
 bootwright destroy --stage clusters --authorize protected,data-loss --yes   # remove Ceph services/records
-bootwright destroy --stage infra --authorize protected --yes               # remove VMs, network, services
+bootwright destroy --stage infra --authorize protected,data-loss --yes     # remove VMs, network, services
 ```
 
 ---
