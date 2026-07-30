@@ -185,6 +185,11 @@ A few habits keep operators on the safe side of these guardrails:
     directs you to run `destroy --authorize protected` for the affected scope
     first — a second, explicit decision.
 
+    Turning protection on (or editing `protectedKinds`) is safe to do on a live,
+    applied context: `spec.safety` is authorization policy that reaches no host,
+    so it is excluded from the recorded desired hash and the next `apply` sees no
+    drift from it.
+
 - **Know what `destroy` does.** Omitting `--stage` requests a full lifecycle
   teardown: `destroy` covers the context and `destroy --clusters <names>`
   narrows it to those roots. Positively owned virtual machines are deleted;

@@ -2,6 +2,19 @@
 
 ## Scope and gate extra-vars
 
+**The data-loss gate is not a scope gate (ADR 0031):** it keys on
+`workflow.EvaluateDestroyDataLoss`, which asks whether *this* run destroys a
+managed storage cluster's OSD data — the cluster layer's
+`cephadm rm-cluster --zap-osds` (`Zapped`), or the machine layer deleting the
+provider-owned machines whose disks hold the OSDs (`Released`). It replaced
+`DestroyScopeCoversStorage`, a scope-name test that left `--stage infra` and
+`--machines` teardowns of a virtualized Ceph cluster authorized by `--yes` alone
+while the preview announced total OSD loss. The same value feeds the gate, the
+`--yes` refusal, the prompt choice and the `Will destroy` preview, so no future
+caller can gate on one reading and print another. Bare-metal OSD hosts are
+deliberately outside `Released`: a bare-metal destroy retains the disk, and the
+reinstall that wipes it crosses `apply`'s data-loss gate instead.
+
 **Executor gate extra-vars:** `bootwright_infra_destroy_context_sweep=true`
 (whole-context / unscoped-infra destroy) tells the infra teardown to reclaim
 EVERY recorded ownership orphan, not only objects still in desired state;

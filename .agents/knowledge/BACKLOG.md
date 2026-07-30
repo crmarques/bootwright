@@ -406,10 +406,14 @@ learned; this file records what it still owes.
   `os.provided: true` and every KubeVirt *host* is bare metal, so two paths stay
   unreachable end-to-end: the bare-metal managed-OS reinstall data-loss
   acknowledgment, and a machine-substrate rebuild of a KubeVirt host cluster.
-  Both are pinned only at unit level.
-- Exit: add a managed-OS machine (or a libvirt-hosted KubeVirt host) to the
-  baseline — in the existing example or a second one — and promote those two
-  scenarios into the matrix.
+  Both are pinned only at unit level. The matrix now takes a per-case `baseline`
+  and already runs `examples/ceph-ibm-libvirt-lab` for the provider-backed
+  machine-layer data-loss rows (ADR 0031), so the second-baseline mechanism
+  exists; these two scenarios still have no matrix row.
+- Exit: promote the bare-metal managed-OS reinstall data-loss acknowledgment and a
+  KubeVirt-host machine-substrate rebuild into the matrix, adding whichever
+  baseline (a managed-OS bare-metal machine, a libvirt-hosted KubeVirt host)
+  each needs.
 - Related: [apply-destroy-authorization-guards.md](apply-destroy-authorization-guards.md)
 
 ## B-038 — The node sudoers drop-in sorts before hardening drop-ins that override it

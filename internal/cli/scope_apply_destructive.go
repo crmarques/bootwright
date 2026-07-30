@@ -45,8 +45,9 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 	return []string{"auto-reclaim dirty filter-OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
 }
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) bool {
 	releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
+	consumedDataLoss := false
 	var substrateReset []string
 	if mode == workflow.ApplyModeRebuild {
 		if len(ocpReinstalls) > 0 {
@@ -64,6 +65,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		if allowDestroy {
 			widened := workflow.UnionClusterNames(subObjectKeys, converge.AllStorageSubObjectRebuildKeys(objects))
 			if len(widened) > len(subObjectKeys) {
+				consumedDataLoss = true
 				named := make(map[string]bool, len(subObjectKeys))
 				for _, key := range subObjectKeys {
 					named[key] = true
@@ -81,6 +83,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		converge.ApplySubObjectRebuildAuthorizedExtraVar(plan, subObjectKeys)
 		if allowDestroy {
 			if filterReclaim := filterReclaimAuthorizedClusters(plan.State, objects); len(filterReclaim) > 0 {
+				consumedDataLoss = true
 				cliout.NewContinuation(stdout).Warning("all-devices OSD reclaim", "authorizes automatic disk reclaim on Ceph cluster(s) "+strings.Join(filterReclaim, ", ")+": on a host whose OSDs are declared with data_devices.all=true, EVERY disk that is unavailable to ceph-volume, has NO mounted filesystem, and is NOT already an OSD of this cluster is WIPED (ceph orch device zap) before the OSD apply — IRREVERSIBLE, and NOT limited to disks that once held Ceph. Mounted/OS/system disks and this cluster's live OSDs are never touched. Do NOT use all=true on a host that also carries data to keep or runs a second Ceph cluster: an unmounted disk of a co-resident cluster is not distinguishable and would be wiped.")
 				converge.ApplyFilterReclaimAuthorizedExtraVar(plan, filterReclaim)
 			}
@@ -114,6 +117,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
 	}
 	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(bootProven, releasedContainerClusters(plan.State, releasedClusters)))
+	return consumedDataLoss
 }
 
 func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) string {

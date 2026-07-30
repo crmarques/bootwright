@@ -9,8 +9,10 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -28,18 +30,19 @@ const (
 var gateRefusalMarkers = []string{"refusing to", "refuses to", "fails closed", "does not authorize data loss"}
 
 type safetyCase struct {
-	name    string
-	seed    func(t *testing.T, ctx workspace.Context)
-	args    []string
-	verdict safetyVerdict
-	want    []string
-	deny    []string
+	name     string
+	baseline string
+	seed     func(t *testing.T, ctx workspace.Context)
+	args     []string
+	verdict  safetyVerdict
+	want     []string
+	deny     []string
 }
 
 func TestApplyDestroySafetyMatrix(t *testing.T) {
 	for _, tc := range safetyMatrixCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := initAdvancedBaselineContext(t)
+			ctx := initSafetyBaselineContext(t, tc.baseline)
 			if tc.seed != nil {
 				tc.seed(t, ctx)
 			}
@@ -92,9 +95,10 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 }
 
 func safetyMatrixCases() []safetyCase {
-	return append(append(append(
+	return append(append(append(append(
 		safetyFlagCoherenceCases(),
 		safetyAuthorizationTokenCases()...),
+		safetyStorageDataLossCases()...),
 		safetyScopeClosureCases()...),
 		safetyStartingStateCases()...)
 }
@@ -139,7 +143,17 @@ func safetyFlagCoherenceCases() []safetyCase {
 		name:    "apply/unknown --authorize token/greenfield/full",
 		args:    []string{"apply", "--authorize", "force", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"is not an authorization token", "data-loss", "shared-infra"},
+		want:    []string{"is not an authorization token", "data-loss"},
+	}, {
+		name:    "apply/a destroy-only --authorize token is a usage error naming the verb that owns it",
+		args:    []string{"apply", "--authorize", "protected", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"is not a risk apply can authorize", "bootwright destroy --authorize protected"},
+	}, {
+		name:    "plan/a destroy-only --authorize token is a usage error",
+		args:    []string{"plan", "--authorize", "unreachable-nodes"},
+		verdict: verdictUsageError,
+		want:    []string{"is not a risk apply can authorize"},
 	}, {
 		name:    "destroy/unknown --authorize token in a comma list/any/full",
 		args:    []string{"destroy", "--authorize", "data-loss,everything", "--yes", "--ask-become-pass=false"},
@@ -229,6 +243,17 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"could not be read", "--authorize unreadable-records"},
 	}, {
+		name:    "destroy/unreadable-records: the token clears the refusal and still discloses the skipped record",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "unreadable-records", "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		want:    []string{"Skipped ownership records"},
+	}, {
+		name:    "destroy/unowned-networks: the token arms the wider blast radius only when asked for",
+		args:    []string{"destroy", "--stage", "infra", "--authorize", "unowned-vms,unowned-networks", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true"},
+	}, {
 		name:    "destroy/shared-infra: a storage consumer conflict refuses and names its token",
 		args:    []string{"destroy", "--stage", "infra", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
@@ -249,6 +274,73 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unreachable-nodes", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
 		want:    []string{"bootwright_destroy_skip_unreachable=true"},
+	}}
+}
+
+func safetyStorageDataLossCases() []safetyCase {
+	return []safetyCase{{
+		name:     "destroy/data-loss: an infra-stage teardown of a provider-backed Ceph cluster refuses under --yes alone",
+		baseline: safetyBaselineVirtualCeph,
+		args:     []string{"destroy", "--stage", "infra", "--authorize", "protected", "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		want:     []string{safetyVirtualCephCluster, "--yes does not authorize data loss", "--authorize data-loss"},
+	}, {
+		name:     "destroy/data-loss: an infra-stage teardown of a provider-backed Ceph cluster prompts for data loss interactively",
+		baseline: safetyBaselineVirtualCeph,
+		args:     []string{"destroy", "--stage", "infra", "--authorize", "protected", "--ask-become-pass=false"},
+		verdict:  verdictPrompted,
+		want:     []string{"Confirm this DESTRUCTIVE action (accept data loss)?"},
+	}, {
+		name:     "destroy/data-loss: the token clears the infra-stage refusal",
+		baseline: safetyBaselineVirtualCeph,
+		args:     []string{"destroy", "--stage", "infra", "--authorize", "protected,data-loss", "--ask-become-pass=false"},
+		verdict:  verdictPrompted,
+		want:     []string{"Continue with destroy?"},
+		deny:     []string{"--yes does not authorize data loss"},
+	}, {
+		name:     "destroy/data-loss: a machine-scoped teardown of a provider-backed OSD host refuses under --yes alone",
+		baseline: safetyBaselineVirtualCeph,
+		args:     []string{"destroy", "--machines", safetyVirtualCephOSDNode, "--authorize", "protected,installed-cluster-node", "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		want:     []string{safetyVirtualCephCluster, "--authorize data-loss"},
+	}, {
+		name:    "destroy/data-loss: retained bare-metal OSD hosts keep the infra teardown out of the data-loss gate",
+		args:    []string{"destroy", "--stage", "infra", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"their disks are not wiped here"},
+		deny:    []string{"ALL OSD DATA"},
+	}, {
+		name: "destroy/installed-cluster-node: a node of a provisioned StorageCluster refuses and names its token",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedStorageOwnership(t, ctx, safetyAdvancedCephCluster)
+		},
+		args:    []string{"destroy", "--machines", safetyAdvancedCephOSDNode, "--authorize", "shared-infra", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{safetyAdvancedCephCluster, "--authorize installed-cluster-node"},
+	}, {
+		name:    "apply/enabling destroy protection after a successful apply is not drift",
+		seed:    seedProtectionAfterApply,
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		deny:    []string{"not a safe in-place reconcile", "would reinstall the cluster"},
+	}, {
+		name:    "apply/re-applying the identical desired state reports no drift at all",
+		seed:    seedSuccessfulApply,
+		args:    []string{"diff", "--recorded"},
+		verdict: verdictAccepted,
+		deny:    []string{"drift", "missing"},
+	}, {
+		name:    "apply/a scoped diff --recorded after a whole-fleet apply reports no drift (scope-invariant hashes)",
+		seed:    seedSuccessfulApply,
+		args:    []string{"diff", "--recorded", "--clusters", safetyAdvancedContainerOCP},
+		verdict: verdictAccepted,
+		deny:    []string{"drift"},
+	}, {
+		name:    "apply/enabling destroy protection after a successful apply keeps diff --recorded in sync",
+		seed:    seedProtectionAfterApply,
+		args:    []string{"diff", "--recorded"},
+		verdict: verdictAccepted,
+		deny:    []string{"drift"},
 	}}
 }
 
@@ -356,11 +448,29 @@ func safetyStartingStateCases() []safetyCase {
 	}}
 }
 
+const (
+	safetyBaselineAdvanced     = "baremetal-redfish-multidc-virtualized-odf-ceph"
+	safetyBaselineVirtualCeph  = "ceph-ibm-libvirt-lab"
+	safetyVirtualCephCluster   = "ceph-ibm"
+	safetyVirtualCephOSDNode   = "ceph-1"
+	safetyAdvancedCephCluster  = "ceph-storage"
+	safetyAdvancedCephOSDNode  = "ceph-dc1-0"
+	safetyAdvancedContainerOCP = "dc1-metal-ocp"
+)
+
 func initAdvancedBaselineContext(t *testing.T) workspace.Context {
 	t.Helper()
+	return initSafetyBaselineContext(t, safetyBaselineAdvanced)
+}
+
+func initSafetyBaselineContext(t *testing.T, example string) workspace.Context {
+	t.Helper()
+	if example == "" {
+		example = safetyBaselineAdvanced
+	}
 	setTestHomeAndRoot(t)
-	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
-	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "matrix", "-f", example); code != 0 {
+	dir := filepath.Join("..", "..", "examples", example)
+	if stdout, stderr, code := runCLI(t, "context", "init", "--name", "matrix", "-f", dir); code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	ctx, err := workspace.ResolveExistingContext("matrix")
@@ -368,6 +478,35 @@ func initAdvancedBaselineContext(t *testing.T) workspace.Context {
 		t.Fatal(err)
 	}
 	return ctx
+}
+
+func seedSuccessfulApply(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state: %v", err)
+	}
+	tasks, err := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state)
+	if err != nil {
+		t.Fatalf("plan apply tasks: %v", err)
+	}
+	now := time.Now().UTC()
+	for _, task := range tasks {
+		if err := workflow.MarkApplyTaskConvergeSafety(ctx.RunsDir, ctx.Name, "seeded-run", task, workflow.ConvergeSafetyStatusReconciled, now); err != nil {
+			t.Fatalf("MarkApplyTaskConvergeSafety(%s): %v", task.Entry.ID, err)
+		}
+	}
+	for _, cluster := range state.StorageClusters {
+		if err := workflow.MarkStorageSubObjectsConvergeSafety(ctx.RunsDir, ctx.Name, "seeded-run", state, cluster.Metadata.Name, workflow.ConvergeSafetyStatusReconciled, now); err != nil {
+			t.Fatalf("MarkStorageSubObjectsConvergeSafety(%s): %v", cluster.Metadata.Name, err)
+		}
+	}
+}
+
+func seedProtectionAfterApply(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	seedProtectedEnvironment(t, ctx)
 }
 
 func assertNoRuntimeRecords(t *testing.T, ctx workspace.Context) {

@@ -64,7 +64,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addAskBecomePassFlag(cmd, &askBecomePass)
 	addYesFlag(cmd, &yes, "destroy")
-	addAuthorizeFlag(cmd, &authorizeFlag)
+	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbDestroy)
 	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks and authorizes no named risk of its own")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: the installer working directory, install/connection records and kubeconfig, and its per-run task and flow logs under this context's runs/ tree. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, or an unrelated run's shared ledger. Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
@@ -84,7 +84,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
 		}
-		auth, err := parseAuthorizations(authorizeFlag)
+		auth, err := parseAuthorizations(authorizeFlag, authorizeVerbDestroy)
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -183,7 +183,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if sel.MachineSelection {
-			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots); err != nil {
+			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots, sel.StorageRoots, ownershipRecords); err != nil {
 				if !auth.allows(authorizeInstalledClusterNode) {
 					return failErr(1, err)
 				}
@@ -284,15 +284,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
 		storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
-		dataLossPlanned := storagePlanned && !dryRun && !plan.NoRemoteWork
+		dataLoss := workflow.EvaluateDestroyDataLoss(plan.State, storageScopeNames, safetyScope)
+		dataLossPlanned := dataLoss.Planned() && !dryRun && !plan.NoRemoteWork
 		allowDestroy := auth.has(authorizeDataLoss)
 		if dataLossPlanned {
 			auth.note(authorizeDataLoss)
-			cliout.NewContinuation(stdout).Warning("data loss", "destroying storage cluster(s) "+strings.Join(storageScopeNames, ", ")+": cephadm rm-cluster --zap-osds destroys ALL OSD DATA and declared devices are wiped (wipefs + sgdisk --zap-all). This is irreversible.")
+			cliout.NewContinuation(stdout).Warning("data loss", dataLoss.Warning())
 		}
 		warnUnusedAuthorizations(stdout, auth, dryRun)
 		if dataLossPlanned {
-			if err := destroyDataLossYesGuard(storageScopeNames, yes, allowDestroy); err != nil {
+			if err := destroyDataLossYesGuard(dataLoss, yes, allowDestroy); err != nil {
 				return failErr(1, err)
 			}
 		}
@@ -300,7 +301,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if purgeHistory {
 				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' installer working directory, install records, kubeconfig, and per-run task/flow logs under runs/ — this history is not recoverable")
 			}
-			if !confirm(stdin, stdout, destroyConfirmPrompt(storagePlanned && !allowDestroy)) {
+			if !confirm(stdin, stdout, destroyConfirmPrompt(dataLoss.Planned() && !allowDestroy)) {
 				return failErr(1, errors.New("destroy aborted"))
 			}
 		}

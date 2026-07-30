@@ -69,3 +69,60 @@ bare metal) via `TestCheckKubeVirtTenantRebuildScopeGatesEverySelectionAxis`.
 on one flag string. Keying on `--clusters` alone left `--machines` runs
 ungated: a machine-scoped rebuild of a KubeVirt host could annihilate a nested
 cluster that a cluster-scoped rebuild refused to touch.
+
+**Consequence-axis rule (ADR 0031).** The same failure repeats one axis over: a
+gate must key on *what the run destroys*, never on the stage name that destroys
+it. `DestroyScopeCoversStorage` (scope name is `clusters` or `all`) drove the
+data-loss gate, so `destroy --stage infra` and `destroy --machines` deleted a
+libvirt/KubeVirt/vSphere-backed Ceph cluster's OSD VMs — the same data — under
+`--yes` alone, while the preview printed `ALL OSD DATA … is destroyed`.
+`workflow.EvaluateDestroyDataLoss` is now the single predicate, and it feeds the
+gate, the `--yes` refusal, the prompt choice, and the teardown preview, so they
+cannot disagree. It has two arms: `Zapped` (the cluster layer's
+`cephadm rm-cluster --zap-osds`) and `Released` (the machine layer deleting
+provider-owned OSD hosts — `MachineRequiresSubstrate` and a non-bare-metal
+provider, because a bare-metal destroy never wipes in place). A new destroy scope
+or a new provider joins the predicate, not a new `if scope.Name ==`.
+`TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` tables the scope
+combinations.
+
+**A recorded hash covers only state that reaches a host.**
+`Environment.spec.safety` is read by `validate_environment.go` and
+`destroy_safety.go` and by nothing else — it renders into no inventory and no
+role. While it sat inside `hashScopedState`, enabling `destroyProtection`
+flipped every container cluster and machine-substrate task to *structural* drift:
+`apply` refused fleet-wide and named `--mode rebuild`, the protection gate then
+refused that rebuild and named `destroy`, and a change that mutated nothing left
+teardown as the only exit. The projection now zeroes the field rather than
+dropping it, because `Safety` is a struct whose `omitempty` Go ignores: the
+payload keeps `"safety":{}` and every hash of an unprotected environment is
+byte-identical to what shipped, so there is no re-baseline and no schema bump.
+Pinned by `TestConvergeHashIgnoresEnvironmentAuthorizationPolicy` and
+`TestConvergeHashKeepsTheEnvironmentSafetyKeyForRecordStability`. Before adding
+any controller-side knob to a spec an apply hashes, ask whether a role ever sees
+it; if not, exclude it there.
+
+**Scope-invariance is now closed over every task kind.**
+`TestEveryApplyTaskHashIsInvariantUnderClusterScoping` plans the advanced two-DC
+example whole and once per cluster root and fails on any task whose desired hash
+differs. It caught the last two offenders — the cluster-add-on task (hashing the
+scope-filtered state) and the fabric per-host task (hashing
+`FabricHostDesiredVars` of the scoped state, whose consumer lists shrink) — which
+made a `--clusters` run after a clean whole-fleet apply report drift and
+`diff --recorded` exit `3` on a converged fleet. Both now hash a projection of the
+unscoped `hashState` while still rendering from the scoped `State`.
+
+**The token vocabulary is bound to its published homes, in both directions.**
+`internal/cli/authorize_contract_test.go` parses the `| token | authorizes |`
+table out of `specs/state-model.md`, ADR 0030 and
+`docs/advanced/operations.md` and requires it to equal
+`authorizationTokens` exactly, so a token cannot ship unpublished and a doc
+cannot promise one that does not exist. It also requires every token to appear in
+a `safetyMatrixCases()` row (a token that unblocks a refusal must be exercised),
+to declare the verbs whose gates consume it, and — for a token no `apply` gate can
+consume — to be refused on `apply`/`plan` as a usage error naming what resolves it
+there. Seven of the eight are destroy-only; only `data-loss` has an apply gate.
+Consumption must be recorded wherever behavior actually changes:
+`emitApplyDataLossWarningsAndVars` returns whether it consumed `data-loss`
+because widening the storage sub-object rebuild authorization is a consumption
+that used to be reported as "had no effect" while the extra-var went to the roles.

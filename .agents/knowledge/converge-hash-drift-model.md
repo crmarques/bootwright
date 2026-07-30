@@ -42,6 +42,38 @@ schema bump, no re-baseline). Pinned by
 TestManagedOSHashIsScopeInvariantWithFullHashState and
 TestManagedOSClustersScopedHashMatchesRecordedWholeClusterHash.
 
+**Controller-side policy is not desired state:** a recorded hash covers only
+desired state that reaches a host. `Environment.spec.safety` (`destroyProtection`,
+`protectedKinds`) is read by validation and by the destroy/rebuild gates and by
+nothing else, yet it sat inside `hashScopedState`: enabling protection flipped
+every container cluster and machine-substrate task to *structural* drift, `apply`
+refused fleet-wide and named `--mode rebuild`, and the protection gate then
+refused that rebuild — a change that mutated nothing left `destroy` as the only
+exit. The projection zeroes the field instead of dropping it, because Go ignores
+`omitempty` on a struct: the payload keeps `"safety":{}`, so every hash of an
+unprotected environment is byte-identical and no re-baseline or schema bump
+follows. Pinned by TestConvergeHashIgnoresEnvironmentAuthorizationPolicy and
+TestConvergeHashKeepsTheEnvironmentSafetyKeyForRecordStability (ADR 0031).
+
+`Environment.spec.resources` was evaluated at the same time and deliberately
+LEFT in the hash: it is also controller-only, but it is a *selector* whose effect
+is already visible through the objects it admits, and unlike `safety` it marshals
+as an absent key when unset — zeroing it would change the payload bytes and
+re-baseline every context that sets it. The residue is narrow (re-listing the same
+object set under different paths false-drifts the fleet once). Do not "fix" it
+without weighing that re-baseline.
+
+**Every task kind is now scope-invariant, and a test says so:**
+TestEveryApplyTaskHashIsInvariantUnderClusterScoping plans the advanced two-DC
+example whole and once per cluster root and fails on any task whose desired hash
+differs. It closed the last two offenders: the cluster-add-on task hashed the
+scope-filtered state, and the fabric per-host task hashed `FabricHostDesiredVars`
+of the *scoped* state (whose per-service consumer lists shrink under `--clusters`).
+Both made a scoped run after a clean whole-fleet apply report drift and
+`diff --recorded` exit 3 on a converged fleet; both now hash a projection of the
+unscoped `hashState` (`DesiredHashState` / `DesiredHashVars`) while still
+rendering from the scoped `State`.
+
 **Fabric tasks hash a host-scoped projection:** `FabricHostDesiredVars` (the
 deterministic per-host rendered fabric vars) is hashed instead of the whole
 state so an unrelated fleet edit does not flip the infrastructure root to

@@ -27,7 +27,7 @@ func TestWarnUnusedAuthorizations(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			auth, err := parseAuthorizations(tc.tokens)
+			auth, err := parseAuthorizations(tc.tokens, authorizeVerbDestroy)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -50,12 +50,12 @@ func TestWarnUnusedAuthorizations(t *testing.T) {
 }
 
 func TestParseAuthorizationsRejectsUnknownToken(t *testing.T) {
-	if _, err := parseAuthorizations([]string{"force"}); err == nil {
+	if _, err := parseAuthorizations([]string{"force"}, authorizeVerbDestroy); err == nil {
 		t.Fatal("an unknown --authorize token must be rejected")
 	} else if !strings.Contains(err.Error(), authorizeDataLoss) {
 		t.Fatalf("the rejection must list the valid tokens, got %q", err.Error())
 	}
-	auth, err := parseAuthorizations([]string{authorizeDataLoss, authorizeProtected, authorizeDataLoss})
+	auth, err := parseAuthorizations([]string{authorizeDataLoss, authorizeProtected, authorizeDataLoss}, authorizeVerbDestroy)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2164,7 +2164,10 @@ verbs that reach machines.
   so teardown (or provisioning) of a standalone managed-OS machine that belongs
   to no cluster is fail-closed (Bootwright installs a managed OS only on
   cluster-member machines). Destroying a machine that is a node of an installed
-  cluster fails closed unless `--authorize installed-cluster-node`.
+  cluster fails closed unless `--authorize installed-cluster-node`, for both
+  cluster kinds: an installed `ContainerCluster` (proved by its install record)
+  and a provisioned managed `StorageCluster` (proved by its Bootwright-owned
+  `storage-cluster` ownership record).
 - `--mode`, on `apply`/`plan`, is the single-valued intent axis:
   `create` asserts a greenfield run and fails if any selected object already
   exists; `reconcile` (the default) creates what is missing, skips what matches,
@@ -2270,15 +2273,20 @@ verbs that reach machines.
   states intent on `apply`/`plan`, and `--authorize <token>` states which named
   risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
   repeatable and comma-separated. An unknown token is a usage error (exit 2)
-  listing the valid set; a token the run never consumed is a non-fatal warning
-  naming it. Under `--dry-run` no token is consumed and every one is reported as
-  such. Exactly these tokens exist, and each unblocks exactly one refusal:
+  listing the tokens the verb accepts; so is a token the verb has no gate for at
+  all — every token except `data-loss` is destroy-only, and passing one to
+  `apply`/`plan` is refused with the guidance that resolves it there rather than
+  silently ignored, so an operator can never believe a gate was cleared. A token
+  the verb accepts but this particular run never consumed is a non-fatal warning
+  naming it. Under `--dry-run` no token is consumed and the human report says so
+  for every one (JSON output carries the plan, not the warnings). Exactly these
+  tokens exist, and each unblocks exactly one refusal:
 
   | token | authorizes |
   | --- | --- |
   | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
   | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token) |
-  | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster |
+  | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) |
   | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker |
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
   | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
@@ -2293,11 +2301,22 @@ verbs that reach machines.
   the device data-safety checks (a mounted, in-use, or unprobeable device still
   fails closed).
 - `--yes` has one meaning on both verbs: it answers the ordinary confirmation
-  prompt and authorizes no named risk. On `destroy`, a teardown that zaps OSDs
-  requires `--authorize data-loss`; without it, a `--yes` run fails closed
-  naming the token, and an interactive run gets the data-loss confirmation
-  ("accept data loss", naming the storage clusters whose OSDs will be zapped)
-  instead of the routine one. This is the same contract `apply` enforces.
+  prompt and authorizes no named risk. On `destroy`, a teardown that destroys a
+  managed storage cluster's OSD data requires `--authorize data-loss`; without
+  it, a `--yes` run fails closed naming the token, and an interactive run gets
+  the data-loss confirmation ("accept data loss", naming the storage clusters
+  whose data goes) instead of the routine one. This is the same contract `apply`
+  enforces.
+  The gate follows the data, not the stage: it fires both where the cluster
+  layer runs `cephadm rm-cluster --zap-osds` and where the machine layer
+  (`--stage infra`, `--machines`, or a full teardown) deletes the provider-owned
+  machines backing a selected managed `StorageCluster`'s OSDs, because deleting a
+  libvirt/KubeVirt/vSphere VM deletes its disks. A storage cluster whose OSD
+  hosts are bare-metal hardware Bootwright retains loses nothing in the machine
+  layer — a bare-metal destroy never wipes in place — so it does not trip the
+  gate, and the teardown preview states that retention rather than claiming a
+  wipe. One predicate decides both the gate and the preview, so they cannot
+  disagree.
 - `destroy --recover-ceph-ownership
   <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
   seed whose controller ownership record or
@@ -2398,6 +2417,20 @@ verbs that reach machines.
   self-contradictory.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `diff --recorded`.
+- A recorded desired hash covers only the desired state that reaches a host, so
+  editing controller-side authorization policy never reads as drift.
+  `Environment.spec.safety` (`destroyProtection`, `protectedKinds`) is consumed
+  only by validation and by the destroy/rebuild gates, renders into nothing, and
+  is therefore excluded from every recorded hash and from the structural
+  projection. Turning protection on must not make the fleet look structurally
+  drifted: that would refuse the next `apply`, and the protection gate would then
+  refuse the `--mode rebuild` the refusal asked for, leaving `destroy` as the only
+  exit from a change that mutated nothing.
+- A recorded hash is also independent of the run's selection: a task's hash is
+  computed from the unscoped desired state, so the same task hashes identically
+  in a whole-fleet run and in a `--clusters`/`--machines` run. Otherwise a scoped
+  run after a clean whole-fleet apply reports drift on a converged fleet and
+  `diff --recorded` exits `3` on it.
 - Before a managed-OS install mutates a host, the install probe classifies the
   live host by presence evidence, independent of recorded state. An
   SSH-unreachable host is absent — greenfield — and the install proceeds. A

@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 const flagMachinesUsage = "comma-separated Machine names to target (default: whole clusters); mutually exclusive with --clusters, limits the run to the fabric and machines phases"
@@ -47,8 +48,8 @@ func resolveScopeSelection(state v1alpha1.State, targetName, clusterScope, machi
 	return clusteraccess.Resolve(state, targetName, clusterScope)
 }
 
-func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots []string) error {
-	if len(containerRoots) == 0 {
+func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, storageRoots []string, ownershipRecords []ownership.ResourceRecord) error {
+	if len(containerRoots) == 0 && len(storageRoots) == 0 {
 		return nil
 	}
 	provisioned, err := workflow.RecordedProvisionedClusters(clustersDir)
@@ -59,8 +60,11 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots []st
 	for _, name := range provisioned {
 		provisionedSet[name] = true
 	}
+	for _, name := range converge.OwnedStorageClusterRecordNames(ownershipRecords) {
+		provisionedSet[name] = true
+	}
 	var installed []string
-	for _, name := range containerRoots {
+	for _, name := range append(append([]string{}, containerRoots...), storageRoots...) {
 		if provisionedSet[name] {
 			installed = append(installed, name)
 		}
@@ -69,7 +73,7 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots []st
 		return nil
 	}
 	sort.Strings(installed)
-	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --authorize installed-cluster-node to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","))
+	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster and destroy whatever data those nodes hold; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --authorize %s to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","), authorizeInstalledClusterNode)
 }
 
 func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, purgeHistory, skipUnreachable bool) error {

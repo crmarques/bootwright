@@ -8,7 +8,10 @@ The teardown ordering clause is revised by
 [ADR 0023](0023-teardown-is-the-inverse-of-buildup.md). The gate *surface* — the
 flag names that authorize each refusal, and the apply-mode vocabulary — is
 revised by
-[ADR 0030](0030-one-intent-flag-and-named-authorizations.md); the model below is
+[ADR 0030](0030-one-intent-flag-and-named-authorizations.md), and refined by
+[ADR 0031](0031-data-loss-follows-the-data-and-policy-is-not-drift.md), which
+scopes the data-loss gate to what a run actually destroys and excludes
+controller-side authorization policy from recorded evidence; the model below is
 otherwise unchanged and still governs.
 
 ## Context
@@ -36,7 +39,11 @@ identity. One classification primitive — missing / match / drift / foreign —
 is shared by the apply-mode preflight and `diff --recorded` (the internal
 StateCheck engine), and one predicate (`taskDriftReconcilable`) decides
 reconcilable-in-place versus structural for all of them, so gate and report can
-never disagree. Classification compares desired against *recorded* desired only;
+never disagree. Classification covers only desired state that reaches a host: `Environment.spec.safety`
+is authorization policy the gates read and nothing renders, so it is excluded from
+every hash — otherwise enabling destroy protection would read as fleet-wide
+structural drift whose only remedy the protection gate itself refuses (ADR 0031).
+Classification compares desired against *recorded* desired only;
 out-of-band live divergence is deliberately invisible here and belongs to the
 per-role Ansible reconcile gates and `diff` (live). Records are written only on
 task success; destroy removes them (including storage sub-object records) so

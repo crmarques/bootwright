@@ -48,11 +48,11 @@ func destroyConfirmPrompt(dataLossUnauthorized bool) string {
 	return "Continue with destroy? [y/N] (default: no): "
 }
 
-func destroyDataLossYesGuard(storageClusters []string, yes, allowDestroy bool) error {
-	if allowDestroy || !yes {
+func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool) error {
+	if allowDestroy || !yes || !dataLoss.Planned() {
 		return nil
 	}
-	return fmt.Errorf("destroy would destroy data: storage cluster(s) %s are torn down with cephadm rm-cluster --zap-osds and their declared devices wiped. --yes does not authorize data loss: re-run `bootwright destroy --authorize %s --yes` with the same --stage/--clusters selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with --clusters to narrow the work set", strings.Join(storageClusters, ", "), authorizeDataLoss)
+	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: re-run `bootwright destroy --authorize %s --yes` with the same --stage/--clusters/--machines selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with --clusters or --machines to narrow the work set", dataLoss.Consequence(), authorizeDataLoss)
 }
 
 func destroySweepReclaims(kind string) bool {
@@ -123,7 +123,11 @@ func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, 
 	}
 	items := make([]output.Item, 0, len(storageNames)+len(containerNames))
 	for _, name := range storageNames {
-		items = append(items, output.Item{Label: name + " (StorageCluster)", Detail: destroyStorageClusterDetail(runtimeLayer, machineLayer)})
+		providerOwnedOSDs := false
+		if cluster, ok := storageClusterByName(state, name); ok {
+			providerOwnedOSDs = len(workflow.StorageClusterProviderOwnedOSDMachines(state, cluster)) > 0
+		}
+		items = append(items, output.Item{Label: name + " (StorageCluster)", Detail: destroyStorageClusterDetail(runtimeLayer, machineLayer, providerOwnedOSDs)})
 	}
 	for _, name := range containerNames {
 		items = append(items, output.Item{Label: name + " (ContainerCluster)", Detail: destroyContainerClusterDetail(state, clustersDir, name, runtimeLayer, machineLayer)})
@@ -136,13 +140,16 @@ func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, 
 	}
 }
 
-func destroyStorageClusterDetail(runtimeLayer, machineLayer bool) string {
+func destroyStorageClusterDetail(runtimeLayer, machineLayer, providerOwnedOSDs bool) string {
 	var parts []string
 	if runtimeLayer {
 		parts = append(parts, "cephadm rm-cluster --zap-osds: ALL OSD DATA destroyed; declared devices wiped (wipefs + sgdisk --zap-all) — irreversible")
 	}
-	if machineLayer {
-		parts = append(parts, "provider-owned machines and declared managed disks wiped — ALL OSD DATA on this storage cluster is destroyed")
+	switch {
+	case machineLayer && providerOwnedOSDs:
+		parts = append(parts, "provider-owned machines deleted with their disks — ALL OSD DATA on this storage cluster is destroyed")
+	case machineLayer:
+		parts = append(parts, "Bootwright-local install state released; the OSD hosts are hardware Bootwright retains, so their disks are not wiped here")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -250,6 +257,15 @@ func appendUniqueString(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func storageClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Metadata.Name == name {
+			return cluster, true
+		}
+	}
+	return v1alpha1.StorageCluster{}, false
 }
 
 func containerClusterByName(state v1alpha1.State, name string) (v1alpha1.ContainerCluster, bool) {

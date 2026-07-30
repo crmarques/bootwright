@@ -4,6 +4,13 @@
 
 Accepted
 
+Refined by
+[ADR 0031](0031-data-loss-follows-the-data-and-policy-is-not-drift.md): the
+`data-loss` gate keys on whether the run destroys OSD data rather than on the
+stage that runs, `installed-cluster-node` covers both cluster kinds, and a token
+a verb has no gate for is a usage error on that verb rather than an accepted
+no-op. The two-axis model below is otherwise unchanged and still governs.
+
 ## Context
 
 The destructive surface of `apply` and `destroy` had grown into nine
@@ -67,7 +74,7 @@ else:
 | --- | --- |
 | `data-loss` | any disk wipe or Ceph OSD zap, on **both** verbs |
 | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection` or `spec.safety.protectedKinds` |
-| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster |
+| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster (either kind, per ADR 0031) |
 | `unowned-vms` | tearing down libvirt/KubeVirt/vSphere VMs that match the Bootwright naming but carry no ownership marker |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unreachable-nodes` | leaving a cluster partially destroyed by skipping unreachable nodes |

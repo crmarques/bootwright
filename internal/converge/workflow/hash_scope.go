@@ -9,6 +9,7 @@ import (
 const ConvergeHashSchema = 2
 
 func hashScopedState(state v1alpha1.State) v1alpha1.State {
+	state.Environments = environmentsWithoutAuthorizationPolicy(state.Environments)
 	roots := state
 	roots.Secrets = nil
 	roots.Entitlements = nil
@@ -58,6 +59,18 @@ func hashScopedState(state v1alpha1.State) v1alpha1.State {
 	state.CustomPlaybooks = keepByName(state.CustomPlaybooks, keptPlaybook, func(o v1alpha1.CustomPlaybook) string { return o.Metadata.Name })
 	state.NetworkConfigs = keepByName(state.NetworkConfigs, keptNetwork, func(o v1alpha1.NetworkConfig) string { return o.Metadata.Name })
 	return state
+}
+
+func environmentsWithoutAuthorizationPolicy(environments []v1alpha1.Environment) []v1alpha1.Environment {
+	if len(environments) == 0 {
+		return environments
+	}
+	out := make([]v1alpha1.Environment, len(environments))
+	copy(out, environments)
+	for i := range out {
+		out[i].Spec.Safety = v1alpha1.EnvironmentSafetySpec{}
+	}
+	return out
 }
 
 func keepReferenced(referenced, kept map[string]bool, name string, obj any) bool {

@@ -33,7 +33,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 		}
 	}
 	addAvailablePriorPhaseCapabilities(graph, state, phaseSet, kubeVirtReqsByCluster)
-	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, target, phaseSet)
+	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, hashState, target, phaseSet)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	}
 
 	if phaseSet[ApplyPhaseAddons] {
-		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
+		if err := planExtensionActivities(graph, state, hashState, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
 			return nil, err
 		}
 		if err := planNodeConfigActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
@@ -99,7 +99,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	return graph.Lower()
 }
 
-func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
+func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
 		return err
@@ -141,8 +141,9 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 						ResourceKeys: addonSharedResourceKeys(binding.Cluster, extension),
 						Status:       TaskStatusPending,
 					},
-					State:     stategraph.FilterStateToApplyClusterRoots(state, stepStateContainers, stepStateStorage),
-					Extension: &extension,
+					State:            stategraph.FilterStateToApplyClusterRoots(state, stepStateContainers, stepStateStorage),
+					DesiredHashState: addonDesiredHashState(hashState, stepStateContainers, stepStateStorage),
+					Extension:        &extension,
 				},
 			}); err != nil {
 				return err
@@ -150,6 +151,11 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, install
 		}
 	}
 	return nil
+}
+
+func addonDesiredHashState(hashState v1alpha1.State, containers, storage []string) *v1alpha1.State {
+	s := stategraph.FilterStateToApplyClusterRoots(hashState, containers, storage)
+	return &s
 }
 
 func addonExclusiveOLMKeys(cluster string, extension v1alpha1.ClusterAddon) []string {

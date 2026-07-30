@@ -5,7 +5,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, target ApplyTarget, phaseSet map[string]bool) ([]string, error) {
+func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, target ApplyTarget, phaseSet map[string]bool) ([]string, error) {
 	taskIDs := []string{}
 	if phaseSet[ApplyPhaseFabric] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
@@ -31,7 +31,7 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ta
 					Limit:           host,
 					Forks:           1,
 					State:           state,
-					DesiredHashVars: render.FabricHostDesiredVars(state, host),
+					DesiredHashVars: render.FabricHostDesiredVars(hashState, host),
 				},
 			}); err != nil {
 				return nil, err
@@ -62,7 +62,7 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ta
 					Limit:           host,
 					Forks:           1,
 					State:           state,
-					DesiredHashVars: render.FabricHostDesiredVars(state, host),
+					DesiredHashVars: render.FabricHostDesiredVars(hashState, host),
 				},
 			}); err != nil {
 				return nil, err

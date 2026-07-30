@@ -39,22 +39,31 @@ refusal and nothing else:
 | --- | --- |
 | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
 | `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` |
-| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster |
+| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` |
 | `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unreachable-nodes` | skipping unreachable nodes during teardown, leaving the cluster partially destroyed |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 
-An unknown token is a usage error listing the valid set; a token the run never
-used prints a warning naming it, so you learn you authorized the wrong risk
+An unknown token is a usage error listing the tokens the command accepts. So is a
+token the command has no gate for: every token except `data-loss` is destroy-only,
+and `apply --authorize protected` is refused with the guidance that resolves it on
+`apply` rather than accepted and ignored. A token the command accepts but this run
+never used prints a warning naming it, so you learn you authorized the wrong risk
 instead of assuming a gate was cleared.
 
 !!! warning "`--yes` authorizes nothing"
     `--yes` answers the ordinary confirmation prompt on either verb and never
-    authorizes data loss or any other named risk. A `destroy` that would zap
-    OSDs needs `--authorize data-loss` (or the interactive data-loss prompt when
-    you omit `--yes`), exactly as `apply` has always required.
+    authorizes data loss or any other named risk. A `destroy` that would destroy
+    a managed Ceph cluster's OSD data needs `--authorize data-loss` (or the
+    interactive data-loss prompt when you omit `--yes`), exactly as `apply` has
+    always required. That covers both ways the data dies: the clusters stage
+    running `cephadm rm-cluster --zap-osds`, and the machine layer
+    (`--stage infra`, `--machines`, or a full teardown) deleting the
+    libvirt/KubeVirt/vSphere machines whose disks hold the OSDs. A Ceph cluster on
+    bare metal keeps its disks through a machine-layer teardown, so that case
+    needs no token — the teardown preview tells you which of the two you have.
 
 !!! tip "Growing a Ceph cluster's OSDs is a plain `apply`, not `--mode rebuild`"
     Adding an OSD device to a `spec.ceph.topology` node reconciles **in place**:
@@ -188,11 +197,16 @@ bootwright destroy --stage infra
 `destroy --dry-run` renders and prints the ordered teardown commands without
 executing; `--output json` is accepted only with `--dry-run` and reports the
 ordered task chain. `--yes` answers the ordinary confirmation prompt and nothing
-more: when the teardown covers a storage cluster, the `cephadm rm-cluster
---zap-osds` needs `--authorize data-loss` on top. Without it, an interactive run
-gets the data-loss prompt (`Confirm this DESTRUCTIVE action (accept data
-loss)?`) and a `--yes` run fails closed naming the token — the same contract
-`apply` enforces.
+more: when the teardown destroys a managed storage cluster's OSD data, it needs
+`--authorize data-loss` on top. Without it, an interactive run gets the data-loss
+prompt (`Confirm this DESTRUCTIVE action (accept data loss)?`) and a `--yes` run
+fails closed naming the token — the same contract `apply` enforces. The gate
+follows the data rather than the stage: the clusters stage runs
+`cephadm rm-cluster --zap-osds`, and `--stage infra` (or `--machines`) deletes the
+libvirt/KubeVirt/vSphere machines whose disks hold those OSDs, so both cross it.
+A Ceph cluster whose OSD hosts are bare metal keeps its disks through the machine
+layer — the reinstall on a later `apply` is where those disks go, and it crosses
+`apply`'s own data-loss gate.
 
 ### Bounded, ownership-gated cleanup
 

@@ -310,3 +310,23 @@ func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspac
 	ledger, err := workflow.RunPreparedApplyTaskGraph(cmdCtx, stdout, stderr, ctx.RunsDir, runOpts, applyTarget, clusterScope, prepared, applyReporter, nil)
 	return renderResult, bundleResult, ledger, err
 }
+
+func OwnedStorageClusterRecordNames(ownershipRecords []ownership.ResourceRecord) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, record := range ownershipRecords {
+		if record.Kind != string(ownership.KindStorageCluster) || record.Cluster == "" {
+			continue
+		}
+		if record.Owner != "" && record.Owner != ownership.Owner {
+			continue
+		}
+		if seen[record.Cluster] {
+			continue
+		}
+		seen[record.Cluster] = true
+		out = append(out, record.Cluster)
+	}
+	sort.Strings(out)
+	return out
+}

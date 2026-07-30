@@ -143,9 +143,26 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, want := range []string{"--mode", "create|reconcile|rebuild", "--authorize", "data-loss", "unowned-networks"} {
+	for _, want := range []string{"--mode", "create|reconcile|rebuild", "--authorize", "data-loss"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("apply help must name the intent and authorization axes, missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, reject := range authorizationTokenNamesForVerb(authorizeVerbDestroy) {
+		if slices.Contains(authorizationTokenNamesForVerb(authorizeVerbApply), reject) {
+			continue
+		}
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("apply help must not advertise the destroy-only token %q it cannot consume:\n%s", reject, stdout)
+		}
+	}
+	destroyHelp, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range authorizationTokenNamesForVerb(authorizeVerbDestroy) {
+		if !strings.Contains(destroyHelp, want) {
+			t.Fatalf("destroy help must name the token %q it accepts:\n%s", want, destroyHelp)
 		}
 	}
 	for _, reject := range []string{"--scope ", "--cluster ", "--scoped-validation", "--check", "--stream-ansible", "--ansible-playbook", "bastion", "container|storage|install|addons", "Subcommand Flags"} {

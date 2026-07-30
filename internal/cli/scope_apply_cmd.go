@@ -89,7 +89,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	}
 	addVerboseFlag(cmd, &verbose)
 	addModeFlag(cmd, &modeFlag, action)
-	addAuthorizeFlag(cmd, &authorizeFlag)
+	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbApply)
 	if usesAnsible {
 		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
 	}
@@ -130,7 +130,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(2, err)
 		}
-		auth, err := parseAuthorizations(authorizeFlag)
+		auth, err := parseAuthorizations(authorizeFlag, authorizeVerbApply)
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -292,7 +292,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)
-			emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy)
+			if emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy) {
+				auth.note(authorizeDataLoss)
+			}
 			warnUnusedAuthorizations(stdout, auth, false)
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)

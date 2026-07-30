@@ -69,8 +69,21 @@ depends on them.
   foreign ownership, unknown state, or a failed probe fails closed before the
   first side effect; a refusal names what was found, why it is unsafe, and the
   exact `bootwright …` command that proceeds intentionally; and the case joins
-  the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`. The
-  normative contract is in `specs/state-model.md` and ADR 0007.
+  the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`. Four
+  rules make that closed over new code rather than a convention to remember:
+  a gate keys on **what the run destroys and what it selected** — the resolved
+  `clusteraccess.Selection` and the shared consequence predicate — never on a
+  stage or flag name, and the gate, the refusal, the prompt choice and the
+  preview all read that one predicate so they cannot disagree; a recorded desired
+  hash covers **only desired state that reaches a host**, so controller-side
+  policy is excluded (folding it in turns a policy edit into fleet-wide drift) and
+  a task hash never depends on the run's `--clusters`/`--machines` selection;
+  an authorization token is **published in every home, exercised by the matrix,
+  and refused by a verb whose gates cannot consume it**; and a token the run did
+  consume is never reported as inert. The normative contract is in
+  `specs/state-model.md` and ADR 0007, refined by ADR 0030 and ADR 0031; the
+  guard tests that enforce it are cataloged in
+  `.agents/knowledge/apply-destroy-authorization-guards.md`.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
   teach workflows and link back. The per-kind field reference is the deliberate
   exception: every page under `docs/concepts/` is one by design (the
