@@ -201,6 +201,9 @@ func TestMachineSSHTargetUsesClusterAccountWhenTheClusterOwnsTheLogin(t *testing
 	if target.User != "cephadm" {
 		t.Fatalf("user = %q, want cephadm", target.User)
 	}
+	if target.KeyRef.Name != "ceph-cluster-key" {
+		t.Fatalf("key = %q, want the orchestration account's own key: switching the login to the cluster account while still offering the machine's key is a guaranteed `Permission denied (publickey)`", target.KeyRef.Name)
+	}
 }
 
 func TestSSHUserOverridesTheDeclaredLogin(t *testing.T) {

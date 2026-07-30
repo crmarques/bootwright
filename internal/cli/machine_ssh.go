@@ -115,11 +115,15 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 	if address == "" {
 		return sshTarget{}, fmt.Errorf("machine %q has no resolvable SSH address; check spec.access.ssh.addressRef", name)
 	}
+	user, keyRef := machineLoginIdentity(state, machine)
+	if keyRef.Name == "" {
+		keyRef = v1alpha1.MachineSSHKeyRef(machine)
+	}
 	return sshTarget{
 		Address:       address,
-		User:          machineLoginUser(state, machine),
+		User:          user,
 		Port:          machine.Spec.Access.SSH.Port,
-		KeyRef:        v1alpha1.MachineSSHKeyRef(machine),
+		KeyRef:        keyRef,
 		KnownHostsRef: machine.Spec.Access.SSH.KnownHostsRef,
 	}, nil
 }
@@ -129,16 +133,26 @@ func machineSSHUser(machine v1alpha1.Machine) string {
 }
 
 func machineLoginUser(state v1alpha1.State, machine v1alpha1.Machine) string {
+	user, _ := machineLoginIdentity(state, machine)
+	return user
+}
+
+func machineLoginIdentity(state v1alpha1.State, machine v1alpha1.Machine) (string, v1alpha1.SecretRef) {
 	if v1alpha1.MachineUsesOperatorIdentity(machine) {
-		return ""
+		return "", v1alpha1.SecretRef{}
 	}
-	if user, ok := storageNodeLoginUser(state, machine.Metadata.Name); ok {
-		return user
+	if user, keyRef, ok := storageNodeLoginIdentity(state, machine.Metadata.Name); ok {
+		return user, keyRef
 	}
-	return v1alpha1.MachineSSHUser(machine)
+	return v1alpha1.MachineSSHUser(machine), v1alpha1.SecretRef{}
 }
 
 func storageNodeLoginUser(state v1alpha1.State, machineName string) (string, bool) {
+	user, _, ok := storageNodeLoginIdentity(state, machineName)
+	return user, ok
+}
+
+func storageNodeLoginIdentity(state v1alpha1.State, machineName string) (string, v1alpha1.SecretRef, bool) {
 	for _, cluster := range state.StorageClusters {
 		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
 			continue
@@ -148,9 +162,9 @@ func storageNodeLoginUser(state v1alpha1.State, machineName string) (string, boo
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if node.MachineRef.Name == machineName {
-				return v1alpha1.StorageClusterCephadmSSHUser(cluster), true
+				return v1alpha1.StorageClusterCephadmSSHUser(cluster), v1alpha1.SecretRef{Name: cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name}, true
 			}
 		}
 	}
-	return "", false
+	return "", v1alpha1.SecretRef{}, false
 }
