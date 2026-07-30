@@ -550,11 +550,6 @@ const (
 	safetyAdvancedContainerOCP = "dc1-metal-ocp"
 )
 
-func initAdvancedBaselineContext(t *testing.T) workspace.Context {
-	t.Helper()
-	return initSafetyBaselineContext(t, safetyBaselineAdvanced)
-}
-
 func initSafetyBaselineContext(t *testing.T, example string) workspace.Context {
 	t.Helper()
 	if example == "" {

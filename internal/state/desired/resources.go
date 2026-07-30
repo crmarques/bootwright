@@ -118,10 +118,6 @@ func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref,
 	return files, nil
 }
 
-func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
-	return scanEnvironmentsCollecting(files, nil)
-}
-
 func scanEnvironmentsCollecting(files []string, skipped *[]error) ([]v1alpha1.Environment, error) {
 	var envs []v1alpha1.Environment
 	for _, file := range files {
