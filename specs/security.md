@@ -510,13 +510,21 @@ Generated output boundaries are part of the safety contract:
   `/var/lib/bootwright/contexts/<context>/runs/safety/`. They may contain
   owner identity, non-secret desired hashes, observed-state classifications,
   and task/resource identifiers, but never secret bytes.
+- `/etc/bootwright` is the shared on-machine state directory, owned by `root`
+  with mode `0755`. Confidentiality is carried by each file's own mode, never by
+  the directory's, because the pre-install ownership probe reads the install
+  marker as the unprivileged orchestration account before it is entitled to
+  root. No writer may tighten the directory itself.
 - Managed machine OS install markers live on the installed machine at
-  `/etc/bootwright/install-marker.json` by default. The marker contains
-  Bootwright ownership metadata and a non-secret desired hash only.
+  `/etc/bootwright/install-marker.json` with mode `0644` by default. The marker
+  contains Bootwright ownership metadata and a non-secret desired hash only.
 - Node access markers live on the machine at
   `/etc/bootwright/access-marker.json` with mode `0644`. They record the
   orchestration account name, the root-login posture, and the paths Bootwright
   owns — non-secret, no key material.
+- Ceph OSD device ownership markers live at
+  `/etc/bootwright/ceph-osd-devices.json` with mode `0600`. They record the
+  devices Bootwright provisioned as OSDs on that node.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested secret-inlined tool inputs under `<dir>` with restrictive
   file modes. The command must fail without `--sensitive`.

@@ -147,7 +147,9 @@
       - -o
       - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
       - "{{ bootwright_os_probe_user | default(bootwright_component.osInstall.ssh.user) }}@{{ bootwright_component.osInstall.ssh.address }}"
-      - "cat {{ bootwright_os_marker_path | quote }}"
+      - >-
+        cat {{ bootwright_os_marker_path | quote }} 2>/dev/null
+        || sudo -n cat {{ bootwright_os_marker_path | quote }}
   delegate_to: localhost
   register: bootwright_os_pre_marker
   failed_when: false
@@ -196,7 +198,8 @@
   ansible.builtin.fail:
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} accepts SSH but
-      {{ bootwright_os_marker_path }} is absent or not owned by bootwright; refusing to
+      {{ bootwright_os_marker_path }} is absent, unreadable, or not owned by bootwright;
+      refusing to
       reinstall, wipe, or adopt a host Bootwright does not own (--mode rebuild does not
       bypass foreign ownership).
   when:

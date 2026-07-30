@@ -445,7 +445,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0700"
+    mode: "0755"
   when: bootwright_current_storage_host.devices | default([]) | length > 0
 
 - name: Stamp Bootwright OSD device ownership marker
