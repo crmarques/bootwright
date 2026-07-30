@@ -1,0 +1,215 @@
+---
+- name: Resolve the Ceph mons the topology operations address
+  ansible.builtin.set_fact:
+    bootwright_ceph_declared_mons: >-
+      {{ (bootwright_selected_storage_cluster.monReadiness | default({})).mons | default([]) | list }}
+    bootwright_ceph_declared_mon_daemons: >-
+      {{ (bootwright_selected_storage_cluster.monReadiness | default({})).mons | default([])
+         | map(attribute='daemon') | reject('equalto', '') | list }}
+  changed_when: false
+
+- name: Wait for every declared Ceph mon to join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - dump
+      - --format
+      - json
+  register: bootwright_ceph_mon_dump
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_mon_readiness_retries | default(60) | int }}"
+  delay: "{{ bootwright_ceph_mon_readiness_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_mon_dump.rc == 0
+      and (
+        bootwright_ceph_declared_mon_daemons
+        | difference((bootwright_ceph_mon_dump.stdout | default('{}', true) | from_json).mons
+                     | default([]) | map(attribute='name') | list)
+        | length
+      ) == 0
+    )
+    or
+    ((bootwright_ceph_mon_dump.attempts | default(1) | int)
+     >= (bootwright_ceph_mon_readiness_retries | default(60) | int))
+  when: bootwright_ceph_declared_mon_daemons | length > 0
+
+- name: Resolve the declared Ceph mons still absent from the monmap
+  ansible.builtin.set_fact:
+    bootwright_ceph_missing_mon_daemons: >-
+      {{ bootwright_ceph_declared_mon_daemons
+         | difference((bootwright_ceph_mon_dump.stdout | default('{}', true) | from_json).mons
+                      | default([]) | map(attribute='name') | list)
+         | list }}
+    bootwright_ceph_mons_ready: >-
+      {{
+        (bootwright_ceph_mon_dump.rc | default(1) | int) == 0
+        and (
+          bootwright_ceph_declared_mon_daemons
+          | difference((bootwright_ceph_mon_dump.stdout | default('{}', true) | from_json).mons
+                       | default([]) | map(attribute='name') | list)
+          | length
+        ) == 0
+      }}
+  changed_when: false
+  when: bootwright_ceph_declared_mon_daemons | length > 0
+
+- name: Collect the declared Ceph mon service when mons did not join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ls
+      - --service_type
+      - mon
+      - --format
+      - yaml
+  register: bootwright_ceph_mon_service_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_declared_mon_daemons | length > 0
+    - not (bootwright_ceph_mons_ready | default(false) | bool)
+
+- name: Collect Ceph mon daemon placement when mons did not join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ps
+      - --daemon-type
+      - mon
+      - --format
+      - yaml
+  register: bootwright_ceph_mon_daemon_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_declared_mon_daemons | length > 0
+    - not (bootwright_ceph_mons_ready | default(false) | bool)
+
+- name: Collect Ceph orchestrator host status when mons did not join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - ls
+      - --format
+      - yaml
+  register: bootwright_ceph_mon_host_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_declared_mon_daemons | length > 0
+    - not (bootwright_ceph_mons_ready | default(false) | bool)
+
+- name: Collect the configured Ceph public network when mons did not join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - dump
+      - --format
+      - json
+  register: bootwright_ceph_mon_config_dump
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_declared_mon_daemons | length > 0
+    - not (bootwright_ceph_mons_ready | default(false) | bool)
+
+- name: Collect recent cephadm events when mons did not join the monmap
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - log
+      - last
+      - "100"
+      - cephadm
+  register: bootwright_ceph_mon_cephadm_log
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_declared_mon_daemons | length > 0
+    - not (bootwright_ceph_mons_ready | default(false) | bool)
+
+- name: Assert every declared Ceph mon joined the monmap
+  vars:
+    bootwright_ceph_mon_public_networks: >-
+      {{ (bootwright_ceph_mon_config_dump.stdout | default('[]', true) | from_json)
+         | selectattr('name', 'defined')
+         | selectattr('name', 'equalto', 'public_network')
+         | map(attribute='value') | list }}
+    bootwright_ceph_missing_mon_hosts: >-
+      {{ bootwright_ceph_declared_mons | default([])
+         | selectattr('daemon', 'in', bootwright_ceph_missing_mon_daemons | default([]))
+         | map(attribute='name') | list }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_mons_ready | default(false) | bool
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not bring every
+      declared mon into the monmap after
+      {{ bootwright_ceph_mon_readiness_retries | default(60) }} attempts. Absent:
+      {{ bootwright_ceph_missing_mon_daemons | default([]) | join(', ') or 'unknown (ceph mon dump failed, rc=' ~ (bootwright_ceph_mon_dump.rc | default('unknown')) ~ ')' }}
+      (orchestrator host{{ 's' if (bootwright_ceph_missing_mon_hosts | length) != 1 else '' }}
+      {{ bootwright_ceph_missing_mon_hosts | join(', ') or 'unknown' }});
+      declared: {{ bootwright_ceph_declared_mon_daemons | join(', ') }}. The topology
+      operations that follow address mons by name (`ceph mon set_location`, and for a
+      stretch cluster `ceph mon enable_stretch_mode`), and Ceph answers
+      `ENOENT: mon.<name> does not exist` for a mon that is not in the monmap, so this
+      apply is failing closed here rather than part-way through the topology
+      reconciliation. A mon the orchestrator never placed is usually a mon-only
+      condition rather than a broken host — OSDs on the same host deploy regardless.
+      The three usual causes: cephadm filtered the host out of the mon placement
+      because it holds no address inside public_network
+      ({{ bootwright_ceph_mon_public_networks | join(', ') or 'unset — cephadm normally sets it from the bootstrap --mon-ip subnet' }}),
+      which it logs as `does not belong to mon public_network(s)`; the mon container
+      never started (image pull against the registry, mirror or proxy); or the daemon
+      is running but cannot join quorum because the mon ports (3300 and 6789) are
+      blocked between the nodes — an OSD only needs to reach the existing mon
+      outbound, so OSD health does not clear this. Declared mon service
+      (ceph orch ls --service_type mon):
+      {{ (bootwright_ceph_mon_service_ls.stdout | default('') | trim)
+      or ('(ceph orch ls failed, rc=' ~ (bootwright_ceph_mon_service_ls.rc | default('unknown')) ~ ')'
+      if (bootwright_ceph_mon_service_ls.rc | default(1) | int) != 0
+      else '(cephadm carries NO mon service — the declared mon placement never landed)') }}
+      Ceph mon daemon placement (ceph orch ps --daemon-type mon):
+      {{ (bootwright_ceph_mon_daemon_ps.stdout | default('') | trim)
+      or ('(ceph orch ps failed, rc=' ~ (bootwright_ceph_mon_daemon_ps.rc | default('unknown')) ~ ')'
+      if (bootwright_ceph_mon_daemon_ps.rc | default(1) | int) != 0
+      else '(no mon daemon is deployed beyond the bootstrap mon)') }}
+      Ceph orchestrator hosts (ceph orch host ls):
+      {{ (bootwright_ceph_mon_host_ls.stdout | default('') | trim)
+      or ('(ceph orch host ls failed, rc=' ~ (bootwright_ceph_mon_host_ls.rc | default('unknown')) ~ ')'
+      if (bootwright_ceph_mon_host_ls.rc | default(1) | int) != 0
+      else '(no hosts are managed by the orchestrator)') }}
+      Live monmap (ceph mon dump):
+      {{ (bootwright_ceph_mon_dump.stdout | default('') | trim)
+      or ('(ceph mon dump failed, rc=' ~ (bootwright_ceph_mon_dump.rc | default('unknown')) ~ ')') }}
+      Recent cephadm events (ceph log last 100 cephadm):
+      {{ (bootwright_ceph_mon_cephadm_log.stdout | default('') | trim)
+      or '(cephadm event log unavailable)' }}
+    quiet: true
+  when: bootwright_ceph_declared_mon_daemons | length > 0

@@ -84,6 +84,18 @@ func storageOSDReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 	}
 }
 
+func storageMonReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
+	hosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
+	mons := make([]any, 0, len(hosts))
+	for _, host := range hosts {
+		mons = append(mons, map[string]any{
+			"name":   host,
+			"daemon": topology.CephDaemonName(host),
+		})
+	}
+	return map[string]any{"mons": mons}
+}
+
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
@@ -204,6 +216,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"sidecarImagePins":     v1alpha1.StorageCephSidecarImagePins(ceph),
 			},
 			"osdReadiness": storageOSDReadinessVars(cluster),
+			"monReadiness": storageMonReadinessVars(cluster),
 		}
 		if !cephrender.MonitoringEnabled(cluster) {
 			entry["skipMonitoringStack"] = true

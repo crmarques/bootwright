@@ -157,6 +157,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/mon_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_coverage_report.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
@@ -572,6 +573,92 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	}
 	if got := fmt.Sprint(dynamicVars["bootwright_ceph_osd_tree_doc"]); !strings.Contains(got, "from_json") || !strings.Contains(got, "default('{}', true)") {
 		t.Fatalf("dynamic-host OSD assertion fail_msg parses the CRUSH tree eagerly, so it must guard from_json against an empty (rc!=0) stdout with default('{}', true), got %v", got)
+	}
+}
+
+func TestStorageMonReadinessGatesEveryDeclaredMonBeforeTopologyOperations(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
+	phase := readRepoFile(t, base+"phases/bootstrap.yml")
+	monInclude := strings.Index(phase, "bootstrap_steps/mon_readiness.yml")
+	topology := strings.Index(phase, "bootstrap_steps/topology_operations.yml")
+	if monInclude < 0 || topology < 0 || monInclude > topology {
+		t.Fatalf("the monmap gate must run before the topology operations that address mons by name, got mon=%d topology=%d", monInclude, topology)
+	}
+	for _, gone := range []string{"bootwright_ceph_stretch_tiebreaker", "Wait for the stretch tiebreaker mon to join the monmap"} {
+		if strings.Contains(phase, gone) {
+			t.Fatalf("the tiebreaker-only monmap gate must be replaced by the every-declared-mon gate, still found %q", gone)
+		}
+	}
+
+	tasks := readAnsibleTasks(t, base+"phases/bootstrap_steps/mon_readiness.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the Ceph mons the topology operations address")
+	waitIdx := findAnsibleTask(t, tasks, "Wait for every declared Ceph mon to join the monmap")
+	missingIdx := findAnsibleTask(t, tasks, "Resolve the declared Ceph mons still absent from the monmap")
+	assertIdx := findAnsibleTask(t, tasks, "Assert every declared Ceph mon joined the monmap")
+	if !(resolveIdx < waitIdx && waitIdx < missingIdx && missingIdx < assertIdx) {
+		t.Fatalf("the monmap gate must resolve the declared mons, poll, evaluate what is missing, then assert")
+	}
+	for _, diagnostic := range []string{
+		"Collect the declared Ceph mon service when mons did not join the monmap",
+		"Collect Ceph mon daemon placement when mons did not join the monmap",
+		"Collect Ceph orchestrator host status when mons did not join the monmap",
+		"Collect the configured Ceph public network when mons did not join the monmap",
+		"Collect recent cephadm events when mons did not join the monmap",
+	} {
+		idx := findAnsibleTask(t, tasks, diagnostic)
+		if idx < missingIdx || idx > assertIdx {
+			t.Fatalf("%q must run between the readiness verdict and the assertion, got %d", diagnostic, idx)
+		}
+	}
+
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the monmap gate must resolve the declared mons in a set_fact, got %v", tasks[resolveIdx])
+	}
+	daemons := fmt.Sprint(resolve["bootwright_ceph_declared_mon_daemons"])
+	for _, want := range []string{"monReadiness", "mons", "daemon"} {
+		if !strings.Contains(daemons, want) {
+			t.Fatalf("the monmap gate must match the rendered mon daemon names (ceph shortens the hostname for mon names), missing %q, got %v", want, daemons)
+		}
+	}
+
+	wait := tasks[waitIdx]
+	command, ok := wait["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the monmap gate must poll with a command probe, got %v", wait)
+	}
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"cephadm", "shell", "ceph", "mon", "dump", "--format", "json"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("the monmap gate argv missing %q: %v", want, argv)
+		}
+	}
+	until := fmt.Sprint(wait["until"])
+	for _, want := range []string{"bootwright_ceph_declared_mon_daemons", "difference", "bootwright_ceph_mon_dump.attempts", "bootwright_ceph_mon_readiness_retries"} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("the monmap poll must compare every declared mon and escape on its own attempt count, missing %q, got %v", want, until)
+		}
+	}
+
+	assertion, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the monmap gate must fail through an assert, got %v", tasks[assertIdx])
+	}
+	if got := fmt.Sprint(assertion["that"]); !strings.Contains(got, "bootwright_ceph_mons_ready") {
+		t.Fatalf("the monmap assertion must gate on the evaluated verdict, got that=%v", got)
+	}
+	failMsg := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{
+		"bootwright_ceph_missing_mon_daemons",
+		"set_location",
+		"public_network",
+		"3300",
+		"ceph orch ls --service_type mon",
+		"ceph log last 100 cephadm",
+	} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("the monmap failure must name what is absent, the operation it breaks and the causes that keep a mon out of the monmap, missing %q, got %v", want, failMsg)
+		}
 	}
 }
 

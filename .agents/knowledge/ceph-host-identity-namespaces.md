@@ -22,8 +22,9 @@ The OSD readiness gate spent its full retry budget and then failed closed with
 CRUSH map` while reporting `30 OSD daemon(s) exist (0 stray, 0 down)` — the
 OSDs were healthy and `in` under CRUSH buckets `node-01`…`node-06`. The same
 mismatch aims `ceph mon set_location` / `enable_stretch_mode` at a mon name that
-is absent from the monmap, and starves the tiebreaker-joined-the-monmap poll in
-`bootstrap.yml`, which matches against `ceph mon dump` names.
+is absent from the monmap, and starves the mons-joined-the-monmap poll in
+`bootstrap_steps/mon_readiness.yml`, which matches `monReadiness.mons[].daemon`
+against `ceph mon dump` names.
 
 **Contract:** Anything compared against CRUSH or monmap output resolves through
 `topology.CrushHostNames` (match set: short plus FQDN, so a bare-hostname estate

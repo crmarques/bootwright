@@ -46,16 +46,26 @@ enabling: `ceph mon set election_strategy connectivity` precedes
 **Constraint:** The tiebreaker is authored as a node token, but
 `enable_stretch_mode` wants the **mon name**, which is the host's *short* name,
 not the orchestrator FQDN — canonicalize the token to a node name, then take the
-ceph daemon name. `ceph mon set_location` and the tiebreaker-joined-the-monmap
-poll (matched against `ceph mon dump` names) take the same short name. See
+ceph daemon name. `ceph mon set_location` and the mons-joined-the-monmap poll
+(matched against `ceph mon dump` names) take the same short name. See
 [ceph-host-identity-namespaces.md](ceph-host-identity-namespaces.md).
 
-**When it bites:** The OSD-readiness wait only anchors mon hosts that carry
-OSDs. A stretch cluster's tiebreaker/arbiter has no OSDs, so its mon can still
-be deploying when the topology operations run — `ceph mon set_location` and
-`enable_stretch_mode` error for a mon absent from the monmap. The role polls
-until the tiebreaker mon has joined so those fail-closed, no-retry ops do not
-miss on a slow arbiter rollout.
+**When it bites:** OSD readiness anchors no mon at all. An `in` OSD on a host
+says nothing about whether *that host's mon* was deployed — cephadm places mons
+asynchronously, one per reconcile pass, and a mon can be filtered out or stalled
+while OSDs on the same host are healthy; on a re-apply the OSDs already exist and
+the OSD gate returns at once. `ceph mon set_location <mon> <domain>=<site>` and
+`ceph mon enable_stretch_mode <tiebreaker> ...` are fail-closed, no-retry ops that
+answer `ENOENT: mon.<name> does not exist` for any mon outside the monmap, so
+`bootstrap_steps/mon_readiness.yml` polls `ceph mon dump` until **every** declared
+mon has joined (not the tiebreaker alone — that gate let
+`set-mon-location-<data-site-node>` fire against a monmap holding only the
+bootstrap mon) and then fails closed with the mon service, mon daemon placement,
+orchestrator hosts, live monmap and recent cephadm events. A mon that never
+arrives is usually a mon-only condition: the host holds no address inside
+`public_network` so cephadm dropped it from the mon placement (`does not belong to
+mon public_network(s)`), the mon container never pulled, or 3300/6789 are blocked
+between nodes so the daemon runs but never joins quorum.
 
 **Constraint:** `ceph mon enable_stretch_mode` is also what re-homes the pools
 nobody declares — `.mgr`, `.nfs`, `device_health_metrics` and the rgw metadata
