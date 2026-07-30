@@ -310,11 +310,28 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictUsageError,
 		want:    []string{"stale-input", "context update"},
 	}, {
+		name:    "destroy/an undecodable run lease refuses before the confirmation prompt, naming the file",
+		seed:    seedUndecodableRunLease,
+		args:    []string{"destroy", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"current.lease.json", "rm -f"},
+		deny:    []string{"Continue with destroy?", "Confirm this DESTRUCTIVE action"},
+	}, {
 		name:    "destroy/stale-input: a clean input reports the token had no effect",
 		args:    []string{"destroy", "--stage", "clusters", "--authorize", "stale-input", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"--authorize stale-input had no effect"},
 	}}
+}
+
+func seedUndecodableRunLease(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	if err := os.MkdirAll(ctx.RunsDir, 0o700); err != nil {
+		t.Fatalf("create runs dir: %v", err)
+	}
+	if err := os.WriteFile(workflow.LeasePath(ctx.RunsDir), []byte("{ truncated"), 0o600); err != nil {
+		t.Fatalf("write truncated run lease: %v", err)
+	}
 }
 
 func seedRetiredFieldInStoredInput(t *testing.T, ctx workspace.Context) {

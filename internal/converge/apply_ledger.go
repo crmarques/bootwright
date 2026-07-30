@@ -28,7 +28,24 @@ func inFlightTaskLabels(ledger workflow.RunLedger) []string {
 	return labels
 }
 
+func CheckRunRecordsReadable(runsDir string) error {
+	if _, _, err := workflow.LoadRunLedger(runsDir); err != nil {
+		return unreadableRunRecord(err, workflow.LedgerPath(runsDir))
+	}
+	if _, _, err := workflow.LoadRunLease(runsDir); err != nil {
+		return unreadableRunRecord(err, workflow.LeasePath(runsDir))
+	}
+	return nil
+}
+
+func unreadableRunRecord(err error, path string) error {
+	return fmt.Errorf("%w; this file only tracks the progress of the current run — no ownership, convergence, or install evidence lives in it, and finished runs are archived under runs/history/ — so once you have confirmed no bootwright run is active, remove it with `sudo rm -f %s` and re-run", err, path)
+}
+
 func CheckCurrentApplyActive(runsDir string) error {
+	if err := CheckRunRecordsReadable(runsDir); err != nil {
+		return err
+	}
 	ledger, found, err := workflow.LoadRunLedger(runsDir)
 	if err != nil {
 		return err
