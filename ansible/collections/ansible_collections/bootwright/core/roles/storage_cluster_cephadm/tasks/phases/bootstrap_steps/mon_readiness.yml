@@ -182,8 +182,14 @@
       apply is failing closed here rather than part-way through the topology
       reconciliation. A mon the orchestrator never placed is usually a mon-only
       condition rather than a broken host — OSDs on the same host deploy regardless.
-      The three usual causes: cephadm filtered the host out of the mon placement
-      because it holds no address inside public_network
+      Read the declared mon service below FIRST: if its `placement:` shows a bare
+      `count:` rather than the declared `hosts:` list, the mon document of the
+      bootstrap spec was rejected and cephadm's bootstrap default is still in force,
+      so cephadm picked the mon hosts by its own scheduler and the declared set was
+      never requested at all — none of the causes below apply, and the usual reason is
+      a declared mon host cephadm does not know (check it against the orchestrator
+      host list below). Otherwise, the three usual causes: cephadm filtered the host
+      out of the mon placement because it holds no address inside public_network
       ({{ bootwright_ceph_mon_public_networks | join(', ') or 'unset — cephadm normally sets it from the bootstrap --mon-ip subnet' }}),
       which it logs as `does not belong to mon public_network(s)`; the mon container
       never started (image pull against the registry, mirror or proxy); or the daemon

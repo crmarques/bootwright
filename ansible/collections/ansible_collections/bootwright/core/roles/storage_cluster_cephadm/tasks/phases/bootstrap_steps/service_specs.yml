@@ -34,6 +34,63 @@
   register: bootwright_ceph_host_spec_apply
   changed_when: true
 
+- name: Refuse a bootstrap spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - not (bootwright_ceph_host_spec_apply.stdout | default('') | lower is search('error|failed|invalid|unknown host'))
+      - not (bootwright_ceph_host_spec_apply.stderr | default('') | lower is search('error|failed|invalid|unknown host'))
+    fail_msg: >-
+      cephadm reported an error while applying the host/mon/mgr spec for
+      {{ bootwright_selected_storage_cluster.name }}. `ceph orch apply -i` takes a
+      multi-document spec and can reject one document while accepting the rest, exiting
+      zero, so the run must read what it said rather than trust the exit code: a rejected
+      mon document leaves the bootstrap default placement (`count: <n>`) in force, and
+      cephadm then picks mon hosts by its own scheduler instead of the declared set —
+      which surfaces much later, and misleadingly, as a monmap readiness failure.
+      stdout: {{ bootwright_ceph_host_spec_apply.stdout | default('') }}
+      stderr: {{ bootwright_ceph_host_spec_apply.stderr | default('') }}
+
+- name: Read back the orchestrator hosts cephadm accepted
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_orch_hosts
+  changed_when: false
+  failed_when: false
+
+- name: Refuse a declared mon host cephadm does not know
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_declared_mon_hosts | difference(bootwright_ceph_known_orch_hosts) | length == 0
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} declares mon(s) on
+      {{ bootwright_ceph_declared_mon_hosts | difference(bootwright_ceph_known_orch_hosts) | join(', ') }},
+      which cephadm does not list as orchestrator host(s)
+      ({{ bootwright_ceph_known_orch_hosts | join(', ') }}). A mon placement naming an
+      unknown host is rejected as a whole, leaving the bootstrap default placement in
+      force and letting cephadm choose mon hosts itself. Add the host to the cluster —
+      or, if it is an arbiter outside the mon public_network, place it in a network the
+      cluster serves — before re-applying.
+    success_msg: >-
+      Every declared mon host is a known orchestrator host.
+  vars:
+    bootwright_ceph_declared_mon_hosts: >-
+      {{ (bootwright_selected_storage_cluster.monReadiness | default({})).mons | default([])
+         | selectattr('name', 'defined') | map(attribute='name')
+         | reject('equalto', '') | list }}
+    bootwright_ceph_known_orch_hosts: >-
+      {{ (bootwright_ceph_orch_hosts.stdout | default('[]', true) | from_json)
+         | selectattr('hostname', 'defined') | map(attribute='hostname') | list }}
+  when: bootwright_ceph_orch_hosts.rc | default(1) | int == 0
+
 - name: Auto-reclaim dirty filter-selected OSD devices
   ansible.builtin.include_tasks: osd_reclaim.yml
 

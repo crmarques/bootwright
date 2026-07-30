@@ -2279,6 +2279,26 @@ func storageCephDestroyTasks(t *testing.T) []map[string]any {
 	)
 }
 
+func TestStorageCephBootstrapSpecApplyIsVerified(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml"
+	specs := readRepoFile(t, path)
+	for _, want := range []string{
+		"bootwright_ceph_host_spec_apply.stdout",
+		"bootwright_ceph_host_spec_apply.stderr",
+		"orch\n      - host\n      - ls",
+		"bootwright_ceph_declared_mon_hosts",
+		"bootwright_ceph_known_orch_hosts",
+	} {
+		if !strings.Contains(specs, want) {
+			t.Errorf("%s must retain %q: `ceph orch apply -i` can reject one document of a multi-document spec and still exit zero, leaving cephadm's default mon placement in force", path, want)
+		}
+	}
+	readiness := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/mon_readiness.yml")
+	if !strings.Contains(readiness, "bare\n      `count:`") && !strings.Contains(readiness, "a bare\n      `count:`") {
+		t.Error("the monmap diagnosis must tell the operator to read the live mon placement first; a bare count: placement means the declared set was never requested, and none of the three network/image/port causes applies")
+	}
+}
+
 func TestStorageCephDestroyReclaimsFilterSelectedDisks(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/filter_device_reclaim.yml"
 	reclaim := readRepoFile(t, path)
