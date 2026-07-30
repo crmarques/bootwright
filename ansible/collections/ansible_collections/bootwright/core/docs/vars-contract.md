@@ -484,7 +484,13 @@ node, including the cephadm bootstrap seed, renders as
 used to limit the bootstrap play. Every storage host renders
 `bootwright_storage_cluster_name`, `bootwright_storage_host_name`,
 `ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
-`ansible_ssh_common_args` from the node's referenced `Machine.spec.access.ssh`. The
+`ansible_ssh_common_args` from the node's referenced `Machine.spec.access.ssh`.
+When `ansible_user` is the cluster's orchestration account rather than the
+Machine's own login — because the node revokes root, or because the teardown
+selector picked that identity — `ansible_ssh_common_args` also offers
+`-o IdentityFile=<bootwright_node_access.accountPrivateKeyPath>`, the private
+half of the `cephadm.clusterSSH.keyRef` pair that is the only key authorized for
+that account. The Machine key stays offered alongside it. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
 

@@ -146,6 +146,36 @@ func TestStorageNodeTeardownConnectionSelectorRepairsCanonicalTrust(t *testing.T
 	}
 }
 
+func TestStorageNodeTeardownSelectorOffersTheOrchestrationAccountKey(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/select_connection.yml"
+	tasks := readAnsibleTasks(t, path)
+	userIdx := findAnsibleTask(t, tasks, "Select the reachable storage node identity for teardown")
+	keyIdx := findAnsibleTask(t, tasks, "Offer the storage node orchestration account credential for teardown")
+	resetIdx := findAnsibleTask(t, tasks, "Reset the storage node connection after teardown identity selection")
+	if !(userIdx < keyIdx && keyIdx < resetIdx) {
+		t.Fatalf("the teardown selector must offer the orchestration account credential after selecting that identity and before the connection is reset (user=%d key=%d reset=%d)", userIdx, keyIdx, resetIdx)
+	}
+	fact, ok := tasks[keyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the orchestration account credential must be a set_fact, got %v", tasks[keyIdx])
+	}
+	args := fmt.Sprint(fact["ansible_ssh_common_args"])
+	for _, want := range []string{"IdentityFile=", "bootwright_node_access.accountPrivateKeyPath", "ansible_ssh_common_args | default('')"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("selecting the orchestration account without offering %q leaves the play connecting as that account with the machine key it does not authorize, and sshd refuses the login: %s", want, args)
+		}
+	}
+	if _, replaced := fact["ansible_ssh_private_key_file"]; replaced {
+		t.Fatalf("the account key must be added to the offered identities, not replace the machine key the install identity still needs, got %v", fact)
+	}
+	when := fmt.Sprint(tasks[keyIdx]["when"])
+	for _, want := range []string{"bootwright_node_access_ready", "connectionOverride", "accountPrivateKeyPath not in"} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("the account credential must be offered only when that identity was selected, and only once per host: when=%s missing %q", when, want)
+		}
+	}
+}
+
 func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 	paths := []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_storage_health.yml",

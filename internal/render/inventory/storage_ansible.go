@@ -120,6 +120,8 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 				entry["ansible_user"] = paths.SSHUser
 			} else if v1alpha1.MachineRevokesRootLogin(machine) {
 				entry["ansible_user"] = access["user"]
+				accountPrivateKeyPath, _ := access["accountPrivateKeyPath"].(string)
+				offerAccountIdentity(entry, accountPrivateKeyPath)
 			}
 		}
 	}

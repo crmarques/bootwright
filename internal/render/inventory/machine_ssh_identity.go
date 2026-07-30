@@ -1,10 +1,24 @@
 package inventory
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 )
+
+func offerAccountIdentity(entry map[string]any, accountPrivateKeyPath string) {
+	if accountPrivateKeyPath == "" {
+		return
+	}
+	identity := shellquote.QuoteWords([]string{"-o", "IdentityFile=" + accountPrivateKeyPath})
+	existing, _ := entry["ansible_ssh_common_args"].(string)
+	entry["ansible_ssh_common_args"] = strings.TrimSpace(identity + " " + existing)
+	if declared, ok := entry["bootwright_declared_ssh_common_args"].(string); ok {
+		entry["bootwright_declared_ssh_common_args"] = strings.TrimSpace(identity + " " + declared)
+	}
+}
 
 func sshUserApplies(machine v1alpha1.Machine, paths PathOptions) bool {
 	if paths.SSHUser == "" || machine.Spec.Access.SSH == nil {

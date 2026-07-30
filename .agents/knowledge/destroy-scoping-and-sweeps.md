@@ -249,8 +249,35 @@ Every teardown play that can target a managed Ceph node account
 shared controller-local connection selector. A retry may legitimately find the
 cephadm identity already removed while the install-window identity was restored
 by an earlier partial pass. The selector chooses whichever identity answers,
-rewrites only `ansible_user`, resets the connection, and leaves the rendered
-canonical `ansible_host` intact. For Bootwright-managed SSH trust, the selector
+rewrites `ansible_user` and the identities offered with it, resets the
+connection, and leaves the rendered canonical `ansible_host` intact.
+
+**The identity and its credential move together — that is the whole point of the
+selector, and it was the one thing it used to leave behind.** The selector probes
+over the role's controller-local `ssh` argv, which offers three keys
+(`preferredIdentityPath`, `installPrivateKeyPath`, `accountPrivateKeyPath`); the
+play connection offers only the Machine access key plus the operator's
+`--ssh-preferred-id-key`. `authorize.yml` authorizes exactly one key for the
+orchestration account, the public half of
+`spec.ceph.cephadm.clusterSSH.keyRef`. So a node whose cephadm account is
+correctly reconciled answered the probe on a key the play could not use, the
+selector switched `ansible_user` to it, and every task after it died on
+`Failed to connect to the host via ssh: cephadm@<host>: Permission denied
+(publickey,…)` — while a node whose account was never finished fell back to the
+install identity and tore down cleanly. The healthiest nodes were the ones that
+failed. The selector now prepends `-o IdentityFile=<accountPrivateKeyPath>` to
+`ansible_ssh_common_args` whenever it selects the orchestration identity, and the
+rendered inventory does the same wherever it statically selects that account
+(`MachineRevokesRootLogin`). It **adds** an identity rather than replacing
+`ansible_ssh_private_key_file`, because when the orchestration account IS the
+install-window identity (ADR 0019) the Machine key may be the only one the
+account holds before `authorize.yml` has ever run; and it is guarded on the path
+not already being present, because the selector runs once per teardown play and
+facts persist across plays. Guarded by
+TestStorageNodeTeardownSelectorOffersTheOrchestrationAccountKey and
+TestStorageNodeEntryOffersTheKeyOfTheAccountItConnectsAs.
+
+For Bootwright-managed SSH trust, the selector
 first repairs a missing canonical-FQDN alias by copying the already-trusted raw
 address entry under a `flock`; it never scans a new key or names a host-key
 algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
