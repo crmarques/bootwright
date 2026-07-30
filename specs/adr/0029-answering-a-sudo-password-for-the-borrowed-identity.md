@@ -40,7 +40,7 @@ does own exists.
 ### The password is prompted, per invocation, and never stored
 
 `--ssh-ask-sudo-password` is a global boolean flag beside `--ssh-user` and
-`--ssh-preferred-id-key`. It prompts once, before the run starts, and holds the
+`--ssh-id-file`. It prompts once, before the run starts, and holds the
 answer in memory for that process only. It takes no value, so the password
 enters neither shell history nor `ps`.
 

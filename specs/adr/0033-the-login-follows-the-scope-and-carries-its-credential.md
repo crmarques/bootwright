@@ -97,7 +97,7 @@ those is opened with that identity's credential — which is what makes
 `machine exec --name ceph-0 --ssh-user cephadm -- id`, documented by ADR 0027,
 actually work. Any other name is a plain `ssh(1)` override that offers no stored
 key, leaving the operator's agent, `~/.ssh` defaults, or
-`--ssh-preferred-id-key` to authenticate; offering the credential of the account
+`--ssh-id-file` to authenticate; offering the credential of the account
 the flag just replaced would only reproduce the defect above.
 
 An account that two clusters both own with different credentials is refused,
@@ -125,10 +125,10 @@ machines where it is true.
   `clusterSSH.user` with `clusterSSH.keyRef`, matching `ContainerCluster`
   behavior and the account cephadm itself uses.
 - `--ssh-user <orchestration account>` on `rsh` / `exec` works without
-  `--ssh-preferred-id-key`.
+  `--ssh-id-file`.
 - `--ssh-user <unknown account>` no longer offers the replaced account's key.
   Where that name is reachable only by a stored credential, it is now reached
-  with `--ssh-preferred-id-key` or an agent — the honest shape, since Bootwright
+  with `--ssh-id-file` or an agent — the honest shape, since Bootwright
   holds no credential for it.
 - Converging paths are unchanged. The rule they already followed is now the
   stated one, so a new path has an answer to check against rather than a

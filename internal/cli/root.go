@@ -23,7 +23,7 @@ const (
 
 var (
 	contextOverride       string
-	sshPreferredIDKey     string
+	sshIDFile             string
 	sshUserOverride       string
 	sshAskSudoPassword    bool
 	sshUserForProvisioned bool
@@ -59,13 +59,13 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVar(&contextOverride, "context", "", flagContextUsage)
 	registerContextNameCompletion(root, "context")
-	root.PersistentFlags().StringVar(&sshPreferredIDKey, "ssh-preferred-id-key", "", flagSSHPreferredIDKeyUsage)
+	root.PersistentFlags().StringVar(&sshIDFile, "ssh-id-file", "", flagSSHIDFileUsage)
 	root.PersistentFlags().StringVar(&sshUserOverride, "ssh-user", "", flagSSHUserUsage)
 	registerFlagCompletion(root, "ssh-user", nil)
 	root.PersistentFlags().BoolVar(&sshAskSudoPassword, "ssh-ask-sudo-password", false, flagSSHAskSudoPasswordUsage)
 	root.PersistentFlags().BoolVar(&sshUserForProvisioned, "ssh-user-for-provisioned", false, flagSSHUserForProvisionedUsage)
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		path, err := resolveSSHPreferredIDKey()
+		path, err := resolveSSHIDFile()
 		if err != nil {
 			return failErr(2, err)
 		}

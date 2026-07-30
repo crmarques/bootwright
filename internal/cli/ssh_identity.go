@@ -121,5 +121,5 @@ func ambiguousSSHUserError(machineName, user string, matches []sshIdentity) erro
 	for _, match := range matches {
 		origins = append(origins, fmt.Sprintf("%s (Secret %q)", match.Origin, match.KeyRef.Name))
 	}
-	return fmt.Errorf("--ssh-user %q names an account Machine %s carries for more than one owner, each with its own credential: %s. Bootwright will not guess which credential opens it. Reach the account through the object that owns it with 'bootwright cluster rsh --name <cluster> --node %s', or pass your own key with --ssh-preferred-id-key", user, machineName, strings.Join(origins, "; "), machineName)
+	return fmt.Errorf("--ssh-user %q names an account Machine %s carries for more than one owner, each with its own credential: %s. Bootwright will not guess which credential opens it. Reach the account through the object that owns it with 'bootwright cluster rsh --name <cluster> --node %s', or pass your own key with --ssh-id-file", user, machineName, strings.Join(origins, "; "), machineName)
 }

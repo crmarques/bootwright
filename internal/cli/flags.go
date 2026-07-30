@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-preferred-id-key"}
+var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-id-file"}
 
 var globalBoolFlags = []string{"--ssh-ask-sudo-password", "--ssh-user-for-provisioned"}
 
@@ -65,7 +65,7 @@ const (
 	flagAskBecomePassUsage         = "prompt for the Ansible become password (default: false as root, true otherwise)"
 	flagTrustOnFirstUseUsage       = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
 	flagContextUsage               = "context to operate in (default: current context)"
-	flagSSHPreferredIDKeyUsage     = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
+	flagSSHIDFileUsage             = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
 	flagSSHUserUsage               = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected unless --ssh-user-for-provisioned widens it, and apply/plan/destroy refuse when no selected machine uses that arm; on rsh and exec it reaches any account, and one Bootwright already holds a credential for is opened with that credential rather than with the credential of the account it replaced"
 	flagSSHAskSudoPasswordUsage    = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
 	flagSSHUserForProvisionedUsage = "widen --ssh-user to every machine in the run, including the ones Bootwright installed and reaches as \"" + v1alpha1.BootwrightSSHUser + "\"; requires --ssh-user, and the named account must exist with sudo on those machines too, because the managed-OS ownership probe authenticates as whatever account is in force"

@@ -50,12 +50,12 @@ desired state — and `sudoPasswordRef` and `knownHostsRef` likewise; when
 context-managed SSH trust state.
 
 Three surfaces deliberately hold no reference and are per-operator ambient
-authority: the `auth.operatorIdentity` arm and the `--ssh-preferred-id-key`
+authority: the `auth.operatorIdentity` arm and the `--ssh-id-file`
 and `--ssh-user` per-invocation flags. `auth.operatorIdentity` authenticates as
 the operator running Bootwright, using that operator's own agent and default
 identities: no key material enters the context, and the effective credential is
 whatever that operator already holds. The
-`--ssh-preferred-id-key` flag likewise names a controller-local private key
+`--ssh-id-file` flag likewise names a controller-local private key
 offered ahead of the declared credentials, with the declared credentials as
 fallback; it is refused unless the file is a regular file with no group or other
 permissions, and it is never recorded in desired state, the converge hash, or

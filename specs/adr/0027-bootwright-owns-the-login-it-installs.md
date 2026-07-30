@@ -138,7 +138,7 @@ They open an interactive session and converge nothing, so `--ssh-user` keeps
 --ssh-user cephadm -- id` remains the documented way to visit the orchestration
 account.
 
-`--ssh-preferred-id-key` is unchanged: offered first, declared credentials still
+`--ssh-id-file` is unchanged: offered first, declared credentials still
 the fallback, never recorded.
 
 ## Consequences

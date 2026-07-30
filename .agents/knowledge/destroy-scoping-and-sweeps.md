@@ -257,7 +257,7 @@ selector, and it was the one thing it used to leave behind.** The selector probe
 over the role's controller-local `ssh` argv, which offers three keys
 (`preferredIdentityPath`, `installPrivateKeyPath`, `accountPrivateKeyPath`); the
 play connection offers only the Machine access key plus the operator's
-`--ssh-preferred-id-key`. `authorize.yml` authorizes exactly one key for the
+`--ssh-id-file`. `authorize.yml` authorizes exactly one key for the
 orchestration account, the public half of
 `spec.ceph.cephadm.clusterSSH.keyRef`. So a node whose cephadm account is
 correctly reconciled answered the probe on a key the play could not use, the

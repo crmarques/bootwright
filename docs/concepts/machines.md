@@ -259,13 +259,13 @@ preflight` checks for it. Prefer a key wherever the machine allows one.
 
 #### Offering your own key first
 
-`--ssh-preferred-id-key <path>` is available on every command that reaches a
+`--ssh-id-file <path>` is available on every command that reaches a
 machine. Bootwright offers that key **before** the credentials the desired
 state declares, and falls back to them when it is not accepted:
 
 ```console
-$ bootwright apply --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
-$ bootwright machine rsh --name ceph-0 --ssh-preferred-id-key ~/.ssh/id_ed25519
+$ bootwright apply --ssh-id-file ~/.ssh/id_ed25519 --yes
+$ bootwright machine rsh --name ceph-0 --ssh-id-file ~/.ssh/id_ed25519
 ```
 
 It is a per-invocation operator preference, never desired state: it is not
@@ -282,7 +282,7 @@ travel as a pair.
 
 ```console
 $ bootwright apply --machines lab-appliance --ssh-user operator \
-    --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
+    --ssh-id-file ~/.ssh/id_ed25519 --yes
 ```
 
 It does **not** move a login Bootwright created, nor one a `Secret` already
@@ -307,7 +307,7 @@ $ bootwright machine exec --name ceph-0 --ssh-user cephadm -- id
 
 See [Which login a command uses](#which-login-a-command-uses).
 
-Like `--ssh-preferred-id-key`, the value never enters desired state or an
+Like `--ssh-id-file`, the value never enters desired state or an
 ownership record, and it is refused unless it is a valid POSIX user name.
 
 #### Using your account everywhere
@@ -319,7 +319,7 @@ widens the override to **every** machine in the run:
 
 ```console
 $ bootwright apply --ssh-user carmj --ssh-user-for-provisioned \
-    --ssh-preferred-id-key ~/.ssh/id_ed25519 --yes
+    --ssh-id-file ~/.ssh/id_ed25519 --yes
 ```
 
 It is a boolean and defaults to `false`; it requires `--ssh-user`, and is
@@ -346,7 +346,7 @@ machines that declare `auth.operatorIdentity`:
 
 ```console
 $ bootwright apply --clusters ceph-prd-01 --ssh-user operator \
-    --ssh-preferred-id-key ~/.ssh/id_ed25519 --ssh-ask-sudo-password --yes
+    --ssh-id-file ~/.ssh/id_ed25519 --ssh-ask-sudo-password --yes
 SSH sudo password:
 ```
 
@@ -548,7 +548,7 @@ $ bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 ```
 
 Add `--ssh-user <name>` to log in as a different account for that one
-invocation, and `--ssh-preferred-id-key <path>` to offer your own key first.
+invocation, and `--ssh-id-file <path>` to offer your own key first.
 
 #### Which login a command uses
 
@@ -578,7 +578,7 @@ account — with that account's key.
 Bootwright already holds a credential for — the machine's own login, or the
 orchestration account of a cluster this machine belongs to — that account's
 credential is used. Any other name is a plain `ssh(1)` override: no stored key is
-offered, so your agent, `~/.ssh` defaults, or `--ssh-preferred-id-key` apply.
+offered, so your agent, `~/.ssh` defaults, or `--ssh-id-file` apply.
 
 To reach a node cluster-first — by cluster and node rather than by Machine name —
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`

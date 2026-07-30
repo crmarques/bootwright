@@ -32,7 +32,7 @@ carries that account's own credential. Run a single command instead with
   bootwright machine rsh --name ceph-dc1-0
 
   # Log in as a different account with your own key
-  bootwright machine rsh --name ceph-dc1-0 --ssh-user operator --ssh-preferred-id-key ~/.ssh/id_ed25519`,
+  bootwright machine rsh --name ceph-dc1-0 --ssh-user operator --ssh-id-file ~/.ssh/id_ed25519`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Machine name to connect to (required)")
 	_ = cmd.MarkFlagRequired("name")
@@ -64,7 +64,7 @@ credential. Drop into an interactive shell instead with 'machine rsh'.
   bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target
 
   # Run it as a different account with your own key
-  bootwright machine exec --name ceph-dc1-0 --ssh-user operator --ssh-preferred-id-key ~/.ssh/id_ed25519 -- id`,
+  bootwright machine exec --name ceph-dc1-0 --ssh-user operator --ssh-id-file ~/.ssh/id_ed25519 -- id`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Machine name to run the command on (required)")
 	_ = cmd.MarkFlagRequired("name")

@@ -434,7 +434,7 @@ Rules:
   before the orchestrator receives it. On a machine whose own login is `root`
   and whose `rootLogin` is `revoke`, machine scope falls back to the
   replacement orchestration identity, credential included.
-- The persistent `--ssh-user` and `--ssh-preferred-id-key` flags override how a
+- The persistent `--ssh-user` and `--ssh-id-file` flags override how a
   machine is reached for one invocation without entering desired state; they are
   specified in the [CLI Contract](#cli-contract) under Global flags.
 - `spec.access.rootLogin` is the machine's OS root-login posture: `keep` (the
@@ -2046,7 +2046,7 @@ Rules:
 
 ### Global flags
 
-`--context`, `--ssh-preferred-id-key`, and `--ssh-user` are persistent root
+`--context`, `--ssh-id-file`, and `--ssh-user` are persistent root
 flags, accepted on every command. The rest are registered per command, on the
 verbs that reach machines.
 
@@ -2054,7 +2054,7 @@ verbs that reach machines.
   the current-context selection for that invocation only. It must name an
   existing context, and it is the selector deciding which fleet `apply` and
   `destroy` mutate.
-- `--ssh-preferred-id-key <path>` offers the named private key ahead of the
+- `--ssh-id-file <path>` offers the named private key ahead of the
   declared credentials; the declared credentials remain the fallback. It is a
   per-invocation preference: it never enters desired state, the converge hash,
   or an install marker.

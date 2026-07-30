@@ -64,6 +64,7 @@ func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 		{"machine trust --hosts", []string{"machine", "trust", "--hosts", "provider-01"}, "--hosts"},
 		{"example init --output", []string{"example", "init", "--name", "lab", "--output", t.TempDir()}, "--output"},
 		{"global --preferred-ssh-id-key", []string{"version", "--preferred-ssh-id-key", "/x"}, "--preferred-ssh-id-key"},
+		{"global --ssh-preferred-id-key", []string{"version", "--ssh-preferred-id-key", "/x"}, "--ssh-preferred-id-key"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,7 +89,7 @@ func TestStripLeadingGlobalFlags(t *testing.T) {
 		{[]string{"apply", "--context", "lab"}, []string{"apply", "--context", "lab"}},
 		{[]string{"--context"}, nil},
 		{[]string{"--ssh-user", "operator", "apply"}, []string{"apply"}},
-		{[]string{"--ssh-preferred-id-key=/k", "--ssh-user=operator", "--context", "lab", "apply"}, []string{"apply"}},
+		{[]string{"--ssh-id-file=/k", "--ssh-user=operator", "--context", "lab", "apply"}, []string{"apply"}},
 		{[]string{"--ssh-user"}, nil},
 		{[]string{"--ssh-ask-sudo-password", "apply"}, []string{"apply"}},
 		{[]string{"--ssh-ask-sudo-password=true", "--ssh-user", "operator", "apply"}, []string{"apply"}},
