@@ -172,3 +172,46 @@ warning states this explicitly (do not use `all: true` on a host shared with
 another Ceph cluster or holding data to keep). The unreliable-diagnostic
 counterpart: the readiness-failure device dump now runs `ceph orch device ls
 --wide --refresh` with a short retry so reject reasons are populated, not empty.
+
+**Constraint (every `until:` in this role needs an attempt escape, even with
+`failed_when: false`):** ansible-core applies `failed_when` inside the retry
+loop body and then, in the loop's `else` branch, sets `result['failed'] = True`
+unconditionally when the budget is exhausted (`task_executor.py`, "we ran out of
+attempts"). `failed_when: false` therefore does NOT survive retry exhaustion.
+Without the `or (… .attempts >= … retries)` term, `osd_reclaim.yml`'s device
+inventory poll aborted the `any_errors_fatal` play BEFORE the OSD spec was
+applied and before `osd_readiness.yml` could produce any diagnostic — so
+authorizing the reclaim could make a fresh bootstrap strictly worse than not
+authorizing it, because cephadm scans host inventories asynchronously and six
+just-registered hosts routinely need longer than the old 12x10s budget. Both
+that poll and the coverage report's twin now carry the escape; the reclaim
+budget matches the readiness poll (30 attempts), and hosts whose inventory never
+arrived are named in a debug rather than silently contributing no candidates.
+
+**Constraint (the readiness failure names the remedy that matches the declared
+selection shape):** the only text that named `apply --mode rebuild --authorize
+data-loss` used to live in `osd_coverage_report.yml`, which `bootstrap.yml`
+includes AFTER `osd_readiness.yml` — correctly, because it reports the
+pass-but-short case — so the total-shortfall failure never reached it and told
+the operator to hand-clean disks instead. `osd_readiness.yml` now composes the
+remedy itself from the rendered `osdReclaimAll` host flag: `all: true` hosts get
+the auto-reclaim invocation (with its irreversibility, the identity-drift
+re-bootstrap caveat, and the `protectedKinds` fail-closed caveat); everything
+else gets `--reclaim-devices` for a static `paths`/`pathSpecs` selection and
+manual cleaning for a narrowing filter. The two must not be crossed: an
+`all: true` cluster declares no static path, so `--reclaim-devices` exits 2
+against it, and narrowing filters are deliberately outside the auto-reclaim.
+The failure also leads with an N-of-M availability rollup computed from a
+`ceph orch device ls --format json` sibling probe, because "every declared
+device on every host was refused" is a different diagnosis from one stray disk
+and the `--wide` table alone left the prose reading as the latter.
+
+**Constraint (the CLI's declared-device set must equal the ansible gate's):**
+`converge.DeclaredOwnedOSDDevices` — which decides whether a `--reclaim-devices`
+path is legitimate — read only `host.Devices`, while the ansible side gates on
+the rendered `devices` list, i.e. `topology.OSDHostAllStaticDevices` (host
+devices UNION osd data/db/wal `paths` and `pathSpecs` UNION a covering
+drivegroup's static paths). A cluster declaring OSDs through `osd.dataDevices.paths`
+or a drivegroup therefore got `install.yml`'s gate telling it to run
+`--reclaim-devices <path>` on a path the CLI then rejected as undeclared. Both
+sides now resolve through `OSDHostAllStaticDevices`.

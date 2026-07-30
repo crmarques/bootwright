@@ -10,6 +10,9 @@
     bootwright_ceph_osd_dynamic_crush_names: >-
       {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).dynamicHosts | default([])
          | map(attribute='crushNames') | flatten | list }}
+    bootwright_ceph_osd_reclaim_all_hosts: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('osdReclaimAll', 'defined') | list }}
 
 - name: Report skipped OSD readiness check
   ansible.builtin.debug:
@@ -174,6 +177,30 @@
         and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
       )
 
+- name: Collect machine-readable device availability when OSDs did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - device
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_osd_device_json
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - >-
+      not (bootwright_ceph_osd_ready | default(false) | bool)
+      or (
+        bootwright_ceph_osd_dynamic_hosts | length > 0
+        and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
+      )
+
 - name: Collect declared OSD service status when OSDs did not become ready
   ansible.builtin.command:
     argv:
@@ -246,6 +273,91 @@
         and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
       )
 
+- name: Summarise declared OSD device availability for the readiness failure
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_availability_summary: >-
+      {{ bootwright_ceph_osd_availability_counted
+         if (bootwright_ceph_osd_declared_devices | length) > 0
+         else bootwright_ceph_osd_availability_unknown }}
+  vars:
+    bootwright_ceph_osd_declared_host_names: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | map(attribute='cephHostname') | reject('equalto', '') | list }}
+    bootwright_ceph_osd_declared_devices: >-
+      {{ (bootwright_ceph_osd_device_json.stdout | default('[]', true) | from_json)
+         | selectattr('name', 'defined')
+         | selectattr('name', 'in', bootwright_ceph_osd_declared_host_names)
+         | map(attribute='devices', default=[]) | flatten
+         | selectattr('path', 'defined') | list }}
+    bootwright_ceph_osd_unavailable_devices: >-
+      {{ bootwright_ceph_osd_declared_devices
+         | selectattr('available', 'defined')
+         | selectattr('available', 'equalto', false) | list }}
+    bootwright_ceph_osd_availability_unknown: >-
+      Per-device availability could not be summarised (ceph orch device ls --format
+      json returned nothing usable for the declared hosts); read the inventory table
+      below directly.
+    bootwright_ceph_osd_availability_fleetwide: >-
+      Every declared device on every declared host was refused, so this is not one
+      stray disk. Treat it as a fleet-wide condition — the disks carry a previous
+      installation signature, or the OS install consumed them — and read one host
+      directly (lsblk, pvs, vgs, findmnt /) before wiping anything.
+    bootwright_ceph_osd_availability_counted: >-
+      Device availability on the declared OSD hosts:
+      {{ bootwright_ceph_osd_unavailable_devices | length }} of
+      {{ bootwright_ceph_osd_declared_devices | length }} device(s) are UNAVAILABLE
+      to ceph-volume.
+      {{ bootwright_ceph_osd_availability_fleetwide
+         if (bootwright_ceph_osd_unavailable_devices | length)
+            == (bootwright_ceph_osd_declared_devices | length)
+         else '' }}
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - >-
+      not (bootwright_ceph_osd_ready | default(false) | bool)
+      or (
+        bootwright_ceph_osd_dynamic_hosts | length > 0
+        and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
+      )
+
+- name: Compose the OSD readiness remedy for the declared device selection
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_readiness_remedy: >-
+      {{ bootwright_ceph_osd_remedy_reclaim_all
+         if bootwright_ceph_osd_reclaim_all_hosts | length > 0
+         else bootwright_ceph_osd_remedy_manual }}
+  vars:
+    bootwright_ceph_osd_remedy_reclaim_all: >-
+      Remedy: {{ bootwright_ceph_osd_reclaim_all_hosts | length }} host(s) declare
+      their OSD devices with data_devices.all=true, so Bootwright can reclaim those
+      disks for you — re-run `bootwright apply --clusters
+      {{ bootwright_selected_storage_cluster.name }} --mode rebuild --authorize
+      data-loss`. That zaps every disk on those hosts which is unavailable to
+      ceph-volume, carries no mounted filesystem, and does not already back an OSD of
+      this cluster, BEFORE the OSD apply; it never touches a mounted or system disk or
+      a live OSD, and it skips any device it cannot probe. It is IRREVERSIBLE and is
+      not limited to disks that once held Ceph, so do not use it on a host that also
+      carries data to keep or runs a second Ceph cluster. Two caveats: --mode rebuild
+      also re-bootstraps this cluster if its identity (seedHost/monIP/network)
+      drifted, and it fails closed on a context whose safety.protectedKinds lists
+      StorageCluster — there, tear the cluster down deliberately with destroy first.
+    bootwright_ceph_osd_remedy_manual: >-
+      Remedy: this cluster declares no data_devices.all=true host, so the automatic
+      all-devices reclaim does not apply to it. For a statically named selection
+      (paths/pathSpecs) re-run `bootwright apply --reclaim-devices <paths>`; for a
+      narrowing filter (model/size/rotational/vendor/limit) there is no automatic
+      reclaim — confirm each disk is disposable, clean it on its host (`wipefs --all`
+      / `sgdisk --zap-all`) or exclude it from the OSD device selection, then
+      re-apply.
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - >-
+      not (bootwright_ceph_osd_ready | default(false) | bool)
+      or (
+        bootwright_ceph_osd_dynamic_hosts | length > 0
+        and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
+      )
+
 - name: Assert declared Ceph OSDs were created
   ansible.builtin.assert:
     that:
@@ -254,19 +366,21 @@
       Ceph cluster {{ bootwright_selected_storage_cluster.name }} did not create the
       declared OSDs: expected
       {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least ' ~ bootwright_ceph_osd_expected_count }}
-      OSD(s) 'in', observed
+      OSD(s) 'in'{{ ' (a per-host floor — the declaration selects devices dynamically, so the exact OSD count is not knowable before the device scan)' if bootwright_ceph_osd_dynamic_hosts | length > 0 else '' }},
+      observed
       {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default('unknown') }}
       (up {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_up_osds | default('unknown') }})
       after {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts. cephadm
-      accepted the OSD spec but ceph-volume did not consume the declared devices. The
-      device inventory below reports, per device, whether it is AVAILABLE and, if not,
+      accepted the OSD spec but ceph-volume did not consume the declared devices.
+      {{ bootwright_ceph_osd_availability_summary | default('') }}
+      The device inventory below reports, per device, whether it is AVAILABLE and, if not,
       the REJECT REASONS (for example: locked, already carries a filesystem/LVM/bluestore
       signature, or is too small); the OSD service status shows the RUNNING count and any
       placement events. Devices declared only through an OSD filter (all/model/size/rotational)
       are not covered by the install-time emptiness guard, so a dirty or previously-used
-      disk reaches ceph-volume unchecked — clean the offending device on its host (confirm
-      it is disposable, then `wipefs --all` / `sgdisk --zap-all`) or exclude it from the OSD
-      device selection, and re-apply. This apply is failing closed rather than reporting
+      disk reaches ceph-volume unchecked.
+      {{ bootwright_ceph_osd_readiness_remedy | default('') }}
+      This apply is failing closed rather than reporting
       success against a short or zero-OSD cluster.
       Ceph orchestrator hosts (ceph orch host ls):
       {{ (bootwright_ceph_osd_host_ls.stdout | default('') | trim)

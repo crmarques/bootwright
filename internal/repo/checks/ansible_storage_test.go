@@ -2178,6 +2178,16 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	if !strings.Contains(reclaim, "- zap") || !strings.Contains(reclaim, "- --force") {
 		t.Errorf("%s must wipe candidates via `ceph orch device zap ... --force`", reclaimPath)
 	}
+	reclaimTop := readAnsibleTasks(t, reclaimPath)
+	reclaimBlockIdx := findAnsibleTask(t, reclaimTop, "Auto-reclaim dirty filter-selected OSD devices before the OSD apply")
+	reclaimTasks := nestedAnsibleTasks(t, reclaimTop[reclaimBlockIdx], "block")
+	refreshIdx := findAnsibleTask(t, reclaimTasks, "Refresh cephadm device inventory for filter-OSD hosts")
+	if until := fmt.Sprint(reclaimTasks[refreshIdx]["until"]); !strings.Contains(until, "bootwright_ceph_filter_device_ls.attempts") {
+		t.Errorf("%s must let the inventory poll terminate at its attempt budget: ansible marks an exhausted `until` failed regardless of `failed_when: false` (task_executor sets result['failed']=True after the retry loop), so without the escape an authorized reclaim aborts the play before the OSD spec is applied. got until=%v", reclaimPath, until)
+	}
+	if findAnsibleTaskIndex(reclaimTasks, "Report filter-OSD hosts whose device inventory never appeared") < 0 {
+		t.Errorf("%s must report the hosts whose inventory never arrived, so a partial reclaim is not silent", reclaimPath)
+	}
 	svc := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml")
 	reclaimIdx := strings.Index(svc, "osd_reclaim.yml")
 	coreIdx := strings.Index(svc, "/mnt/core-services.yaml")
@@ -2207,11 +2217,72 @@ func TestStorageCephadmAllDevicesCoverageReportIsNonDestructive(t *testing.T) {
 			t.Errorf("%s must stay non-destructive (found %q); the coverage report only reads and warns", coveragePath, forbidden)
 		}
 	}
+	coverageTop := readAnsibleTasks(t, coveragePath)
+	coverageBlockIdx := findAnsibleTask(t, coverageTop, "Report all-devices OSD disks left unclaimed after the OSD apply")
+	coverageTasks := nestedAnsibleTasks(t, coverageTop[coverageBlockIdx], "block")
+	coverageRefreshIdx := findAnsibleTask(t, coverageTasks, "Refresh cephadm device inventory for the OSD coverage report")
+	if until := fmt.Sprint(coverageTasks[coverageRefreshIdx]["until"]); !strings.Contains(until, "bootwright_ceph_coverage_device_ls.attempts") {
+		t.Errorf("%s must let the inventory poll terminate at its attempt budget: `failed_when: false` does not survive retry exhaustion, so a read-only report would otherwise fail an apply whose OSDs are healthy. got until=%v", coveragePath, until)
+	}
+
 	boot := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
 	readinessIdx := strings.Index(boot, "osd_readiness.yml")
 	coverageIdx := strings.Index(boot, "osd_coverage_report.yml")
 	if readinessIdx < 0 || coverageIdx < 0 || readinessIdx > coverageIdx {
 		t.Error("bootstrap.yml must include osd_coverage_report.yml after osd_readiness.yml")
+	}
+}
+
+func TestStorageOSDReadinessFailureNamesTheReclaimRemedy(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	resolve, ok := tasks[findAnsibleTask(t, tasks, "Resolve OSD readiness expectation")]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(resolve["bootwright_ceph_osd_reclaim_all_hosts"]), "osdReclaimAll") {
+		t.Fatalf("OSD readiness must resolve the all-devices hosts from the rendered osdReclaimAll flag, got %v", resolve)
+	}
+
+	remedyIdx := findAnsibleTask(t, tasks, "Compose the OSD readiness remedy for the declared device selection")
+	remedyVars, ok := tasks[remedyIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("the readiness remedy must be composed from vars, got %v", tasks[remedyIdx])
+	}
+	allDevices := fmt.Sprint(remedyVars["bootwright_ceph_osd_remedy_reclaim_all"])
+	for _, want := range []string{"data_devices.all=true", "--mode rebuild", "--authorize data-loss", "IRREVERSIBLE", "protectedKinds"} {
+		if !strings.Contains(allDevices, want) {
+			t.Errorf("the all:true readiness remedy must name %q — it is the only automated reclaim Bootwright implements for a filter-authored host, and the coverage report that also names it never runs when the readiness assert aborts the play; got %v", want, allDevices)
+		}
+	}
+	manual := fmt.Sprint(remedyVars["bootwright_ceph_osd_remedy_manual"])
+	for _, want := range []string{"--reclaim-devices", "wipefs --all"} {
+		if !strings.Contains(manual, want) {
+			t.Errorf("the non-all:true readiness remedy must name %q, got %v", want, manual)
+		}
+	}
+	if strings.Contains(manual, "--mode rebuild") {
+		t.Errorf("the non-all:true readiness remedy must not offer --mode rebuild: the auto-reclaim covers all:true only, and narrowing filters are deliberately excluded, got %v", manual)
+	}
+	if strings.Contains(allDevices, "--reclaim-devices") {
+		t.Errorf("the all:true readiness remedy must not offer --reclaim-devices: an all:true selection declares no static path, so the CLI rejects every named device with exit 2, got %v", allDevices)
+	}
+
+	summaryIdx := findAnsibleTask(t, tasks, "Summarise declared OSD device availability for the readiness failure")
+	summaryVars, ok := tasks[summaryIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("the availability summary must be composed from vars, got %v", tasks[summaryIdx])
+	}
+	if got := fmt.Sprint(summaryVars["bootwright_ceph_osd_declared_devices"]); !strings.Contains(got, "default('[]', true)") {
+		t.Errorf("the availability summary parses command stdout eagerly, so it must guard from_json against an empty (rc!=0) stdout with default('[]', true), got %v", got)
+	}
+	if findAnsibleTaskIndex(tasks, "Collect machine-readable device availability when OSDs did not become ready") < 0 {
+		t.Fatal("the readiness failure must collect `ceph orch device ls --format json`: the --wide table carries no per-device availability the message can count")
+	}
+
+	failMsg := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Assert declared Ceph OSDs were created")]["ansible.builtin.assert"].(map[string]any)["fail_msg"])
+	for _, want := range []string{"bootwright_ceph_osd_availability_summary", "bootwright_ceph_osd_readiness_remedy"} {
+		if !strings.Contains(failMsg, want) {
+			t.Errorf("the OSD readiness failure must render %q, got fail_msg=%v", want, failMsg)
+		}
 	}
 }
 

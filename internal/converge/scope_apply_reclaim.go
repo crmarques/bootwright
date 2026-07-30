@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func SplitReclaimDevices(devices string) []string {
@@ -29,7 +30,7 @@ func DeclaredOwnedOSDDevices(state v1alpha1.State, owned []string) []string {
 			continue
 		}
 		for _, host := range sc.Spec.Ceph.Topology.Nodes {
-			for _, dev := range host.Devices {
+			for _, dev := range topology.OSDHostAllStaticDevices(sc, host) {
 				if trimmed := strings.TrimSpace(dev); trimmed != "" {
 					declared[trimmed] = true
 				}

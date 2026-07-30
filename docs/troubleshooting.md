@@ -398,6 +398,97 @@ reclamation workflow.
     `diff` — remove them on the cluster directly (`oc delete`), or destroy the
     whole `ContainerCluster` to reclaim everything at once.
 
+## A Ceph apply ends with zero OSDs
+
+The apply bootstraps the cluster, brings up every monitor, manager and
+monitoring daemon, and then fails closed at the OSD readiness check:
+
+```
+Ceph cluster ceph-01 did not create the declared OSDs: expected at least 6
+OSD(s) 'in', observed 0 (up 0) after 30 attempts.
+Device availability on the declared OSD hosts: 30 of 30 device(s) are
+UNAVAILABLE to ceph-volume.
+```
+
+`ceph orch apply` registers the OSD drivegroups and returns immediately;
+cephadm creates the OSDs asynchronously through ceph-volume, which refuses any
+device that is not empty. So a healthy-looking cluster with zero OSDs almost
+always means the declared disks still carry a signature. Read the
+**REJECT REASONS** column of the device inventory the failure prints:
+
+| Reject reasons | What is on the disk |
+| --- | --- |
+| `Has a FileSystem`, `LVM detected`, `Insufficient space (<10 extents) on vgs` | The whole disk is an LVM physical volume in a fully-allocated volume group — the classic fingerprint of a **previous** `ceph-volume` install (one `ceph-<uuid>` VG per disk, one LV at 100%). |
+| `Has a FileSystem` alone | A plain filesystem signature, no LVM. |
+| `Has BlueStore device label` | A raw-mode bluestore OSD, not an LVM one. |
+| `locked` | Something on the host holds the device open. |
+
+!!! warning "Confirm what the LVM is before wiping anything"
+    A live OSD's disk and a stale one look identical in that table. Read one
+    node directly first — `lsblk`, `pvs`, `vgs -o vg_name,vg_free_count`,
+    `lvs -o lv_name,vg_name,lv_tags` and `findmnt -no SOURCE /`. Volume groups
+    named `ceph-<uuid>` whose LV tags carry `ceph.osd_id=` / `ceph.cluster_fsid=`
+    are prior-install residue; a volume group holding the mounted root
+    filesystem is the OS disk and must never be reclaimed.
+
+This is the expected outcome of reinstalling the operating system on nodes whose
+data disks already held Ceph. The managed-OS kickstart deliberately confines
+itself to `rootDeviceHints.deviceName` (`ignoredisk --only-use=` plus
+`clearpart --drives=`), so a reinstall preserves the data disks — and with them
+the previous cluster's LVM.
+
+**How to clear it depends on how the OSD devices are declared.**
+
+=== "`dataDevices.all: true`"
+
+    Bootwright reclaims the disks for you:
+
+    ```bash
+    bootwright apply --clusters ceph-01 --mode rebuild --authorize data-loss
+    ```
+
+    Before the OSD apply this zaps every disk on those hosts that is unavailable
+    to ceph-volume, carries no mounted filesystem, and does not already back an
+    OSD of this cluster. Mounted and system disks, live OSDs, and any device
+    that cannot be probed are skipped. It is irreversible and **not** limited to
+    disks that once held Ceph, so never use it on a host that also carries data
+    to keep or runs a second Ceph cluster — an unmounted disk belonging to a
+    co-resident cluster is indistinguishable and would be wiped.
+
+    Two interactions to expect: `--mode rebuild` additionally re-bootstraps the
+    cluster if its identity (`seedHost`/`monIP`/network) drifted, and it fails
+    closed on a context whose `safety.protectedKinds` lists `StorageCluster` —
+    there, run the `destroy` the refusal names first.
+
+=== "`dataDevices.paths` / `pathSpecs`"
+
+    Name the devices explicitly:
+
+    ```bash
+    bootwright apply --clusters ceph-01 --reclaim-devices /dev/disk/by-id/wwn-0x...
+    ```
+
+    See [Reclaiming OSD disks](advanced/operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
+
+=== "A narrowing filter (`model`/`size`/`rotational`/`vendor`/`limit`)"
+
+    There is no automatic reclaim. Bootwright only knows the boolean `all` flag,
+    not the predicate, so auto-zapping every unavailable disk could wipe disks
+    the filter never targets. Confirm each disk is disposable and clean it on
+    its host (`wipefs --all`, `sgdisk --zap-all`), or exclude it from the
+    selection, then re-apply.
+
+If instead the inventory reports **zero devices** on hosts that are online but
+carry few or no daemons, the problem is not the disks: cephadm cannot run on
+those hosts, usually a container-image pull or registry/mirror/proxy failure.
+Check `cephadm shell -- ceph log last cephadm` for `cephadm pull` and deploy
+errors.
+
+!!! note "The half-built cluster is already owned"
+    Ownership is recorded before bootstrap, so a plain re-`apply` reconciles the
+    existing cluster in place rather than re-bootstrapping it — and fails at the
+    same check until the disks are cleared. `apply --mode create` refuses.
+
 ## Ceph disk-space alerts flap after install
 
 Shortly after a managed Ceph install the dashboard starts emitting paired

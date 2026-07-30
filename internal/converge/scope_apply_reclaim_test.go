@@ -48,6 +48,66 @@ func TestUnmatchedReclaimDevicesAllMatch(t *testing.T) {
 	}
 }
 
+func TestDeclaredOwnedOSDDevicesCoversEveryStaticSelectionShape(t *testing.T) {
+	rotational := false
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph1"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{
+							{Name: "node-01", Devices: []string{"/dev/sdb"}},
+							{Name: "node-02", Roles: []string{v1alpha1.StorageCephRoleOSD}, OSD: &v1alpha1.StorageCephNodeOSD{
+								DataDevices: &v1alpha1.StorageCephDeviceSelection{
+									Paths:     []string{"/dev/nvme0n1"},
+									PathSpecs: []v1alpha1.StorageCephDevicePath{{Path: "/dev/nvme1n1"}},
+								},
+								DBDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/nvme2n1"}},
+							}},
+							{Name: "node-03", Roles: []string{v1alpha1.StorageCephRoleOSD}},
+							{Name: "node-04", Roles: []string{v1alpha1.StorageCephRoleOSD}, OSD: &v1alpha1.StorageCephNodeOSD{
+								DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+							}},
+						},
+						OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
+							ServiceID: "spinners",
+							OSD: v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{
+								Paths:      []string{"/dev/sdc"},
+								Rotational: &rotational,
+							}},
+						}},
+					},
+				},
+			},
+		}},
+	}
+	want := []string{"/dev/nvme0n1", "/dev/nvme1n1", "/dev/nvme2n1", "/dev/sdb", "/dev/sdc"}
+	if got := DeclaredOwnedOSDDevices(state, []string{"ceph1"}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("DeclaredOwnedOSDDevices = %v, want %v; the CLI match set must equal the paths the ansible OSD gate enforces (host.devices + osd data/db/wal paths + pathSpecs + covering drivegroups), or install.yml tells the operator to run --reclaim-devices on a path the CLI then rejects", got, want)
+	}
+}
+
+func TestDeclaredOwnedOSDDevicesOmitsFilterOnlySelections(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph1"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+						Name:  "node-01",
+						Roles: []string{v1alpha1.StorageCephRoleOSD},
+						OSD:   &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+					}}},
+				},
+			},
+		}},
+	}
+	if got := DeclaredOwnedOSDDevices(state, []string{"ceph1"}); len(got) != 0 {
+		t.Fatalf("DeclaredOwnedOSDDevices = %v, want empty: an all:true selection names no static path, so --reclaim-devices cannot match one and the operator must be steered to --mode rebuild --authorize data-loss instead", got)
+	}
+}
+
 func TestUnmatchedReclaimDevicesIgnoresUnownedClusterDevices(t *testing.T) {
 	state := reclaimTestState()
 	unmatched, declared := UnmatchedReclaimDevices(state, []string{"ceph1"}, "/dev/nvme0n1")

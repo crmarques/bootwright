@@ -36,16 +36,50 @@
       register: bootwright_ceph_filter_device_ls
       changed_when: false
       failed_when: false
-      retries: "{{ bootwright_ceph_filter_reclaim_retries | default(12) | int }}"
+      retries: "{{ bootwright_ceph_filter_reclaim_retries | default(30) | int }}"
       delay: "{{ bootwright_ceph_filter_reclaim_delay | default(10) | int }}"
       until: >-
-        bootwright_ceph_filter_device_ls.rc == 0
-        and (bootwright_ceph_filter_host_names
+        (
+          bootwright_ceph_filter_device_ls.rc == 0
+          and (bootwright_ceph_filter_host_names
+               | difference(
+                   (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
+                   | selectattr('devices', 'defined')
+                   | rejectattr('devices', 'equalto', [])
+                   | map(attribute='name') | list)) | length == 0
+        )
+        or
+        ((bootwright_ceph_filter_device_ls.attempts | default(1) | int)
+         >= (bootwright_ceph_filter_reclaim_retries | default(30) | int))
+
+    - name: Report filter-OSD hosts whose device inventory never appeared
+      ansible.builtin.debug:
+        msg: >-
+          Not auto-reclaiming on
+          {{ bootwright_ceph_filter_inventory_missing | join(', ') }}: cephadm
+          reported no device inventory for
+          {{ bootwright_ceph_filter_inventory_missing | length }} of
+          {{ bootwright_ceph_filter_host_names | length }} all-devices OSD host(s)
+          within {{ bootwright_ceph_filter_reclaim_retries | default(30) }} attempts, so a
+          dirty disk on them cannot be told apart from one cephadm has not scanned
+          yet. Failing open on the scan, not on the wipe — no device is zapped on
+          those hosts. They will surface at the OSD readiness check if their disks
+          are in fact unusable.
+      vars:
+        bootwright_ceph_filter_inventory_missing: >-
+          {{ bootwright_ceph_filter_host_names
              | difference(
-                 (bootwright_ceph_filter_device_ls.stdout | default('[]') | from_json)
+                 (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
                  | selectattr('devices', 'defined')
                  | rejectattr('devices', 'equalto', [])
-                 | map(attribute='name') | list)) | length == 0
+                 | map(attribute='name') | list) }}
+      when: >-
+        (bootwright_ceph_filter_host_names
+         | difference(
+             (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
+             | selectattr('devices', 'defined')
+             | rejectattr('devices', 'equalto', [])
+             | map(attribute='name') | list)) | length > 0
 
     - name: Collect live OSD device metadata for the reclaim safety gate
       ansible.builtin.command:

@@ -34,13 +34,18 @@
       retries: "{{ bootwright_ceph_coverage_retries | default(6) | int }}"
       delay: "{{ bootwright_ceph_coverage_delay | default(10) | int }}"
       until: >-
-        bootwright_ceph_coverage_device_ls.rc == 0
-        and (bootwright_ceph_coverage_host_names
-             | difference(
-                 (bootwright_ceph_coverage_device_ls.stdout | default('[]', true) | from_json)
-                 | selectattr('devices', 'defined')
-                 | rejectattr('devices', 'equalto', [])
-                 | map(attribute='name') | list)) | length == 0
+        (
+          bootwright_ceph_coverage_device_ls.rc == 0
+          and (bootwright_ceph_coverage_host_names
+               | difference(
+                   (bootwright_ceph_coverage_device_ls.stdout | default('[]', true) | from_json)
+                   | selectattr('devices', 'defined')
+                   | rejectattr('devices', 'equalto', [])
+                   | map(attribute='name') | list)) | length == 0
+        )
+        or
+        ((bootwright_ceph_coverage_device_ls.attempts | default(1) | int)
+         >= (bootwright_ceph_coverage_retries | default(6) | int))
 
     - name: Collect live OSD device metadata for the OSD coverage report
       ansible.builtin.command:
