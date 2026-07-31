@@ -93,8 +93,13 @@ else is already bound on that host.
 **Constraint:** cephadm's ingress spec (RGW/NFS HAProxy+keepalived) takes TLS
 material through a single `ssl_cert` field — one PEM blob containing both the
 certificate chain and the private key concatenated, with source `inline`.
-This is a different shape from the management gateway's two separate
-`ssl_certificate`/`ssl_certificate_key` fields; don't assume they match.
+This is a different shape from the management gateway and oauth2-proxy, which
+take two separate fields — but the field *names* are the same short pair,
+`ssl_cert`/`ssl_key`, not the `ssl_certificate`/`ssl_certificate_key` the
+upstream oauth2-proxy example still prints
+([ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)).
+Match the count, not the name: one bundled field for ingress, two for the
+gateway.
 `StorageObjectGatewayIngress.tls` (`certificateRef`+`keyRef`, both a
 `tlsCertificate` Secret) mirrors the two-ref user-facing shape everywhere
 else in the schema for consistency, and `rgw_ingress_tls.yml` concatenates

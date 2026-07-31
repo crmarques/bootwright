@@ -734,3 +734,24 @@ learned; this file records what it still owes.
   `roles/storage_cluster_cephadm/vars/os/RedHat.yml` so ownership records apply
   and destroy does not strip a preexisting copy off a provided node.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
+
+## B-054 — `mgmtGateway` is accepted against a Ceph release that has no such service
+- Status: open
+- Area: storage / ceph
+- Origin: `ssl_cert` field-name fix 2026-07-31
+- Severity: medium
+- Problem: `mgmt-gateway` and `oauth2-proxy` first exist in Tentacle (v20);
+  `v19.2.3`'s `service_spec.py` defines neither class. Authoring
+  `spec.ceph.mgmtGateway` against a Squid cluster — which the OSS provider
+  reaches by default, `release: "squid"` — passes `bootwright validate` and
+  every preflight, then dies deep in the base phase when `ceph orch apply -i`
+  hands the document to the base `ServiceSpec`. The operator sees a keyword
+  error, not "your Ceph is too old". The same gap covers the `ingress` document
+  the Go renderer emits with `backend_service: mgmt-gateway`, which cephadm
+  accepts and then never satisfies.
+- Exit: derive the minimum release for release-gated services and refuse at
+  validate/preflight, the way the FIPS and stretch gates already refuse; decide
+  whether the floor belongs beside the release derivation
+  (`internal/storage/cephprovider`) or in storage preflight.
+- Related: [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md),
+  [ceph-monitoring-service-specs.md](ceph-monitoring-service-specs.md)

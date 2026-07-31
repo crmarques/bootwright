@@ -2979,6 +2979,15 @@ func assertCephSpecApplyIsVerified(t *testing.T, tasks []map[string]any, refusal
 func TestStorageManagementSpecAppliesOneMultiDocumentSpec(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
 	tasks := readAnsibleTasks(t, path)
+	assemble := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Assemble secret-bearing management service specs")]["ansible.builtin.set_fact"])
+	if strings.Contains(assemble, "ssl_certificate") {
+		t.Fatalf("cephadm's MgmtGatewaySpec and OAuth2ProxySpec take the certificate as ssl_cert/ssl_key; ssl_certificate/ssl_certificate_key is refused as an unexpected keyword argument, got %v", assemble)
+	}
+	for _, want := range []string{"'ssl_cert'", "'ssl_key'"} {
+		if !strings.Contains(assemble, want) {
+			t.Fatalf("the management service spec must supply the authored certificate as %s, got %v", want, assemble)
+		}
+	}
 	write := tasks[findAnsibleTask(t, tasks, "Write management service spec")]
 	copyBody, ok := write["ansible.builtin.copy"].(map[string]any)
 	if !ok {

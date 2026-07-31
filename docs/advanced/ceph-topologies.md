@@ -416,7 +416,7 @@ Two optional blocks secure the gateway:
 
 - `spec.ceph.mgmtGateway.tls` (`certificateRef` + `keyRef`, both required
   together) supplies a real certificate for the gateway frontend (cephadm
-  `ssl_certificate` / `ssl_certificate_key`). Without it the composed name
+  `ssl_cert` / `ssl_key`). Without it the composed name
   serves a self-signed cert that browsers reject.
 - `spec.ceph.mgmtGateway.enableAuth: true` puts the dashboard behind SSO and
   **requires** `spec.ceph.mgmtGateway.oauth2Proxy` — Bootwright deploys the

@@ -133,6 +133,31 @@ The bundle is built in a double-quoted task `vars:` entry
 (`[cert | trim, key | trim, ''] | join('\n')`), which also gives the trailing
 newline; a guard test refuses an escape in the assembly expression.
 
+**Constraint:** `MgmtGatewaySpec` and `OAuth2ProxySpec` take the certificate as
+**`ssl_cert` / `ssl_key`** — two separate fields, but the same short names the
+ingress bundle uses. `ssl_certificate` / `ssl_certificate_key` is what the
+upstream `oauth2-proxy.rst` example still prints and what the mgmt-gateway spec
+was originally merged with; the classes were renamed before the feature shipped,
+and the stale doc is the trap. The wrong name is refused at spec construction:
+
+```text
+Error EINVAL: ServiceSpec: __init__() got an unexpected keyword argument 'ssl_certificate'
+```
+
+The `ServiceSpec` prefix is misleading and does **not** mean cephadm failed to
+recognize `service_type` — `ServiceSpec.from_json` carries `@handle_type_error`,
+which formats the message with the class the classmethod was *called* on, while
+the `TypeError` comes from the resolved subclass's `__init__`. Read the keyword,
+not the class name. A guard test refuses `ssl_certificate` in the assembly
+expression.
+
+**Constraint:** `mgmt-gateway` and `oauth2-proxy` are **Tentacle (v20) and
+later**. No Squid release defines either class (`v19.2.3`'s `service_spec.py`
+has neither), so `ServiceSpec._cls` falls through to the base class and the
+document is refused. A `spec.ceph.mgmtGateway` block therefore needs a Ceph 20+
+release; the OSS provider's `squid` default cannot serve one. Bootwright does
+not yet gate on that ([BACKLOG.md](BACKLOG.md) B-054).
+
 **Constraint:** Host identity: authored placement tokens may be machine names;
 they are canonicalized to the registered (fully-qualified) hostname so cephadm
 matches them against the host spec. The per-host OSD service id stays on the

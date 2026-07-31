@@ -15,8 +15,8 @@
               }
               | combine(
                   {
-                    'ssl_certificate': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath),
-                    'ssl_certificate_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)
+                    'ssl_cert': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath),
+                    'ssl_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)
                   } if (bootwright_ceph_management.tls is defined) else {}
                 )
             )
@@ -38,7 +38,7 @@
                 | combine({'https_address': bootwright_ceph_management.oauth2Proxy.httpsAddress} if (bootwright_ceph_management.oauth2Proxy.httpsAddress | default('') | length > 0) else {})
                 | combine({'allowlist_domains': bootwright_ceph_management.oauth2Proxy.allowlistDomains} if (bootwright_ceph_management.oauth2Proxy.allowlistDomains | default([]) | length > 0) else {})
                 | combine({'cookie_secret': lookup('ansible.builtin.file', bootwright_ceph_management.oauth2Proxy.cookieSecretPath)} if (bootwright_ceph_management.oauth2Proxy.cookieSecretPath | default('') | length > 0) else {})
-                | combine({'ssl_certificate': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath), 'ssl_certificate_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)} if (bootwright_ceph_management.tls is defined) else {})
+                | combine({'ssl_cert': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath), 'ssl_key': lookup('ansible.builtin.file', bootwright_ceph_management.tls.keyPath)} if (bootwright_ceph_management.tls is defined) else {})
               )
             }
           ] if (bootwright_ceph_management.oauth2Proxy is defined) else []
