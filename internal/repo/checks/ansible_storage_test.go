@@ -1770,8 +1770,11 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	if got := fmt.Sprint(check["that"]); !strings.Contains(got, "bootwright_ceph_owned_osd_devices") {
 		t.Fatalf("OSD device check must exempt only recorded Bootwright devices, got that=%v", got)
 	}
-	if got := fmt.Sprint(check["fail_msg"]); !strings.Contains(got, "--reclaim-devices") {
-		t.Fatalf("OSD device refusal must name the reclaim remedy, got fail_msg=%v", got)
+	msg := fmt.Sprint(check["fail_msg"])
+	for _, want := range []string{"--reclaim-devices", "--authorize data-loss,unowned-devices"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the OSD device refusal must name %q: a bare --reclaim-devices on a signature-carrying disk is refused again by the data-loss gate and then by the holders gate (ADR 0034), so a remedy that omits the tokens sends the operator through two more walls, got fail_msg=%v", want, msg)
+		}
 	}
 	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {

@@ -389,9 +389,15 @@
       is readable, then re-run apply.{% else %}already carries data
       ({{ item.stdout | trim }}) and is not recorded as a Bootwright-owned OSD
       device. Refusing to use it: wipe it explicitly with
-      `bootwright apply --reclaim-devices {{ item.item }} ...` (irreversible) after
+      `bootwright apply --reclaim-devices {{ item.item }}
+      --authorize data-loss,unowned-devices ...` (irreversible) after
       verifying the data is disposable, or remove the device from the
-      StorageCluster declaration. Reclaim only acts when the controller records
+      StorageCluster declaration. Both tokens are needed and neither implies the
+      other: `data-loss` authorizes the wipe, `unowned-devices` authorizes
+      wiping a device this node holds no ownership record for — without it the
+      reclaim refuses again as soon as the signature turns out to be LVM or
+      dm-crypt holders, which is what a live bluestore OSD looks like. The
+      reclaim needs a scope that includes the deps phase. Reclaim only acts when the controller records
       this cluster as Bootwright-owned; if a reclaim run reported "no device will
       be reclaimed", re-establish ownership first (restore the context's runs
       records, or apply once with this device removed from the declaration, then
