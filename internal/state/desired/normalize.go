@@ -60,6 +60,9 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageObjectGateways {
 		normalizeStorageObjectGateway(&state.StorageObjectGateways[i])
 	}
+	for i := range state.StorageNFSExports {
+		normalizeStorageNFSExport(&state.StorageNFSExports[i])
+	}
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i])
 	}
@@ -569,6 +572,17 @@ func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 	if gateway.Spec.Ceph.FrontendPort == 0 {
 		gateway.Spec.Ceph.FrontendPort = 8080
 	}
+}
+
+func normalizeStorageNFSExport(nfs *v1alpha1.StorageNFSExport) {
+	if nfs.Spec.Ceph.Port != 0 {
+		return
+	}
+	if len(nfs.Spec.Ceph.Ingresses) > 0 {
+		nfs.Spec.Ceph.Port = v1alpha1.StorageNFSDefaultPortWithIngress
+		return
+	}
+	nfs.Spec.Ceph.Port = v1alpha1.StorageNFSDefaultPort
 }
 
 func normalizeStorageExport(export *v1alpha1.StorageExport) {

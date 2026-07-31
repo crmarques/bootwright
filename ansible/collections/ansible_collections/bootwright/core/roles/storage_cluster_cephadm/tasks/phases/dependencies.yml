@@ -7,6 +7,15 @@
     bootwright_ownership_packages: "{{ bootwright_ceph_provider.prerequisitePackages | default(bootwright_ceph_default_prerequisite_packages) }}"
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
 
+- name: Start storage node services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ bootwright_ceph_node_services }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
 - name: Probe host firewalld availability
   ansible.builtin.include_role:
     name: bootwright.core.machine_base
@@ -19,15 +28,6 @@
     permanent: true
     immediate: true
   when: bootwright_firewalld_available | default(false)
-
-- name: Start storage node services
-  ansible.builtin.service:
-    name: "{{ item }}"
-    state: started
-    enabled: true
-  loop: "{{ bootwright_ceph_node_services }}"
-  loop_control:
-    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 - name: Configure the declared NTP sources on the storage node
   ansible.builtin.blockinfile:

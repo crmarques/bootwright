@@ -28,6 +28,7 @@ func validateStorageNFSExports(items []v1alpha1.StorageNFSExport, clusters map[s
 		if len(nfs.Spec.Ceph.Placement.Hosts) == 0 && len(nfs.Spec.Ceph.Placement.Sites) == 0 {
 			errs = append(errs, prefix+".ceph.placement requires hosts or sites")
 		}
+		errs = append(errs, validateStorageNFSPort(prefix, nfs)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", nfs.Spec.Ceph.Placement, cluster, ok, "")...)
 		ingressNames := map[string]bool{}
 		for i, ingress := range nfs.Spec.Ceph.Ingresses {
@@ -50,6 +51,18 @@ func validateStorageNFSExports(items []v1alpha1.StorageNFSExport, clusters map[s
 		errs = append(errs, validateStorageNFSExportEntries(prefix, nfs, filesystems)...)
 	}
 	return errs
+}
+
+func validateStorageNFSPort(prefix string, nfs v1alpha1.StorageNFSExport) []string {
+	port := nfs.Spec.Ceph.Port
+	if port < 0 || port > 65535 {
+		return []string{fmt.Sprintf("%s.ceph.port %d out of range", prefix, port)}
+	}
+	if len(nfs.Spec.Ceph.Ingresses) == 0 || port != v1alpha1.StorageNFSDefaultPort {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s.ceph.port %d collides with the ingress frontend port; a fronted NFS service must listen on a different port than the VIP it is reached through, because ganesha binds every address and haproxy could not then take %d on the VIP (leave it unset for %d)",
+		prefix, port, v1alpha1.StorageNFSDefaultPort, v1alpha1.StorageNFSDefaultPortWithIngress)}
 }
 
 func validateStorageNFSExportEntries(prefix string, nfs v1alpha1.StorageNFSExport, filesystems map[string]v1alpha1.StorageFilesystem) []string {

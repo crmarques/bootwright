@@ -832,8 +832,9 @@ auto-provisions the backing `.nfs` pool, so no pool/namespace is modeled.
 | --- | --- | --- | --- |
 | `spec.storageClusterRef` | Yes | — | Managed `StorageCluster`. |
 | `spec.ceph.serviceID` | Yes | — | NFS service ID (`--cluster-id`). |
+| `spec.ceph.port` | No | `2049` with no ingress; `12049` with one | Port the NFS-Ganesha daemons listen on. Ganesha binds every address, so a fronted service cannot also hold `2049` — haproxy needs that port free on the VIP. Declaring `2049` alongside an ingress is rejected. |
 | `spec.ceph.placement` | Yes | — | Must set `hosts` or `sites` (there is no `nfs` topology role); see [Shared placement](#shared-placement). |
-| `spec.ceph.ingresses[]` | No | — | Ingress VIPs fronting `nfs.<serviceID>` (same shape as the RGW gateway ingress). |
+| `spec.ceph.ingresses[]` | No | — | Ingress VIPs fronting `nfs.<serviceID>` on `2049` (same shape as the RGW gateway ingress). Clients always mount the VIP on the standard port; only the backend moves. |
 | `spec.exports[]` | No | — | NFS exports; each renders an idempotent `ceph nfs export create`. |
 | `spec.exports[].pseudo` | Yes (per entry) | — | NFSv4 pseudo path (`--pseudo-path`); unique within the service. |
 | `spec.exports[].filesystemRef` | One of two FSALs | — | CephFS export (`--fsname`); a `StorageFilesystem` in the same cluster. |

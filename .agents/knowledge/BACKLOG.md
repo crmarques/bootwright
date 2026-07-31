@@ -693,3 +693,44 @@ learned; this file records what it still owes.
   `internal/state/advice/storage_test.go` that lock the current behaviour must
   change with it. These are cephadm option names, not a vendor catalog.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
+
+## B-052 — No preflight for pre-existing package-mode Ceph daemon RPMs
+- Status: open
+- Area: storage / preflight
+- Origin: cephadm-ansible parity audit 2026-07-31
+- Severity: low
+- Problem: IBM's `cephadm-preflight.yml` removes `ceph-mds`, `ceph-mgr`,
+  `ceph-mon`, `ceph-osd`, `ceph-radosgw` and `rbd-mirror` before bootstrap,
+  because a package-mode Ceph install binds the ports and udev/systemd units the
+  containerized daemons want. Bootwright has no equivalent on the apply path —
+  `roles/check_storage_preflight/tasks/main.yml` gathers no package facts — and
+  `destroy_steps/wipe_and_cleanup.yml` removes only Bootwright's own managed
+  package list, on destroy. It bites on an `os.provided` node that carried a
+  previous package-mode Ceph: the seed is already covered by the
+  `/etc/ceph/ceph.conf` gate and the disks by the device-signature gate, so the
+  residue is a non-seed host with `ceph-mon`/`ceph-radosgw` still installed.
+- Exit: gather `package_facts` in `check_storage_preflight` and fail closed when
+  any of those six names is installed, naming what was found and the
+  `dnf remove` that clears it. A check, never a mutation — Bootwright must not
+  uninstall what it did not install. Six static RPM names are not a catalog.
+- Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
+
+## B-053 — `sos` is absent from Bootwright-installed storage nodes
+- Status: open
+- Area: storage / supportability
+- Origin: cephadm-ansible parity audit 2026-07-31
+- Severity: low
+- Problem: `sos` is in cephadm-ansible's `ceph_defaults_infra_pkgs`, and IBM's
+  own `playbooks/checks.yml` computes the missing-package set against that list,
+  so it reports "Required Packages Installed: FAIL" naming `sos` on a
+  Bootwright-built cluster. Bootwright's kickstart is `@^minimal-environment`
+  and `sos` is not in the CentOS Stream 9 BaseOS `core` group, so the node
+  genuinely lacks it where a vendor-prepped node has it. Not a functional
+  defect — `sos` installs from BaseOS on demand and the repos are configured by
+  then — but it is a visible divergence during a support case.
+- Exit: decide whether Bootwright owns support tooling on storage nodes. If yes,
+  add `sos` to `PrerequisitePackages`
+  (`internal/storage/cephprovider/provider.go`) and to both lists in
+  `roles/storage_cluster_cephadm/vars/os/RedHat.yml` so ownership records apply
+  and destroy does not strip a preexisting copy off a provided node.
+- Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)

@@ -29,11 +29,23 @@ native-CLI script discards its stdout (`bw_guarded_quiet`).
 is no `nfs` topology role, so NFS placement is always authored explicitly
 (resolved with role `""`, same as passthrough services).
 
+**Constraint:** NFS-Ganesha binds every address on its host, so a service that
+is fronted by an ingress cannot also hold the standard NFS port: haproxy needs
+`2049` free on the VIP, and cephadm refuses to deploy a daemon whose port is
+already taken (`TCP Port(s) '2049' required for nfs already in use`). The daemon
+port is therefore modeled as `spec.ceph.port`, defaulted by normalize to `2049`
+for a directly mounted service and `12049` when the object declares an ingress;
+the ingress `frontend_port` stays `2049` so clients always mount the VIP on the
+port they expect. Authoring `2049` alongside an ingress is a validation error,
+not a silent misconfiguration. There is no escape hatch through the passthrough:
+`nfs` is in the reserved service-type map, so `spec.ceph.services[]` cannot
+re-declare the service with a different port.
+
 **Constraint:** Each declared export renders as an idempotent
-`ceph nfs export create cephfs|rgw` in the object-gateway phase (after the nfs
-service registers). The role probes `ceph nfs export ls <serviceID>` keyed by
-`<serviceID>|<pseudo>`. Exports are additive-only: a removed export keeps
-running until removed by hand.
+`ceph nfs export apply <serviceID> -i -` with the export JSON on stdin, in the
+object-gateway phase (after the nfs service registers); `apply` is a pure upsert
+and needs no probe. Exports are additive-only: a removed export, a renamed
+pseudo, and a deleted `StorageNFSExport` all keep running until removed by hand.
 
 **When it bites:** The `<serviceID>|<pseudo>` idempotency key contains `|`. In
 the generated `apply.sh` it must be single-quoted or the shell parses it as a

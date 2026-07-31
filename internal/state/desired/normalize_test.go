@@ -613,3 +613,61 @@ func TestNormalizeDefaultsBMCEmulationPorts(t *testing.T) {
 		t.Fatalf("BMC emulator vMediaPort = %d, want %d", got, v1alpha1.DefaultBMCEmulationStartPort+1)
 	}
 }
+
+func TestNormalizeDefaultsStorageNFSPortAwayFromTheIngress(t *testing.T) {
+	cases := []struct {
+		name      string
+		ingresses []v1alpha1.StorageObjectGatewayIngress
+		authored  int
+		want      int
+	}{
+		{name: "direct mount keeps the standard port", want: v1alpha1.StorageNFSDefaultPort},
+		{
+			name:      "fronted service moves off the standard port",
+			ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip", Address: "10.0.0.9", PrefixLength: 24}},
+			want:      v1alpha1.StorageNFSDefaultPortWithIngress,
+		},
+		{
+			name:      "an authored port is carried verbatim",
+			ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip", Address: "10.0.0.9", PrefixLength: 24}},
+			authored:  20490,
+			want:      20490,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			nfs := v1alpha1.StorageNFSExport{
+				Metadata: v1alpha1.Metadata{Name: "nfs"},
+				Spec: v1alpha1.StorageNFSExportSpec{
+					Ceph: v1alpha1.StorageNFSExportCephSpec{ServiceID: "nfs1", Port: tc.authored, Ingresses: tc.ingresses},
+				},
+			}
+			state := v1alpha1.State{StorageNFSExports: []v1alpha1.StorageNFSExport{nfs}}
+			Normalize(&state)
+			if got := state.StorageNFSExports[0].Spec.Ceph.Port; got != tc.want {
+				t.Fatalf("nfs port = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsStorageNFSPortCollidingWithItsIngress(t *testing.T) {
+	nfs := v1alpha1.StorageNFSExport{
+		Metadata: v1alpha1.Metadata{Name: "nfs"},
+		Spec: v1alpha1.StorageNFSExportSpec{
+			Ceph: v1alpha1.StorageNFSExportCephSpec{
+				ServiceID: "nfs1",
+				Port:      v1alpha1.StorageNFSDefaultPort,
+				Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip", Address: "10.0.0.9", PrefixLength: 24}},
+			},
+		},
+	}
+	got := strings.Join(validateStorageNFSPort("StorageNFSExport/nfs spec", nfs), "; ")
+	if !strings.Contains(got, "collides with the ingress frontend port") {
+		t.Fatalf("a fronted nfs service on 2049 must be rejected, got %q", got)
+	}
+	nfs.Spec.Ceph.Ingresses = nil
+	if errs := validateStorageNFSPort("StorageNFSExport/nfs spec", nfs); len(errs) != 0 {
+		t.Fatalf("a directly mounted nfs service on 2049 is correct, got %v", errs)
+	}
+}

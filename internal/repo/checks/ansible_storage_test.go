@@ -2220,6 +2220,9 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if firewalldProbeIdx >= vrrpIdx {
 		t.Fatalf("VRRP firewalld allowance must run after the firewalld probe (probe=%d vrrp=%d)", firewalldProbeIdx, vrrpIdx)
 	}
+	if startIdx := findAnsibleTask(t, dependencyTasks, "Start storage node services"); startIdx >= firewalldProbeIdx {
+		t.Fatalf("the firewalld probe must run after the node services are started; the probe reports unavailable unless firewalld is already running, so probing first silently drops the VRRP allowance for the whole run on a host where this apply just installed firewalld (start=%d probe=%d)", startIdx, firewalldProbeIdx)
+	}
 	vrrp := dependencyTasks[vrrpIdx]
 	vrrpBody, ok := vrrp["ansible.posix.firewalld"].(map[string]any)
 	if !ok {

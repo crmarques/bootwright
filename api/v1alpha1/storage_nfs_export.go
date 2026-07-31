@@ -14,8 +14,14 @@ type StorageNFSExportSpec struct {
 	Exports           []StorageNFSExportEntry  `yaml:"exports,omitempty" json:"exports,omitempty"`
 }
 
+const (
+	StorageNFSDefaultPort            = 2049
+	StorageNFSDefaultPortWithIngress = 12049
+)
+
 type StorageNFSExportCephSpec struct {
 	ServiceID string                        `yaml:"serviceID" json:"serviceID"`
+	Port      int                           `yaml:"port,omitempty" json:"port,omitempty"`
 	Placement StoragePlacement              `yaml:"placement" json:"placement"`
 	Ingresses []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
 }

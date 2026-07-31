@@ -1569,7 +1569,14 @@ Rules:
   `StorageCluster`. `spec.ceph.serviceID` is required.
 - `spec.ceph.placement` must set `hosts` or `sites` (there is no `nfs` topology
   role). `spec.ceph.ingresses[]` mirror the RGW ingress shape and front
-  `nfs.<serviceID>`.
+  `nfs.<serviceID>` on the standard `2049`, so a client always mounts the VIP on
+  the port it expects.
+- `spec.ceph.port` is the port the ganesha daemons themselves listen on. It
+  defaults to `2049` for a directly-mounted service and to `12049` when the
+  service declares an ingress, because ganesha binds every address on the host:
+  a backend still holding `2049` leaves haproxy unable to take that port on the
+  VIP, and cephadm refuses to deploy the daemon. Declaring `2049` together with
+  an ingress is therefore rejected rather than silently broken.
 - Each `spec.exports[]` sets a unique `pseudo` path and exactly one FSAL —
   `filesystemRef` (CephFS, same cluster) or `bucket` (RGW). Optional `path`,
   `accessType` (`RW`/`RO`/`NONE`), `squash`, and `clients[]` spell the

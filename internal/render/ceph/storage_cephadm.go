@@ -147,7 +147,11 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		if nfs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		docs = append(docs, cephadmPlacementService("nfs", nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""), nfs.Spec.Ceph.Placement.CountPerHost, nil))
+		nfsSpec := map[string]any{}
+		if nfs.Spec.Ceph.Port > 0 {
+			nfsSpec["port"] = nfs.Spec.Ceph.Port
+		}
+		docs = append(docs, cephadmPlacementService("nfs", nfs.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, nfs.Spec.Ceph.Placement, ""), nfs.Spec.Ceph.Placement.CountPerHost, nfsSpec))
 		for _, ingress := range nfs.Spec.Ceph.Ingresses {
 			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
 			if !ok {

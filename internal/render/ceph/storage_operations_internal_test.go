@@ -920,6 +920,7 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
 			Ceph: v1alpha1.StorageNFSExportCephSpec{
 				ServiceID: "nfs1",
+				Port:      v1alpha1.StorageNFSDefaultPortWithIngress,
 				Placement: v1alpha1.StoragePlacement{Hosts: []string{"ceph-0"}},
 				Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip", Address: "10.0.0.9", PrefixLength: 24}},
 			},
@@ -942,6 +943,13 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 	ingressSpec := byType["ingress"]["spec"].(map[string]any)
 	if ingressSpec["backend_service"] != "nfs.nfs1" {
 		t.Fatalf("nfs ingress backend = %v", ingressSpec)
+	}
+	nfsSpec, _ := byType["nfs"]["spec"].(map[string]any)
+	if nfsSpec == nil || nfsSpec["port"] != v1alpha1.StorageNFSDefaultPortWithIngress {
+		t.Fatalf("a fronted nfs service must render its own backend port, got spec = %v", byType["nfs"]["spec"])
+	}
+	if nfsSpec["port"] == ingressSpec["frontend_port"] {
+		t.Fatalf("ganesha binds every address, so the backend port must differ from the ingress frontend port; cephadm refuses to deploy the daemon when they collide (both %v)", nfsSpec["port"])
 	}
 
 	byName := map[string]map[string]any{}
