@@ -3296,3 +3296,80 @@ func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
 		}
 	}
 }
+
+func TestStorageRefusesNodesRunningAForeignCephadmCluster(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
+	main := readRepoFile(t, base+"main.yml")
+	rebuild := strings.Index(main, "phases/rebuild.yml")
+	foreign := strings.Index(main, "phases/foreign_cluster.yml")
+	endHost := strings.Index(main, "end_host")
+	if rebuild < 0 || foreign < 0 || endHost < 0 || !(rebuild < foreign && foreign < endHost) {
+		t.Fatalf("the foreign-cluster gate must run on every topology host after an authorized rebuild removed the override fsid and before non-seed hosts end, got rebuild=%d foreign=%d end_host=%d", rebuild, foreign, endHost)
+	}
+
+	tasks := readAnsibleTasks(t, base+"phases/foreign_cluster.yml")
+	listIdx := findAnsibleTask(t, tasks, "List the cephadm systemd units the storage node carries")
+	unitIdx := findAnsibleTask(t, tasks, "Resolve the cephadm cluster identities that own systemd units on the storage node")
+	knownIdx := findAnsibleTask(t, tasks, "Resolve the Ceph cluster identities this apply may legitimately find on the storage node")
+	foreignIdx := findAnsibleTask(t, tasks, "Resolve the cephadm clusters on the storage node this apply does not own")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage node that still runs a cephadm cluster this apply does not own")
+	if !(listIdx < unitIdx && unitIdx < knownIdx && knownIdx < foreignIdx && foreignIdx < refuseIdx) {
+		t.Fatalf("the foreign-cluster gate must list the units, resolve their identities, resolve what this apply owns, subtract, then refuse")
+	}
+
+	command, ok := tasks[listIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the foreign-cluster gate must enumerate units with a command probe, got %v", tasks[listIdx])
+	}
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"systemctl", "list-units", "--all", "ceph-*@*.service"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("the unit probe must enumerate every loaded cephadm unit on the node, missing %q: %v", want, argv)
+		}
+	}
+
+	known, ok := tasks[knownIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the foreign-cluster gate must resolve the owned identities in a set_fact, got %v", tasks[knownIdx])
+	}
+	confIdx := findAnsibleTask(t, tasks, "Read the Ceph configuration the storage node already carries")
+	if confIdx > knownIdx {
+		t.Fatalf("the node's own cluster identity must be read before the owned set is resolved, got conf=%d known=%d", confIdx, knownIdx)
+	}
+	if got := fmt.Sprint(tasks[confIdx]["ansible.builtin.slurp"]); !strings.Contains(got, "/etc/ceph/ceph.conf") {
+		t.Fatalf("the gate must read this node's own cluster identity from its ceph.conf, got %v", got)
+	}
+	knownExpr := fmt.Sprint(known["bootwright_ceph_host_known_fsids"])
+	for _, want := range []string{"bootwright_ceph_host_conf", "bootwright_ceph_override_fsid"} {
+		if !strings.Contains(knownExpr, want) {
+			t.Fatalf("the owned set must cover both the cluster this node already belongs to and the fsid an authorized rebuild is replacing, missing %q, got %v", want, knownExpr)
+		}
+	}
+
+	subtract := fmt.Sprint(tasks[foreignIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_ceph_host_unit_fsids", "difference", "bootwright_ceph_host_known_fsids"} {
+		if !strings.Contains(subtract, want) {
+			t.Fatalf("the foreign set must be the unit identities minus the owned ones, missing %q, got %v", want, subtract)
+		}
+	}
+
+	assertion, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the foreign-cluster gate must fail through an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(assertion["that"]); !strings.Contains(got, "bootwright_ceph_host_foreign_fsids") {
+		t.Fatalf("the refusal must gate on the resolved foreign set, got that=%v", got)
+	}
+	failMsg := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{
+		"bootwright_ceph_host_foreign_units",
+		"Address already in use",
+		"cephadm rm-cluster --force --fsid",
+		"unreachable-nodes",
+		"seed",
+	} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("the refusal must name the leftover units, the port collision they cause, why the seed-side ownership gates miss them and the fsid-scoped remedy, missing %q, got %v", want, failMsg)
+		}
+	}
+}

@@ -1,0 +1,103 @@
+---
+- name: List the cephadm systemd units the storage node carries
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - list-units
+      - --all
+      - --plain
+      - --no-legend
+      - --type=service
+      - ceph-*@*.service
+  register: bootwright_ceph_host_cephadm_units
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the cephadm cluster identities that own systemd units on the storage node
+  vars:
+    bootwright_ceph_host_unit_prefix: '^ceph-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@'
+    bootwright_ceph_host_unit_capture: '^ceph-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})@.*$'
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_unit_fsids: >-
+      {{ bootwright_ceph_host_cephadm_units.stdout_lines | default([])
+         | map('trim')
+         | select('match', bootwright_ceph_host_unit_prefix)
+         | map('regex_replace', bootwright_ceph_host_unit_capture, '\1')
+         | unique | list }}
+  changed_when: false
+
+- name: Read the Ceph configuration the storage node already carries
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_host_conf
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the Ceph cluster identities this apply may legitimately find on the storage node
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_known_fsids: >-
+      {{ [
+           (bootwright_ceph_host_conf.content | default('') | b64decode
+            | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+            | default([], true) | first | default('')),
+           hostvars[bootwright_selected_storage_cluster.seedHost | default(inventory_hostname)]
+             .bootwright_ceph_override_fsid | default('')
+         ] | map('trim') | reject('equalto', '') | unique | list }}
+  changed_when: false
+
+- name: Resolve the cephadm clusters on the storage node this apply does not own
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_foreign_fsids: >-
+      {{ bootwright_ceph_host_unit_fsids | default([])
+         | difference(bootwright_ceph_host_known_fsids | default([])) }}
+  changed_when: false
+
+- name: Collect the foreign cephadm units still loaded on the storage node
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_foreign_units: >-
+      {{ bootwright_ceph_host_cephadm_units.stdout_lines | default([])
+         | map('trim')
+         | select('match', '^ceph-(' ~ (bootwright_ceph_host_foreign_fsids | join('|')) ~ ')@')
+         | list }}
+  changed_when: false
+  when: (bootwright_ceph_host_foreign_fsids | default([])) | length > 0
+
+- name: Refuse a storage node that still runs a cephadm cluster this apply does not own
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_host_foreign_fsids | default([])) | length == 0
+    fail_msg: >-
+      Ceph storage node {{ inventory_hostname }} still carries cephadm systemd units for
+      {{ (bootwright_ceph_host_foreign_fsids | default([])) | length }} cluster
+      identit{{ 'y' if ((bootwright_ceph_host_foreign_fsids | default([])) | length) == 1 else 'ies' }}
+      that storage cluster {{ bootwright_selected_storage_cluster.name }} does not own:
+      {{ (bootwright_ceph_host_foreign_fsids | default([])) | join(', ') }}.
+      Every cephadm daemon binds its port on the host network, so a leftover daemon keeps
+      that port for as long as its unit runs, and cephadm's own deployment of the same
+      daemon type onto this node then fails with `Cannot bind to IP 0.0.0.0 port <port>:
+      [Errno 98] Address already in use` and `TCP Port(s) '0.0.0.0:<port>' required for
+      <daemon> already in use`. Nothing in that failure names this host or the cluster the
+      leftover belongs to: cephadm retries the placement every serve loop, and the apply
+      surfaces it only once the service readiness gate times out, as a service short of its
+      declared daemon count with no host attributed. This apply is failing closed here, on
+      the node that carries the leftover, before the cluster is bootstrapped or converged.
+      Foreign cephadm units on this node:
+      {% for unit in bootwright_ceph_host_foreign_units | default([]) %}
+      {{ unit }}
+      {% endfor %}
+      A previous teardown of that cluster is the usual origin: one that skipped this node
+      (`bootwright cluster destroy ... --authorize unreachable-nodes`) or failed partway
+      through it cleans the other nodes and leaves this one running its daemons, and the
+      Bootwright ownership gates that refuse a pre-existing cluster read the seed host,
+      which this node is not. Remove that cluster's local state on this node with
+      `cephadm rm-cluster --force --fsid <fsid>` for each identity listed above — it is
+      fsid-scoped, so it stops and removes only that cluster's daemons, units and
+      /var/lib/ceph state and leaves {{ bootwright_selected_storage_cluster.name }}'s own
+      daemons on this node untouched — then re-run this apply.
+      Cluster identities this node may legitimately carry:
+      {{ (bootwright_ceph_host_known_fsids | default([])) | join(', ')
+         | default('(none: this node carries no /etc/ceph/ceph.conf and this apply
+           authorized no rebuild, so every cephadm unit on it is foreign)', true) }}.
+    success_msg: >-
+      The storage node runs no cephadm cluster this apply does not own.
+    quiet: true

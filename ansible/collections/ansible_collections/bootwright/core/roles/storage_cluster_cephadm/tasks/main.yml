@@ -37,6 +37,10 @@
   ansible.builtin.include_tasks: phases/rebuild.yml
   when: not bootwright_task_storage_prereqs_only | default(false) | bool
 
+- name: Refuse storage nodes still running a cephadm cluster this apply does not own
+  ansible.builtin.include_tasks: phases/foreign_cluster.yml
+  when: not bootwright_task_storage_prereqs_only | default(false) | bool
+
 - name: End non-seed hosts after the cluster-wide rebuild phase
   ansible.builtin.meta: end_host
   when:
