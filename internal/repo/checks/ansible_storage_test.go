@@ -184,6 +184,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/container_image_base.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/container_runtime.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
@@ -1268,6 +1269,52 @@ func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
 	}
 	if topologyInclude < monInclude {
 		t.Fatalf("this test assumes the topology operations still follow the monmap gate (topology=%d mon=%d)", topologyInclude, monInclude)
+	}
+}
+
+func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
+	main := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
+	gate := strings.Index(main, "phases/container_runtime.yml")
+	rebuild := strings.Index(main, "phases/rebuild.yml")
+	bootstrap := strings.Index(main, "phases/bootstrap.yml")
+	endHost := strings.Index(main, "end_host")
+	if gate < 0 || rebuild < 0 || bootstrap < 0 || endHost < 0 {
+		t.Fatalf("the role is missing a step this ordering depends on (gate=%d rebuild=%d bootstrap=%d endHost=%d)", gate, rebuild, bootstrap, endHost)
+	}
+	if gate > rebuild || gate > bootstrap {
+		t.Fatalf("the container runtime must be proven before the rebuild guard and before bootstrap: cephadm resolves the ceph uid/gid by starting a container before every deployment, so a node that cannot start one places no daemon at all and the run only discovers it on a readiness gate ten minutes later, after disks may already have been zapped (gate=%d rebuild=%d bootstrap=%d)", gate, rebuild, bootstrap)
+	}
+	if gate > endHost {
+		t.Fatalf("the container runtime gate must run before non-seed hosts leave the play, or it only ever proves the seed (gate=%d endHost=%d)", gate, endHost)
+	}
+
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/container_runtime.yml")
+	probeIdx := findAnsibleTask(t, tasks, "Prove the storage node container runtime can start a Ceph container")
+	fallbackIdx := findAnsibleTask(t, tasks, "Prove the storage node container runtime starts under the cgroupfs cgroup manager")
+	writeIdx := findAnsibleTask(t, tasks, "Select the cgroupfs cgroup manager where systemd cannot install the device filter")
+	removeIdx := findAnsibleTask(t, tasks, "Remove the Bootwright cgroup manager drop-in the node no longer needs")
+	assertIdx := findAnsibleTask(t, tasks, "Require a storage node container runtime that can start a Ceph container")
+	if !(probeIdx < fallbackIdx && fallbackIdx < writeIdx && writeIdx < assertIdx) {
+		t.Fatalf("the gate must probe, fall back, remediate, then assert (probe=%d fallback=%d write=%d assert=%d)", probeIdx, fallbackIdx, writeIdx, assertIdx)
+	}
+
+	probe := fmt.Sprint(tasks[probeIdx]["ansible.builtin.command"])
+	for _, want := range []string{"podman", "run", "--entrypoint", "stat", "/var/lib/ceph"} {
+		if !strings.Contains(probe, want) {
+			t.Fatalf("the runtime probe must start a real container the way cephadm does before every deployment; missing %q in %v", want, tasks[probeIdx]["ansible.builtin.command"])
+		}
+	}
+
+	writeWhen := fmt.Sprint(tasks[writeIdx]["when"])
+	if !strings.Contains(writeWhen, "bootwright_ceph_runtime_probe.rc") || !strings.Contains(writeWhen, "bootwright_ceph_runtime_cgroupfs_probe.rc") {
+		t.Fatalf("the cgroup manager drop-in must be written only when the default manager provably fails AND cgroupfs provably works — writing it unconditionally would drop cgroup BPF device isolation on every Ceph node. Got when=%v", tasks[writeIdx]["when"])
+	}
+	removeWhen := fmt.Sprint(tasks[removeIdx]["when"])
+	if !strings.Contains(removeWhen, "bootwright_ceph_runtime_probe.rc") {
+		t.Fatalf("the drop-in must be removed once the default cgroup manager works again, so clearing Secure Boot is self-healing. Got when=%v", tasks[removeIdx]["when"])
+	}
+	if _, ok := tasks[assertIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("the runtime gate must fail closed with an assert, got %v", tasks[assertIdx])
 	}
 }
 

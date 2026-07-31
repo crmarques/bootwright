@@ -93,6 +93,55 @@ func validateStorageCephMonPublicNetwork(prefix string, cluster v1alpha1.Storage
 	return errs
 }
 
+func validateStorageCephUnusedPublicNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+	ceph := cluster.Spec.Ceph
+	if ceph == nil || len(ceph.Networks.PublicCIDRs) < 2 {
+		return nil
+	}
+	type footprint struct {
+		subnets []string
+		address string
+	}
+	footprints := make([]footprint, 0, len(ceph.Topology.Nodes))
+	for _, node := range ceph.Topology.Nodes {
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok {
+			return nil
+		}
+		addrName := ceph.Cephadm.AddressRef.Name
+		if addrName == "" && machine.Spec.Access.SSH != nil {
+			addrName = machine.Spec.Access.SSH.AddressRef.Name
+		}
+		address, _ := v1alpha1.MachineAddressByName(machine, addrName)
+		subnets := storageMachineConnectedSubnets(machine)
+		if len(subnets) == 0 && address == "" {
+			return nil
+		}
+		footprints = append(footprints, footprint{subnets: subnets, address: address})
+	}
+	if len(footprints) == 0 {
+		return nil
+	}
+	var errs []string
+	for _, cidr := range ceph.Networks.PublicCIDRs {
+		stood := false
+		for _, f := range footprints {
+			if len(f.subnets) > 0 && storageNetworksOverlapAny(f.subnets, []string{cidr}) {
+				stood = true
+				break
+			}
+			if len(f.subnets) == 0 && f.address != "" && storageIPWithinAny(f.address, []string{cidr}) {
+				stood = true
+				break
+			}
+		}
+		if !stood {
+			errs = append(errs, fmt.Sprintf("%s.networks.publicCIDRs: no declared Ceph host stands on %s; public_network is the network Ceph daemons bind within and clients reach them on, so an entry no host of this cluster sits in binds nothing and reaches nobody — it is a declaration this estate does not serve. This is what an arbiter subnet copied from another environment looks like: check it against the addresses under spec.ceph.topology.nodes, and drop the entry or correct the host that was meant to stand on it", prefix, cidr))
+		}
+	}
+	return errs
+}
+
 func storageMachineConnectedSubnets(machine v1alpha1.Machine) []string {
 	var subnets []string
 	for _, ia := range machine.Spec.Network.Config.InterfaceAddresses {

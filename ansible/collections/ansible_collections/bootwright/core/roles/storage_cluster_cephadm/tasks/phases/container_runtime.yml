@@ -1,0 +1,176 @@
+---
+- name: Read the storage node kernel lockdown state
+  ansible.builtin.slurp:
+    src: /sys/kernel/security/lockdown
+  register: bootwright_ceph_lockdown_raw
+  failed_when: false
+
+- name: Resolve the storage node kernel lockdown mode
+  vars:
+    bootwright_ceph_lockdown_text: >-
+      {{ (bootwright_ceph_lockdown_raw.content | default('') | b64decode) | trim }}
+  ansible.builtin.set_fact:
+    bootwright_ceph_lockdown_mode: >-
+      {{ (bootwright_ceph_lockdown_text.split('[') | last).split(']') | first
+         if '[' in bootwright_ceph_lockdown_text else 'none' }}
+  changed_when: false
+
+- name: Prove the storage node container runtime can start a Ceph container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --net=host
+      - --entrypoint
+      - stat
+      - "{{ bootwright_ceph_bootstrap_image }}"
+      - -c
+      - "%u %g"
+      - /var/lib/ceph
+  register: bootwright_ceph_runtime_probe
+  changed_when: false
+  failed_when: false
+
+- name: Prove the storage node container runtime starts under the cgroupfs cgroup manager
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --net=host
+      - --cgroup-manager=cgroupfs
+      - --entrypoint
+      - stat
+      - "{{ bootwright_ceph_bootstrap_image }}"
+      - -c
+      - "%u %g"
+      - /var/lib/ceph
+  register: bootwright_ceph_runtime_cgroupfs_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_runtime_probe.rc | default(1) | int != 0
+
+- name: Ensure containers.conf.d directory for the Ceph cgroup manager drop-in
+  ansible.builtin.file:
+    path: /etc/containers/containers.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - bootwright_ceph_runtime_probe.rc | default(1) | int != 0
+    - bootwright_ceph_runtime_cgroupfs_probe.rc | default(1) | int == 0
+
+- name: Select the cgroupfs cgroup manager where systemd cannot install the device filter
+  ansible.builtin.copy:
+    dest: /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Written by Bootwright: this node's kernel refuses the eBPF device filter
+      # that crun installs through systemd, so every container fails to start.
+      # Lockdown mode at the time of writing: {{ bootwright_ceph_lockdown_mode }}
+      [engine]
+      cgroup_manager = "cgroupfs"
+  register: bootwright_ceph_cgroup_manager_dropin
+  when:
+    - bootwright_ceph_runtime_probe.rc | default(1) | int != 0
+    - bootwright_ceph_runtime_cgroupfs_probe.rc | default(1) | int == 0
+
+- name: Remove the Bootwright cgroup manager drop-in the node no longer needs
+  ansible.builtin.file:
+    path: /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf
+    state: absent
+  when: bootwright_ceph_runtime_probe.rc | default(1) | int == 0
+
+- name: Re-prove the storage node container runtime after selecting the cgroup manager
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --net=host
+      - --entrypoint
+      - stat
+      - "{{ bootwright_ceph_bootstrap_image }}"
+      - -c
+      - "%u %g"
+      - /var/lib/ceph
+  register: bootwright_ceph_runtime_reprobe
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool
+
+- name: Collect the storage node container runtime versions when it cannot start a container
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - podman
+      - crun
+      - runc
+      - container-selinux
+      - selinux-policy
+      - systemd
+  register: bootwright_ceph_runtime_versions
+  changed_when: false
+  failed_when: false
+  when: >-
+    (bootwright_ceph_runtime_probe.rc | default(1) | int != 0)
+    and (bootwright_ceph_runtime_reprobe.rc | default(1) | int != 0)
+
+- name: Require a storage node container runtime that can start a Ceph container
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_ceph_runtime_probe.rc | default(1) | int == 0)
+        or (bootwright_ceph_runtime_reprobe.rc | default(1) | int == 0)
+    fail_msg: >-
+      Ceph storage node {{ inventory_hostname }} cannot start a container from
+      {{ bootwright_ceph_bootstrap_image }}, so cephadm can deploy no daemon of any kind
+      here. cephadm runs `podman run --entrypoint stat ... /var/lib/ceph` before every
+      single deployment to resolve the ceph uid/gid, so this failure blocks mon, osd,
+      crash and ceph-exporter alike, and it surfaces later as
+      `CEPHADM_DAEMON_PLACE_FAIL` plus `CEPHADM_REFRESH_FAILED` rather than as anything
+      naming this host. This apply is failing closed here, before the cluster is
+      bootstrapped or any disk is touched, rather than ten minutes later on a daemon
+      readiness gate. Kernel lockdown mode on this node:
+      {{ bootwright_ceph_lockdown_mode }}.
+      {% if bootwright_ceph_lockdown_mode in ['integrity', 'confidentiality'] %}
+      Lockdown is active, which is the usual cause: it is switched on automatically by
+      EFI Secure Boot (`mokutil --sb-state`), and it makes the kernel refuse the
+      eBPF device filter that crun installs through systemd, which crun reports as
+      `crun: systemd failed to install eBPF device filter on cgroup`. Bootwright
+      already retried under `--cgroup-manager=cgroupfs`, which avoids that path, and
+      that failed too — so the runtime is broken beyond the cgroup manager. Clear
+      Secure Boot on this node, or boot it with lockdown disabled.
+      {% else %}
+      Lockdown is not active, so the cause is elsewhere in the runtime: check that
+      /sys/fs/cgroup is cgroup2fs, that bpffs is mounted on /sys/fs/bpf, that SELinux
+      logs no denial (`ausearch -m avc -ts recent`), and that podman, crun and
+      container-selinux are mutually current.
+      {% endif %}
+      Default cgroup manager probe rc={{ bootwright_ceph_runtime_probe.rc | default('unknown') }}:
+      {{ (bootwright_ceph_runtime_probe.stderr | default('') | trim) or '(no stderr)' }}
+      cgroupfs cgroup manager probe rc={{ bootwright_ceph_runtime_cgroupfs_probe.rc | default('not attempted') }}:
+      {{ (bootwright_ceph_runtime_cgroupfs_probe.stderr | default('') | trim) or '(no stderr)' }}
+      Installed runtime packages:
+      {{ (bootwright_ceph_runtime_versions.stdout | default('') | trim) or '(rpm -q unavailable)' }}
+    success_msg: >-
+      The storage node container runtime starts a Ceph container.
+    quiet: true
+
+- name: Report the cgroup manager Bootwright selected for this storage node
+  ansible.builtin.debug:
+    msg: >-
+      Ceph storage node {{ inventory_hostname }} cannot install the eBPF device filter
+      through systemd (kernel lockdown: {{ bootwright_ceph_lockdown_mode }}), so
+      Bootwright wrote
+      /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf to run
+      containers under the cgroupfs cgroup manager instead. Daemons on this node are
+      therefore not device-isolated by a cgroup BPF program. Clearing Secure Boot on
+      this node restores the systemd cgroup manager, and the next apply removes the
+      drop-in on its own.
+  when: bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool

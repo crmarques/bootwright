@@ -27,6 +27,12 @@
   ansible.builtin.include_tasks: phases/install.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
+- name: Prove the Ceph storage node container runtime
+  ansible.builtin.include_tasks: phases/container_runtime.yml
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_ceph_bootstrap_image | default('') | length > 0
+
 - name: Guard and clean an authorized Ceph cluster rebuild
   ansible.builtin.include_tasks: phases/rebuild.yml
   when: not bootwright_task_storage_prereqs_only | default(false) | bool
