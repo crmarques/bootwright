@@ -44,6 +44,7 @@ func scriptOptionsFor(asset StorageAsset, state v1alpha1.State, cluster v1alpha1
 		CoreServicesSpecFile: rel(asset.CoreServicesSpecPath),
 		LateServicesSpecFile: rel(asset.LateServicesSpecPath),
 		BootstrapImage:       provider.Image,
+		ImageBase:            provider.ImageBase,
 		AcceptLicense:        provider.RequiresLicense && provider.Entitlement.License.Accepted,
 		IBMCallHome:          provider.IBMCallHome,
 	}

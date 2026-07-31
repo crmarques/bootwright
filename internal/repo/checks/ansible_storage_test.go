@@ -1071,6 +1071,38 @@ func TestStorageCephadmPinsSidecarImagesEarlyAndConditionally(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmPinsDaemonImageOnEveryApply(t *testing.T) {
+	tasks := storageCephBootstrapTasks(t)
+
+	readIdx := findAnsibleTask(t, tasks, "Read current Ceph daemon container image")
+	setIdx := findAnsibleTask(t, tasks, "Pin the Ceph daemon container image")
+	if readIdx >= setIdx {
+		t.Fatalf("the daemon image pin must read the live value before setting it (read=%d set=%d)", readIdx, setIdx)
+	}
+
+	set := fmt.Sprint(tasks[setIdx]["ansible.builtin.command"])
+	for _, want := range []string{"config", "set", "global", "container_image", "bootwright_ceph_bootstrap_image"} {
+		if !strings.Contains(set, want) {
+			t.Fatalf("the daemon image pin must run ceph config set global container_image <resolved image>; missing %q in %v", want, tasks[setIdx]["ansible.builtin.command"])
+		}
+	}
+
+	when := fmt.Sprint(tasks[setIdx]["when"])
+	if !strings.Contains(when, "bootwright_ceph_daemon_image_current.stdout") {
+		t.Fatalf("the daemon image pin must keep its ceph config get guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
+	}
+	if !strings.Contains(when, "bootwright_ceph_bootstrap_image") || !strings.Contains(when, "length > 0") {
+		t.Fatalf("the daemon image pin must be skipped when no image.version is pinned; writing an empty or tagless value would clear a pin an out-of-band ceph orch upgrade wrote. Got when=%v", tasks[setIdx]["when"])
+	}
+
+	phase := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	pinInclude := strings.Index(phase, "bootstrap_steps/container_image_base.yml")
+	specsInclude := strings.Index(phase, "bootstrap_steps/service_specs.yml")
+	if pinInclude < 0 || specsInclude < 0 || pinInclude > specsInclude {
+		t.Fatalf("the daemon image pin must be asserted before the first ceph orch apply, or the services deployed by this very run still come up on the old image (pin=%d specs=%d)", pinInclude, specsInclude)
+	}
+}
+
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 

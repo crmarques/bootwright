@@ -1082,12 +1082,23 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   ownership record keys on the bare package name, so destroy still matches a
   pinned install. Validation is syntactic — the value must not carry a package
   name, glob, or separator — and is never checked against `release`.
-- `spec.ceph.image` optionally pins the cephadm container image, which
-  `cephadm bootstrap` applies as the default image for every Ceph daemon, making
-  the running cluster version reproducible. It is a block of two halves:
+- `spec.ceph.image` optionally pins the cephadm container image, which every
+  apply asserts as the cluster's `container_image` so that cephadm deploys every
+  Ceph daemon from it, making the running cluster version reproducible. The pin
+  is delivered twice, and both are required: `cephadm bootstrap --image` for the
+  daemons the bootstrap command itself creates, and a converged
+  `ceph config set global container_image` before the first service spec is
+  applied, for every apply thereafter. Bootstrap runs once ever, so it cannot be
+  the only delivery path — without the converged assertion a cluster keeps
+  whatever image it first resolved, which for a vendor package is that build's
+  own floating tag, and the pin silently governs nothing. Asserting the pin is
+  not an upgrade: it binds the daemons cephadm creates or redeploys from then
+  on, and never restarts or re-images a running daemon. It is a block of two
+  halves:
   - `version` is the build: an image tag, or a `sha256:` digest. A mutable tag
-    such as `latest` is not a pin and is rejected. Left unset, the install uses
-    the distribution-packaged cephadm's own default tag, which floats. There is
+    such as `latest` is not a pin and is rejected. Left unset, nothing is
+    asserted and the cluster keeps the image it already resolved, which for a
+    vendor package is that build's own floating tag. There is
     no vendor default: `redhat` and `ibm` registry tags are build-numbered and a
     product release such as `9.1` or `9.9.1.0` is not a tag, so the build is
     supplied here explicitly. For `oss` an exact `x.y.z` `release` derives
@@ -1214,7 +1225,11 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   operations. Sections are `global`, `mon`, `mgr`, `osd`, `mds`, `client`, or
   `<type>.<id>`. Keys removed from the spec are not unset on the cluster (the
   storage-wide additive-only rule above). `public_network` and
-  `cluster_network` are owned by `spec.ceph.networks` and rejected here.
+  `cluster_network` are owned by `spec.ceph.networks` and rejected here, and
+  `container_image` is owned by `spec.ceph.image` and rejected in every section:
+  these operations run after the first service specs are applied, so a daemon
+  image declared here would reach the cluster only after the daemons it was
+  meant to govern had already been deployed from the old value.
 - `spec.ceph.mgrModules[]` declares mgr modules, rendered as idempotent
   `ceph mgr module enable` operations. Modules removed from the spec are not
   disabled (additive-only); module settings are declared under `config.mgr`

@@ -79,6 +79,34 @@ explicit `spec.ceph.image` wins with its tag/digest stripped (a registry
 every apply; it runs on the seed only and is skipped when no base is known (an
 oss release-name image that floats).
 
+**Symptom:** A cluster with `spec.ceph.image.version` pinned runs its daemons
+from the vendor's floating tag anyway — `ceph orch` pulls
+`cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:latest` — and re-applying never corrects it.
+
+**Root cause:** `--image` is an argument to `cephadm bootstrap`, and bootstrap is
+gated on `/etc/ceph/ceph.conf` being absent, so it runs once in a cluster's life.
+mgr/cephadm resolves every `CEPH_IMAGE_TYPES` daemon (mon, mgr, osd, mds, rgw,
+nfs — ganesha included) from the `container_image` config option, while
+`mgr/cephadm/container_image_base` is read only by `ceph orch upgrade`; pinning
+the base therefore binds no daemon. A cluster bootstrapped before the pin was
+authored — or by an earlier run that bootstrapped and then failed, leaving no
+converge record — keeps the ceph package's compiled-in `container_image`
+default, which on a vendor build is that vendor's repository at a floating tag.
+
+**Fix:** `bootstrap_steps/container_image_base.yml` reads and sets
+`global container_image` on every apply, in the same read-then-set shape as the
+base pin and in the same step (5 of 20), which is before the first
+`ceph orch apply` at step 8. It is skipped when no version is pinned: an unset
+`image.version` must never clear a value an out-of-band `ceph orch upgrade`
+wrote. Two alternatives are wrong and must not replace it — seeding
+`container_image` into the bootstrap ceph.conf (cephadm's own
+`prepare_bootstrap_config` overwrites that key from `--image`), and declaring it
+in `spec.ceph.config[global]` (those operations run in the topology phase, after
+the service specs, so daemons deployed by the same run still use the old value;
+validation rejects the key for that reason). Setting the option binds the
+daemons cephadm creates or redeploys afterwards; daemons already running move
+only on `ceph orch upgrade start --image <ref>`, which stays out of band.
+
 **Constraint:** `cephadm bootstrap --registry-json` seeds the registry login
 once, but day-2 daemon pulls authenticate from the **mgr cephadm registry
 store**, not from a node-level podman login. Rotated credentials make every

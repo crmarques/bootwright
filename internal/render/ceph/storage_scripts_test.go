@@ -134,9 +134,11 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 		imageBase    string
 		imageVersion string
 		callHome     string
+		config       map[string]map[string]string
 		want         string
 		wantLicense  bool
 		wantCallHome []string
+		wantPins     []string
 		reject       []string
 	}{
 		{
@@ -144,6 +146,29 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			distribution: v1alpha1.StorageCephDistributionOSS,
 			release:      "20.2.2",
 			want:         "bootstrap=(cephadm --image quay.io/ceph/ceph:v20.2.2 bootstrap --mon-ip 192.0.2.10",
+			wantPins: []string{
+				"bw_run ceph config set global container_image quay.io/ceph/ceph:v20.2.2",
+				"bw_run ceph config set mgr mgr/cephadm/container_image_base quay.io/ceph/ceph",
+			},
+		},
+		{
+			name:         "ibm hoists sidecar pins ahead of the first orch apply",
+			distribution: v1alpha1.StorageCephDistributionIBM,
+			release:      "9.9.1.0",
+			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			imageVersion: "v9.9.1-17759",
+			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
+			config: map[string]map[string]string{"mgr": {
+				"mgr/cephadm/container_image_prometheus": "cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
+			}},
+			want:        "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
+			wantLicense: true,
+			wantPins: []string{
+				"bw_run ceph config set global container_image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+				"bw_run ceph config set mgr mgr/cephadm/container_image_base cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+				"bw_run ceph config set mgr mgr/cephadm/container_image_prometheus cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
+			},
+			wantCallHome: []string{`bw_run ceph orch deny call-home-enabled`},
 		},
 		{
 			name:         "ibm enabled reconciles call home",
@@ -189,6 +214,7 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 					Distribution: tc.distribution,
 					Release:      tc.release,
 					Image:        &v1alpha1.StorageCephImageSpec{Base: tc.imageBase, Version: tc.imageVersion},
+					Config:       tc.config,
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
@@ -246,6 +272,20 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			}
 			if !strings.Contains(script, `bootstrap+=(${BW_CEPHADM_BOOTSTRAP_EXTRA})`) {
 				t.Fatalf("apply.sh lost bootstrap-subcommand extras:\n%s", script)
+			}
+			firstOrchApply := strings.Index(script, "ceph orch apply -i")
+			for _, want := range tc.wantPins {
+				at := strings.Index(script, want)
+				if at < 0 {
+					t.Errorf("apply.sh missing image pin %q; bootstrap runs once ever, so the script must assert the pin the way apply does:\n%s", want, script)
+					continue
+				}
+				if firstOrchApply >= 0 && at > firstOrchApply {
+					t.Errorf("image pin %q must be set before the first ceph orch apply, or the services it deploys come up on the old image:\n%s", want, script)
+				}
+				if got := strings.Count(script, want); got != 1 {
+					t.Errorf("image pin %q rendered %d times, want 1; a sidecar pin hoisted into the pin stage must not also render as a generic config operation", want, got)
+				}
 			}
 			for _, want := range tc.wantCallHome {
 				if !strings.Contains(script, want) {

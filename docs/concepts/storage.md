@@ -106,7 +106,7 @@ spec:
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
 | `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. `oss` takes an upstream release name (`tentacle`) or an exact `x.y.z` version; an exact version pins the package repository and derives `quay.io/ceph/ceph:vX.Y.Z`. `redhat` and `ibm` take a dot-separated numeric product version of any length (`9.1`, `9.9.1.0`), whose leading component is the product stream. The value is used verbatim; see [Version compatibility is yours, not Bootwright's](#version-compatibility-is-yours-not-bootwrights). |
 | `ceph.packageVersion` | No | — | Pins the exact Ceph package build to install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp` — the build your vendor's release-to-package-version table names. It governs the `cephadm` RPM on each storage node and nothing else: the daemons run from the container image, so bumping it reconciles the host CLI in place rather than upgrading or rebuilding the cluster. `redhat` and `ibm` only; for `oss` the build is already named by `ceph.release`. |
-| `ceph.image.version` | No | `vX.Y.Z` from an exact `x.y.z` `oss` `ceph.release`; otherwise none | The daemon image build, as a tag or a `sha256:` digest, applied as the default image for every Ceph daemon. A mutable `latest` is not a pin. There is no `redhat`/`ibm` default because vendor tags are build-numbered and a product release such as `9.9.1.0` is not a tag; left unset, the install uses the distribution-packaged cephadm's own default tag, which floats. |
+| `ceph.image.version` | No | `vX.Y.Z` from an exact `x.y.z` `oss` `ceph.release`; otherwise none | The daemon image build, as a tag or a `sha256:` digest. Every apply pins it as the cluster's `container_image`, so cephadm deploys every daemon — mon, mgr, osd, mds, rgw, nfs — from it; daemons already running move only on an out-of-band upgrade. A mutable `latest` is not a pin. There is no `redhat`/`ibm` default because vendor tags are build-numbered and a product release such as `9.9.1.0` is not a tag; left unset, the cluster keeps whatever image it already resolved, which for a vendor build is that build's own floating tag. |
 | `ceph.image.base` | No | The repository derived from `ceph.distribution`, `ceph.release` and the entitlement registry | The `<registry>/<path>` the version hangs off — `quay.io/ceph/ceph`, `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leave it unset in the normal case: the derived value keeps the vendor namespace and stream welded to the release. Author it to mirror the image or to name a vendor build base Bootwright has not recorded. Must carry no tag, digest, or scheme. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the `cephadm` bootstrap binary fetched from `community.mirror` and executed as root; it adds a content check on top of the HTTPS-only mirror. It does not pin the Ceph packages. `oss` only. |
@@ -122,7 +122,7 @@ spec:
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
 | `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that **every** Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. |
-| `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. |
+| `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. Keys another field owns are rejected here: `public_network`/`cluster_network` belong to `ceph.networks`, and `container_image` belongs to `ceph.image` — these operations run after the first services are deployed, so a pin declared here would arrive too late for them. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |
 | `ceph.mgmtGateway` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it, and `mgmtGateway.ingress` is then required. See [Management gateway](#management-gateway). |
@@ -137,6 +137,13 @@ spec:
     orch upgrade`; the desired state then names the old release, so `diff`
     reports drift until a future apply refreshes the record. Adopting an
     out-of-band upgrade into the recorded desired state is an open design item.
+
+    Apply does assert `ceph.image.version` as the cluster's `container_image` on
+    every run, before it deploys any service, so a daemon cephadm creates or
+    redeploys from then on uses the pinned build rather than the floating tag a
+    vendor package defaults to. That is a pin, not an upgrade: it does not
+    restart or re-image the daemons already running, which is why changing the
+    field is still drift.
 
     `ceph.packageVersion` is the exception: it pins the host `cephadm` RPM, not
     the daemons, so a change to it is reconciled in place on the next apply and

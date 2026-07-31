@@ -16,6 +16,7 @@ type CephScriptOptions struct {
 	CoreServicesSpecFile string
 	LateServicesSpecFile string
 	BootstrapImage       string
+	ImageBase            string
 	AcceptLicense        bool
 	IBMCallHome          string
 }
@@ -37,14 +38,19 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	fmt.Fprintf(&b, "source \"$HERE/%s\"\n\n", opts.LibFile)
 
 	writeBootstrapStage(&b, state, cluster, opts)
+	writeContainerImageStage(&b, cluster, opts)
 
 	b.WriteString("\necho \"== stage 10: host and core service specs (ceph orch apply) ==\"\n")
 	writeOrchApply(&b, opts.BootstrapSpecFile)
 	writeOrchApply(&b, opts.CoreServicesSpecFile)
 
 	b.WriteString("\necho \"== stage 20: ceph objects ==\"\n")
+	hoisted := hoistedImagePinOperations(cluster)
 	var lateOps []map[string]any
 	for _, op := range cephOperationList(state, cluster) {
+		if name, ok := op["name"].(string); ok && hoisted[name] {
+			continue
+		}
 		if op["phase"] == "object-gateway" || op["phase"] == "late-topology" {
 			lateOps = append(lateOps, op)
 			continue
@@ -127,8 +133,49 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	b.WriteString("  # shellcheck disable=SC2206\n")
 	b.WriteString("  [[ -n \"${BW_CEPHADM_BOOTSTRAP_EXTRA:-}\" ]] && bootstrap+=(${BW_CEPHADM_BOOTSTRAP_EXTRA})\n")
 	b.WriteString("  bw_run \"${bootstrap[@]}\"\n")
+	b.WriteString("  echo \"  [note] the image pins in stage 06 are applied either way.\"\n")
 	b.WriteString("fi\n")
 	writeIBMCallHomeStage(b, opts.IBMCallHome)
+}
+
+type cephImagePin struct {
+	section string
+	key     string
+	value   string
+}
+
+func cephImagePins(cluster v1alpha1.StorageCluster, opts CephScriptOptions) []cephImagePin {
+	var pins []cephImagePin
+	if opts.BootstrapImage != "" {
+		pins = append(pins, cephImagePin{section: "global", key: "container_image", value: opts.BootstrapImage})
+	}
+	if opts.ImageBase != "" {
+		pins = append(pins, cephImagePin{section: "mgr", key: v1alpha1.StorageCephContainerImageBaseConfigKey, value: opts.ImageBase})
+	}
+	sidecars := v1alpha1.StorageCephSidecarImagePins(cluster.Spec.Ceph)
+	for _, key := range sortedKeys(sidecars) {
+		pins = append(pins, cephImagePin{section: "mgr", key: key, value: sidecars[key]})
+	}
+	return pins
+}
+
+func hoistedImagePinOperations(cluster v1alpha1.StorageCluster) map[string]bool {
+	hoisted := map[string]bool{}
+	for key := range v1alpha1.StorageCephSidecarImagePins(cluster.Spec.Ceph) {
+		hoisted["set-config-mgr-"+key] = true
+	}
+	return hoisted
+}
+
+func writeContainerImageStage(b *strings.Builder, cluster v1alpha1.StorageCluster, opts CephScriptOptions) {
+	pins := cephImagePins(cluster, opts)
+	if len(pins) == 0 {
+		return
+	}
+	b.WriteString("\necho \"== stage 06: container image pins (before any daemon is deployed) ==\"\n")
+	for _, pin := range pins {
+		fmt.Fprintf(b, "bw_run %s\n", shellquote.Quote([]string{"ceph", "config", "set", pin.section, pin.key, pin.value}))
+	}
 }
 
 func writeIBMCallHomeStage(b *strings.Builder, intent string) {

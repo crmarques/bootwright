@@ -870,6 +870,13 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: `spec.ceph.packageVersion must be empty when distribution=oss`,
 		},
 		{
+			name: "container-image-in-config",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Config = map[string]map[string]string{"global": {"container_image": "quay.io/ceph/ceph:v19.2.1"}}
+			},
+			want: `spec.ceph.config[global].container_image is owned by spec.ceph.image (base/version)`,
+		},
+		{
 			name: "community-bad-mirror",
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Mirror: "ftp://mirror.example.test/ceph"}

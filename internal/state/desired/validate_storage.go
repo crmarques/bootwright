@@ -320,6 +320,9 @@ func validateStorageCephConfig(prefix string, config map[string]map[string]strin
 			if key == "public_network" || key == "cluster_network" {
 				errs = append(errs, fmt.Sprintf("%s is owned by spec.ceph.networks (publicCIDRs/clusterCIDRs); declare it there", keyOwner))
 			}
+			if key == "container_image" {
+				errs = append(errs, fmt.Sprintf("%s is owned by spec.ceph.image (base/version); declare it there, where apply pins it before the first service is deployed", keyOwner))
+			}
 			if options[key] == "" {
 				errs = append(errs, keyOwner+" must not be empty")
 			}
