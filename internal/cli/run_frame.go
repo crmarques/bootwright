@@ -92,11 +92,62 @@ func runPhaseDetail(phase status.RunPhase, ledger workflow.RunLedger, opts phase
 		return runPhaseUnits(phase)
 	}
 	if opts.progress {
-		if settled := status.PhaseSettledTasks(phase); settled > 0 && settled < len(phase.Tasks) {
-			return fmt.Sprintf("%d/%d", settled, len(phase.Tasks))
+		if activity := runPhaseActivity(phase, ledger); activity != "" {
+			parts = append(parts, activity)
 		}
+		if settled := status.PhaseSettledTasks(phase); settled > 0 && settled < len(phase.Tasks) {
+			parts = append(parts, fmt.Sprintf("%d/%d", settled, len(phase.Tasks)))
+		}
+		return strings.Join(parts, "  ")
 	}
 	return ""
+}
+
+func runPhaseActivity(phase status.RunPhase, ledger workflow.RunLedger) string {
+	switch phase.Status {
+	case workflow.TaskStatusRunning:
+		for _, task := range phase.Tasks {
+			if task.Status == workflow.TaskStatusRunning {
+				return applyTaskDisplayLabel(task.Label)
+			}
+		}
+		return ""
+	case workflow.TaskStatusPending:
+		return runPhaseWaitingOn(phase, ledger)
+	default:
+		return ""
+	}
+}
+
+func runPhaseWaitingOn(phase status.RunPhase, ledger workflow.RunLedger) string {
+	var shared workflow.TaskLedgerEntry
+	haveShared := false
+	for _, task := range phase.Tasks {
+		for _, dep := range task.Dependencies {
+			blocker, ok := ledger.Task(dep)
+			if !ok || runPhaseDependencySettled(blocker) {
+				continue
+			}
+			if blocker.Cluster == task.Cluster {
+				return ""
+			}
+			if blocker.Cluster != "" {
+				return "waiting on " + blocker.Cluster + ": " + status.TaskPhaseLabel(blocker)
+			}
+			if !haveShared {
+				shared = blocker
+				haveShared = true
+			}
+		}
+	}
+	if haveShared {
+		return "waiting on " + status.TaskPhaseLabel(shared)
+	}
+	return ""
+}
+
+func runPhaseDependencySettled(task workflow.TaskLedgerEntry) bool {
+	return task.Status == workflow.TaskStatusOK || task.Status == workflow.TaskStatusSkipped
 }
 
 func phaseNamesItsResources(phase status.RunPhase) bool {

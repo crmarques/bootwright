@@ -657,7 +657,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		{
 			name: "plan",
 			args: []string{"plan", "--ask-become-pass=false"},
-			want: []string{"Bootwright: plan", "Stages", "planned task(s)", "Machines", "Cluster install", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: plan", "Stages", "planned task(s)", "Prerequisites", "Cluster install", "Rendered artifacts", "Bundle"},
 		},
 		{
 			name: "apply stage infra dry-run",

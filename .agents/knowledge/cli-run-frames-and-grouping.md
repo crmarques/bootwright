@@ -35,16 +35,50 @@ failure — otherwise a failed "Container clusters" step would not say
 which of the fleet it covered. Guarded by
 `TestDestroyOutputNamesCoveredClusters`.
 
-**Semantics: storage clusters show exactly two fleet phases.**
-"Infrastructure" covers host standup and storage prep
-(`MachineInfraPrepare` + `ManagedMachineOS` + `StorageInfra` task kinds)
-and "Provision" covers the `StorageCluster` kind. The former separate
-"Prepare" phase was computed from the identical task filter so it could
-never differ from Infrastructure and was dropped; there is deliberately
-no "Publish" phase because storage-export consumption (e.g. a Data
-Foundation add-on attaching exported storage) runs inside the consuming
-cluster's add-on tasks and reports under that cluster. `applyrun_test.go`
-pins the absent Prepare/Publish phases.
+**Invariant: a phase row may only hold task kinds that are graph
+ancestors of every kind in the row below it, within one cluster group.**
+The rows are printed as a top-to-bottom sequence, so a reader takes them
+as stages; `TaskPhaseLabel` must not group kinds that can be live at the
+same time as a later row. Two consequences are load-bearing and were
+each a reported bug:
+
+- A container cluster has **no "Machines" row**. `clusterISO` builds on
+  the bastion and depends only on the machine-services tasks, so it runs
+  concurrently with `ClusterInstall` (the per-machine VM creation), which
+  on a KubeVirt guest additionally waits for the whole host cluster.
+  Printing them as separate rows made "Prerequisites" finish before
+  "Machines" started. `MachineInfraPrepare` + `ClusterInstall` +
+  `MachineInfraFinalize` + `ClusterISO` therefore share one
+  "Prerequisites" row, which is exactly `NodeBoot`'s dependency set.
+  Adding a `machines -> iso` edge instead would put the ISO build on the
+  critical path of every KubeVirt guest — do not "fix" it that way.
+- A **storage** cluster keeps its "Machines" row: `ManagedMachineOS ->
+  StorageNodeAccess -> MachineRegistration -> MachineRepositories ->
+  StorageInfra -> StorageCluster` is a genuine chain, and the managed-OS
+  install is the longest step of a Ceph apply. `MachineInfraPrepare` is
+  emitted by both families, so `TaskPhaseLabel` splits it on
+  `Entry.ClusterKind`.
+
+**Gotcha: `HostVirtctl` is a `deps`-stage kind that runs after its
+cluster is installed.** `virtctl.<host>` carries `Cluster = <host
+cluster>` yet `Requires` that host's `clusterInstalled` capability *and*
+its KubeVirt add-on, so it is the last task in the host's subtree — it
+belongs in the "Add-ons" row, not "Prerequisites". Re-attributing it to
+the guest instead is not display-only: `Entry.Cluster` is folded into the
+converge-safety hash identity, gates scoped converge-record reset, and
+filters standing-cluster evidence.
+
+There is deliberately no "Publish" phase because storage-export
+consumption (e.g. a Data Foundation add-on attaching exported storage)
+runs inside the consuming cluster's add-on tasks and reports under that
+cluster. `runphase_coverage_test.go` pins the per-family phase ranks and
+that no planned task kind falls through to the `PhaseWork` catch-all.
+
+**Gotcha: display order comes from `Dependencies` *and*
+`OrderingDependencies`.** Destroy tasks express their teardown order
+purely as `OrderingDependencies`, so a `TasksInDisplayOrder` that reads
+only `Dependencies` prints teardown rows in ledger insertion order.
+Apply tasks carry no ordering edges, so including them is inert there.
 
 **Gotcha: `applyOutputStatus` is a worst-of severity aggregator, not a
 progress roll-up.** It ranks StatusOK/Done LOWEST, so reusing it to fold a

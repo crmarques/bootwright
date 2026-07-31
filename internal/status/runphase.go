@@ -48,18 +48,22 @@ func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 	case workflow.ApplyTaskKindProvider, workflow.ApplyTaskKindInfraComponentServices,
 		workflow.DestroyTaskKindProviderServices, workflow.DestroyTaskKindInfraComponents:
 		return PhaseSharedServices
-	case workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall,
-		workflow.ApplyTaskKindMachineInfraFinalize, workflow.ApplyTaskKindManagedMachineOS,
-		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindMachineRepositories,
-		workflow.ApplyTaskKindStorageNodeAccess,
+	case workflow.ApplyTaskKindMachineInfraPrepare:
+		if task.ClusterKind == workflow.ApplyClusterKindContainer {
+			return PhasePrerequisites
+		}
+		return PhaseMachines
+	case workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineRegistration,
+		workflow.ApplyTaskKindMachineRepositories, workflow.ApplyTaskKindStorageNodeAccess,
 		workflow.DestroyTaskKindMachineInfra, workflow.DestroyTaskKindMachineRegistration,
 		workflow.DestroyTaskKindStorageNodeAccess:
 		return PhaseMachines
-	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindHostVirtctl, workflow.ApplyTaskKindStorageInfra:
+	case workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindMachineInfraFinalize,
+		workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindStorageInfra:
 		return PhasePrerequisites
 	case workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindBootstrapWait, workflow.ApplyTaskKindInstallWait, workflow.ApplyTaskKindStorageCluster:
 		return PhaseClusterInstall
-	case workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply:
+	case workflow.ApplyTaskKindClusterAddon, workflow.ApplyTaskKindNodeConfigApply, workflow.ApplyTaskKindHostVirtctl:
 		return PhaseAddOns
 	case workflow.ApplyTaskKindPlaybook:
 		if hook := PlaybookHookPoint(task.Label); hook != "" {
@@ -99,13 +103,15 @@ func TasksInDisplayOrder(tasks []workflow.TaskLedgerEntry) []workflow.TaskLedger
 	}
 	for _, task := range tasks {
 		seen := map[string]bool{}
-		for _, dep := range task.Dependencies {
-			if _, ok := byID[dep]; !ok || seen[dep] {
-				continue
+		for _, deps := range [][]string{task.Dependencies, task.OrderingDependencies} {
+			for _, dep := range deps {
+				if _, ok := byID[dep]; !ok || seen[dep] {
+					continue
+				}
+				seen[dep] = true
+				indegree[task.ID]++
+				dependents[dep] = append(dependents[dep], task.ID)
 			}
-			seen[dep] = true
-			indegree[task.ID]++
-			dependents[dep] = append(dependents[dep], task.ID)
 		}
 	}
 	ready := make([]string, 0, len(tasks))

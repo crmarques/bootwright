@@ -28,10 +28,12 @@ func TestApplyClusterPhasesAggregateContainerAndStorageStates(t *testing.T) {
 	}
 
 	container := ApplyClusterPhases(ledger, "cluster-a")
-	requireApplyPhase(t, "cluster-a", container, PhaseMachines, workflow.TaskStatusOK)
 	requireApplyPhase(t, "cluster-a", container, PhasePrerequisites, workflow.TaskStatusOK)
 	requireApplyPhase(t, "cluster-a", container, PhaseClusterInstall, workflow.TaskStatusRunning)
 	requireApplyPhase(t, "cluster-a", container, PhaseAddOns, workflow.TaskStatusBlocked)
+	if phasePresent(container, PhaseMachines) {
+		t.Fatalf("machine work on a container cluster runs concurrently with the installer ISO, so it must not claim a phase of its own: %+v", container)
+	}
 
 	storage := ApplyClusterPhases(ledger, "ceph-a")
 	requireApplyPhase(t, "ceph-a", storage, PhasePrerequisites, workflow.TaskStatusOK)

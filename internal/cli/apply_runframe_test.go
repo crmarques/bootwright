@@ -61,18 +61,36 @@ func TestApplyRunFrameCollapsesTasksIntoHighLevelPhases(t *testing.T) {
 	for _, step := range steps {
 		got = append(got, step.Label)
 	}
-	want := []string{status.PhaseMachines, status.PhasePrerequisites, status.PhaseClusterInstall, status.PhaseAddOns}
+	want := []string{status.PhasePrerequisites, status.PhaseClusterInstall, status.PhaseAddOns}
 	if len(got) != len(want) {
-		t.Fatalf("steps = %v, want the four high-level phases %v", got, want)
+		t.Fatalf("steps = %v, want the three high-level phases %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("steps = %v, want %v", got, want)
 		}
 	}
-	if steps[0].Status != output.StatusRunning || steps[0].Detail != "2/3" {
-		t.Fatalf("machines step = %+v, want RUNNING 2/3", steps[0])
+	if steps[0].Status != output.StatusRunning || steps[0].Detail != "Provision machine node02  2/4" {
+		t.Fatalf("prerequisites step = %+v, want RUNNING naming the running task and its progress", steps[0])
 	}
+}
+
+func TestApplyRunFrameNamesTheCrossClusterBlocker(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "wait.host", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install host", Cluster: "host", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
+		{ID: "infra.guest.node01", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine node01", Cluster: "guest", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"wait.host"}},
+	}, time.Now())
+
+	for _, group := range applyRunFrame(ledger, nil).Groups {
+		if group.Title != "guest (ContainerCluster)" {
+			continue
+		}
+		if got := group.Steps[0].Detail; got != "waiting on host: "+status.PhaseClusterInstall {
+			t.Fatalf("guest prerequisites detail = %q, want the blocking cluster and phase named", got)
+		}
+		return
+	}
+	t.Fatalf("guest group missing")
 }
 
 func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
