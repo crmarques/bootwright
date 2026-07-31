@@ -2185,3 +2185,23 @@ func storagePoolSpec(cluster, role string) v1alpha1.StoragePoolSpec {
 		},
 	}
 }
+
+func TestStorageMgmtGatewayErrorsNameTheAuthoredField(t *testing.T) {
+	state := storageValidationState()
+	for i := range state.StorageClusters {
+		if state.StorageClusters[i].Spec.Ceph == nil {
+			continue
+		}
+		state.StorageClusters[i].Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{
+			DNSLabel: "Not A Label",
+			Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+		}
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if strings.Contains(got, "spec.ceph.management") {
+		t.Fatalf("the authored field is spec.ceph.mgmtGateway; spec.ceph.management is a path no input has, so an operator cannot find what to change, got %q", got)
+	}
+	if !strings.Contains(got, "spec.ceph.mgmtGateway.dnsLabel") {
+		t.Fatalf("errors = %q, want the authored path spec.ceph.mgmtGateway.dnsLabel", got)
+	}
+}
