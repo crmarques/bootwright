@@ -150,20 +150,24 @@ resolve** cluster-wide:
   construction: the installer writes the node FQDN as the OS hostname, and a
   `nameResolution` component the node's `NetworkConfig` references publishes a
   record for it.
-- For `os.provided: true` machines, the operator guarantees it. If a machine's
-  real hostname lives outside the composed zone, set the node's `fqdn:` field —
-  `name` stays a strict label and remains the token you author in
-  `placement.hosts[]`, `bootstrap.node` and the stretch tiebreaker, while
-  `fqdn` pins the name cephadm registers.
+- For `os.provided: true` machines, **`apply` writes it**. If a machine's real
+  hostname must stay as it is, set the node's `fqdn:` field — `name` stays a
+  strict label and remains the token you author in `placement.hosts[]`,
+  `bootstrap.node` and the stretch tiebreaker, while `fqdn` pins the name
+  cephadm registers, and `apply` then writes that name instead.
 
-A mismatch passes `validate`, which never reaches the host. It is caught on the
-host itself: **`apply` refuses the node before it installs anything**, comparing
-each storage node's real OS hostname against the name cephadm will register.
-`bootwright preflight` runs the same comparison read-only. cephadm matches that
-string literally against the kernel's hostname, so a DNS record for the node
-name — a CNAME to the machine, or an A record — does not satisfy it; only the
-machine's own hostname does. See
-[ADR 0035](https://github.com/crmarques/bootwright/blob/main/specs/adr/0035-a-storage-node-answers-to-the-name-cephadm-registers.md).
+A mismatch passes `validate`, which never reaches the host. It is settled on the
+host itself: **`apply` writes the name cephadm will register onto every storage
+node before it touches the cluster**, then refuses the node if the write did not
+hold — which means something on the machine owns the name, such as cloud-init
+without `preserve_hostname: true`. `bootwright preflight` reports the pending
+rewrite read-only and refuses nothing. cephadm matches that string literally
+against the kernel's hostname, so a DNS record for the node name — a CNAME to
+the machine, or an A record — does not satisfy it; only the machine's own
+hostname does. See
+[ADR 0035](https://github.com/crmarques/bootwright/blob/main/specs/adr/0035-a-storage-node-answers-to-the-name-cephadm-registers.md)
+and
+[ADR 0036](https://github.com/crmarques/bootwright/blob/main/specs/adr/0036-bootwright-writes-the-name-a-storage-node-answers-to.md).
 
 The machine's own DNS name is separate: every `Machine` carries a `fqdn`
 address (`<machineName>.<domains.machines>` by default) that Bootwright connects to

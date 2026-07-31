@@ -8,6 +8,11 @@ Enforces the invariant [ADR 0017](0017-machine-fqdn-node-identity.md) states but
 never checked, and repairs the `nodes[].fqdn` escape hatch
 [ADR 0025](0025-composed-names-are-labels-plus-explicit-overrides.md) introduced.
 
+Revised by
+[ADR 0036](0036-bootwright-writes-the-name-a-storage-node-answers-to.md), which
+reverses "Bootwright does not write the hostname of a machine it did not
+install" and makes the gate below a post-condition of that write.
+
 ## Context
 
 cephadm identifies a host by the hostname its kernel reports. `ceph orch apply -i`

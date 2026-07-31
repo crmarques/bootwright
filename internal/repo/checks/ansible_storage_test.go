@@ -977,31 +977,36 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 		t.Fatalf("storage node selection must map the rendered hosts attribute, got %s", expr)
 	}
 
-	task := tasks[findAnsibleTask(t, tasks, "Assert storage node name matches the declared topology")]
-	body, ok := task["ansible.builtin.assert"].(map[string]any)
-	if !ok {
-		t.Fatalf("storage hostname verification must be an assert, got %v", task)
-	}
-	that := fmt.Sprint(body["that"])
-	if !strings.Contains(that, "ansible_facts['nodename'] == item.cephHostname") {
-		t.Fatalf("hostname assert must compare the real OS hostname with the declared topology hostname, got %v", body["that"])
-	}
-	for _, reject := range []string{"ansible_facts['hostname']", "split('.')", "| lower"} {
-		if strings.Contains(that, reject) {
-			t.Fatalf("hostname assert must not weaken the cephadm comparison with %s, got %v", reject, body["that"])
+	for _, task := range tasks {
+		body, ok := task["ansible.builtin.assert"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.Contains(fmt.Sprint(body["that"]), "cephHostname") {
+			t.Fatalf("preflight must not refuse a hostname apply rewrites; report it instead, got %v", task["name"])
 		}
 	}
-	failMsg := fmt.Sprint(body["fail_msg"])
+
+	task := tasks[findAnsibleTask(t, tasks, "Report a storage node OS hostname apply will rewrite")]
+	body, ok := task["ansible.builtin.debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage hostname reporting must be a read-only debug, got %v", task)
+	}
+	msg := fmt.Sprint(body["msg"])
 	for _, want := range []string{"{{ ansible_facts['nodename'] }}", "{{ item.cephHostname }}"} {
-		if !strings.Contains(failMsg, want) {
-			t.Fatalf("hostname assert fail_msg must name both the real and the declared hostname, got %s", failMsg)
+		if !strings.Contains(msg, want) {
+			t.Fatalf("hostname report must name both the real and the declared hostname, got %s", msg)
 		}
 	}
 	if got := fmt.Sprint(task["loop"]); !strings.Contains(got, "bootwright_host_storage_nodes") {
-		t.Fatalf("hostname assert must loop this host's declared storage nodes, got %v", task["loop"])
+		t.Fatalf("hostname report must loop this host's declared storage nodes, got %v", task["loop"])
 	}
-	if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_host_storage_nodes | length > 0") {
-		t.Fatalf("hostname assert must be gated on storage nodes, got when=%v", task["when"])
+	when := fmt.Sprint(task["when"])
+	if !strings.Contains(when, "bootwright_host_storage_nodes | length > 0") {
+		t.Fatalf("hostname report must be gated on storage nodes, got when=%v", task["when"])
+	}
+	if !strings.Contains(when, "ansible_facts['nodename'] != item.cephHostname") {
+		t.Fatalf("hostname report must stay silent when the name already matches, got when=%v", task["when"])
 	}
 }
 
@@ -1019,8 +1024,37 @@ func TestStorageCephadmApplyGatesNodeHostname(t *testing.T) {
 	}
 
 	gateIdx := findAnsibleTask(t, tasks, "Refuse a storage node whose OS hostname is not the name cephadm will register")
-	if resolveIdx := findAnsibleTask(t, tasks, "Set current storage node"); gateIdx <= resolveIdx {
+	resolveIdx := findAnsibleTask(t, tasks, "Set current storage node")
+	if gateIdx <= resolveIdx {
 		t.Fatalf("the hostname gate must run after the current storage node is resolved")
+	}
+
+	writeIdx := findAnsibleTask(t, tasks, "Write the OS hostname cephadm will register")
+	if writeIdx <= resolveIdx || writeIdx >= gateIdx {
+		t.Fatalf("the hostname write must run after the node is resolved and before the gate verifies it")
+	}
+	write := tasks[writeIdx]
+	hostname, ok := write["ansible.builtin.hostname"].(map[string]any)
+	if !ok {
+		t.Fatalf("the hostname write must use the hostname module so it persists, got %v", write)
+	}
+	if got := fmt.Sprint(hostname["name"]); !strings.Contains(got, "bootwright_current_storage_host.cephHostname") {
+		t.Fatalf("the hostname write must write the name cephadm registers, got %v", hostname["name"])
+	}
+	if got := fmt.Sprint(write["become"]); got != "true" {
+		t.Fatalf("writing the OS hostname needs privilege, got become=%v", write["become"])
+	}
+
+	rereadIdx := findAnsibleTask(t, tasks, "Re-read storage node platform facts after writing the hostname")
+	if rereadIdx <= writeIdx || rereadIdx >= gateIdx {
+		t.Fatalf("the gate must read facts gathered after the write, not the stale ones")
+	}
+	reread, ok := tasks[rereadIdx]["ansible.builtin.setup"].(map[string]any)
+	if !ok {
+		t.Fatalf("re-reading the hostname must be a setup task, got %v", tasks[rereadIdx])
+	}
+	if subset := fmt.Sprint(reread["gather_subset"]); !strings.Contains(subset, "platform") {
+		t.Fatalf("the re-read must include the platform subset so nodename is refreshed, got %v", reread["gather_subset"])
 	}
 	gate := tasks[gateIdx]
 	body, ok := gate["ansible.builtin.assert"].(map[string]any)

@@ -1343,10 +1343,10 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   unaffected by the zone (ADR 0025). It is rendered
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer
-  sets the OS hostname to the same node FQDN), operator-guaranteed for
-  `os.provided` machines; a mismatch passes `validate` but fails the storage
-  node preflight, which asserts each node's real hostname against the declared
-  topology node name. The per-host OSD service id derives from the node short
+  sets the OS hostname to the same node FQDN), and written by `apply` on every
+  storage node, `os.provided` included, before the run touches the cluster
+  (ADR 0036); a mismatch passes `validate` and is repaired on the host, and
+  `apply` refuses the node only when the write does not hold. The per-host OSD service id derives from the node short
   name (`data-<nodeShortName>`). Node names must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at

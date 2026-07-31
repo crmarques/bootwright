@@ -48,4 +48,5 @@ below.
 | [0032](0032-tearing-down-input-a-newer-build-cannot-read.md) | Tearing Down Input a Newer Build Cannot Read | extends 0030 with the `stale-input` token |
 | [0033](0033-the-login-follows-the-scope-and-carries-its-credential.md) | The Login Follows the Command's Scope, and Carries Its Credential | refines 0019, 0024, 0027 |
 | [0034](0034-wiping-a-device-no-node-claims.md) | Wiping a Device No Node Claims | extends 0030 with the `unowned-devices` token |
-| [0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md) | A Storage Node Answers to the Name cephadm Registers | enforces 0017; repairs the `fqdn` override of 0025 |
+| [0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md) | A Storage Node Answers to the Name cephadm Registers | enforces 0017; repairs the `fqdn` override of 0025; revised by 0036 |
+| [0036](0036-bootwright-writes-the-name-a-storage-node-answers-to.md) | Bootwright Writes the Name a Storage Node Answers To | revises 0035 |
