@@ -494,8 +494,17 @@ Generated output boundaries are part of the safety contract:
 - Managed machine OS Kickstart files and remastered install ISOs may inline
   RHSM organization and activation-key material when
   `MachineInstallProfile.spec.installer.anaconda.packageSource.fromSubscription`
-  references a Red Hat RHEL entitlement. They are runtime artifacts only and
-  must never be versioned.
+  references a Red Hat RHEL entitlement, and the LUKS recovery passphrase when
+  `spec.customizations.security.diskEncryption` is set. Anaconda takes the
+  passphrase on the partitioning line, so there is no way to encrypt a disk at
+  install time without the installer media carrying the secret that opens it.
+  The exposure is bounded rather than removed: the rendered Kickstart is `0600`
+  root-owned on the provider host, the remastered ISO is published `0600`
+  whenever the Kickstart carries any secret, it is served to the BMC over a
+  per-machine tokenized URL, and the Kickstart copies Anaconda leaves at
+  `/root/anaconda-ks.cfg` and `/root/original-ks.cfg` are shredded in `%post`
+  once the volumes are bound. They are runtime artifacts only and must never be
+  versioned.
 - Rendered storage tool inputs live under
   `/var/lib/bootwright/contexts/<context>/rendered/storage/<storageCluster>/`.
 - Kubeconfigs produced for installed clusters live at

@@ -231,6 +231,44 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 	return errs
 }
 
+func validateStorageCephOSDTPM2Stack(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
+	fleetTPM2 := false
+	for _, drivegroup := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		if drivegroup.OSD.TPM2 {
+			fleetTPM2 = true
+		}
+	}
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		if !fleetTPM2 && (node.OSD == nil || !node.OSD.TPM2) {
+			continue
+		}
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
+			continue
+		}
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
+		if !ok {
+			continue
+		}
+		if storageCephNodeInstallsTPM2Stack(profile) {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf(
+			"StorageCluster/%s osd.tpm2 covers Ceph host %s, and sealing the OSD key runs systemd-cryptenroll on that host, which dlopens the %s libraries. MachineInstallProfile/%s installs neither %s nor customizations.security.diskEncryption, and %s is only a weak dependency of systemd-udev, so a minimal install does not carry it and enrollment fails after the OSD is already created. Add %s to customizations.packages.install",
+			cluster.Metadata.Name, node.Name, v1alpha1.TPM2StackPackage, profile.Metadata.Name,
+			v1alpha1.TPM2StackPackage, v1alpha1.TPM2StackPackage, v1alpha1.TPM2StackPackage))
+	}
+	return errs
+}
+
+func storageCephNodeInstallsTPM2Stack(profile v1alpha1.MachineInstallProfile) bool {
+	if profile.Spec.Customizations.Security.DiskEncryption != nil {
+		return true
+	}
+	return machineInstallStringListContains(profile.Spec.Customizations.Packages.Install, v1alpha1.TPM2StackPackage)
+}
+
 func validateStorageCephFIPS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
 	if !cluster.Spec.Ceph.Security.FIPS.Enabled {
 		return nil

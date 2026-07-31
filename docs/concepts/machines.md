@@ -656,6 +656,11 @@ through Anaconda.
 | `spec.customizations.security.selinux.mode` | No | OS default | `enforcing`, `permissive`, or `disabled`. |
 | `spec.customizations.security.firewall.enabled` | No | OS default | Tri-state firewall control; explicit `false` disables. |
 | `spec.customizations.security.fips.enabled` | No | `false` | `true` enables FIPS install configuration. RHEL-only. |
+| `spec.customizations.security.diskEncryption` | No | — (unencrypted) | Presence encrypts the installed system with LUKS2 and binds it to the machine's TPM 2.0. See [Disk encryption](#disk-encryption). |
+| `spec.customizations.security.diskEncryption.unlock.tpm2` | Yes (when the block is set) | — | The only unlock arm: `clevis` seals the volume key in the node's TPM 2.0 chip. |
+| `spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds[]` | No | — (no boot policy) | Platform Configuration Registers the key is sealed against, `0`–`23`. Omitted, the key is released on any boot of that machine — theft of the disk is defeated, tampering with the boot chain is not. |
+| `spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank` | No (invalid without `pcrIds`) | `sha256` | PCR bank the policy reads: `sha1`, `sha256`, `sha384`, or `sha512`. |
+| `spec.customizations.security.diskEncryption.recoveryPassphraseRef` | Yes (when the block is set) | — | `opaque` or `token` Secret holding the passphrase Anaconda creates the LUKS container from. The keyslot is kept as the way back in when the TPM stops releasing the key. |
 
 !!! warning "Profile coupling rules"
     - A profile referenced by a managed-install machine (`os.installProfileRef`)
@@ -666,6 +671,12 @@ through Anaconda.
       `customizations.services.enabled`.
     - `customizations.security.fips.enabled: true` is supported only when
       `os.family` is `rhel` (compared case-insensitively).
+    - `customizations.security.diskEncryption` needs a TPM 2.0 on every machine
+      that references the profile. On a virtual substrate that means the
+      machine's `machineProfiles[]` entry carries
+      [`tpm: {}`](infrastructure.md#emulated-tpm); on bare metal it means the
+      firmware exposes one, which Bootwright cannot check before the install
+      writes to disk.
     - `customizations.repositories.subscription` requires the node to be
       registered — set `spec.subscription.entitlementRef` or
       `installer.anaconda.packageSource.fromSubscription`. Without one, use
@@ -748,6 +759,104 @@ the same rule Anaconda's own `repo` directives follow.
     directive registers during install, so `%post` selects the repositories
     itself. With `spec.subscription` the node registers day-2, so `%post` skips
     the block and the machines-phase task applies it after registration.
+
+## Disk encryption
+
+`customizations.security.diskEncryption` installs the node onto LUKS2 and binds
+the volume to the machine's TPM 2.0, so it boots unattended and a disk pulled out
+of the chassis is inert. It is a **presence block**: omit it and the node
+installs unencrypted.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-luks-recovery
+spec:
+  type: token
+  source:
+    generated:
+      bytes: 32
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+spec:
+  os:
+    family: rhel
+    version: "9.6"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-boot-iso
+  customizations:
+    services:
+      enabled:
+        - sshd
+    security:
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: rhel-luks-recovery
+```
+
+Anaconda creates the container from `recoveryPassphraseRef`, a `%post` script
+binds every LUKS2 volume with `clevis luks bind … tpm2` and rebuilds the
+initramfs, and the passphrase keyslot stays. Bootwright adds `clevis`,
+`clevis-dracut`, `clevis-luks`, `clevis-systemd`, `tpm2-tools` and `tpm2-tss` to
+the install transaction; you do not list them in
+`customizations.packages.install`. Both the root filesystem and swap are
+encrypted; `/boot` and the ESP are not, because the bootloader has to read them.
+
+!!! warning "The recovery passphrase is the only way back in"
+    A TPM releases the key only to the machine it is soldered into. Replace the
+    board, clear the chip, or — with `pcrIds` set — update the firmware, and the
+    node stops at a passphrase prompt on a console nobody is watching. Keep the
+    Secret; `bootwright secret show rhel-luks-recovery` is the recovery path.
+    Bootwright refuses a profile that sets `diskEncryption` without it.
+
+    It is also **fleet-wide**: every machine installed from one profile shares
+    one passphrase. Give a tier that needs its own escrow its own profile.
+
+### Sealing to the boot state
+
+With `pcrIds` omitted, the key is sealed to the chip alone. That defeats disk
+theft; it does **not** detect a tampered boot chain, because the TPM releases the
+key whatever kernel asked. `pcrIds` adds that policy at the cost of fragility —
+each register is re-measured on every boot, and a mismatch means no unlock:
+
+| `pcrIds` entry | Measures | Broken by |
+| --- | --- | --- |
+| `0` | UEFI firmware code | a firmware update |
+| `1` | Firmware configuration, boot order | a BIOS setting or hardware change |
+| `4` | Boot manager binaries | a `shim`/`grub2` erratum |
+| `7` | Secure Boot policy and the certificate that authenticated the image | disabling Secure Boot, a key rotation, a `dbx` revocation |
+
+`7` is the usual choice where boot-state binding is required: it survives kernel
+content updates and still notices Secure Boot being turned off. It is only
+meaningful on a UEFI machine that booted with Secure Boot on — under legacy BIOS
+the register is not populated the way the policy expects. Whatever you pick,
+changing it later is a reinstall, not a reconcile.
+
+### Turning it on is a reinstall
+
+The block is part of the install marker's desired hash, so adding, removing, or
+re-policying it puts every machine on that profile in drift. Partitioning happens
+once, in Anaconda: converging that drift means Bootwright reinstalls the node,
+and `apply` refuses to until the run says so explicitly. Plan it as a rebuild of
+the tier, not as an edit.
+
+### Ceph OSDs are a separate control
+
+`StorageCluster` `spec.ceph.…osd.encrypted` / `osd.tpm2` encrypt the **OSD data
+devices**, and cephadm seals those keys with `systemd-cryptenroll`, not clevis.
+The two features are independent — a node can have either, both, or neither —
+but `osd.tpm2` needs the `tpm2-tss` libraries on the host, which a `minimal`
+install with `installWeakDeps: false` does not pull in. Enabling
+`diskEncryption` installs them; otherwise add `tpm2-tss` to
+`customizations.packages.install`. Bootwright refuses the cluster if neither is
+true. See [Storage](storage.md).
 
 ## Where to go next
 

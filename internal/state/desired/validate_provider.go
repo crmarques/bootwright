@@ -240,6 +240,12 @@ func validateMachineProfiles(prefix, providerType string, profiles []v1alpha1.Ma
 				errs = append(errs, fmt.Sprintf("%s.failureDomainRef is not supported when type=%s; failure domains exist only on vsphere providers", owner, providerType))
 			}
 		}
+		if profile.TPM != nil && providerType != v1alpha1.ProvisionerLibvirt && providerType != v1alpha1.ProvisionerKubeVirt {
+			errs = append(errs, fmt.Sprintf("%s.tpm is not supported when type=%s; only the libvirt and kubevirt adapters attach an emulated TPM 2.0. A vsphere vTPM additionally needs a vCenter key provider and an EFI-firmware VM, which bootwright does not configure", owner, providerType))
+		}
+		if profile.TPM != nil && providerType == v1alpha1.ProvisionerLibvirt && profile.TPM.Persistent != nil {
+			errs = append(errs, fmt.Sprintf("%s.tpm.persistent is not supported when type=%s; libvirt keeps swtpm state on the hypervisor for every defined domain, and only the kubevirt adapter chooses between an ephemeral and a persisted vTPM", owner, providerType))
+		}
 		if providerType != v1alpha1.ProvisionerLibvirt && providerType != v1alpha1.ProvisionerVSphere && len(profile.DataDisks) > 0 {
 			errs = append(errs, fmt.Sprintf("%s.dataDisks is not supported when type=%s; only the libvirt and vsphere adapters provision data disks", owner, providerType))
 		}

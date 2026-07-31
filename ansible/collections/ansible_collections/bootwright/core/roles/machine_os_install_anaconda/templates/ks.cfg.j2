@@ -51,6 +51,22 @@ timezone {{ localization.timezone | default('UTC', true) }} --utc{{ ntp_flag }}
 {% endif %}
 rootpw --lock
 {% set security = ks.security | default({}) %}
+{% set disk_encryption = security.diskEncryption | default({}) %}
+{% set encrypted = (disk_encryption | length) > 0 %}
+{% if encrypted %}
+{% set clevis = disk_encryption.clevis | default({}) %}
+{% set luks_passphrase = lookup('ansible.builtin.file', disk_encryption.passphrasePath) | trim %}
+{% if luks_passphrase | length == 0 %}
+{{ undef(hint='machineOSInstall diskEncryption recovery passphrase secret ' ~ disk_encryption.passphrasePath ~ ' is empty. MachineInstallProfile spec.customizations.security.diskEncryption.recoveryPassphraseRef must resolve to a non-empty secret: Anaconda creates the LUKS container from that passphrase, and it is the only way back into the disk when the TPM stops releasing the key.') }}
+{% endif %}
+{% if (luks_passphrase | regex_search('[^!-~]')) or ('"' in luks_passphrase) or ("'" in luks_passphrase) or ('\\' in luks_passphrase) %}
+{{ undef(hint='machineOSInstall diskEncryption recovery passphrase secret ' ~ disk_encryption.passphrasePath ~ " must hold one line of printable ASCII with no whitespace, quotes, or backslashes: it is passed to Anaconda as --passphrase= on the partitioning line, where those characters change how the line parses. A generated token Secret satisfies this.") }}
+{% endif %}
+{% set pbkdf_flag = (' --pbkdf=' ~ disk_encryption.pbkdf) if (disk_encryption.pbkdf | default('') | length > 0) else '' %}
+{% set luks_flags = ' --encrypted --luks-version=' ~ (disk_encryption.luksVersion | default('luks2', true)) ~ pbkdf_flag ~ ' --passphrase=' ~ luks_passphrase %}
+{% else %}
+{% set luks_flags = '' %}
+{% endif %}
 {% set selinux = security.selinux | default({}) %}
 {% if selinux.mode | default('') | length > 0 %}
 selinux --{{ selinux.mode }}
@@ -85,12 +101,12 @@ zerombr
 clearpart --all --initlabel --drives={{ storage.rootDisk }}
 bootloader --location=mbr --boot-drive={{ storage.rootDisk }}
 reqpart --add-boot
-part swap --recommended --ondisk={{ storage.rootDisk }}
-part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}
+part swap --recommended --ondisk={{ storage.rootDisk }}{{ luks_flags }}
+part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}{{ luks_flags }}
 {% else %}
 zerombr
 clearpart --all --initlabel
-autopart --type=lvm --fstype=xfs
+autopart --type=lvm --fstype=xfs{{ luks_flags }}
 {% endif %}
 
 {% set services = ks.services | default({}) %}
@@ -117,6 +133,20 @@ user --name={{ ssh_user }} --lock
 {% endif %}
 sshkey --username={{ ssh_user }} "{{ ssh_key | trim }}"
 
+{% if encrypted %}
+# Refuse the install before any disk is touched when this machine exposes no TPM
+# 2.0 device. Anaconda would otherwise create the LUKS containers, fail to bind
+# them in %post, and leave a machine that stops at a passphrase prompt on a
+# console nobody is watching. tpm2-tools is not in the installer runtime, so this
+# checks the kernel device nodes only; the usable-TPM check runs in %post.
+%pre --erroronfail
+if [ ! -e /dev/tpmrm0 ] && [ ! -e /dev/tpm0 ]; then
+    echo 'Bootwright: this MachineInstallProfile enables disk encryption unlocked by TPM 2.0, but the kernel exposed no /dev/tpmrm0 or /dev/tpm0 on this machine. Enable the TPM in firmware, or drop customizations.security.diskEncryption from the profile.' >&2
+    exit 1
+fi
+%end
+
+{% endif %}
 {% if sat_enabled and sat_ca %}
 # Trust the corporate Satellite CA inside the installer runtime before the rhsm
 # registration and HTTPS content fetch run. Anaconda runs every %pre script before
@@ -145,6 +175,57 @@ update-ca-trust extract
 {% endfor %}
 %end
 
+{% if encrypted %}
+# Bind every LUKS container Anaconda just created to this machine's TPM 2.0 so it
+# unlocks unattended, then rebuild the initramfs so the clevis dracut module is in
+# it. This runs before the %post that writes the install marker: --erroronfail
+# halts the install on failure, and because the marker is never written the next
+# apply sees an uninstalled machine rather than an installed-but-unencrypted one.
+# The passphrase keyslot is deliberately kept — Red Hat's policy-based decryption
+# guidance is that a TPM whose PCRs move must still have a human way in.
+%post --erroronfail --interpreter=/bin/bash --log=/root/bootwright-ks-luks.log
+set -euo pipefail
+
+if [[ ! -e /dev/tpmrm0 && ! -e /dev/tpm0 ]]; then
+    echo 'Bootwright: no TPM 2.0 device in the installed system' >&2
+    exit 1
+fi
+tpm2_getcap properties-fixed >/dev/null
+
+bootwright_luks_key=$(mktemp)
+chmod 0600 "${bootwright_luks_key}"
+trap 'shred -u "${bootwright_luks_key}" 2>/dev/null || true' EXIT
+cat > "${bootwright_luks_key}" <<'BOOTWRIGHT_LUKS_PASSPHRASE'
+{{ luks_passphrase }}
+BOOTWRIGHT_LUKS_PASSPHRASE
+truncate -s -1 "${bootwright_luks_key}"
+
+# lsblk rather than blkid: the %post chroot can inherit a stale blkid cache from
+# the installer runtime. The devices are counted in the loop rather than held in
+# a bash array, whose length operator would open a Jinja comment here.
+bootwright_luks_seen=0
+for bootwright_luks_device in $(lsblk -p -n -l -o NAME,FSTYPE | awk '$2 == "crypto_LUKS" { print $1 }'); do
+    bootwright_luks_seen=$((bootwright_luks_seen + 1))
+    if clevis luks list -d "${bootwright_luks_device}" 2>/dev/null | grep -q '{{ clevis.pin }}'; then
+        continue
+    fi
+    clevis luks bind -y -d "${bootwright_luks_device}" -k "${bootwright_luks_key}" {{ clevis.pin }} '{{ clevis.config }}'
+    clevis luks list -d "${bootwright_luks_device}"
+done
+
+if [ "${bootwright_luks_seen}" -eq 0 ]; then
+    echo 'Bootwright: partitioning produced no crypto_LUKS device to bind' >&2
+    exit 1
+fi
+
+dracut -fv --regenerate-all
+
+# Anaconda copies the kickstart onto the installed root, and it carries the
+# recovery passphrase in cleartext. The bound volumes no longer need it.
+shred -u /root/anaconda-ks.cfg /root/original-ks.cfg 2>/dev/null || true
+%end
+
+{% endif %}
 %post --log=/root/bootwright-ks-post.log
 {% if localization.formats | default('') | length > 0 %}
 # Keep system messages in {{ localization.language | default('en_US.UTF-8', true) }} while regional

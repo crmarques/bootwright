@@ -6,4 +6,6 @@ bootwright_provider_host_libvirt_packages:
   - libvirt-clients
   - virtinst
   - python3-libvirt
+  - swtpm
+  - swtpm-tools
 bootwright_provider_host_libvirt_libvirt_service: libvirtd

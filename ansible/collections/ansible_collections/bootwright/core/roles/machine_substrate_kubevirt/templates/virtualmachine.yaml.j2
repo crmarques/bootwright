@@ -41,6 +41,10 @@ spec:
               cdrom:
                 bus: sata
               bootOrder: 2
+{% if bootwright_component.profile.tpm is defined %}
+          tpm:
+            persistent: {{ bootwright_component.profile.tpm.persistent | bool | lower }}
+{% endif %}
           interfaces:
 {% for iface in bootwright_component.interfaces | default([]) %}
             - name: {{ iface.name }}

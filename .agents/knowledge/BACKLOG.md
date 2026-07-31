@@ -734,3 +734,72 @@ learned; this file records what it still owes.
   `roles/storage_cluster_cephadm/vars/os/RedHat.yml` so ownership records apply
   and destroy does not strip a preexisting copy off a provided node.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
+
+## B-055 — `initialPasswordPath` escapes the install marker's basename normalization
+- Status: open
+- Area: machines / converge
+- Origin: disk-encryption implementation 2026-07-31
+- Severity: medium
+- Problem: `stableMarkerInput` in
+  `internal/render/inventory/vars_machine_os_marker.go` rewrites every
+  materialized secret path to its basename so the managed-OS install marker's
+  desired hash is portable across per-run secret directories. It covers
+  `ssh.privateKeyPath`, `ssh.knownHostsPath`, `ssh.trustDir`,
+  `kickstart.sshPublicKeyPath`, the RHSM and Satellite paths, the proxy
+  credentials path, and — since this change —
+  `kickstart.security.diskEncryption.passphrasePath`. It does **not** cover
+  `kickstart.initialPasswordPath`, which `vars_machine_os_install.go` sets to an
+  absolute `<secretsDir>/<name>`. A profile using
+  `customizations.ssh.initialPassword` therefore hashes the run's secrets
+  directory into the marker, so a machine can read as drifted — reinstall-only
+  drift — purely because the path moved.
+- Exit: add `markerBasename(kickstart, "initialPasswordPath")` beside the
+  existing calls and extend
+  `TestMarkerHashStableAcrossProxyCredentialsDir` to cover it. Note that the fix
+  changes the recorded hash for every profile that sets `initialPassword`, so it
+  needs the same one-time reinstall-drift warning any hash-shape change does.
+- Related: [converge-hash-drift-model.md](converge-hash-drift-model.md)
+
+## B-056 — Anaconda leaves RHSM material in `/root/anaconda-ks.cfg` on the installed node
+- Status: open
+- Area: machines / secrets
+- Origin: disk-encryption implementation 2026-07-31
+- Severity: medium
+- Problem: Anaconda copies the kickstart it consumed to
+  `/root/anaconda-ks.cfg` and `/root/original-ks.cfg` on the installed system.
+  When `packageSource.fromSubscription` is set, that copy carries the RHSM
+  organization and activation key in cleartext; when
+  `customizations.ssh.initialPassword` is set, it carries the console password.
+  Both survive indefinitely at `0600` root-owned. The disk-encryption `%post`
+  shreds both files, but only when encryption is enabled — which is exactly the
+  case where the disk was already protecting them.
+- Exit: shred the kickstart copies unconditionally in the main `%post`, or
+  decide deliberately that a root-only file on an owned node is acceptable and
+  say so in `specs/security.md`. If they are shredded, note in
+  `docs/advanced/managed-os.md` that the installed node no longer keeps a copy
+  of the kickstart for diagnosis.
+- Related: [disk-encryption-tpm.md](disk-encryption-tpm.md)
+
+## B-057 — Nothing preflights a TPM before an OpenShift node is written to
+- Status: open
+- Area: openshift / disk-encryption
+- Origin: ADR 0037
+- Severity: medium
+- Problem: `ContainerCluster.spec.security.diskEncryption` renders a
+  `MachineConfig` extra manifest. assisted-service's
+  `disk-encryption-requirements-satisfied` host validation short-circuits unless
+  the cluster record itself declares disk encryption, and it never infers that
+  from an extra manifest. A node whose firmware exposes no TPM 2.0 therefore
+  passes every check, has RHCOS written to its disk, and only then fails in the
+  initramfs — `clevis luks bind` errors, `ignition-disks.service` fails, systemd
+  drops to `emergency.target`, and the node never registers. The installer
+  reports a host that never joined; the cause is visible only on the serial or
+  BMC console. The Anaconda path has a `%pre` gate that refuses before any disk
+  is touched; this path has nothing equivalent.
+- Exit: probe the TPM out of band before the install writes — the BMC already
+  answers Redfish for these machines, so a `Systems/<id>` TrustedModules /
+  inventory read at preflight could refuse the run — or revisit
+  `AgentClusterInstall.spec.diskEncryption` if the ZTP `cluster-manifests` flow
+  ever becomes compatible with the `install-config.yaml` renderer.
+- Related: [disk-encryption-tpm.md](disk-encryption-tpm.md),
+  [0037](../../specs/adr/0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md)

@@ -433,7 +433,8 @@ func assertNoFlowStyleCollections(t *testing.T, name, body string) {
 
 func allowedEmptyPresenceUnion(line string) bool {
 	switch strings.TrimSpace(line) {
-	case "secretRef: {}", "storageExportAttachment: {}", "- storageExportAttachment: {}", "boundCluster: {}":
+	case "secretRef: {}", "storageExportAttachment: {}", "- storageExportAttachment: {}", "boundCluster: {}",
+		"tpm2: {}", "tpm: {}":
 		return true
 	default:
 		return false

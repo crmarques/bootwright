@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -220,6 +221,52 @@ func validateMachineInstallSecurity(prefix string, profile v1alpha1.MachineInsta
 		if !machineInstallStringListContains(customizations.Services.Enabled, "firewalld") {
 			errs = append(errs, prefix+".firewall.enabled requires customizations.services.enabled to include firewalld")
 		}
+	}
+	errs = append(errs, validateMachineInstallDiskEncryption(prefix+".diskEncryption", security.DiskEncryption)...)
+	return errs
+}
+
+func validateMachineInstallDiskEncryption(prefix string, encryption *v1alpha1.MachineInstallDiskEncryption) []string {
+	if encryption == nil {
+		return nil
+	}
+	var errs []string
+	errs = append(errs, validateDiskEncryptionUnlock(prefix+".unlock", encryption.Unlock)...)
+	if encryption.RecoveryPassphraseRef.Name == "" {
+		errs = append(errs, prefix+".recoveryPassphraseRef is required: Anaconda creates the LUKS container from a passphrase before anything can be bound to the TPM, and keeping that keyslot is the only way back into the disk when the TPM no longer releases the key")
+	}
+	return errs
+}
+
+func validateDiskEncryptionUnlock(prefix string, unlock v1alpha1.DiskEncryptionUnlock) []string {
+	if unlock.ArmCount() == 0 {
+		return []string{prefix + " must set exactly one unlock arm: tpm2"}
+	}
+	var errs []string
+	if tpm2 := unlock.TPM2; tpm2 != nil {
+		errs = append(errs, validateDiskEncryptionTPM2(prefix+".tpm2", tpm2)...)
+	}
+	return errs
+}
+
+func validateDiskEncryptionTPM2(prefix string, tpm2 *v1alpha1.DiskEncryptionTPM2) []string {
+	var errs []string
+	if tpm2.PCRBank != "" && !slices.Contains(v1alpha1.DiskEncryptionPCRBanks(), tpm2.PCRBank) {
+		errs = append(errs, fmt.Sprintf("%s.pcrBank %q must be one of: %s", prefix, tpm2.PCRBank, strings.Join(v1alpha1.DiskEncryptionPCRBanks(), ", ")))
+	}
+	if len(tpm2.PCRIDs) == 0 && tpm2.PCRBank != "" {
+		errs = append(errs, prefix+".pcrBank has no effect without pcrIds; the TPM releases the key on any boot of this machine unless the policy names the registers it is sealed against")
+	}
+	seen := map[int]bool{}
+	for i, id := range tpm2.PCRIDs {
+		owner := fmt.Sprintf("%s.pcrIds[%d]", prefix, i)
+		switch {
+		case id < 0 || id > v1alpha1.DiskEncryptionMaxPCRID:
+			errs = append(errs, fmt.Sprintf("%s %d must be between 0 and %d", owner, id, v1alpha1.DiskEncryptionMaxPCRID))
+		case seen[id]:
+			errs = append(errs, fmt.Sprintf("%s %d is duplicated", owner, id))
+		}
+		seen[id] = true
 	}
 	return errs
 }

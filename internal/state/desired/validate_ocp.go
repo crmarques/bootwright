@@ -30,6 +30,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		}
 		errs = append(errs, validateDistribution(ocp)...)
 		errs = append(errs, validateContainerClusterFIPS(ocp)...)
+		errs = append(errs, validateContainerClusterDiskEncryption(ocp)...)
 		errs = append(errs, validateClusterNetworking(ocp)...)
 		errs = append(errs, validateClusterNetworkIPFamilies(ocp)...)
 		if ocp.Spec.Install.Method != "" && ocp.Spec.Install.Method != v1alpha1.OCPInstallMethodAgent {
@@ -209,6 +210,33 @@ func validateContainerClusterFIPS(ocp v1alpha1.ContainerCluster) []string {
 		return []string{fmt.Sprintf("ContainerCluster/%s spec.security.fips.enabled requires distribution openshift; okd (community SCOS) is not FIPS-validated", ocp.Metadata.Name)}
 	}
 	return nil
+}
+
+func validateContainerClusterDiskEncryption(ocp v1alpha1.ContainerCluster) []string {
+	encryption := ocp.Spec.Security.DiskEncryption
+	if encryption == nil {
+		return nil
+	}
+	prefix := fmt.Sprintf("ContainerCluster/%s spec.security.diskEncryption", ocp.Metadata.Name)
+	errs := validateDiskEncryptionUnlock(prefix+".unlock", encryption.Unlock)
+	if tpm2 := encryption.Unlock.TPM2; tpm2 != nil && (tpm2.PCRBank != "" || len(tpm2.PCRIDs) > 0) {
+		errs = append(errs, prefix+".unlock.tpm2 accepts no pcrBank or pcrIds: an RHCOS node is bound by Ignition, whose TPM pin seals to the chip with an empty policy, and the agent-based installer exposes no way to pass one. Drop them, or encrypt these nodes with a MachineInstallProfile instead")
+	}
+	seen := map[string]bool{}
+	for i, role := range encryption.Roles {
+		owner := fmt.Sprintf("%s.roles[%d]", prefix, i)
+		switch {
+		case v1alpha1.MachineConfigPoolForRole(role) == "":
+			errs = append(errs, fmt.Sprintf("%s %q must be %s, %s, or %s", owner, role, v1alpha1.NodeRoleMaster, v1alpha1.NodeRoleWorker, v1alpha1.NodeRoleInfra))
+		case seen[role]:
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, role))
+		}
+		seen[role] = true
+	}
+	if len(errs) == 0 && len(v1alpha1.ContainerClusterDiskEncryptionPools(ocp)) == 0 {
+		errs = append(errs, prefix+" selects no node: spec.nodes declares no role that roles[] names, so no MachineConfig would be written")
+	}
+	return errs
 }
 
 func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.Machine) []string {

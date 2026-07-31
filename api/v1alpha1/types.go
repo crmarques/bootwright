@@ -57,6 +57,33 @@ const (
 	MachineInstallSELinuxPermissive = "permissive"
 	MachineInstallSELinuxDisabled   = "disabled"
 
+	DiskEncryptionPCRBankSHA1   = "sha1"
+	DiskEncryptionPCRBankSHA256 = "sha256"
+	DiskEncryptionPCRBankSHA384 = "sha384"
+	DiskEncryptionPCRBankSHA512 = "sha512"
+
+	DiskEncryptionMaxPCRID = 23
+
+	DiskEncryptionClevisPinTPM2 = "tpm2"
+
+	TPM2StackPackage = "tpm2-tss"
+
+	DiskEncryptionTPM2SealHash = "sha256"
+	DiskEncryptionTPM2SealKey  = "ecc"
+
+	DiskEncryptionLUKSVersion = "luks2"
+
+	DiskEncryptionFIPSPBKDF = "pbkdf2"
+
+	DiskEncryptionRootVolumeName  = "root"
+	DiskEncryptionRootVolumeLabel = "luks-root"
+
+	DiskEncryptionRootPartitionDevice = "/dev/disk/by-partlabel/root"
+
+	DiskEncryptionRootMappedDevice = "/dev/mapper/root"
+
+	DiskEncryptionIgnitionVersion = "3.2.0"
+
 	RootSSHUser = "root"
 
 	BootwrightSSHUser = "bootwright"

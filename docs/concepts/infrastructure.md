@@ -374,6 +374,8 @@ are rejected, so the required/applies-to columns differ per arm.
 | `machineProfiles[].dataDisks[]` | No (libvirt and vSphere only) | — | Additional data disks; rejected on baremetal and kubevirt. |
 | `machineProfiles[].dataDisks[].name` | Yes | — | Data disk name. |
 | `machineProfiles[].dataDisks[].sizeGiB` | Yes | — | Data disk size; must be greater than zero. |
+| `machineProfiles[].tpm` | No (libvirt and kubevirt only) | — (no TPM) | Presence attaches an emulated TPM 2.0. See [Emulated TPM](#emulated-tpm). |
+| `machineProfiles[].tpm.persistent` | No (kubevirt only) | `true` | Whether the vTPM keeps its state across VM restarts. |
 
 !!! note "vSphere clones from a sized template"
     A vSphere profile whose `cpu`, `memoryMiB` or `diskGiB` is zero or omitted is
@@ -385,6 +387,39 @@ are rejected, so the required/applies-to columns differ per arm.
     must set `failureDomainRef`, and it must resolve to a declared
     `failureDomains[].name`. With a single failure domain it may be omitted and
     resolves to that one domain implicitly.
+
+### Emulated TPM
+
+A VM has no TPM unless the hypervisor gives it one, so
+[machine disk encryption](machines.md#disk-encryption) and
+[TPM-sealed OSDs](storage.md) fail on a virtual substrate whose profile is
+silent. `tpm: {}` on the profile fixes that:
+
+```yaml
+machineProfiles:
+  - name: ceph-node
+    cpu: 8
+    memoryMiB: 16384
+    diskGiB: 120
+    tpm: {}
+```
+
+- **libvirt** attaches a `tpm-crb` device backed by `swtpm`, which Bootwright
+  installs on the hypervisor. State lives in `/var/lib/libvirt/swtpm/<domain-uuid>/`
+  and survives a power cycle, but `virsh undefine` deletes it — a VM torn down
+  and rebuilt gets a **new** TPM and cannot unseal the old volume. That is
+  harmless under Bootwright, whose `destroy` + `apply` reinstalls the OS anyway.
+  `tpm.persistent` is rejected here: libvirt has no ephemeral mode to opt out of.
+- **kubevirt** sets `devices.tpm.persistent: true`, which needs the
+  `VMPersistentState` feature gate and a `vmStateStorageClass` on the host
+  cluster; without them the VM will not start. `persistent: false` drops the
+  state with the `virt-launcher` pod, so anything sealed to that vTPM is lost on
+  the first restart — set it only for a machine that is reinstalled each boot.
+- **vsphere** rejects `tpm`. A vTPM there needs a vCenter key provider, EFI
+  firmware and a powered-off snapshot-free VM, none of which Bootwright
+  configures. Encrypt those nodes out of band, or run them on hardware.
+- **baremetal** ignores it — the TPM is a firmware fact. Enable it in the BIOS
+  before the install; Bootwright cannot see it until the machine boots.
 
 ### Network Attachments
 

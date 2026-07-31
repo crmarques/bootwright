@@ -92,7 +92,18 @@ type MachineProfile struct {
 	Template         string               `yaml:"template,omitempty" json:"template,omitempty"`
 	FailureDomainRef LocalObjectReference `yaml:"failureDomainRef,omitempty" json:"failureDomainRef,omitempty"`
 	DataDisks        []MachineProfileDisk `yaml:"dataDisks,omitempty" json:"dataDisks,omitempty"`
+	TPM              *MachineProfileTPM   `yaml:"tpm,omitempty" json:"tpm,omitempty"`
 }
+
+type MachineProfileTPM struct {
+	Persistent *bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
+}
+
+func (t *MachineProfileTPM) PersistentEnabled() bool {
+	return t != nil && (t.Persistent == nil || *t.Persistent)
+}
+
+func MachineProfileHasTPM(profile MachineProfile) bool { return profile.TPM != nil }
 
 type MachineProfileDisk struct {
 	Name    string `yaml:"name" json:"name"`

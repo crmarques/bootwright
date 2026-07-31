@@ -57,6 +57,11 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					"diskGiB":   profile.DiskGiB,
 					"dataDisks": machineProfileDisksVars(profile.DataDisks),
 				}
+				if profile.TPM != nil {
+					out["profile"].(map[string]any)["tpm"] = map[string]any{
+						"persistent": profile.TPM.PersistentEnabled(),
+					}
+				}
 				switch provider.Spec.Type {
 				case v1alpha1.ProvisionerLibvirt:
 					l := provider.Spec.Libvirt

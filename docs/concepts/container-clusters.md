@@ -187,6 +187,9 @@ together with `additionalTrustBundleRefs` — see
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `security.fips.enabled` | No | `false` | Install and run the cluster in FIPS mode. |
+| `security.diskEncryption` | No | — (unencrypted) | Presence installs the nodes onto a LUKS2 root volume sealed to each node's TPM 2.0. See [Disk encryption](#disk-encryption). |
+| `security.diskEncryption.unlock.tpm2` | Yes (when the block is set) | — | The only unlock arm. Takes no `pcrIds`/`pcrBank` — see below. |
+| `security.diskEncryption.roles[]` | No | Every role in `nodes[]` | Which node roles to encrypt: `master`, `worker`, `infra`. `infra` folds into the `worker` machine config pool. |
 
 `security.fips.enabled: true` renders `fips: true` into the generated
 `install-config.yaml`, so the agent installer lays down RHCOS in FIPS mode
@@ -209,6 +212,56 @@ mechanism. There is no separate `MachineInstallProfile` to keep consistent.
     bootwright installs. Flipping it on an already-installed cluster is drift
     whose only in-band resolution is a reinstall — OpenShift does not support
     turning FIPS on or off after install.
+
+### Disk encryption
+
+```yaml
+spec:
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+```
+
+Bootwright writes one `MachineConfig` per selected machine config pool into the
+installer's `openshift/` extra-manifest directory —
+`99-bootwright-master-disk-encryption` and `99-bootwright-worker-disk-encryption`
+— each declaring an Ignition `storage.luks` entry on
+`/dev/disk/by-partlabel/root` with `clevis.tpm2`. The bootstrap Machine Config
+Operator folds them into the first rendered config, so Ignition re-provisions the
+root filesystem onto the LUKS volume during each node's first boot. Nothing is
+written to `install-config.yaml`; there is no disk-encryption field there.
+
+No cipher option is rendered. OpenShift 4.18 dropped the
+`aes-cbc-essiv:sha256` override that older FIPS guidance called for, and
+`cryptsetup`'s default `aes-xts-plain64` is what current releases expect with or
+without `security.fips.enabled`.
+
+!!! warning "A node without a TPM installs, then strands itself"
+    Nothing preflights the TPM on this path. A node whose firmware exposes none
+    passes every check, has RHCOS written to its disk, and then fails in the
+    initramfs on first boot — `clevis luks bind` errors, `ignition-disks.service`
+    fails, and systemd drops to `emergency.target`. It never registers, so the
+    installer only reports a host that never joined; the real message is on the
+    serial or BMC console. Enable TPM 2.0 in firmware on every selected node
+    first — on many vendors it is off by default — and clear stale TPM keys from
+    a previous OS, which can wedge the deployment on their own.
+
+!!! note "Day 1 only"
+    `storage.luks` runs in the initramfs of the first boot after RHCOS is
+    written; there is no second chance. The Machine Config Operator classifies
+    `Storage.Luks` and `Storage.Filesystems` as irreconcilable and marks a node
+    that receives them later `Degraded` rather than applying them. Adding the
+    block to a running cluster therefore means reinstalling its nodes.
+
+!!! note "No PCR policy on RHCOS"
+    Unlike a [`MachineInstallProfile`](machines.md#sealing-to-the-boot-state),
+    this block takes no `pcrIds`. Ignition seals with an empty TPM policy, and
+    the agent-based installer exposes no way to pass one, so `pcrIds` and
+    `pcrBank` are rejected here rather than silently ignored. The key is bound to
+    the chip: disk theft is defeated, boot-chain tampering is not.
 
 ## Platform
 

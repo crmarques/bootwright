@@ -23,11 +23,17 @@ type ContainerClusterSpec struct {
 }
 
 type ContainerClusterSecurity struct {
-	FIPS ContainerClusterFIPS `yaml:"fips,omitempty" json:"fips,omitempty"`
+	FIPS           ContainerClusterFIPS            `yaml:"fips,omitempty" json:"fips,omitempty"`
+	DiskEncryption *ContainerClusterDiskEncryption `yaml:"diskEncryption,omitempty" json:"diskEncryption,omitempty"`
 }
 
 type ContainerClusterFIPS struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+type ContainerClusterDiskEncryption struct {
+	Unlock DiskEncryptionUnlock `yaml:"unlock,omitempty" json:"unlock,omitempty"`
+	Roles  []string             `yaml:"roles,omitempty" json:"roles,omitempty"`
 }
 
 type OCPInstallSpec struct {

@@ -14,11 +14,11 @@ type InstallerManifest struct {
 }
 
 func InstallerManifests(ocp v1alpha1.ContainerCluster, secrets InstallerSecrets) []InstallerManifest {
+	manifests := DiskEncryptionManifests(ocp)
 	serving := ocp.Spec.Install.ServingCertificates
 	if serving == nil {
-		return nil
+		return manifests
 	}
-	var manifests []InstallerManifest
 	if api := serving.APIServer; api != nil && len(api.NamedCertificates) > 0 {
 		for _, ref := range uniqueAPICertificateRefs(api.NamedCertificates) {
 			if pair, ok := secrets.TLSPairs[ref.Name]; ok {

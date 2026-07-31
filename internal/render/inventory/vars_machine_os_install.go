@@ -99,13 +99,18 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
 			"repositories":           machineInstallRepositoriesVars(profile.Spec.Customizations.Repositories, eff),
 			"services":               machineInstallServicesVars(profile.Spec.Customizations.Services),
-			"security":               machineInstallSecurityVars(profile.Spec.Customizations.Security),
+			"security":               machineInstallSecurityVars(profile.Spec.Customizations.Security, paths),
 			"storage":                machineInstallStorageVars(profile, state, m),
 			"network":                machineInstallNetworkVars(state, ci, m, clusterName),
 		},
 	}
 	if path := machineInstallInitialPasswordPath(profile, paths); path != "" {
 		out["kickstart"].(map[string]any)["initialPasswordPath"] = path
+	}
+	if profile.Spec.Customizations.Security.DiskEncryption != nil {
+		for _, pkg := range machineInstallDiskEncryptionPackages() {
+			ensureKickstartPackage(out, pkg)
+		}
 	}
 	if machine.Spec.Access.SSH != nil {
 		ssh := map[string]any{

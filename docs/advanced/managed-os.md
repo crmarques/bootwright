@@ -417,6 +417,35 @@ valid on a `Machine` whose nodes are RHCOS; see
     ceph-volume wipes it. `wwn` scopes the install correctly but cannot be
     compared against an OSD device path, so it is rejected there.
 
+## Encrypting the installed disk
+
+`customizations.security.diskEncryption` puts the node on LUKS2 and binds it to
+the machine's TPM 2.0, so it boots unattended. The field reference is in
+[Machines](../concepts/machines.md#disk-encryption); what it costs you at install
+time is:
+
+1. **Turn TPM 2.0 on in firmware first.** It ships disabled on most vendors, and
+   the `%pre` gate refuses the install — before touching a disk — on a machine
+   whose kernel sees no `/dev/tpmrm0`. On a libvirt or KubeVirt substrate the
+   machine profile supplies an [emulated one](../concepts/infrastructure.md#emulated-tpm)
+   instead.
+2. **Declare the recovery passphrase Secret.** A generated `token` Secret is the
+   easy form; Bootwright refuses the profile without one. It is the only way
+   back into a disk whose TPM has been cleared or replaced, and every machine on
+   the profile shares it.
+3. **Expect a reinstall, not a reconcile.** The block is part of the install
+   marker's desired hash, and Anaconda partitions once. Adding it to a built
+   fleet puts every node on the profile in drift that only a reinstall resolves.
+
+The install ISO carries the passphrase — Anaconda takes it on the partitioning
+line, so there is no way around that. Bootwright publishes the ISO `0600`
+whenever the kickstart holds a secret, serves it to the BMC over the same
+per-machine tokenized URL as any other managed-OS boot, and the `%post` shreds
+the kickstart copies Anaconda leaves in `/root` once the volumes are bound.
+
+Afterwards, `clevis luks list -d <device>` on the node shows the binding, and
+`lsblk` shows the root and swap volumes under `crypto_LUKS`.
+
 ## Staging media
 
 A `local-media:<filename.iso>` URL resolves against the host-local media store at

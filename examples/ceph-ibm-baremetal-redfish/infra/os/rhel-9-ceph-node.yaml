@@ -46,3 +46,7 @@ spec:
         mode: enforcing
       firewall:
         enabled: true
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: ceph-luks-recovery

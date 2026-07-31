@@ -13,6 +13,15 @@ variables so each command line ends in a `{{ expression }}` and keeps its
 newline; the `%packages` header options get the same treatment (a trailing
 `{% endif %}` would glue the `@^...-environment` group onto the header line).
 
+**Bash's array-length operator opens a Jinja comment:** the two characters that
+introduce a parameter length expansion are also Jinja's comment-start token, so
+a `%post` script that measures an array aborts the whole render with
+`Syntax error in template: Missing end of comment tag` — and the error names the
+template, not the line. Same trap for any adjacent brace-hash in shell,
+including inside a `#` comment. Count in the loop, or use a separate variable.
+Only rendering the template catches this: the repo's ks.cfg.j2 guards are
+substring pins and do not parse Jinja.
+
 **`urlencode` does not escape `/`:** a proxy credential containing `/` would
 terminate the `--proxy=` URL authority early; both user and password are
 post-processed with `| urlencode | replace('/', '%2F')`. Full detail in

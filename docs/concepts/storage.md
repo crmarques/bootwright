@@ -556,7 +556,7 @@ All field names render 1:1 into the cephadm OSD drivegroup spec.
 | `osd.walDevices` | No | — | WAL device selector. |
 | `osd.filterLogic` | No | `AND` | How cephadm combines the device filters across selectors: `AND` (intersect) or `OR` (union). Spec-level (`filter_logic`). |
 | `osd.encrypted` | No | `false` | Enable encrypted (LUKS) OSDs. |
-| `osd.tpm2` | No | `false` | Seal the OSD LUKS key in the host TPM (`tpm2`). Requires `encrypted: true`. |
+| `osd.tpm2` | No | `false` | Seal the OSD LUKS key in the host TPM (`tpm2`). Requires `encrypted: true`, a TPM 2.0 on every covered node, and the `tpm2-tss` libraries installed there — see the note below. |
 | `osd.osdsPerDevice` | No | cephadm default | OSDs per selected device (non-negative). |
 | `osd.crushDeviceClass` | No | — | CRUSH device class for the whole drivegroup. |
 | `osd.blockDBSize` | No | — | Per-OSD DB slice size carved from `dbDevices` (`block_db_size`, e.g. `60G`). |
@@ -605,6 +605,26 @@ cephadm drivegroup device filter:
     filters mirror cephadm exactly (`model`, `vendor`, `rotational`, `size`,
     `limit`). Per-disk stable selection is expressed as a `/dev/disk/by-id` or
     `wwn` **path** in `paths`/`pathSpecs`, not as a filter.
+
+!!! warning "`osd.tpm2` has host prerequisites the OSD spec cannot state"
+    Sealing an OSD key is not a container operation: `ceph-volume` runs
+    `systemd-cryptenroll --tpm2-device=auto` in the **host's** mount namespace,
+    and that binary dynamically loads the `tpm2-tss` libraries. `tpm2-tss` is
+    only a *weak* dependency of `systemd-udev`, so a Bootwright-installed node —
+    a `minimal` environment with `installWeakDeps: false` — does not have it, and
+    enrollment fails **after** the OSD has already been created.
+
+    Bootwright refuses a cluster whose `osd.tpm2` covers a node whose
+    `MachineInstallProfile` neither lists `tpm2-tss` in
+    `customizations.packages.install` nor enables
+    [`customizations.security.diskEncryption`](machines.md#disk-encryption),
+    which installs it. The node also needs a real TPM 2.0 (`/dev/tpmrm0`); on a
+    virtual substrate that means [`tpm: {}`](infrastructure.md#emulated-tpm) on
+    its machine profile.
+
+    OSD encryption and root-disk encryption are independent controls. They use
+    different machinery — `systemd-cryptenroll` for OSDs, `clevis` for the root
+    volume — and neither implies the other.
 
 #### Stretch mode
 

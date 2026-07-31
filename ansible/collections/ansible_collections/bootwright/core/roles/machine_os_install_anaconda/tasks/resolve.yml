@@ -33,3 +33,13 @@
   ansible.builtin.set_fact:
     bootwright_os_source_iso_effective: "{{ bootwright_component.osInstall.image.effectiveSourcePath }}"
   changed_when: false
+
+- name: Resolve whether the managed OS kickstart carries a secret
+  ansible.builtin.set_fact:
+    bootwright_os_kickstart_sensitive: >-
+      {{
+        (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool)
+        or ((bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length) > 0)
+        or (((bootwright_component.osInstall.kickstart.security | default({})).diskEncryption | default({})) | length > 0)
+      }}
+  changed_when: false

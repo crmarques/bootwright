@@ -43,6 +43,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateAnacondaRootDeviceHintsAreUsable(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
+	errs = append(errs, notes(validateDiskEncryptionHasATPM(state))...)
 	errs = append(errs, duplicateNameFindings(state)...)
 	return errs
 }
@@ -667,6 +668,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	for _, profile := range state.MachineInstallProfiles {
 		if password := profile.Spec.Customizations.SSH.InitialPassword; password != nil {
 			requireUsernamePassword(fmt.Sprintf("MachineInstallProfile/%s spec.customizations.ssh.initialPassword.secretRef", profile.Metadata.Name), password.SecretRef)
+		}
+		if encryption := profile.Spec.Customizations.Security.DiskEncryption; encryption != nil && encryption.RecoveryPassphraseRef.Name != "" {
+			require(fmt.Sprintf("MachineInstallProfile/%s spec.customizations.security.diskEncryption.recoveryPassphraseRef", profile.Metadata.Name), encryption.RecoveryPassphraseRef)
 		}
 	}
 	for _, image := range state.MachineImages {

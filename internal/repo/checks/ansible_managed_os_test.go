@@ -2,6 +2,7 @@ package repocheck
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -477,8 +478,16 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a file task", tasks[stagePermsIdx]["name"])
 	}
-	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if ((bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) or (bootwright_component.osInstall.installer.proxy.credentialsPath | default('') | length > 0)) else '0644' }}" {
+	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if (bootwright_os_kickstart_sensitive | bool) else '0644' }}" {
 		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
+	}
+	resolveTasks := readAnsibleTasks(t, filepath.Join(bootwrightCollectionRoleRoot, "machine_os_install_anaconda", "tasks", "resolve.yml"))
+	sensitivity := findAnsibleTask(t, resolveTasks, "Resolve whether the managed OS kickstart carries a secret")
+	fact := resolveTasks[sensitivity]["ansible.builtin.set_fact"].(map[string]any)["bootwright_os_kickstart_sensitive"].(string)
+	for _, want := range []string{"rhsm.enabled", "proxy.credentialsPath", "diskEncryption"} {
+		if !strings.Contains(fact, want) {
+			t.Fatalf("bootwright_os_kickstart_sensitive must cover %q, got %q; a kickstart that carries a secret must publish its ISO 0600", want, fact)
+		}
 	}
 	for _, tc := range []struct {
 		idx       int
@@ -570,8 +579,16 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"cat > /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem <<'BOOTWRIGHT_SATELLITE_CA'",
 		"update-ca-trust extract",
 		"bootloader --location=mbr --boot-drive={{ storage.rootDisk }}",
-		"part swap --recommended --ondisk={{ storage.rootDisk }}",
-		"part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}",
+		"part swap --recommended --ondisk={{ storage.rootDisk }}{{ luks_flags }}",
+		"part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}{{ luks_flags }}",
+		"autopart --type=lvm --fstype=xfs{{ luks_flags }}",
+		"{% set disk_encryption = security.diskEncryption | default({}) %}",
+		"{% set encrypted = (disk_encryption | length) > 0 %}",
+		"{% set luks_flags = ' --encrypted --luks-version=' ~ (disk_encryption.luksVersion | default('luks2', true)) ~ pbkdf_flag ~ ' --passphrase=' ~ luks_passphrase %}",
+		"clevis luks bind -y -d \"${bootwright_luks_device}\" -k \"${bootwright_luks_key}\" {{ clevis.pin }} '{{ clevis.config }}'",
+		"dracut -fv --regenerate-all",
+		"shred -u /root/anaconda-ks.cfg /root/original-ks.cfg 2>/dev/null || true",
+		"%post --erroronfail --interpreter=/bin/bash --log=/root/bootwright-ks-luks.log",
 		"selinux --{{ selinux.mode }}",
 		"firewall --{{ 'enabled' if firewall.enabled else 'disabled' }}",
 		"{% set net_interfaces = net.interfaces | default([]) %}",

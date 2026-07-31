@@ -50,6 +50,11 @@
       <model type='virtio'/>
     </interface>
 {% endfor %}
+{% if bootwright_component.profile.tpm is defined %}
+    <tpm model='tpm-crb'>
+      <backend type='emulator' version='2.0'/>
+    </tpm>
+{% endif %}
     <serial type='pty'/>
     <console type='pty'/>
     <graphics type='vnc' autoport='yes' listen='127.0.0.1'/>

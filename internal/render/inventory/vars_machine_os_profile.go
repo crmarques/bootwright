@@ -5,6 +5,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
 func machineInstallPackagesVars(packages v1alpha1.MachineInstallPackages) map[string]any {
@@ -144,7 +145,7 @@ func machineInstallServicesVars(services v1alpha1.MachineInstallServices) map[st
 	}
 }
 
-func machineInstallSecurityVars(security v1alpha1.MachineInstallSecurity) map[string]any {
+func machineInstallSecurityVars(security v1alpha1.MachineInstallSecurity, paths PathOptions) map[string]any {
 	out := map[string]any{}
 	if security.SELinux.Mode != "" {
 		out["selinux"] = map[string]any{
@@ -156,5 +157,39 @@ func machineInstallSecurityVars(security v1alpha1.MachineInstallSecurity) map[st
 			"enabled": *security.Firewall.Enabled,
 		}
 	}
+	if encryption := machineInstallDiskEncryptionVars(security, paths); len(encryption) > 0 {
+		out["diskEncryption"] = encryption
+	}
 	return out
+}
+
+func machineInstallDiskEncryptionVars(security v1alpha1.MachineInstallSecurity, paths PathOptions) map[string]any {
+	encryption := security.DiskEncryption
+	if encryption == nil || encryption.Unlock.TPM2 == nil {
+		return nil
+	}
+	out := map[string]any{
+		"luksVersion":    v1alpha1.DiskEncryptionLUKSVersion,
+		"passphrasePath": secret.ResolvePath(encryption.RecoveryPassphraseRef.Name, paths.SecretIndex, paths.SecretsDir),
+		"clevis": map[string]any{
+			"pin":    v1alpha1.DiskEncryptionClevisPinTPM2,
+			"config": v1alpha1.DiskEncryptionTPM2ClevisConfig(encryption.Unlock.TPM2),
+		},
+		"measuresBoot": v1alpha1.DiskEncryptionTPM2MeasuresBoot(encryption.Unlock.TPM2),
+	}
+	if security.FIPS.Enabled {
+		out["pbkdf"] = v1alpha1.DiskEncryptionFIPSPBKDF
+	}
+	return out
+}
+
+func machineInstallDiskEncryptionPackages() []string {
+	return []string{
+		"clevis",
+		"clevis-dracut",
+		"clevis-luks",
+		"clevis-systemd",
+		"tpm2-tools",
+		v1alpha1.TPM2StackPackage,
+	}
 }

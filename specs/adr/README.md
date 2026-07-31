@@ -50,3 +50,4 @@ below.
 | [0034](0034-wiping-a-device-no-node-claims.md) | Wiping a Device No Node Claims | extends 0030 with the `unowned-devices` token |
 | [0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md) | A Storage Node Answers to the Name cephadm Registers | enforces 0017; repairs the `fqdn` override of 0025; revised by 0036 |
 | [0036](0036-bootwright-writes-the-name-a-storage-node-answers-to.md) | Bootwright Writes the Name a Storage Node Answers To | revises 0035 |
+| [0037](0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md) | A TPM Holds the Key, a Passphrase Holds the Machine | follows the enablement grammar of 0014 |

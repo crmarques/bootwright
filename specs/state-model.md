@@ -671,6 +671,32 @@ Rules:
   Anaconda install profiles. It renders `fips=1` into the installer kernel
   command line through `mkksiso --cmdline`; changing this field on an installed
   machine is reinstall-only.
+- `customizations.security.diskEncryption` is a presence block: authoring it
+  installs the node onto LUKS2 sealed to its TPM 2.0, omitting it installs the
+  node unencrypted. It carries an `unlock` presence union whose only arm is
+  `tpm2`, and a required `recoveryPassphraseRef`. The kickstart adds
+  `--encrypted --luks-version=luks2 --passphrase=` to the partitioning line — to
+  both the root and swap partitions when a root disk is selected, to `autopart`
+  otherwise — and an `%post --erroronfail` section binds every resulting LUKS2
+  volume with `clevis luks bind` and regenerates the initramfs. `clevis`,
+  `clevis-dracut`, `clevis-luks`, `clevis-systemd`, `tpm2-tools` and `tpm2-tss`
+  are added to the install transaction; the profile does not list them.
+- `unlock.tpm2.pcrIds[]` seals the key against the named Platform Configuration
+  Registers (`0`–`23`, unique). Omitted, no boot policy is applied and the key is
+  released on any boot of that machine. `unlock.tpm2.pcrBank` selects the bank
+  (`sha1`, `sha256`, `sha384`, `sha512`, default `sha256`) and is rejected
+  without `pcrIds`, which it would not affect.
+- `recoveryPassphraseRef` is required whenever `diskEncryption` is set: Anaconda
+  creates the container from a passphrase before anything can be bound, and that
+  keyslot is deliberately kept as the recovery path when a TPM stops releasing
+  the key. The passphrase reaches the machine inside the generated kickstart, so
+  the built install ISO is published `0600` whenever the kickstart carries one.
+- `customizations.security.diskEncryption` is covered by the install marker's
+  desired hash, so adding, removing, or re-policying it is reinstall-only drift.
+- A machine that references a profile with `diskEncryption`, and whose substrate
+  is a virtual `InfraProvider`, must select a `machineProfiles[]` entry that
+  declares `tpm`. A bare-metal machine is exempt: its TPM is a firmware fact
+  Bootwright cannot read before the install writes to disk.
 - A `Machine` with `os.provided: false` and managed OS install must set
   `spec.os.installProfileRef`.
 
@@ -706,6 +732,13 @@ Rules:
 - Profile fields the selected provider's adapter does not consume are
   rejected: `template` and `failureDomainRef` are vSphere-only, and
   `dataDisks` are consumed by the libvirt and vSphere adapters only.
+- `machineProfiles[].tpm` is a presence block attaching an emulated TPM 2.0, and
+  is consumed by the libvirt and kubevirt adapters only. libvirt renders a
+  `tpm-crb` device on the `swtpm` emulator backend; kubevirt renders
+  `devices.tpm`. `tpm.persistent` (default `true`) is kubevirt-only — libvirt
+  keeps swtpm state per defined domain and has no ephemeral mode to opt out of.
+  vSphere rejects `tpm`: a vTPM there needs a vCenter key provider and EFI
+  firmware Bootwright does not configure. Bare metal ignores it.
 - vSphere `machineProfiles[].failureDomainRef` must name a
   `spec.vsphere.failureDomains[]` entry, and every
   `failureDomains[].server` must equal a declared `vcenters[].server`.
@@ -936,6 +969,27 @@ Rules:
 - `spec.security.fips.enabled: true` renders a FIPS-mode install and is accepted
   only for `distribution.type: openshift`; `okd` (community SCOS) is not
   FIPS-validated and is rejected.
+- `spec.security.diskEncryption` is a presence block carrying the same `unlock`
+  presence union as a `MachineInstallProfile`, plus an optional `roles[]`
+  selection over `master`, `worker`, and `infra`. It renders no
+  `install-config.yaml` key: for each distinct machine config pool it selects
+  (`infra` folds into `worker`) Bootwright writes a `MachineConfig` named
+  `99-bootwright-<pool>-disk-encryption` into the installer's `openshift/`
+  extra-manifest directory, declaring an Ignition `storage.luks` entry on
+  `/dev/disk/by-partlabel/root` with `clevis.tpm2` and the matching
+  `storage.filesystems` entry on `/dev/mapper/root`. No `options` are rendered:
+  current releases expect the `cryptsetup` default cipher with and without FIPS.
+- `roles[]` intersects with the roles `spec.nodes` declares. A selection that
+  resolves to no pool is rejected rather than writing a `MachineConfig` no node
+  would consume.
+- `unlock.tpm2.pcrIds` and `pcrBank` are rejected on a `ContainerCluster`:
+  Ignition seals with an empty TPM policy and the agent-based installer exposes
+  no way to pass one, so the fields would be silently inert.
+- Disk encryption is install-time intent. Ignition provisions the LUKS volume in
+  the initramfs of a node's first boot, and the Machine Config Operator treats
+  `Storage.Luks` and `Storage.Filesystems` as irreconcilable, so authoring the
+  block against a running cluster is drift whose only resolution is reinstalling
+  its nodes.
 - `spec.install.nodeSSH` (and the `Environment` `defaults.install.nodeSSH` that
   fills it when omitted) sets `keyPairRef`, or `publicKeyRef` with an optional
   `privateKeyRef`. `keyPairRef` is mutually exclusive with the other two, and
@@ -1321,6 +1375,14 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   `AND` or `OR`; `tpm2: true` requires `encrypted: true`; `osdsPerDevice`,
   `dbSlots`, and `walSlots` must be non-negative; and `dataAllocateFraction`,
   when set, must be in `(0, 1]`.
+  `tpm2: true` additionally requires every node it covers — per-host or through
+  a fleet drivegroup — to install the `tpm2-tss` libraries, because cephadm
+  seals the key by running `systemd-cryptenroll` in the host's own mount
+  namespace and that binary loads them dynamically. They are only a weak
+  dependency of `systemd-udev`, so a node's `MachineInstallProfile` must either
+  list `tpm2-tss` in `customizations.packages.install` or enable
+  `customizations.security.diskEncryption`, which installs it. OSD encryption
+  and machine root-disk encryption remain independent controls.
   Both require the `osd` role, and every osd-role host must author one of
   them — or be covered by a fleet `spec.ceph.topology.osdDrivegroups[]` entry:
   OSD device consumption is explicit opt-in, so consuming all available
