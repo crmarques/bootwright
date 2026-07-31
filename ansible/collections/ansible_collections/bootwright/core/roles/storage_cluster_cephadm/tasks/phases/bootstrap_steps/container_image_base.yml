@@ -1,5 +1,5 @@
 ---
-- name: Read current Ceph daemon container image
+- name: Read the Ceph cluster configuration carrying the daemon container image
   ansible.builtin.command:
     argv:
       - cephadm
@@ -7,13 +7,22 @@
       - --
       - ceph
       - config
-      - get
-      - global
-      - container_image
-  register: bootwright_ceph_daemon_image_current
+      - dump
+      - --format
+      - json
+  register: bootwright_ceph_image_config_dump
   changed_when: false
   failed_when: false
   when: bootwright_ceph_bootstrap_image | default('') | length > 0
+
+- name: Resolve the current Ceph daemon container image
+  ansible.builtin.set_fact:
+    bootwright_ceph_daemon_image_current: >-
+      {{ (bootwright_ceph_image_config_dump.stdout | default('[]', true) | from_json)
+         | selectattr('section', 'defined') | selectattr('section', 'equalto', 'global')
+         | selectattr('name', 'defined') | selectattr('name', 'equalto', 'container_image')
+         | map(attribute='value') | first | default('') }}
+  changed_when: false
 
 - name: Pin the Ceph daemon container image
   ansible.builtin.command:
@@ -31,7 +40,7 @@
   changed_when: true
   when:
     - bootwright_ceph_bootstrap_image | default('') | length > 0
-    - (bootwright_ceph_daemon_image_current.stdout | default('') | trim) != bootwright_ceph_bootstrap_image
+    - bootwright_ceph_daemon_image_current != bootwright_ceph_bootstrap_image
 
 - name: Read current cephadm container image base
   ansible.builtin.command:

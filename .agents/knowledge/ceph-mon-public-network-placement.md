@@ -70,6 +70,19 @@ identical `ceph config set` is idempotent, and it mirrors the daemon image pin,
 which is likewise asserted early by `container_image_base.yml` and again as a
 rendered operation.
 
+**`ceph config get` takes an entity, not a section.** `ceph config get global <key>`
+answers `Error EINVAL: unrecognized entity 'global'` — `get` resolves its first
+argument as an entity name (`mon`, `osd`, `mgr`, `client`, `mon.a`, …), while
+`global` is only valid as a *section* for `ceph config set`. A read-then-set guard
+written that way never matches, so the value is rewritten on **every** apply and the
+task reports `changed` forever. Both `network_config.yml` and the daemon image pin in
+`container_image_base.yml` shipped with that mistake; both now read
+`ceph config dump --format json` and select the entry whose `section` is `global`,
+which names the global setting exactly and does not fold in per-entity overrides the
+way reading through an entity would. `assertCephGlobalConfigRead` in
+`internal/repo/checks/ansible_storage_test.go` fails any read task that pairs `get`
+with `global`.
+
 **Diagnosis:** `mon_readiness.yml` already collected
 `ceph log last 100 cephadm` but buried the decisive line under four other YAML
 dumps. Its assert now pre-extracts the `Filtered out host` lines with

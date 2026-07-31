@@ -1186,11 +1186,13 @@ func TestStorageCephadmPinsSidecarImagesEarlyAndConditionally(t *testing.T) {
 func TestStorageCephadmPinsDaemonImageOnEveryApply(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
-	readIdx := findAnsibleTask(t, tasks, "Read current Ceph daemon container image")
+	readIdx := findAnsibleTask(t, tasks, "Read the Ceph cluster configuration carrying the daemon container image")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the current Ceph daemon container image")
 	setIdx := findAnsibleTask(t, tasks, "Pin the Ceph daemon container image")
-	if readIdx >= setIdx {
-		t.Fatalf("the daemon image pin must read the live value before setting it (read=%d set=%d)", readIdx, setIdx)
+	if !(readIdx < resolveIdx && resolveIdx < setIdx) {
+		t.Fatalf("the daemon image pin must read and resolve the live value before setting it (read=%d resolve=%d set=%d)", readIdx, resolveIdx, setIdx)
 	}
+	assertCephGlobalConfigRead(t, tasks[readIdx], "container_image")
 
 	set := fmt.Sprint(tasks[setIdx]["ansible.builtin.command"])
 	for _, want := range []string{"config", "set", "global", "container_image", "bootwright_ceph_bootstrap_image"} {
@@ -1200,8 +1202,8 @@ func TestStorageCephadmPinsDaemonImageOnEveryApply(t *testing.T) {
 	}
 
 	when := fmt.Sprint(tasks[setIdx]["when"])
-	if !strings.Contains(when, "bootwright_ceph_daemon_image_current.stdout") {
-		t.Fatalf("the daemon image pin must keep its ceph config get guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
+	if !strings.Contains(when, "bootwright_ceph_daemon_image_current") {
+		t.Fatalf("the daemon image pin must keep its live-value guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
 	}
 	if !strings.Contains(when, "bootwright_ceph_bootstrap_image") || !strings.Contains(when, "length > 0") {
 		t.Fatalf("the daemon image pin must be skipped when no image.version is pinned; writing an empty or tagless value would clear a pin an out-of-band ceph orch upgrade wrote. Got when=%v", tasks[setIdx]["when"])
@@ -1215,10 +1217,30 @@ func TestStorageCephadmPinsDaemonImageOnEveryApply(t *testing.T) {
 	}
 }
 
+func assertCephGlobalConfigRead(t *testing.T, task map[string]any, key string) {
+	t.Helper()
+	read := fmt.Sprint(task["ansible.builtin.command"])
+	if strings.Contains(read, "get") && strings.Contains(read, "global") {
+		t.Fatalf("reading a global Ceph option with `ceph config get global %s` fails with `Error EINVAL: unrecognized entity 'global'` — config get takes an entity (mon, osd, mgr), not a config section, so the read yields nothing, the guard never matches and the value is rewritten on every apply. Read `ceph config dump` and select the global section instead. Got %v", key, task["ansible.builtin.command"])
+	}
+	for _, want := range []string{"config", "dump", "json"} {
+		if !strings.Contains(read, want) {
+			t.Fatalf("the %s read must come from `ceph config dump --format json`; missing %q in %v", key, want, task["ansible.builtin.command"])
+		}
+	}
+}
+
 func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
+	readIdx := findAnsibleTask(t, tasks, "Read the Ceph cluster configuration currently in force")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the Ceph networks currently in force")
 	setIdx := findAnsibleTask(t, tasks, "Reconcile the Ceph public network before any daemon placement is scheduled")
+	if !(readIdx < resolveIdx && resolveIdx < setIdx) {
+		t.Fatalf("the network write must read and resolve the live value before setting it (read=%d resolve=%d set=%d)", readIdx, resolveIdx, setIdx)
+	}
+	assertCephGlobalConfigRead(t, tasks[readIdx], "public_network")
+
 	set := fmt.Sprint(tasks[setIdx]["ansible.builtin.command"])
 	for _, want := range []string{"config", "set", "global", "public_network", "bootwright_ceph_public_network_declared"} {
 		if !strings.Contains(set, want) {
@@ -1226,8 +1248,8 @@ func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
 		}
 	}
 	when := fmt.Sprint(tasks[setIdx]["when"])
-	if !strings.Contains(when, "bootwright_ceph_public_network_current.stdout") {
-		t.Fatalf("the public network write must keep its ceph config get guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
+	if !strings.Contains(when, "bootwright_ceph_public_network_current") {
+		t.Fatalf("the public network write must keep its live-value guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
 	}
 	if !strings.Contains(when, "length > 0") {
 		t.Fatalf("the public network write must be skipped when publicCIDRs is undeclared; writing an empty value would clear the network cephadm bootstrap derived, got when=%v", tasks[setIdx]["when"])
