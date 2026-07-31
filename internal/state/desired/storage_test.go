@@ -1268,7 +1268,7 @@ func TestStorageMgmtGatewayAuthGate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.management", clusterWith(tc.mgmt), state), "; ")
+			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.mgmtGateway", clusterWith(tc.mgmt), state), "; ")
 			if tc.want == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)
@@ -1277,6 +1277,51 @@ func TestStorageMgmtGatewayAuthGate(t *testing.T) {
 			}
 			if !strings.Contains(got, tc.want) {
 				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStorageMgmtGatewayRequiresAReleaseThatHasTheService(t *testing.T) {
+	clusterWith := func(distribution, release string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: distribution,
+			Release:      release,
+			MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
+				Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+			},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+		}}}
+	}
+	cases := []struct {
+		name         string
+		distribution string
+		release      string
+		want         string
+	}{
+		{name: "oss-squid-name", release: "squid", want: `spec.ceph.release "squid" is Ceph 19`},
+		{name: "oss-squid-version", release: "19.2.3", want: `spec.ceph.release "19.2.3" is Ceph 19`},
+		{name: "oss-reef", release: "reef", want: `spec.ceph.release "reef" is Ceph 18`},
+		{name: "oss-tentacle-name", release: "tentacle"},
+		{name: "oss-tentacle-version", release: "20.2.2"},
+		{name: "oss-default"},
+		{name: "oss-unknown-future-name", release: "umbriel"},
+		{name: "vendor-release-is-not-a-ceph-version", distribution: v1alpha1.StorageCephDistributionIBM, release: "8.0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(validateStorageCephMgmtGatewayRelease("StorageCluster/ceph spec.ceph.mgmtGateway", clusterWith(tc.distribution, tc.release)), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("release %q must not be refused: %s", tc.release, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+			if !strings.Contains(got, "requires Ceph 20 or later") {
+				t.Fatalf("the refusal must name the floor it enforces, got %q", got)
 			}
 		})
 	}

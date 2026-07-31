@@ -75,7 +75,7 @@ func validateStorageIngressVRRPCollisions(state v1alpha1.State) []string {
 		ingress := cluster.Spec.Ceph.MgmtGateway.Ingress
 		declarations = append(declarations, storageIngressVRRPDeclaration{
 			cluster:  cluster.Metadata.Name,
-			owner:    fmt.Sprintf("StorageCluster/%s spec.ceph.management.ingress", cluster.Metadata.Name),
+			owner:    fmt.Sprintf("StorageCluster/%s spec.ceph.mgmtGateway.ingress", cluster.Metadata.Name),
 			vrrpID:   ingress.FirstVirtualRouterID,
 			networks: ingress.VirtualInterfaceNetworks,
 		})

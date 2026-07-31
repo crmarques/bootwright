@@ -690,3 +690,32 @@ func TestSelectDerivesPackageSourcesForAReleaseNewerThanBootwright(t *testing.T)
 		t.Fatalf("runtimeOS must carry the implemented family and nothing else, got %#v", runtimeOS)
 	}
 }
+
+func TestUpstreamCephMajorDerivesOnlyWhatTheReleaseActuallyNames(t *testing.T) {
+	cases := []struct {
+		distribution string
+		release      string
+		want         int
+		ok           bool
+	}{
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "reef", want: 18, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "squid", want: 19, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "tentacle", want: 20, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "19.2.3", want: 19, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "", want: 20, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "umbriel"},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: "not a release"},
+		{distribution: v1alpha1.StorageCephDistributionIBM, release: "9.9.1.0"},
+		{distribution: v1alpha1.StorageCephDistributionRedHat, release: "9.1"},
+		{distribution: "nonesuch", release: "squid"},
+	}
+	for _, tc := range cases {
+		got, ok := UpstreamCephMajor(tc.distribution, tc.release)
+		if ok != tc.ok || got != tc.want {
+			t.Fatalf("UpstreamCephMajor(%q, %q) = (%d, %v), want (%d, %v)", tc.distribution, tc.release, got, ok, tc.want, tc.ok)
+		}
+	}
+	if _, ok := UpstreamCephMajor(v1alpha1.StorageCephDistributionIBM, "9.9.1.0"); ok {
+		t.Fatal("a vendor product version is not an upstream Ceph version; deriving a major from it would invent a floor the vendor never promised")
+	}
+}

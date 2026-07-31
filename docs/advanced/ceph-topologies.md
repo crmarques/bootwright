@@ -412,6 +412,13 @@ The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
 dashboard end to end.
 
+The management gateway needs **Ceph 20 (tentacle) or later** — no earlier
+release defines the `mgmt-gateway` or `oauth2-proxy` service. With
+`distribution: oss`, where `spec.ceph.release` names the Ceph version itself,
+`validate` refuses an older release outright. For a vendor distribution the
+product version is not a Ceph version, so the release is checked against the
+running manager daemons at apply time instead, before any spec is written.
+
 Two optional blocks secure the gateway:
 
 - `spec.ceph.mgmtGateway.tls` (`certificateRef` + `keyRef`, both required

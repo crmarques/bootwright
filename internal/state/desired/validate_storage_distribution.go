@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -69,6 +70,21 @@ func validateStorageCephRelease(prefix, distribution, release string) []string {
 		return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
 	}
 	return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading component selects the product stream", prefix, release)}
+}
+
+func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.StorageCluster) []string {
+	distribution := storageCephDistribution(cluster)
+	authored := cluster.Spec.Ceph.Release
+	major, ok := cephprovider.UpstreamCephMajor(distribution, authored)
+	if !ok || major >= cephprovider.MgmtGatewayMinimumCephMajor {
+		return nil
+	}
+	resolved := authored
+	if resolved == "" {
+		resolved = cephprovider.DefaultRelease(distribution) + " (the distribution default)"
+	}
+	return []string{fmt.Sprintf("%s requires Ceph %d or later; spec.ceph.release %s is Ceph %d, which defines no mgmt-gateway or oauth2-proxy service and refuses the spec document at apply time",
+		prefix, cephprovider.MgmtGatewayMinimumCephMajor, strconv.Quote(resolved), major)}
 }
 
 func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {

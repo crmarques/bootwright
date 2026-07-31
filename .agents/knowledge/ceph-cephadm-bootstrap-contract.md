@@ -154,9 +154,28 @@ expression.
 **Constraint:** `mgmt-gateway` and `oauth2-proxy` are **Tentacle (v20) and
 later**. No Squid release defines either class (`v19.2.3`'s `service_spec.py`
 has neither), so `ServiceSpec._cls` falls through to the base class and the
-document is refused. A `spec.ceph.mgmtGateway` block therefore needs a Ceph 20+
-release; the OSS provider's `squid` default cannot serve one. Bootwright does
-not yet gate on that ([BACKLOG.md](BACKLOG.md) B-054).
+document is refused — as an unexpected keyword argument for whichever gateway
+field it reaches first, which names a field and never mentions the release.
+A `spec.ceph.mgmtGateway` block therefore needs Ceph 20+, and the floor is
+enforced twice because neither half can cover the other:
+
+- **validate**, exactly, for `oss` only: the authored release *is* the Ceph
+  version there, so `cephprovider.UpstreamCephMajor` maps a known codename or
+  an `x.y.z` to a major and `validateStorageCephMgmtGatewayRelease` refuses
+  below `MgmtGatewayMinimumCephMajor`. An unrecognized (future) codename
+  derives nothing and is allowed through — the table must never refuse a
+  release it simply has not heard of.
+- **apply**, authoritatively, for every distribution: a vendor product version
+  (`9.9.1.0`) is not a Ceph version and must not be arithmetically mapped to
+  one, so `management_services.yml` reads `ceph versions --format json` and
+  gates on the **lowest** major among the live `mgr` daemons before assembling
+  the spec. A version it cannot read leaves the gate skipped rather than
+  blocking the run; the spec-apply refusal still catches it.
+
+A repo check ties the Ansible floor to the Go constant so the two cannot drift.
+The `ingress` document the Go renderer emits with
+`backend_service: mgmt-gateway` is a plain `IngressSpec` that any release
+accepts and then never satisfies; the apply-time gate refuses ahead of it.
 
 **Constraint:** Host identity: authored placement tokens may be machine names;
 they are canonicalized to the registered (fully-qualified) hostname so cephadm

@@ -1,4 +1,51 @@
 ---
+- name: Read the Ceph release the daemons run
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - versions
+      - --format
+      - json
+  register: bootwright_ceph_daemon_versions
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Resolve the lowest Ceph major release running a manager daemon
+  ansible.builtin.set_fact:
+    bootwright_ceph_mgr_major: >-
+      {{
+        (bootwright_ceph_daemon_versions.stdout | default('') | trim | default('{}', true) | from_json).mgr
+        | default({}) | dict2items | map(attribute='key')
+        | map('regex_search', 'ceph version ([0-9]+)\.', '\1')
+        | flatten | map('int') | list | default([0], true) | min
+      }}
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Refuse a management gateway on a Ceph release that has no such service
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_mgr_major | int) >= (bootwright_ceph_management_minimum_major | default(20) | int)
+    fail_msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }} runs manager daemons on
+      Ceph {{ bootwright_ceph_mgr_major }}, and the `mgmt-gateway` and `oauth2-proxy`
+      services first exist in Ceph {{ bootwright_ceph_management_minimum_major | default(20) }}
+      (tentacle). No earlier release defines either spec class, so `ceph orch apply -i`
+      hands the document to the base ServiceSpec and refuses it — reported as an
+      unexpected keyword argument for whichever gateway field it reaches first, which
+      names the field rather than the release and reads like a spec typo. Either raise
+      spec.ceph.release for this cluster to a Ceph {{ bootwright_ceph_management_minimum_major | default(20) }}
+      build (for a vendor distribution, the product version whose cephadm ships it) and
+      re-run apply, or drop spec.ceph.mgmtGateway and reach the dashboard directly.
+    success_msg: >-
+      Ceph {{ bootwright_ceph_mgr_major }} carries the management gateway services.
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_mgr_major | default(0) | int) > 0
+
 - name: Assemble secret-bearing management service specs
   ansible.builtin.set_fact:
     bootwright_ceph_management_specs: >-
@@ -390,6 +437,9 @@
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
   until: >-
     bootwright_ceph_management_apply.rc == 0
+    or (((bootwright_ceph_management_apply.stdout | default(''))
+         ~ (bootwright_ceph_management_apply.stderr | default('')))
+        is search('unexpected keyword argument|not an \(JSON or YAML\) object|SpecValidationError'))
     or ((bootwright_ceph_management_apply.attempts | default(1) | int)
         >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
   when: bootwright_ceph_management.hosts is defined

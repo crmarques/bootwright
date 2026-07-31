@@ -3,15 +3,27 @@ package cephprovider
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+const MgmtGatewayMinimumCephMajor = 20
+
 var (
 	ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	ossReleaseNamePattern     = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
 	vendorReleasePattern      = regexp.MustCompile(`^[0-9]+(\.[0-9]+)*$`)
+
+	ossReleaseMajors = map[string]int{
+		"octopus":  15,
+		"pacific":  16,
+		"quincy":   17,
+		"reef":     18,
+		"squid":    19,
+		"tentacle": 20,
+	}
 )
 
 type RuntimeOS struct {
@@ -42,6 +54,27 @@ func ResolveRelease(distribution, authored string) (ResolvedRelease, bool) {
 		return ResolvedRelease{}, false
 	}
 	return ResolvedRelease{Value: value, Stream: leadingComponent(value)}, true
+}
+
+func UpstreamCephMajor(distribution, release string) (int, bool) {
+	resolved, ok := ResolveRelease(distribution, release)
+	if !ok {
+		return 0, false
+	}
+	if v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
+		return 0, false
+	}
+	if major, ok := ossReleaseMajors[resolved.Value]; ok {
+		return major, true
+	}
+	if !ossUpstreamVersionPattern.MatchString(resolved.Value) {
+		return 0, false
+	}
+	major, err := strconv.Atoi(leadingComponent(resolved.Value))
+	if err != nil {
+		return 0, false
+	}
+	return major, true
 }
 
 func DefaultRelease(distribution string) string {

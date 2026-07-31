@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 )
 
 func TestStorageNodeAccessDestroySelectsAReachableIdentity(t *testing.T) {
@@ -3250,5 +3252,47 @@ func TestStorageNodeAccessSudoersGrantIsComparedOnTheNode(t *testing.T) {
 	}
 	if strings.Contains(when, "stdout") {
 		t.Fatalf("the sudoers reconcile must not compare stdout on the controller, or it re-installs the grant with changed_when true on every apply, got when=%v", tasks[reconcileIdx]["when"])
+	}
+}
+
+func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
+	tasks := readAnsibleTasks(t, path)
+	probeIdx := findAnsibleTask(t, tasks, "Read the Ceph release the daemons run")
+	majorIdx := findAnsibleTask(t, tasks, "Resolve the lowest Ceph major release running a manager daemon")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a management gateway on a Ceph release that has no such service")
+	assembleIdx := findAnsibleTask(t, tasks, "Assemble secret-bearing management service specs")
+	if !(probeIdx < majorIdx && majorIdx < refuseIdx && refuseIdx < assembleIdx) {
+		t.Fatalf("the release gate must refuse before the spec is assembled and applied (probe=%d major=%d refuse=%d assemble=%d)", probeIdx, majorIdx, refuseIdx, assembleIdx)
+	}
+	if got := fmt.Sprint(tasks[probeIdx]["ansible.builtin.command"]); !strings.Contains(got, "versions") {
+		t.Fatalf("the release gate must read the daemon versions the mgr actually runs, not the client in the shell image, got %v", tasks[probeIdx]["ansible.builtin.command"])
+	}
+	if tasks[probeIdx]["changed_when"] != false || tasks[probeIdx]["failed_when"] != false {
+		t.Fatalf("the version probe must be a read-only tolerated absence, got %v", tasks[probeIdx])
+	}
+	if got := fmt.Sprint(tasks[majorIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, ".mgr") || !strings.Contains(got, "min") {
+		t.Fatalf("the gate must take the LOWEST major among the mgr daemons; a half-upgraded cluster still has a mgr that refuses the document, got %v", tasks[majorIdx]["ansible.builtin.set_fact"])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "> 0") {
+		t.Fatalf("an unreadable version must fall through to the apply-time refusal rather than block the run, got when=%v", tasks[refuseIdx]["when"])
+	}
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the release gate must be an assert, got %v", tasks[refuseIdx])
+	}
+	floor := fmt.Sprintf("default(%d)", cephprovider.MgmtGatewayMinimumCephMajor)
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, floor) {
+		t.Fatalf("the apply-time floor must match cephprovider.MgmtGatewayMinimumCephMajor (%s), or validate and apply disagree about which releases carry the service, got that=%v", floor, refuse["that"])
+	}
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "spec.ceph.release") {
+		t.Fatalf("the refusal must name the field the operator has to change, got fail_msg=%v", refuse["fail_msg"])
+	}
+	apply := tasks[findAnsibleTask(t, tasks, "Apply management service spec")]
+	until := fmt.Sprint(apply["until"])
+	for _, want := range []string{"unexpected keyword argument", "not an \\(JSON or YAML\\) object", "SpecValidationError"} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("a spec cephadm refuses on shape never becomes valid, so the retry loop must stop on %q instead of burning every attempt, got until=%v", want, apply["until"])
+		}
 	}
 }

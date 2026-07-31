@@ -73,7 +73,7 @@ func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts
 	}
 
 	if MgmtGatewayHasSecrets(cluster) {
-		b.WriteString("\necho \"  [todo] spec.ceph.management carries TLS/oauth2-proxy secrets: the mgmt-gateway is NOT in this bundle.\"\n")
+		b.WriteString("\necho \"  [todo] spec.ceph.mgmtGateway carries TLS/oauth2-proxy secrets: the mgmt-gateway is NOT in this bundle.\"\n")
 		b.WriteString("echo \"  [todo] The keepalive ingress above fronts it, so its VIP has no backend until you apply the\"\n")
 		b.WriteString("echo \"  [todo] mgmt-gateway spec with your cert/secret files (or run 'bootwright apply --clusters <cluster>').\"\n")
 	}
