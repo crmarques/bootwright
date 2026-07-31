@@ -129,14 +129,22 @@ brief:
   exceptions — report what `check-fast` proved and let the user ask for more.
   This applies equally to hand-rolled substitutes: no repo-wide `go test -race`,
   no `make check` under another name.
+- A failure that reproduces on the merge base is **inherited, not yours**. Prove
+  it on `main` before claiming it, note it in `.agents/knowledge/BACKLOG.md`, and
+  run whatever stages the abort skipped so the change's own coverage is still
+  green. Then integrate the task and fix the inherited failure in a fresh cycle
+  off the updated `main`. Never widen the task branch with an unrelated fix, and
+  never let an inherited failure park a finished change. Anything that does not
+  reproduce on the merge base is yours: fix it before integrating.
 - Once checks pass on a branch rebased current onto local `main`, integration is
   preauthorized — do the final rebase, fast-forward `main`, remove the worktree,
   and delete the branch without asking. Merge only while every safety gate holds:
-  `main` was clean at task start and is still clean, checks are green, and no
-  rebase or fast-forward conflict occurs. If any gate fails — `main` dirty at
-  integration time, a conflict, checks not green — or the user asked to hold the
-  change for review, do not touch `main`: keep the worktree and report the blocker
-  or held state instead of touching unrelated changes.
+  `main` was clean at task start and is still clean, checks are green apart from
+  proven-inherited failures, and no rebase or fast-forward conflict occurs. If any
+  gate fails — `main` dirty at integration time, a conflict, a failure the change
+  caused — or the user asked to hold the change for review, do not touch `main`:
+  keep the worktree and report the blocker or held state instead of touching
+  unrelated changes.
 
 ## Handoff Format
 
@@ -154,6 +162,9 @@ giving a commit subject after user review/testing:
   temporary branch for review/testing, report the temporary worktree path, branch,
   task commit, whether `make check-fast` completed, and the blocker or the reason it
   is held. If required verification cannot complete, report that blocker instead.
+- An inherited failure carried through a successful merge adds exactly one line
+  after the subject: what failed, that it reproduces on the merge base, and that
+  the follow-up cycle is starting. That cycle then ends with its own subject line.
 - Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
   `chore`, `revert`. Use a scope when obvious (package/module/folder).
 

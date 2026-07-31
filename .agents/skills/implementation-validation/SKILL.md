@@ -84,3 +84,31 @@ restarting the whole gate for each late prose edit is worse. Overlap them:
 - Report the change verified only once both the background run and the scoped
   re-verification are green. A green background run does not cover the prose
   written while it was running.
+
+## Inherited Failures
+
+A red `check-fast` is not automatically your change's fault, and an unrelated
+failure must neither be fixed on the task branch nor park the finished task.
+Classify it before acting:
+
+- **Prove it on the merge base.** Rerun the exact failing target or test package
+  in the primary `main` worktree — a read-only use, since the tests do not mutate
+  the tree. A failure that reproduces there, on a file the change never touched,
+  is inherited.
+- **Everything else is yours.** A failure that passes on `main`, or that names a
+  file in the change's own edit set, was caused by the change: fix it on the
+  branch before integrating. Classify by reproduction, never by plausibility — a
+  guard test naming an unfamiliar package is not evidence of inheritance.
+- **Recover the coverage the abort skipped.** `make` stops at the first failing
+  prerequisite, so an inherited failure in an early stage (`shellcheck-check`,
+  say) means the `go test ./...` stage never ran at all. Run the skipped stages
+  directly so the change's own surface is still verified; when that cannot be
+  done, the change is unverified and the handoff reports a blocker instead.
+- **Record it, then leave it alone.** Add a `.agents/knowledge/BACKLOG.md` row
+  naming the failing target, the symptom, and the commit it reproduces on.
+  Fixing it on the task branch widens the diff, couples two unrelated reviews,
+  and re-opens validation for both.
+- **Integrate the task** once every other safety gate holds, then **open a fresh
+  cycle for the inherited failure** in the same turn: new branch and worktree off
+  the updated `main`, the failure as its own task, its own `check-fast`, its own
+  integration and handoff line.

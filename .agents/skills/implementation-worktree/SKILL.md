@@ -92,9 +92,13 @@ deletion need no separate approval.
 - Rebase the temporary branch onto current local `main` if it advanced; rerun
   `make check-fast` when the rebase changes the effective tree.
 - Merge only while every safety gate holds: `main` was clean at task start and is
-  still clean, `make check-fast` is green, and no rebase or fast-forward conflict
-  occurs. When they all hold, fast-forward `main` to the temporary branch, then
-  remove the worktree and delete the branch.
+  still clean, `make check-fast` is green apart from failures proven inherited
+  from the merge base (`implementation-validation`, "Inherited Failures"), and no
+  rebase or fast-forward conflict occurs. When they all hold, fast-forward `main`
+  to the temporary branch, then remove the worktree and delete the branch.
+- An inherited failure is backlogged, carried through the merge, and then fixed
+  in a fresh cycle off the updated `main` — never folded into the task branch and
+  never a reason to hold a finished change.
 - If `main` is dirty at integration time, a rebase or fast-forward conflict occurs,
   or the user asked to hold the change for review, do not touch `main`: keep the
   worktree and report the blocker or held state.
