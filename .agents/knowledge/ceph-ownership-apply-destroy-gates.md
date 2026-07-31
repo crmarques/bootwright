@@ -79,3 +79,37 @@ to, the ownership and reconcilable-only checks.
 and re-stamped as partially destroyed from the destroy-result file — the
 cluster is only partially torn down and must not read as fully gone. A normal
 teardown (no skipped nodes) removes the record.
+
+**Root cause:** every ownership and apply-mode gate above reads the SEED host —
+`/etc/ceph/ceph.conf`, the host marker and the controller record are all
+resolved there, and `create` refusing a pre-existing cluster means a
+pre-existing cluster *on the seed*. A non-seed node carries no such evidence, so
+a node that still runs daemons of an unrelated fsid passed every gate and was
+enrolled anyway. That is exactly what a teardown which skipped this node
+(`--authorize unreachable-nodes`) or died partway through it leaves behind: the
+other nodes are cleaned, this one keeps its systemd units and containers. The
+leftover is silent until cephadm tries to place the same daemon type there —
+every cephadm daemon binds its port on the host network, so the leftover keeps
+it and the new deployment dies with `Cannot bind to IP 0.0.0.0 port <port>:
+[Errno 98] Address already in use` / `TCP Port(s) '0.0.0.0:<port>' required for
+<daemon> already in use`, retried every serve loop and never attributed to a
+host. The apply then fails ~15 minutes later on the service readiness gate as a
+service one daemon short of its declared count, naming neither the node nor the
+cluster that owns the port. Observed on ceph-prd-01 2026-07-31: node-07 (the
+stretch arbiter, whose earlier teardown failed) still ran
+`ceph-9886b0ec-…@node-exporter.node-07.service` from the previous install, so
+`node-exporter` stuck at 6/7 while every other service reached full count.
+
+**Semantics:** `phases/foreign_cluster.yml` closes that gap on EVERY topology
+host: it lists `ceph-<fsid>@*.service` units, subtracts the identities this
+apply may legitimately find (the fsid in the node's own `/etc/ceph/ceph.conf`,
+plus the seed's `bootwright_ceph_override_fsid` so an authorized rebuild is not
+flagged for the cluster it is replacing), and refuses when anything remains. It
+runs AFTER `phases/rebuild.yml` — an authorized rebuild has removed the override
+fsid's units by then — and before non-seed hosts end, so it precedes bootstrap
+and any device write. It keys on systemd units, not `/var/lib/ceph/<fsid>`
+directories: an inert leftover directory holds no port, and destroy deliberately
+preserves co-resident fsid directories, so directories are not evidence of a
+running cluster. The refusal names each foreign fsid, the loaded units, and
+`cephadm rm-cluster --force --fsid <fsid>` — fsid-scoped, so it removes only
+that cluster's daemons and leaves the applied cluster's own untouched.
