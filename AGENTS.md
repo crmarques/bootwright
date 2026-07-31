@@ -111,8 +111,16 @@ brief:
 - Rebase first: immediately before every `make check-fast`, user-requested `make
   check`, or task commit, check whether local `main` has advanced and rebase onto
   it if so — separately each time, even when an earlier step found the branch
-  current. Use `make check-fast` by default; run `make check` only when the user
-  requests that gate. Task commits are preauthorized; do not ask.
+  current. Task commits are preauthorized; do not ask.
+- `make check-fast` is **the** gate. Run it when the work is implemented, and
+  treat green as sufficient to report the change verified and to integrate.
+- Never run `make check` unless the user asks for it in that turn. It is not a
+  thoroughness upgrade you may elect: its `-race` and `ansible-lint` stages cost
+  tens of minutes, and spending that is the user's call. "The change looks
+  risky", "this touches Ansible", and "I want to be sure before merging" are not
+  exceptions — report what `check-fast` proved and let the user ask for more.
+  This applies equally to hand-rolled substitutes: no repo-wide `go test -race`,
+  no `make check` under another name.
 - Once checks pass on a branch rebased current onto local `main`, integration is
   preauthorized — do the final rebase, fast-forward `main`, remove the worktree,
   and delete the branch without asking. Merge only while every safety gate holds:
