@@ -19,9 +19,10 @@ changes, also run the checks from `definition-stewardship`.
   current local `main` and make any needed fixes or adjustments first. Perform
   this check for every aggregate validation run, even when a previous run
   already found the branch current.
-- Run `make check-fast` from the temporary worktree once the branch is current.
-  Do not run `make check` by yourself; run it only when the user explicitly
-  requests that full gate.
+- Run `make check-fast` from the temporary worktree once the branch is current,
+  in the background, and spend the wait on the tail work below rather than
+  idling. Do not run `make check` by yourself; run it only when the user
+  explicitly requests that full gate.
 - Immediately before every task commit on the temporary branch, check again
   whether local `main` advanced and rebase first if needed. If that rebase
   changes the effective tree after validation, rerun the required validation
@@ -42,3 +43,44 @@ changes, also run the checks from `definition-stewardship`.
   (a stale binary fails on inputs that use fields it does not yet know, such
   as a `required` marker), producing a false negative that is not a real
   defect.
+
+## Overlap The Gate With The Tail Work
+
+`make check-fast` costs minutes. Serializing the knowledge, ADR, and docs
+writing after it doubles the tail of every task for no added confidence, and
+restarting the whole gate for each late prose edit is worse. Overlap them:
+
+- **Freeze the compiled surface first.** Launch only once every edit to Go,
+  Ansible, `api/`, `examples/`, `scripts/`, and the `Containerfile` is final —
+  those are what the gate builds, renders, and lints.
+- **Launch it in the background** (`make -C <worktree> check-fast`, backgrounded)
+  after the rebase check above, and keep working while it runs.
+- **Spend the wait on the tail work**: `.agents/knowledge/` entries, ADRs under
+  `specs/adr/`, spec and `docs/` prose, and drafting the handoff. Write each
+  gated artifact together with its index in the same step — knowledge file plus
+  its `KNOWLEDGE.md` row, ADR plus its `specs/adr/README.md` row, docs page plus
+  its `mkdocs.yml` nav entry — so a guard test never reads a half-written pair.
+- **Leave the compiled surface alone while the run is live.** An edit that lands
+  mid-run is outside that run's verdict and can fail a guard test against a tree
+  that no longer exists. Such a failure is inconclusive, not a finding: settle it
+  with the re-verification below before chasing it.
+- **Re-verify only what landed after the launch**, scoped to what it touched:
+
+  ```text
+  .agents/ prose only:            go test ./internal/repo/checks/...
+
+  plus docs/, specs/, README.md:  go test ./internal/repo/checks/... \
+                                    ./internal/state/desired/... ./internal/cli/...
+                                  make stale-term-check
+
+  anything else:                  make check-fast again, in full
+  ```
+
+  Those three packages hold every test that reads authored prose — the repo
+  guard tests, the docs-snippet validator, and the authorization-contract test —
+  and `stale-term-check` is the only non-Go stage that scans it; nothing else in
+  `go test ./...` can have changed. Extend that list in the same change whenever
+  a task introduces another test that reads prose from the repo tree.
+- Report the change verified only once both the background run and the scoped
+  re-verification are green. A green background run does not cover the prose
+  written while it was running.

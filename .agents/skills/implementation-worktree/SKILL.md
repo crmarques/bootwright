@@ -68,6 +68,10 @@ completion, not just eventual correctness.
   follow `implementation-validation`: immediately before every `make
   check-fast` or user-requested `make check`, check for a `main` advance and
   rebase first when needed.
+- Launch that `make check-fast` in the background as soon as the compiled
+  surface is final, and write the task's knowledge, ADR, and docs updates while
+  it runs — `implementation-validation` ("Overlap The Gate With The Tail Work")
+  owns what may be edited concurrently and how the result is re-verified.
 - Once `make check-fast` passes, repeat the `main` advance check immediately
   before committing task changes. Rebase first when needed; when that changes
   the effective tree, rerun validation before committing. Task commits and

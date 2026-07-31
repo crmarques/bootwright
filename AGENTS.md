@@ -112,8 +112,16 @@ brief:
   check`, or task commit, check whether local `main` has advanced and rebase onto
   it if so — separately each time, even when an earlier step found the branch
   current. Task commits are preauthorized; do not ask.
-- `make check-fast` is **the** gate. Run it when the work is implemented, and
-  treat green as sufficient to report the change verified and to integrate.
+- Overlap whatever has no ordering dependency. Wall-clock time to completion is
+  part of the deliverable: split an independent task list across parallel
+  worktrees, issue independent commands in one batch, and never idle a slow gate
+  — the tail of a task (knowledge entries, ADRs, docs, the handoff) is written
+  *while* `make check-fast` runs, not after it returns.
+- `make check-fast` is **the** gate. Start it in the background as soon as the
+  code, Ansible, API, and example edits are final, and treat green as sufficient
+  to report the change verified and to integrate.
+  `implementation-validation` owns the rest: what may be edited concurrently,
+  and the narrow re-verification covering prose that lands after the launch.
 - Never run `make check` unless the user asks for it in that turn. It is not a
   thoroughness upgrade you may elect: its `-race` and `ansible-lint` stages cost
   tens of minutes, and spending that is the user's call. "The change looks
