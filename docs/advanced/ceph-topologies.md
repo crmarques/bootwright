@@ -152,10 +152,18 @@ resolve** cluster-wide:
   record for it.
 - For `os.provided: true` machines, the operator guarantees it. If a machine's
   real hostname lives outside the composed zone, set the node's `fqdn:` field —
-  `name` stays a strict label, and `fqdn` is the escape hatch.
-  A mismatch passes `validate` (which never reaches the host) but fails
-  `bootwright preflight`, which compares each storage node's real hostname
-  against the declared node FQDN before cephadm ever sees the host spec.
+  `name` stays a strict label and remains the token you author in
+  `placement.hosts[]`, `bootstrap.node` and the stretch tiebreaker, while
+  `fqdn` pins the name cephadm registers.
+
+A mismatch passes `validate`, which never reaches the host. It is caught on the
+host itself: **`apply` refuses the node before it installs anything**, comparing
+each storage node's real OS hostname against the name cephadm will register.
+`bootwright preflight` runs the same comparison read-only. cephadm matches that
+string literally against the kernel's hostname, so a DNS record for the node
+name — a CNAME to the machine, or an A record — does not satisfy it; only the
+machine's own hostname does. See
+[ADR 0035](https://github.com/crmarques/bootwright/blob/main/specs/adr/0035-a-storage-node-answers-to-the-name-cephadm-registers.md).
 
 The machine's own DNS name is separate: every `Machine` carries a `fqdn`
 address (`<machineName>.<domains.machines>` by default) that Bootwright connects to

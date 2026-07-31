@@ -30,7 +30,7 @@ below.
 | [0014](0014-api-grammar.md) | Public API Grammar — References, Unions, Collections, Enablement | |
 | [0015](0015-machine-scope-rhsm-registration.md) | Machine-Scope RHSM Registration and External Management | |
 | [0016](0016-secret-first-class-kind.md) | Secret as a First-Class Kind | |
-| [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | revised by 0018, 0025 |
+| [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | revised by 0018, 0025; enforced by 0035 |
 | [0018](0018-environment-domain-model.md) | Environment Domain Model | refines 0017 |
 | [0019](0019-node-root-posture-and-orchestration-identity.md) | Node Root Posture and Ceph Orchestration Identity | revised by 0024, 0027 |
 | [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | |
@@ -38,7 +38,7 @@ below.
 | [0022](0022-cluster-wait-bootstrap-boundary.md) | Cluster Install Wait Splits at the Bootstrap Boundary | |
 | [0023](0023-teardown-is-the-inverse-of-buildup.md) | Teardown Is the Inverse of Build-Up | revises 0007 |
 | [0024](0024-machine-access-union-and-cluster-owned-node-login.md) | Machine Access Is a Union, and a Ceph Cluster Owns Its Node Login | revises 0019; revised by 0027 |
-| [0025](0025-composed-names-are-labels-plus-explicit-overrides.md) | Composed Names Are Labels Plus Explicit Overrides | refines 0017 |
+| [0025](0025-composed-names-are-labels-plus-explicit-overrides.md) | Composed Names Are Labels Plus Explicit Overrides | refines 0017; `fqdn` override repaired by 0035 |
 | [0026](0026-custom-playbook-kind-name.md) | The Operator-Supplied Playbook Kind Is `CustomPlaybook` | renames the kind of 0005, 0021 |
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024; refined by 0033 |
 | [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
@@ -48,3 +48,4 @@ below.
 | [0032](0032-tearing-down-input-a-newer-build-cannot-read.md) | Tearing Down Input a Newer Build Cannot Read | extends 0030 with the `stale-input` token |
 | [0033](0033-the-login-follows-the-scope-and-carries-its-credential.md) | The Login Follows the Command's Scope, and Carries Its Credential | refines 0019, 0024, 0027 |
 | [0034](0034-wiping-a-device-no-node-claims.md) | Wiping a Device No Node Claims | extends 0030 with the `unowned-devices` token |
+| [0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md) | A Storage Node Answers to the Name cephadm Registers | enforces 0017; repairs the `fqdn` override of 0025 |

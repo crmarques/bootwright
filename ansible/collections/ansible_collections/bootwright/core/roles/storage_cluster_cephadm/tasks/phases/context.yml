@@ -18,30 +18,3 @@
     bootwright_creds_var: bootwright_ceph_registry_credentials
     bootwright_creds_label: "cephadm registry credentialsRef {{ bootwright_ceph_registry_credentials_path }}"
   when: bootwright_ceph_registry_credentials_path | length > 0
-
-- name: Resolve current storage node
-  ansible.builtin.set_fact:
-    bootwright_current_storage_host_matches: >-
-      {{
-        bootwright_selected_storage_cluster.hosts
-        | default([])
-        | selectattr('inventoryHost', 'equalto', inventory_hostname)
-        | list
-      }}
-  changed_when: false
-  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
-
-- name: Validate current storage node context
-  ansible.builtin.assert:
-    that:
-      - bootwright_current_storage_host_matches | length == 1
-    fail_msg: >-
-      Storage node {{ inventory_hostname }} is not declared exactly once in
-      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
-  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
-
-- name: Set current storage node
-  ansible.builtin.set_fact:
-    bootwright_current_storage_host: "{{ bootwright_current_storage_host_matches | first }}"
-  changed_when: false
-  when: not bootwright_task_storage_skip_prereqs | default(false) | bool

@@ -2,6 +2,9 @@
 - name: Resolve Ceph storage role variables
   ansible.builtin.include_tasks: phases/context_vars.yml
 
+- name: Resolve and gate Ceph storage node identity
+  ansible.builtin.include_tasks: phases/node_identity.yml
+
 - name: Prepare Ceph storage node context
   ansible.builtin.include_tasks: phases/context.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool

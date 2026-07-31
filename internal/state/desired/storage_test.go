@@ -118,8 +118,11 @@ func TestStorageStretchTiebreakerSafetyChecksSurviveFQDNNormalization(t *testing
 	if got := state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Name; got != "ceph-arbiter.ceph.example.test" {
 		t.Fatalf("precondition: normalize did not FQDN-qualify the arbiter hostname, got %q", got)
 	}
+	if got := state.StorageClusters[0].Spec.Ceph.Topology.Stretch.Tiebreaker.Node; got != "ceph-arbiter.ceph.example.test" {
+		t.Fatalf("normalize must resolve the tiebreaker token alongside the node it names, got %q", got)
+	}
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, `tiebreaker.node "ceph-arbiter" must be mon-only`) {
+	if !strings.Contains(got, `tiebreaker.node "ceph-arbiter.ceph.example.test" must be mon-only`) {
 		t.Fatalf("stretch tiebreaker mon-only check did not fire after FQDN normalization; errors = %q", got)
 	}
 }

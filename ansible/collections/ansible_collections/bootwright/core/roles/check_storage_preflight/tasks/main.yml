@@ -14,20 +14,18 @@
 - name: Assert storage node name matches the declared topology
   ansible.builtin.assert:
     that:
-      - >-
-        ansible_facts['nodename'] == item.cephHostname
-        or ansible_facts['hostname'] == item.cephHostname
-        or ansible_facts['hostname'] == item.cephHostname.split('.')[0]
+      - ansible_facts['nodename'] == item.cephHostname
     fail_msg: >-
-      Storage node {{ bootwright_host_name }} reports hostname
+      Storage node {{ item.cephHostname }} reports OS hostname
       {{ ansible_facts['nodename'] }} but the name cephadm will register is
-      {{ item.cephHostname }}; cephadm registers hosts under their real OS
-      hostname, so set the machine's hostname (or, for a provided OS, author
-      spec.ceph.topology.nodes[].name) to match {{ item.cephHostname }}.
+      {{ item.cephHostname }}; cephadm compares that string literally against the
+      host's real OS hostname and a DNS record for the node name does not satisfy
+      it. Set the machine's hostname to {{ item.cephHostname }}, or author
+      spec.ceph.topology.nodes[].fqdn to pin the hostname the machine already has.
     quiet: true
   loop: "{{ bootwright_host_storage_nodes }}"
   loop_control:
-    label: "{{ item.hostname }}"
+    label: "{{ item.cephHostname }}"
   when: bootwright_host_storage_nodes | length > 0
 
 - name: Assert storage nodes run Red Hat family Linux

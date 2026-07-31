@@ -27,13 +27,13 @@ func TestClusterAccessReportsStorageClusters(t *testing.T) {
 		"Bootwright: cluster info",
 		"ceph-libvirt:",
 		"Type: ceph (managed)",
-		"Seed node: node01",
+		"Seed node: node01.ceph-libvirt.bootwright.test",
 		"SSH: ssh cephadm@",
 		"Monitors:",
 		"    - node01.ceph-libvirt.bootwright.test=",
 		"Health check: ssh cephadm@",
 		"sudo cephadm shell -- ceph -s",
-		"Admin keyring: /etc/ceph/ceph.client.admin.keyring (on node01)",
+		"Admin keyring: /etc/ceph/ceph.client.admin.keyring (on node01.ceph-libvirt.bootwright.test)",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("cluster info missing %q:\n%s", want, stdout)

@@ -158,6 +158,60 @@ func TestNormalizeDefaultsNodeHostnames(t *testing.T) {
 	}
 }
 
+func TestNormalizeResolvesClusterTokensThroughAnFQDNOverride(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec:     v1alpha1.EnvironmentSpec{Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"}},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "node01"},
+					},
+					Services: []v1alpha1.StorageCephService{{
+						ServiceType: "rgw",
+						Placement:   v1alpha1.StoragePlacement{Hosts: []string{"node01", "node07"}},
+					}},
+					Topology: v1alpha1.StorageCephTopology{
+						Stretch: &v1alpha1.StorageCephStretch{
+							FailureDomain: "datacenter",
+							DataSites:     []string{"dc1", "dc2"},
+							Tiebreaker:    v1alpha1.StorageCephTiebreaker{Node: "node07"},
+						},
+						Nodes: []v1alpha1.StorageCephNode{
+							{Name: "node01", Site: "dc1", MachineRef: v1alpha1.LocalObjectReference{Name: "s1"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+							{Name: "node07", FQDN: "srv-legacy-07", Site: "dc3", MachineRef: v1alpha1.LocalObjectReference{Name: "s7"}, Roles: []string{v1alpha1.StorageCephRoleMON}},
+						},
+					},
+				},
+			},
+		}},
+	}
+
+	Normalize(&state)
+
+	ceph := state.StorageClusters[0].Spec.Ceph
+	if got := ceph.Topology.Nodes[1].Name; got != "srv-legacy-07" {
+		t.Fatalf("pinned node name = %q, want srv-legacy-07 verbatim", got)
+	}
+	if got := ceph.Topology.Stretch.Tiebreaker.Node; got != "srv-legacy-07" {
+		t.Fatalf("tiebreaker token = %q, want it resolved to srv-legacy-07 so the authored label keeps working", got)
+	}
+	if got := ceph.Topology.Stretch.Tiebreaker.Site; got != "dc3" {
+		t.Fatalf("tiebreaker site = %q, want dc3 inferred from the resolved node", got)
+	}
+	if got := ceph.Cephadm.Bootstrap.Node; got != "node01.ceph.example.test" {
+		t.Fatalf("bootstrap token = %q, want node01.ceph.example.test", got)
+	}
+	if got := ceph.Services[0].Placement.Hosts; got[0] != "node01.ceph.example.test" || got[1] != "srv-legacy-07" {
+		t.Fatalf("placement hosts = %v, want both tokens resolved", got)
+	}
+}
+
 func TestAuthoredNodeNameMustBeADNSLabel(t *testing.T) {
 	state := v1alpha1.State{
 		ContainerClusters: []v1alpha1.ContainerCluster{{

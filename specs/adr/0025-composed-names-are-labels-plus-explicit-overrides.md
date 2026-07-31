@@ -58,9 +58,13 @@ nodes:
 
 `Normalize` resolves each node's FQDN — composed, or the authored `fqdn`
 verbatim — back into `name`, so from normalization onwards `name` holds the
-FQDN. Every surface that references a node (`placement.hosts[]`,
-`bootstrap.node`, the stretch tiebreaker, CLI `--node`) accepts either that
-FQDN or its leftmost label, so an operator may keep authoring the label.
+FQDN. In that same pass it resolves every surface that references the node
+(`placement.hosts[]`, `bootstrap.node`, the stretch tiebreaker) from the
+authored label to the same name, so an operator may keep authoring the label
+however far the override departs from it. CLI `--node` accepts the FQDN or its
+leftmost label. [ADR 0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md)
+carries the token resolution; before it, this held only while the override's
+leftmost label happened to match the authored one.
 
 This refines ADR 0017: the node-identity model, the uniqueness rule, and every
 downstream use of the composed FQDN stand unchanged — only the way the verbatim

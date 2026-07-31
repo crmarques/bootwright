@@ -33,10 +33,12 @@
       - /mnt/bootstrap-spec.yaml
   register: bootwright_ceph_host_spec_apply
   changed_when: true
+  failed_when: false
 
 - name: Refuse a bootstrap spec cephadm reported an error for
   ansible.builtin.assert:
     that:
+      - bootwright_ceph_host_spec_apply.rc | default(1) | int == 0
       - not (bootwright_ceph_host_spec_apply.stdout | default('') | lower is search('error|failed|invalid|unknown host'))
       - not (bootwright_ceph_host_spec_apply.stderr | default('') | lower is search('error|failed|invalid|unknown host'))
     fail_msg: >-
@@ -46,7 +48,11 @@
       zero, so the run must read what it said rather than trust the exit code: a rejected
       mon document leaves the bootstrap default placement (`count: <n>`) in force, and
       cephadm then picks mon hosts by its own scheduler instead of the declared set —
-      which surfaces much later, and misleadingly, as a monmap readiness failure.
+      which surfaces much later, and misleadingly, as a monmap readiness failure. A
+      non-zero exit fails this assert on its own, so a cephadm invocation that dies
+      without printing any of those words is refused here rather than carried into the
+      OSD spec apply and the monmap poll.
+      rc: {{ bootwright_ceph_host_spec_apply.rc | default('<none>') }}
       stdout: {{ bootwright_ceph_host_spec_apply.stdout | default('') }}
       stderr: {{ bootwright_ceph_host_spec_apply.stderr | default('') }}
 

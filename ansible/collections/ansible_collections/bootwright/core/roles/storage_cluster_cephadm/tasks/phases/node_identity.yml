@@ -1,0 +1,53 @@
+---
+- name: Gather storage node platform facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - platform
+
+- name: Resolve current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_host_matches: >-
+      {{
+        bootwright_selected_storage_cluster.hosts
+        | default([])
+        | selectattr('inventoryHost', 'equalto', inventory_hostname)
+        | list
+      }}
+  changed_when: false
+
+- name: Validate current storage node context
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_storage_host_matches | length == 1
+    fail_msg: >-
+      Storage node {{ inventory_hostname }} is not declared exactly once in
+      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+
+- name: Set current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_host: "{{ bootwright_current_storage_host_matches | first }}"
+  changed_when: false
+
+- name: Refuse a storage node whose OS hostname is not the name cephadm will register
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['nodename'] == bootwright_current_storage_host.cephHostname
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.cephHostname }} reports OS hostname
+      {{ ansible_facts['nodename'] }}. cephadm identifies a host by its real OS hostname:
+      the mgr runs `cephadm check-host --expect-hostname` against every host document and
+      compares that string literally, so a mismatch is refused no matter how the name
+      resolves in DNS — a CNAME from the node name to the machine does not satisfy it.
+      Refusing here, before any cluster mutation, because cephadm rejects the host
+      document while `ceph orch apply -i` still exits zero: the run would bootstrap a
+      cluster, leave the rejected node out of the orchestrator inventory, keep the
+      bootstrap default mon placement (`count: <n>`) in force, and only surface much
+      later as a monmap readiness failure. Set this machine's hostname to
+      {{ bootwright_current_storage_host.cephHostname }} — Bootwright writes it for the
+      machines whose OS it installs, and for `os.provided: true` machines the operator
+      owns it — or author spec.ceph.topology.nodes[].fqdn to pin the hostname the
+      machine already has.
+    success_msg: >-
+      Storage node OS hostname matches the name cephadm will register.

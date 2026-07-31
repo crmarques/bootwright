@@ -361,11 +361,79 @@ func normalizeNodeNames(state *v1alpha1.State) {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
+		renamed := map[string]string{}
 		for j := range cluster.Spec.Ceph.Topology.Nodes {
 			node := &cluster.Spec.Ceph.Topology.Nodes[j]
+			authored := node.Name
 			node.Name = nodeFQDN(node.Name, node.FQDN, cluster.Metadata.Name, storageDomain)
+			if authored != "" && authored != node.Name {
+				renamed[authored] = node.Name
+			}
 		}
+		normalizeStorageNodeTokens(state, cluster, renamed)
 		normalizeStorageStretch(cluster)
+	}
+}
+
+func normalizeStorageNodeTokens(state *v1alpha1.State, cluster *v1alpha1.StorageCluster, renamed map[string]string) {
+	if len(renamed) == 0 {
+		return
+	}
+	resolve := func(token string) string {
+		if to, ok := renamed[token]; ok {
+			return to
+		}
+		return token
+	}
+	resolveHosts := func(placement *v1alpha1.StoragePlacement) {
+		for i, host := range placement.Hosts {
+			placement.Hosts[i] = resolve(host)
+		}
+	}
+	ceph := cluster.Spec.Ceph
+	ceph.Cephadm.Bootstrap.Node = resolve(ceph.Cephadm.Bootstrap.Node)
+	if stretch := ceph.Topology.Stretch; stretch != nil {
+		stretch.Tiebreaker.Node = resolve(stretch.Tiebreaker.Node)
+	}
+	for i := range ceph.Topology.OSDDrivegroups {
+		resolveHosts(&ceph.Topology.OSDDrivegroups[i].Placement)
+	}
+	for i := range ceph.Services {
+		resolveHosts(&ceph.Services[i].Placement)
+	}
+	if m := ceph.Monitoring; m != nil {
+		for _, service := range []*v1alpha1.StorageCephMonitoringService{
+			m.Prometheus, m.Grafana, m.Alertmanager, m.NodeExporter, m.Loki, m.Promtail,
+		} {
+			if service != nil {
+				resolveHosts(&service.Placement)
+			}
+		}
+	}
+	if mgmt := ceph.MgmtGateway; mgmt != nil {
+		resolveHosts(&mgmt.Ingress.Placement)
+	}
+	for i := range state.StorageFilesystems {
+		fs := &state.StorageFilesystems[i]
+		if fs.Spec.StorageClusterRef.Name == cluster.Metadata.Name {
+			resolveHosts(&fs.Spec.CephFS.MDS.Placement)
+		}
+	}
+	for i := range state.StorageObjectGateways {
+		gw := &state.StorageObjectGateways[i]
+		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		resolveHosts(&gw.Spec.Ceph.Placement)
+		for j := range gw.Spec.Ceph.Ingresses {
+			resolveHosts(&gw.Spec.Ceph.Ingresses[j].Placement)
+		}
+	}
+	for i := range state.StorageNFSExports {
+		nfs := &state.StorageNFSExports[i]
+		if nfs.Spec.StorageClusterRef.Name == cluster.Metadata.Name {
+			resolveHosts(&nfs.Spec.Ceph.Placement)
+		}
 	}
 }
 

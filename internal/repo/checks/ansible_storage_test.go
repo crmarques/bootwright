@@ -983,9 +983,12 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 		t.Fatalf("storage hostname verification must be an assert, got %v", task)
 	}
 	that := fmt.Sprint(body["that"])
-	for _, want := range []string{"ansible_facts['nodename'] == item.cephHostname", "ansible_facts['hostname'] == item.cephHostname"} {
-		if !strings.Contains(that, want) {
-			t.Fatalf("hostname assert must compare gathered hostname facts with the declared topology hostname, got %v", body["that"])
+	if !strings.Contains(that, "ansible_facts['nodename'] == item.cephHostname") {
+		t.Fatalf("hostname assert must compare the real OS hostname with the declared topology hostname, got %v", body["that"])
+	}
+	for _, reject := range []string{"ansible_facts['hostname']", "split('.')", "| lower"} {
+		if strings.Contains(that, reject) {
+			t.Fatalf("hostname assert must not weaken the cephadm comparison with %s, got %v", reject, body["that"])
 		}
 	}
 	failMsg := fmt.Sprint(body["fail_msg"])
@@ -999,6 +1002,80 @@ func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
 	}
 	if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_host_storage_nodes | length > 0") {
 		t.Fatalf("hostname assert must be gated on storage nodes, got when=%v", task["when"])
+	}
+}
+
+func TestStorageCephadmApplyGatesNodeHostname(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
+	tasks := readAnsibleTasks(t, base+"phases/node_identity.yml")
+
+	gather := tasks[findAnsibleTask(t, tasks, "Gather storage node platform facts")]
+	setup, ok := gather["ansible.builtin.setup"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage node fact gathering must be a setup task, got %v", gather)
+	}
+	if subset := fmt.Sprint(setup["gather_subset"]); !strings.Contains(subset, "platform") {
+		t.Fatalf("storage node facts must include the platform subset so nodename is defined, got %v", setup["gather_subset"])
+	}
+
+	gateIdx := findAnsibleTask(t, tasks, "Refuse a storage node whose OS hostname is not the name cephadm will register")
+	if resolveIdx := findAnsibleTask(t, tasks, "Set current storage node"); gateIdx <= resolveIdx {
+		t.Fatalf("the hostname gate must run after the current storage node is resolved")
+	}
+	gate := tasks[gateIdx]
+	body, ok := gate["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the hostname gate must be an assert, got %v", gate)
+	}
+	that := fmt.Sprint(body["that"])
+	if !strings.Contains(that, "ansible_facts['nodename'] == bootwright_current_storage_host.cephHostname") {
+		t.Fatalf("the hostname gate must compare the real OS hostname with the name cephadm registers, got %v", body["that"])
+	}
+	for _, reject := range []string{"ansible_facts['hostname']", "split('.')", "| lower"} {
+		if strings.Contains(that, reject) {
+			t.Fatalf("the hostname gate must not weaken the cephadm comparison with %s, got %v", reject, body["that"])
+		}
+	}
+	for _, task := range tasks {
+		if _, gated := task["when"]; gated {
+			t.Fatalf("node identity must not be gated: --stage base sets skip_prereqs and would bypass the gate, got %v", task)
+		}
+	}
+
+	main := readAnsibleTasks(t, base+"main.yml")
+	identity := main[findAnsibleTask(t, main, "Resolve and gate Ceph storage node identity")]
+	if _, gated := identity["when"]; gated {
+		t.Fatalf("the node identity phase must run in every apply mode, got %v", identity["when"])
+	}
+	if got := fmt.Sprint(identity["ansible.builtin.include_tasks"]); !strings.Contains(got, "node_identity.yml") {
+		t.Fatalf("the node identity phase must include node_identity.yml, got %v", got)
+	}
+	if identityIdx, contextIdx := findAnsibleTask(t, main, "Resolve and gate Ceph storage node identity"), findAnsibleTask(t, main, "Prepare Ceph storage node context"); identityIdx >= contextIdx {
+		t.Fatalf("node identity must be gated before the context phase mutates the node")
+	}
+}
+
+func TestStorageCephadmSpecApplyRefusesNonZeroExit(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	apply := tasks[findAnsibleTask(t, tasks, "Apply Ceph host, mon, and mgr specs")]
+	if got := fmt.Sprint(apply["failed_when"]); got != "false" {
+		t.Fatalf("the spec apply must defer failure to the assert so its diagnostic is reachable, got failed_when=%v", apply["failed_when"])
+	}
+
+	body, ok := tasks[findAnsibleTask(t, tasks, "Refuse a bootstrap spec cephadm reported an error for")]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the bootstrap spec verdict must be an assert")
+	}
+	that := fmt.Sprint(body["that"])
+	if !strings.Contains(that, "bootwright_ceph_host_spec_apply.rc | default(1) | int == 0") {
+		t.Fatalf("deferring the failure requires the assert to carry the exit status, got %v", body["that"])
+	}
+	for _, stream := range []string{"stdout", "stderr"} {
+		if !strings.Contains(that, "bootwright_ceph_host_spec_apply."+stream) {
+			t.Fatalf("the assert must still read %s, which cephadm uses to reject one document while exiting zero, got %v", stream, body["that"])
+		}
 	}
 }
 
