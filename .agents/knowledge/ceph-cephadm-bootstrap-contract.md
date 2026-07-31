@@ -103,6 +103,36 @@ desired hash vs recorded reality, not from Ansible's recap.
 entries inside the daemon/drivegroup spec. Rendering them inside `spec` makes
 `ceph orch apply -i` reject the document.
 
+**Constraint:** `ceph orch apply -i <file>` reads the file with
+`yaml.safe_load_all` and hands **each document** to `ServiceSpec.from_json`,
+which requires a mapping. A file holding a YAML *sequence* of specs is one
+document whose value is a list, so the whole apply dies with
+`Error EINVAL: Service Spec is not an (JSON or YAML) object. got "[{…}]"`
+(rc 22) — the printed text is Python's repr of the loaded list, with the keys in
+the alphabetical order `to_nice_yaml` wrote them, which reads misleadingly like
+Ansible stringified the fact. The Go renderer joins documents with `---` in
+`writeYAMLDocuments`; the two spec files Ansible assembles at run time
+(`management_services.yml`, `rgw_ingress_tls.yml`) must do the same with
+`| map('to_nice_yaml') | join('---\n')`, never `| to_nice_yaml` over the list.
+
+Because the file then carries several documents, cephadm can reject one and
+accept the rest while exiting zero — and a rejected service is never created, so
+the service-readiness gate cannot see it (it only compares `running` against
+`size` for services `ceph orch ls` reports). Both steps therefore apply with
+`failed_when: false` and refuse on a following assert that reads rc plus
+stdout/stderr, as the host/mon/mgr spec apply already did. A retried apply
+(`management_services.yml`) needs the `attempts >=` escape in its `until`, or
+retry exhaustion fails the task before its refusal can name the document.
+
+**Constraint:** RGW/NFS ingress takes cert and key concatenated into one
+`ssl_cert` PEM bundle. That join must not be written as `~ "\n" ~` inside the
+folded (`>-`) `set_fact` expression: the escape survives as a literal
+backslash-n there ([ansible-folded-scalar-escapes.md](ansible-folded-scalar-escapes.md)),
+which cephadm accepts as spec text and haproxy then refuses as a certificate.
+The bundle is built in a double-quoted task `vars:` entry
+(`[cert | trim, key | trim, ''] | join('\n')`), which also gives the trailing
+newline; a guard test refuses an escape in the assembly expression.
+
 **Constraint:** Host identity: authored placement tokens may be machine names;
 they are canonicalized to the registered (fully-qualified) hostname so cephadm
 matches them against the host spec. The per-host OSD service id stays on the

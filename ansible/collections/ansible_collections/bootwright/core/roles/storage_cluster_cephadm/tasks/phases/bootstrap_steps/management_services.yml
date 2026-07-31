@@ -50,7 +50,7 @@
 - name: Write management service spec
   ansible.builtin.copy:
     dest: "{{ bootwright_ceph_remote_work_dir }}/management-services.yaml"
-    content: "{{ bootwright_ceph_management_specs | to_nice_yaml }}"
+    content: "{{ bootwright_ceph_management_specs | map('to_nice_yaml') | join('---\n') }}"
     mode: "0600"
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_management.hosts is defined
@@ -384,7 +384,38 @@
       - /mnt/management-services.yaml
   register: bootwright_ceph_management_apply
   changed_when: true
+  failed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
   retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
-  until: bootwright_ceph_management_apply.rc == 0
+  until: >-
+    bootwright_ceph_management_apply.rc == 0
+    or ((bootwright_ceph_management_apply.attempts | default(1) | int)
+        >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
+  when: bootwright_ceph_management.hosts is defined
+
+- name: Refuse a management service spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_management_apply.rc | default(1) | int == 0
+      - not (bootwright_ceph_management_apply.stdout | default('') | lower is search('error|failed|invalid'))
+      - not (bootwright_ceph_management_apply.stderr | default('') | lower is search('error|failed|invalid'))
+    fail_msg: >-
+      cephadm reported an error while applying the management service spec for
+      {{ bootwright_selected_storage_cluster.name }}. The file carries one document per
+      management service ({{ bootwright_ceph_management_specs | map(attribute='service_type') | join(', ') }}),
+      and `ceph orch apply -i` can reject one document while accepting the rest, exiting
+      zero — a rejected oauth2-proxy document, for instance, leaves a mgmt-gateway that
+      demands authentication with nothing to authenticate against, and the service
+      readiness gate cannot see it because the rejected service is never created.
+      rc: {{ bootwright_ceph_management_apply.rc | default('<none>') }}
+      cephadm said: {{ bootwright_ceph_management_apply_output }}
+    success_msg: >-
+      cephadm accepted every management service document.
+  vars:
+    bootwright_ceph_management_apply_output: >-
+      {{ ((bootwright_ceph_management_apply.stdout | default('')) ~ ' '
+          ~ (bootwright_ceph_management_apply.stderr | default('')))
+         | regex_replace('got "[\s\S]*', 'got <spec redacted>')
+         | regex_replace('-----BEGIN[\s\S]*', '<redacted>') }}
   when: bootwright_ceph_management.hosts is defined

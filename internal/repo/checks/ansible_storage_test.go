@@ -2888,6 +2888,13 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 	if got := fmt.Sprint(assemble["ansible.builtin.set_fact"]); !strings.Contains(got, "ssl_cert") || !strings.Contains(got, "item.serviceID") {
 		t.Fatalf("RGW ingress TLS assembly must keep the concatenated ssl_cert and the rendered service id, got %v", assemble["ansible.builtin.set_fact"])
 	}
+	if got := fmt.Sprint(assemble["ansible.builtin.set_fact"]); strings.Contains(got, `\n`) {
+		t.Fatalf("a block scalar hands Jinja the two characters backslash and n, so the PEM bundle must not be joined with an escape there, got %v", assemble["ansible.builtin.set_fact"])
+	}
+	pem := fmt.Sprint(assemble["vars"])
+	if !strings.Contains(pem, "certificatePath") || !strings.Contains(pem, "keyPath") || !strings.Contains(pem, "join('\n')") {
+		t.Fatalf("the PEM bundle must join the certificate and the key on a real newline, which only a quoted scalar yields, got vars=%v", assemble["vars"])
+	}
 	write := tasks[writeIdx]
 	assertRedactsByDefault(t, "Write RGW ingress TLS certificate spec", write["no_log"])
 	if _, ok := write["loop"]; ok {
@@ -2903,6 +2910,7 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 	if got := copyBody["mode"]; got != "0600" {
 		t.Fatalf("RGW ingress TLS spec file carries a cert and key, so it must stay 0600, got %v", got)
 	}
+	assertCephSpecFileIsMultiDocument(t, "RGW ingress TLS", "bootwright_ceph_rgw_ingress_tls_specs", copyBody["content"])
 	apply := tasks[applyIdx]
 	if _, ok := apply["loop"]; ok {
 		t.Fatalf("RGW ingress TLS must run one ceph orch apply, got loop=%v", apply["loop"])
@@ -2910,6 +2918,79 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 	if got := fmt.Sprint(apply["ansible.builtin.command"]); !strings.Contains(got, "/mnt/rgw-ingress-tls.yaml") {
 		t.Fatalf("RGW ingress TLS apply must consume the merged spec file, got %v", apply["ansible.builtin.command"])
 	}
+	assertCephSpecApplyIsVerified(t, tasks, "Refuse an RGW ingress TLS spec cephadm reported an error for", applyIdx, "bootwright_ceph_rgw_ingress_tls_apply")
+}
+
+func assertCephSpecFileIsMultiDocument(t *testing.T, label, fact string, content any) {
+	t.Helper()
+	got := fmt.Sprint(content)
+	if !strings.Contains(got, "map('to_nice_yaml')") || !strings.Contains(got, "join('---\n')") {
+		t.Fatalf("%s must be written as one YAML document per service; `ceph orch apply -i` reads the file with safe_load_all and refuses a document that is a sequence rather than a mapping (\"Service Spec is not an (JSON or YAML) object\"), got content=%v", label, content)
+	}
+	if strings.Contains(got, fact+" | to_nice_yaml") {
+		t.Fatalf("%s must not serialize the whole list into one document, got content=%v", label, content)
+	}
+}
+
+func assertCephSpecApplyIsVerified(t *testing.T, tasks []map[string]any, refusal string, applyIdx int, register string) {
+	t.Helper()
+	apply := tasks[applyIdx]
+	if apply["failed_when"] != false {
+		t.Fatalf("%q must read what cephadm said rather than trust the exit code, so the apply itself must not fail the run, got failed_when=%v", refusal, apply["failed_when"])
+	}
+	if fmt.Sprint(apply["register"]) != register {
+		t.Fatalf("%q reads %s, so the apply must register it, got register=%v", refusal, register, apply["register"])
+	}
+	assertRedactsByDefault(t, refusal+" (the apply it reads)", apply["no_log"])
+	refuseIdx := findAnsibleTask(t, tasks, refusal)
+	if refuseIdx < applyIdx {
+		t.Fatalf("%q must follow the apply it reads (refuse=%d apply=%d)", refusal, refuseIdx, applyIdx)
+	}
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%q must be an assert, got %v", refusal, tasks[refuseIdx])
+	}
+	that := fmt.Sprint(refuse["that"])
+	for _, want := range []string{register + ".rc | default(1) | int == 0", register + ".stdout", register + ".stderr"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("%q must refuse a rejected document cephadm exited zero for (missing %q), got that=%v", refusal, want, refuse["that"])
+		}
+	}
+	msg := fmt.Sprint(refuse["fail_msg"])
+	if !strings.Contains(msg, "cephadm said:") {
+		t.Fatalf("%q must quote what cephadm printed, got fail_msg=%v", refusal, refuse["fail_msg"])
+	}
+	for _, raw := range []string{register + ".stdout", register + ".stderr"} {
+		if strings.Contains(msg, raw) {
+			t.Fatalf("cephadm echoes the document it rejected, certificate and client secret included, so %q must quote a redacted copy rather than %s", refusal, raw)
+		}
+	}
+	redaction := fmt.Sprint(tasks[refuseIdx]["vars"])
+	for _, want := range []string{register + ".stdout", register + ".stderr", `regex_replace('got "[\s\S]*'`, "regex_replace('-----BEGIN[\\s\\S]*'"} {
+		if !strings.Contains(redaction, want) {
+			t.Fatalf("%q must strip the rejected document and any PEM block out of cephadm's output (missing %q), got vars=%v", refusal, want, tasks[refuseIdx]["vars"])
+		}
+	}
+	if _, ok := tasks[refuseIdx]["no_log"]; ok {
+		t.Fatalf("%q must stay visible; the output it quotes is redacted at the source", refusal)
+	}
+}
+
+func TestStorageManagementSpecAppliesOneMultiDocumentSpec(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
+	tasks := readAnsibleTasks(t, path)
+	write := tasks[findAnsibleTask(t, tasks, "Write management service spec")]
+	copyBody, ok := write["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("the management service spec must be written with copy, got %v", write)
+	}
+	assertCephSpecFileIsMultiDocument(t, "the management service spec", "bootwright_ceph_management_specs", copyBody["content"])
+	applyIdx := findAnsibleTask(t, tasks, "Apply management service spec")
+	apply := tasks[applyIdx]
+	if got := fmt.Sprint(apply["until"]); !strings.Contains(got, "attempts") {
+		t.Fatalf("a retried apply that no longer fails on its own must let its attempts run out, or the refusal that reads it never runs, got until=%v", apply["until"])
+	}
+	assertCephSpecApplyIsVerified(t, tasks, "Refuse a management service spec cephadm reported an error for", applyIdx, "bootwright_ceph_management_apply")
 }
 
 func flattenNodeAccessTasks(t *testing.T, tasks []map[string]any) []map[string]any {

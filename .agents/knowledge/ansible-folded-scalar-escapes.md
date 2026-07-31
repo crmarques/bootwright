@@ -40,6 +40,15 @@ at all — compare on the node with `test "$(…)" = '…'`, where the shell own
 sides. Verify by asserting the built string's `| length`, never by reading the
 rendered task: both forms look identical in a diff.
 
+The damage is not limited to comparisons. The RGW ingress TLS step built its
+`ssl_cert` bundle as `cert ~ "\n" ~ key ~ "\n"` in a folded `set_fact`, so every
+gateway got a PEM whose certificate and key were separated by the two characters
+backslash and `n` — text cephadm stores without complaint and haproxy cannot
+load ([ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)).
+Wherever the joined string is a file's contents rather than a comparand, prefer
+asserting the result parses (`openssl x509`/`pkey` over the bundle) to asserting
+its length.
+
 This is what made the Ceph node sudoers grant re-install on every apply; the
 channel-side half of that story (why a pseudo-terminal also injects CR into any
 stdout compared on the controller) is in

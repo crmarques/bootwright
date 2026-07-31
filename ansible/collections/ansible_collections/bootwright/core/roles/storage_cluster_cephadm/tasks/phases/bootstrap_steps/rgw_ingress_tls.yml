@@ -20,12 +20,7 @@
                   'virtual_ip': item.virtualIP,
                   'frontend_port': item.frontendPort,
                   'monitor_port': item.monitorPort,
-                  'ssl_cert': (
-                    (lookup('ansible.builtin.file', item.certificatePath) | trim)
-                    ~ "\n"
-                    ~ (lookup('ansible.builtin.file', item.keyPath) | trim)
-                    ~ "\n"
-                  )
+                  'ssl_cert': bootwright_ceph_rgw_ingress_tls_pem
                 }
                 | combine({'virtual_interface_networks': item.virtualInterfaceNetworks} if (item.virtualInterfaceNetworks | default([]) | length > 0) else {})
                 | combine({'first_virtual_router_id': item.firstVirtualRouterID} if (item.firstVirtualRouterID | default(0) | int > 0) else {})
@@ -33,6 +28,8 @@
             }
           ]
       }}
+  vars:
+    bootwright_ceph_rgw_ingress_tls_pem: "{{ [(lookup('ansible.builtin.file', item.certificatePath) | trim), (lookup('ansible.builtin.file', item.keyPath) | trim), ''] | join('\n') }}"
   loop: "{{ bootwright_ceph_rgw_ingress_tls | default([]) }}"
   loop_control:
     label: "{{ item.serviceID }}"
@@ -42,7 +39,7 @@
 - name: Write RGW ingress TLS certificate spec
   ansible.builtin.copy:
     dest: "{{ bootwright_ceph_remote_work_dir }}/rgw-ingress-tls.yaml"
-    content: "{{ bootwright_ceph_rgw_ingress_tls_specs | to_nice_yaml }}"
+    content: "{{ bootwright_ceph_rgw_ingress_tls_specs | map('to_nice_yaml') | join('---\n') }}"
     mode: "0600"
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_ceph_rgw_ingress_tls_specs | length > 0
@@ -62,4 +59,33 @@
       - /mnt/rgw-ingress-tls.yaml
   register: bootwright_ceph_rgw_ingress_tls_apply
   changed_when: true
+  failed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: bootwright_ceph_rgw_ingress_tls_specs | length > 0
+
+- name: Refuse an RGW ingress TLS spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_rgw_ingress_tls_apply.rc | default(1) | int == 0
+      - not (bootwright_ceph_rgw_ingress_tls_apply.stdout | default('') | lower is search('error|failed|invalid'))
+      - not (bootwright_ceph_rgw_ingress_tls_apply.stderr | default('') | lower is search('error|failed|invalid'))
+    fail_msg: >-
+      cephadm reported an error while applying the RGW ingress TLS spec for
+      {{ bootwright_selected_storage_cluster.name }}. The file carries one document per
+      object gateway ingress ({{ bootwright_ceph_rgw_ingress_tls_specs | map(attribute='service_id') | join(', ') }}),
+      and `ceph orch apply -i` can reject one document while accepting the rest, exiting
+      zero — a rejected document leaves that gateway's ingress without the supplied
+      certificate, which no later readiness gate notices because the service is never
+      created at all. The certificate and key are concatenated into one PEM bundle, so a
+      key that does not match its certificate, or a path holding something other than PEM
+      text, is refused here. rc: {{ bootwright_ceph_rgw_ingress_tls_apply.rc | default('<none>') }}
+      cephadm said: {{ bootwright_ceph_rgw_ingress_tls_apply_output }}
+    success_msg: >-
+      cephadm accepted every RGW ingress TLS document.
+  vars:
+    bootwright_ceph_rgw_ingress_tls_apply_output: >-
+      {{ ((bootwright_ceph_rgw_ingress_tls_apply.stdout | default('')) ~ ' '
+          ~ (bootwright_ceph_rgw_ingress_tls_apply.stderr | default('')))
+         | regex_replace('got "[\s\S]*', 'got <spec redacted>')
+         | regex_replace('-----BEGIN[\s\S]*', '<redacted>') }}
   when: bootwright_ceph_rgw_ingress_tls_specs | length > 0
