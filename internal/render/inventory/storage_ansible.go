@@ -202,6 +202,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
 			"provider":            cephprovider.Vars(provider),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,
+			"publicNetworkCIDRs":  append([]string(nil), ceph.Networks.PublicCIDRs...),
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{

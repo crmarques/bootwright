@@ -17,6 +17,9 @@
     - name: Pin cephadm container image base
       ansible.builtin.include_tasks: bootstrap_steps/container_image_base.yml
 
+    - name: Reconcile the Ceph public and cluster networks
+      ansible.builtin.include_tasks: bootstrap_steps/network_config.yml
+
     - name: Reconcile cephadm registry login
       ansible.builtin.include_tasks: bootstrap_steps/registry_login.yml
 

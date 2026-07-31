@@ -165,6 +165,9 @@
       {{ bootwright_ceph_declared_mons | default([])
          | selectattr('daemon', 'in', bootwright_ceph_missing_mon_daemons | default([]))
          | map(attribute='name') | list }}
+    bootwright_ceph_mon_placement_filters: >-
+      {{ bootwright_ceph_mon_cephadm_log.stdout | default('')
+         | regex_findall('.*Filtered out host.*') }}
   ansible.builtin.assert:
     that:
       - bootwright_ceph_mons_ready | default(false) | bool
@@ -175,7 +178,20 @@
       {{ bootwright_ceph_missing_mon_daemons | default([]) | join(', ') or 'unknown (ceph mon dump failed, rc=' ~ (bootwright_ceph_mon_dump.rc | default('unknown')) ~ ')' }}
       (orchestrator host{{ 's' if (bootwright_ceph_missing_mon_hosts | length) != 1 else '' }}
       {{ bootwright_ceph_missing_mon_hosts | join(', ') or 'unknown' }});
-      declared: {{ bootwright_ceph_declared_mon_daemons | join(', ') }}. The topology
+      declared: {{ bootwright_ceph_declared_mon_daemons | join(', ') }}.
+      {% if bootwright_ceph_mon_placement_filters | length > 0 %}
+      READ THIS FIRST — cephadm logged that it dropped host(s) from a placement because
+      they hold no address inside the mon public_network
+      ({{ bootwright_ceph_mon_public_networks | join(', ') or 'unset' }}), which is by
+      itself the whole explanation for any absent mon named in it:
+      {{ bootwright_ceph_mon_placement_filters | join(' | ') }}.
+      public_network accepts a comma-separated list, so admit such a host by adding its
+      own subnet to spec.ceph.networks.publicCIDRs — that is how a stretch arbiter
+      standing on a network of its own is placed — or move the host onto a network the
+      cluster already serves. cephadm keeps the host in `placement:` either way, so the
+      mon service below still lists it and reports `size:` above `running:`.
+      {% endif %}
+      The topology
       operations that follow address mons by name (`ceph mon set_location`, and for a
       stretch cluster `ceph mon enable_stretch_mode`), and Ceph answers
       `ENOENT: mon.<name> does not exist` for a mon that is not in the monmap, so this

@@ -1,0 +1,68 @@
+---
+- name: Read the Ceph public network currently in force
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - get
+      - global
+      - public_network
+  register: bootwright_ceph_public_network_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_public_network_declared | length > 0
+
+- name: Reconcile the Ceph public network before any daemon placement is scheduled
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - set
+      - global
+      - public_network
+      - "{{ bootwright_ceph_public_network_declared }}"
+  register: bootwright_ceph_public_network_set
+  changed_when: true
+  when:
+    - bootwright_ceph_public_network_declared | length > 0
+    - (bootwright_ceph_public_network_current.stdout | default('') | trim) != bootwright_ceph_public_network_declared
+
+- name: Read the Ceph cluster network currently in force
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - get
+      - global
+      - cluster_network
+  register: bootwright_ceph_cluster_network_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_cluster_network_declared | length > 0
+
+- name: Reconcile the Ceph cluster network before any daemon placement is scheduled
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config
+      - set
+      - global
+      - cluster_network
+      - "{{ bootwright_ceph_cluster_network_declared }}"
+  register: bootwright_ceph_cluster_network_set
+  changed_when: true
+  when:
+    - bootwright_ceph_cluster_network_declared | length > 0
+    - (bootwright_ceph_cluster_network_current.stdout | default('') | trim) != bootwright_ceph_cluster_network_declared

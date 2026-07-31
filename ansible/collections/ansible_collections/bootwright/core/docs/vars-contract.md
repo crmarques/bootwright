@@ -443,6 +443,8 @@ bootwright_storage_clusters:
         trustBundlePath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-ca
     remoteWorkDir: /tmp/bootwright-storage-ceph-stretch
     resultPath: "{{ bootwright_ansible_artifacts_dir }}/storage-result.json"
+    publicNetworkCIDRs:
+      - 192.168.133.0/24
     clusterNetworkCIDRs:
       - 192.168.133.0/24
     hosts:

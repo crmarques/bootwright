@@ -90,6 +90,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
 	errs = append(errs, validateStorageCephBootstrapPublicNetwork(prefix, cluster, machines)...)
+	errs = append(errs, validateStorageCephMonPublicNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephClusterNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
@@ -582,132 +583,6 @@ func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1a
 		}
 	}
 	return errs
-}
-
-func validateStorageCephBootstrapPublicNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
-	ceph := cluster.Spec.Ceph
-	if ceph == nil || len(ceph.Networks.PublicCIDRs) == 0 {
-		return nil
-	}
-	host := ceph.Cephadm.Bootstrap.Node
-	node, ok := storageCephNodeByName(cluster, host)
-	if host == "" || !ok {
-		return nil
-	}
-	machine, ok := machines[node.MachineRef.Name]
-	if !ok {
-		return nil
-	}
-	addrName := ceph.Cephadm.Bootstrap.AddressRef.Name
-	if addrName == "" && machine.Spec.Access.SSH != nil {
-		addrName = machine.Spec.Access.SSH.AddressRef.Name
-	}
-	monIP, ok := v1alpha1.MachineAddressByName(machine, addrName)
-	if addrName == "" || !ok || monIP == "" {
-		return nil
-	}
-	publics := ceph.Networks.PublicCIDRs
-	var subnets []string
-	for _, ia := range machine.Spec.Network.Config.InterfaceAddresses {
-		if ia.AddressRef.Name != addrName || ia.PrefixLength <= 0 {
-			continue
-		}
-		if subnet, ok := storageConnectedSubnet(monIP, ia.PrefixLength); ok {
-			subnets = append(subnets, subnet)
-		}
-	}
-	if len(subnets) == 0 {
-		if storageIPWithinAny(monIP, publics) {
-			return nil
-		}
-		return []string{fmt.Sprintf("%s.networks.publicCIDRs: cephadm bootstrap host %q mon-ip %s falls outside every entry (%s); the bootstrap monitor cannot bind inside the declared public network", prefix, host, monIP, strings.Join(publics, ","))}
-	}
-	declared := storageCanonicalNetworks(publics)
-	for _, subnet := range subnets {
-		if declared[subnet] {
-			return nil
-		}
-	}
-	return []string{fmt.Sprintf("%s.networks.publicCIDRs: cephadm bootstrap host %q carries mon-ip %s on interface subnet %s, absent from the declared entries (%s); cephadm bootstrap aborts with \"public CIDR network ... is not configured locally\" unless a publicCIDRs entry exactly equals a locally-configured interface subnet — set the Machine/%s interfaceAddresses prefixLength and the publicCIDRs entry to the same CIDR", prefix, host, monIP, strings.Join(subnets, ","), strings.Join(publics, ","), machine.Metadata.Name)}
-}
-
-func validateStorageCephClusterNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
-	ceph := cluster.Spec.Ceph
-	if ceph == nil || len(ceph.Networks.ClusterCIDRs) == 0 {
-		return nil
-	}
-	clusters := ceph.Networks.ClusterCIDRs
-	var errs []string
-	for _, node := range ceph.Topology.Nodes {
-		if !storageCephHostRunsOSD(node) {
-			continue
-		}
-		machine, ok := machines[node.MachineRef.Name]
-		if !ok || len(machine.Spec.Network.Config.InterfaceAddresses) == 0 {
-			continue
-		}
-		if storageMachineHasClusterNetworkAddress(machine, clusters) {
-			continue
-		}
-		errs = append(errs, fmt.Sprintf("%s.networks.clusterCIDRs: Ceph OSD host %q (Machine/%s) configures no interface address inside the declared cluster network (%s); ceph-osd binds its replication socket inside cluster_network and, finding no local address there, aborts with 'unable to find any IP address in network(s)', so every OSD on the host stays down and stray outside the CRUSH map; add an interfaceAddresses entry (matching prefixLength) that places the node on the cluster network, or drop clusterCIDRs to run replication over the public network", prefix, node.Name, machine.Metadata.Name, strings.Join(clusters, ",")))
-	}
-	return errs
-}
-
-func storageCephHostRunsOSD(node v1alpha1.StorageCephNode) bool {
-	if node.OSD != nil {
-		return true
-	}
-	for _, role := range node.Roles {
-		if role == v1alpha1.StorageCephRoleOSD {
-			return true
-		}
-	}
-	return false
-}
-
-func storageMachineHasClusterNetworkAddress(machine v1alpha1.Machine, cidrs []string) bool {
-	for _, ia := range machine.Spec.Network.Config.InterfaceAddresses {
-		ip, ok := v1alpha1.MachineAddressByName(machine, ia.AddressRef.Name)
-		if !ok || ip == "" {
-			continue
-		}
-		if storageIPWithinAny(ip, cidrs) {
-			return true
-		}
-	}
-	return false
-}
-
-func storageConnectedSubnet(ip string, prefixLength int) (string, bool) {
-	_, ipNet, err := net.ParseCIDR(fmt.Sprintf("%s/%d", ip, prefixLength))
-	if err != nil {
-		return "", false
-	}
-	return ipNet.String(), true
-}
-
-func storageCanonicalNetworks(cidrs []string) map[string]bool {
-	out := make(map[string]bool, len(cidrs))
-	for _, cidr := range cidrs {
-		if _, ipNet, err := net.ParseCIDR(cidr); err == nil {
-			out[ipNet.String()] = true
-		}
-	}
-	return out
-}
-
-func storageIPWithinAny(ip string, cidrs []string) bool {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return true
-	}
-	for _, cidr := range cidrs {
-		if _, ipNet, err := net.ParseCIDR(cidr); err == nil && ipNet.Contains(parsed) {
-			return true
-		}
-	}
-	return false
 }
 
 func validateStorageServiceIDUniqueness(state v1alpha1.State) []string {

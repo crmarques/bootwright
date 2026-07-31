@@ -188,6 +188,7 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/late_service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/mon_readiness.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/network_config.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_coverage_report.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/registry_login.yml",
@@ -1211,6 +1212,40 @@ func TestStorageCephadmPinsDaemonImageOnEveryApply(t *testing.T) {
 	specsInclude := strings.Index(phase, "bootstrap_steps/service_specs.yml")
 	if pinInclude < 0 || specsInclude < 0 || pinInclude > specsInclude {
 		t.Fatalf("the daemon image pin must be asserted before the first ceph orch apply, or the services deployed by this very run still come up on the old image (pin=%d specs=%d)", pinInclude, specsInclude)
+	}
+}
+
+func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
+	tasks := storageCephBootstrapTasks(t)
+
+	setIdx := findAnsibleTask(t, tasks, "Reconcile the Ceph public network before any daemon placement is scheduled")
+	set := fmt.Sprint(tasks[setIdx]["ansible.builtin.command"])
+	for _, want := range []string{"config", "set", "global", "public_network", "bootwright_ceph_public_network_declared"} {
+		if !strings.Contains(set, want) {
+			t.Fatalf("the public network must be written with ceph config set global public_network <declared>; missing %q in %v", want, tasks[setIdx]["ansible.builtin.command"])
+		}
+	}
+	when := fmt.Sprint(tasks[setIdx]["when"])
+	if !strings.Contains(when, "bootwright_ceph_public_network_current.stdout") {
+		t.Fatalf("the public network write must keep its ceph config get guard so re-apply is a no-op, got when=%v", tasks[setIdx]["when"])
+	}
+	if !strings.Contains(when, "length > 0") {
+		t.Fatalf("the public network write must be skipped when publicCIDRs is undeclared; writing an empty value would clear the network cephadm bootstrap derived, got when=%v", tasks[setIdx]["when"])
+	}
+
+	phase := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	networkInclude := strings.Index(phase, "bootstrap_steps/network_config.yml")
+	specsInclude := strings.Index(phase, "bootstrap_steps/service_specs.yml")
+	monInclude := strings.Index(phase, "bootstrap_steps/mon_readiness.yml")
+	topologyInclude := strings.Index(phase, "bootstrap_steps/topology_operations.yml")
+	if networkInclude < 0 || specsInclude < 0 || monInclude < 0 || topologyInclude < 0 {
+		t.Fatalf("bootstrap phase is missing a step this ordering depends on (network=%d specs=%d mon=%d topology=%d)", networkInclude, specsInclude, monInclude, topologyInclude)
+	}
+	if networkInclude > specsInclude || networkInclude > monInclude {
+		t.Fatalf("public_network must be asserted before the mon placement is applied and before the monmap gate waits on it; cephadm drops a mon host holding no address inside public_network, so a corrected publicCIDRs that lands only in the later topology operations can never converge (network=%d specs=%d mon=%d)", networkInclude, specsInclude, monInclude)
+	}
+	if topologyInclude < monInclude {
+		t.Fatalf("this test assumes the topology operations still follow the monmap gate (topology=%d mon=%d)", topologyInclude, monInclude)
 	}
 }
 
@@ -2513,6 +2548,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 		base+"ownership_marker.yml",
 		base+"ibm_call_home.yml",
 		base+"container_image_base.yml",
+		base+"network_config.yml",
 		base+"registry_login.yml",
 		base+"dashboard_secret.yml",
 		base+"service_specs.yml",
