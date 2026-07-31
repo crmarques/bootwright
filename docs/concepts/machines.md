@@ -363,7 +363,8 @@ Like `--ssh-user`, it applies only to `operatorIdentity` machines and is refused
 when no machine in the run declares that arm. The account Bootwright creates and
 hands to cephadm is unaffected: it is granted passwordless `sudo` and proved
 without a password and without a terminal, because that is the channel cephadm's
-manager uses. See [ADR 0029](../../specs/adr/0029-answering-a-sudo-password-for-the-borrowed-identity.md).
+manager uses. See
+[ADR 0029](https://github.com/crmarques/bootwright/blob/main/specs/adr/0029-answering-a-sudo-password-for-the-borrowed-identity.md).
 
 !!! note "On a Ceph topology node the password lives on the node, briefly"
     The Ceph node-access channel builds its own `ssh` invocation and cannot use

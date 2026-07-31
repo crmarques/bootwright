@@ -64,6 +64,20 @@ replacement. Mentioning a retired spelling even inside a string fails it.
 `apiVersion` keys in nested manifests do not count). Keep snippets loadable
 or make them fragments (no top-level apiVersion).
 
+**Docs links stay inside `docs_dir`:**
+`TestMkdocsRelativeLinksResolveInsideDocs`
+(`internal/repo/checks/mkdocs_links_test.go`) resolves every relative Markdown
+link under `docs/` (fenced blocks and inline code stripped first) and fails when
+one escapes `docs/` or names a missing file. `docs_dir: docs` means `specs/`,
+`examples/`, and the repo root are NOT publishable pages: a `../../specs/adr/…`
+link builds fine on GitHub but aborts `mkdocs build --strict` in the publish
+job. Link outside `docs/` with an absolute
+`https://github.com/crmarques/bootwright/blob/main/…` URL, which is what every
+other ADR reference in the docs does. Companion checks:
+`TestMkdocsNavTargetsExist` and `TestMkdocsNavCoversAllDocsPages`
+(`internal/repo/checks/mkdocs_nav_test.go`) tie `mkdocs.yml`'s nav to the files
+on disk in both directions.
+
 **get_url checksum policy (M9):** every remote `get_url` fetch in the
 Ansible roles must either pin a `checksum:` (possibly conditional via
 `omit`) or be on the small accepted-unpinnable list in
