@@ -44,7 +44,6 @@ type destroyGateForecast struct {
 	protectedReason     string
 	dataLoss            bool
 	dataLossReason      string
-	purgeHistory        bool
 	unreadableRecordDir string
 }
 

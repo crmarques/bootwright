@@ -22,6 +22,22 @@ type applyDestructiveSet struct {
 	allowDestroy    bool
 }
 
+func applyRunDestructiveDescriptors(mode workflow.ApplyMode, objects []workflow.ObjectClassification, state, planState v1alpha1.State, clustersDir string, reinstalls []string, released []workflow.SubstrateReleaseRecord, rebuiltHosts []string, reclaimDevices string, ownedReclaim []string, allowDestroy bool) []string {
+	return applyDestructiveDescriptors(applyDestructiveSet{
+		mode:            mode,
+		objects:         objects,
+		state:           state,
+		planState:       planState,
+		clustersDir:     clustersDir,
+		reinstalls:      reinstalls,
+		releasedRecords: released,
+		rebuiltHosts:    rebuiltHosts,
+		reclaimDevices:  reclaimDevices,
+		ownedReclaim:    ownedReclaim,
+		allowDestroy:    allowDestroy,
+	})
+}
+
 func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 	var out []string
 	if in.mode == workflow.ApplyModeRebuild {

@@ -279,19 +279,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			applyForeignCephadmDaemons(stdout, &plan, auth, tasks)
 			allowDestroy := auth.has(authorizeDataLoss)
-			destructiveOverride = applyDestructiveDescriptors(applyDestructiveSet{
-				mode:            mode,
-				objects:         objects,
-				state:           state,
-				planState:       plan.State,
-				clustersDir:     clustersDir,
-				reinstalls:      ocpReinstallDescriptors,
-				releasedRecords: releasedRecords,
-				rebuiltHosts:    rebuiltHosts,
-				reclaimDevices:  reclaimDevices,
-				ownedReclaim:    ownedReclaim,
-				allowDestroy:    allowDestroy,
-			})
+			destructiveOverride = applyRunDestructiveDescriptors(mode, objects, state, plan.State, clustersDir, ocpReinstallDescriptors, releasedRecords, rebuiltHosts, reclaimDevices, ownedReclaim, allowDestroy)
 			if len(destructiveOverride) > 0 {
 				auth.note(authorizeDataLoss)
 			}

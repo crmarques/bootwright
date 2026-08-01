@@ -107,6 +107,17 @@ func runScopeDryRunJSONAuthorized(cmd *cobra.Command, stdout io.Writer, cf *comm
 	return output.JSON(stdout, dryRunReportWithAuthorizations{DryRunReport: report, RequiredAuthorizations: required})
 }
 
+func runDestroyDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, plan converge.WorkflowPlan, playbook, artifactsBaseName string, artifactServerOnly bool, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization) error {
+	if artifactServerOnly {
+		return runScopeDryRunJSONAuthorized(cmd, stdout, cf, flags, scope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, destroySafety, nil, 0, required)
+	}
+	tasks, err := workflow.PlanDestroyTasks(scope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
+	if err != nil {
+		return failErr(1, err)
+	}
+	return runFullDestroyDryRunJSONAuthorized(stdout, cf, scope, plan, tasks, destroySafety, required)
+}
+
 func runFullDestroyDryRunJSONAuthorized(stdout io.Writer, cf *commonFlags, scope converge.Scope, plan converge.WorkflowPlan, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization) error {
 	if len(required) == 0 {
 		return runFullDestroyDryRunJSON(stdout, cf, scope, plan, tasks, destroySafety)

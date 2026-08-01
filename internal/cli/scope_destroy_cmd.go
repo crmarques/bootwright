@@ -151,11 +151,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		unreadableRecordsReached := len(ownershipSkipped) > 0
 		if unreadableRecordsReached && !dryRun && !auth.allows(authorizeUnreadableRecords) {
-			details := make([]string, 0, len(ownershipSkipped))
-			for _, warning := range ownershipSkipped {
-				details = append(details, warning.Error())
-			}
-			return failErr(1, fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run `bootwright destroy --authorize %s` to destroy the rest without them", len(ownershipSkipped), ctx.OwnershipDir, strings.Join(details, "; "), authorizeUnreadableRecords))
+			return failErr(1, unreadableOwnershipRefusal(ctx, ownershipSkipped))
 		}
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
@@ -176,19 +172,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
 			}
 		}
-		var storageConsumerOverrideNotice string
-		sharedInfraReached := false
-		if sel.Active && len(sel.StorageRoots) > 0 {
-			if conflicts := stategraph.StorageConsumerDestroyConflicts(state, sel.StorageRoots, sel.ContainerRoots); len(conflicts) > 0 {
-				if runScope.Name != "infra" {
-					return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
-				}
-				sharedInfraReached = true
-				if !auth.allows(authorizeSharedInfra) {
-					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --authorize %s to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), authorizeSharedInfra))
-				}
-				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied"
-			}
+		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope)
+		if consumerErr != nil {
+			return failErr(1, consumerErr)
 		}
 		installedClusterNodeReached := false
 		if sel.MachineSelection {
@@ -209,18 +195,10 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if artifactServerOnly {
 				blocksState = state
 			}
-			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
+			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
+			sharedInfraReached = sharedInfraReached || blocked
 			if blocksErr != nil {
-				sharedInfraReached = true
-				if !auth.allows(authorizeSharedInfra) {
-					return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --authorize %s to tear them down regardless", blocksErr, authorizeSharedInfra))
-				}
-			}
-			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil {
-				sharedInfraReached = true
-				if !auth.allows(authorizeSharedInfra) {
-					return failErr(1, err)
-				}
+				return failErr(1, blocksErr)
 			}
 			componentDecision = decision
 		}
@@ -276,21 +254,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			protectedReason:     destroySafety.Summary(),
 			dataLoss:            dataLossReached,
 			dataLossReason:      dataLoss.Consequence(),
-			purgeHistory:        purgeHistory,
 			unreadableRecordDir: ctx.OwnershipDir,
 		})
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			if !artifactServerOnly {
-				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
-				if terr != nil {
-					return failErr(1, terr)
-				}
-				return runFullDestroyDryRunJSONAuthorized(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth)
-			}
-			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), nil, 0, requiredAuth)
+			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
 			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))
