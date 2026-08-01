@@ -1,0 +1,193 @@
+---
+- name: Resolve the volume groups standing on the Ceph devices this teardown wipes
+  ansible.builtin.command:
+    argv:
+      - pvs
+      - --noheadings
+      - --readonly
+      - --options
+      - vg_name
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_pvs
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_lvm_teardown_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Resolve the Ceph volume groups this teardown must take down before the wipe
+  ansible.builtin.set_fact:
+    bootwright_ceph_teardown_pv_devices: >-
+      {{ bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'equalto', 0)
+         | selectattr('stdout', 'search', '\S') | map(attribute='item') | list }}
+    bootwright_ceph_teardown_vgs: >-
+      {{ bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'equalto', 0)
+         | map(attribute='stdout_lines') | flatten | map('trim') | reject('equalto', '')
+         | unique | list }}
+    bootwright_ceph_teardown_owned_vgs: >-
+      {{ bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'equalto', 0)
+         | selectattr('item', 'in', bootwright_ceph_lvm_teardown_owned_devices | default([]))
+         | map(attribute='stdout_lines') | flatten | map('trim') | reject('equalto', '')
+         | unique | list }}
+  changed_when: false
+
+- name: Read the Ceph OSD tags of the volume groups this teardown owns
+  ansible.builtin.command:
+    argv:
+      - lvs
+      - --noheadings
+      - --readonly
+      - --options
+      - lv_tags
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_lv_tags
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_teardown_owned_vgs | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Resolve the Ceph cluster identity that owns the OSD devices this teardown wipes
+  ansible.builtin.set_fact:
+    bootwright_ceph_teardown_local_fsids: >-
+      {{ bootwright_ceph_teardown_lv_tags.results | default([]) | selectattr('rc', 'equalto', 0)
+         | map(attribute='stdout')
+         | map('regex_search', 'ceph.cluster_fsid=([0-9a-fA-F-]+)', '\1')
+         | reject('none') | flatten | map('trim') | reject('equalto', '') | unique | list }}
+  changed_when: false
+
+- name: Check whether the storage node still carries those Ceph clusters
+  ansible.builtin.stat:
+    path: "/var/lib/ceph/{{ item }}"
+  register: bootwright_ceph_teardown_local_state
+  changed_when: false
+  loop: "{{ bootwright_ceph_teardown_local_fsids | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Resolve the Ceph clusters this teardown must still release on the storage node
+  ansible.builtin.set_fact:
+    bootwright_ceph_teardown_leftover_fsids: >-
+      {{ bootwright_ceph_teardown_local_state.results | default([])
+         | selectattr('stat', 'defined') | selectattr('stat.exists') | map(attribute='item')
+         | list }}
+  changed_when: false
+
+- name: Probe the storage node for cephadm before releasing a leftover Ceph cluster
+  ansible.builtin.shell:
+    cmd: 'if command -v cephadm >/dev/null 2>&1; then echo cephadm; fi'
+    executable: /bin/bash
+  register: bootwright_ceph_teardown_cephadm_probe
+  changed_when: false
+  failed_when: false
+  when: (bootwright_ceph_teardown_leftover_fsids | default([])) | length > 0
+
+- name: Report the Ceph cluster this teardown releases on the storage node
+  ansible.builtin.debug:
+    msg: >-
+      Releasing Ceph cluster
+      {{ bootwright_ceph_teardown_leftover_fsids | join(', ') }} on
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the OSD devices this teardown wipes still carry that cluster's bluestore volume
+      groups and the node still holds its /var/lib/ceph state, so its daemons are still
+      running and holding those logical volumes open. The seed no longer names this
+      cluster — a previous teardown that skipped this node or failed partway through it
+      leaves exactly this state — so the node is released here, before its devices are
+      wiped. The removal is fsid-scoped (`cephadm rm-cluster --force --fsid <fsid>`): it
+      stops and removes only that cluster's daemons, units and /var/lib/ceph state on this
+      node, and zaps no disk.
+  when:
+    - (bootwright_ceph_teardown_leftover_fsids | default([])) | length > 0
+    - bootwright_ceph_teardown_cephadm_probe.stdout | default('') | trim | length > 0
+
+- name: Release the Ceph clusters still running on the storage node
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --fsid
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_rm_cluster
+  changed_when: bootwright_ceph_teardown_rm_cluster.rc == 0
+  failed_when: bootwright_ceph_teardown_rm_cluster.rc != 0
+  loop: "{{ bootwright_ceph_teardown_leftover_fsids | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  when: bootwright_ceph_teardown_cephadm_probe.stdout | default('') | trim | length > 0
+
+- name: Deactivate the volume groups on the Ceph devices this teardown wipes
+  ansible.builtin.command:
+    argv:
+      - vgchange
+      - --activate
+      - "n"
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_vgchange
+  changed_when: bootwright_ceph_teardown_vgchange.rc == 0
+  failed_when: false
+  loop: "{{ bootwright_ceph_teardown_vgs | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to wipe a Ceph device whose volume group is still open
+  ansible.builtin.assert:
+    that:
+      - (item.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to wipe the Ceph OSD device(s) backing volume group {{ item.item }} on
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      LVM refused to deactivate it (vgchange --activate n exited {{ item.rc | default('unknown') }}:
+      {{ item.stderr | default('') | trim }}). A volume group that refuses to deactivate
+      still has an open logical volume, and on a storage node that is a Ceph OSD daemon
+      still running and holding its bluestore block device. wipefs cannot clear a device
+      whose volume group is active — it reports "probing initialization failed: Device or
+      resource busy" — and a wipe that reached the disk under a live OSD would corrupt it,
+      so this teardown stops here instead.
+      This node still runs daemons of a cluster this teardown did not remove, which is
+      what a previous destroy that skipped this node
+      (`--authorize unreachable-nodes`) or failed partway through it leaves behind.
+      {{
+        ('This teardown could not release them itself: the node carries no cephadm binary,'
+         ~ ' so nothing here can stop those daemons.')
+        if (bootwright_ceph_teardown_cephadm_probe.stdout | default('') | trim | length == 0)
+        else ('This teardown releases only the cluster whose bluestore volume groups sit on'
+              ~ ' the devices it is authorized to wipe; these daemons are not that cluster,'
+              ~ ' or their /var/lib/ceph state is already gone while the units still run.')
+      }}
+      Name the cluster with `systemctl list-units 'ceph-*@*.service'` on this node, remove
+      it with `cephadm rm-cluster --force --fsid <fsid>` (fsid-scoped: it stops and removes
+      only that cluster's daemons, units and /var/lib/ceph state, and zaps no disk), then
+      re-run destroy. No --authorize token relaxes this.
+    quiet: true
+  loop: "{{ bootwright_ceph_teardown_vgchange.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
+- name: Remove the volume groups on the Ceph devices this teardown wipes
+  ansible.builtin.command:
+    argv:
+      - vgremove
+      - --force
+      - --yes
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_vgremove
+  changed_when: true
+  failed_when: bootwright_ceph_teardown_vgremove.rc != 0
+  loop: "{{ bootwright_ceph_teardown_vgs | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Remove the physical volume labels from the Ceph devices this teardown wipes
+  ansible.builtin.command:
+    argv:
+      - pvremove
+      - --force
+      - --yes
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_pvremove
+  changed_when: true
+  failed_when: bootwright_ceph_teardown_pvremove.rc != 0
+  loop: "{{ bootwright_ceph_teardown_pv_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"

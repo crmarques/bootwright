@@ -1951,12 +1951,88 @@ func TestStorageCephadmDestroyReprobesMountsBeforeWipe(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	reprobeIdx := findAnsibleTask(t, tasks, "Re-probe declared Ceph destroy devices for active mounts before wipe")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe devices mounted since the first check")
+	lvmIdx := findAnsibleTask(t, tasks, "Take the LVM stack down on the declared Ceph devices before the wipe")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
-	if !(reprobeIdx < refuseIdx && refuseIdx < wipeIdx) {
-		t.Fatalf("ceph destroy must re-probe mounts and refuse before wiping (reprobe=%d refuse=%d wipe=%d)", reprobeIdx, refuseIdx, wipeIdx)
+	if !(reprobeIdx < refuseIdx && refuseIdx < lvmIdx && lvmIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must re-probe mounts and refuse before it takes the LVM stack down and wipes (reprobe=%d refuse=%d lvm=%d wipe=%d)", reprobeIdx, refuseIdx, lvmIdx, wipeIdx)
 	}
-	if refuseIdx+1 != wipeIdx {
-		t.Fatalf("mount re-probe refusal must be the task immediately before the wipe (refuse=%d wipe=%d)", refuseIdx, wipeIdx)
+	if refuseIdx+1 != lvmIdx {
+		t.Fatalf("mount re-probe refusal must be the task immediately before the first destructive step, which is the LVM teardown (refuse=%d lvm=%d)", refuseIdx, lvmIdx)
+	}
+}
+
+func TestStorageCephadmDestroyTearsDownLVMBeforeTheWipe(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/lvm_teardown.yml"
+	tasks := readAnsibleTasks(t, path)
+	vgchangeIdx := findAnsibleTask(t, tasks, "Deactivate the volume groups on the Ceph devices this teardown wipes")
+	openIdx := findAnsibleTask(t, tasks, "Refuse to wipe a Ceph device whose volume group is still open")
+	vgremoveIdx := findAnsibleTask(t, tasks, "Remove the volume groups on the Ceph devices this teardown wipes")
+	pvremoveIdx := findAnsibleTask(t, tasks, "Remove the physical volume labels from the Ceph devices this teardown wipes")
+	if !(vgchangeIdx < openIdx && openIdx < vgremoveIdx && vgremoveIdx < pvremoveIdx) {
+		t.Fatalf("destroy must deactivate, refuse an open volume group, then remove the volume group and the physical volume label: wipefs cannot clear a device whose volume group is active and reports \"Device or resource busy\" instead (vgchange=%d refuse=%d vgremove=%d pvremove=%d)", vgchangeIdx, openIdx, vgremoveIdx, pvremoveIdx)
+	}
+	if got := fmt.Sprint(tasks[vgchangeIdx]["failed_when"]); got != "false" {
+		t.Errorf("the deactivation must not fail the run itself; its result is what the open-volume-group refusal reads to name the live OSD holding the device, got failed_when=%v", tasks[vgchangeIdx]["failed_when"])
+	}
+	if got := fmt.Sprint(tasks[openIdx]["when"]); strings.Contains(got, "authorize") {
+		t.Errorf("no --authorize token may relax the open-volume-group refusal: wiping under a live OSD corrupts it, got when=%v", tasks[openIdx]["when"])
+	}
+	release := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Release the Ceph clusters still running on the storage node")]["ansible.builtin.command"])
+	if !strings.Contains(release, "rm-cluster") || !strings.Contains(release, "--fsid") {
+		t.Fatalf("the leftover-cluster release must be fsid-scoped `cephadm rm-cluster --force --fsid <fsid>`, got %v", release)
+	}
+	if strings.Contains(release, "zap-osds") {
+		t.Errorf("the leftover-cluster release must not pass --zap-osds: this teardown takes the LVM stack down and wipes the devices itself, and --zap-osds needs a pullable container image the node may no longer reach, got %v", release)
+	}
+	tagsIdx := findAnsibleTask(t, tasks, "Read the Ceph OSD tags of the volume groups this teardown owns")
+	if got := fmt.Sprint(tasks[tagsIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_teardown_owned_vgs") {
+		t.Errorf("the released cluster identity must come from the OSD tags of the volume groups standing on devices this node records as its own, never from every volume group present, got loop=%v", tasks[tagsIdx]["loop"])
+	}
+	if tagsIdx > vgchangeIdx {
+		t.Errorf("the leftover cluster must be released before the deactivation; its daemons are what hold the logical volumes open (tags=%d vgchange=%d)", tagsIdx, vgchangeIdx)
+	}
+}
+
+func TestStorageCephadmDestroyWipePathsTakeTheLVMStackDown(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
+	declared := readAnsibleTasks(t, base+"wipe_and_cleanup.yml")
+	declaredLVM := findAnsibleTask(t, declared, "Take the LVM stack down on the declared Ceph devices before the wipe")
+	declaredWipe := findAnsibleTask(t, declared, "Wipe declared Ceph device signatures")
+	if declaredLVM > declaredWipe {
+		t.Fatalf("the declared-device wipe must take the LVM stack down first; a ceph-* volume group left standing makes wipefs fail with \"Device or resource busy\" (lvm=%d wipe=%d)", declaredLVM, declaredWipe)
+	}
+	if got := fmt.Sprint(declared[declaredLVM]["vars"]); !strings.Contains(got, "bootwright_ceph_recorded_osd_devices") {
+		t.Errorf("the declared-device path must vouch only for devices its OSD ownership marker records, so a device wiped under --authorize unowned-devices never triggers an automatic cluster release, got vars=%v", declared[declaredLVM]["vars"])
+	}
+	filter := readAnsibleTasks(t, base+"filter_device_reclaim.yml")
+	filterTasks := nestedAnsibleTasks(t, filter[findAnsibleTask(t, filter, "Reclaim Ceph-signed disks on filter-selected OSD hosts")], "block")
+	filterLVM := findAnsibleTask(t, filterTasks, "Take the LVM stack down on the filter-selected OSD disks before the wipe")
+	filterWipe := findAnsibleTask(t, filterTasks, "Remove filesystem signatures from filter-selected OSD disks")
+	if filterLVM > filterWipe {
+		t.Fatalf("the filter reclaim selects disks by their ceph-* volume group, so it must take that stack down before wipefs (lvm=%d wipe=%d)", filterLVM, filterWipe)
+	}
+}
+
+func TestStorageCephadmDestroyRefusesANodeThatAnswersAndRejectsItsIdentity(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify how a storage host refused its teardown connection")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage host that answers but rejects every teardown identity")
+	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --authorize unreachable-nodes")
+	skipIdx := findAnsibleTask(t, tasks, "Stop tearing down unreachable storage hosts")
+	if !(classifyIdx < refuseIdx && refuseIdx < reachableIdx && reachableIdx < skipIdx) {
+		t.Fatalf("destroy must classify the refusal and fail closed on an answering node before it may skip anything (classify=%d refuse=%d reachable=%d skip=%d)", classifyIdx, refuseIdx, reachableIdx, skipIdx)
+	}
+	if _, ok := tasks[refuseIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("the answering-node refusal must be a hard assert so any_errors_fatal aborts the teardown, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); strings.Contains(got, "bootwright_destroy_skip_unreachable") {
+		t.Errorf("--authorize unreachable-nodes must not relax the answering-node refusal: skipping a node that is running leaves its Ceph daemons up and its OSD devices holding data while the run reports the cluster destroyed, got when=%v", tasks[refuseIdx]["when"])
+	}
+	for _, want := range []string{"bootwright_node_access_target_probe", "bootwright_node_access_install_probe", "bootwright_storage_reachable_probe"} {
+		if got := fmt.Sprint(tasks[classifyIdx]["vars"]) + fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, want) {
+			t.Errorf("the refusal classification must read %s so the teardown reports the identity fault instead of the power-off reading, got %v", want, tasks[classifyIdx])
+		}
 	}
 }
 

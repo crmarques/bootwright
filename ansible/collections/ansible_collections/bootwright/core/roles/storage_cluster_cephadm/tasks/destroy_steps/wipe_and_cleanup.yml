@@ -39,6 +39,16 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
+- name: Take the LVM stack down on the declared Ceph devices before the wipe
+  ansible.builtin.include_tasks: lvm_teardown.yml
+  vars:
+    bootwright_ceph_lvm_teardown_devices: "{{ bootwright_ceph_present_devices | default([]) }}"
+    bootwright_ceph_lvm_teardown_owned_devices: >-
+      {{ (bootwright_ceph_present_devices | default([])
+          | intersect(bootwright_ceph_recorded_osd_devices | default([])))
+         if (bootwright_ceph_osd_marker_valid | default(false) | bool)
+         else [] }}
+
 - name: Wipe declared Ceph device signatures
   ansible.builtin.command:
     argv:

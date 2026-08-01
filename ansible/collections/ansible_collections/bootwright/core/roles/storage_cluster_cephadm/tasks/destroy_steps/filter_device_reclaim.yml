@@ -60,6 +60,12 @@
           Ceph signature are left untouched.
       when: bootwright_ceph_filter_destroy_disks | length > 0
 
+    - name: Take the LVM stack down on the filter-selected OSD disks before the wipe
+      ansible.builtin.include_tasks: lvm_teardown.yml
+      vars:
+        bootwright_ceph_lvm_teardown_devices: "{{ bootwright_ceph_filter_destroy_disks }}"
+        bootwright_ceph_lvm_teardown_owned_devices: "{{ bootwright_ceph_filter_destroy_disks }}"
+
     - name: Remove filesystem signatures from filter-selected OSD disks
       ansible.builtin.command:
         argv:

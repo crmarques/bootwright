@@ -80,7 +80,7 @@ var authorizationTokens = []authorizationToken{{
 	elsewhere:  "destroy removes the fsid of the cluster it tears down and deliberately leaves a co-resident one standing, so a leftover is cleared by the apply that enrolls the node or by `cephadm rm-cluster --force --fsid <fsid>` on it",
 }, {
 	name:       authorizeUnreachableNodes,
-	authorizes: "leaving a cluster partially destroyed by skipping unreachable nodes",
+	authorizes: "leaving a cluster partially destroyed by skipping nodes that do not answer at all — a node that answers SSH and then rejects every teardown identity is never skipped, because skipping a running node leaves its Ceph daemons up and its OSD devices holding data",
 	inert:      "this run contacts no node whose unreachability could be skipped",
 	verbs:      []string{authorizeVerbDestroy},
 	elsewhere:  "apply needs every selected node reachable and never skips one",

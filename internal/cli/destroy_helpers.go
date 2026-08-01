@@ -29,16 +29,23 @@ func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []
 	return out
 }
 
+func partialStorageDestroyNodes(partial converge.PartialStorageDestroy) string {
+	if partial.Skipped == "" {
+		return ""
+	}
+	return " Skipped node(s): " + strings.ReplaceAll(partial.Skipped, ",", ", ") + "."
+}
+
 func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error) {
 	if len(partial.Recorded) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
-			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped and local Ceph state remains. Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them.",
-			strings.Join(partial.Recorded, ", ")))
+			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped, their Ceph daemons are still running and local Ceph state remains.%s Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them. A skipped node keeps serving the cluster this run reported destroyed.",
+			strings.Join(partial.Recorded, ", "), partialStorageDestroyNodes(partial)))
 	}
 	if len(partial.Unrecorded) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
-			"storage cluster(s) %s had unreachable node(s) but no Bootwright ownership record — treated as never provisioned, so nothing was wiped and no durable partial-destroy marker exists. If these clusters ever held data, verify the nodes manually before reusing the hardware.",
-			strings.Join(partial.Unrecorded, ", ")))
+			"storage cluster(s) %s had unreachable node(s) but no Bootwright ownership record — treated as never provisioned, so nothing was wiped and no durable partial-destroy marker exists.%s If these clusters ever held data, verify the nodes manually before reusing the hardware.",
+			strings.Join(partial.Unrecorded, ", "), partialStorageDestroyNodes(partial)))
 	}
 	if err != nil {
 		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error()+"; their converge records are kept so the next apply/destroy fails closed")

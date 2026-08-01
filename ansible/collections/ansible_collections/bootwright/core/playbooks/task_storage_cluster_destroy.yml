@@ -56,15 +56,70 @@
         - bootwright_node_access is defined
         - not (bootwright_node_access_connection_available | default(false) | bool)
 
+    - name: Classify how a storage host refused its teardown connection
+      vars:
+        bootwright_storage_refusal_pattern: >-
+          Permission denied|Too many authentication failures|Host key verification failed|REMOTE
+          HOST IDENTIFICATION HAS CHANGED|no matching (host key|key exchange method|cipher)|Authentication
+          failed|sudo:|Connection closed by|Received disconnect
+        bootwright_storage_identity_refused: >-
+          {{ (bootwright_node_access is defined)
+             and not (bootwright_node_access_connection_available | default(false) | bool) }}
+        bootwright_storage_identity_detail: >-
+          {{ (bootwright_node_access_target_endpoint | default(inventory_hostname))
+             ~ ' exited ' ~ (bootwright_node_access_target_probe.rc | default('unknown') | string)
+             ~ ' for `sudo -n true` (' ~ (bootwright_node_access_target_probe.stderr | default('') | trim) ~ '); '
+             ~ (bootwright_node_access_install_endpoint | default(inventory_hostname))
+             ~ ' exited ' ~ (bootwright_node_access_install_probe.rc | default('unknown') | string)
+             ~ ' for `true` (' ~ (bootwright_node_access_install_probe.stderr | default('') | trim) ~ ')' }}
+      ansible.builtin.set_fact:
+        bootwright_storage_node_answered: >-
+          {{
+            (
+              ((bootwright_node_access_target_probe.rc | default(255) | int) != 255)
+              or ((bootwright_node_access_install_probe.rc | default(255) | int) != 255)
+              or (bootwright_storage_identity_detail is search(bootwright_storage_refusal_pattern))
+            )
+            if (bootwright_storage_identity_refused | bool)
+            else ((bootwright_storage_reachable_probe.msg | default(''))
+                  is search(bootwright_storage_refusal_pattern))
+          }}
+        bootwright_storage_node_refusal: >-
+          {{ bootwright_storage_identity_detail | trim
+             if (bootwright_storage_identity_refused | bool)
+             else (bootwright_storage_reachable_probe.msg | default('') | trim) }}
+      changed_when: false
+      when: bootwright_storage_reachable_probe.unreachable | default(false) | bool
+
+    - name: Refuse a storage host that answers but rejects every teardown identity
+      ansible.builtin.assert:
+        that:
+          - not (bootwright_storage_node_answered | default(false) | bool)
+        fail_msg: >-
+          Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
+          for storage cluster {{ bootwright_storage_cluster_name }} answered over SSH and
+          then rejected every teardown identity: {{ bootwright_storage_node_refusal | default('') }}.
+          The node is up, so this is an identity fault — an unauthorized key, an untrusted
+          host key, or a refused sudo escalation — not an absent node, and
+          --authorize unreachable-nodes deliberately does not cover it: skipping a node that
+          is running leaves its Ceph daemons up and its OSD devices holding cluster data,
+          and the teardown would report the cluster destroyed while this node still serves
+          it. Re-authorize the key for one of those accounts, confirm
+          {{ bootwright_node_access.user | default('the orchestration account') }} still holds its
+          NOPASSWD grant (or pass --ssh-sudo-password), then re-run destroy.
+      when: bootwright_storage_reachable_probe.unreachable | default(false) | bool
+
     - name: Require storage hosts reachable unless --authorize unreachable-nodes
       ansible.builtin.assert:
         that:
           - not (bootwright_storage_reachable_probe.unreachable | default(false) | bool)
         fail_msg: >-
           Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
-          for storage cluster {{ bootwright_storage_cluster_name }} is unreachable:
-          power it on and retry, or re-run with --authorize unreachable-nodes to tear it
-          down as already-absent.
+          for storage cluster {{ bootwright_storage_cluster_name }} did not answer:
+          {{ bootwright_storage_node_refusal | default('no connection diagnostic was recorded') }}.
+          Power it on, confirm the route and that sshd is running, and retry; or re-run with
+          --authorize unreachable-nodes to tear it down as already-absent. A node that
+          answers and refuses its identity is never skipped by that token.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
     - name: Summarize storage hosts skipped as unreachable
@@ -136,7 +191,10 @@
           - not (hostvars[bootwright_storage_seed_host_name].bootwright_storage_reachable_probe.unreachable | default(false) | bool)
         fail_msg: >-
           Ceph seed host {{ bootwright_storage_seed_host_name }} for storage cluster
-          {{ bootwright_storage_cluster_name }} is unreachable: power it on and retry.
+          {{ bootwright_storage_cluster_name }} did not answer:
+          {{ hostvars[bootwright_storage_seed_host_name].bootwright_storage_node_refusal
+             | default('no connection diagnostic was recorded') }}.
+          Power it on, confirm the route and that sshd is running, and retry.
           --authorize unreachable-nodes cannot skip the seed — it proves cluster ownership before
           any node wipes its OSD devices.
       when: bootwright_destroy_skip_unreachable | default(false) | bool
