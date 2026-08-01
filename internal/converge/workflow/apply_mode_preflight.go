@@ -49,7 +49,10 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 
 func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 	var parts []string
-	if len(drifted) > 0 {
+	switch {
+	case len(drifted) > 0 && tiebreakerOnlyDriftSet(drifted):
+		parts = append(parts, tiebreakerDriftRefusal(drifted))
+	case len(drifted) > 0:
 		items := make([]string, 0, len(drifted))
 		for _, o := range drifted {
 			items = append(items, fmt.Sprintf("%s (would %s)", o.Label, structuralRebuildConsequence(o)))
@@ -61,6 +64,38 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; resolve ownership before retrying (foreign objects are never rebuilt)", summarizeApplyObjects(foreign)))
 	}
 	return fmt.Errorf("%s", strings.Join(parts, ". "))
+}
+
+func tiebreakerOnlyDriftSet(drifted []ObjectClassification) bool {
+	for _, o := range drifted {
+		if o.Kind != ObjectKindStorageCluster || !o.TiebreakerOnlyStructuralDrift() {
+			return false
+		}
+	}
+	return true
+}
+
+func TiebreakerReplacementCommand(cluster string) string {
+	return "bootwright storage-cluster replace-arbiter --name " + cluster
+}
+
+func tiebreakerDriftRefusal(drifted []ObjectClassification) string {
+	labels := make([]string, 0, len(drifted))
+	commands := make([]string, 0, len(drifted))
+	for _, o := range drifted {
+		labels = append(labels, o.Label)
+		commands = append(commands, "`"+TiebreakerReplacementCommand(storageClusterObjectName(o))+"`")
+	}
+	sort.Strings(labels)
+	sort.Strings(commands)
+	return fmt.Sprintf("apply refuses this change to %s: its only structural change is spec.ceph.topology.stretch.tiebreaker, and the stretch arbiter is a property of the live monmap that apply cannot reach — `ceph mon enable_stretch_mode` is idempotency-guarded, so a re-apply would leave the old arbiter holding the tiebreaker while the input says otherwise. Move it with %s, which reconciles the live tiebreaker onto the authored one, or revert the change to match the recorded desired state. Rebuilding is not the remedy here: it would wipe and re-bootstrap the whole cluster (cephadm rm-cluster --zap-osds) to move one vote", strings.Join(labels, ", "), strings.Join(commands, ", "))
+}
+
+func storageClusterObjectName(o ObjectClassification) string {
+	if o.Cluster != "" {
+		return o.Cluster
+	}
+	return strings.TrimPrefix(o.Label, ObjectKindStorageCluster+"/")
 }
 
 func structuralRebuildConsequence(o ObjectClassification) string {

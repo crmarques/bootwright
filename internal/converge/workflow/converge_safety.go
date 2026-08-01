@@ -51,20 +51,21 @@ type ConvergeSafetyObservation struct {
 }
 
 type ConvergeSafetyRecord struct {
-	APIVersion     string                      `json:"apiVersion"`
-	ResourceID     string                      `json:"resourceID"`
-	ResourceKind   string                      `json:"resourceKind"`
-	TaskID         string                      `json:"taskID"`
-	TaskKind       string                      `json:"taskKind"`
-	DesiredHash    string                      `json:"desiredHash"`
-	StructuralHash string                      `json:"structuralHash,omitempty"`
-	HashSchema     int                         `json:"hashSchema,omitempty"`
-	Owner          ConvergeSafetyOwnerIdentity `json:"owner"`
-	Observation    ConvergeSafetyObservation   `json:"observation"`
-	Status         ConvergeSafetyStatus        `json:"status"`
-	RunID          string                      `json:"runID,omitempty"`
-	ResourceKeys   []string                    `json:"resourceKeys,omitempty"`
-	UpdatedAt      time.Time                   `json:"updatedAt"`
+	APIVersion              string                      `json:"apiVersion"`
+	ResourceID              string                      `json:"resourceID"`
+	ResourceKind            string                      `json:"resourceKind"`
+	TaskID                  string                      `json:"taskID"`
+	TaskKind                string                      `json:"taskKind"`
+	DesiredHash             string                      `json:"desiredHash"`
+	StructuralHash          string                      `json:"structuralHash,omitempty"`
+	TiebreakerInvariantHash string                      `json:"tiebreakerInvariantHash,omitempty"`
+	HashSchema              int                         `json:"hashSchema,omitempty"`
+	Owner                   ConvergeSafetyOwnerIdentity `json:"owner"`
+	Observation             ConvergeSafetyObservation   `json:"observation"`
+	Status                  ConvergeSafetyStatus        `json:"status"`
+	RunID                   string                      `json:"runID,omitempty"`
+	ResourceKeys            []string                    `json:"resourceKeys,omitempty"`
+	UpdatedAt               time.Time                   `json:"updatedAt"`
 }
 
 func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord, bool, error) {
@@ -185,16 +186,21 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 	if err != nil {
 		return err
 	}
+	tiebreakerInvariantHash, err := applyTaskTiebreakerInvariantHash(task)
+	if err != nil {
+		return err
+	}
 	resourceID := applyTaskSafetyResourceID(task)
 	record := ConvergeSafetyRecord{
-		APIVersion:     ConvergeSafetyAPIVersion,
-		ResourceID:     resourceID,
-		ResourceKind:   task.Entry.Kind,
-		TaskID:         task.Entry.ID,
-		TaskKind:       task.Entry.Kind,
-		DesiredHash:    desiredHash,
-		StructuralHash: structuralHash,
-		HashSchema:     ConvergeHashSchema,
+		APIVersion:              ConvergeSafetyAPIVersion,
+		ResourceID:              resourceID,
+		ResourceKind:            task.Entry.Kind,
+		TaskID:                  task.Entry.ID,
+		TaskKind:                task.Entry.Kind,
+		DesiredHash:             desiredHash,
+		StructuralHash:          structuralHash,
+		TiebreakerInvariantHash: tiebreakerInvariantHash,
+		HashSchema:              ConvergeHashSchema,
 		Owner: ConvergeSafetyOwnerIdentity{
 			Manager: ConvergeSafetyOwner,
 			Context: effectiveContextName(contextName),
@@ -209,6 +215,35 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		UpdatedAt:    now.UTC(),
 	}
 	return SaveConvergeSafetyRecord(runsDir, record)
+}
+
+var storageClusterConvergeTaskKinds = map[string]bool{
+	ApplyTaskKindStorageNodeAccess: true,
+	ApplyTaskKindStorageInfra:      true,
+	ApplyTaskKindStorageCluster:    true,
+}
+
+func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster string, tasks []ApplyTask, now time.Time) error {
+	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(cluster) == "" {
+		return nil
+	}
+	for i := range tasks {
+		task := tasks[i]
+		if task.Entry.Cluster != cluster || !storageClusterConvergeTaskKinds[task.Entry.Kind] {
+			continue
+		}
+		_, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+		if err != nil {
+			return err
+		}
+		if !found {
+			continue
+		}
+		if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusReconciled, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type applyTaskHashCache struct {
@@ -342,6 +377,10 @@ func computeApplyTaskStructuralHash(task ApplyTask) (string, error) {
 	if task.StructuralHashVars == nil {
 		return "", nil
 	}
+	return hashApplyTaskStructuralVars(task, task.StructuralHashVars)
+}
+
+func hashApplyTaskStructuralVars(task ApplyTask, vars any) (string, error) {
 	payload := struct {
 		APIVersion     string `json:"apiVersion"`
 		TaskID         string `json:"taskID"`
@@ -351,7 +390,7 @@ func computeApplyTaskStructuralHash(task ApplyTask) (string, error) {
 		APIVersion:     v1alpha1.APIVersion,
 		TaskID:         task.Entry.ID,
 		TaskKind:       task.Entry.Kind,
-		StructuralVars: task.StructuralHashVars,
+		StructuralVars: vars,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -359,6 +398,53 @@ func computeApplyTaskStructuralHash(task ApplyTask) (string, error) {
 	}
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func applyTaskTiebreakerInvariantHash(task ApplyTask) (string, error) {
+	state, ok := task.StructuralHashVars.(v1alpha1.State)
+	if !ok {
+		return "", nil
+	}
+	stripped, err := stateWithoutStretchTiebreaker(state)
+	if err != nil {
+		return "", err
+	}
+	return hashApplyTaskStructuralVars(task, stripped)
+}
+
+func stateWithoutStretchTiebreaker(state v1alpha1.State) (v1alpha1.State, error) {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return v1alpha1.State{}, fmt.Errorf("encode tiebreaker-invariant hash input: %w", err)
+	}
+	var clone v1alpha1.State
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return v1alpha1.State{}, fmt.Errorf("decode tiebreaker-invariant hash input: %w", err)
+	}
+	for i := range clone.StorageClusters {
+		ceph := clone.StorageClusters[i].Spec.Ceph
+		if ceph == nil || ceph.Topology.Stretch == nil {
+			continue
+		}
+		ceph.Topology.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{}
+	}
+	return clone, nil
+}
+
+func IsTiebreakerOnlyStructuralDrift(record ConvergeSafetyRecord, structuralHash, tiebreakerInvariantHash string) bool {
+	if record.HashSchema < ConvergeHashSchema {
+		return false
+	}
+	if strings.TrimSpace(record.StructuralHash) == "" || strings.TrimSpace(structuralHash) == "" {
+		return false
+	}
+	if record.StructuralHash == structuralHash {
+		return false
+	}
+	if strings.TrimSpace(record.TiebreakerInvariantHash) == "" || strings.TrimSpace(tiebreakerInvariantHash) == "" {
+		return false
+	}
+	return record.TiebreakerInvariantHash == tiebreakerInvariantHash
 }
 
 func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHash string) bool {

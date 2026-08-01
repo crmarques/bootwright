@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/status"
 )
@@ -22,6 +23,44 @@ func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecisio
 	if dryRun {
 		output.NewContinuation(stdout).Warning("destroy protection", message+"; a mutating destroy requires --authorize "+authorizeProtected)
 	}
+}
+
+func destroyPurgeHistoryNotice(dryRun bool) string {
+	lead := "on success this also deletes"
+	if dryRun {
+		lead = "a real run of this destroy would also delete"
+	}
+	return lead + " the destroyed component(s)' whole state tree under clusters/ — installer working directory, install records, kubeconfig, captured cluster secrets — and their per-run task/flow logs under runs/ — this history is not recoverable"
+}
+
+type destroyGateForecast struct {
+	runScope            converge.Scope
+	noRemoteWork        bool
+	staleInput          bool
+	unreadableRecords   bool
+	sharedInfra         bool
+	installedNode       bool
+	protected           bool
+	protectedReason     string
+	dataLoss            bool
+	dataLossReason      string
+	purgeHistory        bool
+	unreadableRecordDir string
+}
+
+func destroyRequiredAuthorizations(auth *authorizations, gates destroyGateForecast) []requiredAuthorization {
+	forecast := newAuthorizationForecast(auth)
+	forecast.consult(authorizeStaleInput, gates.staleInput, "input document(s) of this context no longer decode or validate against this build, so a teardown can only be planned by skipping exactly those documents")
+	forecast.consult(authorizeUnreadableRecords, gates.unreadableRecords, "ownership record(s) under "+gates.unreadableRecordDir+" could not be read, so their resources would be left standing")
+	forecast.consult(authorizeSharedInfra, gates.sharedInfra, "the selected teardown crosses a storage-consumer or cross-context infra-component boundary")
+	forecast.consult(authorizeInstalledClusterNode, gates.installedNode, "a selected machine is a node of an installed cluster")
+	forecast.consult(authorizeProtected, gates.protected, gates.protectedReason)
+	forecast.consult(authorizeDataLoss, gates.dataLoss, gates.dataLossReason)
+	forecast.mayConsult(authorizeUnownedVMs, converge.ScopeTearsMachineLayer(gates.runScope), "this run tears the machine layer down; whether a VM matching the Bootwright naming carries no ownership marker is decided on the provider, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnownedNetworks, converge.ScopeTearsMachineLayer(gates.runScope), "this run tears the machine layer down; whether a libvirt network or KubeVirt DataVolume is unowned is decided on the provider, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnownedDevices, converge.ScopeTearsClusterLayer(gates.runScope), "this run tears the cluster layer down; whether a declared OSD device carries signatures or holders without a Bootwright OSD ownership record is decided on the node, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnreachableNodes, !gates.noRemoteWork, "whether a selected node proves unreachable is decided when the run contacts it, so a preview cannot settle it")
+	return forecast.list()
 }
 
 type destroyReporter struct {

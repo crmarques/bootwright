@@ -228,7 +228,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, false, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit))
+			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices)
+			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth)
 		}
 		var destructiveOverride []string
 		var substrateResetClusters []string
@@ -248,6 +249,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				cliout.NewContinuation(stdout).Warning("substrate release", releaseErr.Error()+"; a destroyed cluster's rebuild authorization could not be read, so its reinstall may be refused — fix or remove the reported record and re-apply")
 			}
 			releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
+			var ownedReclaim []string
 			if override {
 				var rerr error
 				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
@@ -256,19 +258,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
 					return failErr(1, err)
 				}
-				destructiveOverride = workflow.OverrideDestructiveDriftedObjects(objects)
-				destructiveOverride = append(destructiveOverride, ocpReinstallDescriptors...)
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
-			destructiveOverride = append(destructiveOverride, releasedBareMetalReinstallDescriptors(plan.State, releasedRecords)...)
 			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
 			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts); err != nil {
 				return failErr(1, err)
 			}
-			destructiveOverride = append(destructiveOverride, converge.KubeVirtTenantDestroyDescriptors(state, clustersDir, rebuiltHosts)...)
 			if reclaimDevices != "" {
-				ownedReclaim := converge.OwnedStorageClusters(objects)
+				ownedReclaim = converge.OwnedStorageClusters(objects)
 				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, auth.has(authorizeDataLoss)); err != nil {
 					return failErr(1, err)
 				}
@@ -277,14 +275,23 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 						return failErr(2, reclaimUnmatchedError(unmatched, ownedReclaim, declared))
 					}
 				}
-				destructiveOverride = append(destructiveOverride, reclaimDestructiveDescriptors(reclaimDevices, ownedReclaim)...)
 				applyReclaimUnownedDevices(stdout, &plan, auth, reclaimDevices)
 			}
 			applyForeignCephadmDaemons(stdout, &plan, auth, tasks)
 			allowDestroy := auth.has(authorizeDataLoss)
-			if override && allowDestroy {
-				destructiveOverride = append(destructiveOverride, filterReclaimDestructiveDescriptors(filterReclaimAuthorizedClusters(plan.State, objects))...)
-			}
+			destructiveOverride = applyDestructiveDescriptors(applyDestructiveSet{
+				mode:            mode,
+				objects:         objects,
+				state:           state,
+				planState:       plan.State,
+				clustersDir:     clustersDir,
+				reinstalls:      ocpReinstallDescriptors,
+				releasedRecords: releasedRecords,
+				rebuiltHosts:    rebuiltHosts,
+				reclaimDevices:  reclaimDevices,
+				ownedReclaim:    ownedReclaim,
+				allowDestroy:    allowDestroy,
+			})
 			if len(destructiveOverride) > 0 {
 				auth.note(authorizeDataLoss)
 			}
@@ -361,6 +368,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
 			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, reinstallDrift, ownershipRecords)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
+			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices))
 			warnUnusedAuthorizations(stdout, auth, true)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printPlaybookDryRun(stdout, dryRunTasks)

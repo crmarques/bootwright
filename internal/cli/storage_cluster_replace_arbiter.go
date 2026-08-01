@@ -66,10 +66,14 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}
 	if plan.Settled && promotion.Empty() {
 		cliout.New(stdout).Summary(cliout.StatusSkip, plan.Cluster, "mon."+plan.DesiredMon+" already holds the stretch tiebreaker; nothing to replace")
+		if flags.dryRun {
+			printRequiredAuthorizations(stdout, nil)
+		}
 		warnUnusedAuthorizations(stdout, auth, flags.dryRun)
 		return nil
 	}
 	printArbiterPlan(stdout, plan, promotion, flags.dryRun)
+	requiredAuth := replaceArbiterRequiredAuthorizations(auth, plan.SameSite(), plan.Degraded, arbiterSameSiteReason(plan))
 	if plan.SameSite() && !auth.allows(authorizeSameSiteArbiter) {
 		return failErr(1, fmt.Errorf("refusing to make mon.%s the stretch tiebreaker of %s: it sits at %s=%s, which already holds non-tiebreaker mon(s) %s. An arbiter inside a data site cannot break a tie between the two data sites — lose that site and two votes go at once, leaving the survivor without quorum, which is why Ceph itself refuses this without --yes-i-really-mean-it. Put the replacement arbiter in a third site, or, if this is the deliberate emergency fallback while the third site is gone, re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
 			plan.DesiredMon, plan.Cluster, plan.FailureDomain, plan.DesiredSite, strings.Join(plan.SameSiteMons, ", "), plan.Cluster, plan.DesiredMachine, authorizeSameSiteArbiter))
@@ -79,6 +83,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 			plan.Cluster, plan.Degraded, plan.Cluster, plan.DesiredMachine, authorizeDegradedQuorum))
 	}
 	if flags.dryRun {
+		printRequiredAuthorizations(stdout, requiredAuth)
 		warnUnusedAuthorizations(stdout, auth, true)
 		return nil
 	}
@@ -120,6 +125,9 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}, reporter)
 	if runErr != nil {
 		return failErr(1, runErr)
+	}
+	if refreshErr := refreshArbiterConvergeRecords(ctx, state, plan.Cluster); refreshErr != nil {
+		cliout.NewContinuation(stdout).Warning("converge records", refreshErr.Error()+"; the recorded desired state of StorageCluster/"+plan.Cluster+" still names the previous tiebreaker, so the next `bootwright apply` refuses on drift this run created — re-run `"+workflow.TiebreakerReplacementCommand(plan.Cluster)+"` once the records are writable")
 	}
 	cliout.New(stdout).Summary(cliout.StatusOK, plan.Cluster, "stretch tiebreaker is now mon."+plan.DesiredMon+" on Machine/"+plan.DesiredMachine)
 	cliout.NewContinuation(stdout).Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")

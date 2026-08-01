@@ -130,7 +130,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, err)
 		}
 		inputSkipped := mergeSkippedInputDocuments(localitySkipped, stateSkipped)
-		if len(inputSkipped) > 0 && !auth.allows(authorizeStaleInput) {
+		staleInputReached := len(inputSkipped) > 0
+		if staleInputReached && !auth.allows(authorizeStaleInput) {
 			return failErr(1, staleInputRefusal(ctx.Name, inputSkipped))
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
@@ -148,7 +149,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
-		if len(ownershipSkipped) > 0 && !dryRun && !auth.allows(authorizeUnreadableRecords) {
+		unreadableRecordsReached := len(ownershipSkipped) > 0
+		if unreadableRecordsReached && !dryRun && !auth.allows(authorizeUnreadableRecords) {
 			details := make([]string, 0, len(ownershipSkipped))
 			for _, warning := range ownershipSkipped {
 				details = append(details, warning.Error())
@@ -175,19 +177,23 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		var storageConsumerOverrideNotice string
+		sharedInfraReached := false
 		if sel.Active && len(sel.StorageRoots) > 0 {
 			if conflicts := stategraph.StorageConsumerDestroyConflicts(state, sel.StorageRoots, sel.ContainerRoots); len(conflicts) > 0 {
 				if runScope.Name != "infra" {
 					return failErr(1, clusteraccess.FormatStorageConsumerConflicts(conflicts))
 				}
+				sharedInfraReached = true
 				if !auth.allows(authorizeSharedInfra) {
 					return failErr(1, fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --authorize %s to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), authorizeSharedInfra))
 				}
 				storageConsumerOverrideNotice = clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied"
 			}
 		}
+		installedClusterNodeReached := false
 		if sel.MachineSelection {
 			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots, sel.StorageRoots, ownershipRecords); err != nil {
+				installedClusterNodeReached = true
 				if !auth.allows(authorizeInstalledClusterNode) {
 					return failErr(1, err)
 				}
@@ -204,11 +210,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				blocksState = state
 			}
 			decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
-			if blocksErr != nil && !auth.allows(authorizeSharedInfra) {
-				return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --authorize %s to tear them down regardless", blocksErr, authorizeSharedInfra))
+			if blocksErr != nil {
+				sharedInfraReached = true
+				if !auth.allows(authorizeSharedInfra) {
+					return failErr(1, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --authorize %s to tear them down regardless", blocksErr, authorizeSharedInfra))
+				}
 			}
-			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !auth.allows(authorizeSharedInfra) {
-				return failErr(1, err)
+			if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil {
+				sharedInfraReached = true
+				if !auth.allows(authorizeSharedInfra) {
+					return failErr(1, err)
+				}
 			}
 			componentDecision = decision
 		}
@@ -249,6 +261,24 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if len(destroySafety.Reasons) > 0 {
 			auth.note(authorizeProtected)
 		}
+		storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
+		storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
+		dataLoss := workflow.EvaluateDestroyDataLoss(plan.State, storageScopeNames, safetyScope)
+		dataLossReached := dataLoss.Planned() && !plan.NoRemoteWork
+		requiredAuth := destroyRequiredAuthorizations(auth, destroyGateForecast{
+			runScope:            runScope,
+			noRemoteWork:        plan.NoRemoteWork,
+			staleInput:          staleInputReached,
+			unreadableRecords:   unreadableRecordsReached,
+			sharedInfra:         sharedInfraReached,
+			installedNode:       installedClusterNodeReached,
+			protected:           destroySafety.RequiresAuthorization,
+			protectedReason:     destroySafety.Summary(),
+			dataLoss:            dataLossReached,
+			dataLossReason:      dataLoss.Consequence(),
+			purgeHistory:        purgeHistory,
+			unreadableRecordDir: ctx.OwnershipDir,
+		})
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
@@ -258,9 +288,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				if terr != nil {
 					return failErr(1, terr)
 				}
-				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected))
+				return runFullDestroyDryRunJSONAuthorized(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth)
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, false, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), nil, 0)
+			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), nil, 0, requiredAuth)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
 			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))
@@ -287,14 +317,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		printInfraComponentDestroyBlocks(stdout, componentDecision, auth.has(authorizeSharedInfra))
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
-		storageScopeNames := converge.DestroyStorageScopeNames(plan.State, plan.StorageWorkNames)
-		storagePlanned := workflow.DestroyScopeCoversStorage(runScope.Name) && len(storageScopeNames) > 0
-		dataLoss := workflow.EvaluateDestroyDataLoss(plan.State, storageScopeNames, safetyScope)
-		dataLossPlanned := dataLoss.Planned() && !dryRun && !plan.NoRemoteWork
+		dataLossPlanned := dataLossReached && !dryRun
 		allowDestroy := auth.has(authorizeDataLoss)
 		if dataLossPlanned {
 			auth.note(authorizeDataLoss)
 			cliout.NewContinuation(stdout).Warning("data loss", dataLoss.Warning())
+		}
+		if purgeHistory && !plan.NoRemoteWork && (dryRun || !yes) {
+			cliout.NewContinuation(stdout).Warning("purge history", destroyPurgeHistoryNotice(dryRun))
+		}
+		if dryRun {
+			printRequiredAuthorizations(stdout, requiredAuth)
 		}
 		warnUnusedAuthorizations(stdout, auth, dryRun)
 		if dataLossPlanned {
@@ -303,9 +336,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if !dryRun && !yes && !plan.NoRemoteWork {
-			if purgeHistory {
-				cliout.NewContinuation(stdout).Warning("purge history", "on success this also deletes the destroyed component(s)' whole state tree under clusters/ — installer working directory, install records, kubeconfig, captured cluster secrets — and their per-run task/flow logs under runs/ — this history is not recoverable")
-			}
 			if !confirm(stdin, stdout, destroyConfirmPrompt(dataLoss.Planned() && !allowDestroy)) {
 				return failErr(1, errors.New("destroy aborted"))
 			}

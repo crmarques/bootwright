@@ -1,15 +1,16 @@
 package workflow
 
 type ObjectClassification struct {
-	ObjectKey    string                               `json:"objectKey"`
-	Kind         string                               `json:"kind"`
-	Label        string                               `json:"label"`
-	Cluster      string                               `json:"cluster,omitempty"`
-	Class        ConvergeSafetyClassification         `json:"class"`
-	counts       map[ConvergeSafetyClassification]int `json:"-"`
-	reconcilable int
-	Reconcilable bool     `json:"reconcilable,omitempty"`
-	TaskIDs      []string `json:"taskIDs,omitempty"`
+	ObjectKey      string                               `json:"objectKey"`
+	Kind           string                               `json:"kind"`
+	Label          string                               `json:"label"`
+	Cluster        string                               `json:"cluster,omitempty"`
+	Class          ConvergeSafetyClassification         `json:"class"`
+	counts         map[ConvergeSafetyClassification]int `json:"-"`
+	reconcilable   int
+	tiebreakerOnly int
+	Reconcilable   bool     `json:"reconcilable,omitempty"`
+	TaskIDs        []string `json:"taskIDs,omitempty"`
 }
 
 func (o ObjectClassification) Recorded() bool {
@@ -23,6 +24,11 @@ func (o ObjectClassification) HasStructuralDrift() bool {
 }
 
 func (o ObjectClassification) HasReconcilableDrift() bool { return o.reconcilable > 0 }
+
+func (o ObjectClassification) TiebreakerOnlyStructuralDrift() bool {
+	structural := o.counts[ConvergeSafetyDrift] - o.reconcilable
+	return structural > 0 && o.tiebreakerOnly == structural
+}
 
 func (o ObjectClassification) HasForeign() bool { return o.counts[ConvergeSafetyForeign] > 0 }
 
@@ -52,7 +58,7 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
-	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable bool, taskID string) {
+	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable, tiebreakerOnly bool, taskID string) {
 		o := objs[key]
 		if o == nil {
 			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, Cluster: cluster, counts: map[ConvergeSafetyClassification]int{}}
@@ -62,6 +68,9 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		o.counts[class]++
 		if reconcilable {
 			o.reconcilable++
+		}
+		if tiebreakerOnly {
+			o.tiebreakerOnly++
 		}
 		if taskID != "" {
 			o.TaskIDs = append(o.TaskIDs, taskID)
@@ -87,7 +96,11 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
-		add(kind, key, label, task.Entry.Cluster, class, reconcilable, task.Entry.ID)
+		tiebreakerOnly, err := taskTiebreakerOnlyStructuralDrift(task, record, found, class, reconcilable)
+		if err != nil {
+			return nil, err
+		}
+		add(kind, key, label, task.Entry.Cluster, class, reconcilable, tiebreakerOnly, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true
 			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
@@ -99,7 +112,7 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 				if err != nil {
 					return nil, err
 				}
-				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, "")
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, false, "")
 			}
 		}
 	}
@@ -142,6 +155,21 @@ func taskDriftReconcilableWithRecord(task ApplyTask, record ConvergeSafetyRecord
 		return false, nil
 	}
 	return applyTaskReconcilableDrift(task, record, desiredHash)
+}
+
+func taskTiebreakerOnlyStructuralDrift(task ApplyTask, record ConvergeSafetyRecord, found bool, class ConvergeSafetyClassification, reconcilable bool) (bool, error) {
+	if class != ConvergeSafetyDrift || reconcilable || !found {
+		return false, nil
+	}
+	structuralHash, err := ApplyTaskStructuralHash(task)
+	if err != nil {
+		return false, err
+	}
+	invariantHash, err := applyTaskTiebreakerInvariantHash(task)
+	if err != nil {
+		return false, err
+	}
+	return IsTiebreakerOnlyStructuralDrift(record, structuralHash, invariantHash), nil
 }
 
 func applyTaskReconcilableDrift(task ApplyTask, record ConvergeSafetyRecord, desiredHash string) (bool, error) {
