@@ -44,6 +44,20 @@ real rm-cluster failure fails closed (never fall through to wiping devices with
 daemons still up). The destroy play runs `any_errors_fatal`, so a seed
 ownership refusal aborts before any node wipes its OSD devices.
 
+**Semantics (the seed-keyed rm-cluster has a hole the disks close):** both the
+seed and non-seed removals are gated on a fsid the SEED resolves, so a seed a
+previous run already cleaned resolves none and NO host removes anything — which
+is exactly the state a teardown that skipped one node leaves. That node keeps
+running its daemons and its OSD LVs stay open. `destroy_steps/lvm_teardown.yml`
+closes it from the other end: the fsid comes from the `ceph.cluster_fsid` LV tag
+of the bluestore VGs standing on the devices this teardown is authorized to wipe,
+and when `/var/lib/ceph/<fsid>` still exists on that host it runs the same
+fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` there (no `--zap-osds`)
+before taking the LVM stack down. The disks are the authorization: only VGs on
+marker-recorded devices, or on an `osdReclaimAll` host's filter-selected disks,
+may name an identity — never a device carried by `--authorize unowned-devices`
+alone (ADR 0039).
+
 **Semantics:** Apply-mode contract (host-side backstop to the Go preflight):
 `create` refuses any pre-existing cluster on the seed (greenfield only);
 `continue` and `override` act only on a Bootwright-owned cluster and refuse a

@@ -622,32 +622,6 @@ learned; this file records what it still owes.
 - Related: [ceph-ownership-apply-destroy-gates.md](ceph-ownership-apply-destroy-gates.md),
   [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)
 
-## B-049 — Storage-node unreachability messages assert "power it on" for auth and sudo refusals
-- Status: open
-- Area: ceph / diagnostics
-- Origin: ceph-prd-01 full-context destroy 2026-07-29, arbiter refused publickey
-- Severity: medium
-- Problem: storage-node reachability is decided purely by whether two SSH
-  commands return rc=0 — `sudo -n true` as the orchestration account and `true`
-  as the install account (`storage_node_access/tasks/probe.yml:2-18`) — and
-  `select_connection.yml:26-32` sets
-  `bootwright_node_access_connection_available` false only when *both* fail. That
-  one bucket collapses power-off, no route, untrusted host key, an
-  unauthorized key, and a sudo refusal. Every consumer then reports the
-  power-off reading: `task_storage_cluster_destroy.yml:59-68` says "power it on
-  and retry", and `:133-142` says "power it on and retry" for the seed. On
-  ceph-prd-01 the arbiter was up the whole time and refusing publickey for the
-  `cephadm` account, so the operator was sent to the BMC for an identity fault.
-  `probe.yml:20-46` already composes an accurate multi-cause message, but only
-  on the apply path, where `bootwright_node_access_probe_fail_when_unreachable`
-  is true; teardown sets it false and discards that detail.
-- Exit: carry the per-identity probe rc/stderr into the teardown asserts so the
-  fail_msg names which of power, route, host-key trust, key authorization, or
-  sudo actually refused, instead of asserting the power reading. Reuse the
-  three-state pattern already used for the sudo-password diagnostic.
-- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md),
-  B-020
-
 ## B-050 — Daemons left on a pre-pin image are invisible and unreported
 - Status: open
 - Area: storage / ceph
@@ -803,3 +777,28 @@ learned; this file records what it still owes.
   ever becomes compatible with the `install-config.yaml` renderer.
 - Related: [disk-encryption-tpm.md](disk-encryption-tpm.md),
   [0037](../../specs/adr/0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md)
+
+## B-059 — Machine deregistration and node-access teardown still collapse "unreachable"
+- Status: open
+- Area: ceph / diagnostics
+- Origin: ceph-prd-01 full-context destroy 2026-08-01, a running node skipped as unreachable
+- Severity: low
+- Problem: ADR 0039 classified the teardown connection refusal in
+  `task_storage_cluster_destroy.yml` — a node that answers SSH and then rejects
+  every identity is no longer skippable — but the two other consumers of
+  `bootwright_node_access_connection_available` were left as they were.
+  `task_machine_registration_deregister.yml` ("End nodes Bootwright cannot reach
+  or escalate on") and `task_storage_node_access_destroy.yml` still read an
+  identity refusal as an absent node and end the host silently. Neither wipes a
+  device, so the blast radius is bounded: a node whose RHSM registration is never
+  released (it collides with the next install of the same hardware) and an
+  install account whose Bootwright-authored access is never revoked. See
+  [destroy-scoping-and-sweeps.md](destroy-scoping-and-sweeps.md) for how both
+  plays end a host today.
+- Exit: hoist the classification the destroy play now performs into the
+  `storage_node_access` selector so all three consumers read one
+  answered/no-answer fact, then decide per consumer whether an answering node
+  fails closed or is reported as skipped-with-cause. Pin with a test per play.
+- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md),
+  [0039](../../specs/adr/0039-the-node-a-teardown-left-serving-the-cluster.md),
+  B-020

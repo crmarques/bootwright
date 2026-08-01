@@ -98,6 +98,30 @@ VGs from `pvs --noheadings --readonly -o vg_name`), before the existing
 `wipefs`/`sgdisk` pair. dm-crypt holders are named in the refusal but only the
 LVM teardown is automated; `wipefs` handles the crypt signature itself.
 
+**Constraint (destroy takes the LVM stack down too, and releases the cluster the
+disks name):** the destroy wipe went straight to `wipefs --all --force`, which
+cannot open a device whose VG is still active (`probing initialization failed:
+Device or resource busy`). It only ever worked because `cephadm rm-cluster
+--zap-osds` usually removed the OSD VGs first — and that step is gated on an fsid
+resolved from the SEED (`cluster_gate.yml`), so it is skipped exactly when it is
+needed: a seed a previous run already cleaned resolves no fsid, and non-seed
+removal is gated on the seed's. `destroy_steps/lvm_teardown.yml` is now included
+by BOTH wipe paths (`wipe_and_cleanup.yml` for declared devices,
+`filter_device_reclaim.yml` for `all: true` disks) and runs the same sequence the
+apply-side reclaim always has: `vgchange --activate n` → assert → `vgremove` →
+`pvremove`, before `wipefs`/`sgdisk`. A VG that refuses to deactivate has an open
+LV = a live OSD; the assert names the VG, the `vgchange` rc, and the fsid-scoped
+remedy, and no token relaxes it (ADR 0039). Before deactivating, the teardown
+reads `ceph.cluster_fsid` from `lvs -o lv_tags` on the VGs standing on the
+devices it is authorized to wipe and, when `/var/lib/ceph/<fsid>` still exists,
+runs `cephadm rm-cluster --force --fsid <fsid>` there — no `--zap-osds` (the
+teardown wipes the devices itself, and `--zap-osds` needs a pullable image). The
+fsid may come ONLY from VGs on marker-recorded devices, or on the filter-selected
+disks of an `osdReclaimAll` host: a device wiped under `--authorize
+unowned-devices` alone vouches for no cluster identity and releases nothing.
+The mount re-probe must stay immediately before the LVM teardown, which is now
+the first destructive step (the repocheck pins that adjacency).
+
 **Constraint:** Two validators protect the OS disk: a Ceph node must not list
 its root disk (`rootDeviceHints.deviceName`) among OSD data/db/wal paths
 (cephadm would ceph-volume it into an OSD, wiping the installed OS), and a

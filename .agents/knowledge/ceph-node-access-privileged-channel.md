@@ -268,6 +268,39 @@ names all three causes and both commands in its `fail_msg`; keep them there.
 Bootwright proves the grant rather than assuming it precisely because writing it
 is not sufficient.
 
+## 6. Teardown classifies the refusal; "unreachable" is only the node that never answered
+
+**Symptom:** `destroy` ends `[OK] destroy: complete` with a `[WARN] partial
+destroy` naming a cluster, and one node still runs its OSDs, still holds
+`ceph-<uuid>` VGs with open `osd-block-*` LVs, and was up the whole time.
+
+**Cause:** teardown decides reachability from the two probes in `probe.yml`
+(`sudo -n true` as the orchestration account, `true` as the install account) and
+`select_connection.yml` sets `bootwright_node_access_connection_available` false
+only when BOTH fail. That one bucket collapsed power-off, no route, an untrusted
+host key, an unauthorized key, and a sudo refusal (B-049), and
+`task_storage_cluster_destroy.yml` then let `--authorize unreachable-nodes` skip
+the node — a token given for an absent node silently consuming a running one.
+Teardown sets `bootwright_node_access_probe_fail_when_unreachable: false`, so
+`probe.yml`'s accurate multi-cause message (apply-only) was discarded.
+
+**Fix (ADR 0039):** the destroy play classifies before it may skip. `Classify how
+a storage host refused its teardown connection` reads the two probe registers
+(identity path) or the ping `msg` (unmanaged-access path) and sets
+`bootwright_storage_node_answered` — true when a remote command ran at all
+(rc != 255) or the message is an auth / host-key / `sudo` refusal, false only for
+a connection-level failure. `Refuse a storage host that answers but rejects every
+teardown identity` is a hard assert with NO token in its `when`, placed before
+the reachability assert and the `end_host` skip, so `any_errors_fatal` aborts the
+teardown. The remaining reachability messages report
+`bootwright_storage_node_refusal` instead of asserting the power-off reading, and
+the CLI partial-destroy warning names the skipped nodes.
+
+**Rule:** any future consumer of `bootwright_node_access_connection_available`
+that can SKIP work must classify first. `task_machine_registration_deregister.yml`
+and `task_storage_node_access_destroy.yml` still collapse the two (they wipe no
+device, so the blast radius is a still-registered RHSM host, not a live OSD).
+
 ## Related invariants
 
 - **`restore.yml` and `revoke.yml` operate on the *install* account, so they must

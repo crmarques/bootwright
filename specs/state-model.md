@@ -2418,7 +2418,7 @@ verbs that reach machines.
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it |
-  | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
+  | `unreachable-nodes` | skipping nodes that do not answer at all during teardown, leaving the cluster partially destroyed. It covers only the connection-level failure — power, route, or an sshd that never answers. A node that answers over SSH and then rejects every teardown identity (an unauthorized key, an untrusted host key, a refused sudo escalation) is an identity fault, not an absent node: the teardown fails closed on it, names which identity refused and how, and no token skips it, because skipping a running node leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
@@ -2456,6 +2456,28 @@ verbs that reach machines.
   gate, and the teardown preview states that retention rather than claiming a
   wipe. One predicate decides both the gate and the preview, so they cannot
   disagree.
+- A storage teardown takes the LVM stack down before it wipes a device, on both
+  wipe paths (the declared-device wipe and the `all`-devices filter reclaim).
+  `wipefs` cannot clear a device whose volume group is still active — it fails
+  with `probing initialization failed: Device or resource busy` — so the
+  teardown deactivates the volume groups standing on the devices it is about to
+  wipe, removes them, removes the physical volume labels, and only then wipes
+  signatures and zaps the partition table. A volume group that refuses to
+  deactivate still has an open logical volume, which on a storage node is a Ceph
+  OSD daemon still running: the teardown fails closed naming that volume group,
+  the `vgchange` exit status, and the fsid-scoped
+  `cephadm rm-cluster --force --fsid <fsid>` remedy, and no token relaxes it.
+  Before the deactivation the teardown releases the Ceph cluster the node is
+  still running when the seed no longer names it — the leftover a previous
+  teardown that skipped this node or failed partway through it leaves behind.
+  The cluster identity is read from the `ceph.cluster_fsid` tag of the bluestore
+  logical volumes standing on the devices this node's own OSD ownership marker
+  records (or, on an `all`-devices host, on the Ceph-signed disks the filter
+  reclaim selected), so the teardown releases only the cluster that owns the
+  disks it is already authorized to wipe. It is the same fsid-scoped
+  `cephadm rm-cluster --force --fsid <fsid>`, without `--zap-osds`: the teardown
+  wipes the devices itself. A device wiped under `--authorize unowned-devices`
+  alone vouches for no cluster identity and releases nothing (ADR 0039).
 - `destroy --recover-ceph-ownership
   <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
   seed whose controller ownership record or
@@ -2476,7 +2498,14 @@ verbs that reach machines.
 - `destroy --authorize unreachable-nodes` tolerates powered-off or unreachable
   nodes during teardown: it skips them — their devices are NOT wiped and their
   local state remains — and continues, leaving the cluster partially destroyed.
-  It stands alone and needs no second flag. Storage teardown still fails closed
+  It stands alone and needs no second flag. Reachability is decided per node
+  from the teardown identity probes, and their outcome is classified, not
+  collapsed: a node that answers over SSH and then rejects every identity is
+  never skipped by the token. The teardown fails closed on it and reports the
+  identity that refused with its exit status and message, instead of the
+  power-off reading. The skipped-node warning names the nodes it skipped, and
+  the message states that a skipped node keeps serving the cluster the run
+  reported destroyed. Storage teardown still fails closed
   when a cluster's Ceph seed host is unreachable, so ownership stays proven
   before any device wipe. A KubeVirt host-cluster API holding a recorded guest
   is not a skippable node: when it is unreachable Bootwright cannot prove the

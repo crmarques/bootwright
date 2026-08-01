@@ -52,3 +52,4 @@ below.
 | [0036](0036-bootwright-writes-the-name-a-storage-node-answers-to.md) | Bootwright Writes the Name a Storage Node Answers To | revises 0035 |
 | [0037](0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md) | A TPM Holds the Key, a Passphrase Holds the Machine | follows the enablement grammar of 0014 |
 | [0038](0038-removing-the-cluster-a-node-was-left-running.md) | Removing the Cluster a Node Was Left Running | extends 0030 with the `foreign-daemons` token; follows 0034 |
+| [0039](0039-the-node-a-teardown-left-serving-the-cluster.md) | The Node a Teardown Left Serving the Cluster | refines the `unreachable-nodes` token of 0030; closes the teardown side of 0038 |

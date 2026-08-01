@@ -44,7 +44,7 @@ refusal and nothing else:
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk, `apply` only |
-| `unreachable-nodes` | skipping unreachable nodes during teardown, leaving the cluster partially destroyed |
+| `unreachable-nodes` | skipping nodes that do not answer at all during teardown, leaving the cluster partially destroyed — never a node that answers SSH and then rejects its teardown identity |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
@@ -709,12 +709,25 @@ reach: an unreachable node is skipped rather than aborting the play. The token
 names exactly the risk it accepts — a skipped node leaves the cluster only
 *partially* destroyed — and needs no second flag.
 
+It covers a node that does not answer at all: power, route, or an sshd that
+never answers. A node that **answers over SSH and then rejects every teardown
+identity** — an unauthorized key, an untrusted host key, a refused `sudo`
+escalation — is an identity fault, not an absent node, and the token does not
+skip it. The teardown fails closed on it and reports which identity refused,
+with the exit status and message, instead of telling you to power the node on.
+Fix the identity — re-authorize the key, restore the account's NOPASSWD grant,
+or pass `--ssh-sudo-password` — and re-run. Skipping such a node would leave its
+Ceph daemons running and its OSD devices holding cluster data while the run
+reported the cluster destroyed.
+
 ```text
 bootwright destroy --clusters ceph-nprd --authorize unreachable-nodes,data-loss --yes
 ```
 
-What "partial" means: a skipped storage node keeps its OSD device signatures and
-local Ceph state (`/etc/ceph`, `/var/lib/ceph`) — they are **not** wiped. The
+What "partial" means: a skipped storage node keeps its OSD device signatures,
+its running Ceph daemons, and its local Ceph state (`/etc/ceph`,
+`/var/lib/ceph`) — none of it is wiped or stopped, so that node keeps serving
+the cluster the run reported destroyed. The
 cluster's ownership record is kept and marked partially destroyed, so it is not
 treated as fully gone; `bootwright status` flags it, and the teardown prints a
 warning naming the skipped nodes. Re-run `destroy` once the nodes are back up, or

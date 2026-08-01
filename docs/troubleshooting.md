@@ -682,6 +682,65 @@ On nodes Bootwright did not install, `dnf install gdisk` once per host is enough
 `dnf provides */sgdisk` says which repository carries it and whether that
 repository is enabled on the host.
 
+## A destroy reported complete but a node still carries the cluster
+
+`destroy` ends with `[OK] destroy: complete` and a partial-destroy warning, and
+one node still has everything:
+
+```text
+[OK] destroy: complete
+[WARN] partial destroy: storage cluster(s) ceph-prd-01 left partially destroyed:
+unreachable node(s) were skipped, ... Skipped node(s): node-01.
+```
+
+```text
+$ bootwright cluster exec --name ceph-prd-01 --node node-01 -- sudo pvs -o pv_name,vg_name,lv_name
+  /dev/nvme0n1 ceph-96d04ef1-... osd-block-d50ffa4e-...
+```
+
+The `[OK]` is the *run* status; the `[WARN]` is the outcome. A skipped node is
+never wiped, its Ceph daemons are never stopped, and it keeps serving the cluster
+the run reported destroyed. Read the warning: it names the skipped nodes.
+
+Wiping those disks by hand fails while the daemons hold them:
+
+```text
+Logical volume ceph-96d04ef1-.../osd-block-d50ffa4e-... in use.
+wipefs: error: /dev/nvme0n1: probing initialization failed: Device or resource busy
+```
+
+That is an open logical volume, which on a storage node is a live OSD. `vgremove`
+and `wipefs` cannot proceed until the daemons that hold it are gone.
+
+**Re-run `destroy` for the same scope.** It releases the leftover itself: it
+reads the cluster identity from the `ceph.cluster_fsid` tag of the bluestore
+volume groups on the devices it is authorized to wipe, runs the fsid-scoped
+`cephadm rm-cluster --force --fsid <fsid>` on that node, then takes the LVM stack
+down (`vgchange --activate n` → `vgremove` → `pvremove`) before wiping. It does
+this even when the seed no longer names the cluster, which is the normal state
+after the other nodes were cleaned.
+
+Clear it by hand only when the re-run refuses — for example when the node holds
+no Bootwright OSD ownership marker for those devices, so nothing vouches for the
+cluster identity:
+
+```bash
+systemctl list-units 'ceph-*@*.service'
+sudo cephadm rm-cluster --force --fsid <fsid>
+```
+
+That is fsid-scoped: it stops and removes only that cluster's daemons, units and
+`/var/lib/ceph` state on that node, and zaps no disk. Re-run `destroy` afterwards
+to wipe the devices and remove the rest of the local state.
+
+**Why the node was skipped.** `--authorize unreachable-nodes` covers a node that
+does not answer. A node that answers SSH and then rejects every teardown
+identity — an unauthorized key, an untrusted host key, a refused `sudo`
+escalation — now fails the teardown closed and names the identity that refused;
+see [A Ceph node refuses passwordless sudo](#a-ceph-node-refuses-passwordless-sudo).
+If a run predating that behaviour swept such a node into the skip, the node is in
+exactly the state above.
+
 ## Recovering the Ceph dashboard password
 
 `cephadm bootstrap` generates a one-time random `admin` password for the Ceph
