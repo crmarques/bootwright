@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/crmarques/bootwright/internal/roles"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
 
@@ -18,9 +17,7 @@ func exampleKinds() []string {
 	return []string{exampleKindContainerCluster, exampleKindStorageCluster}
 }
 
-func storageExampleApplySupport() string {
-	return fmt.Sprintf("%s - %s", roles.StatusSupported, "provided machines with a cephadm-managed Ceph cluster")
-}
+const storageExampleApplySupport = "supported - provided machines with a cephadm-managed Ceph cluster"
 
 type storageExampleNode struct {
 	Machine string

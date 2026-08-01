@@ -98,7 +98,7 @@ func exampleWorkspace(kind, clusterName, provider string, providerSet bool) ([]s
 		return files, []output.Field{
 			{Key: "cluster", Value: clusterName},
 			{Key: "kind", Value: kind},
-			{Key: "apply support", Value: storageExampleApplySupport()},
+			{Key: "apply support", Value: storageExampleApplySupport},
 		}, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown kind %q (known: %s)", kind, strings.Join(exampleKinds(), ", "))
