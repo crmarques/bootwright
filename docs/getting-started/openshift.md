@@ -123,6 +123,9 @@ Machine-bound shared services, one object per file, all pinned to `bastion`:
 - `name-resolution.yaml` (`dnsmasq`): serves cluster DNS.
 - `ntp-server.yaml` (`chrony`): serves time.
 
+A single-node lab can drop the `load-balancer` and `ntp-server` components
+entirely — `examples/sno-libvirt-redfish` is that reduced form.
+
 ### ContainerCluster (`clusters/container/my-sno-lab/cluster.yaml`)
 
 The OpenShift install intent — and only install intent. It owns the release
@@ -223,6 +226,15 @@ through the emulated Redfish BMC, runs the OpenShift agent install to completion
 and applies any bound add-ons. `status --watch` refreshes until the run reaches a
 terminal state. Re-running `apply` later is safe — matching work is skipped.
 
+### If apply fails
+
+Run `bootwright status`: on a failed run it reports the failed task, the log
+path for it, and prints the exact scoped command to re-run. Fix the cause, then
+re-run the printed command — completed work is recorded and skipped, so the run
+resumes where it stopped; neither `destroy` nor `--mode rebuild` is the
+recovery path for a partial apply. See
+[Apply failed partway](../troubleshooting.md#apply-failed-partway).
+
 ## Access The Cluster
 
 Once apply finishes, list the local access details (URLs, the kubeadmin user,
@@ -257,10 +269,20 @@ oc --kubeconfig ~/.kube/my-sno-lab get nodes
 The kubeconfig carries admin credentials: keep it in a private path and never
 commit it.
 
+### Check it still matches
+
+`bootwright diff` compares the desired state against the running cluster
+(read-only, live by default); `bootwright diff --recorded` compares offline
+against the last recorded apply instead. Either exits `3` when something is out
+of sync, so CI can gate on it. See
+[Comparing against live cluster state](../advanced/operations.md#comparing-against-live-cluster-state).
+
 ## Tear It Down
 
-Remove everything this lab created — the node VM, the libvirt network, and the
-infra services on the bastion:
+Closing the lab out fully takes three steps: destroy the resources, confirm
+nothing is left owned, then delete the context. First remove everything this
+lab created — the node VM, the libvirt network, and the infra services on the
+bastion:
 
 ```bash
 bootwright destroy --yes
@@ -269,7 +291,25 @@ bootwright destroy --yes
 `destroy` is scoped the same way `apply` is, so `--stage clusters` keeps the
 machine substrate and `--clusters <name>` tears down one component. See
 [Operations, recovery & teardown](../advanced/operations.md#tearing-down-with-destroy)
-for the ownership gates, the `--authorize` tokens, and partial teardown.
+for the ownership gates, the `--authorize` tokens, and partial teardown. To
+also remove the captured installer inputs and per-run logs, add
+`--purge-history` — purged history is not recoverable; see
+[Leaving no trace of a destroyed component](../advanced/operations.md#leaving-no-trace-of-a-destroyed-component).
+
+`destroy` leaves the context and its encrypted secret store behind. Confirm
+nothing is left owned, then delete the context:
+
+```bash
+bootwright status
+bootwright context delete --name lab --purge
+```
+
+`context delete --purge` removes the context and with it the encrypted secret
+store, which for this lab still holds the OpenShift pull secret and the
+generated node SSH key pair. `--purge` is mandatory, and the delete fails
+closed while the context still owns resources — which is why it comes last.
+After the current context is deleted, `bootwright context current` reports
+none — the next lab must `context init` before any `secret` command.
 
 ## Next steps
 

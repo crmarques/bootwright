@@ -73,8 +73,8 @@ my-ceph-lab/
     networkconfigs/ceph-net.yaml                     NetworkConfig: 192.168.140.0/24, static IPs
     components/lab-dns.yaml                           InfraComponent: dnsmasq resolver + forwarders
     entitlements/{rhel,ibm-storage-ceph}.yaml         Entitlements: RHEL subscription + IBM Storage Ceph
-    os/rhel-9-x86-64-dvd.yaml                        MachineImage: RHEL 9.8 DVD (local-media)
-    os/rhel-9-ceph-node.yaml                         MachineInstallProfile: Anaconda RHEL install
+    images/rhel-9-x86-64-dvd.yaml                    MachineImage: RHEL 9.8 DVD (local-media)
+    profiles/rhel-9-ceph-node.yaml                   MachineInstallProfile: Anaconda RHEL install
   clusters/storage/ceph-ibm/
     cluster.yaml                                     StorageCluster: distribution ibm, release 9.9.1.0
     nodes/{ceph-1,ceph-2,ceph-3}.yaml                Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
@@ -165,7 +165,7 @@ intent.
   login is `spec.ceph.cephadm.clusterSSH.keyRef: ceph-cluster-ssh` — one SSH
   identity per `StorageCluster`.
 
-### MachineImage and MachineInstallProfile (`infra/os/`)
+### MachineImage and MachineInstallProfile (`infra/images/`, `infra/profiles/`)
 
 These drive the managed RHEL install — the part that distinguishes this lab from
 the agent-installed OpenShift SNO lab.
@@ -238,8 +238,8 @@ environment differs.
 | `infra/providers/libvirt.yaml` | `spec.networkAttachments[].libvirt.bridge` | The libvirt bridge on the machine network (default `vbr-ceph-ibm`). |
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
 | `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
-| `infra/os/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
-| `infra/os/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
+| `infra/images/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
+| `infra/profiles/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`). Any product version installs; its leading component selects the stream. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `mgmtGateway.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
@@ -253,7 +253,7 @@ If you change the `192.168.140.*` network, update every place it appears:
 !!! note "Drop FIPS to simplify"
     Two blocks request FIPS: `spec.ceph.security.fips.enabled` in
     `cluster.yaml` and `customizations.security.fips.enabled` in
-    `infra/os/rhel-9-ceph-node.yaml`. Remove both to build the cluster without
+    `infra/profiles/rhel-9-ceph-node.yaml`. Remove both to build the cluster without
     FIPS — bootwright requires every Ceph node's install profile to agree.
 
 ## Prerequisites Unique To This Lab
@@ -261,7 +261,9 @@ If you change the `192.168.140.*` network, update every place it appears:
 This lab needs three pieces of credential material plus a staged RHEL ISO. None
 goes in YAML — the secrets are stored, encrypted, in the bootwright context with
 `bootwright secret set`, using the secret **names** the example's `Secret`
-objects declare.
+objects declare. The `secret set` commands themselves run after the context
+exists, in [Validate And Set Up The Context](#validate-and-set-up-the-context)
+below.
 
 ### Stage the RHEL DVD ISO
 
@@ -274,6 +276,9 @@ bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.
 bootwright media list
 ```
 
+The media store is root-local and shared by every context, which is why this
+one step may run before the context exists.
+
 ### Get the Red Hat and IBM credentials
 
 - **Red Hat subscription** (`rhel-org`, `rhel-activation-key`): a Red Hat account
@@ -285,6 +290,19 @@ bootwright media list
   IBM Storage Ceph (trial/eval or entitled), then an **entitlement key** from the
   IBM Container Software Library. The registry login is username `cp` with that
   key as the password.
+
+## Validate And Set Up The Context
+
+The setup commands follow the sequence from
+[Installation and Setup](installation.md). Validate the tree and import it into
+a context first — every `secret` verb writes to the *current* context, so the
+context must exist before any credential is loaded:
+
+```bash
+bootwright validate -f .
+bootwright context init --name ceph-ibm-lab -f .
+bootwright context current
+```
 
 ### Set the secrets
 
@@ -315,17 +333,11 @@ The remaining secrets are not "set": `ceph-cluster-ssh`,
 `bastion-host-ssh` is the operator-owned key referenced as a `file:` source —
 `secret generate` brings them all into the context.
 
-## Validate And Set Up The Context
+### Trust, bastion prep, and the read-only checks
 
-The setup commands follow the sequence from
-[Installation and Setup](installation.md). Validate the tree, import it into a
-context, record host trust, then prepare the bastion and run the read-only
-checks:
+Record host trust, then prepare the bastion and run the read-only checks:
 
 ```bash
-bootwright validate -f .
-bootwright context init --name ceph-ibm-lab -f .
-bootwright context current
 bootwright machine trust
 bootwright bastion setup --yes
 bootwright preflight all
@@ -356,6 +368,15 @@ monitor, and creates the OSDs, pools, CephFS filesystem, and the RGW service wit
 its ingress VIP.
 Re-running `apply --yes` is idempotent; for a focused storage rerun use
 `bootwright apply --stage clusters --clusters ceph-ibm --yes`.
+
+### If apply fails
+
+Run `bootwright status`: on a failed run it reports the failed task, the log
+path for it, and prints the exact scoped command to re-run. Fix the cause, then
+re-run the printed command — completed work is recorded and skipped, so the run
+resumes where it stopped; neither `destroy` nor `--mode rebuild` is the
+recovery path for a partial apply. See
+[Apply failed partway](../troubleshooting.md#apply-failed-partway).
 
 ## Verify
 
@@ -412,7 +433,19 @@ bootwright cluster info --name ceph-ibm --secrets
     `./my-ceph-lab/README.md` covers both in more detail, including a
     runtime-only `resolvectl` variant.
 
+### Check it still matches
+
+`bootwright diff` compares the desired state against the running cluster
+(read-only, live by default — it discovers hosts, services, OSDs, and pools on
+the seed node); `bootwright diff --recorded` compares offline against the last
+recorded apply instead. Either exits `3` when something is out of sync, so CI
+can gate on it. See
+[Comparing against live cluster state](../advanced/operations.md#comparing-against-live-cluster-state).
+
 ## Tear It Down
+
+Closing the lab out fully takes three steps: destroy the resources, confirm
+nothing is left owned, then delete the context.
 
 This lab's `Environment` sets `safety.destroyProtection: protected`, so every
 teardown needs `--authorize protected`. Its OSD hosts are libvirt VMs whose disks
@@ -435,7 +468,26 @@ bootwright destroy --stage infra --authorize protected,data-loss --yes
 
 See
 [Operations, recovery & teardown](../advanced/operations.md#tearing-down-with-destroy)
-for the ownership gates, scoping, and what each stage removes.
+for the ownership gates, scoping, and what each stage removes. To also remove
+the captured installer inputs and per-run logs, add `--purge-history` to the
+`destroy` — purged history is not recoverable; see
+[Leaving no trace of a destroyed component](../advanced/operations.md#leaving-no-trace-of-a-destroyed-component).
+
+`destroy` removes the resources but leaves the context and its encrypted
+secret store behind. Confirm nothing is left owned, then delete the context:
+
+```bash
+bootwright status
+bootwright context delete --name ceph-ibm-lab --purge
+```
+
+`context delete --purge` removes the context and with it the encrypted secret
+store, which for this lab still holds the RHSM organization ID and activation
+key, the IBM entitlement key, and the captured Ceph dashboard password.
+`--purge` is mandatory, and the delete fails closed while the context still
+owns resources — which is why it comes last. After the current context is
+deleted, `bootwright context current` reports none — the next lab must
+`context init` before any `secret` command.
 
 ## Next steps
 

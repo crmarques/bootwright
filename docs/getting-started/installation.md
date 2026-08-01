@@ -163,10 +163,18 @@ practical notes it does not carry:
   without it the command exits 1. Destroy any resources the context still owns
   first: `--abandon-resources` deletes it anyway, leaving running infrastructure
   behind and discarding its ownership records and install-captured credentials
-  (kubeconfigs, kubeadmin password). It is deliberately not called `--force`,
-  which on `destroy` authorizes destruction rather than abandonment.
+  (kubeconfigs, kubeadmin password). It is deliberately not spelled `--force`:
+  that word would read as *destroy these resources*, while this flag means
+  *walk away from them*, and one spelling for two opposite outcomes is a
+  foot-gun. No Bootwright verb has a `--force` flag — destructive risks are
+  named one at a time with `--authorize` (see
+  [Operations](../advanced/operations.md#the-two-axes-intent-and-authorization)).
 
 ### Secrets
+
+Every `secret` verb operates on the *current* context — run `context init` (or
+`context use`) first; `bootwright context current` confirms which context you
+are about to write to.
 
 The YAML names the secrets the workflow needs; the bytes live in the encrypted
 context store. You supply operator-owned material with `secret set`, then let
@@ -202,26 +210,39 @@ but never under `--yes`, `--dry-run`, or JSON output, and a *changed* key is
 never accepted automatically. Running `bootwright machine trust` first keeps later
 runs unattended and fail-closed-safe.
 
-### Bastion prep and read-only checks
+### Bastion prep, then the read-only checks
 
-Install the local tooling bootwright needs, run preflight checks, materialize the
-normalized desired state, and preview the task graph. None of these mutate your
-hosts or clusters:
+`bastion setup` installs tooling **on the bastion host only** — the Python
+virtualenv, the managed Ansible runtime, and the cluster CLIs — and changes
+nothing on your machines or clusters:
 
 ```bash
 bootwright bastion setup --yes
+```
+
+Then run the preflight checks, materialize the normalized desired state, and
+preview the task graph. None of these mutate your hosts or clusters:
+
+```bash
 bootwright preflight all
 bootwright render effective
 bootwright plan
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `bastion setup` | Installs the managed Ansible runtime, and — when the context declares an OpenShift/OKD release — the release-matched cluster CLIs and `helm`. |
-| `preflight bastion` | Runs the read-only bastion dependency checks (Python, Ansible runtime, `tar`, `sudo`). |
-| `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. |
-| `render effective` | Writes the desired state with all defaults applied, so you can see exactly what will be acted on. |
-| `plan` | Shows the apply task graph without touching hosts or clusters. |
+Together with the context, secret, and trust steps above, this is the whole
+pre-apply ritual, in the order the guides run it:
+
+| Command | Purpose | What it touches |
+| --- | --- | --- |
+| `validate` | Checks the input tree before any context exists. | nothing — offline |
+| `context init` / `context update` | Imports (or refreshes) the input tree into the named context. | the local context store |
+| `secret check` | Reports any declared secret still missing. | the local context store, read-only |
+| `machine trust` | Records the declared hosts' SSH host keys for strict checking. | reads host keys over the network; writes the local trust store |
+| `bastion setup` | Installs the managed Ansible runtime, and — when the context declares an OpenShift/OKD release — the release-matched cluster CLIs and `helm`. | the bastion host only |
+| `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. | reads hosts over SSH |
+| `render effective` | Writes the desired state with all defaults applied, so you can see exactly what will be acted on. | nothing — renders locally |
+| `plan` | Shows the apply task graph. | nothing — offline |
+| `diff` (after a first apply exists) | Reports drift from desired state; exit code `3` means out of sync. | reads the live cluster |
 
 ## Next steps
 
@@ -229,6 +250,9 @@ With the CLI installed, follow one of the cluster guides:
 
 - [Provisioning an OpenShift cluster](openshift.md)
 - [Provisioning a Ceph cluster](ceph.md)
+
+Wiring Bootwright into CI — exit codes, JSON output, unattended runs:
+[Automation and CI](../advanced/automation.md).
 
 If a step fails, see [Troubleshooting](../troubleshooting.md) for validation, SSH
 trust, artifact fetch, and apply diff issues.
