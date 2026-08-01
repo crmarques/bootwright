@@ -744,6 +744,30 @@ that behaviour skipped on any refusal at all and left the node in exactly the
 state above, so read the skip line in the warning: it now names each skipped node
 with the diagnostic the skip was based on.
 
+## The stretch tiebreaker is on a host that is down or being decommissioned
+
+Do not edit `spec.ceph.topology.stretch.tiebreaker.node` and re-run `apply` —
+the re-authored tiebreaker is structural drift, so `apply` fails closed, and
+the refusal's `--mode rebuild` suggestion is the owned-Ceph wipe-and-rebuild,
+not an arbiter move. The verb that moves a live stretch tiebreaker is:
+
+```bash
+bootwright storage-cluster replace-arbiter --name <cluster> --new-arbiter-machine <machine>
+```
+
+It adds the replacement mon before removing the old one, so a failure part-way
+leaves the original still holding the tiebreaker. Three refusals name the token
+that proceeds:
+
+- `--authorize unreachable-nodes` — when the old arbiter host is provably gone
+  (down, no route), so it must be retired offline;
+- `--authorize same-site-arbiter` — when the replacement shares a site with the
+  data-site mons (the emergency fallback while the third site is gone);
+- `--authorize degraded-quorum` — when declared mons are already out of quorum.
+
+See [Replacing the arbiter](advanced/ceph-topologies.md#replacing-the-arbiter)
+for the full procedure and its preconditions.
+
 ## Recovering the Ceph dashboard password
 
 `cephadm bootstrap` generates a one-time random `admin` password for the Ceph

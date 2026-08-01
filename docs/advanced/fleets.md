@@ -27,6 +27,11 @@ destroy. When both are omitted, every loaded cluster is active. These are
 **selection lists, not references** — they decide scope, they do not wire one
 object to another.
 
+Every container cluster in one Environment renders the same install-config
+`baseDomain` (`Environment.spec.domains.containerClusters`). A fleet spanning
+two base domains needs one context per domain today, and shared
+InfraComponents must then be duplicated per context.
+
 A fleet typically also uses directory selection so the input tree stays
 navigable. `Environment.spec.resources[]` selects the files or directories to
 load; the fleet example loads two directories:
@@ -37,6 +42,10 @@ spec:
     - infra
     - clusters
 ```
+
+`spec.resources[]` is for *narrowing* a shared tree; a tree whose whole content
+is intended should omit it — an authored file the list excludes is silently not
+loaded.
 
 That maps onto the canonical nested layout: shared, non-cluster objects under
 `infra/` (providers, network configs, shared-service `InfraComponent`s, and any
@@ -54,6 +63,22 @@ across clusters.
     and named after `metadata.name` otherwise. `bootwright example init` emits
     this nested tree; the small single-cluster examples are deliberately flat —
     see [Reference examples](examples.md).
+
+## Context is the blast radius
+
+A context is the unit the dangerous verbs act on. It is the default scope of
+`destroy` — with no `--clusters` selector a teardown covers the whole context,
+including the context-wide VM and orphan-ownership sweep. It is the unit
+`Environment.spec.safety` protects (`destroyProtection` and `protectedKinds`
+guard the context's state, not individual clusters). And it is the unit
+`context delete` abandons.
+
+Design fleets around that: put clusters that should share one destroy blast
+radius and one safety policy in one context, and split production from scratch
+into **separate contexts** rather than relying on remembering `--clusters` on
+every teardown. Shared services that cross contexts are exactly what
+`destroy --authorize shared-infra` guards — see the
+[scoped-destroy shared-service warning](operations.md#bounded-ownership-gated-cleanup).
 
 ## The single cluster-selection namespace
 

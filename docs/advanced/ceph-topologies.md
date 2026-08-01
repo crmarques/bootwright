@@ -390,6 +390,12 @@ bootwright storage-cluster replace-arbiter --name ceph-prd-01 \
   --new-arbiter-machine ceph-arbiter-b --yes
 ```
 
+!!! warning "Editing `tiebreaker.node` and re-running `apply` does not move the arbiter"
+    A re-authored `stretch.tiebreaker.node` is structural drift: `apply` refuses
+    it before mutating, and the refusal's `--mode rebuild` suggestion is the
+    owned-Ceph **wipe-and-rebuild** path, not the arbiter move.
+    `storage-cluster replace-arbiter` is the verb that moves it.
+
 Mark every machine that may hold the tiebreaker with the `ceph-arbiter`
 capability (it requires `ceph-node`), and keep them declared whether or not they
 carry the arbiter today:
@@ -409,7 +415,10 @@ spec:
 so the stretch tiebreaker names that machine — snapshotting the previous input to
 `input-history/` first — and then reconciles the live cluster onto it. Edit the
 input by hand and drop the flag if you would rather author the change yourself;
-the run reconciles either way.
+the run reconciles either way. The rewrite lands in the context's input copy,
+not your source tree — see
+[The context holds a copy of your input](../concepts/index.md#the-context-holds-a-copy-of-your-input)
+for the round-trip and the `context update` clobber hazard.
 
 The order never removes before it adds. Bootwright prepares and installs the
 replacement machine and Ceph on it, deploys its mon with the stretch CRUSH

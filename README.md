@@ -229,7 +229,9 @@ remaining verbs are specified by their own `--help` and taught under
 [`docs/`](docs/).
 
 Human text output is designed for operators and may evolve. Use
-`--output json` where available for automation. `bootwright cluster info` prints
+`--output json` where available for automation; the exit-code contract, JSON
+coverage, and unattended-run flags are catalogued in
+[Automation and CI](docs/advanced/automation.md). `bootwright cluster info` prints
 URLs, the kubeadmin user, the `container-cluster oc`/`kubectl`/`kubeconfig`
 commands, and `cluster rsh`. Its human output carries no reusable file path, and prints secret
 bytes only under `--secrets`. Apply runs keep native Ansible, `oc`,

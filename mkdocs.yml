@@ -122,6 +122,7 @@ nav:
       - Networking & load balancing: advanced/networking.md
       - Ownership, idempotency & safety: advanced/ownership-and-safety.md
       - Operations, recovery & teardown: advanced/operations.md
+      - Automation and CI: advanced/automation.md
       - Reference examples: advanced/examples.md
   - Troubleshooting: troubleshooting.md
   - Contributing:

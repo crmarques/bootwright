@@ -252,6 +252,12 @@ The full `Endpoint` field table is in
     vSphere platform blocks for one-control-plane clusters, so these clusters
     render `platform.none`. Use `external` or `infraComponent` instead.
 
+    A single-node cluster has no VIP: the `api`, `api-int`, and `ingress`
+    endpoint addresses must be the node's own install address, which is owned
+    by `Machine.spec.addresses[]`. Repeat it in the cluster's
+    `install.endpoints` verbatim — nothing validates that the two agree, so a
+    mismatch surfaces only as an install that never converges.
+
 ## Load balancers and VIP placement
 
 For a Bootwright-provisioned load balancer, declare the target `InfraComponent`

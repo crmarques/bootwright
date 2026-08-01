@@ -464,6 +464,20 @@ or local runtime records already prove the parent install and its `kubevirt`
 add-on are ready. Select both roots together when the parent is not yet
 installed.
 
+### Moving a Ceph stretch arbiter
+
+Re-authoring `spec.ceph.topology.stretch.tiebreaker` is the one recovery that a
+plain `apply` never converges: the change is classified as structural drift and
+the apply fails closed before mutating. Do not follow that refusal toward
+`--mode rebuild` — that is the owned-Ceph wipe-and-rebuild, not an arbiter move.
+The verb that moves a live stretch tiebreaker is
+`bootwright storage-cluster replace-arbiter --name <cluster>
+--new-arbiter-machine <machine>`. It adds the replacement mon and proves it is
+in the monmap, in quorum, and located **before** removing the old arbiter, so a
+failure part-way leaves the original still holding the tiebreaker. The full
+procedure, its preconditions, and its `--authorize` tokens are in
+[Replacing the arbiter](ceph-topologies.md#replacing-the-arbiter).
+
 ## Removing declared objects
 
 `apply` is additive: it never deletes or deprovisions a live resource whose
@@ -597,7 +611,10 @@ the cluster as it actually runs — add `--adopt`. It edits declared objects in
 place (preserving comments), creates a file for a pool that exists only on the
 cluster, and snapshots the prior input to the context's input history first (so
 the change is recoverable); differences it cannot safely represent are reported
-for a manual edit rather than dropped.
+for a manual edit rather than dropped. The rewrite lands in the context's input
+copy, not your source tree — see
+[The context holds a copy of your input](../concepts/index.md#the-context-holds-a-copy-of-your-input)
+for the round-trip and the `context update` clobber hazard.
 
 ```
 bootwright diff --clusters ceph-storage --adopt
@@ -773,6 +790,30 @@ not produce the same per-node completion proof.
     be verified. Power the seed on (or remove the cluster manually after
     verifying it is safe) and retry. The token does not relax any device
     data-safety check, and like the unowned tokens it authorizes nothing else.
+
+    When the seed cannot come back, the recovery is ordered:
+
+    1. **Powering the seed on is always the first path.** A reachable seed lets
+       the same `destroy` complete under its normal gates.
+    2. **If it cannot come back, capture what the context holds before anything
+       else**: `bootwright container-cluster kubeconfig` for any consumer
+       clusters you still need to administer, and `bootwright secret show` for
+       captured credentials such as a Ceph `dashboard-password`. The terminal
+       step below permanently deletes the captured kubeconfigs and passwords
+       under the context.
+    3. **After removing the cluster out of band, `destroy` still refuses** — the
+       ownership record still claims the cluster, and nothing out of band clears
+       it — so do not loop on retries.
+    4. **The terminal exit is
+       `bootwright context delete --name <ctx> --purge --abandon-resources`.**
+       Its cost is exactly what the flag says: the infrastructure keeps running,
+       and the context's ownership records and captured credentials are
+       permanently lost. See
+       [what `--abandon-resources` is not](../troubleshooting.md#strict-decode-also-gates-destroy)
+       in Troubleshooting.
+
+    An in-product record-only teardown for a decommissioned cluster with no
+    live seed is deliberately deferred (tracked as B-048 in the backlog).
 
 ### Never-provisioned clusters tear down automatically
 
@@ -989,8 +1030,9 @@ them back, and `plan` / `--dry-run` never write them.
   stages.
 - [Architecture](../contributing/architecture.md) — the execution pipeline,
   resource locking, and the four-outcome classifier in depth.
-- [Ceph storage topologies](ceph-topologies.md) — additive-only convergence and
-  the owned-Ceph rebuild details.
+- [Ceph storage topologies](ceph-topologies.md) — additive-only convergence,
+  the owned-Ceph rebuild details, and moving the stretch arbiter with
+  `storage-cluster replace-arbiter`.
 - [Managed OS installs](managed-os.md) — the managed-OS install and reinstall
   model.
 - [Troubleshooting](../troubleshooting.md) — what to do when a run fails closed.

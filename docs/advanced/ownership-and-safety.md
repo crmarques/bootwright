@@ -257,6 +257,11 @@ ever build from input it cannot fully read.
 
 ## Verifying ownership and safety state
 
+The ordered pre-apply ritual — every inspect command, in the order the guides
+run them, with what each touches — is taught once, in
+[Installation → Bastion prep, then the read-only checks](../getting-started/installation.md#bastion-prep-then-the-read-only-checks).
+This table answers the standing questions:
+
 | Question | Command |
 | --- | --- |
 | What will this run do? | `bootwright plan` / `bootwright apply --dry-run` |
