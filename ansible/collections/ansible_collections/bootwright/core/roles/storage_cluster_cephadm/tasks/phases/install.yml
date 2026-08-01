@@ -323,15 +323,13 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
-- name: Ensure gdisk for the reclaim device zap
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: package_apply.yml
-  vars:
-    bootwright_ownership_packages:
-      - gdisk
-    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
-  when: bootwright_ceph_reclaim_present | default([]) | length > 0
+- name: Resolve whether the reclaim needs the Ceph device zap tool
+  ansible.builtin.set_fact:
+    bootwright_ceph_zap_tool_needed: "{{ bootwright_ceph_reclaim_present | default([]) | length > 0 }}"
+  changed_when: false
+
+- name: Ensure the Ceph device zap tool for the reclaim device zap
+  ansible.builtin.include_tasks: ../ensure_zap_tool.yml
 
 - name: Reclaim named OSD devices by wiping signatures
   ansible.builtin.command:
@@ -359,6 +357,7 @@
   loop: "{{ bootwright_ceph_reclaim_present | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  when: bootwright_ceph_zap_tool_present | default(false) | bool
 
 - name: Probe declared OSD devices for existing signatures
   ansible.builtin.command:

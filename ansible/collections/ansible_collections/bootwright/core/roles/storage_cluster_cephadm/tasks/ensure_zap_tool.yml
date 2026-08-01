@@ -1,0 +1,66 @@
+---
+- name: Probe for the Ceph device zap tool before any package transaction
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --version
+  register: bootwright_ceph_zap_tool_probe
+  changed_when: false
+  failed_when: false
+
+- name: Install the Ceph device zap tool when this host lacks it
+  when:
+    - bootwright_ceph_zap_tool_needed | default(false) | bool
+    - bootwright_ceph_zap_tool_probe.rc | default(1) | int != 0
+  block:
+    - name: Ensure gdisk is present for the Ceph device zap
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: package_apply.yml
+      vars:
+        bootwright_ownership_packages:
+          - gdisk
+        bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  rescue:
+    - name: Report the gdisk install this host could not satisfy
+      ansible.builtin.debug:
+        msg: >-
+          Could not install gdisk on
+          {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+          {{ ansible_failed_result.msg | default('the package transaction failed') }}.
+          The repositories this host can reach at teardown are not the ones that served
+          its apply, so a convenience package may simply be unavailable now. Continuing
+          without `sgdisk --zap-all`.
+
+- name: Confirm the Ceph device zap tool after the gdisk install
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --version
+  register: bootwright_ceph_zap_tool_recheck
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_zap_tool_needed | default(false) | bool
+    - bootwright_ceph_zap_tool_probe.rc | default(1) | int != 0
+
+- name: Resolve Ceph device zap tool availability
+  ansible.builtin.set_fact:
+    bootwright_ceph_zap_tool_present: >-
+      {{ (bootwright_ceph_zap_tool_recheck.rc
+          | default(bootwright_ceph_zap_tool_probe.rc | default(1)) | int) == 0 }}
+  changed_when: false
+
+- name: Report the Ceph device wipe running without the partition-table zap
+  ansible.builtin.debug:
+    msg: >-
+      sgdisk is not available on
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }},
+      so `sgdisk --zap-all` is skipped for its devices. `wipefs --all --force` still runs
+      on every device this step covers, and it erases the primary and backup GPT headers
+      along with every filesystem, RAID and LVM signature, so the disks are released;
+      only the belt-and-braces rewrite of the GPT structures is missing. Install gdisk on
+      this host if you want the zap to run as well.
+  when:
+    - bootwright_ceph_zap_tool_needed | default(false) | bool
+    - not (bootwright_ceph_zap_tool_present | bool)

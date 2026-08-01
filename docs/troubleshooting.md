@@ -633,6 +633,55 @@ Remedies, in order of preference:
 `bootwright preflight` fails below 20 GiB free and warns below the
 per-node budget, so a re-run reports which nodes are short.
 
+## A Ceph device wipe reports no gdisk
+
+The declared-device wipe runs `wipefs --all --force` and then `sgdisk --zap-all`
+on each device. `sgdisk` comes from `gdisk`, which Bootwright installs on demand
+rather than as a Ceph prerequisite, so a host that never needed a device zap does
+not carry it. At teardown the repositories that served the apply are often no
+longer reachable — an unregistered host, a retired mirror, or a content view that
+never carried `gdisk` — and the install fails with *"No package gdisk
+available."*
+
+That does not stop the teardown. Bootwright reports the failed install, skips
+`sgdisk --zap-all` for that host, and completes the wipe:
+
+```text
+Could not install gdisk on ceph-prd-01/srv4204: ...
+sgdisk is not available on ceph-prd-01/srv4204, so `sgdisk --zap-all` is
+skipped for its devices.
+```
+
+`wipefs --all --force` still ran, and it erases the primary and backup GPT
+headers along with every filesystem, RAID and LVM signature, so the disks are
+released and `ceph-volume` sees them as available on the next apply. Only the
+belt-and-braces rewrite of the GPT structures is missing. The wipe itself still
+fails closed: a `wipefs` error, a device that became mounted, and an unprobeable
+device all abort the teardown as before.
+
+To get the zap back, put `gdisk` on the nodes while a repository that carries it
+is still reachable. On a Bootwright-installed OS the durable place is the install
+profile, which draws from the installer tree rather than the node's runtime
+repositories:
+
+```yaml
+# MachineInstallProfile
+spec:
+  customizations:
+    packages:
+      install:
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
+        - gdisk
+```
+
+On nodes Bootwright did not install, `dnf install gdisk` once per host is enough
+— the wipe only ever needs it to be present. If the install fails there too,
+`dnf provides */sgdisk` says which repository carries it and whether that
+repository is enabled on the host.
+
 ## Recovering the Ceph dashboard password
 
 `cephadm bootstrap` generates a one-time random `admin` password for the Ceph

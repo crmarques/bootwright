@@ -2736,6 +2736,54 @@ func TestStorageCephDestroyReclaimsFilterSelectedDisks(t *testing.T) {
 	}
 }
 
+func TestStorageCephZapToolIsOptionalAndProbedWithoutAShellBuiltin(t *testing.T) {
+	ensurePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/ensure_zap_tool.yml"
+	ensure := readRepoFile(t, ensurePath)
+	if strings.Contains(ensure, "- command\n") {
+		t.Errorf("%s must not probe for sgdisk through the `command` shell builtin: ansible.builtin.command runs no shell, and most RHEL hosts ship no /usr/bin/command, so the probe reports every host as missing sgdisk and forces a package transaction", ensurePath)
+	}
+	for _, want := range []string{
+		"- sgdisk\n      - --version",
+		"rescue:",
+		"bootwright_ceph_zap_tool_present",
+	} {
+		if !strings.Contains(ensure, want) {
+			t.Errorf("%s must retain %q: the zap tool is a convenience over wipefs, so a host that cannot install gdisk must degrade to the wipefs-only wipe instead of failing the run", ensurePath, want)
+		}
+	}
+	ensureTasks := readAnsibleTasks(t, ensurePath)
+	installIdx := findAnsibleTask(t, ensureTasks, "Install the Ceph device zap tool when this host lacks it")
+	if _, ok := ensureTasks[installIdx]["rescue"]; !ok {
+		t.Error("the gdisk install must sit in a block with a rescue; at teardown the repositories that served the apply are routinely gone, and an uninstallable convenience package must not strand the hardware")
+	}
+	for _, gated := range []struct {
+		path string
+		name string
+	}{
+		{"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/wipe_and_cleanup.yml", "Zap declared Ceph device partition tables"},
+		{"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/filter_device_reclaim.yml", "Zap partition tables on filter-selected OSD disks"},
+		{"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml", "Zap partition tables of reclaimed OSD devices"},
+	} {
+		tasks := readAnsibleTasks(t, gated.path)
+		idx := findAnsibleTaskIndex(tasks, gated.name)
+		if idx < 0 {
+			tasks = nestedAnsibleTasks(t, tasks[findAnsibleTask(t, tasks, "Reclaim Ceph-signed disks on filter-selected OSD hosts")], "block")
+			idx = findAnsibleTask(t, tasks, gated.name)
+		}
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_ceph_zap_tool_present") {
+			t.Errorf("%q must be gated on bootwright_ceph_zap_tool_present; without the gate a host with no sgdisk fails the wipe that wipefs already completed, got when=%v", gated.name, tasks[idx]["when"])
+		}
+	}
+	for _, caller := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/wipe_and_cleanup.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml",
+	} {
+		if !strings.Contains(readRepoFile(t, caller), "ensure_zap_tool.yml") {
+			t.Errorf("%s must reach the zap tool through ensure_zap_tool.yml so apply and destroy share one probe, one best-effort install, and one availability fact", caller)
+		}
+	}
+}
+
 func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	reclaimPath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_reclaim.yml"
 	reclaim := readRepoFile(t, reclaimPath)

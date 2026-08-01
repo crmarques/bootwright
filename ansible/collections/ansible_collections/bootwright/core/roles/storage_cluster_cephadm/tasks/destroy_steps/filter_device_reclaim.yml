@@ -86,6 +86,7 @@
       loop: "{{ bootwright_ceph_filter_destroy_disks }}"
       loop_control:
         label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+      when: bootwright_ceph_zap_tool_present | default(false) | bool
   vars:
     bootwright_ceph_filter_destroy_disks: >-
       {{ bootwright_ceph_filter_destroy_candidates.stdout_lines | default([])
