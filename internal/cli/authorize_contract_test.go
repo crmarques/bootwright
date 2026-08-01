@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,6 +19,27 @@ var authorizationTokenTablePublications = []string{
 }
 
 var authorizationTableRow = regexp.MustCompile("^\\s*\\|\\s*`([a-z][a-z-]*)`\\s*\\|")
+
+const authorizationAcceptedByColumn = "accepted by"
+
+var authorizationPublishedVerbs = map[string]string{
+	"apply":                           authorizeVerbApply,
+	"plan":                            authorizeVerbApply,
+	"destroy":                         authorizeVerbDestroy,
+	"storage-cluster replace-arbiter": authorizeVerbReplaceArbiter,
+}
+
+type publishedAuthorizationRow struct {
+	token string
+	line  int
+	cells []string
+}
+
+type publishedAuthorizationTable struct {
+	path    string
+	columns []string
+	rows    []publishedAuthorizationRow
+}
 
 func TestAuthorizationVocabularyMatchesPublishedContract(t *testing.T) {
 	code := authorizationTokenNames()
@@ -41,16 +64,27 @@ func TestAuthorizationVocabularyMatchesPublishedContract(t *testing.T) {
 
 func readAuthorizationTokenTable(t *testing.T, path string) []string {
 	t.Helper()
+	var out []string
+	for _, row := range readAuthorizationTokenRows(t, path).rows {
+		out = append(out, row.token)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func readAuthorizationTokenRows(t *testing.T, path string) publishedAuthorizationTable {
+	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	var out []string
+	table := publishedAuthorizationTable{path: path}
 	inTable := false
-	for _, line := range strings.Split(string(data), "\n") {
+	for i, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "| token | authorizes |") {
 			inTable = true
+			table.columns = markdownRowCells(trimmed)
 			continue
 		}
 		if !inTable {
@@ -64,7 +98,102 @@ func readAuthorizationTokenTable(t *testing.T, path string) []string {
 			inTable = false
 			continue
 		}
-		out = append(out, match[1])
+		table.rows = append(table.rows, publishedAuthorizationRow{token: match[1], line: i + 1, cells: markdownRowCells(trimmed)})
+	}
+	return table
+}
+
+func markdownRowCells(line string) []string {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) < 2 || !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
+		return nil
+	}
+	parts := strings.Split(trimmed[1:len(trimmed)-1], "|")
+	cells := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cells = append(cells, strings.TrimSpace(part))
+	}
+	return cells
+}
+
+func (tbl publishedAuthorizationTable) columnIndex(name string) int {
+	for i, column := range tbl.columns {
+		if strings.EqualFold(column, name) {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestAuthorizationAcceptedByColumnMatchesTheConsumingVerbs(t *testing.T) {
+	published := 0
+	for _, path := range authorizationTokenTablePublications {
+		table := readAuthorizationTokenRows(t, path)
+		if len(table.rows) == 0 {
+			t.Fatalf("%s carries no `| token | authorizes |` table; the --authorize vocabulary must stay published there", path)
+		}
+		column := table.columnIndex(authorizationAcceptedByColumn)
+		if column < 0 {
+			continue
+		}
+		published++
+		compared := 0
+		for _, row := range table.rows {
+			token, known := authorizationTokenByName(row.token)
+			if !known {
+				continue
+			}
+			compared++
+			if column >= len(row.cells) {
+				t.Errorf("%s:%d the row for --authorize %s has %d cells, so it publishes no %q column value", path, row.line, row.token, len(row.cells), authorizationAcceptedByColumn)
+				continue
+			}
+			verbs, err := parsePublishedAcceptedBy(row.cells[column])
+			if err != nil {
+				t.Errorf("%s:%d the %q cell of --authorize %s is unreadable: %v; spell each verb as one of %s", path, row.line, authorizationAcceptedByColumn, row.token, err, strings.Join(publishedVerbLabels(), ", "))
+				continue
+			}
+			want := append([]string(nil), token.verbs...)
+			sort.Strings(want)
+			if !slices.Equal(verbs, want) {
+				t.Errorf("%s:%d the %q cell of --authorize %s publishes %v, but internal/cli/authorize.go declares verbs %v; the column is normative, so the table and the token registry must agree", path, row.line, authorizationAcceptedByColumn, row.token, verbs, want)
+			}
+		}
+		if compared != len(authorizationTokens) {
+			t.Errorf("%s compared the %q cell of %d tokens, but internal/cli/authorize.go defines %d; the column must cover every token the table publishes", path, authorizationAcceptedByColumn, compared, len(authorizationTokens))
+		}
+	}
+	if published == 0 {
+		t.Fatalf("no publication in %v carries an %q column; the per-token verb set must stay published somewhere", authorizationTokenTablePublications, authorizationAcceptedByColumn)
+	}
+}
+
+func parsePublishedAcceptedBy(cell string) ([]string, error) {
+	var out []string
+	for _, part := range strings.Split(cell, ",") {
+		label := strings.TrimSpace(strings.Trim(strings.TrimSpace(part), "`"))
+		if label == "" {
+			continue
+		}
+		verb, known := authorizationPublishedVerbs[label]
+		if !known {
+			return nil, fmt.Errorf("%q names no authorization verb", label)
+		}
+		if !slices.Contains(out, verb) {
+			out = append(out, verb)
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("it names no verb at all")
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func publishedVerbLabels() []string {
+	out := make([]string, 0, len(authorizationPublishedVerbs))
+	for label := range authorizationPublishedVerbs {
+		out = append(out, "`"+label+"`")
 	}
 	sort.Strings(out)
 	return out
