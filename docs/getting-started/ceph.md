@@ -48,21 +48,21 @@ how managed-OS installs work in general, see
 what it writes always matches your binary's schema:
 
 ```bash
-bootwright example init --name my-ceph-lab --kind storage-cluster --output-dir ./my-ceph-lab
+bootwright example init --name my-ceph --kind storage-cluster --output-dir ./my-ceph
 ```
 
 That writes the four kinds
 [the desired-state model](../concepts/index.md#the-smallest-input) calls the
-smallest Ceph input, and the result passes `bootwright validate -f ./my-ceph-lab`
-as written:
+smallest Ceph input, and the result passes `bootwright validate -f ./my-ceph` as
+written:
 
 ```text
-my-ceph-lab/
+my-ceph/
   environment.yaml                                   Environment: base domain
   secrets.yaml                                       Secrets: cephadm cluster key, node login key
-  clusters/storage/my-ceph-lab/
+  clusters/storage/my-ceph/
     cluster.yaml                                     StorageCluster: community Ceph, three mons, one OSD device per node
-    nodes/my-ceph-lab-node-{1,2,3}.yaml              Machines: three provided (already-installed) storage nodes
+    nodes/my-ceph-node-{1,2,3}.yaml                  Machines: three provided (already-installed) storage nodes
 ```
 
 That scaffold is the whole tree when your storage nodes already run an operating
@@ -74,8 +74,8 @@ RHEL on them. That adds the substrate and managed-OS kinds the scaffold leaves
 out — `InfraProvider`, `NetworkConfig`, `InfraComponent`, `MachineImage`,
 `MachineInstallProfile`, `Entitlement` — plus the pool, filesystem, and gateway
 kinds. They are already assembled in the `ceph-ibm-libvirt-lab` example tree,
-which the rest of this guide walks through, so copy that tree instead and enter
-it:
+which the rest of this guide walks through, so copy that tree into a directory of
+its own and enter it:
 
 ```bash
 git clone https://github.com/crmarques/bootwright.git
