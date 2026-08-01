@@ -45,7 +45,7 @@ exactly one refusal and nothing else:
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk, `apply` only |
-| `unreachable-nodes` | skipping nodes that do not answer at all during teardown, leaving the cluster partially destroyed — never a node that answers SSH and then rejects its teardown identity |
+| `unreachable-nodes` | skipping nodes the teardown proves it could not contact, leaving the cluster partially destroyed — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
@@ -722,16 +722,25 @@ reach: an unreachable node is skipped rather than aborting the play. The token
 names exactly the risk it accepts — a skipped node leaves the cluster only
 *partially* destroyed — and needs no second flag.
 
-It covers a node that does not answer at all: power, route, or an sshd that
-never answers. A node that **answers over SSH and then rejects every teardown
-identity** — an unauthorized key, an untrusted host key, a refused `sudo`
-escalation — is an identity fault, not an absent node, and the token does not
-skip it. The teardown fails closed on it and reports which identity refused,
-with the exit status and message, instead of telling you to power the node on.
-Fix the identity — re-authorize the key, restore the account's NOPASSWD grant,
-or pass `--ssh-sudo-password` — and re-run. Skipping such a node would leave its
-Ceph daemons running and its OSD devices holding cluster data while the run
-reported the cluster destroyed.
+**The teardown has to prove the node is absent before the token may skip it.**
+It skips only what the probe evidence positively shows could not be contacted —
+no route, an unreachable network, a host that is down, a connection that timed
+out or was refused. Anything else fails the teardown closed and prints what the
+probes reported:
+
+- a **rejected identity** (an unauthorized key, an untrusted host key, a refused
+  `sudo` escalation) — fix it and re-run: re-authorize the key, restore the
+  account's NOPASSWD grant, or pass `--ssh-sudo-password`;
+- an **address that does not resolve**, which is a name-resolution fault on the
+  controller, not an absent node — correct the address or restore the resolver;
+- an **empty or unreadable diagnostic** — nothing was proven either way, so
+  nothing is assumed.
+
+None of those show the node is gone, and skipping one that is in fact running
+leaves its Ceph daemons up and its OSD devices holding cluster data while the run
+reports the cluster destroyed. If such a node really is decommissioned, power it
+off: the probe then reports an unreachable host and the token applies. Every skip
+is reported with the diagnostic it was based on, per node.
 
 ```text
 bootwright destroy --clusters ceph-nprd --authorize unreachable-nodes,data-loss --yes

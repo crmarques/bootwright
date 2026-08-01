@@ -51,17 +51,26 @@ with no in-product remedy.
 **A node that answers is never skipped, and a teardown that reaches a node
 finishes it.**
 
-*Classify the refusal.* The teardown keeps the two probes but reads their exit
-status and message. A remote command that ran at all, or an SSH failure whose
-message is an authentication, host-key, or `sudo` refusal, is a node that
-answered. Only a connection-level failure — power, route, an sshd that never
-answered — is unreachable. `--authorize unreachable-nodes` covers that case
-alone. An answering node fails the teardown closed, naming which identity
-refused, with what exit status and message; no token relaxes it, because
-skipping a running node leaves its daemons up and its OSD devices holding
-cluster data while the run reports the cluster destroyed. The reachability
-refusals stop asserting the power-off reading and report what actually refused,
-and the partial-destroy warning names the nodes it skipped.
+*Absence must be proven, not assumed.* The teardown keeps the two probes but
+reads their exit status and message, and skips a node only when that evidence
+positively says the node could not be contacted: no route, an unreachable
+network, a host that is down, a connection that timed out or was refused, or a
+probe the timeout wrapper killed. Everything else fails the teardown closed and
+prints what the probes reported — an identity refusal (an unauthorized key, an
+untrusted host key, a refused `sudo`), an address that does not resolve, an
+empty diagnostic, an error naming none of the above. No token relaxes that,
+because none of those prove the node is gone, and skipping a node that is in
+fact running leaves its daemons up and its OSD devices holding cluster data
+while the run reports the cluster destroyed.
+
+The default matters more than the taxonomy. The first cut of this decision
+enumerated the refusals that mean "answered" and skipped everything else; the
+next run skipped the same node again, on a message that list did not name, and
+reported `[OK]` a second time. Whatever cannot be read as absence is not
+absence. The reachability refusals therefore stop asserting the power-off
+reading and report what actually refused, and both the skip warning and the
+controller-side partial-destroy record carry each skipped node's diagnostic, so
+"skipped" is never evidence-free.
 
 *Take the LVM stack down before the wipe.* Both teardown wipe paths — the
 declared-device wipe and the `all`-devices filter reclaim — deactivate the
@@ -90,12 +99,19 @@ No `--zap-osds` on that removal: the teardown wipes the devices itself, and
 
 ## Consequences
 
-`unreachable-nodes` narrows. A run that relied on it to sweep past a node with
-an unauthorized key or a `sudo` refusal now fails, names the identity, and asks
-for the fix — the same run that used to report the cluster destroyed while the
-node kept serving it. That is the point: the token's contract was always
-"tear down a node that is absent as already-absent", and it never meant
-"proceed without the node that answered".
+`unreachable-nodes` narrows to what it always claimed. A run that relied on it
+to sweep past a node with an unauthorized key, a `sudo` refusal, or an address
+that no longer resolves now fails, prints the diagnostic, and asks for the fix —
+the same run that used to report the cluster destroyed while the node kept
+serving it. The token's contract was always "tear down a node that is absent as
+already-absent", and it never meant "proceed without the node this run could not
+read".
+
+The cost is a node that is genuinely decommissioned but whose refusal is
+unclassifiable: it now blocks the teardown until the operator powers it off, so
+the probe reports an unreachable host, or corrects the address. That is the
+right side to err on — the refusal says so, and the alternative is the incident
+this ADR exists for.
 
 The destroy path gains a removal it did not have. Its blast radius is bounded by
 what the operator already authorized: the daemons of the cluster whose bluestore

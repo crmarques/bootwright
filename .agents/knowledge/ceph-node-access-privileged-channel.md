@@ -284,17 +284,27 @@ the node — a token given for an absent node silently consuming a running one.
 Teardown sets `bootwright_node_access_probe_fail_when_unreachable: false`, so
 `probe.yml`'s accurate multi-cause message (apply-only) was discarded.
 
-**Fix (ADR 0039):** the destroy play classifies before it may skip. `Classify how
-a storage host refused its teardown connection` reads the two probe registers
-(identity path) or the ping `msg` (unmanaged-access path) and sets
-`bootwright_storage_node_answered` — true when a remote command ran at all
-(rc != 255) or the message is an auth / host-key / `sudo` refusal, false only for
-a connection-level failure. `Refuse a storage host that answers but rejects every
-teardown identity` is a hard assert with NO token in its `when`, placed before
-the reachability assert and the `end_host` skip, so `any_errors_fatal` aborts the
-teardown. The remaining reachability messages report
-`bootwright_storage_node_refusal` instead of asserting the power-off reading, and
-the CLI partial-destroy warning names the skipped nodes.
+**Fix (ADR 0039):** the destroy play classifies before it may skip, and **absence
+is matched positively**. `Classify how a storage host refused its teardown
+connection` reads the two probe registers (identity path) or the ping `msg`
+(unmanaged-access path) and sets `bootwright_storage_node_absent` — true ONLY for
+a connection-level failure (`No route to host`, `Network is unreachable`,
+`Host is down`, `Connection timed out`, `Operation timed out`,
+`Connection refused`, `port 22: Connection`, `Destination Host Unreachable`) or a
+probe the `timeout` wrapper killed (rc 124/137/143). `Refuse a storage host this
+teardown cannot prove absent` is a hard assert with NO token in its `when`,
+before the reachability assert and the `end_host` skip, so `any_errors_fatal`
+aborts. Both messages print `bootwright_storage_node_refusal` (endpoint, rc and
+stderr of both probes), and the skip warning plus the controller-side
+`skippedNodeReasons` carry it per node.
+
+**The default is the whole fix — do NOT invert it back.** The first cut
+enumerated the *refusals* (`Permission denied`, `sudo:`, host-key errors) and
+skipped everything else. The very next run skipped the same node again on a
+message that list did not name, and reported `[OK]` a second time. The probe
+tasks are `changed_when: false` + `failed_when: false`, so the default ansible
+callback prints no rc/stderr for them: an evidence-free skip is invisible in the
+run log too. Whatever cannot be read as absence is not absence.
 
 **Rule:** any future consumer of `bootwright_node_access_connection_available`
 that can SKIP work must classify first. `task_machine_registration_deregister.yml`

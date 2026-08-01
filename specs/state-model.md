@@ -2421,7 +2421,7 @@ verbs that reach machines.
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it |
-  | `unreachable-nodes` | skipping nodes that do not answer at all during teardown, leaving the cluster partially destroyed. It covers only the connection-level failure — power, route, or an sshd that never answers. A node that answers over SSH and then rejects every teardown identity (an unauthorized key, an untrusted host key, a refused sudo escalation) is an identity fault, not an absent node: the teardown fails closed on it, names which identity refused and how, and no token skips it, because skipping a running node leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
+  | `unreachable-nodes` | skipping nodes the teardown *proves* it could not contact, leaving the cluster partially destroyed. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
@@ -2509,14 +2509,16 @@ verbs that reach machines.
 - `destroy --authorize unreachable-nodes` tolerates powered-off or unreachable
   nodes during teardown: it skips them — their devices are NOT wiped and their
   local state remains — and continues, leaving the cluster partially destroyed.
-  It stands alone and needs no second flag. Reachability is decided per node
-  from the teardown identity probes, and their outcome is classified, not
-  collapsed: a node that answers over SSH and then rejects every identity is
-  never skipped by the token. The teardown fails closed on it and reports the
-  identity that refused with its exit status and message, instead of the
-  power-off reading. The skipped-node warning names the nodes it skipped, and
-  the message states that a skipped node keeps serving the cluster the run
-  reported destroyed. Storage teardown still fails closed
+  It stands alone and needs no second flag. Absence is decided per node from the
+  teardown identity probes and must be proven, not assumed: the token skips a
+  node only when the probe evidence positively says it could not be contacted.
+  Any other refusal — a rejected identity, an unresolvable address, an empty or
+  unreadable diagnostic — fails the teardown closed and reports the probe exit
+  status and message, instead of the power-off reading, because an unreadable
+  refusal is not proof that a node is gone. The skipped-node warning and the
+  controller-side partial-destroy result carry each skipped node's diagnostic,
+  so a skip always says on what evidence, and the message states that a skipped
+  node keeps serving the cluster the run reported destroyed. Storage teardown still fails closed
   when a cluster's Ceph seed host is unreachable, so ownership stays proven
   before any device wipe. A KubeVirt host-cluster API holding a recorded guest
   is not a skippable node: when it is unreachable Bootwright cannot prove the

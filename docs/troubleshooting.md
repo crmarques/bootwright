@@ -733,13 +733,16 @@ That is fsid-scoped: it stops and removes only that cluster's daemons, units and
 `/var/lib/ceph` state on that node, and zaps no disk. Re-run `destroy` afterwards
 to wipe the devices and remove the rest of the local state.
 
-**Why the node was skipped.** `--authorize unreachable-nodes` covers a node that
-does not answer. A node that answers SSH and then rejects every teardown
-identity — an unauthorized key, an untrusted host key, a refused `sudo`
-escalation — now fails the teardown closed and names the identity that refused;
-see [A Ceph node refuses passwordless sudo](#a-ceph-node-refuses-passwordless-sudo).
-If a run predating that behaviour swept such a node into the skip, the node is in
-exactly the state above.
+**Why the node was skipped.** `--authorize unreachable-nodes` skips a node only
+when the teardown *proves* it could not be contacted — no route, an unreachable
+network, a host that is down, a connection that timed out or was refused. Any
+other refusal now fails the teardown closed and prints what the probes reported:
+a rejected identity (see
+[A Ceph node refuses passwordless sudo](#a-ceph-node-refuses-passwordless-sudo)),
+an address that does not resolve, or a diagnostic it cannot read. A run predating
+that behaviour skipped on any refusal at all and left the node in exactly the
+state above, so read the skip line in the warning: it now names each skipped node
+with the diagnostic the skip was based on.
 
 ## Recovering the Ceph dashboard password
 
