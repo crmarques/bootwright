@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,8 @@ func TestWarnUnusedAuthorizations(t *testing.T) {
 		{"dry-run", []string{authorizeDataLoss}, nil, true, "not consumed by a dry-run"},
 		{"consumed stays silent", []string{authorizeDataLoss}, []string{authorizeDataLoss}, false, ""},
 		{"none given stays silent", nil, nil, false, ""},
+		{"all discloses the token it stood in for", []string{authorizeAll}, []string{authorizeUnownedVMs}, false, "stood in for unowned-vms"},
+		{"all consumed by no gate names itself", []string{authorizeAll}, nil, false, "--authorize all had no effect"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +67,46 @@ func TestParseAuthorizationsRejectsUnknownToken(t *testing.T) {
 	}
 	if len(auth.all()) != 2 {
 		t.Fatalf("a repeated token must be recorded once, got %v", auth.all())
+	}
+}
+
+func TestBlanketAuthorizationExpandsOnlyWithinItsVerb(t *testing.T) {
+	for _, verb := range []string{authorizeVerbApply, authorizeVerbDestroy} {
+		auth, err := parseAuthorizations([]string{authorizeAll}, verb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		accepted := authorizationTokenNamesForVerb(verb)
+		for _, name := range authorizationTokenNames() {
+			want := slices.Contains(accepted, name)
+			if got := auth.has(name); got != want {
+				t.Errorf("--authorize all on %s answers %v for %s, want %v; the blanket token is exactly the set the verb accepts, never wider and never narrower", verb, got, name, want)
+			}
+		}
+		if auth.has("force") {
+			t.Errorf("--authorize all on %s must not answer for a name that is not a registered token", verb)
+		}
+	}
+}
+
+func TestBlanketAuthorizationCreditsOnlyTheTokensItSupplied(t *testing.T) {
+	auth, err := parseAuthorizations([]string{authorizeAll, authorizeDataLoss}, authorizeVerbDestroy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth.note(authorizeDataLoss)
+	if got := auth.expandedByAll(); len(got) != 0 {
+		t.Fatalf("a token named on the command line is not one all stood in for, got %v", got)
+	}
+	if len(auth.unused()) != 1 || auth.unused()[0] != authorizeAll {
+		t.Fatalf("all must still report having had no effect when every consumed gate was named explicitly, got %v", auth.unused())
+	}
+	auth.note(authorizeSharedInfra)
+	if got := auth.expandedByAll(); len(got) != 1 || got[0] != authorizeSharedInfra {
+		t.Fatalf("all must be credited with exactly the unnamed gates it answered, got %v", got)
+	}
+	if len(auth.unused()) != 0 {
+		t.Fatalf("all became effective, so it must no longer be reported as unused, got %v", auth.unused())
 	}
 }
 

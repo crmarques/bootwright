@@ -2399,7 +2399,7 @@ verbs that reach machines.
   risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
   repeatable and comma-separated. An unknown token is a usage error (exit 2)
   listing the tokens the verb accepts; so is a token the verb has no gate for at
-  all — `data-loss` and `unowned-devices` are accepted by both verbs,
+  all — `all`, `data-loss` and `unowned-devices` are accepted by both verbs,
   `foreign-daemons` by `apply` alone, every other token is destroy-only, and
   passing one to a verb that cannot consume it is refused with the guidance that
   resolves it there rather than silently ignored, so an operator can never
@@ -2407,10 +2407,13 @@ verbs that reach machines.
   the verb accepts but this particular run never consumed is a non-fatal warning
   naming it. Under `--dry-run` no token is consumed and the human report says so
   for every one (JSON output carries the plan, not the warnings). Exactly these
-  tokens exist, and each unblocks exactly one refusal:
+  tokens exist. Every one but `all` unblocks exactly one refusal; `all` is the
+  blanket authorization and unblocks exactly the tokens its own verb accepts,
+  nothing wider (ADR 0040):
 
   | token | authorizes |
   | --- | --- |
+  | `all` | every other token the invoked verb accepts, in one word. The set is exactly the tokens this table marks as reachable by the verb being run, so a token added by a later ADR is inside it from the day it lands and `apply --authorize all` never gains a destroy-only one. It grants no refusal that has no token of its own, and never answers a confirmation prompt |
   | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
   | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token) |
   | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) |
@@ -2424,10 +2427,18 @@ verbs that reach machines.
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
 
   No token widens `--clusters`, relaxes the shared-provider-service scope
-  conflict, or relaxes the KubeVirt tenant gate.
+  conflict, or relaxes the KubeVirt tenant gate — `all` included, because it is
+  defined as the union of the tokens above and not as a general override.
   `unowned-vms`/`unowned-networks` apply only where those refusals run (the
   machine layer); outside it they are reported as having had no effect. Neither
   relaxes the Ceph cluster or OSD-device ownership gates.
+
+  `all` is resolved per verb at the point each gate is consulted, so it can
+  never authorize a risk the verb has no gate for, and it is reported rather
+  than assumed: a real run that used it prints which unnamed tokens it stood in
+  for, and a run in which it answered nothing reports that it had no effect like
+  any other token. A token named alongside `all` is credited to that name, not
+  to `all`.
 
   Device data-safety splits in two, and only the ownership half is
   authorizable (ADR 0034). `unowned-devices` relaxes exactly one refusal — that

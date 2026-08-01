@@ -95,12 +95,54 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 }
 
 func safetyMatrixCases() []safetyCase {
-	return append(append(append(append(
+	return append(append(append(append(append(
 		safetyFlagCoherenceCases(),
 		safetyAuthorizationTokenCases()...),
+		safetyBlanketAuthorizationCases()...),
 		safetyStorageDataLossCases()...),
 		safetyScopeClosureCases()...),
 		safetyStartingStateCases()...)
+}
+
+func safetyBlanketAuthorizationCases() []safetyCase {
+	return []safetyCase{{
+		name:    "destroy/all: the blanket token clears the data-loss refusal the named token clears",
+		args:    []string{"destroy", "--authorize", "all", "--ask-become-pass=false"},
+		verdict: verdictPrompted,
+		want:    []string{"Continue with destroy?"},
+		deny:    []string{"--yes does not authorize data loss", "Confirm this DESTRUCTIVE action"},
+	}, {
+		name:    "destroy/all: the expansion reaches every per-token extra var of the run",
+		args:    []string{"destroy", "--stage", "infra", "--authorize", "all", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true", "bootwright_destroy_skip_unreachable=true"},
+	}, {
+		name:    "destroy/all: a real run discloses which unnamed tokens it stood in for",
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		want:    []string{"authorize all", "stood in for", authorizeUnownedVMs},
+	}, {
+		name: "destroy/all: the blanket token still does not widen the selection",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedInstalledCluster(t, ctx, "dc1-child-ocp")
+		},
+		args:    []string{"destroy", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"dc1-child-ocp", "no --authorize token widens"},
+	}, {
+		name:    "apply/all: a dry-run consumes none of it and names it",
+		args:    []string{"apply", "--stage", "deps", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--authorize", "all", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize all is not consumed by a dry-run"},
+	}, {
+		name: "apply/all: the blanket token clears no refusal that has no token of its own",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedInstalledCluster(t, ctx, "dc1-metal-ocp-old")
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"dc1-metal-ocp-old", "the signature of a rename"},
+	}}
 }
 
 func safetyFlagCoherenceCases() []safetyCase {

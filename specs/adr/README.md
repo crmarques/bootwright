@@ -43,7 +43,7 @@ below.
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024; refined by 0033 |
 | [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
 | [0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md) | Answering a `sudo` Password for the Borrowed Identity | extends 0028 |
-| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031; extended by 0032, 0034, 0038 |
+| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031; extended by 0032, 0034, 0038, 0040; refined by 0039 |
 | [0031](0031-data-loss-follows-the-data-and-policy-is-not-drift.md) | Data-Loss Authorization Follows the Data, and Policy Is Not Drift | refines 0007, 0030 |
 | [0032](0032-tearing-down-input-a-newer-build-cannot-read.md) | Tearing Down Input a Newer Build Cannot Read | extends 0030 with the `stale-input` token |
 | [0033](0033-the-login-follows-the-scope-and-carries-its-credential.md) | The Login Follows the Command's Scope, and Carries Its Credential | refines 0019, 0024, 0027 |
@@ -53,3 +53,4 @@ below.
 | [0037](0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md) | A TPM Holds the Key, a Passphrase Holds the Machine | follows the enablement grammar of 0014 |
 | [0038](0038-removing-the-cluster-a-node-was-left-running.md) | Removing the Cluster a Node Was Left Running | extends 0030 with the `foreign-daemons` token; follows 0034 |
 | [0039](0039-the-node-a-teardown-left-serving-the-cluster.md) | The Node a Teardown Left Serving the Cluster | refines the `unreachable-nodes` token of 0030; closes the teardown side of 0038 |
+| [0040](0040-one-word-for-every-token-a-verb-accepts.md) | One Word for Every Token a Verb Accepts | extends 0030 with the `all` token |

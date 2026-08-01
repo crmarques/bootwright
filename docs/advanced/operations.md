@@ -32,11 +32,12 @@ owned-Ceph wipe-and-rebuild, drifted owned-object rebuild. See
 [Apply modes](../concepts/index.md#apply-modes) for the full model.
 
 **`--authorize <token>`** (on `apply`, `plan` and `destroy`, repeatable and
-comma-separated) states which *risk* you accept. Each token unblocks exactly one
-refusal and nothing else:
+comma-separated) states which *risk* you accept. Every token but `all` unblocks
+exactly one refusal and nothing else:
 
 | token | authorizes |
 | --- | --- |
+| `all` | every other token the command accepts, in one word — the apply-side tokens on `apply`/`plan`, the whole table on `destroy`. It never clears a refusal that has no token of its own, and never answers a confirmation prompt |
 | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
 | `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` |
@@ -50,13 +51,25 @@ refusal and nothing else:
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
 
 An unknown token is a usage error listing the tokens the command accepts. So is a
-token the command has no gate for: `data-loss` and `unowned-devices` are accepted
-by both verbs, `foreign-daemons` by `apply` alone, and every other token is
-destroy-only,
+token the command has no gate for: `all`, `data-loss` and `unowned-devices` are
+accepted by both verbs, `foreign-daemons` by `apply` alone, and every other token
+is destroy-only,
 and `apply --authorize protected` is refused with the guidance that resolves it on
 `apply` rather than accepted and ignored. A token the command accepts but this run
 never used prints a warning naming it, so you learn you authorized the wrong risk
 instead of assuming a gate was cleared.
+
+!!! warning "`--authorize all` is a blast radius, not a shortcut"
+    `all` is the one token that stands for others. Reach for it in a lab you
+    intend to flatten, or when a teardown keeps surfacing one more refusal and
+    you have already read the ones before it — not as a habit on state you care
+    about, where naming the risk is the point. It is bounded in three ways: it
+    expands only to the tokens the invoked verb accepts, so `apply --authorize
+    all` never gains a `destroy` token; it clears no refusal that has no token
+    (scope conflicts, the KubeVirt tenant gate, a mounted or in-use device, a
+    `protectedKinds` rebuild on `apply`); and it never answers a confirmation
+    prompt — `--yes` still does that, separately. A real run that used it prints
+    which tokens it stood in for, so the blast radius stays on the record.
 
 !!! warning "`--yes` authorizes nothing"
     `--yes` answers the ordinary confirmation prompt on either verb and never

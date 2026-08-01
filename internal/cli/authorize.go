@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	authorizeAll                  = "all"
 	authorizeDataLoss             = "data-loss"
 	authorizeProtected            = "protected"
 	authorizeInstalledClusterNode = "installed-cluster-node"
@@ -39,6 +40,11 @@ type authorizationToken struct {
 }
 
 var authorizationTokens = []authorizationToken{{
+	name:       authorizeAll,
+	authorizes: "every other token this verb accepts, in one word; it clears no refusal that has no token of its own and never answers a confirmation prompt",
+	inert:      "this run reached no gate any token of this verb could clear",
+	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
+}, {
 	name:       authorizeDataLoss,
 	authorizes: "any disk wipe or Ceph OSD zap, on apply and on destroy",
 	inert:      "this run plans no data-destroying action",
@@ -145,7 +151,7 @@ func flagAuthorizeUsage(verb string) string {
 		token, _ := authorizationTokenByName(name)
 		lines = append(lines, token.name+" = "+token.authorizes)
 	}
-	return "authorize a named risk; repeatable and comma-separated. Each token unblocks exactly one refusal and nothing else; --yes never authorizes any of them. Tokens " + verb + " accepts: " + strings.Join(lines, "; ")
+	return "authorize a named risk; repeatable and comma-separated. Every token but " + authorizeAll + " unblocks exactly one refusal and nothing else; --yes never authorizes any of them. Tokens " + verb + " accepts: " + strings.Join(lines, "; ")
 }
 
 func addAuthorizeFlag(cmd *cobra.Command, p *[]string, verb string) {
@@ -154,13 +160,15 @@ func addAuthorizeFlag(cmd *cobra.Command, p *[]string, verb string) {
 }
 
 type authorizations struct {
-	given   map[string]bool
-	applied map[string]bool
-	order   []string
+	verb     string
+	given    map[string]bool
+	applied  map[string]bool
+	order    []string
+	expanded []string
 }
 
 func parseAuthorizations(values []string, verb string) (*authorizations, error) {
-	out := &authorizations{given: map[string]bool{}, applied: map[string]bool{}}
+	out := &authorizations{verb: verb, given: map[string]bool{}, applied: map[string]bool{}}
 	for _, value := range values {
 		name := strings.TrimSpace(value)
 		if name == "" {
@@ -183,12 +191,31 @@ func parseAuthorizations(values []string, verb string) (*authorizations, error) 
 }
 
 func (a *authorizations) has(name string) bool {
-	return a != nil && a.given[name]
+	if a == nil {
+		return false
+	}
+	return a.given[name] || a.coveredByAll(name)
+}
+
+func (a *authorizations) coveredByAll(name string) bool {
+	if a == nil || name == authorizeAll || a.given[name] || !a.given[authorizeAll] {
+		return false
+	}
+	token, known := authorizationTokenByName(name)
+	return known && slices.Contains(token.verbs, a.verb)
 }
 
 func (a *authorizations) note(name string) {
-	if a != nil {
-		a.applied[name] = true
+	if a == nil {
+		return
+	}
+	a.applied[name] = true
+	if !a.coveredByAll(name) {
+		return
+	}
+	a.applied[authorizeAll] = true
+	if !slices.Contains(a.expanded, name) {
+		a.expanded = append(a.expanded, name)
 	}
 }
 
@@ -202,6 +229,13 @@ func (a *authorizations) all() []string {
 		return nil
 	}
 	return a.order
+}
+
+func (a *authorizations) expandedByAll() []string {
+	if a == nil {
+		return nil
+	}
+	return a.expanded
 }
 
 func (a *authorizations) unused() []string {
@@ -223,6 +257,9 @@ func warnUnusedAuthorizations(stdout io.Writer, a *authorizations, dryRun bool) 
 			cliout.NewContinuation(stdout).Warning("dry-run", "--authorize "+name+" is not consumed by a dry-run; an authorization applies only to a real run")
 		}
 		return
+	}
+	if expanded := a.expandedByAll(); len(expanded) > 0 {
+		cliout.NewContinuation(stdout).Warning("authorize "+authorizeAll, "stood in for "+strings.Join(expanded, ", ")+" — this run consulted those gate(s) and none of them was named on the command line")
 	}
 	for _, name := range a.unused() {
 		cliout.NewContinuation(stdout).Warning("authorize", "--authorize "+name+" had no effect: "+authorizationInertReason(name))

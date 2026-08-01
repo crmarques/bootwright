@@ -11,6 +11,12 @@ stage that runs, `installed-cluster-node` covers both cluster kinds, and a token
 a verb has no gate for is a usage error on that verb rather than an accepted
 no-op. The two-axis model below is otherwise unchanged and still governs.
 
+Extended by
+[ADR 0040](0040-one-word-for-every-token-a-verb-accepts.md): one token, `all`,
+names the union of the tokens its verb accepts. It is the single exception to
+"each token unblocks exactly one refusal" below, and is defined by that rule
+rather than around it — it can reach nothing the individual tokens cannot.
+
 ## Context
 
 The destructive surface of `apply` and `destroy` had grown into nine
@@ -72,6 +78,7 @@ else:
 
 | token | authorizes |
 | --- | --- |
+| `all` | every other token the invoked verb accepts, and nothing else (both verbs, per ADR 0040) |
 | `data-loss` | any disk wipe or Ceph OSD zap, on **both** verbs |
 | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection` or `spec.safety.protectedKinds` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster (either kind, per ADR 0031) |
