@@ -40,29 +40,45 @@ retired `v1alpha1` shapes — a retired field is rejected, not translated.
 Each authored kind owns one slice of operational fact. The links point to the
 domain page where each kind is documented in full.
 
-| Kind | Owns |
-| --- | --- |
-| [`Environment`](environment.md) | Fleet defaults, selected resources, selected clusters, secret declarations, service access catalog, proxy and registry defaults, install trust, and component image pins. |
-| [`Machine`](machines.md) | An OS-ready, Bootwright-installed, or installer-provisioned machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and how an already-installed machine is reached. |
-| [`MachineImage`](machines.md) | Bootable OS install media for managed machine OS installs. |
-| [`MachineInstallProfile`](machines.md) | Reusable managed OS installer settings and customizations. |
-| [`InfraProvider`](infrastructure.md) | Substrate capability: libvirt, bare metal, vSphere, KubeVirt, machine profiles, provider facts, and network attachments. |
-| [`InfraComponent`](infrastructure.md) | Machine-bound shared services such as load balancers, artifact servers, DNS, NTP, proxies, and registries. |
-| [`NetworkConfig`](infrastructure.md) | Reusable machine-network CIDRs, name-resolution selections, and NMState templates. |
-| [`ContainerCluster`](container-clusters.md) | OpenShift or OKD install intent: distribution, release, install mode, platform render mode, endpoints, networking, pools, and node binding. |
-| [`StorageCluster`](storage.md) | Imported or Bootwright-managed Ceph storage intent; references machines by node. |
-| [`StoragePlacementPolicy`](storage.md) | Reusable Ceph placement and replicated-pool defaults. |
-| [`StoragePool`](storage.md) | Ceph pool role, protection type, placement, replication, and application. |
-| [`StorageFilesystem`](storage.md) | CephFS filesystem and metadata/data pool mapping. |
-| [`StorageObjectGateway`](storage.md) | RGW public endpoint and cephadm ingress VIP placement. |
-| [`StorageNFSExport`](storage.md) | NFS-Ganesha service, its CephFS or RGW exports, and ingress VIP placement. |
-| [`StorageExport`](storage.md) | Storage services exported for downstream consumers such as Data Foundation. |
-| [`ClusterAddon`](add-ons.md) | A reusable post-install component applied to an installed cluster. |
-| [`ClusterAddonProfile`](add-ons.md) | An ordered reusable add-on set. |
-| [`ClusterAddonBinding`](add-ons.md) | One cluster's selected profiles, add-ons, and binding-scoped input values. |
-| [`CustomPlaybook`](custom-playbooks.md) | An operator-supplied Ansible playbook run against machines at a chosen provisioning stage, before or after the built-in work. |
-| [`Secret`](secrets.md) | One named unit of secret material: its `spec.type` (what the material is) and optional `spec.source` (how the bytes are obtained). |
-| [`Entitlement`](secrets.md) | Named vendor-controlled access for one product: RHSM subscription, product registry, and license for RHEL or Ceph. |
+### The smallest input
+
+Twenty-one kinds exist; you author a handful. The **core set** for each job is
+the floor, and everything else joins only when its scenario does:
+
+- **Smallest OpenShift input** — `Environment`, `Secret`, `Machine`,
+  `InfraProvider`, `NetworkConfig`, `ContainerCluster`, plus an
+  `InfraComponent` for each cluster service Bootwright itself runs (DNS, load
+  balancer, NTP). `examples/sno-libvirt-redfish` is that shape.
+- **Smallest Ceph input** — `Environment`, `Secret`, `Machine`,
+  `StorageCluster`. `examples/ceph-distribution-oss` is that shape.
+
+See [Examples](../advanced/examples.md) for both trees. The **Required** column
+below ranks every kind: `always` (every context authors it), `per cluster`
+(one per cluster of that type), or `when you need it`.
+
+| Kind | Required | Owns |
+| --- | --- | --- |
+| [`Environment`](environment.md) | always | Fleet defaults, selected resources, selected clusters, secret declarations, service access catalog, proxy and registry defaults, install trust, and component image pins. |
+| [`Machine`](machines.md) | always | An OS-ready, Bootwright-installed, or installer-provisioned machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and how an already-installed machine is reached. |
+| [`MachineImage`](machines.md) | when you need it | Bootable OS install media for managed machine OS installs. |
+| [`MachineInstallProfile`](machines.md) | when you need it | Reusable managed OS installer settings and customizations. |
+| [`InfraProvider`](infrastructure.md) | when you need it | Substrate capability: libvirt, bare metal, vSphere, KubeVirt, machine profiles, provider facts, and network attachments. |
+| [`InfraComponent`](infrastructure.md) | when you need it | Machine-bound shared services such as load balancers, artifact servers, DNS, NTP, proxies, and registries. |
+| [`NetworkConfig`](infrastructure.md) | when you need it | Reusable machine-network CIDRs, name-resolution selections, and NMState templates. |
+| [`ContainerCluster`](container-clusters.md) | per cluster | OpenShift or OKD install intent: distribution, release, install mode, platform render mode, endpoints, networking, pools, and node binding. |
+| [`StorageCluster`](storage.md) | per cluster | Imported or Bootwright-managed Ceph storage intent; references machines by node. |
+| [`StoragePlacementPolicy`](storage.md) | when you need it | Reusable Ceph placement and replicated-pool defaults. |
+| [`StoragePool`](storage.md) | when you need it | Ceph pool role, protection type, placement, replication, and application. |
+| [`StorageFilesystem`](storage.md) | when you need it | CephFS filesystem and metadata/data pool mapping. |
+| [`StorageObjectGateway`](storage.md) | when you need it | RGW public endpoint and cephadm ingress VIP placement. |
+| [`StorageNFSExport`](storage.md) | when you need it | NFS-Ganesha service, its CephFS or RGW exports, and ingress VIP placement. |
+| [`StorageExport`](storage.md) | when you need it | Storage services exported for downstream consumers such as Data Foundation. |
+| [`ClusterAddon`](add-ons.md) | when you need it | A reusable post-install component applied to an installed cluster. |
+| [`ClusterAddonProfile`](add-ons.md) | when you need it | An ordered reusable add-on set. |
+| [`ClusterAddonBinding`](add-ons.md) | when you need it | One cluster's selected profiles, add-ons, and binding-scoped input values. |
+| [`CustomPlaybook`](custom-playbooks.md) | when you need it | An operator-supplied Ansible playbook run against machines at a chosen provisioning stage, before or after the built-in work. |
+| [`Secret`](secrets.md) | always | One named unit of secret material: its `spec.type` (what the material is) and optional `spec.source` (how the bytes are obtained). |
+| [`Entitlement`](secrets.md) | when you need it | Named vendor-controlled access for one product: RHSM subscription, product registry, and license for RHEL or Ceph. |
 
 Post-install components and external storage are separate kinds the
 `Environment` selects and binds, never `ContainerCluster.spec.install` fields —
@@ -118,6 +134,50 @@ Two deliberate carve-outs sit outside the `Ref` grammar:
   is identified by an external GVK plus `{name, namespace}` identity. See
   [Infrastructure](infrastructure.md).
 
+## Where objects live on disk
+
+Filenames are pedagogy, not contract: the loader walks every YAML file under
+the input directory, so Bootwright never requires a particular name or
+nesting. The conventions below are what the scaffold emits, the examples
+teach, and reviews expect:
+
+```text
+environment.yaml
+secrets.yaml
+infra/
+  providers/
+  machines/
+  networkconfigs/
+  components/
+  images/
+  profiles/
+  entitlements/
+clusters/
+  container/<cluster>/
+    cluster.yaml
+    cluster-machines.yaml
+    add-on-binding.yaml
+  storage/<cluster>/
+    cluster.yaml
+    placement.yaml
+    pools/
+    filesystems/
+    object-gateways/
+    exports/
+add-ons/
+custom-playbooks/
+```
+
+One object per file — secrets grouped in `secrets.yaml` are the exception —
+with role-based filenames where the role is unambiguous and `metadata.name`
+otherwise. Flat versus foldered: a single cluster with a handful of objects
+reads best flat (the small teaching examples are deliberately flat); anything
+shared across two clusters, or any second cluster, earns the nested tree.
+Machines that exist for one cluster live with that cluster's folder; genuinely
+shared infrastructure lives under `infra/`. Fleet-specific guidance — sharing
+`infra/` across clusters and the cluster-selection namespace — is in
+[Fleets](../advanced/fleets.md).
+
 ## Contexts
 
 The **controller** is the host you run Bootwright on: it runs the CLI, Ansible,
@@ -159,6 +219,29 @@ drops the existing context and recreates it from the source.
     scripts. An `input/` directory that becomes missing or unreadable is a named
     failure at context-resolution time, with a `context update --name <name> -f`
     remediation.
+
+### The context holds a copy of your input
+
+Three commands write that copy: `context update` replaces the whole tree from
+your source directory, and two verbs edit objects in place — `diff --adopt`
+folds discovered live state into the declared objects, and
+`storage-cluster replace-arbiter --new-arbiter-machine` rebinds the stretch
+tiebreaker. The two editing verbs change the **context copy only**; your
+source tree (usually a git checkout) never sees the rewrite.
+
+!!! warning "`context update` discards in-context rewrites"
+    Because `context update` replaces `input/` from your source, any
+    `--adopt` or `replace-arbiter` rewrite you have not copied back to the
+    source first is discarded by the next update. Round-trip a rewrite before
+    touching the source again: copy the context's `input/` tree back over your
+    source directory (reading it needs root), review with `git diff`, commit,
+    and only then resume the edit-and-`context update` loop.
+
+Before every in-place rewrite the previous input is snapshotted to
+`input-history/<seq>-<reason>/` under the context. Recovery from a snapshot is
+manual — no verb reads it back: copy the snapshot's contents over the
+context's `input/` (or over your source tree, followed by `context update`)
+and re-run `validate`.
 
 Run Bootwright as your user. The CLI re-executes through `sudo` when it needs
 protected state.
@@ -420,7 +503,28 @@ Every field table on the domain pages — including sub-tables — carries a
 
 Cross-field validation rules ("X must be empty when Y", "exactly one of …",
 "required when …") appear as explicit notes on the relevant page, because those
-are the silent authoring failures the reference exists to catch.
+are the silent authoring failures the reference exists to catch. The column
+itself carries only `Yes`, `No`, and — for list entries whose every element
+must set the field — `Yes (per entry)`; no other conditional spelling belongs
+in the column, because the note states the condition precisely.
+
+### Native mapping
+
+A kind page that fronts a driven tool (`openshift-install`,
+cephadm/`ceph orch`, Anaconda kickstart, nmstate, Redfish/Metal3) carries a
+**Native mapping** section: one table per tool, mapping the tool's own input
+vocabulary to the authored field that produces it. Each row gives the native
+key or flag in the tool's own spelling; the Bootwright path (or *derived* when
+Bootwright computes it and nothing is authorable); the divergence class —
+`mirror` (camelCase respellings per the API grammar count as mirrored),
+`renamed`, `relocated` (another kind owns it), `restructured`, `derived`, or
+`invented` (no native counterpart) — and what the divergence buys. A
+divergence earns its place only through orchestration value: a cross-document
+reference, secret `…Ref` indirection, a fleet-level default, multi-cluster
+composition, or safety. The normative rule is the Compatibility Goal in
+[`specs/domain.md`](https://github.com/crmarques/bootwright/blob/main/specs/domain.md);
+these tables are its operator-facing rendering — an operator who knows the
+native tool reads off where each fact they already know is authored.
 
 ### Grammars
 
@@ -433,6 +537,7 @@ are the silent authoring failures the reference exists to catch.
 | Feature block (enable/disable) | Optional feature blocks are presence-managed; see [Feature blocks](#feature-blocks). |
 | Defaults | The normalize phase injects defaults before rendering; `render effective` materializes them so operators can inspect what renderers consume — for example `distribution: openshift`, the `api-int` copy of `api`, and the default cluster and service networks. |
 | References | Plain name strings with a `Ref`/`Refs` suffix; see [References](#references). |
+| Reserved spellings | `type` is reserved for kind-of-thing discriminators, and `management` (`managed`/`external`) is reserved for the who-runs-it axis — who operates the thing, Bootwright or you; no other field uses either word for another meaning (ADR 0014). |
 | Secrets | Desired state stores only names and local source paths. Secret bytes live in the context secret store or operator-owned local files; see [Secrets & entitlements](secrets.md). |
 
 ### Feature blocks
@@ -481,7 +586,8 @@ schemas before any mutation.
     These pages document the fields *you author*. Keys Bootwright derives into
     generated `install-config.yaml` and `agent-config.yaml` (for example
     `baseDomain`, `pullSecret`, `platform.baremetal.apiVIPs`) are installer
-    outputs, not authored API fields — see
+    outputs — and each page's [Native mapping](#native-mapping) table tells
+    you which authored field produces each one. See
     [Architecture](../contributing/architecture.md) for the render pipeline.
 
 ## Where to go next
