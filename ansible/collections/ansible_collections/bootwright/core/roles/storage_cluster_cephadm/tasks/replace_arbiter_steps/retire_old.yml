@@ -1,0 +1,119 @@
+---
+- name: Stage the mon spec that drops the arbiter that was replaced
+  ansible.builtin.copy:
+    dest: "{{ bootwright_arbiter_work_dir.path }}/mon-after.yaml"
+    mode: "0600"
+    content: >-
+      {{
+        {
+          'service_type': 'mon',
+          'placement': {'hosts': bootwright_arbiter_mon_hosts_after},
+          'spec': {'crush_locations': bootwright_arbiter_mon_locations_after}
+        } | to_nice_yaml(indent=2)
+      }}
+
+- name: Apply the mon spec that drops the arbiter that was replaced
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_arbiter_work_dir.path }}:/mnt"
+      - --
+      - ceph
+      - orch
+      - apply
+      - -i
+      - /mnt/mon-after.yaml
+  register: bootwright_arbiter_mon_spec_after
+  changed_when: true
+  failed_when: false
+
+- name: Refuse a final mon spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_mon_spec_after.rc | default(1) | int == 0
+      - not (bootwright_arbiter_mon_spec_after.stdout | default('') | lower is search('error|failed|invalid|unknown host'))
+      - not (bootwright_arbiter_mon_spec_after.stderr | default('') | lower is search('error|failed|invalid|unknown host'))
+    fail_msg: >-
+      cephadm rejected the mon spec that retires mon.{{ bootwright_arbiter_live_mon }}.
+      The tiebreaker has ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}, so the
+      cluster is correct but still carries the extra mon; re-run the command to finish
+      the retirement.
+      rc: {{ bootwright_arbiter_mon_spec_after.rc | default('<none>') }}
+      stdout: {{ bootwright_arbiter_mon_spec_after.stdout | default('') }}
+      stderr: {{ bootwright_arbiter_mon_spec_after.stderr | default('') }}
+    quiet: true
+
+- name: Remove a replaced arbiter mon daemon cephadm still runs
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - daemon
+      - rm
+      - "mon.{{ bootwright_arbiter_live_mon }}"
+      - --force
+  register: bootwright_arbiter_daemon_rm
+  changed_when: bootwright_arbiter_daemon_rm.rc | default(1) | int == 0
+  failed_when: false
+  retries: 12
+  delay: 10
+  until: >-
+    bootwright_arbiter_daemon_rm.rc | default(1) | int == 0
+    or (bootwright_arbiter_daemon_rm.stderr | default('') is search('Unable to find|does not exist|not found'))
+
+- name: Read the monmap after retiring the replaced arbiter daemon
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+  register: bootwright_arbiter_retire_dump
+  changed_when: false
+  failed_when: false
+
+- name: Remove a replaced arbiter mon the monmap still carries
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, mon, rm, "{{ bootwright_arbiter_live_mon }}"]
+  register: bootwright_arbiter_mon_rm
+  changed_when: bootwright_arbiter_mon_rm.rc | default(1) | int == 0
+  failed_when: false
+  when: >-
+    bootwright_arbiter_live_mon in
+    ((bootwright_arbiter_retire_dump.stdout | default('{}', true) | from_json).mons
+     | default([]) | map(attribute='name') | list)
+
+- name: Drain the remaining daemons of the replaced arbiter host
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, orch, host, drain, "{{ bootwright_arbiter_live_node }}"]
+  register: bootwright_arbiter_host_drain
+  changed_when: bootwright_arbiter_host_drain.rc | default(1) | int == 0
+  failed_when: false
+  when:
+    - (bootwright_arbiter_live_node | default('') | length) > 0
+    - not (bootwright_arbiter_old_host_offline | default(false) | bool)
+
+- name: Remove the replaced arbiter host from the orchestrator
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['cephadm', 'shell', '--', 'ceph', 'orch', 'host', 'rm', bootwright_arbiter_live_node]
+        + (['--offline', '--force']
+           if (bootwright_arbiter_old_host_offline | default(false) | bool) else [])
+      }}
+  register: bootwright_arbiter_host_rm
+  changed_when: bootwright_arbiter_host_rm.rc | default(1) | int == 0
+  failed_when: false
+  retries: 12
+  delay: 10
+  until: >-
+    bootwright_arbiter_host_rm.rc | default(1) | int == 0
+    or (bootwright_arbiter_host_rm.stderr | default('') is search('Unknown host|does not exist|not found'))
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
+- name: Remove the arbiter replacement work directory from the seed
+  ansible.builtin.file:
+    path: "{{ bootwright_arbiter_work_dir.path }}"
+    state: absent
+  changed_when: false

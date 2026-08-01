@@ -1,0 +1,42 @@
+---
+- name: Read the live monmap before touching the stretch tiebreaker
+  ansible.builtin.include_tasks: replace_arbiter_steps/probe.yml
+
+- name: Report an arbiter that already answers as the tiebreaker
+  ansible.builtin.debug:
+    msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} already carries
+      mon.{{ bootwright_arbiter_desired_mon }} as its stretch tiebreaker; nothing to
+      replace.
+  when: bootwright_arbiter_settled | bool
+
+- name: Stop once the desired arbiter is already the tiebreaker
+  ansible.builtin.meta: end_host
+  when: bootwright_arbiter_settled | bool
+
+- name: Refuse a tiebreaker swap on a cluster whose mons are not all in quorum
+  ansible.builtin.assert:
+    that:
+      - (bootwright_arbiter_absent_mons | length) == 0 or (bootwright_arbiter_allow_degraded | default(false) | bool)
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} has mon(s)
+      {{ bootwright_arbiter_absent_mons | join(', ') }} outside quorum, so the monmap is
+      already degraded. `ceph mon set_new_tiebreaker` needs a quorum to commit, and
+      swapping the arbiter while a data site is down removes the very vote that is
+      holding the remaining quorum together — if the swap stalls part-way the cluster
+      can lose quorum outright and stop serving I/O. Bring those mons back, or re-run
+      with --authorize degraded-quorum to proceed anyway. Live monmap:
+      {{ bootwright_arbiter_mon_dump_raw | default('(unavailable)') }}
+    quiet: true
+
+- name: Enrol and deploy the replacement arbiter mon
+  ansible.builtin.include_tasks: replace_arbiter_steps/add_new_mon.yml
+
+- name: Switch the stretch tiebreaker onto the replacement mon
+  ansible.builtin.include_tasks: replace_arbiter_steps/switch_tiebreaker.yml
+
+- name: Retire the mon and host of the arbiter that was replaced
+  ansible.builtin.include_tasks: replace_arbiter_steps/retire_old.yml
+
+- name: Verify the replacement arbiter holds the tiebreaker alone
+  ansible.builtin.include_tasks: replace_arbiter_steps/verify.yml

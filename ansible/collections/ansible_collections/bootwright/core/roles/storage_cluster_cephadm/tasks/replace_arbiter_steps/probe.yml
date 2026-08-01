@@ -1,0 +1,87 @@
+---
+- name: Read the live monmap of the storage cluster
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - dump
+      - --format
+      - json
+  register: bootwright_arbiter_mon_dump
+  changed_when: false
+  failed_when: false
+
+- name: Refuse an arbiter replacement whose monmap could not be read
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_mon_dump.rc | default(1) | int == 0
+      - (bootwright_arbiter_mon_dump.stdout | default('') | trim) | length > 0
+    fail_msg: >-
+      `ceph mon dump` on seed host {{ inventory_hostname }} of storage cluster
+      {{ bootwright_arbiter_cluster_name }} exited
+      {{ bootwright_arbiter_mon_dump.rc | default('unknown') }} and returned no monmap, so
+      this run cannot tell which mon is the tiebreaker today. Replacing an arbiter without
+      reading the live monmap first would aim `ceph mon set_new_tiebreaker` at a guess.
+      stderr: {{ bootwright_arbiter_mon_dump.stderr | default('') | trim }}
+    quiet: true
+
+- name: Resolve the live stretch tiebreaker
+  vars:
+    bootwright_arbiter_monmap: >-
+      {{ bootwright_arbiter_mon_dump.stdout | default('{}', true) | from_json }}
+  ansible.builtin.set_fact:
+    bootwright_arbiter_mon_dump_raw: "{{ bootwright_arbiter_mon_dump.stdout | default('') | trim }}"
+    bootwright_arbiter_stretch_live: "{{ bootwright_arbiter_monmap.stretch_mode | default(false) | bool }}"
+    bootwright_arbiter_live_mon: "{{ bootwright_arbiter_monmap.tiebreaker_mon | default('') }}"
+    bootwright_arbiter_live_mon_names: >-
+      {{ bootwright_arbiter_monmap.mons | default([]) | map(attribute='name') | list }}
+    bootwright_arbiter_absent_mons: >-
+      {{ bootwright_arbiter_monmap.mons | default([])
+         | rejectattr('rank', 'in', bootwright_arbiter_monmap.quorum | default([]))
+         | map(attribute='name')
+         | reject('equalto', bootwright_arbiter_monmap.tiebreaker_mon | default(''))
+         | list }}
+    bootwright_arbiter_same_site_mons: >-
+      {{ bootwright_arbiter_monmap.mons | default([])
+         | selectattr('crush_location', 'defined')
+         | selectattr('crush_location.' ~ bootwright_arbiter_failure_domain, 'defined')
+         | selectattr('crush_location.' ~ bootwright_arbiter_failure_domain, 'equalto',
+                      bootwright_arbiter_desired_site)
+         | map(attribute='name')
+         | reject('equalto', bootwright_arbiter_desired_mon)
+         | reject('equalto', bootwright_arbiter_monmap.tiebreaker_mon | default(''))
+         | list }}
+  changed_when: false
+
+- name: Refuse an arbiter replacement on a cluster that is not in stretch mode
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_stretch_live | bool
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} reports `stretch_mode: false`
+      in its live monmap, so it carries no tiebreaker to replace. An arbiter exists only
+      once `ceph mon enable_stretch_mode` has run, which `bootwright apply` does when the
+      topology authors both data sites and a tiebreaker. Converge the cluster with
+      `bootwright apply --clusters {{ bootwright_arbiter_cluster_name }}` first.
+      Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
+    quiet: true
+
+- name: Record whether the desired arbiter already holds the tiebreaker
+  ansible.builtin.set_fact:
+    bootwright_arbiter_settled: >-
+      {{ bootwright_arbiter_live_mon == bootwright_arbiter_desired_mon }}
+  changed_when: false
+
+- name: Refuse a tiebreaker the live monmap does not name
+  ansible.builtin.assert:
+    that:
+      - (bootwright_arbiter_live_mon | length) > 0
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} reports stretch mode but names
+      no `tiebreaker_mon` in its monmap. Bootwright will not guess which mon to retire.
+      Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
+    quiet: true
+  when: not (bootwright_arbiter_settled | bool)

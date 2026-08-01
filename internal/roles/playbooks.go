@@ -26,6 +26,7 @@ const (
 	PlaybookTaskHostVirtctlProvision             = "bootwright.core.task_host_virtctl_provision"
 	PlaybookTaskStorageNodeAccessApply           = "bootwright.core.task_storage_node_access_apply"
 	PlaybookTaskStorageClusterApply              = "bootwright.core.task_storage_cluster_apply"
+	PlaybookTaskStorageClusterReplaceArbiter     = "bootwright.core.task_storage_cluster_replace_arbiter"
 
 	PlaybookTaskMachineRegistrationDeregister  = "bootwright.core.task_machine_registration_deregister"
 	PlaybookTaskMachineInfraDestroy            = "bootwright.core.task_machine_infra_destroy"

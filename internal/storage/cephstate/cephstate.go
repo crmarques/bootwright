@@ -442,6 +442,83 @@ func (d Discovery) Health() (Health, error) {
 	return out, nil
 }
 
+type MonDump struct {
+	FSID              string    `json:"fsid"`
+	Epoch             int       `json:"epoch"`
+	Mons              []MonInfo `json:"mons"`
+	Quorum            []int     `json:"quorum"`
+	StretchMode       bool      `json:"stretch_mode"`
+	TiebreakerMon     string    `json:"tiebreaker_mon"`
+	DisallowedLeaders string    `json:"disallowed_leaders"`
+	ElectionStrategy  int       `json:"election_strategy"`
+}
+
+type MonInfo struct {
+	Rank          int               `json:"rank"`
+	Name          string            `json:"name"`
+	PublicAddr    string            `json:"public_addr"`
+	CrushLocation map[string]string `json:"crush_location"`
+}
+
+func (d Discovery) MonDump() (MonDump, error) {
+	var out MonDump
+	if err := d.decode(ReadMonDump, &out); err != nil {
+		return MonDump{}, err
+	}
+	return out, nil
+}
+
+func (m MonDump) MonByName(name string) (MonInfo, bool) {
+	for _, mon := range m.Mons {
+		if mon.Name == name {
+			return mon, true
+		}
+	}
+	return MonInfo{}, false
+}
+
+func (m MonDump) InQuorum(name string) bool {
+	for _, mon := range m.Mons {
+		if mon.Name != name {
+			continue
+		}
+		for _, rank := range m.Quorum {
+			if rank == mon.Rank {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m MonDump) MonNames() []string {
+	names := make([]string, 0, len(m.Mons))
+	for _, mon := range m.Mons {
+		names = append(names, mon.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (m MonDump) SiteOf(name, failureDomain string) string {
+	mon, ok := m.MonByName(name)
+	if !ok {
+		return ""
+	}
+	return mon.CrushLocation[failureDomain]
+}
+
+func (m MonDump) MonsAtSite(failureDomain, site string) []string {
+	var names []string
+	for _, mon := range m.Mons {
+		if site != "" && mon.CrushLocation[failureDomain] == site {
+			names = append(names, mon.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 type OSDStat struct {
 	NumOSDs   int `json:"num_osds"`
 	NumUpOSDs int `json:"num_up_osds"`

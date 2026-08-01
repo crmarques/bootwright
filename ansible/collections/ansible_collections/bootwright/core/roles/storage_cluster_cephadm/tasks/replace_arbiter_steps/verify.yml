@@ -1,0 +1,47 @@
+---
+- name: Read the monmap once the replacement has settled
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+  register: bootwright_arbiter_final_dump
+  changed_when: false
+  failed_when: false
+  retries: 12
+  delay: 10
+  until: >-
+    bootwright_arbiter_final_dump.rc | default(1) | int == 0
+    and bootwright_arbiter_live_mon not in
+        ((bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json).mons
+         | default([]) | map(attribute='name') | list)
+
+- name: Assert the replacement arbiter holds the tiebreaker and the replaced mon is gone
+  vars:
+    bootwright_arbiter_final: >-
+      {{ bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json }}
+    bootwright_arbiter_final_names: >-
+      {{ (bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json).mons
+         | default([]) | map(attribute='name') | list }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_final.stretch_mode | default(false) | bool
+      - bootwright_arbiter_final.tiebreaker_mon | default('') == bootwright_arbiter_desired_mon
+      - bootwright_arbiter_live_mon not in bootwright_arbiter_final_names
+      - bootwright_arbiter_desired_mon in bootwright_arbiter_final_names
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} did not settle on
+      mon.{{ bootwright_arbiter_desired_mon }} as its sole stretch tiebreaker. Expected the
+      monmap to keep stretch mode, name mon.{{ bootwright_arbiter_desired_mon }} as
+      tiebreaker_mon, and no longer carry mon.{{ bootwright_arbiter_live_mon }}. Live mons:
+      {{ bootwright_arbiter_final_names | join(', ') }}; tiebreaker:
+      {{ bootwright_arbiter_final.tiebreaker_mon | default('(none)') }}. Re-running the
+      command resumes from wherever the procedure stopped.
+      Live monmap: {{ bootwright_arbiter_final_dump.stdout | default('') | trim }}
+    quiet: true
+
+- name: Report the settled stretch tiebreaker
+  ansible.builtin.debug:
+    msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} now answers with stretch
+      tiebreaker mon.{{ bootwright_arbiter_desired_mon }} at
+      {{ bootwright_arbiter_failure_domain }}={{ bootwright_arbiter_desired_site }};
+      mon.{{ bootwright_arbiter_live_mon }} and host
+      {{ bootwright_arbiter_live_node }} left the cluster.

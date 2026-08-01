@@ -27,7 +27,7 @@ var allowedImports = map[string][]string{
 		"internal/ownership", "internal/preflight", "internal/render", "internal/secrets",
 		"internal/sshtrust", "internal/state/advice", "internal/state/desired",
 		"internal/state/graph", "internal/state/scaffold", "internal/state/view",
-		"internal/status", "internal/storage/cephadopt", "internal/storage/cephdiff",
+		"internal/status", "internal/storage/arbiter", "internal/storage/cephadopt", "internal/storage/cephdiff",
 		"internal/storage/cephstate", "internal/storage/topology", "internal/workspace",
 	},
 	"internal/cli/output": {},
@@ -76,6 +76,7 @@ var allowedImports = map[string][]string{
 	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons", "internal/addons/steps", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 
 	"internal/storage/cephadopt":    {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
+	"internal/storage/arbiter":      {"api/v1alpha1", "internal/storage/cephstate", "internal/storage/topology", "internal/workspace"},
 	"internal/storage/cephprovider": {"api/v1alpha1", "internal/entitlements", "internal/secrets"},
 	"internal/storage/cephstate":    {},
 	"internal/storage/cephdiff":     {"api/v1alpha1", "internal/state/view", "internal/storage/cephstate", "internal/storage/topology"},

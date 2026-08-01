@@ -1,0 +1,43 @@
+---
+- name: Replace the stretch arbiter of a managed Ceph storage cluster
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_arbiter_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+  tasks:
+    - name: End hosts outside the storage cluster whose arbiter is being replaced
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') != bootwright_arbiter_cluster_name | default('')
+
+    - name: End every storage host but the seed that drives the replacement
+      ansible.builtin.meta: end_host
+      when: inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+
+    - name: Validate the selected storage cluster context
+      ansible.builtin.assert:
+        that:
+          - bootwright_selected_storage_cluster.name | default('') == bootwright_arbiter_cluster_name | default('')
+        fail_msg: >-
+          Arbiter replacement did not receive a rendered context for
+          {{ bootwright_arbiter_cluster_name | default('<unset>') }}.
+
+    - name: Replace the stretch arbiter
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm
+        tasks_from: replace_arbiter.yml

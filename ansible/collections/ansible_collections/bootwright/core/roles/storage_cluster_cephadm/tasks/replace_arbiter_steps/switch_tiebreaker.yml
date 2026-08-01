@@ -1,0 +1,65 @@
+---
+- name: Refuse a replacement arbiter that shares a site with data-site mons
+  ansible.builtin.assert:
+    that:
+      - (bootwright_arbiter_same_site_mons | length) == 0
+        or (bootwright_arbiter_allow_same_site | default(false) | bool)
+    fail_msg: >-
+      Replacement arbiter mon.{{ bootwright_arbiter_desired_mon }} sits at
+      {{ bootwright_arbiter_failure_domain }}={{ bootwright_arbiter_desired_site }},
+      which already holds non-tiebreaker mon(s)
+      {{ bootwright_arbiter_same_site_mons | join(', ') }}. Ceph refuses this with
+      "has location ..., which matches mons ... on the
+      {{ bootwright_arbiter_failure_domain }} dividing bucket for stretch mode", because
+      an arbiter inside a data site cannot break a tie between the two data sites: lose
+      that site and you lose two votes at once, so the surviving site is left without
+      quorum and I/O stops. A third, independent site is the supported topology. If this
+      IS the deliberate emergency fallback — the third site is gone and an in-quorum mon
+      is being promoted to keep the cluster writable until it returns — re-run with
+      --authorize same-site-arbiter, which passes Ceph's --yes-i-really-mean-it.
+    quiet: true
+
+- name: Switch the stretch tiebreaker to the replacement arbiter mon
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [bootwright_ceph_shell_prefix, ['ceph', 'mon', 'set_new_tiebreaker',
+          bootwright_arbiter_desired_mon]] | flatten
+        + (['--yes-i-really-mean-it']
+           if (bootwright_arbiter_allow_same_site | default(false) | bool) else [])
+      }}
+  vars:
+    bootwright_ceph_shell_prefix: [cephadm, shell, --]
+  register: bootwright_arbiter_set_new
+  changed_when: bootwright_arbiter_set_new.rc | default(1) | int == 0
+  failed_when: false
+
+- name: Read the monmap back after the tiebreaker switch
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+  register: bootwright_arbiter_switched_dump
+  changed_when: false
+  failed_when: false
+
+- name: Assert the replacement arbiter is now the stretch tiebreaker
+  vars:
+    bootwright_arbiter_switched_to: >-
+      {{ (bootwright_arbiter_switched_dump.stdout | default('{}', true) | from_json).tiebreaker_mon
+         | default('') }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_switched_to == bootwright_arbiter_desired_mon
+    fail_msg: >-
+      `ceph mon set_new_tiebreaker {{ bootwright_arbiter_desired_mon }}` did not take on
+      storage cluster {{ bootwright_arbiter_cluster_name }}: the monmap still names
+      {{ bootwright_arbiter_switched_to or '(no tiebreaker)' }}. The run stops here with
+      BOTH arbiter mons in the monmap and the original tiebreaker
+      mon.{{ bootwright_arbiter_live_mon }} still holding the role, which is a safe,
+      quorum-preserving state — nothing has been removed. Read the command output, fix
+      what it names, and re-run; the replacement mon is already deployed, so the re-run
+      resumes at this step.
+      rc: {{ bootwright_arbiter_set_new.rc | default('<none>') }}
+      stdout: {{ bootwright_arbiter_set_new.stdout | default('') | trim }}
+      stderr: {{ bootwright_arbiter_set_new.stderr | default('') | trim }}
+      Live monmap: {{ bootwright_arbiter_switched_dump.stdout | default('') | trim }}
+    quiet: true

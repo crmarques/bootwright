@@ -41,6 +41,7 @@ const (
 	MachineCapabilityLibvirt          = "libvirt"
 	MachineCapabilityContainerRuntime = "container-runtime"
 	MachineCapabilityCephNode         = "ceph-node"
+	MachineCapabilityCephArbiter      = "ceph-arbiter"
 	MachineInstallOSFamilyRHEL        = "rhel"
 	MachineImageMediaTypeDVD          = "dvd"
 	MachineImageMediaTypeBoot         = "boot"

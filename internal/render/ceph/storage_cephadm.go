@@ -69,13 +69,32 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 	}
 	monHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
 	if len(monHosts) > 0 {
-		docs = append(docs, cephadmPlacementService("mon", "", monHosts, 0, nil))
+		docs = append(docs, cephadmPlacementService("mon", "", monHosts, 0, cephadmMonCrushLocations(cluster, monHosts)))
 	}
 	mgrHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR)
 	if len(mgrHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mgr", "", mgrHosts, 0, nil))
 	}
 	return docs
+}
+
+func cephadmMonCrushLocations(cluster v1alpha1.StorageCluster, monHosts []string) map[string]any {
+	if cluster.Spec.Ceph.Topology.Stretch == nil {
+		return nil
+	}
+	domain := topology.FailureDomain(cluster)
+	locations := map[string]any{}
+	for _, hostname := range monHosts {
+		node, ok := topology.HostByName(cluster, hostname)
+		if !ok || node.Site == "" {
+			continue
+		}
+		locations[hostname] = []any{domain + "=" + node.Site}
+	}
+	if len(locations) == 0 {
+		return nil
+	}
+	return map[string]any{"crush_locations": locations}
 }
 
 func CephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {

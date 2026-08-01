@@ -15,6 +15,7 @@ var validMachineCapabilities = map[string]bool{
 	v1alpha1.MachineCapabilityLibvirt:          true,
 	v1alpha1.MachineCapabilityContainerRuntime: true,
 	v1alpha1.MachineCapabilityCephNode:         true,
+	v1alpha1.MachineCapabilityCephArbiter:      true,
 }
 
 func validateMachines(state v1alpha1.State) []string {
@@ -127,6 +128,9 @@ func validateMachineCapabilitySet(owner string, capabilities []string) []string 
 		if !validMachineCapabilities[capability] {
 			errs = append(errs, fmt.Sprintf("%s %q is not in the canonical Machine capability set", owner, capability))
 		}
+	}
+	if seen[v1alpha1.MachineCapabilityCephArbiter] && !seen[v1alpha1.MachineCapabilityCephNode] {
+		errs = append(errs, fmt.Sprintf("%s declares %q without %q; an arbiter candidate is first a storage node, and `bootwright storage-cluster replace-arbiter` installs it as one", owner, v1alpha1.MachineCapabilityCephArbiter, v1alpha1.MachineCapabilityCephNode))
 	}
 	return errs
 }

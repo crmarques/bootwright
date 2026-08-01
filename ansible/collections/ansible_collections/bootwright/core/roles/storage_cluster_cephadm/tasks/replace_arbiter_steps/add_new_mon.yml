@@ -1,0 +1,144 @@
+---
+- name: Create the arbiter replacement work directory on the seed
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: bootwright-arbiter-
+  register: bootwright_arbiter_work_dir
+  changed_when: false
+
+- name: Read the orchestrator hosts before enrolling the replacement arbiter
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, orch, host, ls, --format, json]
+  register: bootwright_arbiter_orch_hosts
+  changed_when: false
+  failed_when: false
+
+- name: Enrol the replacement arbiter host in the orchestrator
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - add
+      - "{{ bootwright_arbiter_desired_node }}"
+      - "{{ bootwright_arbiter_desired_addr }}"
+      - --labels=mon
+  register: bootwright_arbiter_host_add
+  changed_when: bootwright_arbiter_host_add.rc | default(1) | int == 0
+  when: >-
+    bootwright_arbiter_desired_node not in
+    ((bootwright_arbiter_orch_hosts.stdout | default('[]', true) | from_json)
+     | selectattr('hostname', 'defined') | map(attribute='hostname') | list)
+
+- name: Stage the mon spec that carries both arbiters
+  ansible.builtin.copy:
+    dest: "{{ bootwright_arbiter_work_dir.path }}/mon-during.yaml"
+    mode: "0600"
+    content: >-
+      {{
+        {
+          'service_type': 'mon',
+          'placement': {'hosts': bootwright_arbiter_mon_hosts_during},
+          'spec': {'crush_locations': bootwright_arbiter_mon_locations}
+        } | to_nice_yaml(indent=2)
+      }}
+
+- name: Apply the mon spec that carries both arbiters
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --mount
+      - "{{ bootwright_arbiter_work_dir.path }}:/mnt"
+      - --
+      - ceph
+      - orch
+      - apply
+      - -i
+      - /mnt/mon-during.yaml
+  register: bootwright_arbiter_mon_spec_during
+  changed_when: true
+  failed_when: false
+
+- name: Refuse a mon spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_mon_spec_during.rc | default(1) | int == 0
+      - not (bootwright_arbiter_mon_spec_during.stdout | default('') | lower is search('error|failed|invalid|unknown host'))
+      - not (bootwright_arbiter_mon_spec_during.stderr | default('') | lower is search('error|failed|invalid|unknown host'))
+    fail_msg: >-
+      cephadm rejected the mon spec that adds mon.{{ bootwright_arbiter_desired_mon }}
+      alongside the current tiebreaker mon.{{ bootwright_arbiter_live_mon }}. `ceph orch
+      apply -i` can reject a document and still exit zero, so this run reads what it said.
+      A mon deployed while the cluster is already in stretch mode MUST carry a CRUSH
+      location — the spec sets it through `spec.crush_locations`, which is the supported
+      way to add a replacement tiebreaker — so a rejected spec leaves the new mon either
+      undeployed or unable to join the monmap.
+      rc: {{ bootwright_arbiter_mon_spec_during.rc | default('<none>') }}
+      stdout: {{ bootwright_arbiter_mon_spec_during.stdout | default('') }}
+      stderr: {{ bootwright_arbiter_mon_spec_during.stderr | default('') }}
+    quiet: true
+
+- name: Wait for the replacement arbiter mon to join the monmap in quorum
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+  register: bootwright_arbiter_join_dump
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_arbiter_readiness_retries | default(60) | int }}"
+  delay: "{{ bootwright_arbiter_readiness_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_arbiter_join_dump.rc == 0
+      and bootwright_arbiter_desired_mon in
+          ((bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).mons
+           | default([]) | selectattr('rank', 'in',
+             (bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).quorum | default([]))
+           | map(attribute='name') | list)
+    )
+    or
+    ((bootwright_arbiter_join_dump.attempts | default(1) | int)
+     >= (bootwright_arbiter_readiness_retries | default(60) | int))
+
+- name: Collect cephadm events when the replacement arbiter mon did not join
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, log, last, "100", cephadm]
+  register: bootwright_arbiter_join_log
+  changed_when: false
+  failed_when: false
+  when: >-
+    bootwright_arbiter_desired_mon not in
+    ((bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).mons
+     | default([]) | map(attribute='name') | list)
+
+- name: Assert the replacement arbiter mon joined the monmap with its stretch location
+  vars:
+    bootwright_arbiter_joined: >-
+      {{ (bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).mons | default([])
+         | selectattr('name', 'equalto', bootwright_arbiter_desired_mon) | list }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_joined | length == 1
+      - (bootwright_arbiter_joined | first).crush_location | default({})
+        | dict2items | selectattr('key', 'equalto', bootwright_arbiter_failure_domain)
+        | map(attribute='value') | list == [bootwright_arbiter_desired_site]
+    fail_msg: >-
+      Replacement arbiter mon.{{ bootwright_arbiter_desired_mon }} did not reach the
+      monmap of {{ bootwright_arbiter_cluster_name }} with
+      {{ bootwright_arbiter_failure_domain }}={{ bootwright_arbiter_desired_site }} after
+      {{ bootwright_arbiter_readiness_retries | default(60) }} attempts, so the tiebreaker
+      swap is refused before it starts — the current arbiter
+      mon.{{ bootwright_arbiter_live_mon }} is untouched and the cluster still has its
+      quorum. `ceph mon set_new_tiebreaker` answers `mon.<name> does not exist` for a mon
+      outside the monmap and `mon.<name> does not have a location specified` for one that
+      joined without a CRUSH location, so both are failed here instead. The usual causes
+      are the mon-only ones: the host holds no address inside the mon public_network so
+      cephadm filtered it out of the placement, the mon container never pulled, or mon
+      ports 3300/6789 are blocked from the third site. Live monmap:
+      {{ bootwright_arbiter_join_dump.stdout | default('') | trim }}
+      Recent cephadm events:
+      {{ bootwright_arbiter_join_log.stdout | default('(cephadm event log unavailable)') | trim }}
+    quiet: true
