@@ -14,8 +14,8 @@ const (
 	PhaseAddOns            = "Add-ons"
 	PhaseCustomPlaybooks   = "Custom playbooks"
 	PhaseStorageClusters   = "Storage clusters"
-	PhaseClusterRuntime    = "Cluster runtime"
-	PhaseContainerClusters = "Container clusters"
+	PhaseClusterRuntime    = "Cluster runtime (controller)"
+	PhaseContainerClusters = "Cluster records (controller)"
 	PhaseWork              = "Work"
 )
 

@@ -100,7 +100,7 @@ func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.Ru
 		fields := []output.Field{
 			{Key: "failed task", Value: task.Label},
 		}
-		if covered := strings.Join(task.ResourceKeys, ", "); covered != "" {
+		if covered := strings.Join(workflow.DestroyTaskClusterKeys(task), ", "); covered != "" {
 			fields = append(fields, output.Field{Key: "clusters", Value: covered})
 		}
 		fields = append(fields, output.Field{Key: "reason", Value: status.ApplyFailureReason(task.Failure)})
@@ -111,7 +111,7 @@ func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.Ru
 	}
 	for _, task := range ledger.BlockedTasks() {
 		fields := []output.Field{{Key: "blocked task", Value: task.Label}}
-		if covered := strings.Join(task.ResourceKeys, ", "); covered != "" {
+		if covered := strings.Join(workflow.DestroyTaskClusterKeys(task), ", "); covered != "" {
 			fields = append(fields, output.Field{Key: "clusters", Value: covered})
 		}
 		fields = append(fields, output.Field{Key: "reason", Value: applyBlockedReason(ledger, task)})

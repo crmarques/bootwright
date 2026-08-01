@@ -1,6 +1,0 @@
----
-- name: Remove cluster installer and add-on runtime
-  ansible.builtin.include_tasks: destroy_runtime.yml
-
-- name: Remove cluster install records, captured credentials and controller resolver
-  ansible.builtin.include_tasks: destroy_records.yml

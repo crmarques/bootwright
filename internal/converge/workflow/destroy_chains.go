@@ -164,7 +164,7 @@ func (f destroyGraphFacts) containerAllIDs(base string) []string {
 	return out
 }
 
-func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, playbook string, hard []string, ordering func(cluster string) []string, recordsOnly bool) []destroyStep {
+func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, playbook string, hard []string, ordering func(cluster string) []string) []destroyStep {
 	step := destroyStep{
 		id:           base,
 		kind:         kind,
@@ -191,9 +191,6 @@ func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, pla
 			fanned.orderingDependencies = ordering(cluster)
 		}
 		fanned.extraVarOverrides = []string{DestroyContainerClusterExtraVar + "=" + cluster}
-		if recordsOnly {
-			fanned.extraVarOverrides = append(fanned.extraVarOverrides, ContainerClusterRecordsOnlyExtraVar+"=true")
-		}
 		out = append(out, fanned)
 	}
 	return out
@@ -213,6 +210,7 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 			return nil, err
 		}
 		if order := flattenDestroyLevels(levels); len(order) > 0 {
+			step.resourceKeys = order
 			step.extraVarOverrides = []string{
 				DestroyClusterOrderExtraVar + "=" + strings.Join(order, ","),
 				DestroyClusterLevelsExtraVar + "=" + joinDestroyLevels(levels),

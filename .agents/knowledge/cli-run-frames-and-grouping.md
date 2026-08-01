@@ -29,11 +29,41 @@ its parent, with deterministic alphabetical order within groups.
 **Semantics: the destroy frame is a single ordered group.**
 `destroyRunFrame` projects destroy tasks into one group (no per-cluster
 grouping) because destroy tasks are scope-level host-group teardowns
-covering several clusters at once; each step therefore names the
-clusters it covers from the persisted `ResourceKeys` — including on
-failure — otherwise a failed "Container clusters" step would not say
-which of the fleet it covered. Guarded by
-`TestDestroyOutputNamesCoveredClusters`.
+covering several clusters at once. A fanned family (one task per
+cluster) folds back into ONE row whose detail is the union of the
+tasks' cluster keys. Guarded by `TestDestroyOutputNamesCoveredClusters`.
+
+**Invariant: only rows that touch the named cluster may list cluster
+names, and the detail names what the row's work is keyed to — not what
+was wiped.** Both container-cluster families run on
+`bootwright_ocp_hosts`, which is only `localhost`, so neither touches a
+cluster: "Cluster runtime (controller)" kills leftover installer
+processes and removes `runtime/installer`, `runtime/addons` and
+`secrets/addons`; "Cluster records (controller)" removes the install and
+connection records, the captured kubeconfig and kubeadmin password, and
+the controller resolver drop-in plus its ownership record. They are
+built by the same `containerClusterFamilySteps` from the same
+`facts.containerClusters`, so their key lists are byte-identical in
+every fleet — printing both made one fleet look like it was destroyed
+twice, with work still queued after the first row went DONE. The runtime
+row therefore prints no list, and `(controller)` says where both run.
+The row that actually deletes VMs and wipes bare metal is "Machines", so
+that is the row `phaseNamesItsResources` now whitelists.
+
+`runPhaseResourceKeys` and `printDestroyRunSummary` both route through
+`workflow.DestroyTaskClusterKeys` — the raw `ResourceKeys` of a fanned
+step also carry `machine:<name>` ownership tokens, which must never
+print under a field labelled `clusters`.
+
+**Gotcha: the records half must never re-run the runtime half.** The
+planner always plans both families (`clusterDestroySteps` and
+`fullDestroySteps`), and the records step hard-depends on machine
+teardown. `task_container_cluster_agent_destroy.yml` therefore runs
+`destroy_records.yml` unconditionally. It used to select between that
+and a combined `destroy.yml` on an extra var that only the fanned branch
+set, so a single-container-cluster fleet silently re-ran the whole
+runtime teardown after its machines were already gone. Guarded by
+`TestPlanDestroyTasksSplitsRuntimeFromRecordsAtEveryFleetSize`.
 
 **Invariant: a phase row may only hold task kinds that are graph
 ancestors of every kind in the row below it, within one cluster group.**

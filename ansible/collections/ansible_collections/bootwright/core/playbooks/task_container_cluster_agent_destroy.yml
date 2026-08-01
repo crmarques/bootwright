@@ -1,5 +1,5 @@
 ---
-- name: Destroy OpenShift agent install state
+- name: Remove OpenShift cluster records from the controller
   hosts: bootwright_ocp_hosts
   gather_facts: true
   gather_subset:
@@ -16,10 +16,10 @@
         tasks_from: facts
 
   tasks:
-    - name: Destroy per cluster
+    - name: Remove records per cluster
       ansible.builtin.include_role:
         name: bootwright.core.container_cluster_agent_install
-        tasks_from: "{{ (bootwright_container_cluster_records_only | default(false) | bool) | ternary('destroy_records.yml', 'destroy.yml') }}"
+        tasks_from: destroy_records.yml
       loop: "{{ bootwright_clusters | default([]) }}"
       loop_control:
         loop_var: bootwright_current_cluster

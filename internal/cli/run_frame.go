@@ -152,7 +152,7 @@ func runPhaseDependencySettled(task workflow.TaskLedgerEntry) bool {
 
 func phaseNamesItsResources(phase status.RunPhase) bool {
 	switch phase.Label {
-	case status.PhaseStorageClusters, status.PhaseClusterRuntime, status.PhaseContainerClusters:
+	case status.PhaseStorageClusters, status.PhaseMachines, status.PhaseContainerClusters:
 		return true
 	default:
 		return false
@@ -181,7 +181,7 @@ func runPhaseResourceKeys(phase status.RunPhase) string {
 	var keys []string
 	seen := map[string]bool{}
 	for _, task := range phase.Tasks {
-		for _, key := range task.ResourceKeys {
+		for _, key := range workflow.DestroyTaskClusterKeys(task) {
 			if seen[key] {
 				continue
 			}

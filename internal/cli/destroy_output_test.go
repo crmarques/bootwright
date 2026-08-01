@@ -18,7 +18,7 @@ func TestDestroyRunFrameListsHighLevelTeardownPhasesOnly(t *testing.T) {
 		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, Label: "Storage clusters", ResourceKeys: []string{"ceph-prd-01"}, Status: workflow.TaskStatusOK},
 		{ID: "destroy.machine-registration", Kind: workflow.DestroyTaskKindMachineRegistration, Label: "Machine registration", Status: workflow.TaskStatusOK},
 		{ID: "destroy.infra-components", Kind: workflow.DestroyTaskKindInfraComponents, Label: "Infra component services", Status: workflow.TaskStatusOK},
-		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, Label: "Machine infrastructure", Status: workflow.TaskStatusRunning},
+		{ID: "destroy.machine-infra.ocp-prd-01", Kind: workflow.DestroyTaskKindMachineInfra, Label: "Machine infrastructure ocp-prd-01", ResourceKeys: []string{"ocp-prd-01", "machine:node-01", "machine:node-02"}, Status: workflow.TaskStatusRunning},
 		{ID: "destroy.container-clusters", Kind: workflow.DestroyTaskKindContainerCluster, Label: "Container clusters", ResourceKeys: []string{"ocp-prd-01", "ocp-prd-02"}, Status: workflow.TaskStatusPending},
 		{ID: "destroy.provider-services", Kind: workflow.DestroyTaskKindProviderServices, Label: "Provider services", Status: workflow.TaskStatusPending},
 		{ID: "destroy.storage-node-access", Kind: workflow.DestroyTaskKindStorageNodeAccess, Label: "Storage node access", ResourceKeys: []string{"ceph-prd-01"}, Status: workflow.TaskStatusPending},
@@ -48,8 +48,11 @@ func TestDestroyRunFrameListsHighLevelTeardownPhasesOnly(t *testing.T) {
 	if steps[0].Status != output.StatusDone || steps[1].Status != output.StatusRunning || steps[3].Status != output.StatusPending {
 		t.Fatalf("phase statuses = %+v", steps)
 	}
-	if steps[1].Detail != "" {
-		t.Fatalf("machines detail = %q; machine teardown spans the whole work set, so per-task resource keys must not be presented as its scope", steps[1].Detail)
+	if steps[1].Detail != "ocp-prd-01, ceph-prd-01" {
+		t.Fatalf("machines detail = %q; the row that actually destroys nodes must name the clusters it is tearing down", steps[1].Detail)
+	}
+	if strings.Contains(steps[1].Detail, workflow.DestroyMachineResourceKeyPrefix) {
+		t.Fatalf("machines detail = %q; per-machine ownership keys are not cluster names", steps[1].Detail)
 	}
 	if steps[3].Detail != "ocp-prd-01, ocp-prd-02" {
 		t.Fatalf("container clusters detail = %q", steps[3].Detail)

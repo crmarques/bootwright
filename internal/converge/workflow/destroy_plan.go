@@ -36,9 +36,12 @@ const InfraDestroyContextSweepExtraVar = "bootwright_infra_destroy_context_sweep
 
 const DestroyContainerClusterExtraVar = "bootwright_destroy_container_cluster"
 
-const ContainerClusterRecordsOnlyExtraVar = "bootwright_container_cluster_records_only"
-
 const MachineInfraRecordsOnlyExtraVar = "bootwright_machine_infra_records_only"
+
+const (
+	destroyClusterRuntimeLabel = "Cluster runtime (controller)"
+	destroyClusterRecordsLabel = "Cluster records (controller)"
+)
 
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string, storageWorkNames []string) ([]ApplyTask, error) {
 	if destroyMachineScoped(extraVars) {
@@ -119,11 +122,11 @@ func infraMachineDestroySteps() []destroyStep {
 
 func clusterDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destroyStorageWork) ([]destroyStep, error) {
 	steps := containerClusterFamilySteps(facts, destroyClusterRuntimeTaskID, DestroyTaskKindContainerClusterRuntime,
-		"Cluster runtime", roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil, false)
+		destroyClusterRuntimeLabel, roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil)
 	steps = append(steps, storageFamilySteps(state, work, storageClusterFamily(facts, work, true))...)
 	steps = append(steps, containerClusterFamilySteps(facts, destroyContainerClustersTaskID, DestroyTaskKindContainerCluster,
-		"Container clusters", roles.PlaybookTaskContainerClusterAgentDestroy, nil,
-		destroyContainerRecordsOrdering(facts, work), true)...)
+		destroyClusterRecordsLabel, roles.PlaybookTaskContainerClusterAgentDestroy, nil,
+		destroyContainerRecordsOrdering(facts, work))...)
 	steps = append(steps, storageFamilySteps(state, work, storageNodeAccessFamily(work, false, func(cluster string) []string {
 		return facts.containerAllIDs(destroyContainerClustersTaskID)
 	}))...)
@@ -132,7 +135,7 @@ func clusterDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work des
 
 func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destroyStorageWork) ([]destroyStep, error) {
 	steps := containerClusterFamilySteps(facts, destroyClusterRuntimeTaskID, DestroyTaskKindContainerClusterRuntime,
-		"Cluster runtime", roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil, false)
+		destroyClusterRuntimeLabel, roles.PlaybookTaskContainerClusterRuntimeDestroy, nil, nil)
 	steps = append(steps, storageFamilySteps(state, work, storageClusterFamily(facts, work, true))...)
 	steps = append(steps, storageFamilySteps(state, work, machineRegistrationFamily(work, true))...)
 	steps = append(steps, storageFamilySteps(state, work, storageNodeAccessFamily(work, true, nil))...)
@@ -157,8 +160,8 @@ func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destro
 	}
 	steps = append(steps, machineSteps...)
 	steps = append(steps, containerClusterFamilySteps(facts, destroyContainerClustersTaskID, DestroyTaskKindContainerCluster,
-		"Container clusters", roles.PlaybookTaskContainerClusterAgentDestroy,
-		[]string{destroyMachineInfraTaskID}, destroyContainerRecordsOrdering(facts, work), true)...)
+		destroyClusterRecordsLabel, roles.PlaybookTaskContainerClusterAgentDestroy,
+		[]string{destroyMachineInfraTaskID}, destroyContainerRecordsOrdering(facts, work))...)
 	steps = append(steps, infraComponentsDestroyStep(destroyInfraComponentsOrdering(facts, work, placementFirst)))
 	steps = append(steps, providerServicesDestroyStep(destroyProviderServicesOrdering(facts, true)))
 	return steps, nil
@@ -598,7 +601,7 @@ func destroyOutcomeClusterKey(kind, cluster string) string {
 	return kind + "/" + cluster
 }
 
-func destroyTaskClusterKeys(task TaskLedgerEntry) []string {
+func DestroyTaskClusterKeys(task TaskLedgerEntry) []string {
 	var out []string
 	for _, key := range task.ResourceKeys {
 		if key == "" || strings.HasPrefix(key, DestroyMachineResourceKeyPrefix) {
@@ -619,14 +622,14 @@ func SucceededDestroyTaskKinds(ledger RunLedger) DestroyOutcome {
 		}
 		kinds[task.Kind] = true
 		out[destroyOutcomeAttemptedPrefix+task.Kind] = true
-		for _, cluster := range destroyTaskClusterKeys(task) {
+		for _, cluster := range DestroyTaskClusterKeys(task) {
 			out[destroyOutcomeAttemptedPrefix+destroyOutcomeClusterKey(task.Kind, cluster)] = true
 		}
 		if task.Status != TaskStatusOK {
 			unfinished[task.Kind] = true
 			continue
 		}
-		for _, cluster := range destroyTaskClusterKeys(task) {
+		for _, cluster := range DestroyTaskClusterKeys(task) {
 			out[destroyOutcomeClusterKey(task.Kind, cluster)] = true
 		}
 	}

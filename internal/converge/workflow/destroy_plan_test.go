@@ -112,6 +112,24 @@ func TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost(t *testing.T) {
 	t.Fatal("infra destroy plan has no machine infrastructure task")
 }
 
+func TestPlanDestroyTasksMachineInfraNamesTheClustersItTearsDown(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "003-3nodes-libvirt")
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range tasks {
+		if task.Entry.Kind != DestroyTaskKindMachineInfra {
+			continue
+		}
+		if len(DestroyTaskClusterKeys(task.Entry)) == 0 {
+			t.Fatalf("%q carries no cluster key; the row that actually destroys nodes would render nameless", task.Entry.ID)
+		}
+		return
+	}
+	t.Fatal("full destroy plan has no machine infrastructure task")
+}
+
 func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	tasks, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil, nil)
 	if err != nil {
@@ -136,6 +154,30 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	for _, task := range tasks {
 		if len(task.Entry.Dependencies) != 0 {
 			t.Fatalf("the clusters chain plans no machine teardown, so nothing in it may be hard-gated: %q has %v", task.Entry.ID, task.Entry.Dependencies)
+		}
+	}
+}
+
+func TestPlanDestroyTasksSplitsRuntimeFromRecordsAtEveryFleetSize(t *testing.T) {
+	for _, scope := range []string{"clusters", "all"} {
+		tasks, err := PlanDestroyTasks(scope, v1alpha1.State{}, "limit", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtime := destroyTaskByID(t, tasks, "destroy.cluster-runtime")
+		records := destroyTaskByID(t, tasks, "destroy.container-clusters")
+		if runtime.Playbook == records.Playbook {
+			t.Fatalf("%s: runtime and records teardown share playbook %q; the records half must not re-run the runtime half", scope, runtime.Playbook)
+		}
+		for _, pair := range []struct {
+			id   string
+			task ApplyTask
+		}{{"destroy.cluster-runtime", runtime}, {"destroy.container-clusters", records}} {
+			for _, pairVar := range pair.task.ExtraVarPairs {
+				if strings.Contains(pairVar, "records_only") {
+					t.Fatalf("%s: %s carries %q; records-only is no longer a per-fleet-size toggle", scope, pair.id, pairVar)
+				}
+			}
 		}
 	}
 }
