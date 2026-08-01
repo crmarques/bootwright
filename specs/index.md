@@ -7,6 +7,7 @@ Load only the specs needed for the task.
 | Mission, operating model, kind inventory, UX principles | `domain.md` |
 | Pipeline, layers, per-kind ownership boundaries, adapters, orchestration, Ansible, testing | `architecture.md` |
 | Desired-state schema, validation rules, CLI contract | `state-model.md` |
+| Destructive-change safety: intent modes, `--authorize` tokens, refusals | `state-model.md` (CLI Contract → Authorizations); rationale in `adr/0030` |
 | Secrets, credentials, OCP install trust, supply chain | `security.md` |
 | Designing or changing behavior in a decided area | `adr/README.md` decision table |
 

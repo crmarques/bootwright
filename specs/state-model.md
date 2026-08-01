@@ -52,7 +52,12 @@ Kinds: [Environment](#environment) · [Entitlement](#entitlement) ·
 Contracts: [References and Names](#references-and-names) ·
 [Native add-on catalog store](#native-add-on-catalog-store) ·
 [Rendering Contract](#rendering-contract) ·
-[Validation Rules](#validation-rules) · [CLI Contract](#cli-contract).
+[Validation Rules](#validation-rules) · [CLI Contract](#cli-contract)
+([Diagnostics and refusals](#diagnostics-and-refusals) ·
+[Selection and stages](#selection-and-stages) · [Destroy](#destroy) ·
+[Authorizations](#authorizations) ·
+[Apply modes and drift](#apply-modes-and-drift) ·
+[Validate, machine trust, add-ons, and diff](#validate-machine-trust-add-ons-and-diff)).
 
 ## References and Names
 
@@ -97,6 +102,13 @@ Rules:
   every discovered YAML file.
 - A listed file is loaded as a complete YAML file. A listed directory is walked
   deterministically for YAML files.
+- `validate` reports every discovered YAML file under the context input
+  directory that `resources[]` excludes, naming the file and the authored
+  objects it contains — a warning, not an error, because narrowing is
+  legitimate: `warning: Environment/<env> spec.resources excludes <relpath>
+  (<Kind>/<name>[, ...]); remove the path from spec.resources or add "<dir>"
+  to load it`. When `resources[]` is omitted nothing is excluded and no
+  warning is possible.
 - Every referenced Bootwright resource must also be selected.
 - `containerClusters[]` and `storageClusters[]`, when set, are the effective
   fleet selection lists for render, apply, status, destroy, and check flows.
@@ -2080,7 +2092,20 @@ Rules:
 
 ## Validation Rules
 
+These are the cross-kind rules; each kind's own validation rules live in its
+section above.
+
 - Unknown kinds and unknown fields are rejected at load time.
+- A native input key that Bootwright relocates or renames — an
+  `install-config.yaml`/`agent-config.yaml` key, a cephadm flag or spec key,
+  or a kickstart directive whose authored home is elsewhere — produces a
+  redirect diagnostic naming its owner (`field "<native>" is not authored
+  here; <where>`), never a bare unknown-field error. The per-kind Native
+  mapping tables under `docs/concepts/` enumerate the mapping.
+- A field that keeps a native key name but shifts its value vocabulary (for
+  example `provisioningNetwork`, authored lowercase and rendered
+  `Disabled`/`Managed`/`Unmanaged`) states the native spellings in its
+  `docs/concepts/` row and names them in its rejection message.
 - Retired kinds and fields are not migrated.
 - A default consumed by more than one pipeline stage is materialized by the
   normalize phase (for example, an omitted standard container endpoint
@@ -2133,6 +2158,23 @@ Rules:
 - Secret references must resolve to a declared `Secret` object.
 
 ## CLI Contract
+
+This contract binds the whole `bootwright` verb surface: the setup verbs
+(`context`, `example init`, `secret`, `media`, `add-ons`), the inspect verbs
+(`validate`, `preflight`, `plan`, `diff`, `status`, `render`), the lifecycle
+verbs (`apply`, `destroy`), and the resource verbs (`machine`, `bastion
+setup`, `cluster`, `container-cluster`, `storage-cluster`). The `secret`
+verbs' material and encryption semantics are delegated to `security.md`
+(Secret Ownership and Lifecycle); everything else is normative here.
+Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
+[Machine-readable output](#machine-readable-output) ·
+[Global flags](#global-flags) ·
+[Contexts, runs, and read-only posture](#contexts-runs-and-read-only-posture) ·
+[Selection and stages](#selection-and-stages) · [Destroy](#destroy) ·
+[Authorizations](#authorizations) ·
+[Teardown safeguards, cleanup, and history](#teardown-safeguards-cleanup-and-history) ·
+[Apply modes and drift](#apply-modes-and-drift) ·
+[Validate, machine trust, add-ons, and diff](#validate-machine-trust-add-ons-and-diff).
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
@@ -2188,6 +2230,38 @@ Rules:
   - **The replaced machine keeps running.** Only its Ceph membership is removed;
     its OS and substrate are untouched, and tearing the machine down stays a
     separate `destroy` decision.
+
+### Diagnostics and refusals
+
+Every fail-closed refusal, on every verb, names: the object — and the field
+path when a field is at fault; the consequence the refusal prevents, in the
+kind's own vocabulary (a disk wipe, OSD data loss, an orphaned record); exactly
+one way forward — the literal `bootwright …` invocation that proceeds
+intentionally, carrying any required token and the run's own scope and stage
+flags, or, when no Bootwright command can proceed, the sanctioned external
+remedy and why (the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` and
+"widen `--clusters`" are the two shapes of that clause); and, for
+authorization refusals, the token spelled exactly as it is typed. This clause
+states once what ADR 0007 (guidance-first refusals), ADR 0030 (a refusal names
+the exact token that unblocks it), and ADR 0010 (failure summaries preserve
+the exact remedy command through shortening) each record; the per-case bullets
+below add only case-specific content.
+
+### Machine-readable output
+
+`--output json` payloads split into contract and non-contract. Contract —
+automation may pin their shape, and changing one is a breaking change:
+`validate` (the census under
+[Validate, machine trust, add-ons, and diff](#validate-machine-trust-add-ons-and-diff))
+and the `--dry-run` plan reports of `apply`, `destroy`, and `plan`.
+`diff --output json` joins the contract set when its key layout is specified;
+until then it — like every remaining verb's JSON — is a rendering of the human
+report and may change between releases. `diff`'s exit `3` means **not proven
+in sync**: a live difference, drift, foreign ownership, a degraded probe, or a
+never-applied selection — deliberately one code, so automation gates without
+parsing the report; a consumer that must distinguish real drift from a probe
+that could not run reads the report body, which separates classified
+differences from degraded probes.
 
 ### Global flags
 
@@ -2268,11 +2342,14 @@ verbs that reach machines.
   snapshot is what was applied, written at the start of the mutating run;
   nothing reads it back, and plan/`--dry-run` never write it.
 - A command that mutates the context's desired-state input — `context update`
-  replacing the tree, `diff --adopt` editing objects — snapshots the current
-  input to `input-history/<seq>-<reason>/` before writing, under a bounded
-  retention. Every such mutation goes through one component so the
-  snapshot-then-write guarantee holds uniformly and the pre-change input stays
-  recoverable.
+  replacing the tree, `diff --adopt` editing objects, and
+  `storage-cluster replace-arbiter --new-arbiter-machine` rebinding the stretch
+  tiebreaker — snapshots the current input to `input-history/<seq>-<reason>/`
+  before writing, under a bounded retention. Every such mutation goes through
+  one component so the snapshot-then-write guarantee holds uniformly and the
+  pre-change input stays recoverable. Recovery from a snapshot is manual — no
+  verb reads one back; the procedure is documented with the context model in
+  `docs/concepts/`.
 - Read-only verbs (`status`, `diff`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run
@@ -2294,6 +2371,20 @@ verbs that reach machines.
   failing closed until `bootwright machine trust --replace <machines>` records
   it deliberately. Trust is recorded only when `--trust-on-first-use` (default
   true) is left on.
+- The `media` verbs (`add`, `list`, `delete`) manage the root-owned ISO store
+  that `MachineImage` `local-media:` keys resolve against (see
+  [MachineImage](#machineimage)); ADR 0010 decides their flag conventions —
+  root escalation, `--name` targeting, and the one `--yes` gate on replace and
+  delete. `media delete` checks only the store: it does not cross-check loaded
+  `MachineImage` objects, so a key a declared image still names is caught
+  later, by the installer-media preflight check, which fails naming the missing
+  source and the `media add --name <filename.iso>` remediation — the same
+  check that catches a `MachineImage` naming a key never added.
+- `secret encryption init|status` complete the `migrate`/`rotate` pair whose
+  semantics `security.md` (Secret Lifecycle) owns: `init` initializes the
+  current context's encrypted secret store, `status` reports the store's
+  encryption state without reading material. `status` is read-only; the other
+  three mutate only context-local secret state.
 
 ### Selection and stages
 
@@ -2318,7 +2409,16 @@ verbs that reach machines.
   selected clusters alone and lose the unselected consumers. Services
   classified as self-contained are exempt; a service with no classification is
   treated as degrading, so a newly added one fails safe. The remedy is to widen
-  `--clusters` to cover every consumer.
+  `--clusters` to cover every consumer. The classification is part of this
+  contract, keyed by the service slot:
+
+  | class | slots | why |
+  | --- | --- | --- |
+  | self-contained (exempt) | the `artifactServer`, `proxy`, and `registry` `InfraComponent` types; the provider BMC service | its rendered configuration is a function of the service's own declaration alone, so a narrowed re-render cannot lose a consumer |
+  | degrading (fails closed) | the `loadBalancer`, `nameResolution`, and `ntp` `InfraComponent` types | its rendered configuration is a function of the set of consuming clusters, so re-rendering from a narrowed selection would drop the unselected ones |
+
+  A slot absent from the self-contained row degrades. The "why" column is the
+  test: a new service slot classifies itself by which sentence is true of it.
 - A scoped `destroy` fails closed the same way on shared provider-service
   conflicts. No `--authorize` token widens the selection there; the remedy is
   to widen or narrow `--clusters`.
@@ -2377,6 +2477,8 @@ verbs that reach machines.
   `--through` it ends at the family's last. So `--through infra` equals
   `--through machines`, `--stage clusters` starts at `deps`, and
   `--through clusters` is the full graph.
+### Destroy
+
 - `destroy --stage infra` tears down infrastructure for the current context.
   It uses current desired state plus root-managed ownership records. Without
   `--clusters`, it must also remove all context-owned VMs that provider
@@ -2447,6 +2549,8 @@ verbs that reach machines.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
+### Authorizations
+
 - The destructive surface is exactly two orthogonal axes (ADR 0030): `--mode`
   states intent on `apply`/`plan`, and `--authorize <token>` states which named
   risk the operator accepts. Three verbs accept `--authorize`: `apply`/`plan`,
@@ -2580,6 +2684,8 @@ verbs that reach machines.
   is not a skippable node: when it is unreachable Bootwright cannot prove the
   guest VM and DataVolumes absent, so destroy fails closed and retains their
   ownership and cluster runtime records even with the token.
+### Teardown safeguards, cleanup, and history
+
 - Destroying a KubeVirt host cluster while an installed nested cluster is left
   outside the selected work set fails before mutation. No `--authorize` token
   widens `--clusters`; the nested cluster must be selected in the same
@@ -2660,6 +2766,8 @@ verbs that reach machines.
   ownership store, the input-history rollback snapshots). Rejected with the
   artifact-server literal (`--stage infra --clusters artifact-server`), which
   has no per-component history to remove.
+### Apply modes and drift
+
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, converges
   drift that is reconcilable in place, and fails closed on structural
@@ -2824,6 +2932,8 @@ verbs that reach machines.
   that stays up, so routing it through `destroy` would demand a strictly larger
   destruction (the whole Ceph cluster) to recover a smaller one. The refusal
   names the flag that authorizes it.
+### Validate, machine trust, add-ons, and diff
+
 - `bootwright validate --output json` reports a declared-state census: one count
   key per authored kind, named as the lower-camel form of the kind's plural
   (`environments`, `entitlements`, `machines`, `machineImages`,

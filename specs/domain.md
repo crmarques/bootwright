@@ -79,9 +79,18 @@ clusters after provisioning completes. External storage also stays outside
 
 ## Compatibility Goal
 
-The schema should stay close to `install-config.yaml`, `agent-config.yaml`, and
-cephadm inputs while distributing fields to the object that owns the operational
-fact:
+The schema stays as close to the driven tools' own input vocabulary —
+`install-config.yaml`, `agent-config.yaml`, cephadm and `ceph orch` inputs,
+kickstart, nmstate — as the orchestrator role allows, while distributing fields
+to the object that owns the operational fact. The rule: every field on a kind
+that fronts a driven tool either mirrors the native spelling and value
+vocabulary (camelCase respellings per ADR 0014 count as mirrored), or its
+divergence is recorded in that kind's Native mapping table under
+`docs/concepts/` with one of five justifications — a cross-document reference,
+secret `…Ref` indirection, a fleet-level default, multi-cluster composition,
+or safety. An operator who knows the native tool should feel at home; a native
+key Bootwright relocates or renames is redirected by name at strict decode
+(see `state-model.md`, Validation Rules). The fact distribution:
 
 - `ContainerCluster` renders cluster-level installer intent.
 - `Machine` renders machine-level installer input and boot or SSH facts.
