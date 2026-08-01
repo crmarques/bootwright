@@ -286,6 +286,17 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		want:    []string{"--authorize unowned-devices is not consumed by a dry-run"},
 		deny:    []string{"bootwright_ceph_authorize_unowned_devices=true"},
 	}, {
+		name:    "apply/foreign-daemons: apply accepts the token and a dry-run consumes none of it",
+		args:    []string{"apply", "--stage", "base", "--clusters", safetyAdvancedCephCluster, "--authorize", "foreign-daemons", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize foreign-daemons is not consumed by a dry-run"},
+		deny:    []string{"bootwright_ceph_authorize_foreign_daemons=true"},
+	}, {
+		name:    "destroy/foreign-daemons: an apply-only token is a usage error naming what clears it on destroy",
+		args:    []string{"destroy", "--stage", "clusters", "--authorize", "foreign-daemons", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"is not a risk destroy can authorize", "cephadm rm-cluster --force --fsid"},
+	}, {
 		name:    "destroy/unreachable-nodes: the token alone arms the skip, with no second flag",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unreachable-nodes", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

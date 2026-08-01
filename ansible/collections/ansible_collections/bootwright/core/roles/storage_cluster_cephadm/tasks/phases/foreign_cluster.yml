@@ -62,6 +62,67 @@
   changed_when: false
   when: (bootwright_ceph_host_foreign_fsids | default([])) | length > 0
 
+- name: Remove the cephadm clusters on the storage node this apply is authorized to reclaim
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --fsid
+      - "{{ item }}"
+  register: bootwright_ceph_foreign_rm
+  changed_when: bootwright_ceph_foreign_rm.rc == 0
+  failed_when: bootwright_ceph_foreign_rm.rc != 0
+  loop: "{{ bootwright_ceph_host_foreign_fsids | default([]) }}"
+  loop_control:
+    label: "{{ inventory_hostname }} {{ item }}"
+  when:
+    - (bootwright_ceph_host_foreign_fsids | default([])) | length > 0
+    - bootwright_ceph_authorize_foreign_daemons | default(false) | bool
+
+- name: List the cephadm systemd units the storage node carries after the authorized removal
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - list-units
+      - --all
+      - --plain
+      - --no-legend
+      - --type=service
+      - ceph-*@*.service
+  register: bootwright_ceph_host_cephadm_units_after
+  changed_when: false
+  when:
+    - (bootwright_ceph_host_foreign_fsids | default([])) | length > 0
+    - bootwright_ceph_authorize_foreign_daemons | default(false) | bool
+
+- name: Resolve the cephadm clusters the authorized removal left on the storage node
+  vars:
+    bootwright_ceph_host_unit_prefix: '^ceph-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@'
+    bootwright_ceph_host_unit_capture: '^ceph-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})@.*$'
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_foreign_fsids: >-
+      {{ bootwright_ceph_host_cephadm_units_after.stdout_lines | default([])
+         | map('trim')
+         | select('match', bootwright_ceph_host_unit_prefix)
+         | map('regex_replace', bootwright_ceph_host_unit_capture, '\1')
+         | unique | list
+         | difference(bootwright_ceph_host_known_fsids | default([])) }}
+  changed_when: false
+  when: bootwright_ceph_host_cephadm_units_after.stdout_lines is defined
+
+- name: Collect the foreign cephadm units the authorized removal left loaded
+  ansible.builtin.set_fact:
+    bootwright_ceph_host_foreign_units: >-
+      {{ bootwright_ceph_host_cephadm_units_after.stdout_lines | default([])
+         | map('trim')
+         | select('match', '^ceph-(' ~ (bootwright_ceph_host_foreign_fsids | join('|')) ~ ')@')
+         | list }}
+  changed_when: false
+  when:
+    - bootwright_ceph_host_cephadm_units_after.stdout_lines is defined
+    - (bootwright_ceph_host_foreign_fsids | default([])) | length > 0
+
 - name: Refuse a storage node that still runs a cephadm cluster this apply does not own
   ansible.builtin.assert:
     that:
@@ -89,11 +150,18 @@
       (`bootwright cluster destroy ... --authorize unreachable-nodes`) or failed partway
       through it cleans the other nodes and leaves this one running its daemons, and the
       Bootwright ownership gates that refuse a pre-existing cluster read the seed host,
-      which this node is not. Remove that cluster's local state on this node with
-      `cephadm rm-cluster --force --fsid <fsid>` for each identity listed above — it is
-      fsid-scoped, so it stops and removes only that cluster's daemons, units and
-      /var/lib/ceph state and leaves {{ bootwright_selected_storage_cluster.name }}'s own
-      daemons on this node untouched — then re-run this apply.
+      which this node is not.
+      {{
+        'This apply already carried `--authorize foreign-daemons`, so the removal ran on this node and these units survived it: clear them here before enrolling the node.'
+        if (bootwright_ceph_authorize_foreign_daemons | default(false) | bool)
+        else 'Re-run this apply with `--authorize foreign-daemons` to let it remove that state itself, or clear the node first.'
+      }}
+      The removal is `cephadm rm-cluster --force --fsid <fsid>`, once per identity listed
+      above. It is fsid-scoped, so it stops and removes only that cluster's daemons, units
+      and /var/lib/ceph state and leaves {{ bootwright_selected_storage_cluster.name }}'s
+      own daemons on this node untouched, and it zaps no disk, so the other cluster keeps
+      its OSD data. This apply re-probes the node afterwards and refuses again if any of
+      those units outlive it.
       Cluster identities this node may legitimately carry:
       {{ (bootwright_ceph_host_known_fsids | default([])) | join(', ')
          | default('(none: this node carries no /etc/ceph/ceph.conf and this apply

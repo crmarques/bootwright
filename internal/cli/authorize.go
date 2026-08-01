@@ -18,6 +18,7 @@ const (
 	authorizeUnownedVMs           = "unowned-vms"
 	authorizeUnownedNetworks      = "unowned-networks"
 	authorizeUnownedDevices       = "unowned-devices"
+	authorizeForeignDaemons       = "foreign-daemons"
 	authorizeUnreachableNodes     = "unreachable-nodes"
 	authorizeUnreadableRecords    = "unreadable-records"
 	authorizeSharedInfra          = "shared-infra"
@@ -71,6 +72,12 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders but no Bootwright OSD ownership record for this node — an orphan left by a destroyed or foreign Ceph install; on apply it needs --reclaim-devices, and it never relaxes the mounted, in-use, or unprobeable refusals",
 	inert:      "no selected node refused a declared OSD device for want of a Bootwright OSD ownership record (on apply the gate runs only under --reclaim-devices)",
 	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
+}, {
+	name:       authorizeForeignDaemons,
+	authorizes: "removing the cephadm daemons, systemd units and /var/lib/ceph state of another Ceph cluster from a storage node this apply enrolls — fsid-scoped, and it zaps no disk",
+	inert:      "no selected node reached the foreign-cephadm gate (it runs where an apply converges a storage cluster)",
+	verbs:      []string{authorizeVerbApply},
+	elsewhere:  "destroy removes the fsid of the cluster it tears down and deliberately leaves a co-resident one standing, so a leftover is cleared by the apply that enrolls the node or by `cephadm rm-cluster --force --fsid <fsid>` on it",
 }, {
 	name:       authorizeUnreachableNodes,
 	authorizes: "leaving a cluster partially destroyed by skipping unreachable nodes",

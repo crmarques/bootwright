@@ -1408,7 +1408,16 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   sets the OS hostname to the same node FQDN), and written by `apply` on every
   storage node, `os.provided` included, before the run touches the cluster
   (ADR 0036); a mismatch passes `validate` and is repaired on the host, and
-  `apply` refuses the node only when the write does not hold. The per-host OSD service id derives from the node short
+  `apply` refuses the node only when the write does not hold. Before the cluster
+  is bootstrapped or converged, `apply` refuses any topology host still running
+  the systemd units of a cephadm cluster it does not own — an fsid that is
+  neither the node's own `/etc/ceph/ceph.conf` identity nor the one an authorized
+  rebuild is replacing — because every cephadm daemon binds its port on the host
+  network and the collision surfaces only at service readiness, attributed to no
+  host. `--authorize foreign-daemons` removes exactly those identities with the
+  fsid-scoped `cephadm rm-cluster --force --fsid <fsid>`, zapping no disk, then
+  re-probes the node and refuses again if any of their units survived
+  (ADR 0038). The per-host OSD service id derives from the node short
   name (`data-<nodeShortName>`). Node names must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
@@ -2390,10 +2399,11 @@ verbs that reach machines.
   risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
   repeatable and comma-separated. An unknown token is a usage error (exit 2)
   listing the tokens the verb accepts; so is a token the verb has no gate for at
-  all — every token except `data-loss` and `unowned-devices` is destroy-only, and
-  passing one to
-  `apply`/`plan` is refused with the guidance that resolves it there rather than
-  silently ignored, so an operator can never believe a gate was cleared. A token
+  all — `data-loss` and `unowned-devices` are accepted by both verbs,
+  `foreign-daemons` by `apply` alone, every other token is destroy-only, and
+  passing one to a verb that cannot consume it is refused with the guidance that
+  resolves it there rather than silently ignored, so an operator can never
+  believe a gate was cleared. A token
   the verb accepts but this particular run never consumed is a non-fatal warning
   naming it. Under `--dry-run` no token is consumed and the human report says so
   for every one (JSON output carries the plan, not the warnings). Exactly these
@@ -2407,6 +2417,7 @@ verbs that reach machines.
   | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker |
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
+  | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it |
   | `unreachable-nodes` | skipping powered-off or unreachable nodes during teardown, leaving the cluster partially destroyed |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |

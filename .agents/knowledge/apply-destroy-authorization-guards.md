@@ -119,17 +119,23 @@ table out of `specs/state-model.md`, ADR 0030 and
 `authorizationTokens` exactly, so a token cannot ship unpublished and a doc
 cannot promise one that does not exist. It also requires every token to appear in
 a `safetyMatrixCases()` row (a token that unblocks a refusal must be exercised),
-to declare the verbs whose gates consume it, and — for a token no `apply` gate can
-consume — to be refused on `apply`/`plan` as a usage error naming what resolves it
-there. Seven of the nine are destroy-only; `data-loss` and `unowned-devices`
-(ADR 0034) have apply gates. `unowned-devices` is reachable on `apply` only under
+to declare the verbs whose gates consume it, and — for a token a verb's gates
+cannot consume — to be refused there as a usage error naming what resolves it
+instead. Seven of the ten are destroy-only; `data-loss` and `unowned-devices`
+(ADR 0034) have gates on both verbs, and `foreign-daemons` (ADR 0038) is the
+first apply-only one, refused on `destroy`. `unowned-devices` is reachable on `apply` only under
 `--reclaim-devices`, so its matrix row is a `--dry-run` (which by contract
 consumes no token); the real consumption path — the warning and the
 `bootwright_ceph_authorize_unowned_devices` extra var — is pinned by
 `TestWarnReclaimUnownedDevicesStatesBothReadings` and
 `TestUnownedDeviceAuthorizationExtraVarRidesOnlyTheToken` instead, because a real
 `--stage deps` apply on the baseline stops at the machine-check preflight
-(unseeded cluster secrets and host trust) long before the destructive block.
+(unseeded cluster secrets and host trust) long before the destructive block. Both
+apply-side tokens are structured that way: `foreign-daemons` has the same
+`--dry-run` matrix row, and `TestForeignDaemonReclaimRidesTheTokenAndAStorageConverge`
+tables its three real outcomes — armed, closed without the token, and inert with
+no storage-cluster converge in the run — including that the two consuming cases
+never report as inert and the third always does.
 Consumption must be recorded wherever behavior actually changes:
 `emitApplyDataLossWarningsAndVars` returns whether it consumed `data-loss`
 because widening the storage sub-object rebuild authorization is a consumption

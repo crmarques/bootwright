@@ -803,28 +803,3 @@ learned; this file records what it still owes.
   ever becomes compatible with the `install-config.yaml` renderer.
 - Related: [disk-encryption-tpm.md](disk-encryption-tpm.md),
   [0037](../../specs/adr/0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md)
-
-## B-058 — Foreign cephadm daemons on a node are refused, never reclaimed
-- Status: open
-- Area: storage / node reuse
-- Origin: ceph-prd-01 node-exporter 6/7 diagnosis 2026-07-31
-- Severity: low
-- Problem: `phases/foreign_cluster.yml` fails closed when a topology host still
-  runs `ceph-<other fsid>@*.service` units, and names
-  `cephadm rm-cluster --force --fsid <fsid>` as the remedy. That remedy is a
-  command the operator runs by hand on the node, not a `bootwright …`
-  invocation, so the refusal is the one gate in the storage path whose exit is
-  outside the product. The residue it catches is produced by Bootwright's own
-  teardown (a destroy that skipped the node under
-  `--authorize unreachable-nodes`, or one that failed partway through it), so
-  the product creates the state it then refuses to clear.
-- Exit: decide whether removing another cluster's daemons from a node this
-  apply is enrolling deserves an authorization token
-  (`--authorize foreign-daemons`, alongside `data-loss` and `unowned-devices`),
-  which would run the same fsid-scoped `cephadm rm-cluster` the rebuild path
-  already runs. It destroys state Bootwright does not own, so it must be a
-  token and never a default; and it must join
-  `internal/cli/apply_destroy_safety_matrix_test.go` with the rest. Refusing is
-  correct until that is designed — this is about closing the loop, not about
-  the current gate being wrong.
-- Related: [ceph-ownership-apply-destroy-gates.md](ceph-ownership-apply-destroy-gates.md)

@@ -215,6 +215,22 @@ func applyReclaimUnownedDevices(stdout io.Writer, plan *converge.WorkflowPlan, a
 	converge.ApplyCephUnownedDeviceAuthorizationExtraVar(plan, true)
 }
 
+func applyForeignCephadmDaemons(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, tasks []workflow.ApplyTask) {
+	clusters := workflow.StorageConvergeClusterNames(tasks)
+	if len(clusters) == 0 {
+		return
+	}
+	if !auth.allows(authorizeForeignDaemons) {
+		return
+	}
+	warnForeignCephadmDaemons(stdout, clusters)
+	converge.ApplyCephForeignDaemonAuthorizationExtraVar(plan, true)
+}
+
+func warnForeignCephadmDaemons(stdout io.Writer, clusters []string) {
+	cliout.NewContinuation(stdout).Warning("authorize "+authorizeForeignDaemons, "a node of Ceph cluster(s) "+strings.Join(clusters, ", ")+" that still runs cephadm units of an fsid this apply does not own is reclaimed with `cephadm rm-cluster --force --fsid <fsid>` instead of refused. That is fsid-scoped: it stops and removes only that cluster's daemons, units and /var/lib/ceph state on that node, and leaves the applied cluster's own daemons alone. It passes no --zap-osds, so the other cluster's OSD disks keep their data — what is destroyed is its presence on this node, and if that cluster is still live elsewhere it loses this node's daemons, a monitor among them leaving its quorum. The gate re-probes the node afterwards and still refuses if any foreign unit survived.")
+}
+
 func warnReclaimUnownedDevices(stdout io.Writer, reclaimDevices string) {
 	cliout.NewContinuation(stdout).Warning("authorize "+authorizeUnownedDevices, "additionally wipes named device(s) "+reclaimDevices+" that carry LVM or dm-crypt holders without a Bootwright OSD ownership record for their node. Without this token such a device fails closed as a possible live bluestore OSD. It is the right token for an orphan stack left by a Ceph cluster that was destroyed or was never Bootwright's; on a node whose Ceph daemons are still running it wipes a LIVE OSD and its data. A mounted, in-use, or unprobeable device still fails closed and no token relaxes that.")
 }

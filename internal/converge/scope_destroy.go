@@ -13,6 +13,7 @@ const (
 	DestroyAuthorizeUnownedNetsExtraVar = "bootwright_destroy_authorize_unowned_networks"
 	DestroySkipUnreachableExtraVar      = "bootwright_destroy_skip_unreachable"
 	CephAuthorizeUnownedDevicesExtraVar = "bootwright_ceph_authorize_unowned_devices"
+	CephAuthorizeForeignDaemonsExtraVar = "bootwright_ceph_authorize_foreign_daemons"
 )
 
 func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScope string, resolvedClusterRoots []string, machineScope []string, unownedVMs bool, unownedNetworks bool, skipUnreachable bool, unownedDevices bool) {

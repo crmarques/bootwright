@@ -46,6 +46,55 @@ func TestUnownedDeviceAuthorizationExtraVarRidesOnlyTheToken(t *testing.T) {
 	}
 }
 
+func TestForeignDaemonReclaimRidesTheTokenAndAStorageConverge(t *testing.T) {
+	storageTasks := []workflow.ApplyTask{{Entry: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph"}}}
+	prereqTasks := []workflow.ApplyTask{{Entry: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindStorageInfra, Cluster: "ceph"}}}
+	cases := []struct {
+		name     string
+		given    []string
+		tasks    []workflow.ApplyTask
+		wantVar  bool
+		wantWarn bool
+		wantIdle bool
+	}{
+		{"token and a converge arms the reclaim", []string{authorizeForeignDaemons}, storageTasks, true, true, false},
+		{"a converge without the token stays closed", nil, storageTasks, false, false, false},
+		{"the token without a storage converge is inert and says so", []string{authorizeForeignDaemons}, prereqTasks, false, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			auth, err := parseAuthorizations(tc.given, authorizeVerbApply)
+			if err != nil {
+				t.Fatalf("parseAuthorizations: %v", err)
+			}
+			var plan converge.WorkflowPlan
+			var buf bytes.Buffer
+			applyForeignCephadmDaemons(&buf, &plan, auth, tc.tasks)
+			hasVar := len(plan.ExtraVarPairs) == 1 && plan.ExtraVarPairs[0] == converge.CephAuthorizeForeignDaemonsExtraVar+"=true"
+			if hasVar != tc.wantVar {
+				t.Fatalf("extra var %s: want %v, got %v", converge.CephAuthorizeForeignDaemonsExtraVar, tc.wantVar, plan.ExtraVarPairs)
+			}
+			if warned := strings.Contains(buf.String(), authorizeForeignDaemons); warned != tc.wantWarn {
+				t.Fatalf("warning: want %v, got %q", tc.wantWarn, buf.String())
+			}
+			if idle := len(auth.unused()) > 0; idle != tc.wantIdle {
+				t.Fatalf("a token the run consumed must never report as inert and one it could not consume must: want inert=%v, got %v", tc.wantIdle, auth.unused())
+			}
+		})
+	}
+}
+
+func TestWarnForeignCephadmDaemonsStatesWhatSurvivesTheRemoval(t *testing.T) {
+	var buf bytes.Buffer
+	warnForeignCephadmDaemons(&buf, []string{"ceph-prd-01"})
+	got := buf.String()
+	for _, want := range []string{"ceph-prd-01", "foreign-daemons", "rm-cluster --force --fsid", "--zap-osds", "quorum", "re-probes"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the foreign-daemons warning must name %q: it destroys state of a cluster Bootwright does not own, so it must state the scope of the removal, that no disk is zapped, what a still-live cluster loses, and that the gate re-checks. got %q", want, got)
+		}
+	}
+}
+
 func TestReclaimUnmatchedError(t *testing.T) {
 	err := reclaimUnmatchedError([]string{"/dev/disk/by-id/wwn-0x5000"}, []string{"ceph1"}, []string{"/dev/sdb"})
 	msg := err.Error()

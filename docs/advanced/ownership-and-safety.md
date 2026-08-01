@@ -124,6 +124,12 @@ run *before* any mutation if its precondition is not met:
 7. **Render as a second enforcement line.** Rendering fails before writing any
    tool input when an endpoint load-balancer bind or a managed Ceph topology host
    address does not resolve, instead of emitting empty values.
+8. **Foreign state on the node itself.** A storage node still running the
+   cephadm units of a Ceph cluster this apply does not own refuses before the
+   cluster is bootstrapped, because those daemons hold the host ports its own
+   daemons need. `--authorize foreign-daemons` removes exactly those identities
+   and nothing else — see
+   [Enrolling a node another Ceph cluster was left running on](operations.md#enrolling-a-node-another-ceph-cluster-was-left-running-on).
 
 ## Apply modes and what they protect
 

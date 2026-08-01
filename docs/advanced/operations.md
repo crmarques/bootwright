@@ -43,14 +43,16 @@ refusal and nothing else:
 | `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
+| `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk, `apply` only |
 | `unreachable-nodes` | skipping unreachable nodes during teardown, leaving the cluster partially destroyed |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
 
 An unknown token is a usage error listing the tokens the command accepts. So is a
-token the command has no gate for: every token except `data-loss` and
-`unowned-devices` is destroy-only,
+token the command has no gate for: `data-loss` and `unowned-devices` are accepted
+by both verbs, `foreign-daemons` by `apply` alone, and every other token is
+destroy-only,
 and `apply --authorize protected` is refused with the guidance that resolves it on
 `apply` rather than accepted and ignored. A token the command accepts but this run
 never used prints a warning naming it, so you learn you authorized the wrong risk
@@ -661,6 +663,39 @@ Recovery does not trust whichever fsid a live cluster reports or relax
 OSD-device ownership, mounted-device, system-disk, or probe-failure checks. It
 authorizes no `--authorize` token and no `--yes`. The normative contract is in the
 [CLI specification](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract).
+
+## Enrolling a node another Ceph cluster was left running on
+
+An apply refuses a storage node that still carries the systemd units of a
+cephadm cluster it does not own, naming each leftover identity and its units.
+That residue is what a teardown which skipped the node
+(`--authorize unreachable-nodes`) or failed partway through it leaves behind,
+and no `--mode rebuild` clears it: a rebuild removes the one fsid the seed
+carries, so an identity only this node still has is outside its reach. Left
+running, those daemons hold their ports, and cephadm's own placement of the same
+daemon type onto the node fails with `Address already in use` — a failure that
+names neither the node nor the cluster holding the port, and that surfaces only
+when service readiness times out.
+
+Authorize the removal and re-run the same apply:
+
+```text
+bootwright apply --clusters ceph-storage --authorize foreign-daemons --yes
+```
+
+Each foreign identity is removed with `cephadm rm-cluster --force --fsid <fsid>`
+on the node that carries it — that cluster's daemons, units and `/var/lib/ceph`
+state, and nothing belonging to the cluster being applied. No disk is zapped, so
+the other cluster's OSD data survives; what is destroyed is its presence on this
+node. The node is then probed again, and the apply still refuses if any of those
+units outlived the removal.
+
+Because the token destroys state Bootwright does not own, nothing implies it —
+not `--yes`, not `data-loss`, not `--mode rebuild`. If that other cluster is
+still live on nodes elsewhere, it loses this node's daemons, and a monitor among
+them leaves its quorum. Clearing the node by hand first, with the same
+`cephadm rm-cluster --force --fsid <fsid>`, is the same operation without the
+gate or the audit trail.
 
 ## Tearing down with a node powered off
 

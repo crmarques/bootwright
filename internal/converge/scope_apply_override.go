@@ -144,6 +144,13 @@ func ApplyCephUnownedDeviceAuthorizationExtraVar(plan *WorkflowPlan, authorized 
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, CephAuthorizeUnownedDevicesExtraVar+"=true")
 }
 
+func ApplyCephForeignDaemonAuthorizationExtraVar(plan *WorkflowPlan, authorized bool) {
+	if !authorized {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, CephAuthorizeForeignDaemonsExtraVar+"=true")
+}
+
 func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, ownedClusters []string) {
 	if strings.TrimSpace(devices) == "" {
 		return

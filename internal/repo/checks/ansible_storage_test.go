@@ -3456,11 +3456,65 @@ func TestStorageRefusesNodesRunningAForeignCephadmCluster(t *testing.T) {
 		"bootwright_ceph_host_foreign_units",
 		"Address already in use",
 		"cephadm rm-cluster --force --fsid",
+		"--authorize foreign-daemons",
 		"unreachable-nodes",
 		"seed",
 	} {
 		if !strings.Contains(failMsg, want) {
-			t.Fatalf("the refusal must name the leftover units, the port collision they cause, why the seed-side ownership gates miss them and the fsid-scoped remedy, missing %q, got %v", want, failMsg)
+			t.Fatalf("the refusal must name the leftover units, the port collision they cause, why the seed-side ownership gates miss them, the fsid-scoped remedy and the token that runs it in-product, missing %q, got %v", want, failMsg)
+		}
+	}
+}
+
+func TestStorageReclaimsAForeignCephadmClusterOnlyUnderItsToken(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
+	tasks := readAnsibleTasks(t, base+"phases/foreign_cluster.yml")
+	listIdx := findAnsibleTask(t, tasks, "List the cephadm systemd units the storage node carries")
+	foreignIdx := findAnsibleTask(t, tasks, "Resolve the cephadm clusters on the storage node this apply does not own")
+	rmIdx := findAnsibleTask(t, tasks, "Remove the cephadm clusters on the storage node this apply is authorized to reclaim")
+	reprobeIdx := findAnsibleTask(t, tasks, "List the cephadm systemd units the storage node carries after the authorized removal")
+	leftIdx := findAnsibleTask(t, tasks, "Resolve the cephadm clusters the authorized removal left on the storage node")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage node that still runs a cephadm cluster this apply does not own")
+	if !(foreignIdx < rmIdx && rmIdx < reprobeIdx && reprobeIdx < leftIdx && leftIdx < refuseIdx) {
+		t.Fatalf("an authorized reclaim must act on the resolved foreign set, then re-probe the node and re-resolve what is left, and the refusal must still have the last word, got foreign=%d rm=%d reprobe=%d left=%d refuse=%d", foreignIdx, rmIdx, reprobeIdx, leftIdx, refuseIdx)
+	}
+
+	command, ok := tasks[rmIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the reclaim must run cephadm through a command task, got %v", tasks[rmIdx])
+	}
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"cephadm", "rm-cluster", "--force", "--fsid"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("the reclaim must run the fsid-scoped removal the refusal names, missing %q: %v", want, argv)
+		}
+	}
+	if strings.Contains(argv, "--zap-osds") {
+		t.Fatalf("the reclaim must never zap the foreign cluster's OSD disks: the token authorizes removing that cluster's presence on this node, not destroying the data of a cluster Bootwright does not own, got %v", argv)
+	}
+	if got := fmt.Sprint(tasks[rmIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_host_foreign_fsids") {
+		t.Fatalf("the reclaim must remove exactly the identities the gate resolved as foreign, got loop=%v", got)
+	}
+	when := fmt.Sprint(tasks[rmIdx]["when"])
+	for _, want := range []string{"bootwright_ceph_authorize_foreign_daemons", "bootwright_ceph_host_foreign_fsids"} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("removing another cluster's daemons must ride the operator's token and never a default, missing %q, got when=%v", want, when)
+		}
+	}
+	if got := fmt.Sprint(tasks[rmIdx]["failed_when"]); !strings.Contains(got, "rc != 0") {
+		t.Fatalf("a removal that failed must fail the run rather than fall through to a refusal that no longer explains it, got failed_when=%v", got)
+	}
+
+	if _, present := tasks[reprobeIdx]["failed_when"]; present {
+		t.Fatalf("the post-removal probe must fail closed: a node whose units cannot be read is not a node proven clean, got %v", tasks[reprobeIdx])
+	}
+	if fmt.Sprint(tasks[reprobeIdx]["register"]) == fmt.Sprint(tasks[listIdx]["register"]) {
+		t.Fatalf("the post-removal probe must register its own variable: Ansible overwrites a register when its task is skipped, so reusing the first probe's name would erase the listing every unauthorized run refuses on, got %v", tasks[reprobeIdx]["register"])
+	}
+	left := fmt.Sprint(tasks[leftIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{fmt.Sprint(tasks[reprobeIdx]["register"]), "difference", "bootwright_ceph_host_known_fsids", "bootwright_ceph_host_foreign_fsids"} {
+		if !strings.Contains(left, want) {
+			t.Fatalf("what the removal left must be resolved from the post-removal listing, not from the pre-removal one, missing %q, got %v", want, left)
 		}
 	}
 }

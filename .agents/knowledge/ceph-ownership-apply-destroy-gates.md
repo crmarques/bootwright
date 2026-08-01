@@ -113,3 +113,24 @@ preserves co-resident fsid directories, so directories are not evidence of a
 running cluster. The refusal names each foreign fsid, the loaded units, and
 `cephadm rm-cluster --force --fsid <fsid>` — fsid-scoped, so it removes only
 that cluster's daemons and leaves the applied cluster's own untouched.
+
+**The exit is in-product (ADR 0038).** `apply --authorize foreign-daemons` runs
+that same fsid-scoped removal, once per foreign identity, on the node that
+carries it — no `--zap-osds`, so the other cluster's OSD disks keep their data
+and what is destroyed is its presence on this node. Two properties make the
+authorized path still a gate rather than a bypass: the node is probed a SECOND
+time and the foreign set re-resolved from that listing, so a leftover surviving
+its own removal refuses exactly as before; and that probe carries no
+`failed_when: false`, because a node whose units cannot be read is not a node
+proven clean. The second probe must register its own variable — Ansible
+overwrites a register when the task is skipped, so reusing the first probe's name
+would erase, on every unauthorized run, the very listing the refusal prints.
+Why the rebuild could not have done this: `phases/rebuild.yml` removes exactly
+one identity, the seed's `bootwright_ceph_override_fsid`, on every topology host,
+so an fsid a non-seed node carries that the seed no longer does is outside the
+reach of every rebuild by construction. Observed on ceph-prd-01 2026-08-01: a
+`--mode rebuild` apply refused on the arbiter, whose 07-31 15:00 UTC install
+(`9886b0ec`) outlived the 17:08 UTC one (`6489f7ec`) the rebuild was replacing.
+Both fsids are UUIDv1, so decoding their timestamps (and their shared node MAC,
+the seed's) orders the installs and identifies which one a leftover belongs to
+without a run log.

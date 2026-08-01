@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -430,4 +431,20 @@ func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State
 		}
 	}
 	return out, nil
+}
+
+func StorageConvergeClusterNames(tasks []ApplyTask) []string {
+	seen := map[string]bool{}
+	for _, task := range tasks {
+		if task.Entry.Kind != ApplyTaskKindStorageCluster || task.Entry.Cluster == "" {
+			continue
+		}
+		seen[task.Entry.Cluster] = true
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
