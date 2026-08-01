@@ -2151,6 +2151,19 @@ section above.
   `machineNetwork[].cidr` of its selected `NetworkConfig`; an address outside
   every machine network fails validation naming the `Machine`, the
   `interfaceAddresses` entry, and the resolved IP.
+- A `Machine` with `os.provided: false` must have an install network the
+  managed-OS install can express. Anaconda takes exactly one `network`
+  directive, so the expressible subset is a single primary interface of type
+  `ethernet`, `vlan`, or `bond` carrying one IPv4 address, plus an optional
+  default gateway and DNS servers. An effective install network outside that
+  subset — a bridge primary, no IPv4 address, or more than one addressed
+  interface — fails validation naming the `Machine`, the interface, which of
+  those reasons applies, and `spec.os.provided: true` as the alternative that
+  hands the install to the operator. The rule exists because the alternative is
+  silent: the kickstart otherwise falls back to
+  `network --device=link --bootproto=dhcp`, a posture nobody authored, and the
+  machine is unreachable only after its disk is wiped. The subset is enumerated
+  in `docs/advanced/managed-os.md`.
 - Bare-metal boot requires BMC details and artifact access suitable for the
   configured boot method.
 - KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot
@@ -2230,6 +2243,11 @@ Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
   - **The replaced machine keeps running.** Only its Ceph membership is removed;
     its OS and substrate are untouched, and tearing the machine down stays a
     separate `destroy` decision.
+  - **What the run records.** A successful replacement refreshes the cluster's
+    recorded desired and structural state exactly as a successful `apply` writes
+    it. Otherwise the next plain `apply` would refuse on drift this verb itself
+    authored, and the operator's only exits from a supported day-2 operation
+    would be a destructive rebuild or a hand-edit of recorded state.
 
 ### Diagnostics and refusals
 
@@ -2253,7 +2271,8 @@ below add only case-specific content.
 automation may pin their shape, and changing one is a breaking change:
 `validate` (the census under
 [Validate, machine trust, add-ons, and diff](#validate-machine-trust-add-ons-and-diff))
-and the `--dry-run` plan reports of `apply`, `destroy`, and `plan`.
+the `--dry-run` plan reports of `apply`, `destroy`, and `plan`; and the
+executed check results of `preflight`.
 `diff --output json` joins the contract set when its key layout is specified;
 until then it — like every remaining verb's JSON — is a rendering of the human
 report and may change between releases. `diff`'s exit `3` means **not proven
@@ -2262,6 +2281,19 @@ never-applied selection — deliberately one code, so automation gates without
 parsing the report; a consumer that must distinguish real drift from a probe
 that could not run reads the report body, which separates classified
 differences from degraded probes.
+
+`preflight` answers in JSON without `--dry-run`, because the question it exists
+to answer — is this fleet ready to apply? — is answered by running the checks,
+not by planning them. It reports one entry per executed check: the check's
+name, the target it ran against, a status of `ok`, `fail`, or `skip`, the
+detail behind that status, and the fix its human report names; plus a summary
+of the totals. Requiring `--dry-run` before JSON binds the **mutating** verbs
+only, where a plan is the one thing safe to emit without acting; a read-only
+check verb keeps its `--dry-run` JSON for the plan it would have run. Exit
+codes do not change with the output format, and machine-readable output
+suppresses every prompt — the interactive host-key trust prompt included — so
+a check that would have prompted reports `skip` with that as its detail
+instead of stalling a pipeline.
 
 ### Global flags
 
@@ -2610,6 +2642,20 @@ verbs that reach machines.
   closed. A device that is simply absent is neither refused nor wiped — it is
   skipped, reported as a declaration that does not match the hardware, and left
   to fail at OSD readiness where the count is the diagnosis.
+- Every preview of an authorizing verb — `plan`, `apply --dry-run`,
+  `destroy --dry-run`, and `storage-cluster replace-arbiter --dry-run` —
+  reports the authorizations the real run will demand, under a **Required
+  authorizations** heading, so a blast radius is learnable without triggering
+  the refusal that teaches it. It prints one line per token the run would
+  consult, decided by the same predicate the real gate reads, marks a token the
+  invocation already supplied as satisfied, and, when a token's predicate
+  cannot be settled without contacting a host the preview may not contact,
+  names it as *may be required* with that as the reason rather than omitting
+  it. JSON previews carry the same set as `requiredAuthorizations`. A preview
+  that names no token is the positive statement that the real run needs none.
+  This is the preview half of the one-predicate rule: the gate, the refusal,
+  the prompt choice, and this block read one consequence predicate, so a
+  preview cannot under-report what the run then refuses on.
 - `--yes` has one meaning on both verbs: it answers the ordinary confirmation
   prompt and authorizes no named risk. On `destroy`, a teardown that destroys a
   managed storage cluster's OSD data requires `--authorize data-loss`; without
@@ -2785,6 +2831,14 @@ verbs that reach machines.
   self-contradictory.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `diff --recorded`.
+- A structural drift whose only difference is a managed Ceph cluster's
+  `spec.ceph.topology.stretch.tiebreaker.node` routes the operator to
+  `bootwright storage-cluster replace-arbiter --name <cluster>`, not to
+  `--mode rebuild`. Moving one vote is a `ceph mon set_new_tiebreaker`
+  operation the dedicated verb performs online; rebuilding the cluster to
+  express it would destroy every OSD's data to change an arbiter. A drift set
+  that reaches anything beyond the tiebreaker keeps the rebuild remedy, because
+  the verb converges only the arbiter.
 - A recorded desired hash covers only the desired state that reaches a host, so
   editing controller-side authorization policy never reads as drift.
   `Environment.spec.safety` (`destroyProtection`, `protectedKinds`) is consumed
