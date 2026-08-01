@@ -250,7 +250,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			unreadableRecords:   unreadableRecordsReached,
 			sharedInfra:         sharedInfraReached,
 			installedNode:       installedClusterNodeReached,
-			protected:           destroySafety.RequiresAuthorization,
+			protected:           len(destroySafety.Reasons) > 0,
 			protectedReason:     destroySafety.Summary(),
 			dataLoss:            dataLossReached,
 			dataLossReason:      dataLoss.Consequence(),

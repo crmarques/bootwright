@@ -122,7 +122,13 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		seed:    seedProtectedEnvironment,
 		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
-		want:    []string{"Required authorizations", "--authorize " + authorizeProtected, "--authorize " + authorizeDataLoss},
+		want:    []string{"Required authorizations", "--authorize " + authorizeProtected + ": " + authorizationRequired, "--authorize " + authorizeDataLoss},
+	}, {
+		name:    "destroy/preview: a supplied protected token still appears, as satisfied",
+		seed:    seedProtectedEnvironment,
+		args:    []string{"destroy", "--dry-run", "--authorize", authorizeProtected, "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeProtected + ": " + authorizationSatisfied},
 	}, {
 		name:    "destroy/preview: a token already on the command line is satisfied, not required",
 		args:    []string{"destroy", "--dry-run", "--authorize", authorizeDataLoss, "--ask-become-pass=false"},
