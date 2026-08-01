@@ -74,7 +74,6 @@ jobs:
 
       - name: Repository guardrails
         run: |
-          make stale-term-check
           make cli-file-size-check
           make check-go-source-visibility
           make containerfile-pin-check

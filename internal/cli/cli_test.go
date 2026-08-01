@@ -38,14 +38,33 @@ import (
 
 func TestMain(m *testing.M) {
 	localRootGate.enabled = false
-	cleanup, err := stubAnsiblePlaybookOnPath()
+	stubCleanup, err := stubAnsiblePlaybookOnPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stub ansible-playbook: %v\n", err)
 		os.Exit(1)
 	}
+	bundleCleanup, err := shareBundleCacheAcrossTests()
+	if err != nil {
+		stubCleanup()
+		fmt.Fprintf(os.Stderr, "share bundle cache: %v\n", err)
+		os.Exit(1)
+	}
 	code := m.Run()
-	cleanup()
+	bundleCleanup()
+	stubCleanup()
 	os.Exit(code)
+}
+
+func shareBundleCacheAcrossTests() (func(), error) {
+	dir, err := os.MkdirTemp("", "bootwright-cli-test-bundle")
+	if err != nil {
+		return nil, err
+	}
+	restore := workspace.SetBundleCacheRootForTest(dir)
+	return func() {
+		restore()
+		os.RemoveAll(dir)
+	}, nil
 }
 
 func stubAnsiblePlaybookOnPath() (func(), error) {

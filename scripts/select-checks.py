@@ -175,8 +175,6 @@ def stages_for(domains: set[str]) -> set[str]:
         stages.add("shellcheck-check")
     if "docs" in domains:
         stages.add("docs-check")
-    if domains & {"docs", "specs", "readme", "fixtures", "addons", "agents"}:
-        stages.add("stale-term-check")
     if "container" in domains:
         stages.add("containerfile-pin-check")
     if "workflows" in domains:
@@ -271,7 +269,6 @@ def all_stages() -> tuple[str, ...]:
         "docs-check",
         "python-test",
         "shellcheck-check",
-        "stale-term-check",
         "sync-bundle",
         "workflow-yaml-check",
     )

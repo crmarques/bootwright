@@ -60,11 +60,9 @@ class StagesTest(unittest.TestCase):
     def test_go_change_runs_the_go_guardrails_only(self):
         self.assertEqual(selector.stages_for({"go"}), set(selector.GO_STAGES))
 
-    def test_docs_change_runs_the_docs_build_and_stale_terms(self):
+    def test_docs_change_runs_the_docs_build_only(self):
         stages = selector.stages_for({"docs"})
-        self.assertIn("docs-check", stages)
-        self.assertIn("stale-term-check", stages)
-        self.assertNotIn("check-gofmt", stages)
+        self.assertEqual(stages, {"docs-check"})
 
     def test_ansible_change_runs_syntax_check_and_bundle_sync(self):
         stages = selector.stages_for({"ansible"})

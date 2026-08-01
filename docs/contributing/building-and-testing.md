@@ -48,7 +48,7 @@ change can break; `make check-full` is the release gate and CI
 | --- | --- | --- |
 | `make check-scoped` | A bug fix, or any change that preserves the existing contracts | Only what the diff against `CHECK_BASE` (default `main`) can break: the guardrail stages whose input paths the diff touched, and the changed Go packages plus their reverse-dependency closure. |
 | `make check-feature` | A new feature, kind, flag, or field | Everything `check-scoped` selects, plus an unconditional contract floor — `api/v1alpha1`, the validators, the renderers, `internal/cli`, `internal/converge`, and the repo guard tests — because a new contract changes packages the diff never touches. |
-| `make check-fast` | You want the whole Go suite without the slow linters | The cheap local guardrails — CLI file-size, Go source visibility, `gofmt`, the stale-term denylist, Containerfile digest pinning, `shellcheck`, and the E2E dependency check — followed by the full `go test ./...`. |
+| `make check-fast` | You want the whole Go suite without the slow linters | The cheap local guardrails — CLI file-size, Go source visibility, `gofmt`, Containerfile digest pinning, `shellcheck`, and the E2E dependency check — followed by the full `go test ./...` (which carries the retired-vocabulary denylist as a guard test). |
 | `make check-full` | Cutting a release, or on request | Everything in `check-fast` plus `go vet`, `staticcheck`, `go mod tidy` verification, the Python unit tests, `ansible-syntax-check`, `ansible-lint`, the workflow-YAML lint, `docs-check`, `go test -race`, and a clean-checkout test run. |
 
 Intent selects the **floor**, never the ceiling. `check-scoped` on a change that

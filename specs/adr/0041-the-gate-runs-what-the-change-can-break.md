@@ -41,10 +41,12 @@ hold 720 of the ~2 400 test functions and have no dependents at all, so a change
 confined to either can only break itself; `api/v1alpha1` has 34 dependents and
 genuinely needs a wide retest. The gate made no distinction.
 
-A fourth cause is structural rather than mechanical: the same rule is enforced
-twice in places. The `stale-term-check` denylist in the `Makefile` and
-`TestCurrentDefinitionDocsUseNewSchemaTerms` in `internal/repo/checks` are two
-separately maintained term lists over overlapping path sets, free to drift apart.
+A fourth cause is structural rather than mechanical: the same rule was enforced
+twice. The `stale-term-check` denylist in the `Makefile` and
+`TestCurrentDefinitionDocsUseNewSchemaTerms` in `internal/repo/checks` were two
+separately maintained term lists over overlapping path sets, and they had
+already drifted — `.agents/knowledge/repo-fitness-guardrails.md` documented that
+`specs/adr` was excluded from the scan, while the Makefile variable listed it.
 
 ## Decision
 
@@ -85,6 +87,18 @@ installs a stub on `PATH`. Playbook validity is covered by
 depends on the `ansible/` tree, the collections stamp, and the sync script, so an
 unchanged tree makes it a no-op.
 
+**A test package shares one extracted bundle.** `BundleDir` consults a cache root
+that `SetBundleCacheRootForTest` overrides, and the `internal/cli` `TestMain`
+points it at one directory for the whole package. Per-test `RootDir()` isolation
+is untouched; only the extracted bundle is shared, and `existingBundleMatches`
+still verifies the archive digest, so a shared directory cannot serve stale
+content.
+
+**One owner per rule.** `TestCurrentDefinitionDocsUseNewSchemaTerms` holds the
+union of both retired-vocabulary term lists over the union of both path sets,
+exempting `specs/adr` because an ADR must be able to quote the shape it retired.
+The `stale-term-check` Makefile target and `DEFINITION_CHECK_PATHS` are deleted.
+
 ## Consequences
 
 Measured on a 16-core host, all comparisons under equal load:
@@ -110,7 +124,7 @@ narrow re-verification list.
 requiring it, and drops the redundant `go test -vet=off ./...` pass that
 duplicated `check-fast`'s own run.
 
-The stub removes the Ansible execution but not the rest of `internal/cli`'s cost:
-at 159.8s it remains the slowest package in the repo, because every test
-re-extracts the embedded bundle into a fresh `t.TempDir()` home. B-061 records
-that lever, worth roughly another 140s.
+The two changes compound on `internal/cli`, the repo's slowest package: 408.9s
+with real Ansible and per-test bundle extraction, 159.8s with the Ansible stub
+alone, and 17.3s with the shared bundle cache as well. `TestApplyDestroySafetyMatrix`
+follows the same curve — 231.6s, 45.3s, 12.5s.

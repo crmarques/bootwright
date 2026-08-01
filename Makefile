@@ -27,7 +27,6 @@ E2E_ANSIBLE_FLAGS = $(if $(ANSIBLE_PLAYBOOK),--ansible-playbook $(ANSIBLE_PLAYBO
 E2E_APPLY_ALL ?= $(BIN_DIR)/$(BINARY) apply --yes
 E2E_APPLY_FLAGS ?=
 E2E_CLEAN ?= sudo rm -rf
-DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md specs/adr test add-ons $(wildcard examples)
 
 ANSIBLE_SRC_DIR = ansible
 EMBED_BUNDLE_ARCHIVE = internal/converge/bundle/ansible_bundle.zip
@@ -93,7 +92,7 @@ SELECT_CHECKS = $(PYTHON) scripts/select-checks.py
 CHECK_BASE ?= main
 SELECT_TIER ?= scoped
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check-full check-fast check-scoped check-feature run-selected-checks check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle test validate plan check-full check-fast check-scoped check-feature run-selected-checks check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
@@ -182,7 +181,7 @@ check-full: check-fast
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
-check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check shellcheck-check check-e2e-deps
+check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt containerfile-pin-check shellcheck-check check-e2e-deps
 	$(GO) test $(GO_TEST_PACKAGES)
 
 check-scoped: sync-bundle
@@ -304,18 +303,6 @@ workflow-yaml-check:
 docs-check:
 	@$(MKDOCS) --version >/dev/null 2>&1 || { printf '%s\n' 'mkdocs is not importable by $(PYTHON); install with $(PYTHON) -m pip install -r docs/requirements.txt or set MKDOCS=/path/to/mkdocs'; exit 1; }
 	$(MKDOCS) build --strict
-
-stale-term-check:
-	@if command -v rg >/dev/null 2>&1; then \
-		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
-		status=$$?; \
-	else \
-		grep -RInE 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
-		status=$$?; \
-	fi; \
-	if [ "$$status" -eq 0 ]; then exit 1; fi; \
-	if [ "$$status" -eq 1 ]; then exit 0; fi; \
-	exit "$$status"
 
 cli-file-size-check:
 	@over=$$(find internal/cli internal/render internal/render/installer internal/render/inventory internal/render/ceph internal/state/scaffold internal/converge internal/converge/bastion internal/secrets internal/sshtrust internal/preflight internal/status internal/clusteraccess internal/infra/proxy internal/host/become -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \

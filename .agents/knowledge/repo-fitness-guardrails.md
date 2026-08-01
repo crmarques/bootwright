@@ -47,9 +47,15 @@ internal/state/graph — split by kind when crossed), `API_FILE_LINE_LIMIT=600`
 own `storage_<kind>.go`-style file). `_test.go` files are excluded. Do not
 raise a limit without a deliberate refactor justification.
 
-**stale-term-check scope:** `DEFINITION_CHECK_PATHS` in the Makefile
-deliberately excludes `specs/adr` — ADRs intentionally describe the
-abandoned/old shape in their Context sections and would false-positive.
+**Stale-term scope:** `TestCurrentDefinitionDocsUseNewSchemaTerms`
+(`internal/repo/checks/repocheck_test.go`) is the single owner of the retired
+definition vocabulary — one term list over one path set. It exempts
+`specs/adr` because ADRs intentionally quote the shape they retired and would
+false-positive. Until ADR 0041 the same rule was ALSO enforced by a
+`stale-term-check` Makefile grep with a different term list and a path set that
+did include `specs/adr`; the two drifted, and this paragraph documented the
+intent the Makefile had already diverged from. Add a retired term here and
+nowhere else.
 
 **Diagnostics vocabulary:** `TestDiagnosticsSpeakAuthoredFieldVocabulary`
 (`internal/state/desired/validate_vocabulary_test.go`) greps validator

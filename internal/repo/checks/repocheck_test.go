@@ -59,60 +59,124 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	}
 }
 
+var staleDefinitionRoots = []string{
+	"README.md",
+	"docs",
+	"specs/state-model.md",
+	"specs/architecture.md",
+	"specs/domain.md",
+	"specs/security.md",
+	"specs/index.md",
+	"specs/README.md",
+	"test",
+	"add-ons",
+	"examples",
+	"ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md",
+}
+
+var staleDefinitionTerms = []string{
+	"spec.bootArtifactsHttp",
+	"spec.bootArtifactsExternal",
+	"providerRefs",
+	"HostPool",
+	"`Network`",
+	"infrastructureRef",
+	"clusterInstallMode",
+	"bootInterface",
+	"serviceAddresses",
+	"serviceAddressNames",
+	"`spec.installMode`",
+	"`spec.ssh.address`",
+	"isoFrom",
+	"`Host`",
+	"`ClusterInfra`",
+	"kind: Host",
+	"kind: ClusterInfra",
+	"kind: Playbook",
+	"clusterInfra",
+	"hostRef",
+	"spec.machine.libvirt",
+	"services.bootArtifacts",
+	"services.loadBalancer",
+	"services.proxy",
+	"services.registry",
+	"services.nameResolution",
+	"MachineFlavorBareMetal",
+	"BuildClosure",
+	"input-files",
+	"/state/",
+	"/workflow/",
+	"internal/runtime/",
+	"internal/infra/support",
+	"internal/converge/checks",
+}
+
+var staleDefinitionPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`runtime/[^/]+/installer`),
+}
+
 func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
-	files := []string{
-		"README.md",
-		"specs/architecture.md",
-		"specs/state-model.md",
-		"ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md",
-	}
-	docsDir := filepath.Join(repoRoot(t), "docs")
-	if err := filepath.WalkDir(docsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-		rel, err := filepath.Rel(repoRoot(t), path)
-		if err != nil {
-			return err
-		}
-		files = append(files, filepath.ToSlash(rel))
-		return nil
-	}); err != nil {
-		t.Fatalf("walk docs: %v", err)
-	}
-	rejected := []string{
-		"spec.bootArtifactsHttp",
-		"spec.bootArtifactsExternal",
-		"providerRefs",
-		"HostPool",
-		"`Network`",
-		"infrastructureRef",
-		"clusterInstallMode",
-		"bootInterface",
-		"serviceAddresses",
-		"serviceAddressNames",
-		"`spec.installMode`",
-		"`spec.ssh.address`",
-		"isoFrom",
-		"`Host`",
-		"`ClusterInfra`",
-		"kind: Host",
-		"kind: ClusterInfra",
-		"kind: Playbook",
-		"clusterInfra",
-		"hostRef",
-	}
-	for _, path := range files {
+	for _, path := range staleDefinitionFiles(t) {
 		data := readRepoFile(t, path)
-		for _, phrase := range rejected {
+		if strings.IndexByte(data, 0) >= 0 {
+			continue
+		}
+		for _, phrase := range staleDefinitionTerms {
 			if strings.Contains(data, phrase) {
-				t.Fatalf("%s still contains stale schema text %q", path, phrase)
+				t.Errorf("%s still contains stale schema text %q", path, phrase)
+			}
+		}
+		for _, pattern := range staleDefinitionPatterns {
+			if pattern.MatchString(data) {
+				t.Errorf("%s still contains stale schema text matching %q", path, pattern)
 			}
 		}
 	}
+}
+
+func staleDefinitionFiles(t *testing.T) []string {
+	t.Helper()
+	root := repoRoot(t)
+	var files []string
+	for _, entry := range staleDefinitionRoots {
+		full := filepath.Join(root, filepath.FromSlash(entry))
+		info, err := os.Stat(full)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			t.Fatalf("stat %s: %v", entry, err)
+		}
+		if !info.IsDir() {
+			files = append(files, entry)
+			continue
+		}
+		if err := filepath.WalkDir(full, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !staleDefinitionScannedExt(filepath.Ext(path)) {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			files = append(files, filepath.ToSlash(rel))
+			return nil
+		}); err != nil {
+			t.Fatalf("walk %s: %v", entry, err)
+		}
+	}
+	return files
+}
+
+func staleDefinitionScannedExt(ext string) bool {
+	switch ext {
+	case ".md", ".yaml", ".yml", ".go", ".json", ".sh":
+		return true
+	}
+	return false
 }
 
 func TestCephFSMetadataPoolDestructiveChangeDocumented(t *testing.T) {

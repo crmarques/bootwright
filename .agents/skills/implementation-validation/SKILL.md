@@ -79,14 +79,13 @@ the whole gate for each late prose edit is worse. Overlap them:
 
   plus docs/, specs/, README.md:  go test ./internal/repo/checks/... \
                                     ./internal/state/desired/... ./internal/cli/...
-                                  make stale-term-check
 
   anything else:                  rerun the selected gate, in full
   ```
 
   Those three packages hold every test that reads authored prose — the repo
-  guard tests, the docs-snippet validator, and the authorization-contract test —
-  and `stale-term-check` is the only non-Go stage that scans it; nothing else in
+  guard tests (including the retired-vocabulary denylist), the docs-snippet
+  validator, and the authorization-contract test; nothing else in
   `go test ./...` can have changed. Extend that list in the same change whenever
   a task introduces another test that reads prose from the repo tree.
 - Report the change verified only once both the background run and the scoped

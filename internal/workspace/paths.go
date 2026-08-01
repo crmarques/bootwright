@@ -11,6 +11,8 @@ const (
 	ansibleBundlesDirName = "ansible-bundles"
 )
 
+var bundleCacheRoot string
+
 func DefaultControllerCLIInstallDir() string {
 	return "/usr/local/bin"
 }
@@ -43,8 +45,18 @@ func ResolveAnsiblePlaybook() string {
 	return "ansible-playbook"
 }
 
+func SetBundleCacheRootForTest(path string) func() {
+	previous := bundleCacheRoot
+	bundleCacheRoot = path
+	return func() { bundleCacheRoot = previous }
+}
+
 func BundleDir(versionMarker string) (string, error) {
-	return filepath.Abs(filepath.Join(CacheDir(), ansibleBundlesDirName, bundleCacheKey(versionMarker)))
+	root := bundleCacheRoot
+	if root == "" {
+		root = CacheDir()
+	}
+	return filepath.Abs(filepath.Join(root, ansibleBundlesDirName, bundleCacheKey(versionMarker)))
 }
 
 func bundleCacheKey(versionMarker string) string {
