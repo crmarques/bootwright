@@ -802,3 +802,32 @@ learned; this file records what it still owes.
 - Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md),
   [0039](../../specs/adr/0039-the-node-a-teardown-left-serving-the-cluster.md),
   B-020
+
+## B-060 — Two stale-term denylists cover overlapping paths and can drift
+- Status: open
+- Area: repo guardrails / definitions
+- Origin: ADR 0040
+- Severity: low
+- Problem: the same class of rule is enforced twice, by two independently
+  maintained lists. `stale-term-check` in the `Makefile` greps one set of retired
+  terms over `README.md`, `docs`, five named `specs/*.md` files, `specs/adr`,
+  `test`, `add-ons`, and `examples`.
+  `TestCurrentDefinitionDocsUseNewSchemaTerms` in
+  `internal/repo/checks/repocheck_test.go` greps a *different, longer* set over
+  `README.md`, three named files, and every `.md` under `docs/`. Neither list is
+  a superset of the other and neither references the other, so a term added to
+  one is silently absent from the other. ADR 0040 folded the stage into the
+  scoped gate but did not merge the lists.
+- Why it was not merged: the path sets differ deliberately. ADR 0026 quotes the
+  retired custom-playbook kind name verbatim, because documenting that rename is
+  the ADR's whole purpose, so the Go test's term list cannot simply be pointed at
+  the Makefile's path list — historical decision records must be allowed to name
+  the terms they retired. The same guard rejects any file that spells one out,
+  which is why this entry does not either.
+- Exit: make one owner authoritative — the Go guard test, since it runs in every
+  gate tier that selects `internal/repo/checks` — with the union of both term
+  lists, the union of both path sets, and an explicit `specs/adr/**` exemption
+  justified in the test itself. Then delete the `Makefile` target and its
+  `DEFINITION_CHECK_PATHS` variable, and drop `stale-term-check` from
+  `scripts/select-checks.py`.
+- Related: [0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md)
