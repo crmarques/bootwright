@@ -3,7 +3,7 @@ PYTHON ?= python3
 DOCKER ?= docker
 STATICCHECK ?= $(shell command -v staticcheck 2>/dev/null)
 SHELLCHECK ?= $(shell command -v shellcheck 2>/dev/null)
-MKDOCS ?= $(shell command -v mkdocs 2>/dev/null)
+MKDOCS ?= $(PYTHON) -m mkdocs
 COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
@@ -302,7 +302,7 @@ workflow-yaml-check:
 	$(YAMLLINT) -d '{extends: default, rules: {document-start: disable, line-length: disable, truthy: {check-keys: false}, comments-indentation: disable}}' .github/workflows
 
 docs-check:
-	@test -n "$(MKDOCS)" || { printf '%s\n' 'mkdocs not found in PATH; install with python3 -m pip install -r docs/requirements.txt or set MKDOCS=/path/to/mkdocs'; exit 1; }
+	@$(MKDOCS) --version >/dev/null 2>&1 || { printf '%s\n' 'mkdocs is not importable by $(PYTHON); install with $(PYTHON) -m pip install -r docs/requirements.txt or set MKDOCS=/path/to/mkdocs'; exit 1; }
 	$(MKDOCS) build --strict
 
 stale-term-check:

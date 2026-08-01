@@ -108,27 +108,42 @@ brief:
 - Create a temporary branch and worktree from local `main` (preauthorized — do not
   ask). Edit only inside it; use the primary `main` worktree for read-only
   inspection until integration.
-- Rebase first: immediately before every `make check-fast`, user-requested `make
-  check`, or task commit, check whether local `main` has advanced and rebase onto
-  it if so — separately each time, even when an earlier step found the branch
-  current. Task commits are preauthorized; do not ask.
+- Rebase first: immediately before every gate run or task commit, check whether
+  local `main` has advanced and rebase onto it if so — separately each time, even
+  when an earlier step found the branch current. Task commits are preauthorized;
+  do not ask.
 - Overlap whatever has no ordering dependency. Wall-clock time to completion is
   part of the deliverable: split an independent task list across parallel
   worktrees, issue independent commands in one batch, and never idle a slow gate
   — the tail of a task (knowledge entries, ADRs, docs, the handoff) is written
-  *while* `make check-fast` runs, not after it returns.
-- `make check-fast` is **the** gate. Start it in the background as soon as the
-  code, Ansible, API, and example edits are final, and treat green as sufficient
-  to report the change verified and to integrate.
-  `implementation-validation` owns the rest: what may be edited concurrently,
-  and the narrow re-verification covering prose that lands after the launch.
-- Never run `make check` unless the user asks for it in that turn. It is not a
-  thoroughness upgrade you may elect: its `-race` and `ansible-lint` stages cost
-  tens of minutes, and spending that is the user's call. "The change looks
-  risky", "this touches Ansible", and "I want to be sure before merging" are not
-  exceptions — report what `check-fast` proved and let the user ask for more.
-  This applies equally to hand-rolled substitutes: no repo-wide `go test -race`,
-  no `make check` under another name.
+  *while* the selected gate runs, not after it returns.
+- **Pick the gate by what the change is**, and start it in the background as soon
+  as the code, Ansible, API, and example edits are final. Green is sufficient to
+  report the change verified and to integrate.
+  - `make check-scoped` — a bug fix or any change that preserves existing
+    contracts. Runs only the stages the diff can break and the changed Go
+    packages plus their reverse-dependency closure.
+  - `make check-feature` — a new feature, kind, flag, or field. Adds the
+    API/validator/render/CLI contract floor, because a new contract changes
+    packages the diff never touches.
+  - `make check-fast` — the whole Go suite, when a change is broad enough that
+    selection buys nothing, or when the selector widened anyway.
+
+  Intent selects the floor, never the ceiling: the selector derives the package
+  set from the diff and the import graph, so calling a change "a bug fix" cannot
+  narrow one that is genuinely wide. It fails open — an unresolvable base, a
+  huge diff, or an edit to `Makefile`, `go.mod`, `go.sum`, or the selector
+  itself runs everything. `implementation-validation` owns the rest: what may be
+  edited concurrently, and the narrow re-verification covering prose that lands
+  after the launch.
+- Never run `make check-full` unless the user asks for it in that turn, or a
+  release is being cut. It is not a thoroughness upgrade you may elect: its
+  `-race`, `ansible-lint`, `docs-check`, and clean-checkout stages cost tens of
+  minutes, and spending that is the user's call. "The change looks risky", "this
+  touches Ansible", and "I want to be sure before merging" are not exceptions —
+  report what the selected gate proved and let the user ask for more. This
+  applies equally to hand-rolled substitutes: no repo-wide `go test -race`, no
+  `make check-full` under another name.
 - A failure that reproduces on the merge base is **inherited, not yours**. Prove
   it on `main` before claiming it, note it in `.agents/knowledge/BACKLOG.md`, and
   run whatever stages the abort skipped so the change's own coverage is still
@@ -160,7 +175,7 @@ giving a commit subject after user review/testing:
   summaries, file lists, verification details, or commit questions.
 - When a safety gate blocks merge, or the user asked to hold the change on a
   temporary branch for review/testing, report the temporary worktree path, branch,
-  task commit, whether `make check-fast` completed, and the blocker or the reason it
+  task commit, which gate was selected and whether it completed, and the blocker or the reason it
   is held. If required verification cannot complete, report that blocker instead.
 - An inherited failure carried through a successful merge adds exactly one line
   after the subject: what failed, that it reproduces on the merge base, and that
@@ -174,6 +189,6 @@ Examples:
 - Held for review: worktree
   `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`, branch
   `work/<task-slug>-<base8>-<timestamp>`, task commit
-  `feat(cli): add --machines selection`, `make check-fast` completed green —
+  `feat(cli): add --machines selection`, `make check-feature` completed green —
   held at the user's request for hardware testing.
-- Blocked: `Blocked: make check-fast could not complete`
+- Blocked: `Blocked: make check-scoped could not complete`

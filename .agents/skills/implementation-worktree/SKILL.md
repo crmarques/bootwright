@@ -7,7 +7,7 @@ Work must happen in a temporary branch and worktree, never directly in the prima
 ## Load First
 
 - `/.agents/skills/implementation-validation/SKILL.md` — owns the rebase-first →
-  `make check-fast` loop this skill defers to.
+  gate-selection loop this skill defers to.
 - Any task-specific project skills for the requested change.
 
 ## Before Editing
@@ -51,11 +51,12 @@ completion, not just eventual correctness.
 - Give each independent piece its own `work/<scope-slug>-<base8>-<timestamp>`
   branch and matching worktree, and work them concurrently.
 - The coordinating agent reviews, combines worker output, resolves conflicts,
-  and runs the final validation once for the combined result — do not run
-  `make check-fast` per worker branch when a single combined run will do.
+  and runs the final validation once for the combined result — do not run a gate
+  per worker branch when a single combined run will do. The combined diff is
+  wider than any worker's, so the selected gate widens with it.
 - Fold every worker branch into one integration branch (rebase or cherry-pick,
-  in a stated order) before validating; that combined branch is the only one
-  `make check-fast` runs against and the only one `main` fast-forwards to.
+  in a stated order) before validating; that combined branch is the only one the
+  gate runs against and the only one `main` fast-forwards to.
 - Do not over-split: more branches means more rebase/merge/conflict-resolution
   overhead at integration. If the pieces touch overlapping files, are too small
   to justify a separate branch, or coordination would cost more wall-clock time
@@ -65,34 +66,32 @@ completion, not just eventual correctness.
 ## Validate And Commit
 
 - Run focused commands during implementation. After the intended edit set,
-  follow `implementation-validation`: immediately before every `make
-  check-fast` or user-requested `make check`, check for a `main` advance and
-  rebase first when needed.
-- Launch that `make check-fast` in the background as soon as the compiled
-  surface is final, and write the task's knowledge, ADR, and docs updates while
-  it runs — `implementation-validation` ("Overlap The Gate With The Tail Work")
+  follow `implementation-validation`: immediately before every gate run, check
+  for a `main` advance and rebase first when needed.
+- Launch the selected gate in the background as soon as the compiled surface is
+  final, and write the task's knowledge, ADR, and docs updates while it runs — `implementation-validation` ("Overlap The Gate With The Tail Work")
   owns what may be edited concurrently and how the result is re-verified.
-- Once `make check-fast` passes, repeat the `main` advance check immediately
-  before committing task changes. Rebase first when needed; when that changes
+- Once the gate passes, repeat the `main` advance check immediately before
+  committing task changes. Rebase first when needed; when that changes
   the effective tree, rerun validation before committing. Task commits and
   commits of rebase fixes are preauthorized — do not ask. Author commits as the
   human only — no agent co-author or attribution trailer (see AGENTS.md
   "Handoff Format").
-- Once `make check-fast` passes and the branch is rebased current, integration is
+- Once the gate passes and the branch is rebased current, integration is
   preauthorized — do not ask. Proceed to "Integrate" below. The only reasons to
   leave the change on the branch without merging are a failed safety gate or an
   explicit user request to hold it for review/testing.
 
 ## Integrate
 
-When `make check-fast` is green and the branch is current, merging is
+When the selected gate is green and the branch is current, merging is
 preauthorized — the final rebase, fast-forward, worktree removal, and branch
 deletion need no separate approval.
 
 - Rebase the temporary branch onto current local `main` if it advanced; rerun
-  `make check-fast` when the rebase changes the effective tree.
+  the gate when the rebase changes the effective tree.
 - Merge only while every safety gate holds: `main` was clean at task start and is
-  still clean, `make check-fast` is green apart from failures proven inherited
+  still clean, the selected gate is green apart from failures proven inherited
   from the merge base (`implementation-validation`, "Inherited Failures"), and no
   rebase or fast-forward conflict occurs. When they all hold, fast-forward `main`
   to the temporary branch, then remove the worktree and delete the branch.

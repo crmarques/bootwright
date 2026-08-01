@@ -40,20 +40,54 @@ make test          # go test ./...
 
 ## Check gates
 
-Three gates — the two Go gates cheapest first, plus the docs build. CI
-(`.github/workflows/checks.yml`) requires all three.
+Four gates, ordered by breadth. Pick the narrowest one that covers what the
+change can break; `make check-full` is the release gate and CI
+(`.github/workflows/checks.yml`) runs its stages individually.
 
-| Command | What it runs |
-| --- | --- |
-| `make check-fast` | Syncs the bundle, then the cheap local guardrails — CLI file-size, Go source visibility, `gofmt`, the stale-term denylist, Containerfile digest pinning, `shellcheck`, and the E2E dependency check — followed by the full `go test ./...` suite. This is the gate to run before handing off a change. |
-| `make check` | Everything in `check-fast` plus `go vet`, `staticcheck`, `go mod tidy` verification, `go test -race`, a clean-checkout test run, the Python unit tests, `ansible-syntax-check`, `ansible-lint`, and the workflow-YAML lint. Run it when you touch the Ansible collection, dependencies, or concurrency-sensitive code. |
-| `make docs-check` | The docs gate: `mkdocs build --strict`, which fails on a broken link, an unresolved reference, or a page missing from the MkDocs nav. Install its dependencies once with `python3 -m pip install -r docs/requirements.txt`, and preview with `mkdocs serve`. Run it whenever you touch `docs/` or `mkdocs.yml`; it is not part of `make check`. |
+| Command | When | What it runs |
+| --- | --- | --- |
+| `make check-scoped` | A bug fix, or any change that preserves the existing contracts | Only what the diff against `CHECK_BASE` (default `main`) can break: the guardrail stages whose input paths the diff touched, and the changed Go packages plus their reverse-dependency closure. |
+| `make check-feature` | A new feature, kind, flag, or field | Everything `check-scoped` selects, plus an unconditional contract floor — `api/v1alpha1`, the validators, the renderers, `internal/cli`, `internal/converge`, and the repo guard tests — because a new contract changes packages the diff never touches. |
+| `make check-fast` | You want the whole Go suite without the slow linters | The cheap local guardrails — CLI file-size, Go source visibility, `gofmt`, the stale-term denylist, Containerfile digest pinning, `shellcheck`, and the E2E dependency check — followed by the full `go test ./...`. |
+| `make check-full` | Cutting a release, or on request | Everything in `check-fast` plus `go vet`, `staticcheck`, `go mod tidy` verification, the Python unit tests, `ansible-syntax-check`, `ansible-lint`, the workflow-YAML lint, `docs-check`, `go test -race`, and a clean-checkout test run. |
+
+Intent selects the **floor**, never the ceiling. `check-scoped` on a change that
+touches `api/v1alpha1` still retests all 34 dependent packages, because the
+selector derives the package set from the diff and the import graph — labelling
+the prompt "a bug fix" cannot narrow a change that is genuinely wide.
+
+`make docs-check` remains available on its own: `mkdocs build --strict` fails on
+a broken link, an unresolved reference, or a page missing from the MkDocs nav.
+Install its dependencies once with `python3 -m pip install -r
+docs/requirements.txt`, and preview with `mkdocs serve`. `check-scoped` and
+`check-feature` run it automatically when the diff touches `docs/` or
+`mkdocs.yml`; `check-full` always runs it.
+
+The selector is
+[`scripts/select-checks.py`](https://github.com/crmarques/bootwright/blob/main/scripts/select-checks.py),
+unit-tested by `scripts/test_select_checks.py`. It fails **open**: an
+unresolvable base ref, a non-git tree, a diff over `--max-changed` paths, or an
+edit to `Makefile`, `go.mod`, `go.sum`, or the selector itself all widen the run
+to every stage and `./...`. Inspect a selection without running it:
+
+```sh
+python3 scripts/select-checks.py --tier scoped --base main
+```
 
 `check-fast`'s E2E dependency check only verifies that `ansible-playbook` is
 reachable. The cases behind it are described in
 [`test/README.md`](https://github.com/crmarques/bootwright/blob/main/test/README.md),
 listed by `make list-e2e-cases`, and rendered without touching a host by
 `make e2e-dry-run CASE=<name>`.
+
+!!! warning "Never let a test spawn the real `ansible-playbook`"
+    `workspace.ResolveAnsiblePlaybook()` falls back to whatever
+    `ansible-playbook` is on `PATH`, so a test that drives `apply` or `destroy`
+    to completion executes real Ansible against unreachable fixture hosts and
+    waits out every SSH timeout. The `internal/cli` `TestMain` installs a stub on
+    `PATH` for exactly this reason — that one change took
+    `TestApplyDestroySafetyMatrix` from 283s to 11.5s. A new test package that
+    drives a converge path must do the same.
 
 !!! tip "If `/tmp` is a small tmpfs"
     The full test suite can exhaust a small `/tmp` and fail with a disk-quota

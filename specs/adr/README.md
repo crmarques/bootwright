@@ -54,3 +54,4 @@ below.
 | [0038](0038-removing-the-cluster-a-node-was-left-running.md) | Removing the Cluster a Node Was Left Running | extends 0030 with the `foreign-daemons` token; follows 0034 |
 | [0039](0039-the-node-a-teardown-left-serving-the-cluster.md) | The Node a Teardown Left Serving the Cluster | refines the `unreachable-nodes` token of 0030; closes the teardown side of 0038 |
 | [0040](0040-one-word-for-every-token-a-verb-accepts.md) | One Word for Every Token a Verb Accepts | extends 0030 with the `all` token |
+| [0041](0041-the-gate-runs-what-the-change-can-break.md) | The Gate Runs What the Change Can Break | replaces the single `check-fast` gate; retires `make check` for `make check-full` |
