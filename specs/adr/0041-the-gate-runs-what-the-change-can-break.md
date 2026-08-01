@@ -1,4 +1,4 @@
-# ADR 0040: The Gate Runs What the Change Can Break
+# ADR 0041: The Gate Runs What the Change Can Break
 
 ## Status
 

@@ -45,7 +45,7 @@ stage exists for. Losing the accidental execution loses no verification.
 
 ## Related
 
-- [ADR 0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md) —
+- [ADR 0041](../../specs/adr/0041-the-gate-runs-what-the-change-can-break.md) —
   the tiered gate this discovery motivated.
 - [`ansible-ssh-liveness-timeouts.md`](ansible-ssh-liveness-timeouts.md) — where
   the 30s connect timeout comes from.

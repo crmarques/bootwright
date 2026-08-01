@@ -806,7 +806,7 @@ learned; this file records what it still owes.
 ## B-060 — Two stale-term denylists cover overlapping paths and can drift
 - Status: open
 - Area: repo guardrails / definitions
-- Origin: ADR 0040
+- Origin: ADR 0041
 - Severity: low
 - Problem: the same class of rule is enforced twice, by two independently
   maintained lists. `stale-term-check` in the `Makefile` greps one set of retired
@@ -816,7 +816,7 @@ learned; this file records what it still owes.
   `internal/repo/checks/repocheck_test.go` greps a *different, longer* set over
   `README.md`, three named files, and every `.md` under `docs/`. Neither list is
   a superset of the other and neither references the other, so a term added to
-  one is silently absent from the other. ADR 0040 folded the stage into the
+  one is silently absent from the other. ADR 0041 folded the stage into the
   scoped gate but did not merge the lists.
 - Why it was not merged: the path sets differ deliberately. ADR 0026 quotes the
   retired custom-playbook kind name verbatim, because documenting that rename is
@@ -830,19 +830,19 @@ learned; this file records what it still owes.
   justified in the test itself. Then delete the `Makefile` target and its
   `DEFINITION_CHECK_PATHS` variable, and drop `stale-term-check` from
   `scripts/select-checks.py`.
-- Related: [0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md)
+- Related: [0041](../../specs/adr/0041-the-gate-runs-what-the-change-can-break.md)
 
 ## B-061 — Every `internal/cli` test re-extracts the whole embedded Ansible bundle
 - Status: open
 - Area: testing / bundle cache
-- Origin: ADR 0040
+- Origin: ADR 0041
 - Severity: medium
 - Problem: `bundle.EnsureAnsibleBundle` extracts the 4.9 MB embedded archive into
   `workspace.BundleDir(versionMarker)`, which resolves under `CacheDir()` →
   `RootDir()`. Every `internal/cli` test calls `setTestHomeAndRoot`, which points
   `RootDir()` at a fresh `t.TempDir()`, so the `existingBundleMatches` reuse check
   can never hit across tests and each context-init test unpacks roughly 1 400
-  files from scratch. Measured after ADR 0040's Ansible stub landed: a test that
+  files from scratch. Measured after ADR 0041's Ansible stub landed: a test that
   never initializes a context runs in 0.00s; a pair of context-init tests costs
   4.2s, about 2s each, essentially all of it extraction. The package as a whole
   is 159.8s on an idle host, and it is the slowest package in the repo by an
@@ -858,4 +858,4 @@ learned; this file records what it still owes.
   Expect `internal/cli` to fall from ~160s to ~20s, and a docs-only scoped gate
   from ~170s to ~15s.
 - Related: [go-test-spawns-real-ansible.md](go-test-spawns-real-ansible.md),
-  [0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md)
+  [0041](../../specs/adr/0041-the-gate-runs-what-the-change-can-break.md)
