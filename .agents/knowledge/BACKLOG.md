@@ -803,15 +803,15 @@ learned; this file records what it still owes.
   [0039](../../specs/adr/0039-the-node-a-teardown-left-serving-the-cluster.md),
   B-020
 
-## B-060 — The status next-step spine ends on the retired `bootwright cluster access`
+## B-060 — The status next-step spine ends on a retired `cluster` subcommand
 - Status: open
 - Area: cli / status
 - Origin: ux-review 2026-08-01; the spec spine clause landed in the same change
 - Severity: medium
-- Problem: `internal/status/hints.go:33` appends the literal
-  `"bootwright cluster access"` as the terminal next-step hint, in text output
-  and in `status --output json` `nextSteps[]`. No such subcommand exists — the
-  name sits in `retiredCLIVocabulary`
+- Problem: `internal/status/hints.go:33` appends a retired `cluster`
+  subcommand (the pre-`info` access verb) as the terminal next-step hint, in
+  text output and in `status --output json` `nextSteps[]`. No such subcommand
+  exists — the name sits in `retiredCLIVocabulary`
   (`internal/repo/checks/artifact_sync_test.go`), but that guard scans only
   Markdown, so the emitter survived the retirement. The operator's taught
   compass ends on an unknown-command error at the moment of first success.
