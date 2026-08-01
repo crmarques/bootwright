@@ -44,24 +44,48 @@ how managed-OS installs work in general, see
 
 ## Get The Input Tree
 
-There is no `example init` provider for Ceph, so start from the ready-made
-example tree in the bootwright source repository. If you installed the release
-tarball, clone the repo for the YAML — and note that example trees on `main`
-track `main`'s schema, so a released binary may reject them (see
-[Install the CLI](installation.md#install-the-cli)):
+`bootwright example init` scaffolds a Ceph tree with the build you installed, so
+what it writes always matches your binary's schema:
+
+```bash
+bootwright example init --name my-ceph-lab --kind storage-cluster --output-dir ./my-ceph-lab
+```
+
+That writes the four kinds
+[the desired-state model](../concepts/index.md#the-smallest-input) calls the
+smallest Ceph input, and the result passes `bootwright validate -f ./my-ceph-lab`
+as written:
+
+```text
+my-ceph-lab/
+  environment.yaml                                   Environment: base domain
+  secrets.yaml                                       Secrets: cephadm cluster key, node login key
+  clusters/storage/my-ceph-lab/
+    cluster.yaml                                     StorageCluster: community Ceph, three mons, one OSD device per node
+    nodes/my-ceph-lab-node-{1,2,3}.yaml              Machines: three provided (already-installed) storage nodes
+```
+
+That scaffold is the whole tree when your storage nodes already run an operating
+system you manage: give each node its address, point the `<name>-node-ssh` secret
+at a key that logs in to them, pick the distribution and release, and apply.
+
+**This lab is bigger**, because bootwright also builds the three VMs and installs
+RHEL on them. That adds the substrate and managed-OS kinds the scaffold leaves
+out — `InfraProvider`, `NetworkConfig`, `InfraComponent`, `MachineImage`,
+`MachineInstallProfile`, `Entitlement` — plus the pool, filesystem, and gateway
+kinds. They are already assembled in the `ceph-ibm-libvirt-lab` example tree,
+which the rest of this guide walks through, so copy that tree instead and enter
+it:
 
 ```bash
 git clone https://github.com/crmarques/bootwright.git
-```
-
-Then copy the example into a working directory and enter it:
-
-```bash
 cp -r bootwright/examples/ceph-ibm-libvirt-lab ./my-ceph-lab
 cd ./my-ceph-lab
 ```
 
-The example is a complete, valid bootwright tree. Its layout:
+Example trees track `main`'s schema; if `bootwright validate -f .` rejects one,
+install from source ([Install the CLI](installation.md#install-the-cli),
+Option B). The example is a complete, valid bootwright tree. Its layout:
 
 ```text
 my-ceph-lab/

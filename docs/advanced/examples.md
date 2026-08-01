@@ -13,17 +13,24 @@ name from the other kinds; the secret **bytes** are still supplied through the
 local context, never checked in.
 
 When you are starting fresh, prefer the CLI scaffold instead of copying an
-example by hand:
+example by hand — it emits the schema the binary you installed reads, so it
+cannot skew against a release the way a tree copied from `main` can:
 
 ```text
 bootwright example init --name <cluster-name> --output-dir <input-dir>
+bootwright example init --name <cluster-name> --kind storage-cluster --output-dir <input-dir>
 ```
 
-The scaffold produces a nested `infra/` + `clusters/container/<name>/` workspace and is
-what [Getting Started](../getting-started/index.md) walks through. The committed
-examples below are reference trees for comparison and adaptation — some use a
-different (often flatter, more minimal) shape than the scaffold, so read the
-example's own `README.md` for its authoritative file list.
+`--kind` selects what is scaffolded. `container-cluster` — the default — produces
+the nested `infra/` + `clusters/container/<name>/` OpenShift workspace
+[Getting Started](../getting-started/index.md) walks through, and takes
+`--provider`. `storage-cluster` produces the smallest complete Ceph input —
+`Environment`, `Secret`, three provided-machine Ceph nodes, and a
+`StorageCluster` under `clusters/storage/<name>/` — and takes no `--provider`,
+because it provisions no substrate. Both trees pass `bootwright validate` as
+written. The committed examples below are reference trees for comparison and
+adaptation — some use a different (often flatter, more minimal) shape than the
+scaffold, so read the example's own `README.md` for its authoritative file list.
 
 !!! tip "No vSphere example tree — scaffold one"
     The committed examples cover libvirt/emulated-Redfish, bare-metal Redfish,
@@ -72,9 +79,11 @@ only the domain kinds that distinguish each tree.
     snippets**, not runnable trees: each is a `StorageCluster` with no
     `ContainerCluster` and a single placeholder (`os.provided`, RFC-5737 address)
     `Machine`. They exist to show how each Ceph distribution is selected
-    (community, Red Hat, IBM) and the entitlement that selection needs — for an
-    end-to-end managed IBM Ceph build provisioned by Bootwright via `cephadm`,
-    use `ceph-ibm-libvirt-lab` or `ceph-ibm-baremetal-redfish` instead.
+    (community, Red Hat, IBM) and the entitlement that selection needs — to start
+    a runnable Ceph tree of your own, scaffold one with `bootwright example init
+    --kind storage-cluster`, and for an end-to-end managed IBM Ceph build
+    provisioned by Bootwright via `cephadm`, use `ceph-ibm-libvirt-lab` or
+    `ceph-ibm-baremetal-redfish` instead.
     Contrast them with `baremetal-redfish-imported-ceph-odf`, where the
     `StorageCluster` is in **import** posture — it consumes an externally
     managed Ceph cluster rather than provisioning one. See

@@ -26,6 +26,7 @@ func newExampleCmd(stdout io.Writer) *cobra.Command {
 
 func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 	name := ""
+	kind := exampleKindContainerCluster
 	provider := string(scaffold.ProviderEmulatedBareMetal)
 	outputDir := ""
 	yes := false
@@ -34,14 +35,17 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		Short: "Write a safe desired-state example directory",
 		Args:  cobra.NoArgs,
 		Example: `  bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
-  bootwright example init --name my-baremetal-lab --provider bare-metal --output-dir ./my-baremetal-lab`,
+  bootwright example init --name my-baremetal-lab --provider bare-metal --output-dir ./my-baremetal-lab
+  bootwright example init --name my-ceph-lab --kind storage-cluster --output-dir ./my-ceph-lab`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "cluster name to scaffold (required)")
-	cmd.Flags().StringVar(&provider, "provider", provider, "example provider ("+strings.Join(scaffold.KnownProviders(), "|")+")")
+	cmd.Flags().StringVar(&kind, "kind", kind, "cluster kind to scaffold ("+strings.Join(exampleKinds(), "|")+")")
+	registerFlagCompletion(cmd, "kind", exampleKinds())
+	cmd.Flags().StringVar(&provider, "provider", provider, "example provider for --kind container-cluster ("+strings.Join(scaffold.KnownProviders(), "|")+")")
 	registerFlagCompletion(cmd, "provider", scaffold.KnownProviders())
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory to write the example into (default: the --name value)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite files in a non-empty output directory")
-	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		clusterName := name
 		if !desiredstate.IsDNSLabel(clusterName) {
 			return failf(2, "--name must be a lowercase DNS label")
@@ -49,7 +53,7 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		if outputDir == "" {
 			outputDir = clusterName
 		}
-		files, err := scaffold.Workspace(clusterName, scaffold.Provider(provider))
+		files, fields, err := exampleWorkspace(kind, clusterName, provider, c.Flags().Changed("provider"))
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -57,22 +61,48 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		support := scaffold.ApplySupport(scaffold.Provider(provider))
 		p := output.New(stdout)
 		p.Command("example init")
 		p.Section("Example")
-		p.Fields([]output.Field{
-			{Key: "cluster", Value: clusterName},
-			{Key: "provider", Value: provider},
-			{Key: "output-dir", Value: filepath.Clean(outputDir)},
-			{Key: "apply support", Value: fmt.Sprintf("%s - %s", support.Status, support.Summary)},
-		})
+		p.Fields(append(fields, output.Field{Key: "output-dir", Value: filepath.Clean(outputDir)}))
 		p.Section("Written inputs")
 		p.Artifacts([]output.ArtifactGroup{{Paths: written}})
 		p.Summary(output.StatusOK, "example init", "import with bootwright context init --name <ctx> -f "+filepath.Clean(outputDir))
 		return nil
 	}
 	return cmd
+}
+
+func exampleWorkspace(kind, clusterName, provider string, providerSet bool) ([]scaffold.File, []output.Field, error) {
+	switch kind {
+	case exampleKindContainerCluster:
+		files, err := scaffold.Workspace(clusterName, scaffold.Provider(provider))
+		if err != nil {
+			return nil, nil, err
+		}
+		support := scaffold.ApplySupport(scaffold.Provider(provider))
+		return files, []output.Field{
+			{Key: "cluster", Value: clusterName},
+			{Key: "kind", Value: kind},
+			{Key: "provider", Value: provider},
+			{Key: "apply support", Value: fmt.Sprintf("%s - %s", support.Status, support.Summary)},
+		}, nil
+	case exampleKindStorageCluster:
+		if providerSet {
+			return nil, nil, fmt.Errorf("--provider does not apply to --kind %s: its machines are provided, so no substrate is scaffolded; drop --provider", exampleKindStorageCluster)
+		}
+		files, err := storageExampleWorkspace(clusterName)
+		if err != nil {
+			return nil, nil, err
+		}
+		return files, []output.Field{
+			{Key: "cluster", Value: clusterName},
+			{Key: "kind", Value: kind},
+			{Key: "apply support", Value: storageExampleApplySupport()},
+		}, nil
+	default:
+		return nil, nil, fmt.Errorf("unknown kind %q (known: %s)", kind, strings.Join(exampleKinds(), ", "))
+	}
 }
 
 func writeExampleFiles(dir string, files []scaffold.File, overwrite bool) ([]string, error) {
