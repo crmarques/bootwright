@@ -27,9 +27,9 @@ and are outside this contract.
 ## JSON output
 
 Verbs that accept `--output json`, and what the JSON describes. On the mutating
-verbs JSON is a **preview-only** format: `apply`, `destroy`, and the scoped
-`preflight` targets accept it only together with `--dry-run` (exit `2`
-otherwise).
+verbs JSON is a **preview-only** format: `apply` and `destroy` accept it only
+together with `--dry-run` (exit `2` otherwise). The read-only verbs report
+results, `preflight` included.
 
 | Verb(s) | Requires `--dry-run` | The JSON describes |
 | --- | --- | --- |
@@ -38,13 +38,30 @@ otherwise).
 | `diff` / `diff --recorded` | no | The comparison report (exit `3` is still the sync signal). |
 | `machine list`, `cluster list`, `cluster info`, `machine trust`, `secret list`, `secret check`, `secret encryption status`, `add-ons list`, `media list` | no | The listed inventory or check result of that verb. |
 | `render`, `render effective`, `render installer`, `render storage` | no | The render report (for `render --output-dir`, the manifest of exported files). |
-| `preflight infra\|clusters\|container-cluster\|storage-cluster\|all` | **yes** | The planned preflight command graph — **not** check results. Gate CI on the live preflight's exit code instead. |
+| `preflight infra\|clusters\|container-cluster\|storage-cluster` | no | The executed check results of that live preflight: `checks[]` of `{name, target, status, detail, impact, fix}` and a `summary` of `{total, failed}`, plus `ok`, `context`, `target`, and the run `log`. With `--dry-run` it returns the planned preflight command graph instead. |
+| `preflight all` | **yes** | The planned preflight command graph — **not** check results. Gate CI on the live preflight's exit code instead. |
 | `plan` | always a preview | The planned task graph. |
 | `apply`, `destroy` | **yes** | The plan — a real mutating run has no JSON mode. |
 
 Two preflight targets differ: `preflight add-ons` has no `--dry-run` and its
 `--output json` emits machine-readable pass/fail results from the live run, and
 `preflight bastion` accepts neither flag.
+
+A live scoped preflight reports every check it executed, and its exit code still
+carries the verdict — `0` when nothing failed, `1` when any check did. `status`
+is lowercase (`ok`, `warn`, `info`, `skip`, `fail`); only `fail` counts toward
+`summary.failed` and the non-zero exit, so a pipeline can surface warnings
+without failing on them:
+
+```bash
+bootwright preflight infra --output json > preflight.json || \
+  jq -r '.checks[] | select(.status == "fail") | "\(.target)/\(.name): \(.detail)\n  fix: \(.fix)"' preflight.json
+```
+
+Controller-side checks run first and a failure among them stops the run before
+the hosts are contacted. When they all pass, the Ansible preflight runs and its
+outcome is the report's last check (`target: "Ansible preflight"`, with the run
+log in `log`), so one report always carries the whole verdict.
 
 When JSON was requested, errors are also emitted as a JSON report with `ok`,
 `exitCode`, `error`, and `diagnostics[]`, so a pipeline never has to parse

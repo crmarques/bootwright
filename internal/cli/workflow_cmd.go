@@ -26,13 +26,13 @@ fails. Per-check pass/fail detail is in the terminal output and the run, task,
 and cluster logs under Bootwright storage.
 
 In CI, gate on the live preflight exit code. Structured --output json behavior
-varies by target: the scope-based targets (infra, clusters, container-cluster,
-storage-cluster, all) accept --output json only with --dry-run, and return the
-planned preflight command graph (the work that would run), not pass/fail
-results; 'preflight add-ons' has no --dry-run and instead emits machine-readable
-pass/fail JSON from a live run with --output json; 'preflight bastion' has
-neither flag. For offline desired-state validation with structured result JSON,
-use 'validate'.`,
+varies by target: infra, clusters, container-cluster and storage-cluster emit
+the executed check results (checks[] plus a total/failed summary) from a live
+run, and return the planned preflight command graph instead when --dry-run is
+also given; 'preflight add-ons' emits live pass/fail JSON and has no --dry-run;
+'preflight all' accepts --output json only with --dry-run, and returns the plan;
+'preflight bastion' has neither flag. For offline desired-state validation with
+structured result JSON, use 'validate'.`,
 	}
 	cmd.AddCommand(
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),

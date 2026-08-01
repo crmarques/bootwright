@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -220,13 +221,17 @@ func TestPreflightJSONAndDryRunNeverPrompt(t *testing.T) {
 
 	stdout, stderr, code := runCLI(t, "preflight", "infra", "--output", "json")
 	if code == 0 {
-		t.Fatal("preflight --output json without --dry-run unexpectedly succeeded")
+		t.Fatal("preflight --output json with unrecorded host trust unexpectedly succeeded")
 	}
 	if strings.Contains(stdout, "[y/N]") || strings.Contains(stdout, "SSH host trust (first use)") {
 		t.Fatalf("json preflight reached the trust prompt:\n%s", stdout)
 	}
-	if !strings.Contains(stdout, "--dry-run") {
-		t.Fatalf("json preflight error report missing --dry-run requirement:\nstdout=%s\nstderr=%s", stdout, stderr)
+	var report preflightResultReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("json preflight did not emit executed check results: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if report.OK || report.Summary.Failed == 0 {
+		t.Fatalf("json preflight must report the unrecorded host trust as a failed check:\n%s", stdout)
 	}
 
 	stdout, stderr, code = runCLI(t, "preflight", "infra", "--dry-run")

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -29,7 +28,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		Example: scopeCheckExample(scope.Name),
 	}
 	cf := addCommonFlags()
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
+	registerScopePreflightFlags(cmd, &flags, scope)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addVerboseFlag(cmd, &verbose)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
@@ -59,11 +58,11 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		}
 		limit := scope.AnsibleLimit
 		if flags.output == outputJSON {
-			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))
+			if dryRun {
+				selected := converge.PhasesForState(scope.Phases(), state)
+				return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
 			}
-			selected := converge.PhasesForState(scope.Phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
+			return runScopePreflightJSON(c, stdout, stderr, cf, flags, scope, state, limit, verbose, hostTrustScope, secretScope)
 		}
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {
@@ -108,6 +107,9 @@ func scopeCheckExample(scopeName string) string {
   # Limit to specific storage clusters
   bootwright preflight %[1]s --clusters ceph-storage
 
+  # Machine-readable check results for CI
+  bootwright preflight %[1]s --output json
+
   # Print the planned Ansible command without executing it
   bootwright preflight %[1]s --dry-run`, scopeName)
 	default:
@@ -116,6 +118,9 @@ func scopeCheckExample(scopeName string) string {
 
   # Limit to specific clusters
   bootwright preflight %[1]s --clusters sno-libvirt,managed-01
+
+  # Machine-readable check results for CI
+  bootwright preflight %[1]s --output json
 
   # Print the planned Ansible command without executing it
   bootwright preflight %[1]s --dry-run`, scopeName)

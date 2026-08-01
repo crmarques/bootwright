@@ -16,18 +16,26 @@ func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State,
 	return runApplyHostCheck(stdout, stderr, state, selected, contextName, secretsDir, clustersDir, runsDir, hostTrustScope, secretScope)
 }
 
-func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir, runsDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) (err error) {
+func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir, runsDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) error {
+	checks, err := collectHostChecks(state, selected, contextName, secretsDir, clustersDir, runsDir, hostTrustScope, secretScope)
+	if err != nil {
+		return err
+	}
+	return renderCheckResults(stdout, "machine check", checks)
+}
+
+func collectHostChecks(state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir, runsDir string, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) (checks []preflightCheck, err error) {
 	runtimeDir, err := os.MkdirTemp(runsDir, "preflight-runtime-")
 	if err != nil {
-		return fmt.Errorf("create preflight runtime directory: %w", err)
+		return nil, fmt.Errorf("create preflight runtime directory: %w", err)
 	}
 	defer func() {
 		if cleanupErr := os.RemoveAll(runtimeDir); cleanupErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove preflight runtime directory %s: %w", runtimeDir, cleanupErr))
 		}
 	}()
-	checks := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, runtimeDir, preflight.DefaultDeps, hostTrustScope, secretScope)
-	return renderCheckResults(stdout, "machine check", preflightChecksToOutput(checks))
+	collected := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, runtimeDir, preflight.DefaultDeps, hostTrustScope, secretScope)
+	return preflightChecksToOutput(collected), nil
 }
 
 func renderCheckResults(stdout io.Writer, label string, checks []preflightCheck) error {
