@@ -436,6 +436,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	errs = append(errs, validateMachineInterfaceBindings(prefix+".interfaceBinding", machine, networkInterfaceNames(effective), provider)...)
 	if effective != nil {
 		errs = append(errs, validateMachineNetworkStaticAddresses(prefix+".config", machine, effective)...)
+		errs = append(errs, validateMachineInstallNetwork(prefix+".config", machine, effective)...)
 	}
 	return errs
 }

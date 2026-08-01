@@ -477,13 +477,21 @@ reaches the install itself
 | IPv4 static addressing, or DHCP | Yes |
 | The default gateway (`routes.config` destination `0.0.0.0/0`) | Yes |
 | DNS servers (`dns-resolver`) | Yes |
-| `bridge`, `team`, VRF | **No** — the type-specific wiring is silently not lowered |
-| A second addressed interface | **No** — only the primary renders |
-| IPv6-only addressing | **No** — only IPv4 addresses are read |
+| `bridge`, `team`, VRF as the install primary | **No** — `validate` refuses; one of these away from the primary is simply not lowered |
+| A second addressed interface | **No** — only the primary renders, and `validate` refuses when the address Bootwright reconnects at is not on it |
+| IPv6-only addressing | **No** — only IPv4 addresses are read, and `validate` refuses |
 | Non-default routes | **No** — only the default route survives |
 
-An install network the subset cannot express — no static IPv4 on any interface
-— currently falls back to `network --device=link --bootproto=dhcp`.
+An install network the subset cannot express never reaches Anaconda:
+`bootwright validate` fails closed on a `Machine` with `os.provided: false` and
+an `installProfileRef` whose effective network carries no IPv4 address, makes an
+inexpressible interface type the install primary, or leaves the address
+Bootwright reconnects at on an interface the install never brings up. Each
+refusal names the machine, the interface, what the install would have done to a
+disk it had already wiped, and the `os.provided: true` alternative — which hands
+that machine to your own OS install and leaves Bootwright to reach it
+afterwards. A machine that authors no static address at all still installs with
+`network --device=link --bootproto=dhcp`, which is what DHCP asks for.
 
 The subset constrains only the install window. Once the OS is up, Bootwright
 applies the **full** authored nmstate document with `nmstatectl apply` under a
