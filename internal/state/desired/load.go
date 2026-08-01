@@ -27,10 +27,11 @@ func LoadNormalizeValidateInputFiles(paths []string) (v1alpha1.State, error) {
 type ClusterSelectionExclusions struct {
 	ContainerClusters []string
 	StorageClusters   []string
+	Resources         []ExcludedResourceFile
 }
 
 func (e ClusterSelectionExclusions) Empty() bool {
-	return len(e.ContainerClusters) == 0 && len(e.StorageClusters) == 0
+	return len(e.ContainerClusters) == 0 && len(e.StorageClusters) == 0 && len(e.Resources) == 0
 }
 
 func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
@@ -54,7 +55,7 @@ func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclus
 	if err != nil {
 		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
-	state, err := loadSelectedFiles(files)
+	state, excludedResources, err := loadSelectedFilesReportingExclusions(files)
 	if err != nil {
 		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
@@ -70,6 +71,7 @@ func loadNormalizeSelect(paths []string) (v1alpha1.State, ClusterSelectionExclus
 	Normalize(&state)
 	selected := applyEnvironmentClusterSelection(state)
 	exclusions := clusterSelectionExclusions(state, selected)
+	exclusions.Resources = excludedResources
 	return selected, exclusions, nil
 }
 
@@ -127,20 +129,26 @@ func Load(paths []string) (v1alpha1.State, error) {
 }
 
 func loadSelectedFiles(files []string) (v1alpha1.State, error) {
+	state, _, err := loadSelectedFilesReportingExclusions(files)
+	return state, err
+}
+
+func loadSelectedFilesReportingExclusions(files []string) (v1alpha1.State, []ExcludedResourceFile, error) {
 	selectedFiles, selectingEnv, resourceSelection, err := selectResourceFiles(files)
 	if err != nil {
-		return v1alpha1.State{}, err
+		return v1alpha1.State{}, nil, err
 	}
 	state, err := loadFiles(selectedFiles)
 	if err != nil {
-		return v1alpha1.State{}, err
+		return v1alpha1.State{}, nil, err
 	}
-	if resourceSelection {
-		if err := validateSelectedResourceReferences(state, files, selectedFiles, selectingEnv); err != nil {
-			return v1alpha1.State{}, err
-		}
+	if !resourceSelection {
+		return state, nil, nil
 	}
-	return state, nil
+	if err := validateSelectedResourceReferences(state, files, selectedFiles, selectingEnv); err != nil {
+		return v1alpha1.State{}, nil, err
+	}
+	return state, excludedResourceFiles(files, selectedFiles, selectingEnv), nil
 }
 
 func loadFiles(files []string) (v1alpha1.State, error) {

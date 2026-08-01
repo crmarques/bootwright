@@ -418,25 +418,30 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 func scanResourceInventory(files []string) map[resourceKey]string {
 	out := map[resourceKey]string{}
 	for _, file := range files {
-		scanResourceInventoryFile(file, out)
+		for _, key := range scanResourceKeys(file) {
+			if _, exists := out[key]; !exists {
+				out[key] = file
+			}
+		}
 	}
 	return out
 }
 
-func scanResourceInventoryFile(file string, out map[resourceKey]string) {
+func scanResourceKeys(file string) []resourceKey {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return
+		return nil
 	}
+	var out []resourceKey
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	for {
 		var node yaml.Node
 		err := decoder.Decode(&node)
 		if errors.Is(err, io.EOF) {
-			return
+			return out
 		}
 		if err != nil {
-			return
+			return out
 		}
 		if isZeroNode(node) {
 			continue
@@ -452,10 +457,7 @@ func scanResourceInventoryFile(file string, out map[resourceKey]string) {
 		if meta.APIVersion != v1alpha1.APIVersion || !knownResourceKind(meta.Kind) || meta.Metadata.Name == "" {
 			continue
 		}
-		key := resourceKey{kind: meta.Kind, name: meta.Metadata.Name}
-		if _, exists := out[key]; !exists {
-			out[key] = file
-		}
+		out = append(out, resourceKey{kind: meta.Kind, name: meta.Metadata.Name})
 	}
 }
 
@@ -481,6 +483,60 @@ func uniqueFiles(groups ...[]string) []string {
 		}
 	}
 	return out
+}
+
+type ExcludedResourceFile struct {
+	Environment string
+	Path        string
+	Objects     []string
+	LoadPath    string
+}
+
+func (e ExcludedResourceFile) Warning() string {
+	return fmt.Sprintf("Environment/%s spec.resources excludes %s (%s); remove the path from spec.resources or add %q to load it",
+		e.Environment, e.Path, strings.Join(e.Objects, ", "), e.LoadPath)
+}
+
+func excludedResourceFiles(discoveredFiles, selectedFiles []string, env v1alpha1.Environment) []ExcludedResourceFile {
+	selected := map[string]bool{}
+	for _, file := range selectedFiles {
+		selected[file] = true
+	}
+	var out []ExcludedResourceFile
+	for _, file := range discoveredFiles {
+		if selected[file] {
+			continue
+		}
+		keys := scanResourceKeys(file)
+		if len(keys) == 0 {
+			continue
+		}
+		objects := make([]string, 0, len(keys))
+		for _, key := range keys {
+			objects = append(objects, key.kind+"/"+key.name)
+		}
+		relative := relativeResourcePath(env.SourcePath, file)
+		out = append(out, ExcludedResourceFile{
+			Environment: env.Metadata.Name,
+			Path:        relative,
+			Objects:     objects,
+			LoadPath:    resourceLoadPath(relative),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+func resourceLoadPath(relative string) string {
+	cut := strings.LastIndex(relative, "/")
+	if cut <= 0 {
+		return relative
+	}
+	dir := relative[:cut]
+	if dir == ".." || strings.HasPrefix(dir, "../") || strings.HasPrefix(dir, "/") {
+		return relative
+	}
+	return dir
 }
 
 func relativeResourcePath(envSourcePath, path string) string {
