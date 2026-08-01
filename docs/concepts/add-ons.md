@@ -104,8 +104,8 @@ discriminated union arm whose key is byte-identical to the `type` value.
 | `spec.provides[]` | No | — | Capability advertisements; each value must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and be unique. |
 | `spec.requires[]` | No | — | Capability another add-on **in the same binding** must provide; drives apply order. |
 | `spec.accepts.inputs[]` | No | — | Binding-scoped scalar inputs and effects. |
-| `spec.olm` | For `type: olm` | — | OLM resources and optional custom resources. |
-| `spec.manifestSet` | For `type: manifestSet` | — | Ordered manifest file list. |
+| `spec.olm` | No | — | OLM resources and optional custom resources. Required for `type: olm`. |
+| `spec.manifestSet` | No | — | Ordered manifest file list. Required for `type: manifestSet`. |
 | `spec.readiness` | No | — | Readiness timeout and checks. |
 | `spec.steps[]` | No | — | Lifecycle steps the add-on ships: playbooks and/or templated manifests. See [Steps](#steps). |
 
@@ -182,8 +182,8 @@ install.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `olm.catalogSource.name` | Yes within `catalogSource` | — | Name of the CatalogSource the add-on ships. `subscription.source` defaults to it. |
-| `olm.catalogSource.image` | Yes within `catalogSource` | — | Catalog index image (e.g. a partner catalog on `icr.io/cpopen`). |
+| `olm.catalogSource.name` | No | — | Name of the CatalogSource the add-on ships. `subscription.source` defaults to it. |
+| `olm.catalogSource.image` | No | — | Catalog index image (e.g. a partner catalog on `icr.io/cpopen`). |
 | `olm.catalogSource.displayName` | No | — | CatalogSource display name. |
 | `olm.catalogSource.publisher` | No | — | CatalogSource publisher. |
 | `olm.catalogSource.pollInterval` | No | — | `updateStrategy.registryPoll.interval` (how often OLM re-pulls the index). |
@@ -191,7 +191,7 @@ install.
 | `olm.namespace.name` | Yes | — | Namespace name. |
 | `olm.namespace.create` | No | `false` | Whether Bootwright creates the namespace. When `false`, the namespace must already exist. |
 | `olm.namespace.labels` | No | — | Namespace labels applied when Bootwright creates it. |
-| `olm.operatorGroup.name` | Yes within `operatorGroup` | — | OperatorGroup name. Required only when an `operatorGroup` block is present. |
+| `olm.operatorGroup.name` | No | — | OperatorGroup name. Required only when an `operatorGroup` block is present. |
 | `olm.operatorGroup.targetNamespaces[]` | No | — | OperatorGroup target namespaces; each entry must be non-empty. |
 | `olm.subscription.name` | Yes | — | Subscription name. |
 | `olm.subscription.package` | Yes | — | Operator package. |
@@ -204,7 +204,8 @@ install.
 
 !!! note "Shipping a catalog"
     `olm.catalogSource` is for operators that come from a catalog the cluster
-    does not already serve (partner and community indexes). When set,
+    does not already serve (partner and community indexes). A shipped catalog
+    must set both `name` and `image`. When set,
     `subscription.source` must match `catalogSource.name` (omit it and the
     normalize phase fills it in). The registry hosting the index image must be
     reachable from the cluster — for authenticated registries the pull
@@ -240,7 +241,7 @@ files applied in declared order.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `manifestSet.manifests[]` | Yes (≥ 1) | — | At least one manifest entry is required. |
+| `manifestSet.manifests[]` | Yes | — | At least one manifest entry is required. |
 | `manifestSet.manifests[].path` | Yes | — | Manifest path, applied in declared order. |
 
 !!! warning "Manifest path safety"
@@ -261,16 +262,17 @@ value.
 | --- | --- | --- | --- |
 | `accepts.inputs[].name` | Yes | — | Input name. Must be unique within the add-on; bindings reference it by name. |
 | `accepts.inputs[].required` | No | `false` | When `true`, every binding of this add-on must supply the input; validation rejects a binding that omits it. Optional inputs may be omitted, and any effects they carry are skipped. |
-| `accepts.inputs[].resourceRef.kind` | One of `resourceRef`/`secretRef` | — | Binding value must name a loaded object of this Bootwright kind. |
-| `accepts.inputs[].secretRef` | One of `resourceRef`/`secretRef` | — | Empty presence arm (`{}`); binding value names a Secret. |
-| `accepts.inputs[].effects[].storageExportAttachment` | One effect arm | — | Empty presence arm (`{}`); wires the add-on to a Data Foundation `StorageExport` — see the contract note below. |
-| `accepts.inputs[].effects[].globalPullSecretMerge.registry` | For `globalPullSecretMerge` | — | Registry host whose credential is merged into the cluster's global pull secret. |
-| `accepts.inputs[].effects[].globalPullSecretMerge.username` | For `globalPullSecretMerge` | — | Registry username the merged credential authenticates as. |
+| `accepts.inputs[].resourceRef.kind` | No | — | Binding value must name a loaded object of this Bootwright kind. |
+| `accepts.inputs[].secretRef` | No | — | Empty presence arm (`{}`); binding value names a Secret. |
+| `accepts.inputs[].effects[].storageExportAttachment` | No | — | Empty presence arm (`{}`); wires the add-on to a Data Foundation `StorageExport` — see the contract note below. |
+| `accepts.inputs[].effects[].globalPullSecretMerge.registry` | No | — | Registry host whose credential is merged into the cluster's global pull secret. |
+| `accepts.inputs[].effects[].globalPullSecretMerge.username` | No | — | Registry username the merged credential authenticates as. |
 
 !!! note "Each input names exactly one resolution"
     An input must set exactly one of `resourceRef` or `secretRef`. Setting both,
     or neither, is rejected. A `resourceRef.kind` must name a known Bootwright
-    kind.
+    kind. Each `effects[]` entry likewise sets exactly one effect arm, and a
+    `globalPullSecretMerge` effect requires both `registry` and `username`.
 
 !!! note "Data Foundation storage attachment contract"
     A `storageExportAttachment` effect requires the add-on to provide
@@ -307,17 +309,17 @@ add-on to become ready after apply.
 | --- | --- | --- | --- |
 | `readiness.timeout` | No | `30m` | Overall readiness timeout. A Go duration such as `10m`, `30m`, or `1h`. |
 | `readiness.checks[]` | No | — | Readiness checks; required (≥ 1) when `spec.provides[]` is set. |
-| `readiness.checks[].csvSucceeded` | One check arm | — | Waits for a Subscription's installed CSV to reach `Succeeded`. |
+| `readiness.checks[].csvSucceeded` | No | — | Waits for a Subscription's installed CSV to reach `Succeeded`. |
 | `readiness.checks[].csvSucceeded.namespace` | Yes | — | Subscription namespace. |
 | `readiness.checks[].csvSucceeded.subscription` | Yes | — | Subscription name. |
-| `readiness.checks[].condition` | One check arm | — | Waits for a Kubernetes resource condition. |
+| `readiness.checks[].condition` | No | — | Waits for a Kubernetes resource condition. |
 | `readiness.checks[].condition.apiVersion` | Yes | — | Resource API version. |
 | `readiness.checks[].condition.kind` | Yes | — | Resource kind. |
 | `readiness.checks[].condition.name` | Yes | — | Resource name. |
 | `readiness.checks[].condition.namespace` | No | — | Resource namespace. Omit for cluster-scoped kinds. |
 | `readiness.checks[].condition.condition.type` | Yes | — | Condition type. |
 | `readiness.checks[].condition.condition.status` | Yes | — | Expected condition status. |
-| `readiness.checks[].resourceExists` | One check arm | — | Waits until a Kubernetes resource can be read. |
+| `readiness.checks[].resourceExists` | No | — | Waits until a Kubernetes resource can be read. |
 | `readiness.checks[].resourceExists.apiVersion` | Yes | — | Resource API version. |
 | `readiness.checks[].resourceExists.kind` | Yes | — | Resource kind. |
 | `readiness.checks[].resourceExists.name` | Yes | — | Resource name. |
@@ -352,20 +354,24 @@ everywhere else in the input tree.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `steps[].name` | Yes | — | Step name, unique within the add-on. |
-| `steps[].gates` / `steps[].follows` | Yes (exactly one) | — | `gates: apply` runs the step before the operator install and blocks it until the step succeeds. `follows: operatorReady` runs after the operator CSV reaches Succeeded, before `olm.customResources` (olm add-ons only); `follows: ready` runs after readiness checks pass. `gates` may not be combined with `onFailure: continue`. |
-| `steps[].playbook` | One of playbook/manifests | — | Entry playbook, relative to the add-on file. |
+| `steps[].gates` / `steps[].follows` | No | — | `gates: apply` runs the step before the operator install and blocks it until the step succeeds. `follows: operatorReady` runs after the operator CSV reaches Succeeded, before `olm.customResources` (olm add-ons only); `follows: ready` runs after readiness checks pass. `gates` may not be combined with `onFailure: continue`. |
+| `steps[].playbook` | No | — | Entry playbook, relative to the add-on file. |
 | `steps[].source.path` | No | — | Absolute directory outside the input tree holding the Ansible content; `playbook`, `rolesPath` and `collectionsPath` then resolve against it. `source.git` is rejected here — a step's content ships with its add-on. See [custom playbooks](custom-playbooks.md#external-ansible-content). |
 | `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |
-| `steps[].target` | For a playbook step | — | Machines the playbook runs against (see below). |
+| `steps[].target` | No | — | Machines the playbook runs against (see below). |
 | `steps[].secretRefs[]` | No | — | `Secret` names materialized into the step's scoped secrets directory — only these, never the whole store. |
 | `steps[].extraVars` | No | — | Extra vars handed to the playbook as a single JSON `-e`. Connection and `become` keys (`ansible_user`, `ansible_host`, `ansible_connection`, `ansible_ssh_*`, `ansible_become*`, …) are rejected: an extra var outranks the inventory, so one would repoint the identity Bootwright connects as for every host in the run. |
 | `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
 | `steps[].run` | No | `onChange` | `onChange` skips a step whose content and inputs are unchanged; `always` re-runs every apply. |
 | `steps[].onFailure` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A step whose manifests consume its outputs must be `fail`. |
 | `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_step_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the step; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
-| `steps[].manifests[]` | One of playbook/manifests | — | Templated manifests applied to the bound cluster after the step succeeds. |
+| `steps[].manifests[]` | No | — | Templated manifests applied to the bound cluster after the step succeeds. |
 | `steps[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
 | `steps[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
+
+Every step sets exactly one of `gates` and `follows`, and at least one of
+`playbook` and `manifests[]` (a step may ship both). A step with a `playbook`
+must declare `target`.
 
 The `target` selects machines a playbook runs against — exactly one of
 `boundCluster` (the bound container cluster's nodes), `fromInput` (dereference a
@@ -533,9 +539,9 @@ authored YAML cannot override.
 | `spec.profileRefs[]` | No | — | `ClusterAddonProfile` references expanded for this cluster. |
 | `spec.addonRefs[]` | No | — | Direct `ClusterAddon` references appended after expanded profiles. |
 | `spec.addonConfigs[]` | No | — | Per-add-on input values. Config entries do not select add-ons. |
-| `spec.addonConfigs[].addonRef` | Yes within an entry | — | Referenced `ClusterAddon`; must already be selected by `profileRefs[]` or `addonRefs[]`. |
-| `spec.addonConfigs[].inputs[].name` | Yes within an input | — | Input name. Must be declared by the referenced add-on's `spec.accepts.inputs[]` and unique within the config entry. |
-| `spec.addonConfigs[].inputs[].value` | Yes within an input | — | Scalar binding-scoped value. A `resourceRef` input must resolve to a loaded object of that kind; a `secretRef` input must resolve to a loaded Secret when secret checks run. |
+| `spec.addonConfigs[].addonRef` | Yes (per entry) | — | Referenced `ClusterAddon`; must already be selected by `profileRefs[]` or `addonRefs[]`. |
+| `spec.addonConfigs[].inputs[].name` | Yes (per entry) | — | Input name. Must be declared by the referenced add-on's `spec.accepts.inputs[]` and unique within the config entry. |
+| `spec.addonConfigs[].inputs[].value` | Yes (per entry) | — | Scalar binding-scoped value. A `resourceRef` input must resolve to a loaded object of that kind; a `secretRef` input must resolve to a loaded Secret when secret checks run. |
 
 A binding must include at least one `profileRefs` or `addonRefs` entry. Use
 separate bindings for separate clusters.

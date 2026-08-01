@@ -52,10 +52,10 @@ and any other arm must be empty.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | `baremetal`, `libvirt`, `vsphere`, or `kubevirt`. |
-| `spec.baremetal` | For `type: baremetal` | — | Bare-metal boot defaults and BMC defaults. |
-| `spec.libvirt` | For `type: libvirt` | — | Libvirt host, URI, BMC emulation, and VM profiles. |
-| `spec.vsphere` | For `type: vsphere` | — | vCenter, failure domains, staging, node networking, and VM profiles. |
-| `spec.kubevirt` | For `type: kubevirt` | — | Host cluster or kubeconfig, namespace, storage class, and VM profiles. |
+| `spec.baremetal` | No | — | Bare-metal boot defaults and BMC defaults. Required for `type: baremetal`. |
+| `spec.libvirt` | No | — | Libvirt host, URI, BMC emulation, and VM profiles. Required for `type: libvirt`. |
+| `spec.vsphere` | No | — | vCenter, failure domains, staging, node networking, and VM profiles. Required for `type: vsphere`. |
+| `spec.kubevirt` | No | — | Host cluster or kubeconfig, namespace, storage class, and VM profiles. Required for `type: kubevirt`. |
 | `spec.networkAttachments[]` | No | — | Named substrate network attachment capabilities. |
 
 !!! note "Artifact use belongs to consumers"
@@ -191,7 +191,7 @@ can be attached as virtual media exactly as on real hardware.
 | `bindAddress` | No | `0.0.0.0` | Bind address for the emulated BMC. |
 | `port` | No | `8000` | BMC emulation port; must be `1..65535`. |
 | `vMediaPort` | No | `port + 1` (i.e. `8001`) | Virtual media service port; must be `1..65535`. |
-| `auth.credentialsRef` | Required when enabled | — | BMC emulation credentials secret. |
+| `auth.credentialsRef` | No | — | BMC emulation credentials secret. Required whenever emulation is enabled (see the warning above). |
 | `disableCertificateVerification` | No | `false` | TLS verification opt-out for the emulated BMC. |
 
 !!! note "Port constraints"
@@ -323,8 +323,8 @@ secrets kubeconfig — do not put kubeconfig bytes in desired state); use
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `kubevirt.hostClusterRef` | Exactly one of these two | — | Bootwright-managed host `ContainerCluster` running OpenShift Virtualization. |
-| `kubevirt.kubeconfigRef` | Exactly one of these two | — | Secret holding the kubeconfig of an external virtualization cluster. |
+| `kubevirt.hostClusterRef` | No | — | Bootwright-managed host `ContainerCluster` running OpenShift Virtualization. |
+| `kubevirt.kubeconfigRef` | No | — | Secret holding the kubeconfig of an external virtualization cluster. |
 | `kubevirt.namespace` | Yes | — | Namespace for child VMs; must be a DNS label. |
 | `kubevirt.storageClassRef` | No | — | Storage class used by VM disks. |
 | `kubevirt.machineProfiles[]` | No | — | VM shape list ([Machine Profiles](#machine-profiles)). |
@@ -366,16 +366,16 @@ are rejected, so the required/applies-to columns differ per arm.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `machineProfiles[].name` | Yes | — | Profile name selected by `Machine.spec.substrate.profileRef`; unique within the provider. |
-| `machineProfiles[].cpu` | Yes on `vsphere`, otherwise No | — | vCPU count; must be non-negative, and greater than zero on vSphere. |
-| `machineProfiles[].memoryMiB` | Yes on `vsphere`, otherwise No | — | Memory in MiB; must be non-negative, and greater than zero on vSphere. |
-| `machineProfiles[].diskGiB` | Yes on `vsphere`, otherwise No | — | Root disk size in GiB; must be non-negative, and greater than zero on vSphere. |
-| `machineProfiles[].template` | No (vSphere only) | — | vSphere template to clone from; rejected on non-vSphere providers. |
-| `machineProfiles[].failureDomainRef` | See note (vSphere only) | — | vSphere failure-domain name; rejected on non-vSphere providers. |
-| `machineProfiles[].dataDisks[]` | No (libvirt and vSphere only) | — | Additional data disks; rejected on baremetal and kubevirt. |
-| `machineProfiles[].dataDisks[].name` | Yes | — | Data disk name. |
-| `machineProfiles[].dataDisks[].sizeGiB` | Yes | — | Data disk size; must be greater than zero. |
-| `machineProfiles[].tpm` | No (libvirt and kubevirt only) | — (no TPM) | Presence attaches an emulated TPM 2.0. See [Emulated TPM](#emulated-tpm). |
-| `machineProfiles[].tpm.persistent` | No (kubevirt only) | `true` | Whether the vTPM keeps its state across VM restarts. |
+| `machineProfiles[].cpu` | No | — | vCPU count; must be non-negative, and greater than zero on vSphere. |
+| `machineProfiles[].memoryMiB` | No | — | Memory in MiB; must be non-negative, and greater than zero on vSphere. |
+| `machineProfiles[].diskGiB` | No | — | Root disk size in GiB; must be non-negative, and greater than zero on vSphere. |
+| `machineProfiles[].template` | No | — | vSphere template to clone from; rejected on non-vSphere providers. |
+| `machineProfiles[].failureDomainRef` | No | — | vSphere failure-domain name; rejected on non-vSphere providers. See the multiplicity note below. |
+| `machineProfiles[].dataDisks[]` | No | — | Additional data disks (libvirt and vSphere); rejected on baremetal and kubevirt. |
+| `machineProfiles[].dataDisks[].name` | Yes (per entry) | — | Data disk name. |
+| `machineProfiles[].dataDisks[].sizeGiB` | Yes (per entry) | — | Data disk size; must be greater than zero. |
+| `machineProfiles[].tpm` | No | — (no TPM) | Presence attaches an emulated TPM 2.0 (libvirt and kubevirt only). See [Emulated TPM](#emulated-tpm). |
+| `machineProfiles[].tpm.persistent` | No | `true` | Whether the vTPM keeps its state across VM restarts. KubeVirt only; rejected on libvirt. |
 
 !!! note "vSphere clones from a sized template"
     A vSphere profile whose `cpu`, `memoryMiB` or `diskGiB` is zero or omitted is
@@ -484,12 +484,12 @@ service. The `ntp`/`chrony` arm is the exception and requires no capability.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | `artifactServer`, `loadBalancer`, `proxy`, `nameResolution`, `ntp`, or `registry`; equals the populated arm key. |
-| `spec.artifactServer` | For `type: artifactServer` | — | Artifact publication service. |
-| `spec.loadBalancer` | For `type: loadBalancer` | — | HAProxy-backed endpoint VIP service. |
-| `spec.proxy` | For `type: proxy` | — | Forward proxy service. |
-| `spec.nameResolution` | For `type: nameResolution` | — | DNS service. |
-| `spec.ntp` | For `type: ntp` | — | NTP service. |
-| `spec.registry` | For `type: registry` | — | Mirror registry service. |
+| `spec.artifactServer` | No | — | Artifact publication service. Required for `type: artifactServer`. |
+| `spec.loadBalancer` | No | — | HAProxy-backed endpoint VIP service. Required for `type: loadBalancer`. |
+| `spec.proxy` | No | — | Forward proxy service. Required for `type: proxy`. |
+| `spec.nameResolution` | No | — | DNS service. Required for `type: nameResolution`. |
+| `spec.ntp` | No | — | NTP service. Required for `type: ntp`. |
+| `spec.registry` | No | — | Mirror registry service. Required for `type: registry`. |
 
 !!! note "`implementation` is a fixed single value per arm"
     Each service arm carries a required `implementation` field that must equal
@@ -657,6 +657,43 @@ spec:
             next-hop-interface: primary
             table-id: 254
 ```
+
+## Native mapping
+
+Where the native constructs an operator already knows live on these kinds. See
+[conventions](index.md) for how to read the tables.
+
+### Native mapping — nmstate
+
+`NetworkConfig` fronts nmstate directly: the template **is** an nmstate
+document, passed through verbatim into the agent installer's
+`hosts[].networkConfig`. A managed-OS install lowers only a subset of it into
+the kickstart `network` directive — see
+[Kickstart network subset](../advanced/managed-os.md#kickstart-network-subset).
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| the nmstate document (`interfaces`, `routes`, `dns-resolver`, …) | `spec.template.networkConfig` | mirror | — |
+| `dns-resolver.config.server` | `spec.nameResolutionRefs[]` | restructured | cross-document reference into the `Environment` name-resolution catalog |
+| per-host nmstate additions | `Machine` `spec.network.config.overrides` (deep-merged over the selected template) | mirror | — |
+| per-host static addresses | `Machine` `spec.network.config.interfaceAddresses[]` referencing `spec.addresses[]` | restructured | the IP is authored once and shared with SSH and endpoint resolution |
+
+### Native mapping — `install-config.yaml` (vSphere platform)
+
+The vSphere platform keys are install-config's own spellings, relocated onto
+the provider so one document serves every cluster on that vCenter.
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `platform.vsphere.vcenters[]` (`server`, `port`, `datacenters`) | `spec.vsphere.vcenters[]` (verbatim keys) | relocated | cross-document reference — the provider owns vCenter facts once |
+| `platform.vsphere.vcenters[].user` / `.password` | `spec.vsphere.vcenters[].credentialsRef` | renamed | secret `…Ref` indirection |
+| `platform.vsphere.failureDomains[]` (`name`, `region`, `zone`, `server`) | `spec.vsphere.failureDomains[]` (verbatim keys) | relocated | cross-document reference |
+| `…failureDomains[].topology` (`datacenter`, `computeCluster`, `datastore`, `folder`, `resourcePool`, `networks`) | `spec.vsphere.failureDomains[].topology` (verbatim keys) | relocated | cross-document reference |
+| `platform.vsphere.nodeNetworking.{external,internal}.networkSubnetCidr` | `spec.vsphere.nodeNetworking` (verbatim keys, including the lowercase `Cidr`) | relocated | cross-document reference |
+
+The provider's `spec.baremetal.defaults.bmc` block only supplies fleet defaults
+for the per-machine BMC fields; the Metal3/Redfish mapping table lives on
+[Machines](machines.md#native-mapping).
 
 ## Where to go next
 

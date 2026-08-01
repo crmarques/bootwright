@@ -49,18 +49,26 @@ The tables below describe only `spec`.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.capabilities[]` | No | — | Roles a machine fulfills. See the canonical set below. |
-| `spec.substrate.providerRef` | When `os.provided: false` | — | Names the `InfraProvider` that supplies the substrate. |
-| `spec.substrate.profileRef` | When `os.provided: false` on `libvirt`, `vsphere`, or `kubevirt` | — | Names a provider `machineProfiles[]` entry. Must be empty for `baremetal`. |
-| `spec.hardware.nics[]` | When `os.provided: false` on `baremetal` | — | Physical NIC inventory. |
-| `spec.hardware.boot.nicRef` | When `os.provided: false` on `baremetal` | — | Boot NIC name from `hardware.nics[]`. |
-| `spec.hardware.management.bmc` | When `os.provided: false` on `baremetal` | — | BMC access for Redfish virtual media. |
+| `spec.substrate.providerRef` | No | — | Names the `InfraProvider` that supplies the substrate. |
+| `spec.substrate.profileRef` | No | — | Names a provider `machineProfiles[]` entry. Must be empty for `baremetal`. |
+| `spec.hardware.nics[]` | No | — | Physical NIC inventory. |
+| `spec.hardware.boot.nicRef` | No | — | Boot NIC name from `hardware.nics[]`. |
+| `spec.hardware.management.bmc` | No | — | BMC access for Redfish virtual media. |
 | `spec.os.provided` | Yes | — | `true` for OS-ready machines; `false` for machines Bootwright or the cluster installer provisions. |
 | `spec.os.installProfileRef` | No | — | Names a `MachineInstallProfile` for Bootwright-managed OS install. Must be empty when `os.provided: true`. |
 | `spec.os.install` | No | — | Machine-owned install hints. Must be empty when `os.provided: true`. |
 | `spec.network.config` | No | — | Install network selection and overrides. Must be empty when `os.provided: true`. |
-| `spec.network.interfaceBinding[]` | When `os.provided: false` on `baremetal` with a `NetworkConfig` | — | Maps hardware NIC names to NMState interface names. |
+| `spec.network.interfaceBinding[]` | No | — | Maps hardware NIC names to NMState interface names. |
 | `spec.addresses[]` | No | — | Durable named addresses used by SSH, services, and endpoint resolution. |
 | `spec.access` | No | `ssh.auth.operatorIdentity` when `os.provided: true` | How Bootwright reaches a machine it did **not** install: `local: true` for the controller, or `ssh` with an `auth` arm. Refused on a machine Bootwright installs — there it derives the `bootwright` service account. |
+
+!!! note "Conditionally required with `os.provided: false`"
+    A machine that needs a substrate requires `substrate.providerRef`, plus
+    `substrate.profileRef` on a `libvirt`, `vsphere`, or `kubevirt` provider
+    (it must be empty for `baremetal`). On a `baremetal` provider,
+    `hardware.nics[]`, `hardware.boot.nicRef`, and `hardware.management.bmc`
+    are also required, and `network.interfaceBinding[]` whenever a
+    `NetworkConfig` is selected.
 
 ### Capabilities
 
@@ -121,19 +129,20 @@ provider with `os.provided: false`, `nics[]` (each with a `macAddress`) and
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `hardware.nics[].name` | Yes (per entry) | — | Local NIC name used by Bootwright references. |
-| `hardware.nics[].macAddress` | Required on `baremetal` `os.provided: false` machines | — | Physical MAC address. |
-| `hardware.boot.nicRef` | Required on `baremetal` `os.provided: false` machines | — | Name of the boot NIC from `nics[]`. |
-| `hardware.management.bmc.address` | Required when any BMC field is set | — | Redfish BMC address, commonly `redfish-virtualmedia+https://...`. |
+| `hardware.nics[].macAddress` | No | — | Physical MAC address. |
+| `hardware.boot.nicRef` | No | — | Name of the boot NIC from `nics[]`. |
+| `hardware.management.bmc.address` | No | — | Redfish BMC address, commonly `redfish-virtualmedia+https://...`. |
 | `hardware.management.bmc.protocol` | No | `redfish` | Only `redfish` is supported today; any other value is rejected. |
-| `hardware.management.bmc.credentialsRef` | Required when any BMC field is set | — | Secret containing BMC credentials. |
+| `hardware.management.bmc.credentialsRef` | No | — | Secret containing BMC credentials. |
 | `hardware.management.bmc.tls.verify` | No | `true` | bootwright→BMC TLS leg: whether bootwright verifies the BMC's own certificate. Set `false` for a lab/self-signed BMC. Inherits `baremetal.defaults.bmc.tls`. |
 | `hardware.management.bmc.virtualMedia.tls.trust` | No | `disable-verification` | BMC→artifact-server leg: how the BMC comes to trust the artifact server certificate for the virtual-media fetch. `disable-verification` turns verification off on the BMC for the fetch; `import-certificate` uploads the certificate into the BMC trust store so verification can stay on; `established` declares trust already exists out of band, and bootwright then performs **no** BMC security writes. The first two need a BMC account privileged enough to write security settings — see [SSH or artifact fetch failures](../troubleshooting.md#ssh-or-artifact-fetch-failures). |
 | `hardware.management.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | No | `true` | With `trust: disable-verification` only: re-enable the verification flags after the agent ISO is mounted. Set `false` to leave verification off. |
 | `hardware.management.bmc.virtualMedia.tls.removeCertificateAfterBoot` | No | `false` | With `trust: import-certificate` only: remove the imported certificate from the BMC after the agent ISO is mounted. |
 
-A per-`Machine` `hardware.management.bmc` block overrides the provider's
-`baremetal.defaults.bmc` for that server (`tls` and `virtualMedia` inherit when
-omitted; `credentialsRef` is always per-machine). A complete bare-metal `Machine`
+A `bmc` block, once any of its fields is set, must set both `address` and
+`credentialsRef`. A per-`Machine` `hardware.management.bmc` block overrides the
+provider's `baremetal.defaults.bmc` for that server (`tls` and `virtualMedia`
+inherit when omitted; `credentialsRef` is always per-machine). A complete bare-metal `Machine`
 inventory example sits on [Infrastructure](infrastructure.md#bare-metal).
 
 ### Network
@@ -146,7 +155,7 @@ with `spec`; the two are mutually exclusive. `overrides` and
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `network.config.networkConfigRef` | No | — | Names a reusable `NetworkConfig`. Mutually exclusive with `network.config.spec`. |
-| `network.config.attachmentRef` | Required with `networkConfigRef` on a provider-backed machine | The `networkConfigRef` name, only when the provider declares exactly one attachment | Names an `InfraProvider.spec.networkAttachments[]` entry. |
+| `network.config.attachmentRef` | No | The `networkConfigRef` name, only when the provider declares exactly one attachment | Names an `InfraProvider.spec.networkAttachments[]` entry. Required with `networkConfigRef` on a provider-backed machine. |
 | `network.config.interfaceAddresses[].interface` | Yes (per entry) | — | NMState interface receiving the static address. |
 | `network.config.interfaceAddresses[].addressRef` | Yes (per entry) | — | Name from `spec.addresses[]`. |
 | `network.config.interfaceAddresses[].prefixLength` | Yes (per entry) | — | Prefix length; must be 1-128, or 1-32 when the family is IPv4. |
@@ -185,7 +194,7 @@ decided by `spec.os.provided` alone:
 | `access.ssh.addressRef` | No | An address named `ssh`, else `fqdn` | Address name used for SSH; must resolve to `spec.addresses[]`. |
 | `access.ssh.port` | No | `22` | TCP port for SSH. |
 | `access.ssh.user` | No | See below | Login account on the machine you already own. Required with `passwordRef`. |
-| `access.ssh.auth` | Yes (when `access.ssh` is set) | — | How Bootwright authenticates. Exactly one arm; see below. |
+| `access.ssh.auth` | No | — | How Bootwright authenticates. Required whenever `access.ssh` is set; exactly one arm — see below. |
 | `access.ssh.sudoPasswordRef` | No | — | `usernamePassword` Secret supplying the `sudo` password. Bootwright escalates with `become`, so an account without passwordless `sudo` needs this. It is stored in the context and shared with everyone who holds that context; for your **own** login password use [`--ssh-ask-sudo-password`](#answering-a-sudo-that-asks-for-a-password) instead, which prompts per run and stores nothing. |
 | `access.ssh.knownHostsRef` | No | Context-managed SSH trust | Explicit `known_hosts` secret. |
 | `access.rootLogin` | No | `keep` | `keep` or `revoke`. `revoke` is accepted only on an `os.provided: true` machine that declares `access.ssh` **and** that a managed Ceph `StorageCluster` lists in `spec.ceph.topology.nodes` under a non-root `clusterSSH.user` — that account is the replacement login. Anywhere else it is rejected. See [Storage → The Ceph node login](storage.md#the-ceph-node-login). |
@@ -648,7 +657,7 @@ through Anaconda.
 | `spec.customizations.repositories.configure[].baseURL` | Yes (per entry) | — | Repository base URL; must be `http://` or `https://`. |
 | `spec.customizations.repositories.configure[].enabled` | No | `true` | Whether the repo is active. `false` configures it without turning it on. |
 | `spec.customizations.repositories.configure[].gpgCheck` | No | `true` | Signature enforcement. |
-| `spec.customizations.repositories.configure[].gpgKeyURL` | No (Yes when `gpgCheck`) | — | `http://`, `https://`, or `file:///` GPG key. Required unless `gpgCheck: false`. |
+| `spec.customizations.repositories.configure[].gpgKeyURL` | No | — | `http://`, `https://`, or `file:///` GPG key. Required unless `gpgCheck: false`. |
 | `spec.customizations.repositories.subscription.enable[]` | No | — | Entitled repository ids to enable via `subscription-manager`. `*` is rejected here. |
 | `spec.customizations.repositories.subscription.disable[]` | No | — | Entitled repository ids to disable. `*` means "all others" and, with a non-empty `enable[]`, renders as a purge. |
 | `spec.customizations.services.enabled[]` | No | — | Services to enable. |
@@ -657,15 +666,17 @@ through Anaconda.
 | `spec.customizations.security.firewall.enabled` | No | OS default | Tri-state firewall control; explicit `false` disables. |
 | `spec.customizations.security.fips.enabled` | No | `false` | `true` enables FIPS install configuration. RHEL-only. |
 | `spec.customizations.security.diskEncryption` | No | — (unencrypted) | Presence encrypts the installed system with LUKS2 and binds it to the machine's TPM 2.0. See [Disk encryption](#disk-encryption). |
-| `spec.customizations.security.diskEncryption.unlock.tpm2` | Yes (when the block is set) | — | The only unlock arm: `clevis` seals the volume key in the node's TPM 2.0 chip. |
+| `spec.customizations.security.diskEncryption.unlock.tpm2` | No | — | The only unlock arm: `clevis` seals the volume key in the node's TPM 2.0 chip. |
 | `spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds[]` | No | — (no boot policy) | Platform Configuration Registers the key is sealed against, `0`–`23`. Omitted, the key is released on any boot of that machine — theft of the disk is defeated, tampering with the boot chain is not. |
-| `spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank` | No (invalid without `pcrIds`) | `sha256` | PCR bank the policy reads: `sha1`, `sha256`, `sha384`, or `sha512`. |
-| `spec.customizations.security.diskEncryption.recoveryPassphraseRef` | Yes (when the block is set) | — | `opaque` or `token` Secret holding the passphrase Anaconda creates the LUKS container from. The keyslot is kept as the way back in when the TPM stops releasing the key. |
+| `spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank` | No | `sha256` | PCR bank the policy reads: `sha1`, `sha256`, `sha384`, or `sha512`. Valid only alongside `pcrIds`. |
+| `spec.customizations.security.diskEncryption.recoveryPassphraseRef` | No | — | `opaque` or `token` Secret holding the passphrase Anaconda creates the LUKS container from. The keyslot is kept as the way back in when the TPM stops releasing the key. |
 
 !!! warning "Profile coupling rules"
     - A profile referenced by a managed-install machine (`os.installProfileRef`)
       must list `sshd` in `customizations.services.enabled`, or the referencing
       `Machine` fails validation.
+    - `customizations.security.diskEncryption`, when present, requires both
+      `unlock.tpm2` and `recoveryPassphraseRef`.
     - `customizations.security.firewall.enabled: true` requires `firewalld` in
       **both** `customizations.packages.install` and
       `customizations.services.enabled`.
@@ -857,6 +868,40 @@ install with `installWeakDeps: false` does not pull in. Enabling
 `diskEncryption` installs them; otherwise add `tpm2-tss` to
 `customizations.packages.install`. Bootwright refuses the cluster if neither is
 true. See [Storage](storage.md).
+
+## Native mapping
+
+Where the high-value native keys an operator already knows live on these kinds.
+See [conventions](index.md) for how to read the tables.
+
+### Native mapping — kickstart (Anaconda)
+
+The `MachineInstallProfile` paths below are relative to `spec` of that kind.
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `lang` | `spec.customizations.localization.language` | renamed | one localization block also owns `formats` and `additionalLocales[]` |
+| `keyboard` / `timezone` | `spec.customizations.localization.keyboard` / `.timezone` | mirror | — |
+| `url --url=` | `spec.installer.anaconda.packageSource` (`mirror.baseURL` or `hostedTree`) | renamed | one union covers mirror, subscription CDN, and hosted-tree sources |
+| `repo --name= --baseurl=` | `spec.customizations.repositories.configure[].id` + `.baseURL` | renamed | `id` names the repo section and file (`bootwright-<id>.repo`); `displayName` is the yum `name=` display string |
+| `rhsm` | `Entitlement`, named by `spec.installer.anaconda.packageSource.fromSubscription.entitlementRef` or `spec.subscription.entitlementRef` | relocated | secret `…Ref` indirection; one entitlement shared fleet-wide |
+| `%packages` (`@^<env>`, `--excludedocs`, `--exclude-weakdeps`) | `spec.customizations.packages.environment` / `.install[]` / `.excludeDocs` / `.installWeakDeps` | mirror | — |
+| `services --enabled/--disabled` | `spec.customizations.services.enabled[]` / `.disabled[]` | mirror | — |
+| `selinux --enforcing/--permissive/--disabled` | `spec.customizations.security.selinux.mode` | mirror | — |
+| `firewall --enabled/--disabled` | `spec.customizations.security.firewall.enabled` | restructured | a tri-state boolean instead of a flag pair |
+| `ignoredisk` / `clearpart` / `bootloader` / `part … --ondisk` | derived from `Machine` `spec.os.install.rootDeviceHints` via `spec.customizations.storage.rootDevice.source` | derived | Metal3-shaped hints shared with agent installs; only `deviceName` and `wwn` are honored here — see [Managed OS installs](../advanced/managed-os.md#root-device-hints) |
+| `network …` | `NetworkConfig` (nmstate), lowered to kickstart flags at render time | relocated | cross-document reference — one nmstate document drives the install and day-2 convergence |
+| `fips=1` | `spec.customizations.security.fips.enabled` | renamed | grouped into one security posture block |
+
+### Native mapping — Metal3 / Redfish BMC
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `bmc.address` scheme (`redfish-virtualmedia+https://…/redfish/v1/Systems/1`) | `spec.hardware.management.bmc.address` | mirror | — (the Metal3 `BareMetalHost` scheme vocabulary, not raw Redfish) |
+| `bmc.credentialsName` | `spec.hardware.management.bmc.credentialsRef` | renamed | secret `…Ref` indirection |
+| `bmc.disableCertificateVerification` | `spec.hardware.management.bmc.tls.verify` | restructured | safety — verification is the default and the opt-out is explicit; inheritable from the provider's `baremetal.defaults.bmc` |
+| `rootDeviceHints.{deviceName,hctl,model,vendor,serialNumber,minSizeGigabytes,wwn,rotational}` | `spec.os.install.rootDeviceHints` | mirror | — (byte-for-byte agent-config/Metal3 vocabulary) |
+| — | `spec.hardware.management.bmc.virtualMedia.tls.trust` (+ `restoreVerificationAfterBoot`, `removeCertificateAfterBoot`) | invented | safety — the BMC→artifact-server trust leg has no Metal3 or Redfish counterpart |
 
 ## Where to go next
 

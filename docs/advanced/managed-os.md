@@ -10,7 +10,9 @@ work runs — the path most commonly used for Ceph storage nodes, which need a
 managed RHEL before cephadm. This page is the task how-to. The object model and
 every field live on [Machines](../concepts/machines.md); the worked end-to-end
 lab is `examples/ceph-ibm-libvirt-lab` (the snippets below are adapted from its
-`infra/os/` subtree) and `examples/ceph-ibm-baremetal-redfish` for bare metal.
+machine-image and install-profile objects — in a tree layout those live under
+`infra/images/` and `infra/profiles/`) and `examples/ceph-ibm-baremetal-redfish`
+for bare metal.
 
 ## When Bootwright installs the OS
 
@@ -417,6 +419,77 @@ valid on a `Machine` whose nodes are RHCOS; see
     ceph-volume wipes it. `wwn` scopes the install correctly but cannot be
     compared against an OSD device path, so it is rejected there.
 
+## What the install lays down
+
+The rendered kickstart supports exactly two partition layouts, and the trigger
+is the root-device hint: **a resolvable root-device hint selects the named-disk
+layout, which is not LVM; no hint selects whole-machine
+`autopart --type=lvm`.** Side by side, as the kickstart template renders them
+(`<root-disk>` is the disk the hint resolved to):
+
+With a resolvable hint — named disk, plain partitions, **not** LVM:
+
+```text
+ignoredisk --only-use=<root-disk>
+zerombr
+clearpart --all --initlabel --drives=<root-disk>
+bootloader --location=mbr --boot-drive=<root-disk>
+reqpart --add-boot
+part swap --recommended --ondisk=<root-disk>
+part / --fstype=xfs --size=10240 --grow --ondisk=<root-disk>
+```
+
+Without a hint — whole machine, LVM:
+
+```text
+zerombr
+clearpart --all --initlabel
+autopart --type=lvm --fstype=xfs
+```
+
+The named-disk layout produces:
+
+| Mount | Type | Size |
+| --- | --- | --- |
+| `/boot` (plus the platform partitions `reqpart` adds, e.g. `/boot/efi` on UEFI) | plain partition | Anaconda defaults |
+| swap | plain partition | Anaconda `--recommended` |
+| `/` | plain partition, xfs | 10 GiB minimum, grows over the rest of the disk |
+
+The no-hint layout is Anaconda's default LVM scheme instead: a plain `/boot`
+plus an LVM volume group spanning **every** disk on the machine, holding xfs
+`/` and swap per Anaconda's autopart defaults.
+
+`MachineInstallProfile` exposes no partitioning knob today — the layout above
+is the contract. [Disk encryption](#encrypting-the-installed-disk) appends LUKS
+flags to the same `part`/`autopart` lines; it does not change the shape.
+
+## Kickstart network subset
+
+A kickstart `network` directive can express far less than nmstate, so only a
+subset of the authored [machine network config](../concepts/machines.md)
+reaches the install itself
+(`internal/render/inventory/vars_machine_os_network.go`):
+
+| nmstate construct | In the install network? |
+| --- | --- |
+| One primary interface — the one holding the default route, else the first with a static IPv4 address | Yes (a single `network` line) |
+| Interface types `ethernet`, `vlan`, `bond` (including VLAN over bond) | Yes |
+| IPv4 static addressing, or DHCP | Yes |
+| The default gateway (`routes.config` destination `0.0.0.0/0`) | Yes |
+| DNS servers (`dns-resolver`) | Yes |
+| `bridge`, `team`, VRF | **No** — the type-specific wiring is silently not lowered |
+| A second addressed interface | **No** — only the primary renders |
+| IPv6-only addressing | **No** — only IPv4 addresses are read |
+| Non-default routes | **No** — only the default route survives |
+
+An install network the subset cannot express — no static IPv4 on any interface
+— currently falls back to `network --device=link --bootproto=dhcp`.
+
+The subset constrains only the install window. Once the OS is up, Bootwright
+applies the **full** authored nmstate document with `nmstatectl apply` under a
+rollback checkpoint, so the running machine converges to everything you
+authored.
+
 ## Encrypting the installed disk
 
 `customizations.security.diskEncryption` puts the node on LUKS2 and binds it to
@@ -475,9 +548,11 @@ CDN) only through a forward proxy, set
 Bootwright renders `--proxy=` onto the `rhsm`, `url`, and `repo` Kickstart
 directives so Anaconda registers and fetches through it — useful for a
 `fromSubscription` boot-ISO install on an estate with no internal mirror but a
-corporate proxy. Each node brings up its network from its
-[machine network config](../concepts/machines.md) before Anaconda fetches, so a
-boot ISO needs no extra early-networking setup. For the full proxy-target model
+corporate proxy. Each node brings up its install network from the
+[kickstart subset](#kickstart-network-subset) of its machine network config
+before Anaconda fetches — make sure the construct that reaches the proxy or
+mirror is one the subset can express, or the install falls back to DHCP on the
+boot link. For the full proxy-target model
 and why `machineOSInstall` must be external, see
 [Disconnected & proxied installs](disconnected-proxy.md).
 

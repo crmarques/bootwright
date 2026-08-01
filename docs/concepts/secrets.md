@@ -365,16 +365,16 @@ type. The secrets it names are declared as first-class `Secret` objects.
 | `metadata.name` | Yes | — | Entitlement name referenced by storage or OS install inputs. |
 | `spec.type` | Yes | — | Discriminator: `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
 | `spec.rhsm.management` | No | `managed` | Who registers the nodes: `managed` (Bootwright's machines-phase registration task) or `external` (registration is delegated to an operator [`CustomPlaybook`](custom-playbooks.md); the arm then carries only `management` — `organizationRef`, `activationKeyRef`, `satellite`, and `connectToInsights` are rejected). `ibm-storage-ceph` carries no `rhsm`; its nodes register RHEL through a separate `redhat-rhel` subscription named by the profile `subscription` or the cluster `osSubscriptionRef`. |
-| `spec.rhsm.organizationRef` | Conditional | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
-| `spec.rhsm.activationKeyRef` | Conditional | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
+| `spec.rhsm.organizationRef` | No | — | Secret for the Red Hat organization ID. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
+| `spec.rhsm.activationKeyRef` | No | — | Secret for the Red Hat activation key. Required wherever a `managed` `rhsm` arm is required; rejected under `management: external`. |
 | `spec.rhsm.connectToInsights` | No | `false` | Whether registered RHEL nodes enroll in Insights. |
-| `spec.rhsm.satellite.hostname` | Conditional | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. |
+| `spec.rhsm.satellite.hostname` | No | — | Corporate Red Hat Satellite/Capsule FQDN (bare host, no scheme). Required when the `satellite` block is set. |
 | `spec.rhsm.satellite.trustBundleRef` | No | — | Secret with the Satellite's PEM CA bundle, trusted before registration. Required in practice for private/self-signed Satellite CAs. |
 | `spec.rhsm.satellite.contentBaseURL` | No | `https://<hostname>/pulp/content` | Override for the Satellite content (Pulp) base URL; derived from `hostname` when omitted. |
 | `spec.registry.url` | No | — | Scheme-less mirror root `host[:port][/namespace]`; no credentials, query, fragment, or trailing slash. Defaults to `registry.redhat.io` (`redhat-ceph`) or `cp.icr.io/cp` (`ibm-storage-ceph`). A custom Ceph registry requires `StorageCluster.spec.ceph.image.base` at that root plus the canonical vendor repository suffix; a bare `image.version` does not satisfy it. |
-| `spec.registry.credentialsRef` | Conditional | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
+| `spec.registry.credentialsRef` | No | — | Registry entitlement credentials. Required for `redhat-ceph` and `ibm-storage-ceph`. |
 | `spec.registry.trustBundleRef` | No | — | Registry trust bundle. |
-| `spec.license.accept` | Conditional | `false` | Must be `true` for `ibm-storage-ceph`. |
+| `spec.license.accept` | No | `false` | Must be `true` for `ibm-storage-ceph`. |
 
 ### Types
 

@@ -69,9 +69,9 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `distribution.type` | No | `openshift` | `openshift` or `okd`. |
-| `distribution.release.version` | One of version/image | — | Release version (the OpenShift release path). |
+| `distribution.release.version` | No | — | Release version (the OpenShift release path). |
 | `distribution.release.channel` | No | — | Optional release channel for the OpenShift release path. |
-| `distribution.release.image` | One of version/image | — | Explicit release image (the OKD / pinned-install path). |
+| `distribution.release.image` | No | — | Explicit release image (the OKD / pinned-install path). |
 
 !!! note "Cross-field rule: one of version/image is required"
     A release is pinned by `version` or `image`, and **at least one of the two
@@ -113,12 +113,20 @@ still fails for the missing `version`/`image`, and an `okd` cluster rejects
 | `install.mode` | No | `connected` | `connected` or `disconnected`. |
 | `install.platform` | No | Derived (see [Platform](#platform)) | Installer platform render mode. |
 | `install.endpoints` | No | — | Closed map keyed by `api`, `api-int`, and `ingress`; see [Endpoints](#endpoints). |
-| `install.agent.redfishVirtualMedia.artifactServerEndpoint` | Required for bare-metal nodes | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint the Redfish BMC fetches the agent ISO from. |
-| `install.agent.bootArtifacts.artifactServerEndpoint` | Required for disconnected installs | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint that publishes disconnected agent boot artifacts. |
-| `install.pullSecretRef` | Required for OpenShift | Environment default, else `openshift-pull-secret` | Pull secret name. |
+| `install.agent.redfishVirtualMedia.artifactServerEndpoint` | No | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint the Redfish BMC fetches the agent ISO from. |
+| `install.agent.bootArtifacts.artifactServerEndpoint` | No | `serverRef` may inherit the default `artifactServers[]` entry | Artifact server endpoint that publishes disconnected agent boot artifacts. |
+| `install.pullSecretRef` | No | Environment default, else `openshift-pull-secret` | Pull secret name. |
 | `install.nodeSSH` | No | Generated `<cluster-name>-cluster-admin-ssh-key` | Node SSH material; see [Node SSH](#node-ssh). |
 | `install.additionalTrustBundleRefs[]` | No | — | Cluster-scoped install CA bundle secret names. |
 | `install.servingCertificates` | No | — | API and ingress serving certificates; see [Serving certificates](#serving-certificates). |
+
+!!! note "Conditionally required install fields"
+    `install.agent.redfishVirtualMedia.artifactServerEndpoint` is required when
+    any node is bare-metal (the BMC fetches the agent ISO from it);
+    `install.agent.bootArtifacts.artifactServerEndpoint` is required for
+    `install.mode: disconnected`; `install.pullSecretRef` is required for an
+    `openshift` distribution and is normally filled from the `Environment`
+    default.
 
 !!! note "Disconnected installs need a mirror"
     `install.mode: disconnected` requires `Environment.spec.registries.mirror`
@@ -135,8 +143,8 @@ Author either a combined key pair or split public/private references — not bot
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `install.nodeSSH.keyPairRef` | One of `keyPairRef`/`publicKeyRef` | Generated convention key | Secret holding both private and public material. |
-| `install.nodeSSH.publicKeyRef` | Required when `keyPairRef` is empty | — | Secret holding public key material. |
+| `install.nodeSSH.keyPairRef` | No | Generated convention key | Secret holding both private and public material. |
+| `install.nodeSSH.publicKeyRef` | No | — | Secret holding public key material. |
 | `install.nodeSSH.privateKeyRef` | No | — | Secret holding private key material for local probes and `cluster rsh`/`exec`. |
 
 !!! note "Key pair or split refs, not both"
@@ -169,10 +177,10 @@ together with `additionalTrustBundleRefs` — see
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `servingCertificates.apiServer.namedCertificates[]` | At least one when `apiServer` is present | — | API server named certificates. |
-| `servingCertificates.apiServer.namedCertificates[].names[]` | At least one per entry | — | DNS SAN names this certificate serves; must not target the internal `api-int` endpoint. |
+| `servingCertificates.apiServer.namedCertificates[]` | No | — | API server named certificates. |
+| `servingCertificates.apiServer.namedCertificates[].names[]` | Yes (per entry) | — | DNS SAN names this certificate serves; must not target the internal `api-int` endpoint. |
 | `servingCertificates.apiServer.namedCertificates[].secretRef` | Yes (per entry) | — | Secret holding the certificate and key. |
-| `servingCertificates.ingress.defaultCertificateRef` | Required when `ingress` is present | — | Secret holding the ingress default certificate. |
+| `servingCertificates.ingress.defaultCertificateRef` | No | — | Secret holding the ingress default certificate. |
 
 !!! note "Present-then-required leaves"
     `apiServer` and `ingress` are independently optional, but if you author
@@ -188,8 +196,11 @@ together with `additionalTrustBundleRefs` — see
 | --- | --- | --- | --- |
 | `security.fips.enabled` | No | `false` | Install and run the cluster in FIPS mode. |
 | `security.diskEncryption` | No | — (unencrypted) | Presence installs the nodes onto a LUKS2 root volume sealed to each node's TPM 2.0. See [Disk encryption](#disk-encryption). |
-| `security.diskEncryption.unlock.tpm2` | Yes (when the block is set) | — | The only unlock arm. Takes no `pcrIds`/`pcrBank` — see below. |
+| `security.diskEncryption.unlock.tpm2` | No | — | The only unlock arm. Takes no `pcrIds`/`pcrBank` — see below. |
 | `security.diskEncryption.roles[]` | No | Every role in `nodes[]` | Which node roles to encrypt: `master`, `worker`, `infra`. `infra` folds into the `worker` machine config pool. |
+
+When `security.diskEncryption` is present, `unlock.tpm2` is required — it is
+the only unlock arm.
 
 `security.fips.enabled: true` renders `fips: true` into the generated
 `install-config.yaml`, so the agent installer lays down RHCOS in FIPS mode
@@ -272,7 +283,7 @@ providers. The platform mode feeds the generated `install-config.yaml`.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `install.platform.type` | No | Derived from the bound machines' provider | `baremetal`, `vsphere`, `none`, or `external`. |
-| `install.platform.baremetal.provisioningNetwork` | No | — | `disabled`, `managed`, or `unmanaged`. |
+| `install.platform.baremetal.provisioningNetwork` | No | — | `disabled`, `managed`, or `unmanaged`. Authored lowercase; install-config spells the values `Disabled`/`Managed`/`Unmanaged`, and Bootwright renders the native casing for you. |
 | `install.platform.vsphere.nodeNetworking` | No | — | vSphere node networking subnets; see below. |
 | `install.platform.external` | No | — | Free-form passthrough map for the `external` platform. |
 
@@ -321,21 +332,24 @@ keys are accepted. Omitting an endpoint's `source.type` normalizes it to
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `endpoints.<slot>.address` | Required for `openshift`/`external` sources | — | Literal endpoint address. |
+| `endpoints.<slot>.address` | No | — | Literal endpoint address. Required for the `openshift` and `external` sources (see the source table above). |
 | `endpoints.<slot>.dnsName` | No | — | Optional DNS name. |
 | `endpoints.<slot>.port` | No | — | Optional port. |
 | `endpoints.<slot>.scheme` | No | — | Optional scheme. |
 | `endpoints.<slot>.prefixLength` | No | — | Prefix length for VIP-style endpoints. |
 | `endpoints.<slot>.interfaceNetworks[]` | No | — | Interface networks for VIP placement. |
 | `endpoints.<slot>.source.type` | No | `openshift` | `openshift`, `external`, or `infraComponent`. |
-| `endpoints.<slot>.source.componentRef` | Required for `infraComponent` | — | Load-balancer `InfraComponent` name. |
+| `endpoints.<slot>.source.componentRef` | No | — | Load-balancer `InfraComponent` name. Required for the `infraComponent` source. |
 | `endpoints.<slot>.source.bindAddressRef` | No | — | Names a `bindAddresses[]` entry on the referenced load balancer. |
 
 !!! note "Single-node clusters reject `openshift` sources"
     A single-node cluster cannot use `source.type: openshift` on the `api`,
     `api-int`, or `ingress` slot — pair it with the `platform.none` default
-    above. Use `external` or `infraComponent` instead. For how VIPs and managed
-    load balancers wire together, see
+    above. Use `external` or `infraComponent` instead. A single-node cluster
+    has no VIP: the `api`, `api-int`, and `ingress` addresses must all be the
+    node's own install address — the `Machine` `spec.addresses[]` entry its
+    install network references. Repeat it here verbatim; nothing validates the
+    two agree. For how VIPs and managed load balancers wire together, see
     [Networking](../advanced/networking.md).
 
 ## Artifact Server Endpoints
@@ -351,9 +365,12 @@ artifactServerEndpoint:
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef` | Required for bare-metal nodes | — | Endpoint the Redfish BMC fetches the agent ISO from. |
-| `install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` | Required for disconnected installs | — | Endpoint that publishes agent boot artifacts and becomes `bootArtifactsBaseURL`. |
+| `install.agent.redfishVirtualMedia.artifactServerEndpoint.endpointRef` | No | — | Endpoint the Redfish BMC fetches the agent ISO from. |
+| `install.agent.bootArtifacts.artifactServerEndpoint.endpointRef` | No | — | Endpoint that publishes agent boot artifacts and becomes `bootArtifactsBaseURL`. |
 | `artifactServerEndpoint.serverRef` | No | Default `artifactServers[]` entry | Names an `Environment.spec.infraComponents.artifactServers[].name`. Empty inherits the entry marked `default: true`, or the sole entry. |
+
+The Redfish endpoint is required when any node is bare-metal; the
+boot-artifacts endpoint is required for disconnected installs.
 
 `endpointRef` is never defaulted globally. A new consumer adds its own
 `artifactServerEndpoint` field instead of adding a slot to `InfraComponent` or
@@ -366,8 +383,8 @@ network type. The whole block and any field within it may be omitted.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `networking.networkType` | No | — | OpenShift network type; renders the installer default when omitted. |
-| `networking.clusterNetwork[].cidr` | Required per entry | `10.128.0.0/14` (default entry) | Pod network CIDR. |
+| `networking.networkType` | No | — | OpenShift network type; renders the installer default when omitted. An authored value passes through verbatim in its native casing (e.g. `OVNKubernetes`). |
+| `networking.clusterNetwork[].cidr` | Yes (per entry) | `10.128.0.0/14` (default entry) | Pod network CIDR. |
 | `networking.clusterNetwork[].hostPrefix` | No | `23` (default entry) | Pod network host prefix. |
 | `networking.serviceNetwork[]` | No | `172.30.0.0/16` | Service network CIDRs. |
 
@@ -421,6 +438,45 @@ machine-pool fields (`replicas`, `architecture`, `hyperthreading`, `platform`,
     here. A node `Machine` is installed by Bootwright, so it is declared with
     `os.provided: false` on the `Machine` itself; that constraint is enforced by
     [Machine](machines.md) validation, not by `ContainerCluster`.
+
+## Native mapping
+
+Where the high-value `openshift-install` input keys live in Bootwright — the
+rows an operator arriving with a working native config will look up. See
+[conventions](index.md) for how to read the table.
+
+### Native mapping — `install-config.yaml`
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `baseDomain` | `Environment` `spec.domains.containerClusters` | relocated | fleet-level default — one zone for every cluster in the context |
+| `metadata.name` | `metadata.name` | mirror | — |
+| `controlPlane.replicas` / `compute[].replicas` | derived — counted from `spec.nodes[].role` (`infra` and `worker` count as compute) | derived | the node roster is the single source of truth |
+| `networking.networkType` / `clusterNetwork[].cidr` / `clusterNetwork[].hostPrefix` / `serviceNetwork[]` | `spec.networking.networkType` / `spec.networking.clusterNetwork[]` / `spec.networking.serviceNetwork[]` | mirror | — |
+| `networking.machineNetwork[].cidr` | `NetworkConfig` `spec.machineNetwork[]` | relocated | cross-document reference — machines and clusters share one network template |
+| `platform.<type>` | `spec.install.platform.type` | mirror | — (discriminated union; the arm key equals the type) |
+| `platform.baremetal.provisioningNetwork` | `spec.install.platform.baremetal.provisioningNetwork` | restructured | mirror key; only the value vocabulary is normalized — authored lowercase `disabled`/`managed`/`unmanaged`, rendered native `Disabled`/`Managed`/`Unmanaged` |
+| `platform.*.apiVIPs` / `ingressVIPs` | `spec.install.endpoints.api.address` / `spec.install.endpoints.ingress.address` | restructured | cross-document reference plus a `source` union naming who owns the VIP |
+| `platform.*.loadBalancer.type` | derived from each endpoint's `source.type` (`UserManaged` when any source is not `openshift`) | derived | the endpoint source already says who runs the balancer |
+| `pullSecret` | `spec.install.pullSecretRef` | renamed | secret `…Ref` indirection — no secret bytes in desired state |
+| `sshKey` | `spec.install.nodeSSH.keyPairRef` (or `publicKeyRef`) | restructured | secret `…Ref` indirection; the pair also serves `cluster rsh`/`exec` |
+| `additionalTrustBundle` | `spec.install.additionalTrustBundleRefs[]` | renamed | secret `…Ref` indirection; a list of bundles concatenates |
+| `proxy` | `Environment` proxies (`spec.infraComponents.proxies[]` + `spec.proxyFor.containerClusterInstall`) | relocated | fleet-level default with per-consumer override |
+| `imageDigestSources` | `Environment` `spec.registries.imageDigestSources[]`, plus entries derived from the registry-mirror component | relocated | fleet-level default; release-image entries are derived from the mirror |
+| `fips` | `spec.security.fips.enabled` | renamed | grouped into one cluster security posture |
+
+### Native mapping — `agent-config.yaml`
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `rendezvousIP` | derived — the first master's primary install address | derived | one less hand-copied IP; the roster already knows it |
+| `hosts[].hostname` | `spec.nodes[].name` | renamed | composes `<name>.<cluster>.<zone>` under the fleet domain model |
+| `hosts[].role` | `spec.nodes[].role` | mirror | authoring-only extra value `infra` — installs as `worker`, promoted day-2 |
+| `hosts[].interfaces[].name` / `.macAddress` | `Machine` `spec.hardware.nics[]` (mirror keys `name`, `macAddress`) | relocated | cross-document reference — hardware facts live on the machine |
+| `hosts[].rootDeviceHints.*` | `Machine` `spec.os.install.rootDeviceHints` (byte-for-byte Metal3 mirror) | relocated | cross-document reference — the hint survives a node moving between clusters |
+| `hosts[].networkConfig` | `NetworkConfig` `spec.template.networkConfig` (nmstate passthrough) | relocated | cross-document reference — one template serves many hosts |
+| `additionalNTPSources[]` | derived from the `Environment` NTP catalog entry / `InfraComponent` | derived | fleet-level default |
+| `minimalISO` / `bootArtifactsBaseURL` | derived from `spec.install.mode: disconnected` + `spec.install.agent.bootArtifacts.artifactServerEndpoint` | derived | one mode switch drives the disconnected boot-artifact plumbing |
 
 ## Where to go next
 

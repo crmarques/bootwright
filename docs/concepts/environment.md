@@ -31,7 +31,7 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-fqdn-address) and [Domain model](#domain-model). |
-| `spec.machineAccess.keyRef` | When any `Machine` installs an OS | — | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. See [Machine access](#machine-access). |
+| `spec.machineAccess.keyRef` | No | — | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. Required as soon as any `Machine` sets `os.installProfileRef`. See [Machine access](#machine-access). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `protected`; empty means `allow`. `protected` state needs `destroy --authorize protected`. |
 | `spec.safety.protectedKinds[]` | No | — | Per-kind destructive-change protection. Each entry is one of `ContainerCluster`, `StorageCluster`, or `Machine`; any other value is rejected. `apply --mode rebuild` on an object of a listed kind fails closed with no token that overrides it — the remedy is an explicit `destroy` first. `--reclaim-devices` alone fails closed and names `--authorize data-loss` as the authorization. `destroy` requires `--authorize protected`. |
@@ -79,6 +79,10 @@ spec:
 Defaulting chain: `machines` → `base`; `clusters` → `base`;
 `containerClusters` → `clusters`; `storageClusters` → `clusters`. An
 `Environment` that sets only `base` resolves every identity under that one zone.
+
+Every container cluster in one Environment renders the same install-config
+`baseDomain`; a fleet spanning two base domains needs one context per domain
+today, and shared InfraComponents must then be duplicated.
 
 Composition under the model:
 
@@ -143,8 +147,11 @@ by catalog name without knowing whether Bootwright runs it or the site provides
 it. Each entry sets `management: external` or `management: managed`. Managed
 entries point at an [`InfraComponent`](infrastructure.md) through `componentRef`;
 external entries carry connection facts directly. `name` and `management` are
-required on every entry. The remaining fields are conditional on `management` —
-fields marked managed-only are rejected on external entries and vice versa.
+required on every entry. The remaining fields are conditional on `management`:
+`componentRef` is required on managed entries and rejected on external ones,
+while an external entry instead requires its connection facts — `connection.*`
+for proxies, `address` for name resolution and NTP, `endpoints[]` for artifact
+servers, and `url` for registries — which are rejected on managed entries.
 
 Load balancers are deliberately absent from the catalog: one is bound per
 cluster endpoint, not fleet-wide, so a `ContainerCluster` endpoint points at a
@@ -152,41 +159,41 @@ managed component directly through `source.componentRef` plus a
 `bindAddressRef`, and an operator-run load balancer is declared at the consuming
 endpoint with `source.type: external` and an `address`.
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `proxies[].name` | Yes | DNS-label entry name (not `none`). |
-| `proxies[].default` | No | Marks the proxy every consumer inherits when its `proxyFor` slot is empty; see [Validation](#validation). |
-| `proxies[].management` | Yes | `external` or `managed`. |
-| `proxies[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.proxy`. Rejected on external entries. |
-| `proxies[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
-| `proxies[].connection.httpProxy` | No | Bare proxy URL; at least one of `httpProxy`/`httpsProxy`/`noProxy` is required on external entries. |
-| `proxies[].connection.httpsProxy` | No | Bare proxy URL. |
-| `proxies[].connection.noProxy[]` | No | No-proxy hosts. |
-| `proxies[].connection.auth.proxyAuthRef` | No | Secret with proxy credentials; URLs must not embed credentials. |
-| `proxies[].connection.trustBundleRef` | No | Secret (PEM) with the CA a TLS-inspecting proxy re-signs HTTPS with; installed into the trust store of managed hosts that egress through the proxy. See [Disconnected & proxied installs](../advanced/disconnected-proxy.md#tls-inspecting-proxies). |
-| `nameResolution[].name` | Yes | DNS-label entry name (not `none`). |
-| `nameResolution[].management` | Yes | `external` or `managed`. |
-| `nameResolution[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.nameResolution`. |
-| `nameResolution[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
-| `nameResolution[].address` | For `external` | Resolver IP address (external entries only). |
-| `nameResolution[].additionalIngressHosts[]` | No | Extra ingress hostnames. |
-| `artifactServers[].name` | Yes | DNS-label entry name (not `none`). |
-| `artifactServers[].default` | No | Marks the artifact server consumers inherit when `artifactServerEndpoint.serverRef` is empty; see [Artifact Server Default](#artifact-server-default). |
-| `artifactServers[].management` | Yes | `external` or `managed`. |
-| `artifactServers[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.artifactServer`. |
-| `artifactServers[].endpoints[].name` | For `external` | Endpoint name; `endpoints` is required on external entries, rejected on managed. |
-| `artifactServers[].endpoints[].url` | For `external` | Endpoint `http(s)` URL. |
-| `registries[].name` | Yes | DNS-label entry name (not `none`). |
-| `registries[].default` | No | Marks the default registry; see [Validation](#validation). |
-| `registries[].management` | Yes | `external` or `managed`. |
-| `registries[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.registry`. |
-| `registries[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
-| `registries[].url` | For `external` | Registry URL (external entries only). |
-| `ntp[].name` | Yes | DNS-label entry name (not `none`). |
-| `ntp[].management` | Yes | `external` or `managed`. |
-| `ntp[].componentRef` | For `managed` | Selects a managed `InfraComponent` with `spec.ntp`. |
-| `ntp[].endpointRef` | No | Names an `endpoints[]` entry on the managed component. |
-| `ntp[].address` | For `external` | NTP server IP or DNS hostname (external entries only). |
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `proxies[].name` | Yes | — | DNS-label entry name (not `none`). |
+| `proxies[].default` | No | `false` | Marks the proxy every consumer inherits when its `proxyFor` slot is empty; see [Validation](#validation). |
+| `proxies[].management` | Yes | — | `external` or `managed`. |
+| `proxies[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.proxy`. Managed entries only — rejected on external entries. |
+| `proxies[].endpointRef` | No | — | Names an `endpoints[]` entry on the managed component. |
+| `proxies[].connection.httpProxy` | No | — | Bare proxy URL; at least one of `httpProxy`/`httpsProxy`/`noProxy` is required on external entries. |
+| `proxies[].connection.httpsProxy` | No | — | Bare proxy URL. |
+| `proxies[].connection.noProxy[]` | No | — | No-proxy hosts. |
+| `proxies[].connection.auth.proxyAuthRef` | No | — | Secret with proxy credentials; URLs must not embed credentials. |
+| `proxies[].connection.trustBundleRef` | No | — | Secret (PEM) with the CA a TLS-inspecting proxy re-signs HTTPS with; installed into the trust store of managed hosts that egress through the proxy. See [Disconnected & proxied installs](../advanced/disconnected-proxy.md#tls-inspecting-proxies). |
+| `nameResolution[].name` | Yes | — | DNS-label entry name (not `none`). |
+| `nameResolution[].management` | Yes | — | `external` or `managed`. |
+| `nameResolution[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.nameResolution`. Managed entries only. |
+| `nameResolution[].endpointRef` | No | — | Names an `endpoints[]` entry on the managed component. |
+| `nameResolution[].address` | No | — | Resolver IP address. External entries only, and required there. |
+| `nameResolution[].additionalIngressHosts[]` | No | — | Extra ingress hostnames. |
+| `artifactServers[].name` | Yes | — | DNS-label entry name (not `none`). |
+| `artifactServers[].default` | No | `false` | Marks the artifact server consumers inherit when `artifactServerEndpoint.serverRef` is empty; see [Artifact Server Default](#artifact-server-default). |
+| `artifactServers[].management` | Yes | — | `external` or `managed`. |
+| `artifactServers[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.artifactServer`. Managed entries only. |
+| `artifactServers[].endpoints[].name` | Yes (per entry) | — | Endpoint name. `endpoints[]` is required on external entries, rejected on managed. |
+| `artifactServers[].endpoints[].url` | Yes (per entry) | — | Endpoint `http(s)` URL. |
+| `registries[].name` | Yes | — | DNS-label entry name (not `none`). |
+| `registries[].default` | No | `false` | Marks the default registry; see [Validation](#validation). |
+| `registries[].management` | Yes | — | `external` or `managed`. |
+| `registries[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.registry`. Managed entries only. |
+| `registries[].endpointRef` | No | — | Names an `endpoints[]` entry on the managed component. |
+| `registries[].url` | No | — | Registry URL. External entries only, and required there. |
+| `ntp[].name` | Yes | — | DNS-label entry name (not `none`). |
+| `ntp[].management` | Yes | — | `external` or `managed`. |
+| `ntp[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.ntp`. Managed entries only. |
+| `ntp[].endpointRef` | No | — | Names an `endpoints[]` entry on the managed component. |
+| `ntp[].address` | No | — | NTP server IP or DNS hostname. External entries only, and required there. |
 
 ## Artifact Server Default
 
@@ -274,8 +281,8 @@ is rejected.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `<component>.<impl>.local` | At least one of `local`/`public` | — | Local (mirrored) image reference; version tag or digest. |
-| `<component>.<impl>.public` | At least one of `local`/`public` | — | Public image reference; version tag or digest. |
+| `<component>.<impl>.local` | No | — | Local (mirrored) image reference; version tag or digest. |
+| `<component>.<impl>.public` | No | — | Public image reference; version tag or digest. |
 
 ## Validation
 
@@ -309,6 +316,19 @@ Beyond the per-field rules above, the validator enforces:
   least one `mirrors[]` value.
 - Proxy URLs and `Entitlement.spec.registry.url` must not embed inline
   credentials.
+
+## Native mapping
+
+The fleet-level keys of the driven tools that land on `Environment` rather than
+on the consuming cluster kind. See [conventions](index.md) for how to read the
+table.
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `baseDomain` (install-config) | `spec.domains.containerClusters` | relocated | fleet-level default — every cluster in the context shares one base domain |
+| `proxy` (install-config: `httpProxy`/`httpsProxy`/`noProxy`) | `spec.infraComponents.proxies[].connection`, selected by `spec.proxyFor.containerClusterInstall` | relocated | fleet-level default with per-consumer override |
+| `imageDigestSources` (install-config) | `spec.registries.imageDigestSources[]` (mirror keys), plus entries derived from the registry-mirror component | relocated | fleet-level default; release-image entries are derived from the mirror |
+| `--registry-json` (cephadm bootstrap) | `Entitlement` registry credentials, named by `StorageCluster` `spec.ceph.entitlementRef` | relocated | secret `…Ref` indirection; one entitlement shared fleet-wide |
 
 ## Where to go next
 

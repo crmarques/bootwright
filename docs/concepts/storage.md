@@ -91,7 +91,7 @@ spec:
 | --- | --- | --- | --- |
 | `spec.type` | Yes | — | Currently `ceph`. |
 | `spec.management` | No | `managed` | `managed` or `external`. External (imported) clusters are consumed through `StorageExport` and skip the cephadm storage task entirely. |
-| `spec.ceph` | When `management: managed` | — | Ceph distribution, cephadm bootstrap, networks, topology, config, monitoring, and passthrough services. |
+| `spec.ceph` | No | — | Ceph distribution, cephadm bootstrap, networks, topology, config, monitoring, and passthrough services. |
 
 !!! note "Cross-field rules"
     - `spec.ceph` is **required when** the cluster is managed and **must be
@@ -110,12 +110,12 @@ spec:
 | `ceph.image.base` | No | The repository derived from `ceph.distribution`, `ceph.release` and the entitlement registry | The `<registry>/<path>` the version hangs off — `quay.io/ceph/ceph`, `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leave it unset in the normal case: the derived value keeps the vendor namespace and stream welded to the release. Author it to mirror the image or to name a vendor build base Bootwright has not recorded. Must carry no tag, digest, or scheme. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the `cephadm` bootstrap binary fetched from `community.mirror` and executed as root; it adds a content check on top of the HTTPS-only mirror. It does not pin the Ceph packages. `oss` only. |
-| `ceph.entitlementRef` | When `redhat` or `ibm` | — | Names an `Entitlement` object. Must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
+| `ceph.entitlementRef` | No | — | Names an `Entitlement` object. Required for `redhat` and `ibm`: it must resolve to a `redhat-ceph` (for `redhat`) or `ibm-storage-ceph` (for `ibm`) entitlement. Must be empty for `oss`. See [Secrets](secrets.md#entitlements). |
 | `ceph.osSubscriptionRef` | No | — | Names a `redhat-rhel` `Entitlement` supplying the RHEL subscription for provided-OS Ceph nodes (managed-OS nodes name it on their `MachineInstallProfile.spec.subscription` instead). Must resolve to a `redhat-rhel` entitlement. Chiefly paired with `distribution: ibm`, whose product entitlement does not itself entitle RHEL. See [Secrets](secrets.md#entitlements). |
-| `ceph.ibm.callHome` | When `ibm` | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. License acceptance enables Call Home by default, so omission is rejected. |
+| `ceph.ibm.callHome` | No | — | Explicit IBM Call Home outbound-communication intent: `enabled` or `disabled`. Required for `distribution: ibm` — license acceptance enables Call Home by default, so omission is rejected there. |
 | `ceph.cephadm.addressRef` | No | — | Default address name used to resolve cephadm host addresses. |
 | `ceph.cephadm.clusterSSH.user` | No | `cephadm` on a managed cluster; `root` on an external one | The account cephadm manages every host as (`--ssh-user`). Bootwright provisions it on any topology node that does not already carry it; it is never a node's install-window identity. Rejected as `root` when a topology node is one Bootwright installs, or when a provided node authors a non-root `access.ssh.user`. See [The Ceph node login](#the-ceph-node-login). |
-| `ceph.cephadm.clusterSSH.keyRef` | Required when `clusterSSH.user` is non-root (the default) | — | Names the `sshKeyPair` secret that is the cluster identity — the key cephadm reaches every host with, and the key Bootwright authorizes for the orchestration account. Must not be `Environment.spec.machineAccess.keyRef`, nor a `Secret` a `Machine` authors as its own `access.ssh.auth.privateKeyRef`. |
+| `ceph.cephadm.clusterSSH.keyRef` | No | — | Names the `sshKeyPair` secret that is the cluster identity — the key cephadm reaches every host with, and the key Bootwright authorizes for the orchestration account. Required whenever `clusterSSH.user` is non-root (the default). Must not be `Environment.spec.machineAccess.keyRef`, nor a `Secret` a `Machine` authors as its own `access.ssh.auth.privateKeyRef`. |
 | `ceph.cephadm.bootstrap.node` | Yes | — | Topology node that cephadm bootstraps on, named by its node name (FQDN or short label). A machine name is rejected with guidance naming the node. |
 | `ceph.cephadm.bootstrap.addressRef` | No | `ceph.cephadm.addressRef`, then the node machine's SSH address | Address used for the rendered cephadm `--mon-ip`, resolved in that fallback order. |
 | `ceph.cephadm.bootstrap.singleHostDefaults` | No | `false` | Renders cephadm's `--single-host-defaults` at bootstrap (relaxed defaults for a one-node cluster). Valid only for a **single-host, non-stretch** topology and requires at least two declared OSDs. It owns `osd_pool_default_size`, `osd_pool_default_min_size`, and `osd_crush_chooseleaf_type` at bootstrap, so those keys are rejected in `ceph.config[global]`, and it owns `mgr_standby_modules`, which is rejected in `ceph.config[mgr]`. Referenced by the [`StoragePool`](#storagepool) cross-field rules. |
@@ -422,11 +422,11 @@ available, so it has no meaning without one. The walkthrough is in
 | `mgmtGateway.dnsLabel` | No | `mgr` | Leftmost label only; the published name is `<dnsLabel>.<cluster>.<domains.storageClusters>`. A dotted value is rejected. |
 | `mgmtGateway.port` | No | `8443` | Gateway listening port; `0..65535`. |
 | `mgmtGateway.enableAuth` | No | `false` | `true` puts the dashboard behind `oauth2Proxy`, which then becomes required (and is rejected when auth is off). |
-| `mgmtGateway.tls.certificateRef` / `.keyRef` | Both, within `tls` | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. Omit the block for cephadm's self-signed certificate. |
-| `mgmtGateway.oauth2Proxy.providerDisplayName` | With `oauth2Proxy` | — | Provider name shown on the login page. |
-| `mgmtGateway.oauth2Proxy.clientId` | With `oauth2Proxy` | — | OIDC client ID. |
-| `mgmtGateway.oauth2Proxy.clientSecretRef` | With `oauth2Proxy` | — | `Secret` holding the OIDC client secret. |
-| `mgmtGateway.oauth2Proxy.oidcIssuerUrl` | With `oauth2Proxy` | — | OIDC issuer URL. |
+| `mgmtGateway.tls.certificateRef` / `.keyRef` | No | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. A `tls` block, once present, must set both. Omit the block for cephadm's self-signed certificate. |
+| `mgmtGateway.oauth2Proxy.providerDisplayName` | Yes | — | Provider name shown on the login page. |
+| `mgmtGateway.oauth2Proxy.clientId` | Yes | — | OIDC client ID. |
+| `mgmtGateway.oauth2Proxy.clientSecretRef` | Yes | — | `Secret` holding the OIDC client secret. |
+| `mgmtGateway.oauth2Proxy.oidcIssuerUrl` | Yes | — | OIDC issuer URL. |
 | `mgmtGateway.oauth2Proxy.redirectUrl` / `httpsAddress` / `allowlistDomains[]` / `cookieSecretRef` | No | — | Optional oauth2-proxy tuning. |
 | `mgmtGateway.ingress.name` | Yes | — | cephadm ingress service name. |
 | `mgmtGateway.ingress.address` | Yes | — | The VIP the gateway answers on. |
@@ -434,6 +434,9 @@ available, so it has no meaning without one. The walkthrough is in
 | `mgmtGateway.ingress.virtualInterfaceNetworks[]` | No | — | CIDRs whose interface keepalived binds the VIP to. |
 | `mgmtGateway.ingress.firstVirtualRouterID` | No | cephadm default | VRRP router ID; must not collide with another ingress on an overlapping network in the same cluster. |
 | `mgmtGateway.ingress.placement` | No | every `ingress`-role host | See [Shared placement](#shared-placement). Under stretch it must cover both data sites. |
+
+`oauth2Proxy` is required when `enableAuth: true` and rejected when auth is
+off; the four `Yes` rows within it apply once the block is present.
 
 ### Monitoring
 
@@ -482,6 +485,11 @@ the node declares:
 | `alertmanager` | +1 | Nodes where Alertmanager is placed |
 | `loki` | +20 | Nodes where Loki is placed (cephadm sets no Loki retention) |
 
+On a managed-OS node the whole budget lands inside the root partition the
+install lays down — see
+[What the install lays down](../advanced/managed-os.md#what-the-install-lays-down)
+for that layout.
+
 Preflight **fails** below an absolute floor of 20 GiB free and **warns** below
 the computed budget. A node that installs under budget still comes up, but its
 root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
@@ -514,7 +522,7 @@ For cephadm service types Bootwright does not model first-class (for example
 | `topology.nodes[].machineRef` | Yes | — | `Machine` with the `ceph-node` capability. A node the cluster installs authors no `access` block — the cluster owns its login; a node it does not install authors its own. See [The Ceph node login](#the-ceph-node-login). |
 | `topology.nodes[].name` | Yes | — | The cluster's name for this node — independent of the machine name and unique within the cluster. Must be a DNS label (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and composes to `<name>.<cluster>.<domains.storageClusters>` (the storage-cluster zone; see [Environment → Domain model](environment.md#domain-model)). A dotted value is rejected — use `topology.nodes[].fqdn` to pin a name outside that zone. The composed FQDN is the cephadm host-spec hostname, rendered verbatim, and must equal the host's actual OS hostname — `apply` writes it onto the machine before it touches the cluster, and refuses the node if the write does not hold. |
 | `topology.nodes[].fqdn` | No | composed from `name` | Explicit FQDN for a node whose real OS hostname must stay outside the storage-cluster zone (a pre-existing corporate host, say). Used verbatim as the cephadm host-spec hostname, and it is what `apply` writes onto the machine — author it to keep the name the machine already has instead of having `apply` replace it. `name` is still required — it stays the node's identity inside the cluster and is what `placement.hosts[]`, `cephadm.bootstrap.node` and `topology.stretch.tiebreaker.node` resolve against, so pinning `fqdn` never forces the foreign name into a cluster-level token. See [ADR 0025](https://github.com/crmarques/bootwright/blob/main/specs/adr/0025-composed-names-are-labels-plus-explicit-overrides.md), [ADR 0035](https://github.com/crmarques/bootwright/blob/main/specs/adr/0035-a-storage-node-answers-to-the-name-cephadm-registers.md) and [ADR 0036](https://github.com/crmarques/bootwright/blob/main/specs/adr/0036-bootwright-writes-the-name-a-storage-node-answers-to.md). |
-| `topology.nodes[].site` | When stretch is enabled or any placement narrows by `sites` | — | Failure-domain bucket. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
+| `topology.nodes[].site` | No | — | Failure-domain bucket. Required when stretch is enabled or any placement narrows by `sites`. Becomes the cephadm host-spec CRUSH location only in stretch mode; `placement.sites` selects against it. No effect otherwise. |
 | `topology.nodes[].roles[]` | Yes | — | Ceph roles, such as `mon`, `mgr`, `osd`, `mds`, `rgw`, `prometheus`, `grafana`, `alertmanager`. Roles always become host labels. |
 | `topology.nodes[].labels[]` | No | — | Additional free-form cephadm host labels (for example `_admin`). Must not duplicate a role. |
 | `topology.nodes[].devices[]` | No | — | Literal OSD device paths; shorthand for `osd.dataDevices.paths`. Requires the `osd` role. Mutually exclusive with `osd`. |
@@ -551,7 +559,7 @@ All field names render 1:1 into the cephadm OSD drivegroup spec.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `osd.dataDevices` | Yes (when `osd` is set) | — | Data device selector. |
+| `osd.dataDevices` | Yes | — | Data device selector. |
 | `osd.dbDevices` | No | — | DB device selector. |
 | `osd.walDevices` | No | — | WAL device selector. |
 | `osd.filterLogic` | No | `AND` | How cephadm combines the device filters across selectors: `AND` (intersect) or `OR` (union). Spec-level (`filter_logic`). |
@@ -634,9 +642,9 @@ operator alone knows; normalize derives the rest from the topology.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `topology.stretch.failureDomain` | Yes (when stretch is enabled) | — | CRUSH failure domain mapping sites to real buckets. |
+| `topology.stretch.failureDomain` | Yes | — | CRUSH failure domain mapping sites to real buckets. |
 | `topology.stretch.dataSites[]` | No | the topology's non-tiebreaker sites | Must resolve to exactly the two mon-bearing data sites. Author only when extra OSD-only sites would be wrongly derived. |
-| `topology.stretch.tiebreaker.node` | Yes (when stretch is enabled) | — | Mon-only node with no OSD devices, in the tiebreaker site; named by its node name (FQDN or short label), never the machine name. |
+| `topology.stretch.tiebreaker.node` | Yes | — | Mon-only node with no OSD devices, in the tiebreaker site; named by its node name (FQDN or short label), never the machine name. Changing this on a cluster already in stretch mode is not converged by `apply` — move it with `bootwright storage-cluster replace-arbiter`. |
 | `topology.stretch.tiebreaker.site` | No | the tiebreaker node's site | Must be distinct from `dataSites`. |
 | `topology.stretch.ruleName` | No | `stretch-rule` | Stretch CRUSH rule inherited by policy-less stretch pools. |
 
@@ -684,8 +692,8 @@ running (additive-only).
 | `spec.ceph.application` | No | inferred from `role` | Overrides the inferred `ceph osd pool application enable` value. |
 | `spec.ceph.replicated.size` | No | Ceph default | Replica count (`replicated` only). |
 | `spec.ceph.replicated.minSize` | No | Ceph default | Minimum replicas (`replicated` only). |
-| `spec.ceph.erasure.dataChunks` | Yes (when `type: erasure`) | — | Erasure `k`; must be positive. |
-| `spec.ceph.erasure.codingChunks` | Yes (when `type: erasure`) | — | Erasure `m`; must be positive. |
+| `spec.ceph.erasure.dataChunks` | No | — | Erasure `k`; must be positive. |
+| `spec.ceph.erasure.codingChunks` | No | — | Erasure `m`; must be positive. |
 | `spec.ceph.erasure.plugin` | No | Ceph default (`jerasure`) | EC plugin: `jerasure`, `isa`, `clay`, `lrc`, or `shec`. |
 | `spec.ceph.erasure.technique` | No | — | Plugin-specific coding technique (`technique`, e.g. `reed_sol_van`). |
 | `spec.ceph.erasure.crushDeviceClass` | No | — | Tier the EC pool onto a device class (`crush-device-class`). |
@@ -698,7 +706,8 @@ running (additive-only).
 
 !!! note "Cross-field rules"
     - `type: replicated` must not set `erasure`; `type: erasure` must not set
-      `replicated` and requires `erasure`.
+      `replicated` and requires `erasure` with both `dataChunks` and
+      `codingChunks`.
     - Erasure pools are not allowed on stretch-mode clusters; on a stretch
       cluster any authored `replicated.size`/`minSize` must be `4`/`2`.
     - Outside stretch mode, host-domain replica size and erasure `k+m` cannot
@@ -759,7 +768,7 @@ desired state leaves the live filesystem running (additive-only).
 | `spec.storageClusterRef` | Yes | — | Managed `StorageCluster`. |
 | `spec.cephfs.metadataPoolRef` | Yes | — | Metadata `StoragePool`. |
 | `spec.cephfs.dataPoolRefs[]` | Yes | — | One or more data pools, each authored as a plain pool name (the `{name, default}` object form is only for electing the default). |
-| `spec.cephfs.dataPoolRefs[].name` | Yes (object form) | — | Data pool name. |
+| `spec.cephfs.dataPoolRefs[].name` | Yes (per entry) | — | Data pool name (object form only). |
 | `spec.cephfs.dataPoolRefs[].default` | No | `true` for a single entry; otherwise `false` | Marks the default data pool. |
 | `spec.cephfs.mds.activeCount` | No | Ceph default | Active MDS count (`max_mds`). |
 | `spec.cephfs.mds.standbyReplay` | No | `false` | Enable hot standby-replay MDS (`allow_standby_replay`), the standard production HA posture. |
@@ -822,8 +831,8 @@ state leaves the live service running (additive-only).
 | `spec.ceph.ingresses[].virtualInterfaceNetworks[]` | No | — | Renders verbatim to the cephadm ingress `virtual_interface_networks`. |
 | `spec.ceph.ingresses[].firstVirtualRouterID` | No | cephadm default (`50`) | Keepalived VRRP router ID (1–255), rendered verbatim as `first_virtual_router_id`. |
 | `spec.ceph.ingresses[].placement` | No | every host carrying the `ingress` role | Ingress placement; see [Shared placement](#shared-placement). |
-| `spec.ceph.ingresses[].tls.certificateRef` | Both, within `tls` | — | Serving certificate for the public S3 endpoint on this VIP; must name a `tlsCertificate` `Secret`. Omit the block to serve plain HTTP or cephadm's own certificate. |
-| `spec.ceph.ingresses[].tls.keyRef` | Both, within `tls` | — | Private key for that certificate. |
+| `spec.ceph.ingresses[].tls.certificateRef` | No | — | Serving certificate for the public S3 endpoint on this VIP; must name a `tlsCertificate` `Secret`. A `tls` block, once present, must set both `certificateRef` and `keyRef`. Omit the block to serve plain HTTP or cephadm's own certificate. |
+| `spec.ceph.ingresses[].tls.keyRef` | No | — | Private key for that certificate. |
 
 !!! note "Storage owns the endpoint"
     RGW public endpoints and ingress VIPs are owned by the storage gateway, not
@@ -857,9 +866,9 @@ auto-provisions the backing `.nfs` pool, so no pool/namespace is modeled.
 | `spec.ceph.ingresses[]` | No | — | Ingress VIPs fronting `nfs.<serviceID>` on `2049` (same shape as the RGW gateway ingress). Clients always mount the VIP on the standard port; only the backend moves. |
 | `spec.exports[]` | No | — | NFS exports; each renders an idempotent `ceph nfs export create`. |
 | `spec.exports[].pseudo` | Yes (per entry) | — | NFSv4 pseudo path (`--pseudo-path`); unique within the service. |
-| `spec.exports[].filesystemRef` | One of two FSALs | — | CephFS export (`--fsname`); a `StorageFilesystem` in the same cluster. |
+| `spec.exports[].filesystemRef` | No | — | CephFS export (`--fsname`); a `StorageFilesystem` in the same cluster. |
 | `spec.exports[].path` | No | `/` | Directory within the filesystem (`--path`). |
-| `spec.exports[].bucket` | One of two FSALs | — | RGW export (`--bucket`). |
+| `spec.exports[].bucket` | No | — | RGW export (`--bucket`). |
 | `spec.exports[].accessType` | No | — | `RW`, `RO` (renders `--readonly`), or `NONE`. |
 | `spec.exports[].squash` | No | — | NFS squash mode (`--squash`, e.g. `no_root_squash`). |
 | `spec.exports[].clients[]` | No | — | Restrict access by address/CIDR (`--client-addr`). |
@@ -891,10 +900,10 @@ OpenShift Data Foundation external mode. The export name is what an
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.type` | Yes, unless `dataFoundation` is set | `dataFoundation` when `spec.dataFoundation` is set | Currently `dataFoundation`. The value names the **shape** of the exported surface — an RBD pool, a filesystem, and an optional object gateway — not a dependency on the ODF operator; an export is consumed by whatever add-on binds it. |
+| `spec.type` | No | `dataFoundation` when `spec.dataFoundation` is set | Currently `dataFoundation`. The value names the **shape** of the exported surface — an RBD pool, a filesystem, and an optional object gateway — not a dependency on the ODF operator; an export is consumed by whatever add-on binds it. |
 | `spec.storageClusterRef` | Yes | — | Imported or managed `StorageCluster`. |
-| `spec.dataFoundation` | When `storageClusterRef` is managed Ceph | — | References managed storage services to export; see [Data Foundation](#data-foundation). |
-| `spec.externalDetails` | When `storageClusterRef` is external Ceph | — | Operator-supplied external-cluster details; see [External details](#external-details). |
+| `spec.dataFoundation` | No | — | References managed storage services to export; see [Data Foundation](#data-foundation). |
+| `spec.externalDetails` | No | — | Operator-supplied external-cluster details; see [External details](#external-details). |
 
 !!! note "Cross-field rules"
     - For a **managed** `storageClusterRef`, `dataFoundation` is required and
@@ -949,7 +958,7 @@ spec:
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `externalDetails.fromSecretRef` | Yes within `externalDetails` | — | Secret with the operator-supplied external-cluster-details JSON. |
+| `externalDetails.fromSecretRef` | Yes | — | Secret with the operator-supplied external-cluster-details JSON. |
 
 !!! note "Who produces the details"
     The export itself never gathers credentials. Either the operator supplies
@@ -959,6 +968,50 @@ spec:
     external-cluster-details exporter from the installed operator, runs it on a
     node of the managed Ceph cluster, and consumes the captured output. See the
     add-ons page for the step shapes.
+
+## Native mapping
+
+Where the high-value cephadm and `ceph orch` vocabulary lives across the
+storage kinds — the rows an operator arriving with a working cephadm setup will
+look up. See [conventions](index.md) for how to read the tables, and
+[ADR 0008](https://github.com/crmarques/bootwright/blob/main/specs/adr/0008-ceph-declarative-cephadm-compat.md)
+for the mirroring contract (cephadm semantics kept one-for-one, spellings
+camelCased).
+
+### Native mapping — `cephadm bootstrap`
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `--mon-ip` | `spec.ceph.cephadm.bootstrap.node` + `bootstrap.addressRef` | restructured | cross-document reference — the IP stays authored once, on the `Machine` |
+| `--ssh-user` | `spec.ceph.cephadm.clusterSSH.user` | renamed | one `clusterSSH` block owns the whole cluster identity |
+| `--ssh-private-key` / `--ssh-public-key` | `spec.ceph.cephadm.clusterSSH.keyRef` | restructured | secret `…Ref` indirection — one `sshKeyPair` Secret carries both halves |
+| `--cluster-network` | `spec.ceph.networks.clusterCIDRs[]` | renamed | shared vocabulary with `publicCIDRs[]`; renders `cluster_network` |
+| `public_network` (in `[global]` of `--config`) | `spec.ceph.networks.publicCIDRs[]` | renamed | an owned field, so a conflicting `ceph.config` key can be rejected |
+| `--image` | `spec.ceph.image.base` + `image.version` | restructured | the derived `base` welds vendor namespace and stream to the release; author only the pin |
+| `--config` | `spec.ceph.config` (literal `ceph.conf` section → key → value map) | mirror | — |
+| `--registry-json` | `Entitlement` registry credentials, named by `spec.ceph.entitlementRef` | relocated | secret `…Ref` indirection; one entitlement shared fleet-wide |
+| `--skip-monitoring-stack` | `spec.ceph.monitoring.enabled: false` | restructured | one positive enable flag instead of a negative skip flag |
+| `--single-host-defaults` | `spec.ceph.cephadm.bootstrap.singleHostDefaults` | mirror | — |
+| `--allow-fqdn-hostname` / `--automatically-accept-license` / `--dashboard-password-noupdate` | derived — not authorable | derived | safety — the hostname contract and license acceptance are owned by validation and the entitlement |
+
+### Native mapping — `ceph orch` service specs
+
+| Native key or flag | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `service_type` / `service_id` | `spec.ceph.services[].serviceType` / `serviceID` (implied for first-class kinds) | mirror | — |
+| `placement.hosts` / `placement.count_per_host` | `placement.hosts[]` / `placement.countPerHost` on every placement | mirror | — (plus the invented `placement.sites[]`, which narrows by topology site) |
+| `unmanaged` / `extra_container_args` / `extra_entrypoint_args` / `networks` / `custom_configs[].{mount_path,content}` | `unmanaged` / `extraContainerArgs[]` / `extraEntrypointArgs[]` / `networks[]` / `customConfigs[].{mountPath,content}` | mirror | — (camelCase lowered to snake_case on render) |
+| OSD drivegroup vocabulary (`data_devices`/`db_devices`/`wal_devices` with `paths`, `all`, `model`, `vendor`, `rotational`, `size`, `limit`; `crush_device_class`, `filter_logic`, `block_db_size`, `block_wal_size`, `db_slots`, `wal_slots`, `osds_per_device`, `data_allocate_fraction`, `encrypted`, `tpm2`) | `spec.ceph.topology.nodes[].osd` / `spec.ceph.topology.osdDrivegroups[].osd` — same names, camelCased | mirror | — |
+| host `labels` | `spec.ceph.topology.nodes[].labels[]` | mirror | — |
+| host `labels` (role labels) | `spec.ceph.topology.nodes[].roles[]` | invented | a closed role set that also derives service placement and CRUSH location, rendered into the same cephadm label list |
+| host `location.<failureDomain>` | `spec.ceph.topology.nodes[].site` | renamed | one site token drives the CRUSH location and `placement.sites[]` selection |
+| `ssl_cert` / `ssl_key` (ingress, mgmt-gateway) | `tls.certificateRef` / `tls.keyRef` (`StorageObjectGateway` ingresses, `mgmtGateway.tls`) | restructured | secret `…Ref` indirection, injected at apply time so rendered specs never carry key bytes — safety |
+| `rgw_realm` / `rgw_zonegroup` / `rgw_zone` | `StorageObjectGateway` `spec.ceph.realm` / `zoneGroup` / `zone` | mirror | — |
+| mgmt-gateway `port` / `virtual_ip` / `enable_auth` | `spec.ceph.mgmtGateway.port` / `mgmtGateway.ingress.address` / `mgmtGateway.enableAuth` | mirror | — (plus the invented `dnsLabel`, publishing `<dnsLabel>.<cluster>.<zone>`) |
+
+`spec.ceph.services[]` is the verbatim passthrough for any service type without
+a first-class surface — its `spec` sub-map renders field-for-field into the
+`ceph orch apply` document.
 
 ## Where to go next
 
