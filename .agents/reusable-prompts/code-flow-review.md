@@ -19,7 +19,7 @@ schema/UX `specs-ux.md`; for provisioning-execution depth
 safe fix, the tests that prove it, and the files likely touched.
 
 Review-only by default — do not edit unless the user asks you to fix findings now.
-Do not run `make check` while reviewing; use targeted read-only commands
+Do not run `make check-full` while reviewing; use targeted read-only commands
 (`bootwright validate`, focused render/plan inspection, narrow searches,
 existing test evidence). If asked to fix in the same turn, make the smallest safe
 fixes in a temporary worktree and run `make check-fast` after the edit set.

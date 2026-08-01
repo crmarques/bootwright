@@ -28,7 +28,7 @@ the reason:
   and ensure `$(go env GOPATH)/bin` is on `PATH`.
 
 Before declaring an implementation task done, run `make check-fast` through the
-implementation validation skill. Do not run `make check` by yourself; run it
+implementation validation skill. Do not run `make check-full` by yourself; run it
 only when the user explicitly requests that full gate.
 
 ## Standards

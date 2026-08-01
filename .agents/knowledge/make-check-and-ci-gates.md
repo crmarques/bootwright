@@ -1,11 +1,22 @@
 # make check targets and CI gates: ordering and rationale
 
+**Tiers (ADR 0041):** `check-scoped` (bug fix) and `check-feature` (new
+feature, kind, flag, field) run only what the diff against `CHECK_BASE` can
+break, via `scripts/select-checks.py`; `check-fast` runs the whole Go suite;
+`check-full` is the release gate. `make check` is retired. Intent selects the
+floor, never the ceiling — the package set comes from the diff and the import
+graph, and the selector fails open on an unresolvable base, an oversized diff,
+or an edit to `Makefile`, `go.mod`, `go.sum`, or the selector itself.
+
 **Ordering:** check targets run cheapest-to-slowest so local runs fail on
-lightweight guardrails before starting race or clean-checkout tests.
-`check-fast` (and `check`) run `sync-bundle` FIRST so the embedded ansible
-bundle matches the source tree before Go tests run; otherwise
+lightweight guardrails before starting race or clean-checkout tests. Every
+gate depends on `sync-bundle` FIRST so the embedded ansible bundle matches the
+source tree before Go tests run; otherwise
 `TestEmbeddedBundleMatchesSourceAnsible` fails (or skips) against a stale or
-absent gitignored bundle artifact.
+absent gitignored bundle artifact. Since ADR 0041 the bundle is a real file
+target rather than `.PHONY`, so an unchanged `ansible/` tree makes it a no-op
+(2.19s to 0.21s) — but note that a `main` advance touching `ansible/` does
+leave the locally built zip stale, and that test is how it surfaces.
 
 **Race timeout:** `internal/cli` is a large integration-style package that
 runs ~12 minutes under `-race` on slower machines, past Go's 600s/package
@@ -55,9 +66,12 @@ per-checkout and cleaned by `make clean`.
   pushes) because `release.yml` only runs `go test ./...` before shipping
   binaries — tagging an unvetted commit must still pass staticcheck, race,
   lint, and the repo guardrails before release artifacts ship.
-- The `Docs strict build` step runs `mkdocs build --strict` on every PR so
+- The `Docs strict build` step runs `make docs-check` on every PR so
   strict-mode breakage fails in checks.yml rather than silently at pages.yml
-  publish time.
+  publish time, and so CI and the local target cannot drift. `docs-check`
+  invokes `$(PYTHON) -m mkdocs`, not the `mkdocs` console script: on Fedora
+  that script's `#!/usr/bin/python3 -sP` shebang suppresses user site-packages
+  and hides `mkdocs-material`, making the target unrunnable locally.
 - The `pages.yml` publish gate republishes when a push touches `docs/` or
   `mkdocs.yml` even under a `feat:`/`fix:` commit subject (in addition to
   `docs:`-subject and `v*`-tag triggers), because synchronized code+docs

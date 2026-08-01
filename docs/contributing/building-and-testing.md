@@ -16,9 +16,9 @@ check gates. It is for contributors changing the code; operators do not need it.
   `make build` needs Galaxy to install the collections and pack them.
 - **Python 3** — runs the bundle-sync and collection-verify scripts.
 
-The full `make check` gate additionally needs `staticcheck`, `shellcheck`,
-`yamllint`, and `ansible-lint`; each target prints an install hint if the tool
-is missing.
+The `make check-full` release gate additionally needs `staticcheck`,
+`shellcheck`, `yamllint`, `ansible-lint`, and the MkDocs dependencies; each
+target prints an install hint if the tool is missing.
 
 ## Build
 
