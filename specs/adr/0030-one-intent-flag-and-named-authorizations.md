@@ -17,6 +17,13 @@ names the union of the tokens its verb accepts. It is the single exception to
 "each token unblocks exactly one refusal" below, and is defined by that rule
 rather than around it — it can reach nothing the individual tokens cannot.
 
+Extended by
+[ADR 0042](0042-moving-the-vote-that-breaks-the-tie.md): the `same-site-arbiter`
+and `degraded-quorum` tokens, and a third consuming verb,
+`storage-cluster replace-arbiter`, which also consumes `unreachable-nodes`.
+`--authorize` is keyed to a verb *set* from there on, not to the `apply`/`destroy`
+pair below.
+
 ## Context
 
 The destructive surface of `apply` and `destroy` had grown into nine
@@ -72,13 +79,14 @@ the per-role Ansible gates, with no translation layer where a rename can drift.
 
 ### Axis 2 — authorization: `--authorize <token>`
 
-`apply`, `plan` and `destroy` take a repeatable, comma-separated `--authorize`
+`apply`, `plan`, `destroy` and `storage-cluster replace-arbiter` (ADR 0042) take
+a repeatable, comma-separated `--authorize`
 carrying named tokens. Each token unblocks exactly one refusal and nothing
 else:
 
 | token | authorizes |
 | --- | --- |
-| `all` | every other token the invoked verb accepts, and nothing else (both verbs, per ADR 0040) |
+| `all` | every other token the invoked verb accepts, and nothing else (every verb, per ADR 0040 and ADR 0042) |
 | `data-loss` | any disk wipe or Ceph OSD zap, on **both** verbs |
 | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection` or `spec.safety.protectedKinds` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster (either kind, per ADR 0031) |
@@ -86,7 +94,9 @@ else:
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device carrying signatures or LVM/dm-crypt holders that this node has no Bootwright OSD ownership record for (both verbs, per ADR 0034) |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls (apply only, per ADR 0038) |
-| `unreachable-nodes` | leaving a cluster partially destroyed by skipping unreachable nodes |
+| `unreachable-nodes` | acting on a node the run proves it could not contact: skipping it on destroy, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` |
+| `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker (`storage-cluster replace-arbiter` only) |
+| `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum (`storage-cluster replace-arbiter` only) |
 | `unreadable-records` | proceeding when ownership records cannot be read, leaving their resources standing |
 | `shared-infra` | storage-consumer conflicts and shared infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents (destroy only, per ADR 0032) |

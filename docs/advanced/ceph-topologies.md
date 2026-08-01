@@ -375,6 +375,63 @@ ceph:
     inheriting pools, and the resulting `ceph osd pool set` commands are visible
     in the rendered `ceph/operations.yaml`.
 
+### Replacing the arbiter
+
+Moving the tiebreaker to another machine — a data centre going down for
+maintenance, arbiter hardware being replaced, the third site lost — is the one
+storage change `apply` cannot make. `apply` converges the authored topology, but
+a cluster already in stretch mode reaches a new arbiter only through
+`ceph mon set_new_tiebreaker`, and a re-apply neither issues it nor retires the
+mon it replaces. `storage-cluster replace-arbiter` does exactly that work and
+nothing else:
+
+```bash
+bootwright storage-cluster replace-arbiter --name ceph-prd-01 \
+  --new-arbiter-machine ceph-arbiter-b --yes
+```
+
+Mark every machine that may hold the tiebreaker with the `ceph-arbiter`
+capability (it requires `ceph-node`), and keep them declared whether or not they
+carry the arbiter today:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-arbiter-b
+spec:
+  capabilities:
+    - ceph-node
+    - ceph-arbiter
+```
+
+`--new-arbiter-machine` authors the intent for you: it rewrites the context input
+so the stretch tiebreaker names that machine — snapshotting the previous input to
+`input-history/` first — and then reconciles the live cluster onto it. Edit the
+input by hand and drop the flag if you would rather author the change yourself;
+the run reconciles either way.
+
+The order never removes before it adds. Bootwright prepares and installs the
+replacement machine and Ceph on it, deploys its mon with the stretch CRUSH
+location, and waits for that mon to be in the monmap, in quorum, and located —
+Ceph's three preconditions for `set_new_tiebreaker` — before moving the
+tiebreaker. Only then does it retire the replaced mon and remove its host. Any
+failure ahead of the swap therefore leaves the original arbiter in place with the
+cluster's quorum intact, every step is idempotent, and re-running resumes where
+it stopped. A run whose desired arbiter already holds the tiebreaker reports a
+no-op.
+
+Three situations fail closed and name the token that proceeds:
+
+| Situation | Why it stops | Token |
+| --- | --- | --- |
+| The replacement shares a site with the data-site mons | An arbiter inside a data site cannot break a tie between the two — lose that site and two votes go at once. Ceph refuses it too, without `--yes-i-really-mean-it` | `--authorize same-site-arbiter` |
+| Declared mons are outside quorum | `set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together | `--authorize degraded-quorum` |
+| The arbiter being replaced cannot be contacted | Retiring it needs `ceph orch host rm --offline --force` and skips host-local cleanup — only ever for a host the probes *prove* absent, never one that answered and refused an identity | `--authorize unreachable-nodes` |
+
+The machine that was replaced keeps running with its OS intact; only its Ceph
+membership is removed. Tear it down separately when you no longer want it.
+
 ## The management gateway and HA dashboard
 
 `spec.ceph.mgmtGateway` renders a native cephadm **management gateway**

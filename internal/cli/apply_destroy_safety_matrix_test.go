@@ -95,13 +95,14 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 }
 
 func safetyMatrixCases() []safetyCase {
-	return append(append(append(append(append(
+	return append(append(append(append(append(append(
 		safetyFlagCoherenceCases(),
 		safetyAuthorizationTokenCases()...),
 		safetyBlanketAuthorizationCases()...),
 		safetyStorageDataLossCases()...),
 		safetyScopeClosureCases()...),
-		safetyStartingStateCases()...)
+		safetyStartingStateCases()...),
+		safetyReplaceArbiterCases()...)
 }
 
 func safetyBlanketAuthorizationCases() []safetyCase {
@@ -226,6 +227,35 @@ func safetyFlagCoherenceCases() []safetyCase {
 		args:    []string{"apply", "--output", "json", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
 		want:    []string{"--dry-run"},
+	}}
+}
+
+func safetyReplaceArbiterCases() []safetyCase {
+	return []safetyCase{{
+		name:    "apply/same-site-arbiter is not a risk apply can authorize",
+		args:    []string{"apply", "--authorize", "same-site-arbiter", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"same-site-arbiter", "replace-arbiter"},
+	}, {
+		name:    "destroy/degraded-quorum is not a risk destroy can authorize",
+		args:    []string{"destroy", "--authorize", "degraded-quorum", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"degraded-quorum", "replace-arbiter"},
+	}, {
+		name:    "replace-arbiter/a candidate bound to another cluster is refused before the cluster is read",
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--new-arbiter-machine", "dc2-child-ocp-infra-master-0", "--authorize", "same-site-arbiter,degraded-quorum", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"dc2-child-ocp", "ceph-arbiter"},
+	}, {
+		name:    "replace-arbiter/an unknown machine is refused before the cluster is read",
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--new-arbiter-machine", "no-such-machine", "--authorize", "degraded-quorum", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"no-such-machine", "matches no Machine"},
+	}, {
+		name:    "replace-arbiter/a machine without the arbiter capability is refused",
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--new-arbiter-machine", "bastion", "--authorize", "same-site-arbiter", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"bastion", "ceph-node"},
 	}}
 }
 

@@ -62,6 +62,29 @@ func ComputePromotion(ctx workspace.Context, cluster v1alpha1.StorageCluster, ma
 	}, nil
 }
 
+func WithPromotedTiebreaker(cluster v1alpha1.StorageCluster, promotion Promotion) v1alpha1.StorageCluster {
+	if promotion.Empty() || cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Topology.Stretch == nil {
+		return cluster
+	}
+	nodes := make([]v1alpha1.StorageCephNode, len(cluster.Spec.Ceph.Topology.Nodes))
+	copy(nodes, cluster.Spec.Ceph.Topology.Nodes)
+	for i := range nodes {
+		if nodes[i].Name != promotion.FromNode {
+			continue
+		}
+		nodes[i].Name = promotion.ToNode
+		nodes[i].FQDN = ""
+		nodes[i].MachineRef = v1alpha1.LocalObjectReference{Name: promotion.Machine}
+	}
+	stretch := *cluster.Spec.Ceph.Topology.Stretch
+	stretch.Tiebreaker.Node = promotion.ToNode
+	ceph := *cluster.Spec.Ceph
+	ceph.Topology.Nodes = nodes
+	ceph.Topology.Stretch = &stretch
+	cluster.Spec.Ceph = &ceph
+	return cluster
+}
+
 func Apply(ctx workspace.Context, promotion Promotion) (string, error) {
 	if promotion.Empty() {
 		return "", nil

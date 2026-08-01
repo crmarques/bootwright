@@ -1,0 +1,189 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/storage/arbiter"
+	"github.com/crmarques/bootwright/internal/storage/cephstate"
+	"github.com/crmarques/bootwright/internal/storage/topology"
+	"github.com/crmarques/bootwright/internal/workspace"
+)
+
+func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writer, cf *commonFlags, flags replaceArbiterFlags) error {
+	auth, err := parseAuthorizations(flags.authorize, authorizeVerbReplaceArbiter)
+	if err != nil {
+		return failErr(2, err)
+	}
+	ctx, err := cf.resolve()
+	if err != nil {
+		return failErr(1, err)
+	}
+	if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
+		return e
+	}
+	printMutatingRunPreamble(stdout, outputText, "storage-cluster replace-arbiter")
+	state, err := loadDesiredState(cf)
+	if err != nil {
+		return failErr(1, err)
+	}
+	cluster, err := resolveArbiterCluster(state, flags.clusterName)
+	if err != nil {
+		return failErr(2, err)
+	}
+	if _, err := arbiter.DesiredArbiter(cluster); err != nil {
+		return failErr(2, err)
+	}
+	promotion := arbiter.Promotion{}
+	if flags.machineName != "" {
+		if err := arbiter.ValidateCandidate(state, cluster, flags.machineName); err != nil {
+			return failErr(2, err)
+		}
+		if promotion, err = arbiter.ComputePromotion(ctx, cluster, flags.machineName); err != nil {
+			return failErr(1, err)
+		}
+	}
+	clustersDir := workspace.ControllerClustersDir(ctx.Name)
+	bundleResult, err := prepareWorkflowBundle(true)
+	if err != nil {
+		return failErr(1, err)
+	}
+	live, err := discoverArbiterClusterState(c, stdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name)
+	if err != nil {
+		return failErr(1, err)
+	}
+	plan, err := arbiter.Compute(state, arbiterDesiredCluster(cluster, promotion), live)
+	if err != nil {
+		return failErr(1, err)
+	}
+	if plan.Settled && promotion.Empty() {
+		cliout.New(stdout).Summary(cliout.StatusSkip, plan.Cluster, "mon."+plan.DesiredMon+" already holds the stretch tiebreaker; nothing to replace")
+		warnUnusedAuthorizations(stdout, auth, flags.dryRun)
+		return nil
+	}
+	printArbiterPlan(stdout, plan, promotion, flags.dryRun)
+	if plan.SameSite() && !auth.allows(authorizeSameSiteArbiter) {
+		return failErr(1, fmt.Errorf("refusing to make mon.%s the stretch tiebreaker of %s: it sits at %s=%s, which already holds non-tiebreaker mon(s) %s. An arbiter inside a data site cannot break a tie between the two data sites — lose that site and two votes go at once, leaving the survivor without quorum, which is why Ceph itself refuses this without --yes-i-really-mean-it. Put the replacement arbiter in a third site, or, if this is the deliberate emergency fallback while the third site is gone, re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
+			plan.DesiredMon, plan.Cluster, plan.FailureDomain, plan.DesiredSite, strings.Join(plan.SameSiteMons, ", "), plan.Cluster, plan.DesiredMachine, authorizeSameSiteArbiter))
+	}
+	if plan.Degraded != "" && !auth.allows(authorizeDegradedQuorum) {
+		return failErr(1, fmt.Errorf("refusing to move the stretch tiebreaker of %s while %s: `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together. Bring those mons back, or re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
+			plan.Cluster, plan.Degraded, plan.Cluster, plan.DesiredMachine, authorizeDegradedQuorum))
+	}
+	if flags.dryRun {
+		warnUnusedAuthorizations(stdout, auth, true)
+		return nil
+	}
+	if !flags.yes && !confirm(stdin, stdout, replaceArbiterConfirmPrompt(plan)) {
+		return failErr(1, errArbiterAborted())
+	}
+	if !promotion.Empty() {
+		snapshot, aerr := arbiter.Apply(ctx, promotion)
+		if aerr != nil {
+			return failErr(1, aerr)
+		}
+		cliout.NewContinuation(stdout).Status(cliout.StatusOK, "input", promotion.RelPath+" now declares tiebreaker "+promotion.ToNode+" (previous input snapshotted to input-history/"+snapshot+")")
+		if state, err = loadDesiredState(cf); err != nil {
+			return failErr(1, err)
+		}
+		if cluster, err = resolveArbiterCluster(state, flags.clusterName); err != nil {
+			return failErr(1, err)
+		}
+	}
+	become, reporter, becomeCleanup, err := prepareMutatingRunCredential(stdin, stdout, stderr, converge.WorkflowPlan{AskBecomePass: flags.askBecomePas}, false)
+	if err != nil {
+		return failErr(1, err)
+	}
+	defer becomeCleanup()
+	if err := prepareArbiterMachine(c, stdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name, become.PasswordFile, bundleResult, reporter); err != nil {
+		return err
+	}
+	monHosts := plan.MonHostsDuring
+	runErr := converge.RunArbiterReplacement(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, converge.ArbiterRunOptions{
+		Plan:               plan,
+		Address:            topology.NodeAddress(state, cluster, plan.DesiredNode),
+		MonLocations:       arbiterMonLocations(cluster, plan, monHosts),
+		MonLocationsAfter:  arbiterMonLocations(cluster, plan, plan.MonHostsAfter),
+		AllowSameSite:      auth.has(authorizeSameSiteArbiter),
+		AllowDegraded:      auth.has(authorizeDegradedQuorum),
+		OldHostOffline:     auth.allows(authorizeUnreachableNodes),
+		BecomePasswordFile: become.PasswordFile,
+		Verbose:            flags.verbose,
+	}, reporter)
+	if runErr != nil {
+		return failErr(1, runErr)
+	}
+	cliout.New(stdout).Summary(cliout.StatusOK, plan.Cluster, "stretch tiebreaker is now mon."+plan.DesiredMon+" on Machine/"+plan.DesiredMachine)
+	cliout.NewContinuation(stdout).Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")
+	warnUnusedAuthorizations(stdout, auth, false)
+	return nil
+}
+
+func arbiterDesiredCluster(cluster v1alpha1.StorageCluster, promotion arbiter.Promotion) v1alpha1.StorageCluster {
+	if promotion.Empty() {
+		return cluster
+	}
+	return arbiter.WithPromotedTiebreaker(cluster, promotion)
+}
+
+func discoverArbiterClusterState(c *cobra.Command, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, flags replaceArbiterFlags, state v1alpha1.State, clusterName string) (cephstate.Discovery, error) {
+	bundleResult, err := prepareWorkflowBundle(true)
+	if err != nil {
+		return cephstate.Discovery{}, err
+	}
+	discovered, err := converge.RunCephStateDiscovery(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, flags.verbose, false, newWorkflowReporter(stdout, "Read"))
+	if err != nil {
+		return cephstate.Discovery{}, fmt.Errorf("read the live state of storage cluster %s: %w; replace-arbiter reconciles the live tiebreaker, so it cannot plan without reaching the cluster", clusterName, err)
+	}
+	live, ok := discovered[clusterName]
+	if !ok || !live.Probed {
+		return cephstate.Discovery{}, fmt.Errorf("storage cluster %s answered no live Ceph reads, so this run cannot tell which mon is the tiebreaker today; confirm the cluster is up and its seed node reachable", clusterName)
+	}
+	return live, nil
+}
+
+func prepareArbiterMachine(c *cobra.Command, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, flags replaceArbiterFlags, state v1alpha1.State, clusterName, becomePasswordFile string, bundleResult bundle.AnsibleBundleResult, reporter *workflowReporter) error {
+	runScope, err := converge.ApplyThroughScope("deps")
+	if err != nil {
+		return failErr(1, err)
+	}
+	sel, err := resolveScopeSelection(state, runScope.Name, clusterName, "")
+	if err != nil {
+		return failErr(1, err)
+	}
+	plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, flags.askBecomePas, false)
+	if err != nil {
+		return failErr(1, err)
+	}
+	if err := workflow.EnsureApplySupported(plan.State); err != nil {
+		return failErr(1, err)
+	}
+	applyTarget, tasks, limits, _, err := converge.PlanScopedApply(c.Context(), runScope, &plan, state, workflow.ApplyModeReconcile, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
+	if err != nil {
+		return failErr(1, err)
+	}
+	converge.ApplyVerboseExtraVar(&plan, flags.verbose)
+	if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, workflow.ApplyTaskConnectedMachines(tasks), nil); err != nil {
+		return err
+	}
+	if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
+		return failErr(1, err)
+	}
+	runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, becomePasswordFile, false, "replace-arbiter prepare "+clusterName, workflow.ApplyModeReconcile, false)
+	_, _, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, clusterName, plan, tasks, limits, true, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
+	if err != nil {
+		if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
+			return silentExit(1)
+		}
+		return failErr(1, err)
+	}
+	return nil
+}

@@ -83,6 +83,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.task_host_virtctl_provision \
 	bootwright.core.task_storage_node_access_apply \
 	bootwright.core.task_storage_cluster_apply \
+	bootwright.core.task_storage_cluster_replace_arbiter \
 	bootwright.core.task_storage_cluster_destroy
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))

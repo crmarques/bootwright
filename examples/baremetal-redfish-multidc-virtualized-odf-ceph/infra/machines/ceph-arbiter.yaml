@@ -5,6 +5,7 @@ metadata:
 spec:
   capabilities:
     - ceph-node
+    - ceph-arbiter
 
   os:
     provided: true

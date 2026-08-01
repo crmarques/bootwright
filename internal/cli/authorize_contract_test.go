@@ -96,14 +96,14 @@ func TestEveryAuthorizationTokenDeclaresAConsumingVerb(t *testing.T) {
 			continue
 		}
 		for _, verb := range token.verbs {
-			if verb != authorizeVerbApply && verb != authorizeVerbDestroy {
+			if !slices.Contains(authorizationVerbs(), verb) {
 				t.Errorf("--authorize %s declares unknown verb %q", token.name, verb)
 			}
 		}
 		if token.inert == "" {
 			t.Errorf("--authorize %s has no inert reason; an unconsumed token must say why it had no effect", token.name)
 		}
-		if slices.Contains(token.verbs, authorizeVerbApply) && slices.Contains(token.verbs, authorizeVerbDestroy) {
+		if len(token.verbs) == len(authorizationVerbs()) {
 			continue
 		}
 		if token.elsewhere == "" {
@@ -114,7 +114,7 @@ func TestEveryAuthorizationTokenDeclaresAConsumingVerb(t *testing.T) {
 
 func TestAuthorizationTokenRejectedOnAVerbThatCannotConsumeIt(t *testing.T) {
 	for _, token := range authorizationTokens {
-		for _, verb := range []string{authorizeVerbApply, authorizeVerbDestroy} {
+		for _, verb := range authorizationVerbs() {
 			if slices.Contains(token.verbs, verb) {
 				if _, err := parseAuthorizations([]string{token.name}, verb); err != nil {
 					t.Errorf("--authorize %s must be accepted by %s: %v", token.name, verb, err)

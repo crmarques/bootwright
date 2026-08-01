@@ -24,11 +24,14 @@ const (
 	authorizeUnreadableRecords    = "unreadable-records"
 	authorizeSharedInfra          = "shared-infra"
 	authorizeStaleInput           = "stale-input"
+	authorizeSameSiteArbiter      = "same-site-arbiter"
+	authorizeDegradedQuorum       = "degraded-quorum"
 )
 
 const (
-	authorizeVerbApply   = "apply"
-	authorizeVerbDestroy = "destroy"
+	authorizeVerbApply          = "apply"
+	authorizeVerbDestroy        = "destroy"
+	authorizeVerbReplaceArbiter = "replace-arbiter"
 )
 
 type authorizationToken struct {
@@ -43,12 +46,13 @@ var authorizationTokens = []authorizationToken{{
 	name:       authorizeAll,
 	authorizes: "every other token this verb accepts, in one word; it clears no refusal that has no token of its own and never answers a confirmation prompt",
 	inert:      "this run reached no gate any token of this verb could clear",
-	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
+	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy, authorizeVerbReplaceArbiter},
 }, {
 	name:       authorizeDataLoss,
 	authorizes: "any disk wipe or Ceph OSD zap, on apply and on destroy",
 	inert:      "this run plans no data-destroying action",
 	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
+	elsewhere:  "replace-arbiter moves a mon-only tiebreaker and wipes no disk, so it carries no data-loss refusal",
 }, {
 	name:       authorizeProtected,
 	authorizes: "acting on state whose Environment sets spec.safety.destroyProtection or spec.safety.protectedKinds",
@@ -78,6 +82,7 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders but no Bootwright OSD ownership record for this node — an orphan left by a destroyed or foreign Ceph install; on apply it needs --reclaim-devices, and it never relaxes the mounted, in-use, or unprobeable refusals",
 	inert:      "no selected node refused a declared OSD device for want of a Bootwright OSD ownership record (on apply the gate runs only under --reclaim-devices)",
 	verbs:      []string{authorizeVerbApply, authorizeVerbDestroy},
+	elsewhere:  "replace-arbiter touches no OSD device, so it carries no device-ownership refusal",
 }, {
 	name:       authorizeForeignDaemons,
 	authorizes: "removing the cephadm daemons, systemd units and /var/lib/ceph state of another Ceph cluster from a storage node this apply enrolls — fsid-scoped, and it zaps no disk",
@@ -86,10 +91,22 @@ var authorizationTokens = []authorizationToken{{
 	elsewhere:  "destroy removes the fsid of the cluster it tears down and deliberately leaves a co-resident one standing, so a leftover is cleared by the apply that enrolls the node or by `cephadm rm-cluster --force --fsid <fsid>` on it",
 }, {
 	name:       authorizeUnreachableNodes,
-	authorizes: "leaving a cluster partially destroyed by skipping nodes the teardown proves it could not contact — no route, unreachable network, host down, connection timed out or refused. A refusal that does not prove absence (a rejected identity, an address that does not resolve, an empty or unreadable diagnostic) is never skipped, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding data",
+	authorizes: "acting on a node the run proves it could not contact — no route, unreachable network, host down, connection timed out or refused. On destroy it skips that node and leaves the cluster partially destroyed; on replace-arbiter it retires the replaced arbiter offline (`ceph orch host rm --offline --force`) with no host-local cleanup. A refusal that does not prove absence (a rejected identity, an address that does not resolve, an empty or unreadable diagnostic) is never skipped, because acting on a node that is in fact running leaves its Ceph daemons up and its OSD devices holding data",
 	inert:      "this run contacts no node whose unreachability could be skipped",
-	verbs:      []string{authorizeVerbDestroy},
+	verbs:      []string{authorizeVerbDestroy, authorizeVerbReplaceArbiter},
 	elsewhere:  "apply needs every selected node reachable and never skips one",
+}, {
+	name:       authorizeSameSiteArbiter,
+	authorizes: "promoting a mon that shares a failure domain with the data-site mons to stretch tiebreaker — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two, so losing that site drops two votes at once and the survivor is left without quorum",
+	inert:      "the replacement arbiter shares its site with no non-tiebreaker mon",
+	verbs:      []string{authorizeVerbReplaceArbiter},
+	elsewhere:  "apply and destroy never move a stretch tiebreaker; only `bootwright storage-cluster replace-arbiter` does",
+}, {
+	name:       authorizeDegradedQuorum,
+	authorizes: "moving the stretch tiebreaker while declared mons are outside quorum. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together",
+	inert:      "every declared mon of the selected cluster is in quorum",
+	verbs:      []string{authorizeVerbReplaceArbiter},
+	elsewhere:  "apply and destroy never move a stretch tiebreaker; only `bootwright storage-cluster replace-arbiter` does",
 }, {
 	name:       authorizeUnreadableRecords,
 	authorizes: "proceeding when ownership records cannot be read, leaving their resources standing",
@@ -109,6 +126,10 @@ var authorizationTokens = []authorizationToken{{
 	verbs:      []string{authorizeVerbDestroy},
 	elsewhere:  "apply must never build from input it cannot fully read; re-render the input for the current schema and run `bootwright context update`",
 }}
+
+func authorizationVerbs() []string {
+	return []string{authorizeVerbApply, authorizeVerbDestroy, authorizeVerbReplaceArbiter}
+}
 
 func authorizationTokenNames() []string {
 	out := make([]string, 0, len(authorizationTokens))

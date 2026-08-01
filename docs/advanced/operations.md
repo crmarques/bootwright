@@ -45,7 +45,9 @@ exactly one refusal and nothing else:
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk, `apply` only |
-| `unreachable-nodes` | skipping nodes the teardown proves it could not contact, leaving the cluster partially destroyed — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) |
+| `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) |
+| `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker, on `storage-cluster replace-arbiter` — the emergency fallback when the third site is gone |
+| `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum, on `storage-cluster replace-arbiter` |
 | `unreadable-records` | proceeding when ownership records cannot be read |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |

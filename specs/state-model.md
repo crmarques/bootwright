@@ -456,17 +456,23 @@ Rules:
   after the `sshd` reload. Node access state is recorded on the machine at
   `/etc/bootwright/access-marker.json` (mode `0644`, non-secret). See ADR 0019
   and `security.md`.
-- `spec.capabilities[]` is a closed vocabulary of four values:
-  `openshift-node`, `ceph-node`, `container-runtime`, and `libvirt`. Every value
+- `spec.capabilities[]` is a closed vocabulary of five values:
+  `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and
+  `libvirt`. Every value
   is enforced somewhere; there are no inventory-only labels. An unknown, empty,
   or duplicated entry fails validation naming the `Machine` and the accepted
   set. Two values assert a property of the machine itself —
   `container-runtime` (it runs containers, required of every containerised
-  `InfraComponent` host) and `libvirt` (it is a libvirt hypervisor host); the
-  other two restate a binding a reference already declares (`openshift-node`
+  `InfraComponent` host) and `libvirt` (it is a libvirt hypervisor host); two
+  restate a binding a reference already declares (`openshift-node`
   for a `ContainerCluster` node, `ceph-node` for a `StorageCluster` topology
   node) and are cross-checked against it. A component host is never tagged with
   a capability named after its service.
+  `ceph-arbiter` is the one forward-looking value: it marks a machine eligible to
+  carry a stretch tiebreaker, whether or not it holds one today, and is what
+  `storage-cluster replace-arbiter --new-arbiter-machine` selects a candidate
+  from. It requires `ceph-node`, because an arbiter candidate is first a storage
+  node.
 
 ## MachineImage
 
@@ -2144,6 +2150,44 @@ Rules:
   `kubectl`, `kubeconfig` — the Kubernetes admin-credential surface) and
   `storage-cluster`. Their `--name` accepts that kind only and refuses the other
   by name. A kind-specific verb is never added under `cluster`.
+- `storage-cluster replace-arbiter --name <cluster>` moves a managed Ceph
+  cluster's stretch tiebreaker onto another machine, running only the work that
+  change needs. It is the one operation `apply` cannot express: `apply` converges
+  the authored topology, but a live cluster already in stretch mode reaches a new
+  arbiter only through `ceph mon set_new_tiebreaker`, and a re-apply neither
+  issues it nor retires the mon it replaces.
+  - **Desired state stays the source of truth.** The verb reconciles the live
+    tiebreaker onto `spec.ceph.topology.stretch.tiebreaker`. Optional
+    `--new-arbiter-machine <machine>` authors that intent first: it rewrites the
+    context input so the tiebreaker node names the given `Machine` (snapshotting
+    the prior input to `input-history/` through the one mutation component), then
+    reconciles. Omitted, the verb reconciles the arbiter the input already
+    declares.
+  - **The candidate is authored, not discovered.** `--new-arbiter-machine` is
+    refused unless the `Machine` declares the `ceph-arbiter` capability (which
+    requires `ceph-node`) and is node-bound by no other `ContainerCluster` or
+    `StorageCluster`.
+  - **Order, and what a failure leaves behind.** The run prepares and installs
+    the replacement machine and Ceph on it (the `apply --through deps` graph for
+    the cluster), deploys its mon with the stretch CRUSH location, waits for that
+    mon to be in the monmap *and* in quorum *and* located, only then moves the
+    tiebreaker, and only then retires the replaced mon and its orchestrator host.
+    Nothing is removed before the replacement is proved, so every failure ahead
+    of the swap leaves the original arbiter holding the tiebreaker with quorum
+    intact. Every step is idempotent and a re-run resumes; a run whose desired
+    arbiter already answers as `tiebreaker_mon` is a reported no-op.
+  - **Refusals.** A cluster that is not managed, declares no `spec.ceph`, or
+    authors no stretch tiebreaker fails closed before the cluster is contacted.
+    A cluster whose live monmap reports `stretch_mode: false`, or that answers no
+    live read at all, fails closed rather than guess which mon to retire.
+    A replacement arbiter sharing a failure domain with the data-site mons needs
+    `--authorize same-site-arbiter`; declared mons outside quorum need
+    `--authorize degraded-quorum`; a replaced arbiter host the run proves it
+    cannot contact needs `--authorize unreachable-nodes`, which retires it with
+    `ceph orch host rm --offline --force` and no host-local cleanup.
+  - **The replaced machine keeps running.** Only its Ceph membership is removed;
+    its OS and substrate are untouched, and tearing the machine down stays a
+    separate `destroy` decision.
 
 ### Global flags
 
@@ -2429,7 +2473,9 @@ verbs that reach machines.
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it |
-  | `unreachable-nodes` | skipping nodes the teardown *proves* it could not contact, leaving the cluster partially destroyed. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
+  | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
+  | `same-site-arbiter` | promoting a mon that shares its stretch failure domain with the data-site mons to tiebreaker, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two data sites, so losing that site drops two votes at once and the survivor is left without quorum |
+  | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
