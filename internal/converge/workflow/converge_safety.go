@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -59,6 +60,7 @@ type ConvergeSafetyRecord struct {
 	DesiredHash             string                      `json:"desiredHash"`
 	StructuralHash          string                      `json:"structuralHash,omitempty"`
 	TiebreakerInvariantHash string                      `json:"tiebreakerInvariantHash,omitempty"`
+	TiebreakerNodes         map[string]string           `json:"tiebreakerNodes,omitempty"`
 	HashSchema              int                         `json:"hashSchema,omitempty"`
 	Owner                   ConvergeSafetyOwnerIdentity `json:"owner"`
 	Observation             ConvergeSafetyObservation   `json:"observation"`
@@ -200,6 +202,7 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		DesiredHash:             desiredHash,
 		StructuralHash:          structuralHash,
 		TiebreakerInvariantHash: tiebreakerInvariantHash,
+		TiebreakerNodes:         applyTaskTiebreakerNodes(task),
 		HashSchema:              ConvergeHashSchema,
 		Owner: ConvergeSafetyOwnerIdentity{
 			Manager: ConvergeSafetyOwner,
@@ -421,17 +424,67 @@ func stateWithoutStretchTiebreaker(state v1alpha1.State) (v1alpha1.State, error)
 	if err := json.Unmarshal(data, &clone); err != nil {
 		return v1alpha1.State{}, fmt.Errorf("decode tiebreaker-invariant hash input: %w", err)
 	}
+	dropped := map[string]bool{}
 	for i := range clone.StorageClusters {
 		ceph := clone.StorageClusters[i].Spec.Ceph
 		if ceph == nil || ceph.Topology.Stretch == nil {
 			continue
 		}
+		node := ceph.Topology.Stretch.Tiebreaker.Node
 		ceph.Topology.Stretch.Tiebreaker = v1alpha1.StorageCephTiebreaker{}
+		if node == "" {
+			continue
+		}
+		kept := make([]v1alpha1.StorageCephNode, 0, len(ceph.Topology.Nodes))
+		for _, entry := range ceph.Topology.Nodes {
+			if entry.Name == node {
+				dropped[entry.MachineRef.Name] = true
+				continue
+			}
+			kept = append(kept, entry)
+		}
+		ceph.Topology.Nodes = kept
+	}
+	if len(dropped) > 0 {
+		machines := make([]v1alpha1.Machine, 0, len(clone.Machines))
+		for _, machine := range clone.Machines {
+			if dropped[machine.Metadata.Name] {
+				continue
+			}
+			machines = append(machines, machine)
+		}
+		clone.Machines = machines
 	}
 	return clone, nil
 }
 
-func IsTiebreakerOnlyStructuralDrift(record ConvergeSafetyRecord, structuralHash, tiebreakerInvariantHash string) bool {
+func stateTiebreakerNodes(state v1alpha1.State) map[string]string {
+	out := map[string]string{}
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Topology.Stretch == nil {
+			continue
+		}
+		node := cluster.Spec.Ceph.Topology.Stretch.Tiebreaker.Node
+		if node == "" {
+			continue
+		}
+		out[cluster.Metadata.Name] = node
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func applyTaskTiebreakerNodes(task ApplyTask) map[string]string {
+	state, ok := task.StructuralHashVars.(v1alpha1.State)
+	if !ok {
+		return nil
+	}
+	return stateTiebreakerNodes(state)
+}
+
+func IsTiebreakerOnlyStructuralDrift(record ConvergeSafetyRecord, structuralHash, tiebreakerInvariantHash string, tiebreakerNodes map[string]string) bool {
 	if record.HashSchema < ConvergeHashSchema {
 		return false
 	}
@@ -444,7 +497,10 @@ func IsTiebreakerOnlyStructuralDrift(record ConvergeSafetyRecord, structuralHash
 	if strings.TrimSpace(record.TiebreakerInvariantHash) == "" || strings.TrimSpace(tiebreakerInvariantHash) == "" {
 		return false
 	}
-	return record.TiebreakerInvariantHash == tiebreakerInvariantHash
+	if record.TiebreakerInvariantHash != tiebreakerInvariantHash {
+		return false
+	}
+	return len(tiebreakerNodes) > 0 && !maps.Equal(record.TiebreakerNodes, tiebreakerNodes)
 }
 
 func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHash string) bool {

@@ -67,12 +67,16 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 }
 
 func tiebreakerOnlyDriftSet(drifted []ObjectClassification) bool {
+	named := 0
 	for _, o := range drifted {
-		if o.Kind != ObjectKindStorageCluster || !o.TiebreakerOnlyStructuralDrift() {
+		if !o.TiebreakerOnlyStructuralDrift() {
 			return false
 		}
+		if storageClusterObjectName(o) != "" {
+			named++
+		}
 	}
-	return true
+	return named == len(drifted) && named > 0
 }
 
 func TiebreakerReplacementCommand(cluster string) string {
@@ -81,10 +85,16 @@ func TiebreakerReplacementCommand(cluster string) string {
 
 func tiebreakerDriftRefusal(drifted []ObjectClassification) string {
 	labels := make([]string, 0, len(drifted))
-	commands := make([]string, 0, len(drifted))
+	seen := map[string]bool{}
+	var commands []string
 	for _, o := range drifted {
 		labels = append(labels, o.Label)
-		commands = append(commands, "`"+TiebreakerReplacementCommand(storageClusterObjectName(o))+"`")
+		name := storageClusterObjectName(o)
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		commands = append(commands, "`"+TiebreakerReplacementCommand(name)+"`")
 	}
 	sort.Strings(labels)
 	sort.Strings(commands)

@@ -169,7 +169,7 @@ func taskTiebreakerOnlyStructuralDrift(task ApplyTask, record ConvergeSafetyReco
 	if err != nil {
 		return false, err
 	}
-	return IsTiebreakerOnlyStructuralDrift(record, structuralHash, invariantHash), nil
+	return IsTiebreakerOnlyStructuralDrift(record, structuralHash, invariantHash, applyTaskTiebreakerNodes(task)), nil
 }
 
 func applyTaskReconcilableDrift(task ApplyTask, record ConvergeSafetyRecord, desiredHash string) (bool, error) {

@@ -95,14 +95,77 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 }
 
 func safetyMatrixCases() []safetyCase {
-	return append(append(append(append(append(append(
+	return append(append(append(append(append(append(append(
 		safetyFlagCoherenceCases(),
 		safetyAuthorizationTokenCases()...),
 		safetyBlanketAuthorizationCases()...),
 		safetyStorageDataLossCases()...),
 		safetyScopeClosureCases()...),
 		safetyStartingStateCases()...),
-		safetyReplaceArbiterCases()...)
+		safetyReplaceArbiterCases()...),
+		safetyPreviewAuthorizationCases()...)
+}
+
+func safetyPreviewAuthorizationCases() []safetyCase {
+	return []safetyCase{{
+		name:    "destroy/preview: a dry run names the data-loss token its real counterpart refuses on",
+		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Required authorizations", "--authorize " + authorizeDataLoss, authorizationRequired},
+	}, {
+		name:    "destroy/preview: the non-dry counterpart refuses on exactly that token",
+		args:    []string{"destroy", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--authorize " + authorizeDataLoss},
+	}, {
+		name:    "destroy/preview: a dry run forecasts protected alongside data-loss",
+		seed:    seedProtectedEnvironment,
+		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Required authorizations", "--authorize " + authorizeProtected, "--authorize " + authorizeDataLoss},
+	}, {
+		name:    "destroy/preview: a token already on the command line is satisfied, not required",
+		args:    []string{"destroy", "--dry-run", "--authorize", authorizeDataLoss, "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeDataLoss + ": " + authorizationSatisfied},
+	}, {
+		name:    "destroy/preview: a host-decided token is disclosed as may be required, never omitted",
+		args:    []string{"destroy", "--stage", "infra", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeUnownedVMs + ": " + authorizationMaybe, "--authorize " + authorizeUnreachableNodes},
+	}, {
+		name:    "destroy/preview: the JSON preview carries the same tokens",
+		args:    []string{"destroy", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"requiredAuthorizations", "\"token\": \"" + authorizeDataLoss + "\"", "\"status\": \"" + authorizationRequired + "\""},
+	}, {
+		name:    "destroy/preview: --purge-history discloses the history a real run would delete",
+		args:    []string{"destroy", "--purge-history", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"purge history", "a real run of this destroy would also delete"},
+	}, {
+		name:    "apply/preview: a dry run names the data-loss token its real counterpart refuses on",
+		seed:    seedSuccessfulApply,
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Required authorizations", "--authorize " + authorizeDataLoss + ": " + authorizationRequired},
+	}, {
+		name:    "apply/preview: the non-dry counterpart refuses on exactly that token",
+		seed:    seedSuccessfulApply,
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--yes does not authorize data loss", "--authorize " + authorizeDataLoss},
+	}, {
+		name:    "apply/preview: host-decided apply tokens are disclosed as may be required",
+		args:    []string{"apply", "--stage", "base", "--clusters", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeForeignDaemons + ": " + authorizationMaybe},
+	}, {
+		name:    "apply/preview: the JSON preview carries the same tokens",
+		args:    []string{"apply", "--stage", "deps", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"requiredAuthorizations", "\"token\": \"" + authorizeUnownedDevices + "\""},
+	}}
 }
 
 func safetyBlanketAuthorizationCases() []safetyCase {
@@ -256,7 +319,103 @@ func safetyReplaceArbiterCases() []safetyCase {
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--new-arbiter-machine", "bastion", "--authorize", "same-site-arbiter", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
 		want:    []string{"bastion", "ceph-node"},
+	}, {
+		name: "apply/a re-authored stretch tiebreaker routes to replace-arbiter, never to rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSuccessfulApply(t, ctx)
+			seedRetargetedTiebreaker(t, ctx)
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster, "spec.ceph.topology.stretch.tiebreaker"},
+		deny:    []string{"re-run with `bootwright apply --mode rebuild`"},
+	}, {
+		name: "apply/a tiebreaker change alongside another structural change keeps routing to rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSuccessfulApply(t, ctx)
+			seedRetargetedTiebreaker(t, ctx)
+			seedRenamedStretchRule(t, ctx)
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"re-run with `bootwright apply --mode rebuild`"},
+		deny:    []string{"bootwright storage-cluster replace-arbiter --name"},
+	}, {
+		name: "replace-arbiter/refreshing the storage records leaves the next apply no drift to refuse",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSuccessfulApply(t, ctx)
+			seedRetargetedTiebreaker(t, ctx)
+			seedArbiterConvergeRecordRefresh(t, ctx)
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		deny:    []string{"not a safe in-place reconcile", "bootwright storage-cluster replace-arbiter --name"},
 	}}
+}
+
+func safetyStorageClusterInputPath(t *testing.T, ctx workspace.Context) string {
+	t.Helper()
+	files, err := desiredstate.LoadedInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("resolve selected input files: %v", err)
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		body := string(data)
+		if strings.Contains(body, "kind: "+v1alpha1.KindStorageCluster) && strings.Contains(body, "name: "+safetyAdvancedCephCluster) {
+			return file
+		}
+	}
+	t.Fatalf("no %s input file declares %s", v1alpha1.KindStorageCluster, safetyAdvancedCephCluster)
+	return ""
+}
+
+func rewriteSafetyInput(t *testing.T, path string, replacements [][2]string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	body := string(data)
+	for _, pair := range replacements {
+		next := strings.Replace(body, pair[0], pair[1], 1)
+		if next == body {
+			t.Fatalf("%s does not contain %q", path, pair[0])
+		}
+		body = next
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func seedRetargetedTiebreaker(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
+		{"node: node-07", "node: node-08"},
+		{"- name: node-07", "- name: node-08"},
+	})
+}
+
+func seedRenamedStretchRule(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
+		{"        failureDomain: datacenter", "        failureDomain: datacenter\n        ruleName: stretch-rule-alt"},
+	})
+}
+
+func seedArbiterConvergeRecordRefresh(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state: %v", err)
+	}
+	if err := refreshArbiterConvergeRecords(ctx, state, safetyAdvancedCephCluster); err != nil {
+		t.Fatalf("refreshArbiterConvergeRecords: %v", err)
+	}
 }
 
 func safetyAuthorizationTokenCases() []safetyCase {
