@@ -82,4 +82,4 @@ jobs:
       - name: Docs strict build
         run: |
           pip install --disable-pip-version-check -r docs/requirements.txt
-          mkdocs build --strict
+          make docs-check
