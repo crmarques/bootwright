@@ -117,6 +117,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newMachineCmd(stdin, stdout, stderr),
 		newBastionCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
+		newContainerClusterCmd(stdout),
 	)
 	addGroup(root, groupGeneral,
 		newVersionCmd(stdout),

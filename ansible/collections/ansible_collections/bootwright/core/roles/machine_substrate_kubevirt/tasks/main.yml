@@ -74,7 +74,7 @@
         else 'the external KubeVirt host cluster'
       }}. Correct storageClassRef to a class returned by
       {{
-        ('`bootwright cluster oc --name ' ~ bootwright_component.kubevirt.hostClusterRef
+        ('`bootwright container-cluster oc --name ' ~ bootwright_component.kubevirt.hostClusterRef
          ~ ' get storageclass`')
         if (bootwright_component.kubevirt.hostClusterRef | default('') | length > 0)
         else '`kubectl --kubeconfig <host-kubeconfig> get storageclass`'

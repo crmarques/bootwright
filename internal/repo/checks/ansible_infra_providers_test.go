@@ -785,7 +785,7 @@ func TestKubeVirtStorageClassValidatedBeforeMutation(t *testing.T) {
 	if got := fmt.Sprint(require["that"]); !strings.Contains(got, "bootwright_kubevirt_storage_class_probe.rc") {
 		t.Fatalf("storage class requirement must check the probe result, got %v", require["that"])
 	}
-	if got := fmt.Sprint(require["fail_msg"]); !strings.Contains(got, "storageClassRef") || !strings.Contains(got, "cluster oc") {
+	if got := fmt.Sprint(require["fail_msg"]); !strings.Contains(got, "storageClassRef") || !strings.Contains(got, "container-cluster oc") {
 		t.Fatalf("storage class requirement must name the bad field and discovery command, got %v", require["fail_msg"])
 	}
 }

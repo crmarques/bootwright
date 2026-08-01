@@ -25,15 +25,15 @@ type clusterKubectlDeps struct {
 
 var defaultClusterKubectlDeps = clusterKubectlDeps{run: runClusterKubectlInvocation}
 
-func newClusterOcCmd() *cobra.Command {
-	return newClusterKubeClientCmd("oc")
+func newContainerClusterOcCmd() *cobra.Command {
+	return newContainerClusterKubeClientCmd("oc")
 }
 
-func newClusterKubectlCmd() *cobra.Command {
-	return newClusterKubeClientCmd("kubectl")
+func newContainerClusterKubectlCmd() *cobra.Command {
+	return newContainerClusterKubeClientCmd("kubectl")
 }
 
-func newClusterKubeClientCmd(binary string) *cobra.Command {
+func newContainerClusterKubeClientCmd(binary string) *cobra.Command {
 	clusterName := ""
 	cmd := &cobra.Command{
 		Use:   binary + " --name <cluster> <command>...",
@@ -48,20 +48,20 @@ Put bootwright's own --name (and any global --context) before the ` + binary + `
 command; everything after the cluster name is handed to ` + binary + ` verbatim,
 so its own flags (-n, -o, --selector, ...) and a shell pipeline work unchanged:
 
-    bootwright cluster ` + binary + ` --name managed-01 get nodes
-    bootwright cluster ` + binary + ` --name managed-01 get pods -A -o json | jq '.items | length'
+    bootwright container-cluster ` + binary + ` --name managed-01 get nodes
+    bootwright container-cluster ` + binary + ` --name managed-01 get pods -A -o json | jq '.items | length'
 
 ` + binary + ` runs as you, not as root, with your PATH and HOME, so your plugins
 and kube cache behave normally.`,
 		Args: cobra.ArbitraryArgs,
 		Example: `  # Run a command against a cluster
-  bootwright cluster ` + binary + ` --name managed-01 get nodes
+  bootwright container-cluster ` + binary + ` --name managed-01 get nodes
 
   # ` + binary + ` flags after the cluster name pass straight through
-  bootwright cluster ` + binary + ` --name managed-01 get pods -n openshift-ingress
+  bootwright container-cluster ` + binary + ` --name managed-01 get pods -n openshift-ingress
 
   # Pipe machine-readable output into another tool
-  bootwright cluster ` + binary + ` --name managed-01 get nodes -o json | jq -r '.items[].metadata.name'`,
+  bootwright container-cluster ` + binary + ` --name managed-01 get nodes -o json | jq -r '.items[].metadata.name'`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster name (required)")
 	_ = cmd.MarkFlagRequired("name")
@@ -70,7 +70,7 @@ and kube cache behave normally.`,
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return failErr(2, fmt.Errorf("cluster %s requires a command after the cluster name, e.g. 'bootwright cluster %s --name %s get nodes'", binary, binary, clusterNameOrPlaceholder(clusterName)))
+			return failErr(2, fmt.Errorf("container-cluster %s requires a command after the cluster name, e.g. 'bootwright container-cluster %s --name %s get nodes'", binary, binary, clusterNameOrPlaceholder(clusterName)))
 		}
 		return runClusterKubeClient(c.Context(), cf, binary, clusterName, args)
 	}

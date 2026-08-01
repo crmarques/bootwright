@@ -118,8 +118,9 @@ Every secret moves through the same stages, and each stage has one owner:
   directories and `0600` files, removed after execution.
 - **Captured** — the per-cluster store above.
 - **Revealed** — `secret show`, `cluster info --secrets`, and
-  `cluster kubeconfig` decrypt to memory or stdout; `cluster oc` and
-  `cluster kubectl` materialize a bounded caller-owned `0600` temporary
+  `container-cluster kubeconfig` decrypt to memory or stdout;
+  `container-cluster oc` and
+  `container-cluster kubectl` materialize a bounded caller-owned `0600` temporary
   kubeconfig and remove it when the child exits.
 - **Rotated** — `secret encryption rotate` re-encrypts every material in a
   store under a new key and drops the keys no envelope still references.

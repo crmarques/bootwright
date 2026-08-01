@@ -44,9 +44,9 @@ func TestClusterKubeClientRunsWithDecryptedKubeconfig(t *testing.T) {
 			}
 			t.Cleanup(func() { defaultClusterKubectlDeps = previous })
 
-			_, stderr, code := runCLI(t, "cluster", binary, "--name", "sno-libvirt", "get", "pods", "-n", "openshift-ingress", "-o", "json")
+			_, stderr, code := runCLI(t, "container-cluster", binary, "--name", "sno-libvirt", "get", "pods", "-n", "openshift-ingress", "-o", "json")
 			if code != 0 {
-				t.Fatalf("cluster %s exited %d, stderr=%q", binary, code, stderr)
+				t.Fatalf("container-cluster %s exited %d, stderr=%q", binary, code, stderr)
 			}
 			if gotBinary != binary {
 				t.Fatalf("binary = %q, want %q", gotBinary, binary)
@@ -75,11 +75,11 @@ func TestClusterKubeClientRemovesMaterializedKubeconfig(t *testing.T) {
 	}
 	t.Cleanup(func() { defaultClusterKubectlDeps = previous })
 
-	if _, stderr, code := runCLI(t, "cluster", "oc", "--name", "sno-libvirt", "get", "nodes"); code != 0 {
-		t.Fatalf("cluster oc exited %d, stderr=%q", code, stderr)
+	if _, stderr, code := runCLI(t, "container-cluster", "oc", "--name", "sno-libvirt", "get", "nodes"); code != 0 {
+		t.Fatalf("container-cluster oc exited %d, stderr=%q", code, stderr)
 	}
 	if kubeconfigPath == "" {
-		t.Fatal("cluster oc did not materialize a kubeconfig")
+		t.Fatal("container-cluster oc did not materialize a kubeconfig")
 	}
 	if _, err := os.Stat(kubeconfigPath); !os.IsNotExist(err) {
 		t.Fatalf("materialized kubeconfig %s was not removed after the command, stat err=%v", kubeconfigPath, err)
@@ -96,16 +96,16 @@ func TestClusterKubeClientPreservesExitCode(t *testing.T) {
 	}
 	t.Cleanup(func() { defaultClusterKubectlDeps = previous })
 
-	if _, _, code := runCLI(t, "cluster", "kubectl", "--name", "sno-libvirt", "get", "nonexistent"); code != 23 {
-		t.Fatalf("cluster kubectl exit code = %d, want 23", code)
+	if _, _, code := runCLI(t, "container-cluster", "kubectl", "--name", "sno-libvirt", "get", "nonexistent"); code != 23 {
+		t.Fatalf("container-cluster kubectl exit code = %d, want 23", code)
 	}
 }
 
 func TestClusterKubeClientRequiresCommand(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "cluster", "oc", "--name", "sno-libvirt")
+	_, stderr, code := runCLI(t, "container-cluster", "oc", "--name", "sno-libvirt")
 	if code != 2 {
-		t.Fatalf("cluster oc without a command exited %d, want 2\nstderr=%s", code, stderr)
+		t.Fatalf("container-cluster oc without a command exited %d, want 2\nstderr=%s", code, stderr)
 	}
 	if !strings.Contains(stderr, "requires a command") {
 		t.Fatalf("stderr missing missing-command guidance: %q", stderr)
@@ -114,8 +114,8 @@ func TestClusterKubeClientRequiresCommand(t *testing.T) {
 
 func TestClusterKubeClientRequiresName(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	if _, _, code := runCLI(t, "cluster", "oc", "get", "nodes"); code == 0 {
-		t.Fatal("cluster oc without --name unexpectedly succeeded")
+	if _, _, code := runCLI(t, "container-cluster", "oc", "get", "nodes"); code == 0 {
+		t.Fatal("container-cluster oc without --name unexpectedly succeeded")
 	}
 }
 
@@ -128,14 +128,14 @@ func TestClusterKubeClientRejectsNonContainerCluster(t *testing.T) {
 	t.Cleanup(func() { defaultClusterKubectlDeps = previous })
 
 	initTestContext(t, cephFixture)
-	_, stderr, code := runCLI(t, "cluster", "oc", "--name", "ceph-libvirt", "get", "nodes")
+	_, stderr, code := runCLI(t, "container-cluster", "oc", "--name", "ceph-libvirt", "get", "nodes")
 	if code != 2 {
-		t.Fatalf("cluster oc against a storage cluster exited %d, want 2\nstderr=%s", code, stderr)
+		t.Fatalf("container-cluster oc against a storage cluster exited %d, want 2\nstderr=%s", code, stderr)
 	}
 	if !strings.Contains(stderr, "unknown cluster(s): ceph-libvirt") {
 		t.Fatalf("stderr missing container-only rejection: %q", stderr)
 	}
 	if called {
-		t.Fatal("cluster oc ran the client for a non-container cluster")
+		t.Fatal("container-cluster oc ran the client for a non-container cluster")
 	}
 }

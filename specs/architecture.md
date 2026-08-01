@@ -25,8 +25,8 @@ fingerprint so repeated applies can skip completed installs and resume only
 from known-safe phases. Ansible, `oc`, SSH, SCP, Ceph, and installer process
 output produced by apply and destroy tasks is captured into root-managed run,
 task, and cluster logs rather than streamed. The interactive passthrough verbs —
-`cluster oc`, `cluster kubectl`, and the `rsh`/`exec` shells under `cluster` and
-`machine` — stream the child process on the caller's stdio, the external process
+`container-cluster oc`, `container-cluster kubectl`, and the `rsh`/`exec` shells
+under `cluster` and `machine` — stream the child process on the caller's stdio, the external process
 passthrough exception in the `state-model.md` CLI Contract.
 
 Context-backed bastion and OpenShift installer actions run on localhost.

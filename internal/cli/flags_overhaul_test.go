@@ -59,7 +59,7 @@ func TestRenamedFlagsRejectOldSpellings(t *testing.T) {
 		args []string
 		flag string
 	}{
-		{"cluster kubeconfig --cluster", []string{"cluster", "kubeconfig", "--cluster", "managed-01"}, "--cluster"},
+		{"container-cluster kubeconfig --cluster", []string{"container-cluster", "kubeconfig", "--cluster", "managed-01"}, "--cluster"},
 		{"cluster info --cluster", []string{"cluster", "info", "--cluster", "managed-01"}, "--cluster"},
 		{"machine trust --hosts", []string{"machine", "trust", "--hosts", "provider-01"}, "--hosts"},
 		{"example init --output", []string{"example", "init", "--name", "lab", "--output", t.TempDir()}, "--output"},

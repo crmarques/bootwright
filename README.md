@@ -230,8 +230,8 @@ remaining verbs are specified by their own `--help` and taught under
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright cluster info` prints
-URLs, the kubeadmin user, and the `cluster oc`/`kubectl`/`kubeconfig`/`rsh`
-commands. Its human output carries no reusable file path, and prints secret
+URLs, the kubeadmin user, the `container-cluster oc`/`kubectl`/`kubeconfig`
+commands, and `cluster rsh`. Its human output carries no reusable file path, and prints secret
 bytes only under `--secrets`. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
 while the terminal shows a ledger-backed fleet dashboard with log paths,

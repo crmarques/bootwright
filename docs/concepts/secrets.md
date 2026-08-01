@@ -336,7 +336,8 @@ store. `bootwright secret show` reads only context-local secret files (never
     task succeeds, so the files on disk are never plaintext and `sudo cat` does
     not reveal them — though root on the controller can still decrypt through
     the co-located keyring. Reading and using them (`cluster info --secrets`,
-    `cluster oc`, `cluster kubectl`, `cluster kubeconfig`) is covered in
+    `container-cluster oc`, `container-cluster kubectl`,
+    `container-cluster kubeconfig`) is covered in
     [Install OpenShift](../getting-started/openshift.md).
 
 Effective install/agent configs and `openshift/` manifests with resolved secrets

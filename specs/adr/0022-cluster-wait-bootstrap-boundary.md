@@ -87,7 +87,7 @@ destroy.
 
 - Captured cluster credentials are published, and encrypted per ADR 0020, at
   bootstrap-complete instead of install-complete. Operators can reach the
-  cluster with `bootwright cluster kubeconfig` while the install finishes.
+  cluster with `bootwright container-cluster kubeconfig` while the install finishes.
 - `bootstrapWait` is a distinct task kind, so an already-installed cluster
   skips it before Ansible, a destroy removes its converge record, and it never
   moves the cluster install record — only install-complete may mark a cluster

@@ -58,9 +58,9 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 		"Console: https://console-openshift-console.apps.sno-libvirt.bootwright.test",
 		"Kubeadmin user: kubeadmin",
 		"Show password: bootwright cluster info --name sno-libvirt --secrets",
-		"oc: bootwright cluster oc --name sno-libvirt get nodes",
-		"kubectl: bootwright cluster kubectl --name sno-libvirt get nodes",
-		"Kubeconfig: bootwright cluster kubeconfig --name sno-libvirt",
+		"oc: bootwright container-cluster oc --name sno-libvirt get nodes",
+		"kubectl: bootwright container-cluster kubectl --name sno-libvirt get nodes",
+		"Kubeconfig: bootwright container-cluster kubeconfig --name sno-libvirt",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, got)
@@ -93,9 +93,9 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 		"Bootwright: cluster info",
 		"sno-libvirt:",
 		"Show password: bootwright cluster info --name sno-libvirt --secrets",
-		"oc: bootwright cluster oc --name sno-libvirt get nodes",
-		"kubectl: bootwright cluster kubectl --name sno-libvirt get nodes",
-		"Kubeconfig: bootwright cluster kubeconfig --name sno-libvirt",
+		"oc: bootwright container-cluster oc --name sno-libvirt get nodes",
+		"kubectl: bootwright container-cluster kubectl --name sno-libvirt get nodes",
+		"Kubeconfig: bootwright container-cluster kubeconfig --name sno-libvirt",
 		"Node master-0: bootwright cluster rsh --name sno-libvirt --node master-0",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -166,8 +166,8 @@ func TestContainerClusterAccessSubtreeRemoved(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("container-cluster access unexpectedly succeeded:\n%s", stdout)
 	}
-	if !strings.Contains(stderr, `unknown command "container-cluster"`) {
-		t.Fatalf("stderr does not reject removed container-cluster subtree: %q", stderr)
+	if !strings.Contains(stderr, `invalid argument "access" for "bootwright container-cluster"`) {
+		t.Fatalf("stderr does not reject removed container-cluster access subtree: %q", stderr)
 	}
 }
 

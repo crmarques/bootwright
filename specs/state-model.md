@@ -2133,9 +2133,17 @@ Rules:
 - Exit codes are contract: `0` success, `1` a run or load failure, `2` a usage
   error. `diff` adds `3` for out-of-sync selected state (see the `diff`
   bullets).
-  The interactive passthrough verbs — `cluster oc`/`cluster kubectl` and
-  `machine`/`cluster` `rsh`/`exec` — propagate the child process's exit status
-  verbatim and are outside this contract.
+  The interactive passthrough verbs — `container-cluster oc`/`container-cluster
+  kubectl` and `machine`/`cluster` `rsh`/`exec` — propagate the child process's
+  exit status verbatim and are outside this contract.
+- Cluster verbs split by how much they need to know about the cluster kind.
+  `cluster` holds what reads the same for every cluster root — `list`, `info`,
+  and the `rsh`/`exec` node shells — and its `--name` accepts a
+  `ContainerCluster` or a `StorageCluster`. A verb that only means something for
+  one kind lives under that kind's own command: `container-cluster` (`oc`,
+  `kubectl`, `kubeconfig` — the Kubernetes admin-credential surface) and
+  `storage-cluster`. Their `--name` accepts that kind only and refuses the other
+  by name. A kind-specific verb is never added under `cluster`.
 
 ### Global flags
 

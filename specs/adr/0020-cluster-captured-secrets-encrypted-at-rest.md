@@ -100,7 +100,7 @@ cleanup gap.
 - `clusters/<cluster>/secrets/{dashboard-password,kubeconfig,kubeadmin-password}`
   hold JSON AES-256-GCM envelopes, not raw credential bytes. `sudo cat` on
   these paths no longer works; the documented recovery command is `bootwright
-  cluster info --secrets` (passwords) or `bootwright cluster kubeconfig --name
+  cluster info --secrets` (passwords) or `bootwright container-cluster kubeconfig --name
   <cluster>` (kubeconfig).
 - File-presence checks (`os.Stat`, `FileStatus`) are unaffected — the file
   still exists at the same path, so cluster-readiness and artifact-status

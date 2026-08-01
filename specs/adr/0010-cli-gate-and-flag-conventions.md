@@ -69,7 +69,7 @@ touch root-owned state:
   The client reads that material through a parent-held anonymous descriptor;
   Bootwright forwards cancellation, preserves the child exit status, closes
   the descriptor after SSH exits, and escalates only when a non-empty `--name`
-  is present. `cluster oc`/`kubectl` follow the same shape for the same reason
+  is present. `container-cluster oc`/`kubectl` follow the same shape for the same reason
   — the cluster kubeconfig is root-owned — and likewise preserve the child
   exit status.
 - A leading global `--context` is stripped for classification only; the
@@ -99,7 +99,7 @@ be built and discarded ahead of execution, and that has not been tried.
   playbook.
 - Targeted resource commands take `--name` rather than positionals
   (`secret delete/show`, `media add/delete`, `add-ons add/delete`,
-  `machine`/`cluster` `rsh`/`exec`, `cluster oc`/`kubectl`).
+  `machine`/`cluster` `rsh`/`exec`, `container-cluster oc`/`kubectl`).
 
 ### Destructive-command gating and override remedies
 
