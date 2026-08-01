@@ -1,10 +1,14 @@
 package repocheck
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -64,11 +68,67 @@ func TestRetiredCLIVocabularyAbsent(t *testing.T) {
 
 func scanRetiredVocabulary(t *testing.T, rel, body string) {
 	t.Helper()
-	for _, token := range retiredCLIVocabulary {
-		if strings.Contains(body, token) {
-			t.Errorf("%s contains retired CLI vocabulary %q; use the current flag/verb", rel, token)
+	for _, retired := range retiredCLIVocabulary {
+		if strings.Contains(body, retired) {
+			t.Errorf("%s contains retired CLI vocabulary %q; use the current flag/verb", rel, retired)
 		}
 	}
+}
+
+func TestRetiredCLIVocabularyAbsentFromGoStrings(t *testing.T) {
+	repo := repoRoot(t)
+	for _, root := range []string{"internal", "cmd"} {
+		full := filepath.Join(repo, root)
+		err := filepath.WalkDir(full, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if path != full && strings.HasPrefix(d.Name(), ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if filepath.Ext(path) != ".go" || strings.HasSuffix(d.Name(), "_test.go") {
+				return nil
+			}
+			rel, err := filepath.Rel(repo, path)
+			if err != nil {
+				return err
+			}
+			scanRetiredVocabularyInStrings(t, rel, readRepoFile(t, rel))
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+}
+
+func scanRetiredVocabularyInStrings(t *testing.T, rel, body string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, rel, body, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", rel, err)
+	}
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		value, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
+		}
+		for _, retired := range retiredCLIVocabulary {
+			if !strings.Contains(value, retired) {
+				continue
+			}
+			t.Errorf("%s:%d emits retired CLI vocabulary %q; use the current flag/verb", rel, fset.Position(lit.Pos()).Line, retired)
+		}
+		return true
+	})
 }
 
 func TestKnowledgeIndexMatchesDirectory(t *testing.T) {
