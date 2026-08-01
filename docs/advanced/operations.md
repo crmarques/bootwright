@@ -229,6 +229,16 @@ A Ceph cluster whose OSD hosts are bare metal keeps its disks through the machin
 layer — the reinstall on a later `apply` is where those disks go, and it crosses
 `apply`'s own data-loss gate.
 
+Previews tell you which tokens the real run will demand, so you never have to
+learn them by tripping a refusal. `plan`, `apply --dry-run`,
+`destroy --dry-run`, and `storage-cluster replace-arbiter --dry-run` each print
+a **Required authorizations** block: one line per gate the run would consult,
+with the tokens you already passed marked as satisfied, and
+`requiredAuthorizations` carrying the same list under `--output json`. A token
+whose gate cannot be decided without contacting a host the preview does not
+contact is listed as *may be required*, with that as its reason. An empty block
+means the run needs none.
+
 ### Bounded, ownership-gated cleanup
 
 `destroy` is deliberately conservative about what it removes:
