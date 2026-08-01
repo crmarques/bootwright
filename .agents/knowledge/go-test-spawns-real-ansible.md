@@ -7,8 +7,7 @@ machine rather than just contended. `ps` during the run shows real
 `ansible-playbook` processes with inventory paths under a `Test*` temp
 directory, and `ssh` processes dialling fixture hostnames such as
 `bastion.bootwright.test`. The package's wall time tracks machine load rather
-than its own work: the same suite that takes 3 minutes idle takes 7 under
-contention, because the cost is timeouts waiting, not CPU.
+than its own work, because the cost is timeouts waiting, not CPU.
 
 ## Root cause
 
@@ -25,9 +24,11 @@ burns the SSH `ConnectTimeout` (30s in the generated inventory) before failing.
 Nothing about that is coverage: the tests in question assert on the CLI's
 authorization output, which is produced *before* the first Ansible invocation.
 
-Measured on `internal/cli`: `TestApplyDestroySafetyMatrix` took 283s with the
-real binary and 11.5s with a stub. The whole package went from 204s idle (420s
-under load) to 23s.
+Measured on `internal/cli`, idle host, paired runs:
+`TestApplyDestroySafetyMatrix` took 231.6s with the real binary and 45.3s with a
+stub; the whole package went from 408.9s to 159.8s. Take such numbers only from
+runs made back to back on an idle machine — under load the same package varies by
+more than 2x, because the cost is timeouts waiting rather than CPU.
 
 ## What to do
 

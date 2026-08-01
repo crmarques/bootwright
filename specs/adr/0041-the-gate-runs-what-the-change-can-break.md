@@ -26,10 +26,9 @@ executable is configured. `TestApplyDestroySafetyMatrix` drives 21 cases through
 `ansible-playbook`, which opened SSH connections to fixture hosts that do not
 exist and waited out a 30-second connect timeout apiece. Those cases assert only
 that no gate-refusal marker appears in the output — they never assert the run's
-outcome — so the Ansible execution bought no coverage at all. Measured:
-`TestApplyDestroySafetyMatrix` alone took 283s; the whole `internal/cli` package
-took 204s idle and 420s on a loaded host. The timeouts make the package's
-runtime a function of how busy the machine is rather than of the work it does.
+outcome — so the Ansible execution bought no coverage at all. Measured on an
+idle host: `TestApplyDestroySafetyMatrix` took 231.6s, and the whole
+`internal/cli` package 408.9s.
 
 **The bundle was regenerated unconditionally.** `sync-bundle` was a `.PHONY`
 target, so every `make build`, `make check-fast`, and `make check` re-packed
@@ -90,8 +89,10 @@ unchanged tree makes it a no-op.
 
 Measured on a 16-core host, all comparisons under equal load:
 
-- `TestApplyDestroySafetyMatrix`: 283s → 11.5s. The whole `internal/cli` package:
-  204s → 23s, and its runtime no longer scales with machine load.
+- `TestApplyDestroySafetyMatrix`: 231.6s → 45.3s. The whole `internal/cli`
+  package: 408.9s → 159.8s. Both measured on an idle host with the embedded
+  bundle present; gate timings on a loaded host vary by more than 2x, so only
+  paired measurements taken back to back are meaningful.
 - `sync-bundle` on a warm tree: 2.19s → 0.21s, and it no longer rewrites the
   embedded zip.
 - A one-file change in `internal/cli` selects 2 packages instead of 58.
@@ -108,3 +109,8 @@ narrow re-verification list.
 `check-full` gains `docs-check`, which `make check` never ran despite CI
 requiring it, and drops the redundant `go test -vet=off ./...` pass that
 duplicated `check-fast`'s own run.
+
+The stub removes the Ansible execution but not the rest of `internal/cli`'s cost:
+at 159.8s it remains the slowest package in the repo, because every test
+re-extracts the embedded bundle into a fresh `t.TempDir()` home. B-061 records
+that lever, worth roughly another 140s.

@@ -831,3 +831,31 @@ learned; this file records what it still owes.
   `DEFINITION_CHECK_PATHS` variable, and drop `stale-term-check` from
   `scripts/select-checks.py`.
 - Related: [0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md)
+
+## B-061 — Every `internal/cli` test re-extracts the whole embedded Ansible bundle
+- Status: open
+- Area: testing / bundle cache
+- Origin: ADR 0040
+- Severity: medium
+- Problem: `bundle.EnsureAnsibleBundle` extracts the 4.9 MB embedded archive into
+  `workspace.BundleDir(versionMarker)`, which resolves under `CacheDir()` →
+  `RootDir()`. Every `internal/cli` test calls `setTestHomeAndRoot`, which points
+  `RootDir()` at a fresh `t.TempDir()`, so the `existingBundleMatches` reuse check
+  can never hit across tests and each context-init test unpacks roughly 1 400
+  files from scratch. Measured after ADR 0040's Ansible stub landed: a test that
+  never initializes a context runs in 0.00s; a pair of context-init tests costs
+  4.2s, about 2s each, essentially all of it extraction. The package as a whole
+  is 159.8s on an idle host, and it is the slowest package in the repo by an
+  order of magnitude — which also means every docs-only `check-scoped` run pays
+  it, because `internal/cli` is one of the three prose readers.
+- Exit: let the bundle cache be shared while staying correct. `BundleDir` already
+  keys on the version marker and `existingBundleMatches` already verifies the
+  archive digest, so a shared directory cannot serve stale content. Add an
+  explicit override — an exported test hook alongside `SetRootDirForTest`, or an
+  environment variable `BundleDir` honours — and have the `internal/cli`
+  `TestMain` point it at one directory for the whole package. Keep per-test
+  `RootDir()` isolation for everything else; only the bundle cache is shared.
+  Expect `internal/cli` to fall from ~160s to ~20s, and a docs-only scoped gate
+  from ~170s to ~15s.
+- Related: [go-test-spawns-real-ansible.md](go-test-spawns-real-ansible.md),
+  [0040](../../specs/adr/0040-the-gate-runs-what-the-change-can-break.md)

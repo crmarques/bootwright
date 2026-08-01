@@ -86,7 +86,7 @@ listed by `make list-e2e-cases`, and rendered without touching a host by
     to completion executes real Ansible against unreachable fixture hosts and
     waits out every SSH timeout. The `internal/cli` `TestMain` installs a stub on
     `PATH` for exactly this reason — that one change took
-    `TestApplyDestroySafetyMatrix` from 283s to 11.5s. A new test package that
+    `TestApplyDestroySafetyMatrix` from 231.6s to 45.3s. A new test package that
     drives a converge path must do the same.
 
 !!! tip "If `/tmp` is a small tmpfs"
