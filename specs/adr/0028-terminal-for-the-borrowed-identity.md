@@ -4,6 +4,14 @@
 
 Accepted
 
+Extended by
+[ADR 0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md): the
+password axis this ADR named and left open. `--ssh-ask-sudo-password` prompts
+for the borrowed identity's `sudo` password once per invocation, holds it in
+memory for that process only, and reaches the run as the name of an environment
+variable rather than a value — never the secret store, the inventory, the run
+log, or the converge hash.
+
 ## Context
 
 `storage_node_access` is the only privileged path in the collection that

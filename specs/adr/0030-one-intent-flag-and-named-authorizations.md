@@ -19,6 +19,24 @@ probe failure (a rejected identity, an unresolvable address, an empty
 diagnostic) fails closed and no token skips it.
 
 Extended by
+[ADR 0032](0032-tearing-down-input-a-newer-build-cannot-read.md): the
+`stale-input` token, which lets a teardown plan from stored input a newer build
+can no longer decode, skipping exactly those documents and reporting whatever
+they declared as left standing.
+
+Extended by [ADR 0034](0034-wiping-a-device-no-node-claims.md): the
+`unowned-devices` token. It authorizes only the ownership half of device
+data-safety — a declared OSD device carrying signatures or holders this node has
+no record for — while the physical half (mounted, in use, unprobeable) stays
+unauthorizable by any token.
+
+Extended by
+[ADR 0038](0038-removing-the-cluster-a-node-was-left-running.md): the
+`foreign-daemons` token, which authorizes removing another Ceph cluster's
+daemons and on-host state from a node this apply enrolls. It is `apply`-only and
+zaps no disk, so the other cluster's OSD data survives the removal.
+
+Extended by
 [ADR 0040](0040-one-word-for-every-token-a-verb-accepts.md): one token, `all`,
 names the union of the tokens its verb accepts. It is the single exception to
 "each token unblocks exactly one refusal" below, and is defined by that rule

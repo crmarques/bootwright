@@ -78,14 +78,19 @@ spec:
 
 ### Fields
 
+Two exclusivity rules the Required column cannot carry: exactly one of
+`spec.gates` and `spec.follows` must be set, and setting both is rejected; and
+when `spec.source` is set, exactly one of `source.path` and `source.git` must
+be set, with `url` and `ref` both required inside `source.git`.
+
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `spec.gates` | Exactly one of `gates`/`follows` | — | Anchor phase this playbook blocks: `fabric`, `machines`, `deps`, `base`, `add-ons`. |
-| `spec.follows` | Exactly one of `gates`/`follows` | — | Anchor phase this playbook runs after. |
+| `spec.gates` | No | — | Anchor phase this playbook blocks: `fabric`, `machines`, `deps`, `base`, `add-ons`. |
+| `spec.follows` | No | — | Anchor phase this playbook runs after. |
 | `spec.source` | No | — | Content lives beside the object. Set to point elsewhere; see [External Ansible content](#external-ansible-content). |
-| `spec.source.path` | Exactly one of `path`/`git` | — | Absolute directory outside the input tree. |
-| `spec.source.git.url` | With `source.git` | — | `https`, `ssh`, `file://`, or an absolute local repository path. |
-| `spec.source.git.ref` | With `source.git` | — | Commit, tag, or branch. |
+| `spec.source.path` | No | — | Absolute directory outside the input tree. |
+| `spec.source.git.url` | No | — | `https`, `ssh`, `file://`, or an absolute local repository path. |
+| `spec.source.git.ref` | No | — | Commit, tag, or branch. |
 | `spec.source.git.subdir` | No | repository root | Directory inside the repository. |
 | `spec.source.git.secretRef` | No | — | `sshKeyPair` for `ssh`, `token`/`usernamePassword` for `https`; rejected for a local repository. |
 | `spec.playbook` | Yes | — | Entry playbook, `.yaml`/`.yml`, relative to the object file (or to `source`). |
