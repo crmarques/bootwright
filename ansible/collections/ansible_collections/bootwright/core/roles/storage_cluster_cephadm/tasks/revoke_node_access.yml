@@ -24,15 +24,55 @@
     - bootwright_node_access is defined
     - bootwright_node_access_destroy_drop_in.changed | default(false) | bool
 
+- name: Probe the storage node install account before reauthorizing its key
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ bootwright_node_access_install_account }}"
+  register: bootwright_node_access_destroy_install_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_node_access is defined
+    - (bootwright_node_access_install_account | default('') | length) > 0
+
+- name: Record whether the storage node install identity can be restored
+  ansible.builtin.set_fact:
+    bootwright_node_access_destroy_install_present: >-
+      {{ (bootwright_node_access_destroy_install_probe.rc | default(1) | int) == 0 }}
+  when: bootwright_node_access is defined
+
 - name: Reauthorize the machine access key for the storage node install account
   ansible.posix.authorized_key:
-    user: "{{ bootwright_node_access.installUser }}"
+    user: "{{ bootwright_node_access_install_account }}"
     key: "{{ bootwright_node_access_install_public_key }}"
     state: present
     manage_dir: true
   when:
     - bootwright_node_access is defined
     - (bootwright_node_access_install_public_key | default('') | length) > 0
+    - bootwright_node_access_destroy_install_present | default(false) | bool
+
+- name: Note the storage node install identity Bootwright could not restore
+  ansible.builtin.debug:
+    msg: >-
+      Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} carries no
+      {{ bootwright_node_access_install_account | default('install-window', true) }}
+      account, so this teardown has no install identity to hand the node back to, and on a
+      node Bootwright installed the kickstart's own PermitRootLogin no still stands whatever
+      this run removed, so root is no way back in either.
+      {{ bootwright_node_access.user }} therefore keeps its authorized keys, its NOPASSWD
+      grant in {{ bootwright_node_access.sudoersPath }} and the marker at
+      {{ bootwright_node_access.markerPath }}: stripping them would leave this node with no
+      administrative identity at all, reachable only from its console. The storage cluster
+      itself is torn down. Recreate the install account with the machine access key
+      authorized and re-run destroy to finish narrowing access, or remove
+      {{ bootwright_node_access.user }} by hand once another identity answers.
+  changed_when: false
+  when:
+    - bootwright_node_access is defined
+    - not (bootwright_node_access_destroy_install_present | default(false) | bool)
 
 - name: Probe the storage node orchestration account before deauthorizing keys
   ansible.builtin.command:
@@ -55,6 +95,8 @@
     - bootwright_node_access is defined
     - (bootwright_node_access_install_public_key | default('') | length) > 0
     - (bootwright_node_access_destroy_account_probe.rc | default(1) | int) == 0
+    - bootwright_node_access_destroy_install_present | default(false) | bool
+    - not (bootwright_node_access.installIdentity | default(false) | bool)
 
 - name: Deauthorize the cephadm cluster key for the storage node orchestration account
   ansible.posix.authorized_key:
@@ -67,15 +109,20 @@
     - bootwright_node_access is defined
     - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
     - (bootwright_node_access_destroy_account_probe.rc | default(1) | int) == 0
+    - bootwright_node_access_destroy_install_present | default(false) | bool
 
 - name: Remove the storage node access marker
   ansible.builtin.file:
     path: "{{ bootwright_node_access.markerPath }}"
     state: absent
-  when: bootwright_node_access is defined
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access_destroy_install_present | default(false) | bool
 
 - name: Remove the storage node orchestration sudoers grant
   ansible.builtin.file:
     path: "{{ bootwright_node_access.sudoersPath }}"
     state: absent
-  when: bootwright_node_access is defined
+  when:
+    - bootwright_node_access is defined
+    - bootwright_node_access_destroy_install_present | default(false) | bool

@@ -295,6 +295,44 @@ passwd lookup; it still restores the install identity and root-login posture and
 removes the marker and sudoers grant. This preserves retry safety after an
 operator or an earlier partial teardown already removed the account.
 
+**The install account needs the same probe, and its absence gates strictly
+more.** `state: present` resolves the home through `getpwnam()` too, so
+reauthorizing the machine access key for an install account the node does not
+carry fails the whole revoke — `Failed to lookup user bootwright:
+"getpwnam(): name not found"` on the one node whose install-window account was
+never created or was removed out of band, aborting a destroy that had already
+restored root login on every node in the cluster. The revoke probes the install
+account first, and it probes `bootwright_node_access_install_account` (the name
+`context.yml` resolves: `installUser`, or the ambient account when the Machine
+declares none) rather than `bootwright_node_access.installUser`, so the restore
+targets the same account `revoke.yml` deauthorized at apply.
+A missing install account is NOT an already-completed cleanup state, so it is
+not merely skipped: apply's own refusal text names the install identity as the
+recovery path ("recover over `<installUser>` or the node console"), and the
+orchestration account's keys plus its NOPASSWD grant are what teardown removes
+on the strength of that path existing. With no install account to hand the node
+back to, the revoke leaves the orchestration account's two key removals, the
+marker and the sudoers grant in place, restores root login (widening only), and
+prints what it left and why. Stripping them would end a "successful" destroy
+with a node that has no administrative identity at all, reachable only from its
+console — the one outcome the teardown must never produce over the network.
+That outcome is not hypothetical on a node Bootwright installed: `rootLogin:
+revoke` is refused there because the kickstart already writes
+`PermitRootLogin no` in its own file, so removing the drop-in restores nothing
+and `bootwright` is the only fallback there has ever been.
+
+The same invariant closes the collapsed-identity hole. When the orchestration
+account IS the install-window identity (ADR 0019, `installIdentity`), apply's
+`revoke.yml` removes the machine access key from that account and leaves only
+the cluster key, so the destroy-side pair — restore the machine key on the
+install account, then remove the machine key from the orchestration account —
+addressed the SAME account and cancelled out; with the cluster key removed too,
+teardown emptied the only account's `authorized_keys` and left nothing to log in
+as. The machine-key removal is now gated on `not installIdentity`, which makes
+the teardown the exact inverse of apply for that shape: the cluster key goes,
+the install-window key stays.
+Guarded by TestStorageNodeAccessDestroyToleratesMissingInstallAccount.
+
 ## Purging run history
 
 **`--purge-history` piggybacks on the reset functions' own success scope,

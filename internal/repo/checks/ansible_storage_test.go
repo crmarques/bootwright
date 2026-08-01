@@ -54,6 +54,49 @@ func TestStorageNodeAccessDestroyToleratesMissingOrchestrationAccount(t *testing
 	}
 }
 
+func TestStorageNodeAccessDestroyToleratesMissingInstallAccount(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/revoke_node_access.yml"
+	tasks := readAnsibleTasks(t, path)
+	probeIdx := findAnsibleTask(t, tasks, "Probe the storage node install account before reauthorizing its key")
+	recordIdx := findAnsibleTask(t, tasks, "Record whether the storage node install identity can be restored")
+	restoreIdx := findAnsibleTask(t, tasks, "Reauthorize the machine access key for the storage node install account")
+	noteIdx := findAnsibleTask(t, tasks, "Note the storage node install identity Bootwright could not restore")
+	if !(probeIdx < recordIdx && recordIdx < restoreIdx && restoreIdx < noteIdx) {
+		t.Fatalf("node-access destroy must probe the install account and record the verdict before restoring its key (probe=%d record=%d restore=%d note=%d)", probeIdx, recordIdx, restoreIdx, noteIdx)
+	}
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || fmt.Sprint(probe["argv"]) != "[getent passwd {{ bootwright_node_access_install_account }}]" {
+		t.Fatalf("node-access destroy must probe the resolved install account, got %v", tasks[probeIdx])
+	}
+	if tasks[probeIdx]["changed_when"] != false || tasks[probeIdx]["failed_when"] != false {
+		t.Fatalf("missing install account probe must be a read-only tolerated absence, got %v", tasks[probeIdx])
+	}
+	restore, ok := tasks[restoreIdx]["ansible.posix.authorized_key"].(map[string]any)
+	if !ok || restore["user"] != "{{ bootwright_node_access_install_account }}" {
+		t.Fatalf("node-access destroy must restore the key on the account apply took it from, got %v", tasks[restoreIdx])
+	}
+	narrowing := []string{
+		"Reauthorize the machine access key for the storage node install account",
+		"Deauthorize the machine access key for the storage node orchestration account",
+		"Deauthorize the cephadm cluster key for the storage node orchestration account",
+		"Remove the storage node access marker",
+		"Remove the storage node orchestration sudoers grant",
+	}
+	for _, name := range narrowing {
+		idx := findAnsibleTask(t, tasks, name)
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_node_access_destroy_install_present") {
+			t.Fatalf("%q must be gated on a restorable install identity: with no account to hand the node back to, removing the orchestration account's keys and sudo grant leaves the node reachable only from its console; got when=%v", name, tasks[idx]["when"])
+		}
+	}
+	if got := fmt.Sprint(tasks[noteIdx]["when"]); !strings.Contains(got, "not (bootwright_node_access_destroy_install_present") {
+		t.Fatalf("node-access destroy must report the access it deliberately left behind, got when=%v", tasks[noteIdx]["when"])
+	}
+	machineKeyIdx := findAnsibleTask(t, tasks, "Deauthorize the machine access key for the storage node orchestration account")
+	if got := fmt.Sprint(tasks[machineKeyIdx]["when"]); !strings.Contains(got, "not (bootwright_node_access.installIdentity") {
+		t.Fatalf("the machine access key must survive on an orchestration account that IS the install identity (ADR 0019): apply removed it there, this task restores it two steps earlier, and removing it again with the cluster key empties the only account's authorized_keys; got when=%v", tasks[machineKeyIdx]["when"])
+	}
+}
+
 func TestStorageNodeAccessGrantsSudoBeforeDroppingWheel(t *testing.T) {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
 	const wheelTask = "Remove the storage node orchestration account from wheel"
