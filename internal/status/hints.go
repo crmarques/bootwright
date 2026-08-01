@@ -30,7 +30,7 @@ func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 			"bootwright plan",
 			"bootwright apply --yes",
 			"bootwright status --watch",
-			"bootwright cluster access",
+			"bootwright cluster info",
 		)
 		return hints
 	}
