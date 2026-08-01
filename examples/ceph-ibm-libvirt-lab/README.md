@@ -189,8 +189,8 @@ infra/providers/libvirt.yaml                  InfraProvider: libvirt + VM profil
 infra/machines/bastion.yaml                   Machine: the libvirt host (localhost)
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, static IPs
 infra/components/lab-dns.yaml                 InfraComponent: dnsmasq resolver + forwarders
-infra/os/rhel-9-x86-64-dvd.yaml               MachineImage: RHEL 9.8 DVD (local-media)
-infra/os/rhel-9-ceph-node.yaml                MachineInstallProfile: anaconda RHEL install
+infra/images/rhel-9-x86-64-dvd.yaml           MachineImage: RHEL 9.8 DVD (local-media)
+infra/profiles/rhel-9-ceph-node.yaml          MachineInstallProfile: anaconda RHEL install
 clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1.0, mgmt-gateway HA dashboard
 clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml  Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
 clusters/storage/ceph-ibm/placement-policy.yaml  size 2 / minSize 2, failureDomain host

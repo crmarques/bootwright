@@ -6,13 +6,6 @@ spec:
   domains:
     base: bootwright.test
 
-  resources:
-    - secrets.yaml
-    - infra
-    - clusters
-    - add-ons
-    - custom-playbooks
-
   infraComponents:
     artifactServers:
       - name: default
