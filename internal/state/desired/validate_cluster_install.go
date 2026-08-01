@@ -38,7 +38,7 @@ func validateClusterPlatform(owner string, platform v1alpha1.InstallPlatform, re
 		switch bm.ProvisioningNetwork {
 		case v1alpha1.ProvisioningNetworkDisabled, v1alpha1.ProvisioningNetworkManaged, v1alpha1.ProvisioningNetworkUnmanaged:
 		default:
-			errs = append(errs, fmt.Sprintf("%s.bareMetal.provisioningNetwork %q must be one of {%s, %s, %s}",
+			errs = append(errs, fmt.Sprintf("%s.bareMetal.provisioningNetwork %q must be one of {%s, %s, %s}; these are the native install-config values Disabled/Managed/Unmanaged in Bootwright's lowercase house style, and the rendered install-config.yaml restores the native capitalization",
 				owner, bm.ProvisioningNetwork, v1alpha1.ProvisioningNetworkDisabled, v1alpha1.ProvisioningNetworkManaged, v1alpha1.ProvisioningNetworkUnmanaged))
 		}
 	}

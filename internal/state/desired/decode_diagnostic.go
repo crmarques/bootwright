@@ -43,6 +43,9 @@ func rewriteUnknownFieldMessage(msg string, value any) (string, bool) {
 		return "", false
 	}
 	field, typeName := m[2], m[3]
+	if where, ok := nativeKeyRedirect(value, field); ok {
+		return m[1] + fmt.Sprintf("field %q is not authored here; %s", field, where), true
+	}
 	suggestion := nearestFieldName(field, structYAMLFields(value, typeName))
 	if suggestion == "" {
 		return "", false

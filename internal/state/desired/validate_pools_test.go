@@ -20,7 +20,7 @@ spec:
   compute:
     - replicas: 3
 `,
-			want: "field compute not found",
+			want: `field "compute" is not authored here; control-plane and compute replica counts are derived from spec.nodes[].role`,
 		},
 		{
 			name: "control-plane",
@@ -31,7 +31,7 @@ spec:
   controlPlane:
     replicas: 3
 `,
-			want: "field controlPlane not found",
+			want: `field "controlPlane" is not authored here; control-plane and compute replica counts are derived from spec.nodes[].role`,
 		},
 	}
 	for _, tc := range cases {

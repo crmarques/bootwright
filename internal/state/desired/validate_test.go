@@ -1643,7 +1643,7 @@ func TestRemovedContainerClusterInstallFieldsRejectStrictDecode(t *testing.T) {
 			name: "baseDomain",
 			fieldYAML: `    baseDomain: cluster.example.test
 `,
-			wantSubstring: "field baseDomain not found",
+			wantSubstring: `field "baseDomain" is not authored here; Environment spec.domains.containerClusters`,
 		},
 		{
 			name: "imageDigestSources",
