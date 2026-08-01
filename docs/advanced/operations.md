@@ -31,35 +31,34 @@ Bootwright-owned drift it knows how to rebuild — managed-OS reinstall,
 owned-Ceph wipe-and-rebuild, drifted owned-object rebuild. See
 [Apply modes](../concepts/index.md#apply-modes) for the full model.
 
-**`--authorize <token>`** (on `apply`, `plan` and `destroy`, repeatable and
-comma-separated) states which *risk* you accept. Every token but `all` unblocks
-exactly one refusal and nothing else:
+**`--authorize <token>`** (on `apply`/`plan`, `destroy`, and
+`storage-cluster replace-arbiter`, repeatable and comma-separated) states which
+*risk* you accept. Every token but `all` unblocks exactly one refusal and
+nothing else; the `accepted by` column is normative:
 
-| token | authorizes |
-| --- | --- |
-| `all` | every other token the command accepts, in one word — the apply-side tokens on `apply`/`plan`, the whole table on `destroy`. It never clears a refusal that has no token of its own, and never answers a confirmation prompt |
-| `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
-| `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` |
-| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` |
-| `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker |
-| `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
-| `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` |
-| `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk, `apply` only |
-| `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) |
-| `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker, on `storage-cluster replace-arbiter` — the emergency fallback when the third site is gone |
-| `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum, on `storage-cluster replace-arbiter` |
-| `unreadable-records` | proceeding when ownership records cannot be read |
-| `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context |
-| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents |
+| token | authorizes | accepted by |
+| --- | --- | --- |
+| `all` | every other token the invoked command accepts, in one word — the `accepted by` column decides the set per verb. It never clears a refusal that has no token of its own, and never answers a confirmation prompt | `apply`, `destroy`, `storage-cluster replace-arbiter` |
+| `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` | `apply`, `destroy` |
+| `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` | `destroy` |
+| `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` | `destroy` |
+| `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker | `destroy` |
+| `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context | `destroy` |
+| `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` | `apply`, `destroy` |
+| `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk | `apply` |
+| `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) | `destroy`, `storage-cluster replace-arbiter` |
+| `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker — the emergency fallback when the third site is gone | `storage-cluster replace-arbiter` |
+| `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum | `storage-cluster replace-arbiter` |
+| `unreadable-records` | proceeding when ownership records cannot be read | `destroy` |
+| `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context | `destroy` |
+| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents | `destroy` |
 
-An unknown token is a usage error listing the tokens the command accepts. So is a
-token the command has no gate for: `all`, `data-loss` and `unowned-devices` are
-accepted by both verbs, `foreign-daemons` by `apply` alone, and every other token
-is destroy-only,
-and `apply --authorize protected` is refused with the guidance that resolves it on
-`apply` rather than accepted and ignored. A token the command accepts but this run
-never used prints a warning naming it, so you learn you authorized the wrong risk
-instead of assuming a gate was cleared.
+An unknown token is a usage error listing the tokens the command accepts. So is
+a token the command has no gate for — the `accepted by` column above is the
+rule, and `apply --authorize protected` is refused with the guidance that
+resolves it on `apply` rather than accepted and ignored. A token the command
+accepts but this run never used prints a warning naming it, so you learn you
+authorized the wrong risk instead of assuming a gate was cleared.
 
 !!! warning "`--authorize all` is a blast radius, not a shortcut"
     `all` is the one token that stands for others. Reach for it in a lab you
@@ -67,7 +66,9 @@ instead of assuming a gate was cleared.
     you have already read the ones before it — not as a habit on state you care
     about, where naming the risk is the point. It is bounded in three ways: it
     expands only to the tokens the invoked verb accepts, so `apply --authorize
-    all` never gains a `destroy` token; it clears no refusal that has no token
+    all` never gains a `destroy` token and `storage-cluster replace-arbiter
+    --authorize all` stands in for exactly its three (`unreachable-nodes`,
+    `same-site-arbiter`, `degraded-quorum`); it clears no refusal that has no token
     (scope conflicts, the KubeVirt tenant gate, a mounted or in-use device, a
     `protectedKinds` rebuild on `apply`); and it never answers a confirmation
     prompt — `--yes` still does that, separately. A real run that used it prints

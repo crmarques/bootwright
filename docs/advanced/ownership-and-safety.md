@@ -21,7 +21,10 @@ For the conceptual model see
 execution internals see [Architecture](../contributing/architecture.md); for the
 recovery procedures these guardrails protect, see
 [Operations, recovery & teardown](operations.md). The normative model is
-[ADR 0007](https://github.com/crmarques/bootwright/blob/main/specs/adr/0007-apply-destroy-safety-model.md)
+[ADR 0030](https://github.com/crmarques/bootwright/blob/main/specs/adr/0030-one-intent-flag-and-named-authorizations.md)
+refined by
+[ADR 0031](https://github.com/crmarques/bootwright/blob/main/specs/adr/0031-data-loss-follows-the-data-and-policy-is-not-drift.md)
+(ADR 0007 is the superseded base they revise)
 and the CLI contract in
 [specs/state-model.md](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md#cli-contract);
 this page is the operator-facing rendering.
@@ -202,9 +205,17 @@ A few habits keep operators on the safe side of these guardrails:
   bare-metal hardware and its installed OS are retained. Use `--stage clusters`
   to keep machine substrate. Disk cleanup is bounded to provider-owned disks or
   declared Bootwright-managed devices — Bootwright never wipes arbitrary visible
-  disks — and the `unowned-vms`, `unowned-networks` and `unreachable-nodes`
-  `--authorize` tokens are explicit opt-ins, never defaults. `--yes` grants
-  none of them; a teardown that zaps OSDs needs `--authorize data-loss`. See [Operations, recovery & teardown](operations.md).
+  disks — and every `--authorize` token is an explicit opt-in, never a default.
+  The complete list of named authorizations, what each one unblocks, and which
+  verbs accept it lives in
+  [Operations → the two axes](operations.md#the-two-axes-intent-and-authorization);
+  that table is the only place the vocabulary is maintained. `--yes` grants
+  none of them; a teardown that zaps OSDs needs `--authorize data-loss`.
+- **`--authorize all` is bounded, not blanket.** It stands in for exactly the
+  tokens the invoked verb accepts, clears no refusal that has no token of its
+  own, and never answers a confirmation prompt; a real run that used it prints
+  which tokens it stood in for. Reach for it deliberately — see the
+  [blast-radius warning](operations.md#the-two-axes-intent-and-authorization).
 - **Keep state safe to commit.** Desired state names secrets but never carries
   bytes; keep pull secrets, keys, and kubeconfigs out of Git
   ([Secrets & entitlements](../concepts/secrets.md)).
@@ -239,11 +250,9 @@ default, and it is registered for `destroy` only: `apply`, `plan`, `diff`, and
 ever build from input it cannot fully read.
 
 !!! warning "It authorizes one refusal and nothing else"
-    `stale-input` does not relax `data-loss`, `protected`,
-    `installed-cluster-node`, `unowned-vms`/`unowned-networks`,
-    `unreachable-nodes`, `unreadable-records`, or `shared-infra`; it does not
-    relax any device data-safety check, the Ceph seed ownership proof, the
-    active-run check, or the confirmation prompt. Every one of those is still
+    `stale-input` relaxes no other token and no un-tokened refusal: every
+    other gate — the device data-safety checks, the Ceph seed ownership proof,
+    the active-run check, and the confirmation prompt included — is still
     evaluated against whatever *did* decode.
 
 ## Verifying ownership and safety state

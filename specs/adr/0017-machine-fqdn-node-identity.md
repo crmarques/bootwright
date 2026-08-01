@@ -2,12 +2,15 @@
 
 ## Status
 
-Accepted in part.
+Accepted
+
 [ADR 0018](0018-environment-domain-model.md) replaces `baseDomain` with the
 per-class `Environment.spec.domains`;
 [ADR 0025](0025-composed-names-are-labels-plus-explicit-overrides.md) replaces
-the dotted-value FQDN escape with an explicit `nodes[].fqdn` field. The
-node-identity model itself stands.
+the dotted-value FQDN escape with an explicit `nodes[].fqdn` field;
+[ADR 0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md)
+enforces the node-name contract on storage nodes. The node-identity model
+itself stands.
 
 ## Context
 

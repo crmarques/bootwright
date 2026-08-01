@@ -4,6 +4,11 @@
 
 Accepted
 
+Content delivery is revised by
+[ADR 0021](0021-external-playbook-content.md); the kind name is renamed by
+[ADR 0026](0026-custom-playbook-kind-name.md). The stage-hook model below
+otherwise stands.
+
 ## Context
 
 Bootwright provisions infrastructure by running a fixed, embedded set of

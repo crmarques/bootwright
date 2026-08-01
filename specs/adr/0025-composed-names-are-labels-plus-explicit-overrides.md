@@ -4,6 +4,10 @@
 
 Accepted
 
+Refines [ADR 0017](0017-machine-fqdn-node-identity.md). The `nodes[].fqdn`
+override this decision introduced is repaired and enforced by
+[ADR 0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md).
+
 ## Context
 
 Bootwright composes several DNS names from a leftmost label, an owning object's

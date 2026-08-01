@@ -6,7 +6,10 @@ Accepted
 
 Extends [ADR 0030](0030-one-intent-flag-and-named-authorizations.md) with one
 token, on the pattern [ADR 0034](0034-wiping-a-device-no-node-claims.md) set for
-a device no node claims.
+a device no node claims. Closed on the teardown side by
+[ADR 0039](0039-the-node-a-teardown-left-serving-the-cluster.md): a node
+`destroy` cannot reach is skipped only on positive proof of absence, so a
+running node's daemons are never silently left behind.
 
 ## Context
 

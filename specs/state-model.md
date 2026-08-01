@@ -2254,9 +2254,10 @@ verbs that reach machines.
   kubeadmin password — are permanently lost. It is also what proceeds when
   ownership records cannot be read at all. `destroy --context <name>` first is
   the non-abandoning path. The flag is deliberately **not** spelled `--force`:
-  on `destroy` that word authorizes destroying resources, while here it
-  authorizes walking away from them, and one spelling for two opposite
-  outcomes is a foot-gun. There is no `--force` alias on `context delete`.
+  that word would read as *destroy these resources*, while this flag means
+  *walk away from them*, and one spelling for two opposite outcomes is a
+  foot-gun. No Bootwright verb carries a `--force` flag anywhere — destructive
+  risks are named one at a time with `--authorize`.
 - An input directory that is missing, unreadable, or not a directory is a named
   failure at context resolution/readiness time that names the context and the
   input directory and points at `context update --name <name> -f` (or `context init
@@ -2448,37 +2449,38 @@ verbs that reach machines.
   still requires the package.
 - The destructive surface is exactly two orthogonal axes (ADR 0030): `--mode`
   states intent on `apply`/`plan`, and `--authorize <token>` states which named
-  risk the operator accepts on `apply`, `plan` and `destroy`. `--authorize` is
-  repeatable and comma-separated. An unknown token is a usage error (exit 2)
-  listing the tokens the verb accepts; so is a token the verb has no gate for at
-  all — `all`, `data-loss` and `unowned-devices` are accepted by both verbs,
-  `foreign-daemons` by `apply` alone, every other token is destroy-only, and
-  passing one to a verb that cannot consume it is refused with the guidance that
-  resolves it there rather than silently ignored, so an operator can never
-  believe a gate was cleared. A token
-  the verb accepts but this particular run never consumed is a non-fatal warning
-  naming it. Under `--dry-run` no token is consumed and the human report says so
-  for every one (JSON output carries the plan, not the warnings). Exactly these
-  tokens exist. Every one but `all` unblocks exactly one refusal; `all` is the
-  blanket authorization and unblocks exactly the tokens its own verb accepts,
-  nothing wider (ADR 0040):
+  risk the operator accepts. Three verbs accept `--authorize`: `apply`/`plan`,
+  `destroy`, and `storage-cluster replace-arbiter` (ADR 0042); `plan` aliases
+  `apply` throughout the table. `--authorize` is repeatable and
+  comma-separated. An unknown token is a usage error (exit 2) listing the
+  tokens the verb accepts; so is a token the verb has no gate for at all — the
+  `accepted by` column below is normative, and passing a token to a verb
+  outside its cell is refused with the guidance that resolves it there rather
+  than silently ignored, so an operator can never believe a gate was cleared. A
+  token the verb accepts but this particular run never consumed is a non-fatal
+  warning naming it. Under `--dry-run` no token is consumed and the human
+  report says so for every one (JSON output carries the plan, not the
+  warnings). Exactly these tokens exist. Every one but `all` unblocks exactly
+  one refusal; `all` is the blanket authorization and unblocks exactly the
+  tokens whose `accepted by` cell names the invoked verb, nothing wider
+  (ADR 0040):
 
-  | token | authorizes |
-  | --- | --- |
-  | `all` | every other token the invoked verb accepts, in one word. The set is exactly the tokens this table marks as reachable by the verb being run, so a token added by a later ADR is inside it from the day it lands and `apply --authorize all` never gains a destroy-only one. It grants no refusal that has no token of its own, and never answers a confirmation prompt |
-  | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` |
-  | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token) |
-  | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) |
-  | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker |
-  | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs |
-  | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed |
-  | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it |
-  | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed |
-  | `same-site-arbiter` | promoting a mon that shares its stretch failure domain with the data-site mons to tiebreaker, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two data sites, so losing that site drops two votes at once and the survivor is left without quorum |
-  | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together |
-  | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing |
-  | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) |
-  | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing |
+  | token | authorizes | accepted by |
+  | --- | --- | --- |
+  | `all` | every other token the invoked verb accepts, in one word. The set is exactly the tokens this table marks as reachable by the verb being run, so a token added by a later ADR is inside it from the day it lands and `apply --authorize all` never gains a destroy-only one. It grants no refusal that has no token of its own, and never answers a confirmation prompt | `apply`, `destroy`, `storage-cluster replace-arbiter` |
+  | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` | `apply`, `destroy` |
+  | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token) | `destroy` |
+  | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) | `destroy` |
+  | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker | `destroy` |
+  | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs | `destroy` |
+  | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed | `apply`, `destroy` |
+  | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it | `apply` |
+  | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed | `destroy`, `storage-cluster replace-arbiter` |
+  | `same-site-arbiter` | promoting a mon that shares its stretch failure domain with the data-site mons to tiebreaker, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two data sites, so losing that site drops two votes at once and the survivor is left without quorum | `storage-cluster replace-arbiter` |
+  | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together | `storage-cluster replace-arbiter` |
+  | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing | `destroy` |
+  | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) | `destroy` |
+  | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing | `destroy` |
 
   No token widens `--clusters`, relaxes the shared-provider-service scope
   conflict, or relaxes the KubeVirt tenant gate — `all` included, because it is

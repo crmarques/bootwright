@@ -11,6 +11,13 @@ stage that runs, `installed-cluster-node` covers both cluster kinds, and a token
 a verb has no gate for is a usage error on that verb rather than an accepted
 no-op. The two-axis model below is otherwise unchanged and still governs.
 
+Refined by
+[ADR 0039](0039-the-node-a-teardown-left-serving-the-cluster.md):
+`unreachable-nodes` skips a node only on probe evidence that positively proves
+absence — no route, host down, a refused or timed-out connection; every other
+probe failure (a rejected identity, an unresolvable address, an empty
+diagnostic) fails closed and no token skips it.
+
 Extended by
 [ADR 0040](0040-one-word-for-every-token-a-verb-accepts.md): one token, `all`,
 names the union of the tokens its verb accepts. It is the single exception to
