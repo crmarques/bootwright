@@ -7,8 +7,8 @@ machine rather than just contended. `ps` during the run shows real
 `ansible-playbook` processes with inventory paths under a `Test*` temp
 directory, and `ssh` processes dialling fixture hostnames such as
 `bastion.bootwright.test`. The package's wall time tracks machine load rather
-than its own work, and a heavily loaded run may fail where an idle one passes,
-with no code change to explain it.
+than its own work: the same suite that takes 3 minutes idle takes 7 under
+contention, because the cost is timeouts waiting, not CPU.
 
 ## Root cause
 
@@ -27,7 +27,7 @@ authorization output, which is produced *before* the first Ansible invocation.
 
 Measured on `internal/cli`: `TestApplyDestroySafetyMatrix` took 283s with the
 real binary and 11.5s with a stub. The whole package went from 204s idle (420s
-and a failure under load) to 23s.
+under load) to 23s.
 
 ## What to do
 

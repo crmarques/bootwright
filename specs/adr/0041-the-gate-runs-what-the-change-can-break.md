@@ -28,9 +28,8 @@ exist and waited out a 30-second connect timeout apiece. Those cases assert only
 that no gate-refusal marker appears in the output — they never assert the run's
 outcome — so the Ansible execution bought no coverage at all. Measured:
 `TestApplyDestroySafetyMatrix` alone took 283s; the whole `internal/cli` package
-took 204s on an idle host and 420s on a loaded one, where it also failed — the
-timeouts make the package's runtime, and apparently its verdict, a function of
-how busy the machine is.
+took 204s idle and 420s on a loaded host. The timeouts make the package's
+runtime a function of how busy the machine is rather than of the work it does.
 
 **The bundle was regenerated unconditionally.** `sync-bundle` was a `.PHONY`
 target, so every `make build`, `make check-fast`, and `make check` re-packed
@@ -92,7 +91,7 @@ unchanged tree makes it a no-op.
 Measured on a 16-core host, all comparisons under equal load:
 
 - `TestApplyDestroySafetyMatrix`: 283s → 11.5s. The whole `internal/cli` package:
-  204s → 23s, and no longer sensitive to machine load.
+  204s → 23s, and its runtime no longer scales with machine load.
 - `sync-bundle` on a warm tree: 2.19s → 0.21s, and it no longer rewrites the
   embedded zip.
 - A one-file change in `internal/cli` selects 2 packages instead of 58.
