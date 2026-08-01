@@ -38,7 +38,39 @@ import (
 
 func TestMain(m *testing.M) {
 	localRootGate.enabled = false
-	os.Exit(m.Run())
+	cleanup, err := stubAnsiblePlaybookOnPath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stub ansible-playbook: %v\n", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
+
+func stubAnsiblePlaybookOnPath() (func(), error) {
+	dir, err := os.MkdirTemp("", "bootwright-cli-test-bin")
+	if err != nil {
+		return nil, err
+	}
+	stub := "#!/bin/sh\nprintf '%s\\n' 'ansible-playbook is stubbed in the cli test package' >&2\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(stub), 0o755); err != nil {
+		os.RemoveAll(dir)
+		return nil, err
+	}
+	previous, had := os.LookupEnv("PATH")
+	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previous); err != nil {
+		os.RemoveAll(dir)
+		return nil, err
+	}
+	return func() {
+		if had {
+			os.Setenv("PATH", previous)
+		} else {
+			os.Unsetenv("PATH")
+		}
+		os.RemoveAll(dir)
+	}, nil
 }
 
 func TestHubCommandsNotAdvertised(t *testing.T) {

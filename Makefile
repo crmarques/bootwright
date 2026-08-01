@@ -88,7 +88,12 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+ANSIBLE_BUNDLE_SOURCES = $(shell find $(ANSIBLE_SRC_DIR) -type f -not -name '.stamp' -print 2>/dev/null)
+SELECT_CHECKS = $(PYTHON) scripts/select-checks.py
+CHECK_BASE ?= main
+SELECT_TIER ?= scoped
+
+.PHONY: all build go-build container-build sync-bundle test validate plan check-full check-fast check-scoped check-feature run-selected-checks check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
@@ -139,7 +144,9 @@ container-build:
 	rm -rf $(CONTAINER_CACHE_DIR)
 	mv $(CONTAINER_CACHE_NEXT_DIR) $(CONTAINER_CACHE_DIR)
 
-sync-bundle: $(COLLECTIONS_STAMP)
+sync-bundle: $(EMBED_BUNDLE_ARCHIVE)
+
+$(EMBED_BUNDLE_ARCHIVE): $(COLLECTIONS_STAMP) scripts/sync-ansible-bundle.py $(ANSIBLE_BUNDLE_SOURCES)
 	@$(PYTHON) scripts/sync-ansible-bundle.py \
 		--source $(ANSIBLE_SRC_DIR) \
 		--collections $(EMBED_COLLECTIONS_DIR) \
@@ -163,20 +170,47 @@ $(BIN_DIR):
 test:
 	$(GO) test $(GO_TEST_PACKAGES)
 
-check: check-fast
+check-full: check-fast
 	$(GO) vet $(GO_TEST_PACKAGES)
 	$(MAKE) staticcheck
 	$(MAKE) go-mod-tidy-check
-	$(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
 	$(MAKE) ansible-lint-check
 	$(MAKE) workflow-yaml-check
+	$(MAKE) docs-check
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
 check-fast: sync-bundle cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check shellcheck-check check-e2e-deps
 	$(GO) test $(GO_TEST_PACKAGES)
+
+check-scoped: sync-bundle
+	@$(MAKE) --no-print-directory run-selected-checks SELECT_TIER=scoped
+
+check-feature: sync-bundle
+	@$(MAKE) --no-print-directory run-selected-checks SELECT_TIER=feature
+
+run-selected-checks:
+	@plan=$$($(SELECT_CHECKS) --tier $(SELECT_TIER) --base $(CHECK_BASE)) || exit 1; \
+	eval "$$plan"; \
+	printf 'check-%s: %s\n' '$(SELECT_TIER)' "$$BOOTWRIGHT_SELECTION_SUMMARY"; \
+	if [ -n "$$BOOTWRIGHT_SELECTION_STAGES" ]; then \
+		printf '  stages:   %s\n' "$$BOOTWRIGHT_SELECTION_STAGES"; \
+	fi; \
+	if [ -n "$$BOOTWRIGHT_SELECTION_PACKAGES" ]; then \
+		printf '  packages: %s\n' "$$BOOTWRIGHT_SELECTION_PACKAGES"; \
+	fi; \
+	if [ -z "$$BOOTWRIGHT_SELECTION_STAGES" ] && [ -z "$$BOOTWRIGHT_SELECTION_PACKAGES" ]; then \
+		printf '  nothing to run\n'; \
+		exit 0; \
+	fi; \
+	if [ -n "$$BOOTWRIGHT_SELECTION_STAGES" ]; then \
+		$(MAKE) --no-print-directory $$BOOTWRIGHT_SELECTION_STAGES || exit 1; \
+	fi; \
+	if [ -n "$$BOOTWRIGHT_SELECTION_PACKAGES" ]; then \
+		$(GO) test $$BOOTWRIGHT_SELECTION_PACKAGES || exit 1; \
+	fi
 
 check-go-source-visibility:
 	@ignored=$$(find add-ons api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
@@ -385,9 +419,11 @@ help:
 		'Targets:' \
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
-		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip' \
-		'  check            Run fast guardrails, then Go/Python/Ansible checks, bundle sync, and go.mod tidiness' \
-		'  check-fast       Run cheap local guardrails plus Go unit tests (syncs the ansible bundle and needs ansible-playbook; no race, staticcheck, lint, or clean-checkout)' \
+		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip (no-op when the ansible tree is unchanged)' \
+		'  check-scoped     Run only the stages and Go packages the change against CHECK_BASE can break (bug-fix gate)' \
+		'  check-feature    check-scoped plus the API/validator/render/CLI contract floor (new-feature gate)' \
+		'  check-fast       Run cheap local guardrails plus the whole Go suite (no race, staticcheck, lint, docs, or clean-checkout)' \
+		'  check-full       The release gate: everything, including race, staticcheck, ansible-lint, docs, and clean-checkout' \
 		'  test             Run Go tests' \
 		'  docs-check       Build the documentation site with mkdocs --strict (the required CI docs gate)' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
