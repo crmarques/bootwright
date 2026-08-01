@@ -19,7 +19,7 @@ would audit, and do not defer findings to a later step.
 
 This prompt owns **internal architecture**: package boundaries, the Go↔Ansible
 split, repo/script distribution, role taxonomy, and spec/code drift. For the
-user-facing CLI and schema contract use `specs-ux.md` or `cli-schema-ux-rethink.md`.
+user-facing CLI and schema contract use `ux-review.md`.
 
 Out of scope: line-by-line code review, formatting, isolated bugs, and naming
 nitpicks. Naming **is** in scope when a package, type, file, directory, role,

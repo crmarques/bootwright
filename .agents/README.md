@@ -31,8 +31,7 @@ current specs and code before judging.
 | Prompt | Use When |
 | --- | --- |
 | `architecture.md` | Rethinking internal architecture — package boundaries, the Go↔Ansible split, repo/script distribution, or role taxonomy |
-| `cli-schema-ux-rethink.md` | Rethinking the CLI and desired-state schema from first principles (three-alternatives design critique) |
-| `specs-ux.md` | Auditing the *current* user-facing contract — operator UX, authoring ergonomics, and definition/spec quality |
+| `ux-review.md` | Reviewing the user-facing contract — operator journey, native-tool schema alignment, authoring economy, production safety, definition quality; outputs a prioritized docs/specs/ADR plan |
 | `code-review.md` | Auditing implementation quality and safety — correctness, dead code, duplication, error handling, script/CI safety |
 | `code-flow-review.md` | Tracing real input end-to-end to final output for bugs, intent drift, and Go↔Ansible contract mismatches |
 | `provisioning-logic-review.md` | Reviewing the provisioning graph — closure, dependency ordering, locks, parallelism, and resumability |

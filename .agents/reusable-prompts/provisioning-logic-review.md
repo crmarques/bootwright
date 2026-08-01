@@ -11,8 +11,8 @@ This prompt owns **provisioning logic**: selected-resource closure, activity and
 capability graph construction, dependency ordering, resource locks, parallelism,
 Ansible cohorting, nested substrates, provider readiness, OS readiness, storage,
 cluster install, add-ons, failure recovery, and operator-visible progress. For
-package boundaries use `architecture.md`; for user-facing CLI and schema rethink
-use `cli-schema-ux-rethink.md`; for end-to-end input/output bug tracing use
+package boundaries use `architecture.md`; for user-facing CLI and schema review
+use `ux-review.md`; for end-to-end input/output bug tracing use
 `code-flow-review.md`.
 
 The deliverable **is** the review and improvement plan. Do the read-only

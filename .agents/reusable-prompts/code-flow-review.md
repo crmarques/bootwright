@@ -12,7 +12,7 @@ effects, and Go↔Ansible contract mismatches.
 This is the **dynamic end-to-end pass**: does the real flow turn real input into
 correct output? For static implementation quality use `code-review.md`; for a deep
 security pass `security-audit.md`; for package boundaries `architecture.md`; for
-schema/UX `specs-ux.md`; for provisioning-execution depth
+schema/UX `ux-review.md`; for provisioning-execution depth
 `provisioning-logic-review.md`; for idempotency and destructive-safety
 `idempotency-safety-audit.md`; for lifecycle transitions across many scenarios
 `state-lifecycle-scenario-review.md`. Every finding here should name the smallest

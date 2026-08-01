@@ -24,7 +24,7 @@ Read current repo state before judging:
 2. `specs/README.md`, `specs/index.md`, then `specs/domain.md`,
    `specs/architecture.md`, `specs/state-model.md`, and `specs/security.md`.
 3. Relevant prompt context only when useful: `idempotency-safety-audit.md`,
-   `cli-schema-ux-rethink.md`, `provisioning-logic-review.md`.
+   `ux-review.md`, `provisioning-logic-review.md`.
 4. Current CLI, selection, validation, planning, `diff`, `apply`,
    `destroy`, ownership records, install records, convergence-safety records,
    provider adapters, Ansible roles, tests, docs, and examples in scope.

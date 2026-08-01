@@ -19,8 +19,8 @@ chain, naming-as-code-quality, and test gaps. Sibling prompts own the deeper
 single-topic passes: `architecture.md` (package boundaries and redesign),
 `security-audit.md` (dedicated security audit), `idempotency-safety-audit.md`
 (idempotency and destructive-safety depth), `state-lifecycle-scenario-review.md`
-(lifecycle scenarios), and `specs-ux.md` / `cli-schema-ux-rethink.md` (schema
-and user-facing UX). Out of scope here: broad architecture redesign, schema
+(lifecycle scenarios), and `ux-review.md` (schema and user-facing UX). Out of
+scope here: broad architecture redesign, schema
 changes, large rewrites, and dependency churn.
 
 Weight findings across implementation quality, surface hygiene (dead/duplicated
