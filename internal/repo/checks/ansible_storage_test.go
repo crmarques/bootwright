@@ -2013,26 +2013,57 @@ func TestStorageCephadmDestroyWipePathsTakeTheLVMStackDown(t *testing.T) {
 	}
 }
 
-func TestStorageCephadmDestroyRefusesANodeThatAnswersAndRejectsItsIdentity(t *testing.T) {
+func TestStorageCephadmDestroySkipsOnlyANodeItProvesAbsent(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
 	classifyIdx := findAnsibleTask(t, tasks, "Classify how a storage host refused its teardown connection")
-	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage host that answers but rejects every teardown identity")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage host this teardown cannot prove absent")
 	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --authorize unreachable-nodes")
 	skipIdx := findAnsibleTask(t, tasks, "Stop tearing down unreachable storage hosts")
 	if !(classifyIdx < refuseIdx && refuseIdx < reachableIdx && reachableIdx < skipIdx) {
-		t.Fatalf("destroy must classify the refusal and fail closed on an answering node before it may skip anything (classify=%d refuse=%d reachable=%d skip=%d)", classifyIdx, refuseIdx, reachableIdx, skipIdx)
+		t.Fatalf("destroy must classify the refusal and fail closed on a node it cannot prove absent before it may skip anything (classify=%d refuse=%d reachable=%d skip=%d)", classifyIdx, refuseIdx, reachableIdx, skipIdx)
 	}
 	if _, ok := tasks[refuseIdx]["ansible.builtin.assert"]; !ok {
-		t.Fatalf("the answering-node refusal must be a hard assert so any_errors_fatal aborts the teardown, got %v", tasks[refuseIdx])
+		t.Fatalf("the unproven-absence refusal must be a hard assert so any_errors_fatal aborts the teardown, got %v", tasks[refuseIdx])
 	}
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); strings.Contains(got, "bootwright_destroy_skip_unreachable") {
-		t.Errorf("--authorize unreachable-nodes must not relax the answering-node refusal: skipping a node that is running leaves its Ceph daemons up and its OSD devices holding data while the run reports the cluster destroyed, got when=%v", tasks[refuseIdx]["when"])
+		t.Errorf("--authorize unreachable-nodes must not relax the unproven-absence refusal: skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding data while the run reports the cluster destroyed, got when=%v", tasks[refuseIdx]["when"])
 	}
+	assertion := fmt.Sprint(tasks[refuseIdx]["ansible.builtin.assert"])
+	if !strings.Contains(assertion, "bootwright_storage_node_absent") {
+		t.Errorf("the refusal must gate on proven absence, not on a negated answered flag: an unreadable refusal must fail closed rather than skip, got %v", tasks[refuseIdx]["ansible.builtin.assert"])
+	}
+	if !strings.Contains(assertion, "bootwright_storage_node_refusal") {
+		t.Errorf("the refusal must print what the probes reported, or the operator is told a node was skipped with no evidence, got %v", tasks[refuseIdx]["ansible.builtin.assert"])
+	}
+	classify := fmt.Sprint(tasks[classifyIdx]["vars"]) + fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"])
 	for _, want := range []string{"bootwright_node_access_target_probe", "bootwright_node_access_install_probe", "bootwright_storage_reachable_probe"} {
-		if got := fmt.Sprint(tasks[classifyIdx]["vars"]) + fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, want) {
-			t.Errorf("the refusal classification must read %s so the teardown reports the identity fault instead of the power-off reading, got %v", want, tasks[classifyIdx])
+		if !strings.Contains(classify, want) {
+			t.Errorf("the classification must read %s so the teardown reports what actually refused instead of the power-off reading, got %v", want, tasks[classifyIdx])
 		}
+	}
+	for _, want := range []string{"No route to host", "Connection timed out", "Connection refused"} {
+		if !strings.Contains(classify, want) {
+			t.Errorf("absence must be matched positively; %q is one of the connection-level failures that prove a node could not be contacted, got %v", want, tasks[classifyIdx]["vars"])
+		}
+	}
+	for _, reject := range []string{"Permission denied", "Host key verification"} {
+		if strings.Contains(classify, reject) {
+			t.Errorf("the classification must not enumerate identity refusals like %q: anything that is not proven absence already fails closed, and listing them invites the inverse default, got %v", reject, tasks[classifyIdx]["vars"])
+		}
+	}
+}
+
+func TestStorageCephadmDestroyReportsWhyEachSkippedNodeWasSkipped(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	summaryIdx := findAnsibleTask(t, tasks, "Summarize storage hosts skipped as unreachable")
+	block := fmt.Sprint(tasks[summaryIdx])
+	if !strings.Contains(block, "bootwright_storage_skipped_reasons") {
+		t.Fatalf("the skip summary must carry each node's refusal, not only its name: a skipped node with no recorded cause is what let a running node pass as absent, got %v", tasks[summaryIdx])
+	}
+	if !strings.Contains(block, "skippedNodeReasons") {
+		t.Errorf("the controller-side result must record the per-node refusal so the partial-destroy warning can print it, got %v", tasks[summaryIdx])
 	}
 }
 

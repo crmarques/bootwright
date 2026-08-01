@@ -30,6 +30,9 @@ func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []
 }
 
 func partialStorageDestroyNodes(partial converge.PartialStorageDestroy) string {
+	if len(partial.Reasons) > 0 {
+		return " Skipped node(s), with what each refusal reported: " + strings.Join(partial.Reasons, "; ") + "."
+	}
 	if partial.Skipped == "" {
 		return ""
 	}

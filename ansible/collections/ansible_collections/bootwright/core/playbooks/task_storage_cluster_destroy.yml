@@ -58,10 +58,9 @@
 
     - name: Classify how a storage host refused its teardown connection
       vars:
-        bootwright_storage_refusal_pattern: >-
-          Permission denied|Too many authentication failures|Host key verification failed|REMOTE
-          HOST IDENTIFICATION HAS CHANGED|no matching (host key|key exchange method|cipher)|Authentication
-          failed|sudo:|Connection closed by|Received disconnect
+        bootwright_storage_absence_pattern: >-
+          No route to host|Network is unreachable|Host is down|Connection timed out|Operation
+          timed out|Connection refused|port 22: Connection|Destination Host Unreachable
         bootwright_storage_identity_refused: >-
           {{ (bootwright_node_access is defined)
              and not (bootwright_node_access_connection_available | default(false) | bool) }}
@@ -72,17 +71,20 @@
              ~ (bootwright_node_access_install_endpoint | default(inventory_hostname))
              ~ ' exited ' ~ (bootwright_node_access_install_probe.rc | default('unknown') | string)
              ~ ' for `true` (' ~ (bootwright_node_access_install_probe.stderr | default('') | trim) ~ ')' }}
+        bootwright_storage_probe_timed_out: >-
+          {{ [(bootwright_node_access_target_probe.rc | default(0) | int),
+               (bootwright_node_access_install_probe.rc | default(0) | int)]
+             | select('in', [124, 137, 143]) | list | length > 0 }}
       ansible.builtin.set_fact:
-        bootwright_storage_node_answered: >-
+        bootwright_storage_node_absent: >-
           {{
             (
-              ((bootwright_node_access_target_probe.rc | default(255) | int) != 255)
-              or ((bootwright_node_access_install_probe.rc | default(255) | int) != 255)
-              or (bootwright_storage_identity_detail is search(bootwright_storage_refusal_pattern))
+              (bootwright_storage_identity_detail is search(bootwright_storage_absence_pattern))
+              or (bootwright_storage_probe_timed_out | bool)
             )
             if (bootwright_storage_identity_refused | bool)
             else ((bootwright_storage_reachable_probe.msg | default(''))
-                  is search(bootwright_storage_refusal_pattern))
+                  is search(bootwright_storage_absence_pattern))
           }}
         bootwright_storage_node_refusal: >-
           {{ bootwright_storage_identity_detail | trim
@@ -91,22 +93,29 @@
       changed_when: false
       when: bootwright_storage_reachable_probe.unreachable | default(false) | bool
 
-    - name: Refuse a storage host that answers but rejects every teardown identity
+    - name: Refuse a storage host this teardown cannot prove absent
       ansible.builtin.assert:
         that:
-          - not (bootwright_storage_node_answered | default(false) | bool)
+          - bootwright_storage_node_absent | default(false) | bool
         fail_msg: >-
           Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
-          for storage cluster {{ bootwright_storage_cluster_name }} answered over SSH and
-          then rejected every teardown identity: {{ bootwright_storage_node_refusal | default('') }}.
-          The node is up, so this is an identity fault — an unauthorized key, an untrusted
-          host key, or a refused sudo escalation — not an absent node, and
-          --authorize unreachable-nodes deliberately does not cover it: skipping a node that
-          is running leaves its Ceph daemons up and its OSD devices holding cluster data,
-          and the teardown would report the cluster destroyed while this node still serves
-          it. Re-authorize the key for one of those accounts, confirm
-          {{ bootwright_node_access.user | default('the orchestration account') }} still holds its
-          NOPASSWD grant (or pass --ssh-sudo-password), then re-run destroy.
+          for storage cluster {{ bootwright_storage_cluster_name }} refused every teardown
+          identity, and the refusal is not proof that the node is gone:
+          {{ bootwright_storage_node_refusal | default('no connection diagnostic was recorded') }}.
+          --authorize unreachable-nodes skips a node that could not be contacted at all — no
+          route, an unreachable network, a connection that timed out or was refused. It does
+          not skip a node that answered and rejected an identity (an unauthorized key, an
+          untrusted host key, a refused sudo escalation), and it does not skip a refusal
+          Bootwright cannot read as absence at all — an address that does not resolve, an
+          empty diagnostic, or an error that names neither. None of those prove the node is
+          absent, and skipping a node that is in fact running leaves its Ceph daemons up and
+          its OSD devices holding cluster data while this run reports the cluster destroyed.
+          Read the diagnostic above: fix the identity it names (re-authorize the key, restore
+          the NOPASSWD grant of
+          {{ bootwright_node_access.user | default('the orchestration account') }}, or pass
+          --ssh-sudo-password), or correct the address it could not reach, then re-run
+          destroy. If the node really is decommissioned, power it off so the teardown can
+          prove it absent.
       when: bootwright_storage_reachable_probe.unreachable | default(false) | bool
 
     - name: Require storage hosts reachable unless --authorize unreachable-nodes
@@ -133,14 +142,22 @@
             | selectattr('bootwright_storage_reachable_probe.unreachable')
             | list
           }}
+        bootwright_storage_skipped_reasons: >-
+          {{
+            bootwright_storage_skipped_entries
+            | map(attribute='bootwright_storage_node_name')
+            | zip(bootwright_storage_skipped_entries
+                  | map(attribute='bootwright_storage_node_refusal', default='no connection diagnostic was recorded'))
+            | map('join', ': ') | list
+          }}
       block:
         - name: Warn about storage hosts skipped as unreachable
           ansible.builtin.debug:
             msg: >-
-              Skipped unreachable storage node(s):
-              {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list | join(', ') }}.
-              Their OSD devices were NOT wiped and local Ceph state remains; storage
-              cluster(s)
+              Skipped storage node(s) this teardown proved absent:
+              {{ bootwright_storage_skipped_reasons | join('; ') }}.
+              Their OSD devices were NOT wiped, their Ceph daemons were not stopped and
+              local Ceph state remains; storage cluster(s)
               {{ bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list | join(', ') }}
               are only partially destroyed. Re-run destroy once the nodes are back
               up, or wipe them manually, before reusing the hardware.
@@ -162,7 +179,8 @@
                 {
                   'partialClusters': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list),
                   'skippedNodes': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list),
-                  'skippedHosts': (bootwright_storage_skipped_entries | map(attribute='inventory_hostname') | list)
+                  'skippedHosts': (bootwright_storage_skipped_entries | map(attribute='inventory_hostname') | list),
+                  'skippedNodeReasons': bootwright_storage_skipped_reasons
                 } | to_nice_json
               }}
             mode: "0600"

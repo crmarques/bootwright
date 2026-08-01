@@ -21,9 +21,10 @@ const (
 )
 
 type storageDestroyResult struct {
-	PartialClusters []string `json:"partialClusters"`
-	SkippedNodes    []string `json:"skippedNodes"`
-	SkippedHosts    []string `json:"skippedHosts"`
+	PartialClusters    []string `json:"partialClusters"`
+	SkippedNodes       []string `json:"skippedNodes"`
+	SkippedHosts       []string `json:"skippedHosts"`
+	SkippedNodeReasons []string `json:"skippedNodeReasons"`
 }
 
 type PartialStorageDestroy struct {
@@ -31,6 +32,7 @@ type PartialStorageDestroy struct {
 	Unrecorded []string
 	Clusters   []string
 	Skipped    string
+	Reasons    []string
 	Found      bool
 }
 
@@ -82,6 +84,7 @@ func readStorageDestroyResults(runLogPath string) (storageDestroyResult, bool, e
 		merged.PartialClusters = append(merged.PartialClusters, result.PartialClusters...)
 		merged.SkippedNodes = append(merged.SkippedNodes, result.SkippedNodes...)
 		merged.SkippedHosts = append(merged.SkippedHosts, result.SkippedHosts...)
+		merged.SkippedNodeReasons = append(merged.SkippedNodeReasons, result.SkippedNodeReasons...)
 	}
 	return merged, complete, nil
 }
@@ -98,6 +101,7 @@ func RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath string) (
 	}
 	out.Clusters = uniqueSorted(result.PartialClusters)
 	out.Skipped = strings.Join(uniqueSorted(result.SkippedNodes), ",")
+	out.Reasons = uniqueSorted(result.SkippedNodeReasons)
 	records, err := ownership.LoadContext(ownershipDir, contextName)
 	if err != nil {
 		return out, fmt.Errorf("load ownership records to persist partial-destroy markers: %w", err)
