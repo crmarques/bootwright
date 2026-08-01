@@ -86,6 +86,14 @@ class PackagesTest(unittest.TestCase):
         packages = selector.packages_for(self.root, {"docs/x.md"}, {"docs"}, "scoped")
         self.assertEqual(set(packages), set(selector.PROSE_READER_PACKAGES))
 
+    def test_agent_guidance_alone_selects_only_the_repo_guards(self):
+        packages = selector.packages_for(self.root, {"AGENTS.md"}, {"agents"}, "scoped")
+        self.assertEqual(set(packages), {"./internal/repo/checks/..."})
+
+    def test_agent_guidance_with_docs_still_selects_every_prose_reader(self):
+        packages = selector.packages_for(self.root, {"AGENTS.md", "docs/x.md"}, {"agents", "docs"}, "scoped")
+        self.assertEqual(set(packages), set(selector.PROSE_READER_PACKAGES))
+
     def test_fixture_change_selects_the_fixture_readers(self):
         packages = selector.packages_for(self.root, {"examples/a.yaml"}, {"fixtures"}, "scoped")
         self.assertEqual(set(packages), set(selector.FIXTURE_READER_PACKAGES))

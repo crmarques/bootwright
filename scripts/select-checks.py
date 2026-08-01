@@ -188,8 +188,10 @@ def packages_for(root: Path, changed: set[str], domains: set[str], tier: str) ->
     selected: set[str] = set()
     if domains & {"go", "api"}:
         selected.update(go_closure(root, changed))
-    if domains & {"docs", "specs", "readme", "agents"}:
+    if domains & {"docs", "specs", "readme"}:
         selected.update(PROSE_READER_PACKAGES)
+    elif "agents" in domains:
+        selected.add("./internal/repo/checks/...")
     if domains & {"fixtures", "addons"}:
         selected.update(FIXTURE_READER_PACKAGES)
     if "ansible" in domains:
