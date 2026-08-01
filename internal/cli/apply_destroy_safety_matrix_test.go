@@ -106,21 +106,16 @@ func safetyMatrixCases() []safetyCase {
 
 func safetyBlanketAuthorizationCases() []safetyCase {
 	return []safetyCase{{
-		name:    "destroy/all: the blanket token clears the data-loss refusal the named token clears",
+		name:    "destroy/all: the blanket token clears the data-loss refusal and discloses what it stood in for",
 		args:    []string{"destroy", "--authorize", "all", "--ask-become-pass=false"},
 		verdict: verdictPrompted,
-		want:    []string{"Continue with destroy?"},
+		want:    []string{"Continue with destroy?", "authorize all", "stood in for", authorizeUnownedVMs, authorizeDataLoss},
 		deny:    []string{"--yes does not authorize data loss", "Confirm this DESTRUCTIVE action"},
 	}, {
 		name:    "destroy/all: the expansion reaches every per-token extra var of the run",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "all", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
 		want:    []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true", "bootwright_destroy_skip_unreachable=true"},
-	}, {
-		name:    "destroy/all: a real run discloses which unnamed tokens it stood in for",
-		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
-		verdict: verdictAuthorized,
-		want:    []string{"authorize all", "stood in for", authorizeUnownedVMs},
 	}, {
 		name: "destroy/all: the blanket token still does not widen the selection",
 		seed: func(t *testing.T, ctx workspace.Context) {

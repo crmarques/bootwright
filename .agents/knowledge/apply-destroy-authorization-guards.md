@@ -122,7 +122,7 @@ a `safetyMatrixCases()` row (a token that unblocks a refusal must be exercised),
 to declare the verbs whose gates consume it, and — for a token a verb's gates
 cannot consume — to be refused there as a usage error naming what resolves it
 instead. Eight of the twelve are destroy-only; `data-loss` and `unowned-devices`
-(ADR 0034) and `all` (ADR 0039) have gates on both verbs, and `foreign-daemons`
+(ADR 0034) and `all` (ADR 0040) have gates on both verbs, and `foreign-daemons`
 (ADR 0038) is the first apply-only one, refused on `destroy`. `unowned-devices` is reachable on `apply` only under
 `--reclaim-devices`, so its matrix row is a `--dry-run` (which by contract
 consumes no token); the real consumption path — the warning and the
@@ -142,7 +142,7 @@ because widening the storage sub-object rebuild authorization is a consumption
 that used to be reported as "had no effect" while the extra-var went to the roles.
 
 **`all` is resolved through the same `has`/`note` pair, never around it.**
-The blanket token (ADR 0039) adds no gate and no call site: `authorizations`
+The blanket token (ADR 0040) adds no gate and no call site: `authorizations`
 carries the verb it was parsed for, `has` answers yes when `all` was given and
 the asked-for name is a registered token *of that verb*, and `note` credits
 `all` for the names it supplied. Everything follows from that one resolution
