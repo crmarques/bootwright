@@ -56,3 +56,5 @@ below.
 | [0040](0040-one-word-for-every-token-a-verb-accepts.md) | One Word for Every Token a Verb Accepts | extends 0030 with the `all` token |
 | [0041](0041-the-gate-runs-what-the-change-can-break.md) | The Gate Runs What the Change Can Break | replaces the single `check-fast` gate; retires `make check` for `make check-full` |
 | [0042](0042-moving-the-vote-that-breaks-the-tie.md) | Moving the Vote That Breaks the Tie | adds `storage-cluster replace-arbiter`; extends 0030 with the `same-site-arbiter` and `degraded-quorum` tokens and a third authorization verb; widens the `unreachable-nodes` token of 0030/0039 |
+| [0043](0043-one-cluster-one-address-family.md) | One Cluster, One Address Family | extended by 0044 |
+| [0044](0044-the-endpoint-a-single-node-cluster-answers-at.md) | The Endpoint a Single-Node Cluster Answers At | extends 0043; follows the source union of 0014 |

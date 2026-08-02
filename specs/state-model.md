@@ -932,23 +932,39 @@ Rules:
   endpoint (its `address` and `source`); `render effective` materializes the
   copy and an authored `api-int` always wins.
 - `endpoints.<slot>.source.type` accepts `openshift` (default), `external`,
-  or `infraComponent`. `openshift` and `external` own the endpoint's address
-  directly. `infraComponent` requires `source.componentRef` pointing at a
+  `infraComponent`, or `node`. `openshift` and `external` own the endpoint's
+  address directly. `infraComponent` requires `source.componentRef` pointing at a
   `loadBalancer` `InfraComponent` and must not set `address`.
   `source.bindAddressRef` names the selected `bindAddresses[]` entry; it may
   be omitted only when the load balancer declares exactly one bind address,
   and a non-empty `source.bindAddressRef` must match a `bindAddresses[].name`
   regardless of bind count.
+  - `node` means the slot answers at the cluster's single node, and is valid
+    only on a cluster with exactly one node — any other cluster is rejected
+    naming the node count and the reason, because a multi-node cluster answers
+    at a VIP no single node owns. Like `infraComponent`, it must not set
+    `address`: the address is resolved from the bound `Machine`'s
+    `spec.addresses[]` entry that its
+    `spec.network.config.interfaceAddresses[]` points at, which is the same
+    install address the VIP/node-IP collision rule and the network-config
+    renderer read. A node whose `interfaceAddresses[]` resolve to no address,
+    or to more than one, is rejected naming what was found rather than guessed
+    at. `render effective` materializes the resolved `address`, so validators
+    and renderers read one value (ADR 0044).
   - Besides `address` and `source`, each slot accepts `dnsName` (a DNS
     subdomain naming the endpoint when no address is owned here), `port` and
     `scheme` (`http` or `https`) refining the endpoint URL, and — where the slot
     owns a VIP — `prefixLength` (valid only alongside `address`) and
     `interfaceNetworks[]` (CIDRs narrowing which interface carries the VIP).
   - **Single-node clusters** additionally reject `source.type: openshift` on the
-    `api`, `api-int`, and `ingress` slots.
+    `api`, `api-int`, and `ingress` slots. `source.type: node` is the positive
+    form of the same fact and is the shape these clusters should author: all
+    three slots answer at the one node, and the address is resolved once from
+    the `Machine` rather than repeated three times.
   - `source.componentRef` and `source.bindAddressRef` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
-    or `source.type: infraComponent`. On a **VIP-bearing slot** — `api`,
+    `source.type: infraComponent`, or `source.type: node`. On a **VIP-bearing
+    slot** — `api`,
     `api-int`, or `ingress` on a multi-machine cluster whose install platform is
     `baremetal` or `vsphere`, the combination that renders `apiVIPs`/`ingressVIPs`
     into install-config — `dnsName` alone does not satisfy that one-of: the slot
@@ -2152,6 +2168,22 @@ section above.
   source's bind address — must fall inside a selected `NetworkConfig`
   `machineNetwork[].cidr`; an out-of-network endpoint fails validation naming the
   slot and value.
+- **Single-stack is the `v1alpha1` scope**: one `ContainerCluster` carries one IP
+  address family. The effective networking of a cluster is the union of the
+  `machineNetwork[].cidr` entries of the `NetworkConfig`s its nodes consume (plus
+  any inline `spec.network.config.spec.machineNetwork[]`),
+  `spec.networking.clusterNetwork[].cidr`, `spec.networking.serviceNetwork[]`,
+  and the resolved `api`, `api-int`, and `ingress` endpoint addresses. A second
+  address family anywhere in that set fails validation naming the cluster, both
+  conflicting values with their families, and the scope. IPv6-only stays legal —
+  the rule refuses **mixing**, not IPv6; `clusterNetwork` and `serviceNetwork`
+  defaults already follow the machine-network family. Node install addresses are
+  not collected separately because an `interfaceAddresses`-resolved install IP
+  must already fall inside a selected machine network. The refusal exists
+  because `endpoints.<slot>.address` is a single address where the native
+  `apiVIPs`/`ingressVIPs` are lists precisely to carry one VIP per family, so a
+  dual-stack fleet would otherwise render a silent single-stack install-config
+  (ADR 0043).
 - A machine's `interfaceAddresses`-resolved install IP must fall inside a
   `machineNetwork[].cidr` of its selected `NetworkConfig`; an address outside
   every machine network fails validation naming the `Machine`, the
