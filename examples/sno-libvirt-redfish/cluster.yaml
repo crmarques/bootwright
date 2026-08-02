@@ -12,13 +12,11 @@ spec:
       keyPairRef: sno-libvirt-cluster-admin-ssh-key
     endpoints:
       api:
-        address: 192.168.132.20
         source:
-          type: external
+          type: node
       ingress:
-        address: 192.168.132.20
         source:
-          type: external
+          type: node
 
   nodes:
 

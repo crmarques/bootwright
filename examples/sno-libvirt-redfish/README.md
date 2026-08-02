@@ -18,7 +18,9 @@ emulated Redfish BMC.
 - `cluster-machines.yaml`: the node `Machine` — `networkConfigRef`, per-machine
   `interfaceAddresses` (IP), and root device hints.
 - `cluster.yaml`: OpenShift release, install endpoints, networking, and node
-  binding.
+  binding. A single-node cluster has no VIP, so every endpoint slot takes
+  `source.type: node` and resolves to the node's own install address — the
+  `interfaceAddresses` entry above — instead of repeating that address.
 
 ## Validate And Apply
 

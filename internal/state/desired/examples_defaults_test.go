@@ -33,8 +33,14 @@ func TestSNOLibvirtExampleMaterializesDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("api-int endpoint was not materialized from api")
 	}
-	if apiInt.Address != "192.168.132.20" || apiInt.Source.Type != v1alpha1.EndpointSourceExternal {
-		t.Fatalf("api-int endpoint = %+v, want address 192.168.132.20 source external", apiInt)
+	if apiInt.Address != "192.168.132.20" || apiInt.Source.Type != v1alpha1.EndpointSourceNode {
+		t.Fatalf("api-int endpoint = %+v, want address 192.168.132.20 source node", apiInt)
+	}
+	for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointIngress} {
+		endpoint := cluster.Spec.Install.Endpoints[name]
+		if endpoint.Address != "192.168.132.20" || endpoint.Source.Type != v1alpha1.EndpointSourceNode {
+			t.Fatalf("%s endpoint = %+v, want the node install address materialized from source node", name, endpoint)
+		}
 	}
 
 	platform := cluster.Spec.Install.Platform
