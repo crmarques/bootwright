@@ -60,13 +60,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 			}
 		}
 		if output == outputJSON {
-			if err := writeAddonsCheckJSON(stdout, results, failed == 0); err != nil {
-				return failErr(1, err)
-			}
-			if failed > 0 {
-				return silentExit(1)
-			}
-			return nil
+			return writePreflightResultJSON(stdout, cf.ctx.Name, "add-ons", preflightCheckResults(results), "")
 		}
 		p.Checks(results)
 		if failed > 0 {
@@ -76,35 +70,6 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		return nil
 	}
 	return cmd
-}
-
-type addonsCheckResult struct {
-	Group       string `json:"group,omitempty"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	Evidence    string `json:"evidence,omitempty"`
-	Impact      string `json:"impact,omitempty"`
-	Remediation string `json:"remediation,omitempty"`
-}
-
-type addonsCheckReport struct {
-	OK     bool                `json:"ok"`
-	Checks []addonsCheckResult `json:"checks"`
-}
-
-func writeAddonsCheckJSON(stdout io.Writer, checks []cliout.Check, ok bool) error {
-	report := addonsCheckReport{OK: ok, Checks: make([]addonsCheckResult, 0, len(checks))}
-	for _, check := range checks {
-		report.Checks = append(report.Checks, addonsCheckResult{
-			Group:       check.Group,
-			Name:        check.Name,
-			Status:      string(check.Status),
-			Evidence:    check.Evidence,
-			Impact:      check.Impact,
-			Remediation: check.Remediation,
-		})
-	}
-	return cliout.JSON(stdout, report)
 }
 
 func extensionPreflightChecks(clustersDir, secretsDir string, state v1alpha1.State) []cliout.Check {

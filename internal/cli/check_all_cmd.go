@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -33,7 +32,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addVerboseFlag(cmd, &verbose)
-	addOutputFlagDryRun(cmd, &output)
+	addOutputFlag(cmd, &output)
 	addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -44,10 +43,10 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 			return failErr(1, err)
 		}
 		if output == outputJSON {
-			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for preflight all"))
-			}
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
+			if !dryRun {
+				return runAllPreflightJSON(c, stdout, stderr, cf, scopeFlags, state, verbose)
+			}
 			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
 		}

@@ -23,15 +23,3 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 	}
 	return output.JSON(stdout, report)
 }
-
-func runFullDestroyDryRunJSON(stdout io.Writer, cf *commonFlags, scope converge.Scope, plan converge.WorkflowPlan, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety) error {
-	bundleDir, err := resolveBundleDir()
-	if err != nil {
-		return failErr(1, err)
-	}
-	report, err := converge.BuildFullDestroyDryRunReport(cf.ctx, bundleDir, scope, plan.State, plan.Selected, tasks, plan.ExtraVarPairs, destroySafety)
-	if err != nil {
-		return failErr(1, err)
-	}
-	return output.JSON(stdout, report)
-}
