@@ -124,7 +124,10 @@ Machine-bound shared services, one object per file, all pinned to `bastion`:
 - `ntp-server.yaml` (`chrony`): serves time.
 
 A single-node lab can drop the `load-balancer` and `ntp-server` components
-entirely — `examples/sno-libvirt-redfish` is that reduced form.
+entirely — `examples/sno-libvirt-redfish` is that reduced form. Without a load
+balancer there is no VIP to point at, so the cluster's `api`, `api-int`, and
+`ingress` slots take `source.type: node` and resolve to the node's own install
+address; see [Endpoints](../concepts/container-clusters.md#endpoints).
 
 ### ContainerCluster (`clusters/container/my-sno-lab/cluster.yaml`)
 

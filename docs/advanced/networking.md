@@ -242,21 +242,60 @@ endpoints:
 - `infraComponent` — a Bootwright-provisioned load balancer; set
   `source.componentRef` (the `InfraComponent` name) and, when the load balancer
   declares more than one bind address, `source.bindAddressRef`.
+- `node` — the cluster's single node; the address resolves from that node's
+  `Machine`. Single-node clusters only, and `address` must be empty.
 
 The full `Endpoint` field table is in
 [Container clusters](../concepts/container-clusters.md#endpoints).
 
-!!! note "Single-node clusters reject `openshift` sources"
+!!! note "Single-node clusters answer at their node, not at a VIP"
     A single-node cluster cannot use `source.type: openshift` on the `api`,
     `api-int`, or `ingress` slot — the agent installer rejects bare-metal and
     vSphere platform blocks for one-control-plane clusters, so these clusters
-    render `platform.none`. Use `external` or `infraComponent` instead.
+    render `platform.none`.
 
-    A single-node cluster has no VIP: the `api`, `api-int`, and `ingress`
-    endpoint addresses must be the node's own install address, which is owned
-    by `Machine.spec.addresses[]`. Repeat it in the cluster's
-    `install.endpoints` verbatim — nothing validates that the two agree, so a
-    mismatch surfaces only as an install that never converges.
+    A single-node cluster has no VIP: all three slots answer at the node's own
+    install address. Say that with `source.type: node` instead of repeating the
+    address:
+
+    ```yaml
+    endpoints:
+      api:
+        source:
+          type: node
+      api-int:
+        source:
+          type: node
+      ingress:
+        source:
+          type: node
+    ```
+
+    Bootwright resolves the address from the `Machine.spec.addresses[]` entry
+    the node's `spec.network.config.interfaceAddresses[]` points at, and
+    `render effective` materializes it, so the endpoints cannot drift from the
+    machine. A node that resolves to no install address, or to more than one,
+    is rejected naming what was found. `external` and `infraComponent` stay
+    available when an operator-owned load balancer or DNS name fronts the node.
+
+## One cluster, one IP address family
+
+Single-stack is the current scope. A `ContainerCluster`'s effective networking —
+the `machineNetwork[]` CIDRs of the `NetworkConfig`s its nodes consume, its
+`spec.networking.clusterNetwork` and `serviceNetwork`, and the resolved `api`,
+`api-int`, and `ingress` endpoint addresses — must be one address family.
+Mixing families is refused naming the cluster, both conflicting values with
+their families, and the scope.
+
+IPv6-only is fully supported: an all-IPv6 cluster validates, and the
+`clusterNetwork`/`serviceNetwork` defaults follow the machine-network family.
+The rule refuses *mixing*, not IPv6.
+
+Dual-stack is deferred rather than partially wired.
+`endpoints.<slot>.address` is a single address, where the native
+`apiVIPs`/`ingressVIPs` are lists precisely so a cluster can carry one VIP per
+family — so a fleet authored with both families used to render a single-stack
+install-config nobody wrote. Failing closed at validation replaces that silence.
 
 ## Load balancers and VIP placement
 

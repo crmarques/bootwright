@@ -329,28 +329,59 @@ keys are accepted. Omitting an endpoint's `source.type` normalizes it to
 | `openshift` | The installer or cluster owns the endpoint; an explicit `address` is required. |
 | `external` | Operator-owned load balancer or DNS; an explicit `address` is required. |
 | `infraComponent` | Bootwright-managed load balancer selected by `componentRef`; the address resolves from the component's `bindAddressRef`. |
+| `node` | The cluster's single node owns the endpoint; the address resolves from that node's `Machine`. Single-node clusters only, and `address` must be empty. |
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `endpoints.<slot>.address` | No | — | Literal endpoint address. Required for the `openshift` and `external` sources (see the source table above). |
+| `endpoints.<slot>.address` | No | Node install address for the `node` source | Literal endpoint address. Required for the `openshift` and `external` sources, and must be empty for the `infraComponent` and `node` sources (see the source table above). |
 | `endpoints.<slot>.dnsName` | No | — | Optional DNS name. |
 | `endpoints.<slot>.port` | No | — | Optional port. |
 | `endpoints.<slot>.scheme` | No | — | Optional scheme. |
 | `endpoints.<slot>.prefixLength` | No | — | Prefix length for VIP-style endpoints. |
 | `endpoints.<slot>.interfaceNetworks[]` | No | — | Interface networks for VIP placement. |
-| `endpoints.<slot>.source.type` | No | `openshift` | `openshift`, `external`, or `infraComponent`. |
+| `endpoints.<slot>.source.type` | No | `openshift` | `openshift`, `external`, `infraComponent`, or `node`. |
 | `endpoints.<slot>.source.componentRef` | No | — | Load-balancer `InfraComponent` name. Required for the `infraComponent` source. |
 | `endpoints.<slot>.source.bindAddressRef` | No | — | Names a `bindAddresses[]` entry on the referenced load balancer. |
 
-!!! note "Single-node clusters reject `openshift` sources"
+!!! note "Single-node clusters answer at their node, not at a VIP"
     A single-node cluster cannot use `source.type: openshift` on the `api`,
     `api-int`, or `ingress` slot — pair it with the `platform.none` default
-    above. Use `external` or `infraComponent` instead. A single-node cluster
-    has no VIP: the `api`, `api-int`, and `ingress` addresses must all be the
-    node's own install address — the `Machine` `spec.addresses[]` entry its
-    install network references. Repeat it here verbatim; nothing validates the
-    two agree. For how VIPs and managed load balancers wire together, see
+    above. Use `source.type: node`, which says the slot answers at the
+    cluster's one node and resolves the address from that node's `Machine`:
+
+    ```yaml
+    endpoints:
+      api:
+        source:
+          type: node
+      api-int:
+        source:
+          type: node
+      ingress:
+        source:
+          type: node
+    ```
+
+    The address comes from the `Machine.spec.addresses[]` entry that the node's
+    `spec.network.config.interfaceAddresses[]` points at — the same install
+    address the node boots with — so there is nothing to keep in agreement.
+    `render effective` shows the resolved address. `node` is valid only on a
+    cluster with exactly one node, and a node whose `interfaceAddresses[]`
+    resolve to no address or to more than one is rejected naming what was
+    found. `external` and `infraComponent` remain available if an operator-owned
+    load balancer or DNS name fronts the node. For how VIPs and managed load
+    balancers wire together, see
     [Networking](../advanced/networking.md).
+
+!!! note "One cluster, one IP address family"
+    Single-stack is the current scope. A `ContainerCluster` whose machine
+    networks, `spec.networking.clusterNetwork`/`serviceNetwork`, and resolved
+    endpoint addresses do not all share one address family is rejected naming
+    the two conflicting values and their families. IPv6-only is fully
+    supported — the rule refuses *mixing* families, not IPv6. Dual-stack is
+    deferred: `endpoints.<slot>.address` is a single address where the native
+    `apiVIPs`/`ingressVIPs` are lists precisely so a cluster can carry one VIP
+    per family.
 
 ## Artifact Server Endpoints
 
