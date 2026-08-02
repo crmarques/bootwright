@@ -803,209 +803,37 @@ learned; this file records what it still owes.
   [0039](../../specs/adr/0039-the-node-a-teardown-left-serving-the-cluster.md),
   B-020
 
-## B-060 — The status next-step spine ends on a retired `cluster` subcommand
-- Status: open
-- Area: cli / status
-- Origin: ux-review 2026-08-01; the spec spine clause landed in the same change
-- Severity: medium
-- Problem: `internal/status/hints.go:33` appends a retired `cluster`
-  subcommand (the pre-`info` access verb) as the terminal next-step hint, in
-  text output and in `status --output json` `nextSteps[]`. No such subcommand
-  exists — the name sits in `retiredCLIVocabulary`
-  (`internal/repo/checks/artifact_sync_test.go`), but that guard scans only
-  Markdown, so the emitter survived the retirement. The operator's taught
-  compass ends on an unknown-command error at the moment of first success.
-- Exit: emit `bootwright cluster info` (the verb the getting-started guides
-  teach for post-apply access), and honor the spine contract: every spine
-  entry is a command the CLI accepts verbatim or command-free prose. See B-067
-  for the guard extension that keeps it honest.
-- Related: `internal/status/hints.go`, `internal/cli/status_report.go`
-
-## B-061 — `preflight --output json` can only describe the plan, never a check result
-- Status: open
-- Area: cli / preflight
-- Origin: ux-review 2026-08-01; docs/advanced/automation.md documents the current coupling
-- Severity: medium
-- Problem: for the scoped preflight targets, `--output json` is accepted only
-  with `--dry-run` (`internal/cli/scope_check_cmd.go`), and that JSON is the
-  playbook plan — the command exits before `runScopeHostCheck`. The one verb
-  whose job is "is this fleet ready to apply?" answers machines in prose only,
-  so CI parses human text the project reserves the right to change.
-- Exit: accept `--output json` without `--dry-run` and emit executed check
-  results — per check `{name, target, status: ok|fail|skip, detail, fix}` plus
-  a `{total, failed}` summary, mirroring the text fields of
-  `internal/cli/scope_sshcheck.go`. Exit codes unchanged; `--dry-run` JSON
-  keeps meaning the plan; host-trust prompting stays suppressed under JSON.
-  Switch the flag registration off `addOutputFlagDryRun`, and update
-  `docs/advanced/automation.md`'s table plus the Machine-readable output
-  posture in `specs/state-model.md` in the same change.
-- Related: `internal/cli/scope_check_cmd.go`, `internal/cli/flags.go`
-
-## B-062 — `validate` stays silent about files `Environment.spec.resources[]` excludes
-- Status: open
-- Area: state / validation
-- Origin: ux-review 2026-08-01; the spec rule (state-model.md, Environment) landed in the same change, unimplemented
-- Severity: high
-- Problem: `internal/state/desired/resources.go` validates selection in one
-  direction only (a selected object naming an excluded one errs); an authored
-  file the allow-list excludes is silently not loaded — `validate`, `plan`,
-  and `apply` all read clean while the operator's add-ons or playbooks never
-  run. The foldered examples' no-op whole-tree lists were removed in this
-  change; the warning is the missing half.
-- Exit: implement the warning exactly as specified in `specs/state-model.md`
-  (Environment): one line per excluded discovered YAML file, naming the file
-  and the authored objects it contains, warning severity.
-- Related: `internal/state/desired/resources.go`
-
-## B-063 — Strict decode gives no redirect for relocated or renamed native keys
-- Status: open
-- Area: state / diagnostics
-- Origin: ux-review 2026-08-01; the Validation Rules clauses landed in the same change, partially implemented (Ceph validators already redirect)
-- Severity: medium
-- Problem: `internal/state/desired/decode_diagnostic.go` suggests only
-  same-struct fields within Levenshtein distance 3, so the systematic
-  install-config translations get a bare `not found in type`: `baseDomain`
-  (owner: `Environment.spec.domains.containerClusters`), `controlPlane`/
-  `compute` (derived from `nodes[].role`), `sshKey` (`nodeSSH.keyPairRef`),
-  `pullSecret` (`pullSecretRef`), `additionalTrustBundle`
-  (`additionalTrustBundleRefs[]`), `apiVIPs`/`ingressVIPs`
-  (`install.endpoints`), `machineNetwork` (`NetworkConfig`). The
-  `provisioningNetwork` rejection also never says the native
-  `Disabled`/`Managed`/`Unmanaged` spellings are the lowercased house style.
-- Exit: a native-key redirect table keyed by (kind path, native key),
-  consulted before the Levenshtein fallback, emitting
-  `field "<native>" is not authored here; <where>` with the owners above; and
-  the `provisioningNetwork` message naming the native spellings. The Native
-  mapping tables under `docs/concepts/` are the same data — keep them in sync.
-- Related: `internal/state/desired/decode_diagnostic.go`,
-  `internal/state/desired/validate_cluster_install.go`
-
-## B-064 — An inexpressible managed-OS install network silently falls back to DHCP
-- Status: open
-- Area: render / managed-os
-- Origin: ux-review 2026-08-01; docs/advanced/managed-os.md now documents the subset
-- Severity: high
-- Problem: `internal/render/inventory/vars_machine_os_network.go` renders one
-  kickstart `network` stanza from the primary interface and handles only
-  `ethernet`/`vlan`/`bond` with an IPv4 address; a bridge-primary, IPv6-only,
-  or multi-addressed machine passes validation and installs with
-  `network --device=link --bootproto=dhcp` — a network posture that was never
-  authored, surfacing as an SSH timeout after the disk was wiped.
-- Exit: fail closed at validation for a `Machine` with `os.provided: false`
-  whose effective install network cannot be expressed as an Anaconda `network`
-  directive, naming the machine, the interface, the reason (bridge primary /
-  no IPv4 / N addressed interfaces), and the `os.provided: true` alternative.
-- Related: `internal/render/inventory/vars_machine_os_network.go`,
-  `ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2`
-
-## B-065 — Previews forecast the `protected` token but not `data-loss` or `--purge-history`
-- Status: open
-- Area: cli / safety
-- Origin: ux-review 2026-08-01
-- Severity: medium
-- Problem: `destroy --dry-run` prints "a mutating destroy requires
-  --authorize protected" (`internal/cli/destroy_output.go`), but the data-loss
-  evaluation is gated on `!dryRun` (`internal/cli/scope_destroy_cmd.go`,
-  `internal/cli/scope_apply_cmd.go`), so the preview the docs designate for
-  learning a run's blast radius cannot show the highest-consequence token the
-  real run will demand.
-- Exit: a preview contract for all three authorization verbs: every
-  dry-run/plan emits a "Required authorizations" block — one line per token
-  the real run will consult, computed on the same predicate the real run uses,
-  with supplied tokens listed as satisfied — in text and as a
-  `requiredAuthorizations` JSON array; matrix rows assert a dry run names
-  every token its non-dry counterpart refuses on; record the contract in
-  `specs/state-model.md` (CLI Contract) when it lands.
-- Related: `internal/cli/scope_destroy_cmd.go`, `internal/cli/scope_apply_cmd.go`,
-  `internal/cli/apply_destroy_safety_matrix_test.go`
-
-## B-066 — `destroy --help` renders eleven token descriptions as one ~1,900-character run
-- Status: open
-- Area: cli / help
-- Origin: ux-review 2026-08-01
-- Severity: low
-- Problem: `flagAuthorizeUsage` (`internal/cli/authorize.go`) joins every
-  accepted token's full prose with `"; "` into a single cobra flag-usage
-  string; on `destroy` that is ~1,900 characters wrapped as one flag entry, so
-  operators learn the vocabulary by triggering refusals instead — the habit
-  the `--authorize all` warning exists to prevent.
-- Exit: one-line flag usage naming the verb's accepted tokens; an
-  "Authorizations:" block in each command's Long help, one token per line with
-  a ≤120-character gloss; the long prose stays in the spec, operations.md, and
-  the refusals; a guard asserts every accepted token appears in its verb's
-  Long help.
-- Related: `internal/cli/authorize.go`, `internal/cli/workflow_cmd.go`
-
-## B-067 — Guard extensions the 2026-08-01 definition changes call for
-- Status: open
-- Area: repo checks
-- Origin: ux-review 2026-08-01; each guarded artifact landed in that change
-- Severity: low
-- Problem: five new definition surfaces have no guard yet, so they can drift
-  the way the pre-review prose did: (1) the `accepted by` column of the
-  `--authorize` tables (`specs/state-model.md`, `docs/advanced/operations.md`)
-  is not asserted against `authorizationToken.verbs`
-  (`internal/cli/authorize_contract_test.go` checks token names only); (2)
-  `retiredCLIVocabulary` scans only Markdown, never Go source under
-  `internal/`/`cmd/` (B-060's escape route); (3) the shared-service
-  classification table (`specs/state-model.md`, Selection and stages) is not
-  set-compared with `selfContainedSharedServiceSlots`
-  (`internal/state/graph/services.go`); (4) no check constrains
-  `docs/concepts/*.md` Required cells to `Yes|No|Yes (per entry)` or requires
-  a Default column per field table; (5) relations in `specs/adr/README.md`'s
-  third column are not required to appear in the named ADR's `## Status`
-  block.
-- Exit: extend `internal/repo/checks` (and the authorize contract test) with
-  the five assertions; each is a small parser over an artifact whose format
-  this change already fixed.
-- Related: `internal/repo/checks/artifact_sync_test.go`,
-  `internal/cli/authorize_contract_test.go`,
-  `internal/state/graph/services.go`
-
-## B-068 — Tiebreaker drift routes to `--mode rebuild`, and replace-arbiter leaves stale hashes
-- Status: open
-- Area: ceph / safety
-- Origin: ux-review 2026-08-01, adversarial verification of a refuted finding
-- Severity: medium
-- Problem: two residuals around ADR 0042. (a) Re-authoring
-  `spec.ceph.topology.stretch.tiebreaker.node` correctly fails closed as
-  structural drift, but the refusal's remedy points at `--mode rebuild` — the
-  owned-Ceph wipe-and-rebuild — when the right verb is
-  `storage-cluster replace-arbiter` (docs now say so; the refusal text does
-  not). (b) A successful `replace-arbiter` run leaves the recorded storage
-  hashes stale, so the next plain `apply` refuses on drift the verb itself
-  created.
-- Exit: (a) the tiebreaker-only structural-drift refusal names
-  `storage-cluster replace-arbiter --name <cluster>`; (b) replace-arbiter
-  refreshes the recorded desired/structural hashes for the cluster it
-  reconciled, exactly as a successful apply would; matrix rows for both.
-- Related: `internal/converge/workflow/apply_mode_preflight.go`,
-  `internal/cli/storage_cluster_replace_arbiter.go`,
-  [0042](../../specs/adr/0042-moving-the-vote-that-breaks-the-tie.md)
-
-## B-069 — UX-review Later-tier decisions awaiting a product call
+## B-069 — UX-review decisions still awaiting a product call
 - Status: open
 - Area: api / decisions
-- Origin: ux-review 2026-08-01; each item carries a recommendation in the review plan
+- Origin: ux-review 2026-08-01; the review recommended a position on every
+  other item in this entry and those landed, leaving the two below
 - Severity: low
-- Problem: five decisions were surfaced and deliberately not taken in the
-  definitions pass: (1) dual-stack VIPs — `endpoints.<slot>.address` is scalar
-  where native `apiVIPs` is a list; dual-stack is neither supported nor
-  rejected (recommend: declare single-stack the `v1alpha1` scope and fail
-  closed on a second address family; alternative: an ADR promoting `address`
-  to `addresses[]`); (2) the install-config coverage boundary — no passthrough
-  and no documented not-supported list, asymmetric with
-  `spec.ceph.services[]` (an ADR must choose closed-by-design with per-key
-  workarounds, or a narrow `installConfigOverrides` overlay, engaging ADR
-  0008's rationale); (3) `endpoints.<slot>.source.type: node` for single-node
-  clusters, removing the three-way IP duplication docs now warn about; (4)
-  `example init --kind storage-cluster` scaffold parity for the Ceph path;
-  (5) storage authoring shorthands — a derived
-  `StoragePlacementPolicy.spec.ceph.ruleName` default and a CephFS
-  volume-style pool derivation — both need re-scoping before any ADR (the
-  review's verifier corrected their compositions).
-- Exit: user picks per item; an accepted item becomes its own ADR + entry, a
-  rejected one becomes a do-not-re-propose note in the owning knowledge file.
+- Problem: two decisions were surfaced and deliberately not taken, because
+  neither has a recommendation the review was willing to make on the user's
+  behalf. (1) **The install-config coverage boundary.** `ContainerCluster`
+  reaches exactly the keys in `api/v1alpha1/owned_installer_fields.go`, with
+  no passthrough and no published not-supported list — asymmetric with the
+  Ceph path, where `spec.ceph.services[]` accepts service specs Bootwright
+  does not model. Nothing decides whether that asymmetry is the design. An ADR
+  must choose between closed-by-design (every authorable key is a modeled
+  field; an unmodeled key needs a field and an ADR; day-2 intent goes to
+  `ClusterAddon`, which is the only authorable manifest channel today) and a
+  narrow `installConfigOverrides` overlay that rejects owned keys. Either
+  choice has to engage ADR 0008's rationale for mirroring cephadm
+  declaratively, and the honest cost of the closed option is that install-time
+  keys such as `capabilities`, `featureSet`, and `cpuPartitioningMode` are
+  inexpressible with no workaround at all. (2) **Storage authoring
+  shorthands** — a derived `StoragePlacementPolicy.spec.ceph.ruleName` default
+  and a CephFS `fs volume`-style pool derivation. Both need re-scoping before
+  any ADR: the review's own adversarial verification corrected their
+  compositions (the kind has no `type`; failure domain is effective rather
+  than authored; policy-less pools are legal, so the proposed "sole policy"
+  selection rule is inconsistent), and every shipped policy already sets
+  `ruleName` to `metadata.name`, so the urgency is weak.
+- Exit: user picks per item; an accepted item becomes its own ADR plus an
+  implementation entry, a rejected one becomes a do-not-re-propose note in the
+  owning knowledge file.
 - Related: [0008](../../specs/adr/0008-ceph-declarative-cephadm-compat.md),
   [0018](../../specs/adr/0018-environment-domain-model.md),
   [0025](../../specs/adr/0025-composed-names-are-labels-plus-explicit-overrides.md)

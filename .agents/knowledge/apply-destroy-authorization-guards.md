@@ -154,3 +154,36 @@ run that did use it prints which unnamed tokens it stood in for, which is the
 unused-token warning pointed the other way. Adding a future token puts it inside
 `all` on the day it lands, so the disclosure line is the only record of what a
 given run expanded to.
+
+**The preview reads the gate's predicate, not a copy of it.** Every dry run and
+`plan` of the three authorizing verbs emits a `Required authorizations` block,
+so a token is learnable before a refusal teaches it. The rule that keeps the
+block honest is structural: each gate's predicate is captured into one named
+value that the gate, the refusal, the prompt choice and the forecast all read.
+`destroy` splits it as `dataLossReached` (shared) versus
+`dataLossPlanned = dataLossReached && !dryRun` (the real run only) — the split
+is what fixes the original defect, where the whole data-loss evaluation sat
+behind `!dryRun` and the preview could not see the highest-consequence token.
+`apply` accumulates its destructive descriptors in one function both paths call,
+differing only in evidence: the real run passes the live reinstall plan, the
+preview an offline forecast. `protected` keys on the presence of safety reasons
+rather than on `RequiresAuthorization`, which goes false once the token is
+supplied and would have hidden the satisfied case. A token whose evidence lives
+on a host the preview may not contact is disclosed as *may be required* — a
+preview performs no probe to settle one, and silence would read as "none
+needed". Matrix rows assert a dry run names every token its non-dry counterpart
+refuses on.
+
+**The published contract is guard-synced in both directions.** The `accepted by`
+column of the `--authorize` tables in `specs/state-model.md` and
+`docs/advanced/operations.md` is set-compared with each token's verb set
+(`TestAuthorizationAcceptedByColumnMatchesTheConsumingVerbs`); ADR 0030's table
+predates the column and is asserted on token names only. Four sibling guards in
+`internal/repo/checks` cover the artifacts the same review touched: the
+shared-service classification table against `selfContainedSharedServiceSlots`,
+the `docs/concepts/` Required/Default column convention against the spellings
+`docs/concepts/index.md` owns, the ADR index's passive relations against the
+referenced ADR's `## Status` block, and retired CLI vocabulary in Go string
+literals — that last one exists because the Markdown-only scan let a retired
+verb survive in `internal/status/hints.go` and end the next-step spine on an
+unknown command.
