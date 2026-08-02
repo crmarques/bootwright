@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/roles"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -21,16 +22,27 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 			if !ok || !v1alpha1.MachineInstallsOS(machine) {
 				continue
 			}
+			profile, hasProfile := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
+			if !hasProfile {
+				continue
+			}
+			installRole := roles.LookupOSInstallRole(profile.Spec.Installer)
+			if installRole == "" {
+				continue
+			}
 			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, paths)
 			component["machineRef"] = managedOSTaskHost(state, m)
 			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, paths); len(osInstall) > 0 {
 				component["osInstall"] = osInstall
-				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name), machineOSRedfishVirtualMediaEndpoint(state, machine))
-				if boot != nil {
-					boot["readiness"] = map[string]any{
-						"type": "none",
+				component["osInstallRole"] = installRole
+				if profile.Spec.Installer.Anaconda != nil {
+					boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name), machineOSRedfishVirtualMediaEndpoint(state, machine))
+					if boot != nil {
+						boot["readiness"] = map[string]any{
+							"type": "none",
+						}
+						component["boot"] = boot
 					}
-					component["boot"] = boot
 				}
 				components = append(components, component)
 			}

@@ -67,7 +67,55 @@ type MachineInstallOS struct {
 }
 
 type MachineInstallProfileInstaller struct {
-	Anaconda *MachineInstallAnaconda `yaml:"anaconda,omitempty" json:"anaconda,omitempty"`
+	Anaconda      *MachineInstallAnaconda      `yaml:"anaconda,omitempty" json:"anaconda,omitempty"`
+	TemplateClone *MachineInstallTemplateClone `yaml:"templateClone,omitempty" json:"templateClone,omitempty"`
+}
+
+func (i MachineInstallProfileInstaller) ArmCount() int {
+	count := 0
+	for _, set := range []bool{i.Anaconda != nil, i.TemplateClone != nil} {
+		if set {
+			count++
+		}
+	}
+	return count
+}
+
+func (i MachineInstallProfileInstaller) Mode() string {
+	switch {
+	case i.Anaconda != nil:
+		return MachineInstallModeAnaconda
+	case i.TemplateClone != nil:
+		return MachineInstallModeTemplateClone
+	default:
+		return ""
+	}
+}
+
+type MachineInstallTemplateClone struct {
+	Seed MachineInstallCloneSeed `yaml:"seed" json:"seed"`
+}
+
+type MachineInstallCloneSeed struct {
+	CloudInit *MachineInstallCloudInitSeed `yaml:"cloudInit,omitempty" json:"cloudInit,omitempty"`
+}
+
+func (s MachineInstallCloneSeed) ArmCount() int {
+	count := 0
+	for _, set := range []bool{s.CloudInit != nil} {
+		if set {
+			count++
+		}
+	}
+	return count
+}
+
+type MachineInstallCloudInitSeed struct {
+	GrowRootFilesystem *bool `yaml:"growRootFilesystem,omitempty" json:"growRootFilesystem,omitempty"`
+}
+
+func MachineInstallCloudInitGrowRootFilesystem(seed *MachineInstallCloudInitSeed) bool {
+	return seed == nil || seed.GrowRootFilesystem == nil || *seed.GrowRootFilesystem
 }
 
 type MachineInstallAnaconda struct {

@@ -45,6 +45,8 @@ const (
 	MachineInstallOSFamilyRHEL        = "rhel"
 	MachineImageMediaTypeDVD          = "dvd"
 	MachineImageMediaTypeBoot         = "boot"
+	MachineInstallModeAnaconda        = "anaconda"
+	MachineInstallModeTemplateClone   = "templateClone"
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 	MachineInstallPackageEnvMinimal   = "minimal"
@@ -92,6 +94,8 @@ const (
 	DefaultSSHPort = 22
 
 	MachineInstallPasswordLocked = "locked"
+
+	MachineInstallCloneDisableMarkerPath = "/etc/cloud/cloud-init.disabled"
 
 	MachineInstallRepositoryFileDir     = "/etc/yum.repos.d"
 	MachineInstallRepositoryFilePrefix  = "bootwright-"

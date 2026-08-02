@@ -30,9 +30,19 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		return nil
 	}
 	profile, ok := stateview.MachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
-	if !ok || profile.Spec.Installer.Anaconda == nil {
+	if !ok {
 		return nil
 	}
+	switch profile.Spec.Installer.Mode() {
+	case v1alpha1.MachineInstallModeAnaconda:
+		return machineOSInstallAnacondaVars(state, ci, m, machine, profile, clusterName, paths)
+	case v1alpha1.MachineInstallModeTemplateClone:
+		return machineOSInstallCloneVars(state, ci, m, machine, profile, clusterName, paths)
+	}
+	return nil
+}
+
+func machineOSInstallAnacondaVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, profile v1alpha1.MachineInstallProfile, clusterName string, paths PathOptions) map[string]any {
 	image, ok := stateview.MachineImage(state, profile.Spec.Installer.Anaconda.ImageRef.Name)
 	if !ok {
 		return nil

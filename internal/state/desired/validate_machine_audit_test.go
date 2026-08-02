@@ -169,20 +169,24 @@ func TestMachineInstallRepositoryIDCharacters(t *testing.T) {
 	}
 }
 
+func installProfileWithOS(os v1alpha1.MachineInstallOS) v1alpha1.MachineInstallProfile {
+	return v1alpha1.MachineInstallProfile{Spec: v1alpha1.MachineInstallProfileSpec{OS: os}}
+}
+
 func TestMachineInstallOSFloor(t *testing.T) {
-	if errs := validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{Family: "rhel", Version: "9.7"}); len(errs) != 0 {
+	if errs := validateMachineInstallOSFloor("os", installProfileWithOS(v1alpha1.MachineInstallOS{Family: "rhel", Version: "9.7"})); len(errs) != 0 {
 		t.Fatalf("rhel 9.7 rejected: %v", errs)
 	}
-	if errs := validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{Family: "rhel", Version: "10.1"}); len(errs) != 0 {
+	if errs := validateMachineInstallOSFloor("os", installProfileWithOS(v1alpha1.MachineInstallOS{Family: "rhel", Version: "10.1"})); len(errs) != 0 {
 		t.Fatalf("rhel 10.1 rejected: %v", errs)
 	}
-	if !containsSubstring(validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{Family: "rhel", Version: "8.10"}), "below the supported floor") {
+	if !containsSubstring(validateMachineInstallOSFloor("os", installProfileWithOS(v1alpha1.MachineInstallOS{Family: "rhel", Version: "8.10"})), "below the supported floor") {
 		t.Fatalf("expected rhel 8.10 rejection")
 	}
-	if !containsSubstring(validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{Family: "centos", Version: "9"}), "is not supported") {
+	if !containsSubstring(validateMachineInstallOSFloor("os", installProfileWithOS(v1alpha1.MachineInstallOS{Family: "centos", Version: "9"})), "is not supported") {
 		t.Fatalf("expected non-rhel family rejection")
 	}
-	if errs := validateMachineInstallOSFloor("os", v1alpha1.MachineInstallOS{}); len(errs) != 0 {
+	if errs := validateMachineInstallOSFloor("os", installProfileWithOS(v1alpha1.MachineInstallOS{})); len(errs) != 0 {
 		t.Fatalf("empty OS rejected here: %v", errs)
 	}
 }

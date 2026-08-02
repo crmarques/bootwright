@@ -41,6 +41,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateUniqueMachineFQDNs(state))...)
 	errs = append(errs, notes(validateClusterBoundHostnameSource(state))...)
 	errs = append(errs, notes(validateAnacondaRootDeviceHintsAreUsable(state))...)
+	errs = append(errs, notes(validateMachineInstallCloneSubstrate(state))...)
 	errs = append(errs, notes(validateManagedOSCephNodeRootDisk(state))...)
 	errs = append(errs, notes(validateOSDDevicesExcludeRootDisk(state))...)
 	errs = append(errs, notes(validateDiskEncryptionHasATPM(state))...)

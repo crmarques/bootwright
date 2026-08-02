@@ -53,6 +53,57 @@ func networkConfigFamilyIP(entry map[string]any, family string) string {
 	return ""
 }
 
+type RoutedInterface struct {
+	Name string
+	Type string
+	IPv4 string
+}
+
+func NetworkConfigRoutedInterface(config map[string]any) (RoutedInterface, bool) {
+	name := networkConfigDefaultRouteInterface(config)
+	if name == "" {
+		return RoutedInterface{}, false
+	}
+	raw, _ := config["interfaces"].([]any)
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if got, _ := entry["name"].(string); got != name {
+			continue
+		}
+		kind, _ := entry["type"].(string)
+		return RoutedInterface{Name: name, Type: kind, IPv4: networkConfigFamilyIP(entry, "ipv4")}, true
+	}
+	return RoutedInterface{Name: name}, true
+}
+
+func networkConfigDefaultRouteInterface(config map[string]any) string {
+	routes, ok := config["routes"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entries, ok := routes["config"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, item := range entries {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		destination, _ := entry["destination"].(string)
+		if destination != "0.0.0.0/0" {
+			continue
+		}
+		if name, _ := entry["next-hop-interface"].(string); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
 func NetworkConfigDNSServers(config map[string]any) []string {
 	rawResolver, ok := config["dns-resolver"].(map[string]any)
 	if !ok {

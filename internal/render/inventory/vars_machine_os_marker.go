@@ -27,6 +27,9 @@ func stableMarkerInput(osInstall map[string]any) map[string]any {
 		markerBasename(ssh, "knownHostsPath")
 		markerBasename(ssh, "trustDir")
 	}
+	if guest, ok := out["guest"].(map[string]any); ok {
+		markerBasename(guest, "sshPublicKeyPath")
+	}
 	if kickstart, ok := out["kickstart"].(map[string]any); ok {
 		markerBasename(kickstart, "sshPublicKeyPath")
 		if security, ok := kickstart["security"].(map[string]any); ok {

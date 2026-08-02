@@ -29,7 +29,7 @@ func validateMachineImages(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateMachineInstallSubscription(prefix string, profile v1alpha1.MachineInstallProfile, anaconda *v1alpha1.MachineInstallAnaconda, state v1alpha1.State) []string {
+func validateMachineInstallSubscription(prefix string, profile v1alpha1.MachineInstallProfile, state v1alpha1.State) []string {
 	sub := profile.Spec.Subscription
 	if sub == nil {
 		return nil
@@ -43,7 +43,7 @@ func validateMachineInstallSubscription(prefix string, profile v1alpha1.MachineI
 	} else if ent.Spec.Type != v1alpha1.EntitlementTypeRedHatRHEL {
 		errs = append(errs, fmt.Sprintf("%s.subscription.entitlementRef %q resolves to type %q, want %q", prefix, ref, ent.Spec.Type, v1alpha1.EntitlementTypeRedHatRHEL))
 	}
-	if anaconda.PackageSource.GetFromSubscription() != nil {
+	if profile.Spec.Installer.Anaconda.GetPackageSource().GetFromSubscription() != nil {
 		errs = append(errs, prefix+".subscription cannot be combined with installer.anaconda.packageSource.fromSubscription; fromSubscription already registers the node during install")
 	}
 	return errs
@@ -69,41 +69,14 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		if profile.Spec.OS.Architecture == "" {
 			errs = append(errs, prefix+".os.architecture is required")
 		}
-		errs = append(errs, validateMachineInstallOSFloor(prefix+".os", profile.Spec.OS)...)
-		if profile.Spec.Installer.Anaconda == nil {
-			errs = append(errs, prefix+".installer.anaconda is required")
+		errs = append(errs, validateMachineInstallOSFloor(prefix+".os", profile)...)
+		if profile.Spec.Installer.ArmCount() != 1 {
+			errs = append(errs, prefix+".installer must set exactly one of: anaconda, templateClone")
 			continue
 		}
-		anaconda := profile.Spec.Installer.Anaconda
-		imageRef := anaconda.ImageRef.Name
-		bootMedia := ""
-		if imageRef == "" {
-			errs = append(errs, prefix+".installer.anaconda.imageRef is required")
-		} else if image, ok := images[imageRef]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
-		} else {
-			bootMedia = image.Spec.BootMedia
-		}
-		errs = append(errs, validateMachineInstallPackageSource(prefix+".installer.anaconda", bootMedia, anaconda.PackageSource)...)
-		if !anaconda.RedfishVirtualMedia.ArtifactServerEndpoint.IsZero() {
-			errs = append(errs, validateArtifactServerEndpointRef(
-				prefix+".installer.anaconda.redfishVirtualMedia.artifactServerEndpoint",
-				anaconda.RedfishVirtualMedia.ArtifactServerEndpoint,
-				env,
-				components,
-				artifactServerEndpointValidation{RequireManaged: true},
-			)...)
-		}
-		if hostedTree := anaconda.PackageSource.GetHostedTree(); hostedTree != nil {
-			errs = append(errs, validateArtifactServerEndpointRef(
-				prefix+".installer.anaconda.packageSource.hostedTree.artifactServerEndpoint",
-				hostedTree.ArtifactServerEndpoint,
-				env,
-				components,
-				artifactServerEndpointValidation{Required: true, RequireManaged: true, RequireHTTP: true},
-			)...)
-		}
-		errs = append(errs, validateMachineInstallSubscription(prefix, profile, anaconda, state)...)
+		errs = append(errs, validateMachineInstallAnacondaArm(prefix, profile, images, env, components)...)
+		errs = append(errs, validateMachineInstallCloneArm(prefix, profile)...)
+		errs = append(errs, validateMachineInstallSubscription(prefix, profile, state)...)
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
@@ -120,17 +93,58 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateMachineInstallOSFloor(prefix string, os v1alpha1.MachineInstallOS) []string {
+func validateMachineInstallOSFloor(prefix string, profile v1alpha1.MachineInstallProfile) []string {
+	os := profile.Spec.OS
 	if os.Family == "" || os.Version == "" {
 		return nil
 	}
 	if strings.ToLower(os.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
-		return []string{fmt.Sprintf("%s.family %q is not supported; the Anaconda install template targets RHEL 9 or later grammar. Set family: %s", prefix, os.Family, v1alpha1.MachineInstallOSFamilyRHEL)}
+		return []string{fmt.Sprintf("%s.family %q is not supported; Bootwright's managed OS install targets RHEL 9 or later. Set family: %s", prefix, os.Family, v1alpha1.MachineInstallOSFamilyRHEL)}
 	}
 	if major := leadingVersionMajor(os.Version); major > 0 && major < 9 {
+		if profile.Spec.Installer.TemplateClone != nil {
+			return []string{fmt.Sprintf("%s.version %q is below the supported floor; the cloud-init seed and the day-2 nmstate and repository roles target RHEL 9 or later. Use RHEL 9 or later", prefix, os.Version)}
+		}
 		return []string{fmt.Sprintf("%s.version %q is below the supported floor; the Anaconda install template targets RHEL 9 or later grammar (rootpw --allow-ssh, %%packages --exclude-weakdeps). Use RHEL 9 or later", prefix, os.Version)}
 	}
 	return nil
+}
+
+func validateMachineInstallAnacondaArm(prefix string, profile v1alpha1.MachineInstallProfile, images map[string]v1alpha1.MachineImage, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	anaconda := profile.Spec.Installer.Anaconda
+	if anaconda == nil {
+		return nil
+	}
+	var errs []string
+	imageRef := anaconda.ImageRef.Name
+	bootMedia := ""
+	if imageRef == "" {
+		errs = append(errs, prefix+".installer.anaconda.imageRef is required")
+	} else if image, ok := images[imageRef]; !ok {
+		errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
+	} else {
+		bootMedia = image.Spec.BootMedia
+	}
+	errs = append(errs, validateMachineInstallPackageSource(prefix+".installer.anaconda", bootMedia, anaconda.PackageSource)...)
+	if !anaconda.RedfishVirtualMedia.ArtifactServerEndpoint.IsZero() {
+		errs = append(errs, validateArtifactServerEndpointRef(
+			prefix+".installer.anaconda.redfishVirtualMedia.artifactServerEndpoint",
+			anaconda.RedfishVirtualMedia.ArtifactServerEndpoint,
+			env,
+			components,
+			artifactServerEndpointValidation{RequireManaged: true},
+		)...)
+	}
+	if hostedTree := anaconda.PackageSource.GetHostedTree(); hostedTree != nil {
+		errs = append(errs, validateArtifactServerEndpointRef(
+			prefix+".installer.anaconda.packageSource.hostedTree.artifactServerEndpoint",
+			hostedTree.ArtifactServerEndpoint,
+			env,
+			components,
+			artifactServerEndpointValidation{Required: true, RequireManaged: true, RequireHTTP: true},
+		)...)
+	}
+	return errs
 }
 
 func leadingVersionMajor(version string) int {
