@@ -74,6 +74,11 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}
 	printArbiterPlan(stdout, plan, promotion, flags.dryRun)
 	requiredAuth := replaceArbiterRequiredAuthorizations(auth, plan.SameSite(), plan.Degraded, arbiterSameSiteReason(plan))
+	if flags.dryRun {
+		printRequiredAuthorizations(stdout, requiredAuth)
+		warnUnusedAuthorizations(stdout, auth, true)
+		return nil
+	}
 	if plan.SameSite() && !auth.allows(authorizeSameSiteArbiter) {
 		return failErr(1, fmt.Errorf("refusing to make mon.%s the stretch tiebreaker of %s: it sits at %s=%s, which already holds non-tiebreaker mon(s) %s. An arbiter inside a data site cannot break a tie between the two data sites — lose that site and two votes go at once, leaving the survivor without quorum, which is why Ceph itself refuses this without --yes-i-really-mean-it. Put the replacement arbiter in a third site, or, if this is the deliberate emergency fallback while the third site is gone, re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
 			plan.DesiredMon, plan.Cluster, plan.FailureDomain, plan.DesiredSite, strings.Join(plan.SameSiteMons, ", "), plan.Cluster, plan.DesiredMachine, authorizeSameSiteArbiter))
@@ -81,11 +86,6 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if plan.Degraded != "" && !auth.allows(authorizeDegradedQuorum) {
 		return failErr(1, fmt.Errorf("refusing to move the stretch tiebreaker of %s while %s: `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together. Bring those mons back, or re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
 			plan.Cluster, plan.Degraded, plan.Cluster, plan.DesiredMachine, authorizeDegradedQuorum))
-	}
-	if flags.dryRun {
-		printRequiredAuthorizations(stdout, requiredAuth)
-		warnUnusedAuthorizations(stdout, auth, true)
-		return nil
 	}
 	if !flags.yes && !confirm(stdin, stdout, replaceArbiterConfirmPrompt(plan)) {
 		return failErr(1, errArbiterAborted())
