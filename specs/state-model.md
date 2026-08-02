@@ -2192,13 +2192,22 @@ section above.
   `MachineInstallProfile` — must have an install network the kickstart can
   express. Anaconda takes exactly one `network` directive, so the expressible
   subset is a single primary interface of type `ethernet`, `vlan`, or `bond`
-  carrying one IPv4 address, plus an optional default gateway and DNS servers.
+  carrying one IPv4 address or taking one by DHCP, plus an optional default
+  gateway and DNS servers.
   Three postures fail validation, each naming the `Machine`, the interface, the
   reason, and `spec.os.provided: true` as the alternative that hands the
-  install to the operator: the install interface carries no IPv4 address; the
-  primary is an interface type the directive cannot create (a bridge, a team, a
-  VRF); or the address Bootwright reconnects at after the install is not on the
-  interface the directive brings up. A machine that addresses a second
+  install to the operator: the install interface carries neither an IPv4
+  address nor IPv4 DHCP (`ipv4.dhcp: true` with `ipv4.enabled` not `false`) —
+  a machine with no static address at all already renders the same
+  `network --device=link --bootproto=dhcp`, so refusing the DHCP-plus-IPv6 one
+  would contradict it; the primary is an interface type the directive cannot
+  create (a bridge, a team, a VRF); or `access.ssh.addressRef` resolves to a
+  literal IP that is not on the interface the directive brings up. A reference
+  that resolves to the machine's implicit `fqdn` entry names no install-time
+  IP — there is nothing to move onto an interface — so that arm does not apply;
+  which interface answers the name is a DNS question `preflight` checks, and
+  the `fqdn` record must resolve to the `access.ssh` address in any case. A
+  machine that addresses a second
   interface is **not** refused for that alone — the install brings up the
   primary and `nmstatectl apply` adds the rest afterwards, which is how a
   storage node reaches its cluster network. The rule exists because the
@@ -2660,7 +2669,7 @@ verbs that reach machines.
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed | `apply`, `destroy` |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it | `apply` |
   | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed | `destroy`, `storage-cluster replace-arbiter` |
-  | `same-site-arbiter` | promoting a mon that shares its stretch failure domain with the data-site mons to tiebreaker, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two data sites, so losing that site drops two votes at once and the survivor is left without quorum | `storage-cluster replace-arbiter` |
+  | `same-site-arbiter` | promoting a mon to tiebreaker while another mon already sits in its stretch failure domain, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter that shares a site with a voting mon cannot independently break a tie, so losing that site drops two votes at once and the survivor is left without quorum. The usual shape is an arbiter moved inside a data site, but the gate keys on the shared domain, not on the site's role | `storage-cluster replace-arbiter` |
   | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together | `storage-cluster replace-arbiter` |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing | `destroy` |
   | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) | `destroy` |

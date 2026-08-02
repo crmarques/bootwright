@@ -47,7 +47,7 @@ nothing else; the `accepted by` column is normative:
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` | `apply`, `destroy` |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk | `apply` |
 | `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) | `destroy`, `storage-cluster replace-arbiter` |
-| `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker — the emergency fallback when the third site is gone | `storage-cluster replace-arbiter` |
+| `same-site-arbiter` | promoting a mon to stretch tiebreaker while another mon already sits in its site — the emergency fallback when the third site is gone | `storage-cluster replace-arbiter` |
 | `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum | `storage-cluster replace-arbiter` |
 | `unreadable-records` | proceeding when ownership records cannot be read | `destroy` |
 | `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context | `destroy` |
