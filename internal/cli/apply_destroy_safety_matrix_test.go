@@ -356,6 +356,35 @@ func safetyReplaceArbiterCases() []safetyCase {
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictAuthorized,
 		deny:    []string{"not a safe in-place reconcile", "bootwright storage-cluster replace-arbiter --name"},
+	}, {
+		name:    "replace-arbiter/preview: a dry run names every gate the real run consults, in one refusal-free pass",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want: []string{"Required authorizations",
+			"--authorize " + authorizeSameSiteArbiter + ": " + authorizationRequired,
+			"--authorize " + authorizeDegradedQuorum + ": " + authorizationRequired,
+			"--authorize " + authorizeUnreachableNodes + ": " + authorizationMaybe},
+		deny: []string{"refusing to"},
+	}, {
+		name:    "replace-arbiter/preview: the non-dry counterpart refuses on the first token the preview named",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"refusing to", "--authorize " + authorizeSameSiteArbiter},
+	}, {
+		name:    "replace-arbiter/preview: the non-dry counterpart then refuses on the second token the preview named",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeSameSiteArbiter, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"refusing to move the stretch tiebreaker", "--authorize " + authorizeDegradedQuorum},
+	}, {
+		name:    "replace-arbiter/preview: a supplied token reads satisfied and still previews the gate it clears",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeDegradedQuorum, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want: []string{"--authorize " + authorizeDegradedQuorum + ": " + authorizationSatisfied,
+			"--authorize " + authorizeSameSiteArbiter + ": " + authorizationRequired},
 	}}
 }
 
