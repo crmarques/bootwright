@@ -159,6 +159,7 @@ clusters/
     add-on-binding.yaml
   storage/<cluster>/
     cluster.yaml
+    nodes/
     placement.yaml
     pools/
     filesystems/

@@ -135,9 +135,10 @@ at your path instead.
 
 ## The Setup Mechanics
 
-Both cluster guides obtain an input tree (OpenShift scaffolds one with
-`example init`; Ceph copies an example), then run the same setup sequence against
-it. Those steps are explained once here; the guides simply run them.
+Both cluster guides obtain an input tree — `bootwright example init` scaffolds
+one for either kind (`--kind container-cluster`, the default, or
+`--kind storage-cluster`) — then run the same setup sequence against it. Those
+steps are explained once here; the guides simply run them.
 
 After any command, `bootwright status` reports readiness and prints the suggested
 next command — lean on it as you work.
