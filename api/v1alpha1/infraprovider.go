@@ -77,7 +77,8 @@ type NetworkAttachmentLibvirt struct {
 }
 
 type NetworkAttachmentVSphere struct {
-	Portgroup string `yaml:"portgroup" json:"portgroup"`
+	Portgroup         string `yaml:"portgroup" json:"portgroup"`
+	DistributedSwitch string `yaml:"distributedSwitch,omitempty" json:"distributedSwitch,omitempty"`
 }
 
 type NetworkAttachmentBareMetal struct {

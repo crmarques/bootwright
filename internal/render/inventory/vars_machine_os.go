@@ -68,6 +68,7 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		network := machine.Spec.Network.Config
 		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
 			bindings = append(bindings, v1alpha1.MachineNetworkBinding{
+				MachineName:      machine.Metadata.Name,
 				NetworkConfigRef: network.NetworkConfigRef,
 				ProviderRef:      machine.Spec.Substrate.ProviderRef,
 				AttachmentRef:    network.AttachmentRef,

@@ -28,6 +28,9 @@
         | map('combine', {'name': bootwright_vsphere_portgroup,
                           'device_type': bootwright_vsphere_nic_device,
                           'start_connected': true})
+        | map('combine', {'dvswitch_name': bootwright_vsphere_dvswitch}
+                         if (bootwright_vsphere_dvswitch | default('') | length > 0)
+                         else {})
         | list
       }}
   changed_when: false

@@ -52,8 +52,16 @@ func NetworkAttachment(p v1alpha1.InfraProvider, name string) (v1alpha1.NetworkA
 	return v1alpha1.NetworkAttachmentCapability{}, false
 }
 
-func MachineNetworkBinding(ci v1alpha1.ClusterInstall, providerName, networkName string) (v1alpha1.MachineNetworkBinding, bool) {
+func MachineNetworkBinding(ci v1alpha1.ClusterInstall, machineName, providerName, networkName string) (v1alpha1.MachineNetworkBinding, bool) {
 	for _, binding := range ci.NetworkBindings {
+		if binding.MachineName != "" && binding.MachineName == machineName {
+			return binding, true
+		}
+	}
+	for _, binding := range ci.NetworkBindings {
+		if binding.MachineName != "" {
+			continue
+		}
 		if binding.ProviderRef.Name == providerName && binding.NetworkConfigRef.Name == networkName {
 			return binding, true
 		}

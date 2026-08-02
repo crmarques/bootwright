@@ -3,6 +3,7 @@
   ansible.builtin.set_fact:
     bootwright_vsphere: "{{ bootwright_component.vsphere | default({}) }}"
     bootwright_vsphere_portgroup: "{{ bootwright_component.networkAttachment.vsphere.portgroup | default('') }}"
+    bootwright_vsphere_dvswitch: "{{ bootwright_component.networkAttachment.vsphere.distributedSwitch | default('') }}"
     bootwright_vsphere_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_vsphere_ownership_marker: >-
       bootwright:context={{ bootwright_clusters_dir | dirname | basename }}

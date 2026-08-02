@@ -6,7 +6,7 @@ import (
 )
 
 func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine) map[string]any {
-	binding, ok := stateview.MachineNetworkBinding(ci, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
+	binding, ok := stateview.MachineNetworkBinding(ci, m.Name, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
 	if !ok {
 		return nil
 	}
@@ -54,7 +54,11 @@ func networkAttachmentVars(attachment v1alpha1.NetworkAttachmentCapability) map[
 		out["libvirt"] = map[string]any{"bridge": attachment.Libvirt.Bridge}
 	case attachment.VSphere != nil:
 		out["kind"] = v1alpha1.ProvisionerVSphere
-		out["vsphere"] = map[string]any{"portgroup": attachment.VSphere.Portgroup}
+		vsphere := map[string]any{"portgroup": attachment.VSphere.Portgroup}
+		if attachment.VSphere.DistributedSwitch != "" {
+			vsphere["distributedSwitch"] = attachment.VSphere.DistributedSwitch
+		}
+		out["vsphere"] = vsphere
 	case attachment.KubeVirt != nil:
 		out["kind"] = v1alpha1.ProvisionerKubeVirt
 		out["kubevirt"] = map[string]any{"nad": networkRefMultusName(attachment.KubeVirt.NetworkRef)}
