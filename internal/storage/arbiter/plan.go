@@ -141,13 +141,13 @@ func ValidateCandidate(state v1alpha1.State, cluster v1alpha1.StorageCluster, ma
 		return fmt.Errorf("--new-arbiter-machine %q matches no Machine in this context; the replacement arbiter is authored, not discovered", machineName)
 	}
 	if !v1alpha1.MachineHasCapability(machine, v1alpha1.MachineCapabilityCephNode) {
-		return fmt.Errorf("Machine/%s lacks capability %q, so it cannot carry a Ceph mon; add %q (and %q to mark it an arbiter candidate) and run `bootwright context update`", machineName, v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephArbiter)
+		return fmt.Errorf("the arbiter candidate Machine/%s lacks capability %q, so it cannot carry a Ceph mon; add %q (and %q to mark it an arbiter candidate) and run `bootwright context update`", machineName, v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephArbiter)
 	}
 	if !v1alpha1.MachineHasCapability(machine, v1alpha1.MachineCapabilityCephArbiter) {
-		return fmt.Errorf("Machine/%s does not declare capability %q; an arbiter replacement only moves the tiebreaker onto a machine authored to hold it, so add that capability and run `bootwright context update`", machineName, v1alpha1.MachineCapabilityCephArbiter)
+		return fmt.Errorf("the arbiter candidate Machine/%s does not declare capability %q; an arbiter replacement only moves the tiebreaker onto a machine authored to hold it, so add that capability and run `bootwright context update`", machineName, v1alpha1.MachineCapabilityCephArbiter)
 	}
 	if owner, node, ok := boundElsewhere(state, cluster.Metadata.Name, machineName); ok {
-		return fmt.Errorf("Machine/%s is already node %q of %s; a machine is node-bound by at most one cluster, so it cannot also become the arbiter of %s — pick an unbound arbiter candidate or release that node first", machineName, node, owner, cluster.Metadata.Name)
+		return fmt.Errorf("the arbiter candidate Machine/%s is already node %q of %s; a machine is node-bound by at most one cluster, so it cannot also become the arbiter of %s — pick an unbound arbiter candidate or release that node first", machineName, node, owner, cluster.Metadata.Name)
 	}
 	return nil
 }
