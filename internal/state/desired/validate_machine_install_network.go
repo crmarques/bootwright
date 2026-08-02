@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -17,10 +18,11 @@ var anacondaNetworkInterfaceTypes = map[string]bool{
 }
 
 type installNetworkInterface struct {
-	name string
-	kind string
-	v4   []string
-	v6   []string
+	name  string
+	kind  string
+	v4    []string
+	v6    []string
+	dhcp4 bool
 }
 
 func validateMachineInstallNetwork(owner string, machine v1alpha1.Machine, config map[string]any) []string {
@@ -28,16 +30,19 @@ func validateMachineInstallNetwork(owner string, machine v1alpha1.Machine, confi
 		return nil
 	}
 	var addressed, unreachable []installNetworkInterface
+	dhcp4 := false
 	for _, iface := range installNetworkInterfaces(config) {
 		switch {
 		case len(iface.v4) > 0:
 			addressed = append(addressed, iface)
+		case iface.dhcp4:
+			dhcp4 = true
 		case len(iface.v6) > 0:
 			unreachable = append(unreachable, iface)
 		}
 	}
 	if len(addressed) == 0 {
-		if len(unreachable) == 0 {
+		if dhcp4 || len(unreachable) == 0 {
 			return nil
 		}
 		return []string{fmt.Sprintf("%s carries no IPv4 address; interface %q is addressed %s only, and an Anaconda network directive expresses IPv4 static addressing or DHCP and nothing else, so the install would run `network --device=link --bootproto=dhcp` and the machine would never answer at its authored address once its disk had been wiped. Give the install interface an IPv4 address, %s",
@@ -52,6 +57,9 @@ func validateMachineInstallNetwork(owner string, machine v1alpha1.Machine, confi
 		return nil
 	}
 	reach := v1alpha1.MachineSSHAddress(machine)
+	if net.ParseIP(reach) == nil {
+		return nil
+	}
 	if machineInstallNetworkCarries(primary, reach) {
 		return nil
 	}
@@ -60,9 +68,6 @@ func validateMachineInstallNetwork(owner string, machine v1alpha1.Machine, confi
 }
 
 func machineInstallNetworkCarries(iface installNetworkInterface, address string) bool {
-	if address == "" {
-		return false
-	}
 	for _, ip := range iface.v4 {
 		if ip == address {
 			return true
@@ -96,13 +101,26 @@ func installNetworkInterfaces(config map[string]any) []installNetworkInterface {
 		}
 		kind, _ := entry["type"].(string)
 		out = append(out, installNetworkInterface{
-			name: name,
-			kind: kind,
-			v4:   networkConfigFamilyAddresses(entry, "ipv4"),
-			v6:   networkConfigFamilyAddresses(entry, "ipv6"),
+			name:  name,
+			kind:  kind,
+			v4:    networkConfigFamilyAddresses(entry, "ipv4"),
+			v6:    networkConfigFamilyAddresses(entry, "ipv6"),
+			dhcp4: networkConfigFamilyUsesDHCP(entry, "ipv4"),
 		})
 	}
 	return out
+}
+
+func networkConfigFamilyUsesDHCP(entry map[string]any, family string) bool {
+	familyConfig, ok := entry[family].(map[string]any)
+	if !ok {
+		return false
+	}
+	if enabled, ok := familyConfig["enabled"].(bool); ok && !enabled {
+		return false
+	}
+	dhcp, _ := familyConfig["dhcp"].(bool)
+	return dhcp
 }
 
 func networkConfigFamilyAddresses(entry map[string]any, family string) []string {

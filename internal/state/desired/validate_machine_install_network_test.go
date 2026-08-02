@@ -36,7 +36,27 @@ func installNetworkConfig(defaultRoute string, interfaces ...map[string]any) map
 	return config
 }
 
+func installNetworkDHCPIface(name, kind string) map[string]any {
+	return map[string]any{
+		"name": name,
+		"type": kind,
+		"ipv4": map[string]any{"enabled": true, "dhcp": true},
+	}
+}
+
+func installNetworkAddIPv6(entry map[string]any, ip string) map[string]any {
+	entry["ipv6"] = map[string]any{
+		"enabled": true,
+		"address": []any{map[string]any{"ip": ip, "prefix-length": 64}},
+	}
+	return entry
+}
+
 func installingMachine(sshAddress string) v1alpha1.Machine {
+	return installingMachineReachedBy("ssh", sshAddress)
+}
+
+func installingMachineReachedBy(addressName, address string) v1alpha1.Machine {
 	provided := false
 	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "node-0"},
@@ -45,9 +65,9 @@ func installingMachine(sshAddress string) v1alpha1.Machine {
 				Provided:          &provided,
 				InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9"},
 			},
-			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: sshAddress}},
+			Addresses: []v1alpha1.MachineAddress{{Name: addressName, Address: address}},
 			Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
-				AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+				AddressRef: v1alpha1.LocalObjectReference{Name: addressName},
 			}},
 		},
 	}
@@ -125,6 +145,55 @@ func TestValidateMachineInstallNetworkRefusesInexpressibleInstallNetworks(t *tes
 				t.Errorf("refusal =\n%q\nwant\n%q", errs[0], tc.want)
 			}
 		})
+	}
+}
+
+func TestValidateMachineInstallNetworkAcceptsASecondInterfaceWhenTheReconnectIsByName(t *testing.T) {
+	const owner = "Machine/node-0 spec.network.config"
+	machine := installingMachineReachedBy(v1alpha1.MachineAddressFQDN, "node-0.example.test")
+	config := installNetworkConfig("bond0.200",
+		installNetworkIface("bond0.200", "vlan", "ipv4", "192.168.140.20"),
+		installNetworkIface("bond0.201", "vlan", "ipv4", "192.168.141.20"))
+
+	if errs := validateMachineInstallNetwork(owner, machine, config); len(errs) != 0 {
+		t.Fatalf("name reconnect rejected: %v", errs)
+	}
+
+	bridged := installNetworkConfig("br0",
+		installNetworkIface("eno1", "ethernet", "ipv4", "192.168.140.20"),
+		installNetworkIface("br0", "linux-bridge", "ipv4", "192.168.141.20"))
+	if errs := validateMachineInstallNetwork(owner, machine, bridged); len(errs) != 1 {
+		t.Fatalf("errs = %v, want the bridge-primary refusal to still fire", errs)
+	}
+
+	ipReconnect := installingMachineReachedBy("ip", "192.168.141.20")
+	if errs := validateMachineInstallNetwork(owner, ipReconnect, config); len(errs) != 1 {
+		t.Fatalf("errs = %v, want the off-primary IP reconnect to still be refused", errs)
+	}
+}
+
+func TestValidateMachineInstallNetworkAcceptsDHCPv4CarryingAStaticIPv6(t *testing.T) {
+	const owner = "Machine/node-0 spec.network.config"
+	machine := installingMachineReachedBy(v1alpha1.MachineAddressFQDN, "node-0.example.test")
+	config := installNetworkConfig("eno1",
+		installNetworkAddIPv6(installNetworkDHCPIface("eno1", "ethernet"), "2001:db8::20"))
+
+	if errs := validateMachineInstallNetwork(owner, machine, config); len(errs) != 0 {
+		t.Fatalf("dhcp4 install network rejected: %v", errs)
+	}
+
+	static := installNetworkDHCPIface("eno1", "ethernet")
+	static["ipv4"] = map[string]any{"enabled": true, "dhcp": false}
+	if errs := validateMachineInstallNetwork(owner, machine, installNetworkConfig("eno1",
+		installNetworkAddIPv6(static, "2001:db8::20"))); len(errs) != 1 {
+		t.Fatalf("errs = %v, want the ipv6-only refusal to still fire without dhcp4", errs)
+	}
+
+	off := installNetworkDHCPIface("eno1", "ethernet")
+	off["ipv4"] = map[string]any{"enabled": false, "dhcp": true}
+	if errs := validateMachineInstallNetwork(owner, machine, installNetworkConfig("eno1",
+		installNetworkAddIPv6(off, "2001:db8::20"))); len(errs) != 1 {
+		t.Fatalf("errs = %v, want a disabled ipv4 stanza to stay refused", errs)
 	}
 }
 
