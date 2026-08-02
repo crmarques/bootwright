@@ -108,7 +108,12 @@ Rules:
   legitimate: `warning: Environment/<env> spec.resources excludes <relpath>
   (<Kind>/<name>[, ...]); remove the path from spec.resources or add "<dir>"
   to load it`. When `resources[]` is omitted nothing is excluded and no
-  warning is possible.
+  warning is possible. A discovered file that declares no Bootwright object is
+  not reported: the warning exists for authored intent that silently never
+  runs, and a stray note or a vendored YAML is neither. `<dir>` is the path to
+  add — the file's own relative path when it sits beside the `Environment`,
+  because `resources[]` rejects `"."` and advice that fails validation is not
+  advice.
 - Every referenced Bootwright resource must also be selected.
 - `containerClusters[]` and `storageClusters[]`, when set, are the effective
   fleet selection lists for render, apply, status, destroy, and check flows.
@@ -2151,19 +2156,26 @@ section above.
   `machineNetwork[].cidr` of its selected `NetworkConfig`; an address outside
   every machine network fails validation naming the `Machine`, the
   `interfaceAddresses` entry, and the resolved IP.
-- A `Machine` with `os.provided: false` must have an install network the
-  managed-OS install can express. Anaconda takes exactly one `network`
-  directive, so the expressible subset is a single primary interface of type
-  `ethernet`, `vlan`, or `bond` carrying one IPv4 address, plus an optional
-  default gateway and DNS servers. An effective install network outside that
-  subset — a bridge primary, no IPv4 address, or more than one addressed
-  interface — fails validation naming the `Machine`, the interface, which of
-  those reasons applies, and `spec.os.provided: true` as the alternative that
-  hands the install to the operator. The rule exists because the alternative is
-  silent: the kickstart otherwise falls back to
+- A `Machine` Bootwright installs an OS on — `os.provided: false` with a
+  `MachineInstallProfile` — must have an install network the kickstart can
+  express. Anaconda takes exactly one `network` directive, so the expressible
+  subset is a single primary interface of type `ethernet`, `vlan`, or `bond`
+  carrying one IPv4 address, plus an optional default gateway and DNS servers.
+  Three postures fail validation, each naming the `Machine`, the interface, the
+  reason, and `spec.os.provided: true` as the alternative that hands the
+  install to the operator: the install interface carries no IPv4 address; the
+  primary is an interface type the directive cannot create (a bridge, a team, a
+  VRF); or the address Bootwright reconnects at after the install is not on the
+  interface the directive brings up. A machine that addresses a second
+  interface is **not** refused for that alone — the install brings up the
+  primary and `nmstatectl apply` adds the rest afterwards, which is how a
+  storage node reaches its cluster network. The rule exists because the
+  alternative is silent: the kickstart otherwise falls back to
   `network --device=link --bootproto=dhcp`, a posture nobody authored, and the
-  machine is unreachable only after its disk is wiped. The subset is enumerated
-  in `docs/advanced/managed-os.md`.
+  machine is unreachable only after its disk is wiped. A machine with
+  `os.provided: false` and no install profile is out of scope — it boots the
+  agent image from the full `NetworkConfig`, where bridges and IPv6 are
+  expressible. The subset is enumerated in `docs/advanced/managed-os.md`.
 - Bare-metal boot requires BMC details and artifact access suitable for the
   configured boot method.
 - KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot
@@ -2284,16 +2296,20 @@ differences from degraded probes.
 
 `preflight` answers in JSON without `--dry-run`, because the question it exists
 to answer — is this fleet ready to apply? — is answered by running the checks,
-not by planning them. It reports one entry per executed check: the check's
-name, the target it ran against, a status of `ok`, `fail`, or `skip`, the
-detail behind that status, and the fix its human report names; plus a summary
-of the totals. Requiring `--dry-run` before JSON binds the **mutating** verbs
-only, where a plan is the one thing safe to emit without acting; a read-only
-check verb keeps its `--dry-run` JSON for the plan it would have run. Exit
-codes do not change with the output format, and machine-readable output
-suppresses every prompt — the interactive host-key trust prompt included — so
-a check that would have prompted reports `skip` with that as its detail
-instead of stalling a pipeline.
+not by planning them. Every target answers in one shape: `context`, `target`,
+`ok`, a `checks[]` of `{name, target, status, detail, impact, fix}`, a
+`summary` of `{total, failed}`, and the run `log` where one was written.
+`status` is `ok`, `warn`, `info`, `skip`, or `fail`, and only `fail` counts
+toward `summary.failed` and the exit code — a warning is disclosed without
+failing a pipeline. Controller-side checks come first, and a failure among them
+ends the run before any host is contacted; otherwise the Ansible preflight's
+own outcome is the last entry. Requiring `--dry-run` before JSON binds the
+**mutating** verbs only, where a plan is the one thing safe to emit without
+acting; `preflight --dry-run --output json` still reports the plan it would
+have run. Exit codes do not change with the output format, and machine-readable
+output suppresses every prompt — the interactive host-key trust prompt included
+— so a check that would have prompted reports its status instead of stalling a
+pipeline.
 
 ### Global flags
 
@@ -2642,6 +2658,13 @@ verbs that reach machines.
   closed. A device that is simply absent is neither refused nor wiped — it is
   skipped, reported as a declaration that does not match the hardware, and left
   to fail at OSD readiness where the count is the diagnosis.
+- Every verb that accepts `--authorize` publishes its own accepted tokens in
+  its help: the flag usage names the tokens and nothing more, and an
+  `Authorizations:` block in the command's long help lists one token per line
+  with a gloss of at most 120 characters. A token's full consequence stays in
+  the table above, in `docs/advanced/operations.md`, and in the refusal that
+  names it — a flag usage that inlines every token's prose teaches the
+  vocabulary by refusal instead of by reading.
 - Every preview of an authorizing verb — `plan`, `apply --dry-run`,
   `destroy --dry-run`, and `storage-cluster replace-arbiter --dry-run` —
   reports the authorizations the real run will demand, under a **Required
@@ -2651,8 +2674,12 @@ verbs that reach machines.
   invocation already supplied as satisfied, and, when a token's predicate
   cannot be settled without contacting a host the preview may not contact,
   names it as *may be required* with that as the reason rather than omitting
-  it. JSON previews carry the same set as `requiredAuthorizations`. A preview
-  that names no token is the positive statement that the real run needs none.
+  it. JSON previews carry the same set as `requiredAuthorizations`, always
+  present and empty rather than absent when no gate is reached. A preview that
+  names no token is the positive statement that the real run needs none.
+  `destroy --purge-history` discloses in the preview the state tree a real run
+  would delete, for the same reason: the highest-consequence part of a run must
+  be legible before it happens, not only after.
   This is the preview half of the one-predicate rule: the gate, the refusal,
   the prompt choice, and this block read one consequence predicate, so a
   preview cannot under-report what the run then refuses on.
@@ -3116,4 +3143,26 @@ verbs that reach machines.
   run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an
   operator reaching for `--mode rebuild` or `destroy`.
+  Every spine entry is either a command the CLI accepts verbatim — it resolves
+  to a registered command path and carries only flags that command registers —
+  or command-free prose. A spine that ends on a verb the CLI no longer has
+  turns the moment of first success into an unknown-command error, so the
+  entries are exercised against the registered command tree rather than
+  written by hand.
+- `example init --name <cluster>` writes a scaffolded desired-state tree,
+  contacting no host and no context. `--kind` selects the shape and defaults to
+  `container-cluster`: that kind writes the OpenShift core set for the
+  substrate `--provider` names, and `storage-cluster` writes the smallest Ceph
+  input — an `Environment`, a `Secret`, the storage-node `Machine`s, and a
+  `StorageCluster` under `clusters/storage/<cluster>/`. An unknown `--kind` is
+  a usage error naming the known kinds. `--provider` applies to
+  `container-cluster` only: the storage scaffold's machines are `os.provided`,
+  so it provisions no substrate, and passing `--provider` with it is a usage
+  error naming the flag to drop rather than a silently ignored flag. Both kinds
+  share one command shape — `--output-dir` defaults to the `--name` value, a
+  non-empty output directory is refused unless `--yes` is passed, and the run
+  reports what was written. Scaffolded output carries no secret material, only
+  named `Secret` objects and placeholders, and every scaffolded tree validates
+  as written: `bootwright validate -f <output-dir>` passes on fresh output for
+  every `--kind`, and for every `--provider` the container kind accepts.
 - Rendered effective state must not include secret bytes.
