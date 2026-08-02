@@ -866,3 +866,54 @@ learned; this file records what it still owes.
   are different products.
 - Related: [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md),
   [examples-wip-fixtures.md](examples-wip-fixtures.md)
+
+## B-071 — Nothing validates a Ceph node's `diskGiB` against the root-FS budget
+- Status: open
+- Area: state/desired · storage sizing
+- Origin: vSphere arbiter provisioning review (2026-08-02)
+- Problem: `internal/render/ceph/storage_cephadm_rootfs.go` already computes the
+  per-node root-filesystem budget (`NodeRootFilesystemGiB`, floor
+  `RootFilesystemFloorGiB = 20`), but its only non-test caller is the renderer
+  (`internal/render/inventory/storage_ansible.go`). No desired-state rule
+  compares that number against the `machineProfiles[].diskGiB` the operator
+  authored, so an undersized Ceph node is discovered by
+  `check_storage_preflight` *after* the VM is built and RHEL is installed — and
+  the substrate gates then refuse an in-place resize, making the only remedy a
+  `destroy --stage infra` plus a reinstall.
+- Blocker: `internal/repo/checks/import_matrix_test.go` does not allow
+  `internal/state/desired` to import `internal/render/ceph`, which is correct —
+  a validator must not depend on a renderer. The budget calculation would first
+  have to move to a package both may import (`internal/storage/topology` is
+  allowed by both), which also drags `MonitoringEnabled` and
+  `PrometheusRetentionSize` along.
+- Exit: move the root-FS budget into `internal/storage/topology`, then add a
+  rule beside `validateManagedOSCephNodeRootDisk` that errors when a topology
+  node's effective profile `diskGiB` is below `RootFilesystemFloorGiB` and warns
+  when it is below `NodeRootFilesystemGiB`. Note the honest limit: `diskGiB` is
+  raw disk and the preflight measures *free space*, so the validator can only
+  catch the unambiguous case.
+- Related: [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)
+
+## B-072 — Standby `ceph-arbiter` candidates are built only on promotion
+- Status: open (by design today — recorded so it is a decision, not a surprise)
+- Area: storage/arbiter · apply scope
+- Origin: vSphere arbiter provisioning review (2026-08-02)
+- Problem: `managedMachineOSInstallGroupsVars`
+  (`internal/render/inventory/vars_machine_os.go`) derives managed-OS machines
+  strictly from `spec.ceph.topology.nodes[].machineRef`. A Machine that carries
+  the `ceph-arbiter` capability but is not the current tiebreaker is in no
+  topology, so `bootwright apply` never provisions it. It is built by
+  `storage-cluster replace-arbiter`, which rewrites the input and then runs a
+  scoped apply through the `deps` stage — so a candidate pool of three yields
+  one live VM and two that materialize at promotion time. That is deliberate
+  (`arbiter.ComputePromotion` refuses a machine that already names a topology
+  node, and a standby in the topology would be a cephadm-enrolled host every
+  apply must reach), but an operator who declares three candidates and expects
+  three VMs after `apply` is surprised, and a promotion that has to build a VM
+  is slower and riskier than one that only moves a mon.
+- Exit: decide whether a warm standby is wanted. If so, the shape is a
+  candidate list that provisions substrate + OS but is never enrolled into
+  cephadm — distinct from `topology.nodes[]`, and it must not enter the mon
+  count validators in `validate_storage_stretch.go`. If not, document the
+  build-on-promotion behaviour where candidates are declared.
+- Related: [ceph-arbiter-replacement.md](ceph-arbiter-replacement.md)
