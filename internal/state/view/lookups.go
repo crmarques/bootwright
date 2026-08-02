@@ -2,6 +2,7 @@ package stateview
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -149,4 +150,18 @@ func InstallMachineAddress(machine v1alpha1.InstallMachine, name string) string 
 		}
 	}
 	return ""
+}
+
+func InstallMachineAddresses(machine v1alpha1.InstallMachine) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, ia := range machine.Network.InterfaceAddresses {
+		address := strings.TrimSpace(InstallMachineAddress(machine, ia.AddressRef.Name))
+		if address == "" || seen[address] {
+			continue
+		}
+		seen[address] = true
+		out = append(out, address)
+	}
+	return out
 }

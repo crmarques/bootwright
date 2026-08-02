@@ -145,6 +145,7 @@ const (
 	EndpointSourceOpenShift      = "openshift"
 	EndpointSourceExternal       = "external"
 	EndpointSourceInfraComponent = "infraComponent"
+	EndpointSourceNode           = "node"
 
 	ComponentSlotLoadBalancer   = "loadBalancer"
 	ComponentSlotArtifactServer = "artifactServer"

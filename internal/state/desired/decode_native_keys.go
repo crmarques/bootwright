@@ -18,8 +18,8 @@ var nativeKeyRedirects = map[nativeKeyLocation]string{
 	{v1alpha1.KindContainerCluster, "sshKey"}:                "spec.install.nodeSSH.keyPairRef names the sshKeyPair Secret; desired state carries no key material",
 	{v1alpha1.KindContainerCluster, "pullSecret"}:            "spec.install.pullSecretRef names the pull-secret Secret; desired state carries no secret bytes",
 	{v1alpha1.KindContainerCluster, "additionalTrustBundle"}: "spec.install.additionalTrustBundleRefs[] names the trust-bundle Secrets; desired state carries no certificate bytes",
-	{v1alpha1.KindContainerCluster, "apiVIPs"}:               "spec.install.endpoints.api owns the API VIP: set address, or source.type: infraComponent",
-	{v1alpha1.KindContainerCluster, "ingressVIPs"}:           "spec.install.endpoints.ingress owns the ingress VIP: set address, or source.type: infraComponent",
+	{v1alpha1.KindContainerCluster, "apiVIPs"}:               "spec.install.endpoints.api owns the API VIP: set address, source.type: infraComponent, or source.type: node on a single-node cluster. The slot carries one address because single-stack is the current scope, so there is no per-family list to author",
+	{v1alpha1.KindContainerCluster, "ingressVIPs"}:           "spec.install.endpoints.ingress owns the ingress VIP: set address, source.type: infraComponent, or source.type: node on a single-node cluster. The slot carries one address because single-stack is the current scope, so there is no per-family list to author",
 	{v1alpha1.KindContainerCluster, "machineNetwork"}:        "NetworkConfig spec.machineNetwork[] owns the machine networks, and each node reaches it through spec.nodes[].machineRef",
 }
 

@@ -40,6 +40,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
+	materializeNodeEndpointAddresses(state)
 	applyClusterPlatformDefaults(state)
 	applyClusterNetworkDefaults(state)
 	applyBareMetalBMCDefaults(state)

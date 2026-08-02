@@ -77,13 +77,16 @@ func TestValidateClusterNetworkIPFamilies(t *testing.T) {
 			},
 		}
 	}
-	if errs := validateClusterNetworkIPFamilies(cluster("10.128.0.0/14", "fd00::/112")); !containsSubstring(errs, "primary IP family mismatch") {
+	check := func(ocp v1alpha1.ContainerCluster) []string {
+		return validateClusterSingleAddressFamily(v1alpha1.State{}, ocp, map[string]v1alpha1.NetworkConfig{})
+	}
+	if errs := check(cluster("10.128.0.0/14", "fd00::/112")); !containsSubstring(errs, "mixes IP address families") {
 		t.Fatalf("expected IP-family mismatch finding, got: %v", errs)
 	}
-	if errs := validateClusterNetworkIPFamilies(cluster("10.128.0.0/14", "172.30.0.0/16")); len(errs) != 0 {
+	if errs := check(cluster("10.128.0.0/14", "172.30.0.0/16")); len(errs) != 0 {
 		t.Fatalf("matching v4 primaries must pass, got: %v", errs)
 	}
-	if errs := validateClusterNetworkIPFamilies(cluster("fd01::/48", "fd00::/112")); len(errs) != 0 {
+	if errs := check(cluster("fd01::/48", "fd00::/112")); len(errs) != 0 {
 		t.Fatalf("matching v6 primaries must pass, got: %v", errs)
 	}
 }

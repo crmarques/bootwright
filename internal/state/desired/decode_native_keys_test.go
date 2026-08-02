@@ -58,12 +58,12 @@ func TestNativeKeyRedirectsNameTheOwningPath(t *testing.T) {
 		{
 			name: "apiVIPs",
 			spec: "  install:\n    platform:\n      baremetal:\n        apiVIPs:\n          - 192.168.140.5\n",
-			want: `field "apiVIPs" is not authored here; spec.install.endpoints.api owns the API VIP: set address, or source.type: infraComponent`,
+			want: `field "apiVIPs" is not authored here; spec.install.endpoints.api owns the API VIP: set address, source.type: infraComponent, or source.type: node on a single-node cluster. The slot carries one address because single-stack is the current scope, so there is no per-family list to author`,
 		},
 		{
 			name: "ingressVIPs",
 			spec: "  install:\n    platform:\n      baremetal:\n        ingressVIPs:\n          - 192.168.140.6\n",
-			want: `field "ingressVIPs" is not authored here; spec.install.endpoints.ingress owns the ingress VIP: set address, or source.type: infraComponent`,
+			want: `field "ingressVIPs" is not authored here; spec.install.endpoints.ingress owns the ingress VIP: set address, source.type: infraComponent, or source.type: node on a single-node cluster. The slot carries one address because single-stack is the current scope, so there is no per-family list to author`,
 		},
 		{
 			name: "machineNetwork",

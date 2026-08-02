@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func validateClusterPlatform(owner string, platform v1alpha1.InstallPlatform, required bool) []string {
@@ -111,6 +112,10 @@ func validateClusterEndpoint(prefix, name string, ci v1alpha1.ClusterInstall, co
 		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddressRef.Name != "" {
 			errs = append(errs, prefix+".source component fields are only valid when source.type=infraComponent")
 		}
+	case v1alpha1.EndpointSourceNode:
+		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddressRef.Name != "" {
+			errs = append(errs, prefix+".source component fields are only valid when source.type=infraComponent")
+		}
 	case v1alpha1.EndpointSourceInfraComponent:
 		if endpoint.Address != "" {
 			errs = append(errs, prefix+".address must be empty when source.type=infraComponent; use source.bindAddressRef")
@@ -118,11 +123,11 @@ func validateClusterEndpoint(prefix, name string, ci v1alpha1.ClusterInstall, co
 		errs = append(errs, validateEndpointProvider(prefix, endpoint.Source, components)...)
 		errs = append(errs, validateEndpointBindAddressNetwork(prefix, ci, components, endpoint.Source, networkConfigs)...)
 	default:
-		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s}",
-			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
+		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s, %s}",
+			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent, v1alpha1.EndpointSourceNode))
 	}
 	switch {
-	case endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent:
+	case endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent, endpoint.Source.Type == v1alpha1.EndpointSourceNode:
 	case endpointSlotRendersVIP(ci, name):
 		if endpoint.Address == "" {
 			errs = append(errs, prefix+" must set address or source.type=infraComponent; this slot renders a platform VIP into install-config, and dnsName alone would render an empty VIP list")
@@ -182,18 +187,8 @@ type nodeInstallIP struct {
 func clusterInstallNodeInstallIPs(ci v1alpha1.ClusterInstall) []nodeInstallIP {
 	var out []nodeInstallIP
 	for _, machine := range ci.Machines {
-		addrByName := map[string]string{}
-		for _, addr := range machine.Addresses {
-			if addr.Name != "" {
-				addrByName[addr.Name] = addr.Address
-			}
-		}
-		for _, ia := range machine.Network.InterfaceAddresses {
-			raw, ok := addrByName[ia.AddressRef.Name]
-			if !ok {
-				continue
-			}
-			if ip := net.ParseIP(raw); ip != nil {
+		for _, address := range stateview.InstallMachineAddresses(machine) {
+			if ip := net.ParseIP(address); ip != nil {
 				out = append(out, nodeInstallIP{ip: ip, owner: fmt.Sprintf("node %q", machine.Name)})
 			}
 		}

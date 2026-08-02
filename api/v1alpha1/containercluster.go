@@ -10,8 +10,9 @@ type ContainerCluster struct {
 }
 
 type ContainerClusterDefaultedRefs struct {
-	PullSecretRef bool
-	NodeSSH       bool
+	PullSecretRef       bool
+	NodeSSH             bool
+	NodeEndpointAddress map[string]bool
 }
 
 type ContainerClusterSpec struct {

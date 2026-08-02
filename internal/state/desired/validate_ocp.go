@@ -32,7 +32,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		errs = append(errs, validateContainerClusterFIPS(ocp)...)
 		errs = append(errs, validateContainerClusterDiskEncryption(ocp)...)
 		errs = append(errs, validateClusterNetworking(ocp)...)
-		errs = append(errs, validateClusterNetworkIPFamilies(ocp)...)
+		errs = append(errs, validateClusterSingleAddressFamily(state, ocp, networkConfigs)...)
 		if ocp.Spec.Install.Method != "" && ocp.Spec.Install.Method != v1alpha1.OCPInstallMethodAgent {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.method %q must be %q",
 				ocp.Metadata.Name, ocp.Spec.Install.Method, v1alpha1.OCPInstallMethodAgent))
@@ -62,6 +62,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 			errs = append(errs, validateMachineNetworkBindings(ci, providers, networkConfigs)...)
 			errs = append(errs, validateContainerEndpointRefs(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
+			errs = append(errs, validateNodeSourceEndpoints(state, ocp)...)
 		}
 		errs = append(errs, validateNodes(ocp, machines)...)
 		errs = append(errs, validateInstallRefs(state, ocp)...)
@@ -143,26 +144,6 @@ func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {
 		}
 	}
 	return errs
-}
-
-func validateClusterNetworkIPFamilies(ocp v1alpha1.ContainerCluster) []string {
-	networking := ocp.Spec.Networking
-	if networking == nil || len(networking.ClusterNetwork) == 0 || len(networking.ServiceNetwork) == 0 {
-		return nil
-	}
-	clusterFamily, ok := cidrIPFamily(networking.ClusterNetwork[0].CIDR)
-	if !ok {
-		return nil
-	}
-	serviceFamily, ok := cidrIPFamily(networking.ServiceNetwork[0])
-	if !ok {
-		return nil
-	}
-	if clusterFamily != serviceFamily {
-		return []string{fmt.Sprintf("ContainerCluster/%s spec.networking primary IP family mismatch: clusterNetwork[0] is %s but serviceNetwork[0] is %s; openshift-install requires the first entry of clusterNetwork and serviceNetwork to share one IP family",
-			ocp.Metadata.Name, clusterFamily, serviceFamily)}
-	}
-	return nil
 }
 
 func cidrIPFamily(cidr string) (string, bool) {
@@ -340,11 +321,11 @@ func validateContainerEndpointRefs(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 			if endpoint.Address == "" {
 				errs = append(errs, fmt.Sprintf("%s.address is required for %s endpoint", prefix, role))
 			}
-		case v1alpha1.EndpointSourceInfraComponent:
+		case v1alpha1.EndpointSourceInfraComponent, v1alpha1.EndpointSourceNode:
 		default:
-			errs = append(errs, fmt.Sprintf("%s.name %q references endpoint source.type %q; container endpoints require one of {%s, %s, %s}",
+			errs = append(errs, fmt.Sprintf("%s.name %q references endpoint source.type %q; container endpoints require one of {%s, %s, %s, %s}",
 				prefix, refName, source,
-				v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
+				v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent, v1alpha1.EndpointSourceNode))
 		}
 	}
 	return errs

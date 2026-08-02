@@ -2858,7 +2858,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
         type: external
 `)
 			},
-			wantSubstring: `spec.install.endpoints.api.source.type "cephadm" must be one of {openshift, external, infraComponent}`,
+			wantSubstring: `spec.install.endpoints.api.source.type "cephadm" must be one of {openshift, external, infraComponent, node}`,
 		},
 		{
 			name: "unknown-endpoint-key-rejected",
