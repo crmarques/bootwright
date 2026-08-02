@@ -1,0 +1,16 @@
+---
+- name: Record cloned managed OS install ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: managed-os-install
+    bootwright_ownership_name: "{{ bootwright_current_os_group.name }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      cluster: "{{ bootwright_current_os_group.name }}"
+      machine: "{{ bootwright_component.name }}"
+      labels:
+        bootwright.kind: managed-os-install
+      attributes:
+        installer: templateClone
+        sshAddress: "{{ bootwright_component.osInstall.ssh.address }}"

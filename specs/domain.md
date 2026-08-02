@@ -30,7 +30,7 @@ Operators author desired state as twenty-one YAML kinds:
 | `Entitlement` | What vendor-controlled content access (subscription, registry, license) does a `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph` product need? |
 | `Machine` | Which OS-ready, Bootwright-installed, or installer-provisioned machine should be used, and what substrate, OS, network, access, and capability facts does it own? |
 | `MachineImage` | Which bootable OS install media can Bootwright customize and serve? |
-| `MachineInstallProfile` | How should Bootwright install and customize an OS on a managed machine? |
+| `MachineInstallProfile` | How should Bootwright install and customize an OS on a managed machine? `spec.installer` is a one-of over exactly one of `anaconda` (install from boot media) or `templateClone` (clone a golden image and personalize it), and the arm selects the OS-install role. |
 | `InfraProvider` | What substrate capabilities, machine profiles, provider connection facts, and network attachments are available? |
 | `InfraComponent` | Which machine-bound shared services and routable endpoints exist outside cluster intent? |
 | `NetworkConfig` | What machine CIDRs and NMState templates can install workflows consume? |

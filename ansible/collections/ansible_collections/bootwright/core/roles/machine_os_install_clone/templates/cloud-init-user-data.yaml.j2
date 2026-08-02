@@ -1,0 +1,54 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+{% set guest = bootwright_component.osInstall.guest %}
+{% set ssh_key = lookup('ansible.builtin.file', guest.sshPublicKeyPath) | trim %}
+{% if ssh_key | length == 0 %}
+{{ undef(hint='cloned managed OS seed has no public key to authorize for ' ~ guest.sshUser ~ '. Environment spec.machineAccess.keyRef must resolve to an sshKeyPair Secret whose public half is materialized, otherwise the cloned machine would accept no login at all.') }}
+{% endif %}
+#cloud-config
+hostname: {{ guest.hostname.split('.') | first }}
+fqdn: {{ guest.hostname }}
+prefer_fqdn_over_hostname: true
+disable_root: true
+ssh_pwauth: {{ (guest.passwordAuthentication | default(false) | bool) | lower }}
+users:
+  - name: {{ guest.sshUser }}
+    lock_passwd: true
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - "{{ ssh_key }}"
+{% if guest.growRootFilesystem | default(true) | bool %}
+growpart:
+  mode: auto
+  devices:
+    - /
+resize_rootfs: true
+{% else %}
+resize_rootfs: false
+{% endif %}
+write_files:
+  - path: {{ guest.sudoersPath }}
+    owner: "root:root"
+    permissions: "0440"
+    content: |
+      Defaults:{{ guest.sshUser }} !requiretty
+      {{ guest.sshUser }} ALL=(ALL) NOPASSWD: ALL
+  - path: /etc/ssh/sshd_config.d/99-bootwright-managed-os.conf
+    owner: "root:root"
+    permissions: "0644"
+    content: |
+      PermitRootLogin no
+{% if not (guest.passwordAuthentication | default(false) | bool) %}
+      PasswordAuthentication no
+{% endif %}
+  - path: {{ guest.disableMarkerPath }}
+    owner: "root:root"
+    permissions: "0644"
+    content: ""
+runcmd:
+{% for service in guest.services.enabled | default([]) %}
+  - [systemctl, enable, --now, {{ service }}]
+{% endfor %}
+{% for service in guest.services.disabled | default([]) %}
+  - [systemctl, disable, --now, {{ service }}]
+{% endfor %}
+  - [systemctl, restart, sshd]

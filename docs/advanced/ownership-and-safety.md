@@ -47,6 +47,18 @@ These live under the protected context state directory
 (`/var/lib/bootwright/contexts/<context>/`) and are the source of truth for every
 skip, resume, and teardown decision. They never contain secret bytes.
 
+A machine installed by cloning a vSphere template records exactly what an
+Anaconda-installed one does. Its install ownership record carries the same
+`managed-os-install` kind, distinguished only by `attributes.installer:
+templateClone`, and it names no provider-host paths because a clone stages
+nothing on a provider host. The cloned VM itself carries the same
+`bootwright:context=… bootwright:cluster=… bootwright:machine=…` annotation as any other Bootwright
+VM, so the existing vSphere substrate teardown removes it. There is no new
+ownership kind, no new destroy verb, and no new `--authorize` token for this
+install mode — including its failure modes: a VM created by a role that could
+not write the annotation is unowned in the ordinary sense and needs
+`--authorize unowned-vms` like any other.
+
 !!! note "Owned versus foreign is the central distinction"
     Bootwright only ever rebuilds or removes resources its own records prove it
     created. A resource with a non-Bootwright owner — or a Ceph cluster that is

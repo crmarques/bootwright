@@ -496,6 +496,29 @@ root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
 alert will fire on the trailing fill rate — see
 [Ceph disk-space alerts flap after install](../troubleshooting.md#ceph-disk-space-alerts-flap-after-install).
 
+!!! warning "Size the root disk from this budget before the first apply"
+    On a virtual substrate the budget is a **VM sizing decision**, and it is one
+    you make once. Read the node's roles off the table above, add them up, and
+    put the result in that machine's
+    [`machineProfiles[].diskGiB`](infrastructure.md#machine-profiles) before you
+    apply.
+
+    A **mon-only node** — the usual shape for a stretch arbiter — costs
+    **20 GiB base + 15 GiB for `mon` = 35 GiB**. The absolute floor preflight
+    refuses below is 20 GiB *free*, which a 20 GiB disk cannot clear once an OS
+    is on it, so 20 is not a working value for any storage node. Add `mgr` (+5)
+    if the arbiter also carries one, and the monitoring terms if any of those
+    services land there.
+
+    Correcting `diskGiB` afterwards is not an edit. On vSphere the substrate
+    gate refuses an in-place root-disk resize **and** a change to the disk
+    count, both naming `destroy --stage infra` as the way out — so the fix costs
+    a machine teardown plus a full OS reinstall, and on an arbiter that means
+    taking the tiebreaker vote out and putting it back. The libvirt adapter
+    takes the same position for the same reason — the guest partitions would not
+    follow a disk that grew underneath them. The KubeVirt adapter has no
+    equivalent refusal today.
+
 ### Passthrough services
 
 For cephadm service types Bootwright does not model first-class (for example

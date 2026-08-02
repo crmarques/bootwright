@@ -11,7 +11,7 @@ import (
 )
 
 func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
-	probe := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
+	probe := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_identity/tasks/probe_existing.yml")
 
 	foreign := probe[findAnsibleTask(t, probe, "Refuse foreign or unmarked reachable managed OS")]
 	foreignWhen := fmt.Sprint(foreign["when"])
@@ -31,11 +31,16 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 		t.Fatalf("drifted refusal must apply only to a Bootwright-owned host, got when=%v", drifted["when"])
 	}
 
-	main := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
-	for _, name := range []string{"Write managed OS marker", "Record managed OS ownership"} {
-		task := main[findAnsibleTask(t, main, name)]
-		if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_managed_os_stamp_owned") {
-			t.Fatalf("%s must be gated on the ownership-proof fact, got when=%v", name, task["when"])
+	for _, role := range []string{"machine_os_install_anaconda", "machine_os_install_clone"} {
+		main := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/"+role+"/tasks/main.yml")
+		if idx := findAnsibleTaskIndex(main, "Probe existing managed OS state"); idx < 0 {
+			t.Fatalf("%s must probe existing managed OS state before installing", role)
+		}
+		for _, name := range []string{"Write managed OS marker", "Record managed OS ownership"} {
+			task := main[findAnsibleTask(t, main, name)]
+			if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_managed_os_stamp_owned") {
+				t.Fatalf("%s %s must be gated on the ownership-proof fact, got when=%v", role, name, task["when"])
+			}
 		}
 	}
 }
@@ -58,7 +63,7 @@ func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
 }
 
 func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/ssh_trust.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_identity/tasks/ssh_trust.yml")
 	if findAnsibleTask(t, tasks, "Ensure managed OS SSH trust directory") >= findAnsibleTask(t, tasks, "Scan managed OS SSH host key") {
 		t.Fatalf("the trust directory must be ensured before the host-key scan writes into it")
 	}
@@ -126,7 +131,7 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 		t.Fatalf("%s must verify the recorded host key strictly: %s", verify["name"], verifyCmd)
 	}
 
-	probeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
+	probeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_identity/tasks/probe_existing.yml")
 	pre := probeTasks[findAnsibleTask(t, probeTasks, "Record managed OS SSH host key before install when reachable")]
 	assertIncludeTasksFile(t, pre, "ssh_trust.yml")
 	preVars, ok := pre["vars"].(map[string]any)
@@ -783,14 +788,15 @@ func TestManagedOSSourceStagingElectedPerProviderHostAndSourceID(t *testing.T) {
 func managedOSAnacondaTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/"
+	identity := "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_identity/tasks/"
 	return readAnsibleTasksFromFiles(t,
 		base+"validate.yml",
 		base+"resolve.yml",
-		base+"probe_existing.yml",
+		identity+"probe_existing.yml",
 		base+"install_media.yml",
 		base+"wait.yml",
-		base+"configure_network.yml",
-		base+"marker.yml",
+		identity+"configure_network.yml",
+		identity+"marker.yml",
 		base+"ownership.yml",
 	)
 }

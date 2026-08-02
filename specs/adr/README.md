@@ -58,3 +58,4 @@ below.
 | [0042](0042-moving-the-vote-that-breaks-the-tie.md) | Moving the Vote That Breaks the Tie | adds `storage-cluster replace-arbiter`; extends 0030 with the `same-site-arbiter` and `degraded-quorum` tokens and a third authorization verb; widens the `unreachable-nodes` token of 0030/0039 |
 | [0043](0043-one-cluster-one-address-family.md) | One Cluster, One Address Family | extended by 0044 |
 | [0044](0044-the-endpoint-a-single-node-cluster-answers-at.md) | The Endpoint a Single-Node Cluster Answers At | extends 0043; follows the source union of 0014 |
+| [0045](0045-installing-the-os-a-golden-image-already-carries.md) | Installing the OS a Golden Image Already Carries | follows the second-backend dispatch rule of 0002; follows the presence-union grammar of 0014 |

@@ -334,8 +334,25 @@ bootwright_provider_machine_setups:
 
 Managed OS install playbooks consume one projected group per storage or service
 domain that needs Bootwright-installed machines. Each component carries the
-resolved provider, boot media, base install image, Kickstart inputs, and
-optional installer kernel arguments.
+resolved provider, boot media, the OS-install role to dispatch, and the
+install-mode-specific inputs that role consumes.
+
+Every managed OS component carries `osInstallRole`, the exact Ansible role name
+that lays the operating system down. It is derived from the machine's
+`MachineInstallProfile.spec.installer` arm, so the playbook never constructs a
+role name and never branches on the install mode:
+
+| Key | Shape |
+| --- | --- |
+| `osInstallRole` | `bootwright.core.machine_os_install_anaconda` when the profile sets `installer.anaconda`; `bootwright.core.machine_os_install_clone` when it sets `installer.templateClone` |
+
+The `osInstall` block below differs per mode. The Anaconda mode carries
+`installer`, `image` and `kickstart`, and the component also carries `boot`. The
+template-clone mode carries `guest` instead and has no `installer`, `image`,
+`kickstart` or `boot` key at all, because a clone consumes no installer media
+and never boots from virtual media.
+
+### Anaconda mode
 
 ```yaml
 bootwright_managed_os_install_groups:
@@ -343,6 +360,7 @@ bootwright_managed_os_install_groups:
     storageClusterName: ceph-libvirt
     components:
       - name: ceph-0
+        osInstallRole: bootwright.core.machine_os_install_anaconda
         osInstall:
           profileName: rhel-9-ceph-node-minimal-fips
           os:
@@ -350,7 +368,6 @@ bootwright_managed_os_install_groups:
             version: "9.8"
             architecture: x86_64
           installer:
-            type: anaconda
             kernelArgs:
               - fips=1
             repositories: []
@@ -402,6 +419,86 @@ bootwright_managed_os_install_groups:
 arguments such as RHEL FIPS enablement. The Anaconda role adds those arguments
 with `mkksiso --cmdline` and includes them in the source identity file so a
 changed command line forces install ISO rebuild.
+
+### Template-clone mode
+
+```yaml
+bootwright_managed_os_install_groups:
+  - name: ceph-vsphere
+    storageClusterName: ceph-vsphere
+    components:
+      - name: ceph-arbiter-0
+        osInstallRole: bootwright.core.machine_os_install_clone
+        osInstall:
+          profileName: rhel-9-arbiter-clone
+          os:
+            family: rhel
+            version: "9.8"
+            architecture: x86_64
+          guest:
+            instanceId: bootwright-ceph-vsphere-ceph-arbiter-0
+            hostname: ceph-arbiter-0.lab.example.com
+            sshUser: cephadm
+            sshPublicKeyPath: /var/lib/bootwright/contexts/lab/secrets/ceph-cluster-ssh.pub
+            passwordAuthentication: false
+            sudoersPath: /etc/sudoers.d/99-bootwright-cephadm
+            growRootFilesystem: true
+            disableMarkerPath: /etc/cloud/cloud-init.disabled
+            services:
+              enabled:
+                - sshd
+              disabled: []
+            network:
+              bootproto: static
+              device: 00:50:56:aa:bb:cc
+              ip: 10.20.30.41
+              prefix: 24
+              gateway: 10.20.30.1
+              dnsServers:
+                - 10.20.30.10
+          ssh:
+            address: 10.20.30.41
+            connectionAddress: 10.20.30.41
+            user: cephadm
+            privateKeyPath: /var/lib/bootwright/contexts/lab/secrets/ceph-cluster-ssh
+            knownHostsPath: /var/lib/bootwright/contexts/lab/trust/ceph-arbiter-0/known_hosts
+          marker:
+            path: /etc/bootwright/install-marker.json
+            desiredHash: sha256:...
+          network:
+            desiredState: {}
+```
+
+`guest.network` is the same projection that feeds `kickstart.network` in the
+Anaconda mode, so both install modes read one rendered addressing contract.
+`guest` carries only public material: a hostname, an install user, that user's
+**public** key, a sudoers path and a static IPv4 primary. The clone role turns it
+into a cloud-init payload, and on vSphere that payload travels in the VM's
+`extraConfig`, which is plaintext to any vCenter principal that can read the VM.
+Nothing secret may be added to `guest`.
+
+`network.desiredState` is the full nmstate document, applied day-2 over SSH by
+the shared `bootwright.core.machine_os_identity` role exactly as it is for an
+Anaconda install. The seed only has to get SSH answering.
+
+## Guest Seed Facts
+
+`bootwright_machine_guest_seed` is a play-scoped fact the selected OS-install
+role sets from its `seed.yml` entrypoint, before the substrate role is
+dispatched. It is the hand-off from "how this OS is installed" to "how this
+substrate delivers a first-boot payload", and it is the reason the substrate role
+never has to know which install mode it is serving:
+
+| Fact | Shape |
+| --- | --- |
+| `bootwright_machine_guest_seed` | `{}` when the machine's install mode needs no first-boot payload (Anaconda), or `{cloudInit: {metadata: <text>, userData: <text>}}` when it does (template clone) |
+
+The vSphere substrate role translates a `cloudInit` seed into
+`guestinfo.metadata` / `guestinfo.userdata` plus their `guestinfo.*.encoding`
+keys, base64-encoded, and passes them as `advanced_settings`. Because
+`advanced_settings` is diffed against the VM's existing `extraConfig`, the seed
+text must be byte-stable across applies: a second apply issues no reconfigure.
+Substrates that do not translate the seed ignore it.
 
 ## Managed Storage Shape
 
@@ -613,8 +710,8 @@ services such as `ntp` consume package/config fields, and the `bmc_emulated`
 role consumes provider BMC service `bmcEmulated.*`. Layer playbooks dispatch exact
 rendered role names and task entrypoints (`applyRole`, `destroyRole`,
 `substratePrepareRole`, `substratePrepareFrom`, `substrateApplyRole`,
-`substrateApplyFrom`, `bootApplyRole`, `mediaPrepareRole`, and
-`cleanupMediaRole`) rather than constructing role names from diagnostic labels.
+`substrateApplyFrom`, `bootApplyRole`, `mediaPrepareRole`, `cleanupMediaRole`,
+and `osInstallRole`) rather than constructing role names from diagnostic labels.
 `cleanupMediaRole` is set only for boot backends that own a `cleanup_media`
 action (Redfish, vSphere), so post-install media cleanup dispatches on it without
 enumerating boot roles.

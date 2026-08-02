@@ -1,0 +1,30 @@
+---
+- name: Validate cloned managed OS inputs
+  ansible.builtin.import_tasks: validate.yml
+
+- name: Resolve cloned managed OS paths
+  ansible.builtin.import_tasks: resolve.yml
+
+- name: Probe existing managed OS state
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: probe_existing.yml
+
+- name: Wait for cloned managed OS access
+  ansible.builtin.import_tasks: wait.yml
+
+- name: Configure managed OS network
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: configure_network.yml
+  when: (bootwright_component.osInstall.network.desiredState | default({}) | length) > 0
+
+- name: Write managed OS marker
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: marker.yml
+  when: bootwright_managed_os_stamp_owned | default(true) | bool
+
+- name: Record managed OS ownership
+  ansible.builtin.import_tasks: ownership.yml
+  when: bootwright_managed_os_stamp_owned | default(true) | bool

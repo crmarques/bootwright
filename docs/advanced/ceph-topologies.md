@@ -411,6 +411,18 @@ spec:
     - ceph-arbiter
 ```
 
+!!! warning "Size an arbiter's root disk before you apply it"
+    An arbiter is usually a mon-only node, and a mon-only node's root-filesystem
+    budget is **20 GiB base + 15 GiB for `mon` = 35 GiB**. On a virtual
+    substrate that number is the machine profile's `diskGiB`, and it has to be
+    right the first time: the substrate gate refuses an in-place root-disk
+    resize, so correcting it costs a `destroy --stage infra` plus a reinstall —
+    on the machine holding, or about to hold, the tiebreaker vote. Work the
+    number out from
+    [Node root-filesystem budget](../concepts/storage.md#node-root-filesystem-budget)
+    before the first apply, and give standby candidates the same size as the
+    arbiter they may replace.
+
 `--new-arbiter-machine` authors the intent for you: it rewrites the context input
 so the stretch tiebreaker names that machine — snapshotting the previous input to
 `input-history/` first — and then reconciles the live cluster onto it. Edit the

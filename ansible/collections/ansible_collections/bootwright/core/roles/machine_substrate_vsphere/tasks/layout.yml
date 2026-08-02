@@ -34,3 +34,23 @@
         | list
       }}
   changed_when: false
+
+- name: Resolve the vSphere guest seed
+  ansible.builtin.set_fact:
+    bootwright_vsphere_cloud_init: "{{ (bootwright_machine_guest_seed | default({})).cloudInit | default({}) }}"
+  changed_when: false
+
+- name: Resolve vSphere guest seed advanced settings
+  ansible.builtin.set_fact:
+    bootwright_vsphere_advanced_settings: >-
+      {{
+        [
+          {'key': 'guestinfo.metadata', 'value': (bootwright_vsphere_cloud_init.metadata | b64encode)},
+          {'key': 'guestinfo.metadata.encoding', 'value': 'base64'},
+          {'key': 'guestinfo.userdata', 'value': (bootwright_vsphere_cloud_init.userData | b64encode)},
+          {'key': 'guestinfo.userdata.encoding', 'value': 'base64'}
+        ]
+        if ((bootwright_vsphere_cloud_init.userData | default('')) | length) > 0
+        else []
+      }}
+  changed_when: false

@@ -27,8 +27,14 @@ for bare metal.
   Otherwise the cluster's agent installer provisions it.
 
 So a *managed OS install* is the `os.provided: false` + `os.installProfileRef`
-combination: Bootwright drives Anaconda to lay down the OS, then takes the node
-over SSH. A managed-install machine authors **no** `access` block — the install
+combination: Bootwright lays the OS down, then takes the node over SSH. The
+profile's `spec.installer` picks how — `anaconda`, which boots install media and
+installs from scratch (everything from here to
+[Encrypting the installed disk](#encrypting-the-installed-disk) describes that
+arm), or `templateClone`, which copies a vSphere golden image that already
+carries the OS and personalizes it on first boot (see
+[Installing from a vSphere template](#installing-from-a-vsphere-template)).
+A managed-install machine authors **no** `access` block — the install
 creates the `bootwright` account and authorizes
 `Environment.spec.machineAccess.keyRef` for it; authoring `access` is a
 validation error. Only an OS-ready (`os.provided: true`) machine declares
@@ -538,6 +544,243 @@ the kickstart copies Anaconda leaves in `/root` once the volumes are bound.
 
 Afterwards, `clevis luks list -d <device>` on the node shows the binding, and
 `lsblk` shows the root and swap volumes under `crypto_LUKS`.
+
+## Installing from a vSphere template
+
+`installer.templateClone` is the second managed-OS install mode. Instead of
+booting media and running Anaconda, the vSphere adapter clones a template that
+already carries RHEL, and the clone personalizes itself on first boot from a
+cloud-init seed. It exists for machines where a 10-minute installer run buys
+nothing — a Ceph stretch arbiter is the motivating case: a mon-sized VM that
+needs a static address on the server-cluster CIDR, an SSH login, and nothing
+else.
+
+Everything in this section is vSphere-only. The API shape is provider-neutral,
+but only the vCenter adapter translates the seed today.
+
+### The sequence
+
+1. Bootwright renders the seed — a cloud-init **metadata** document (instance
+   id, hostname, and a network-config v2 stanza matching the primary NIC by MAC)
+   and a **user-data** document (the `bootwright` account with its authorized
+   key, the sudoers drop-in, the sshd drop-in, `growpart`, and
+   `systemctl enable --now` for `customizations.services`).
+2. The clone is created with both documents base64-encoded into the VM's
+   `extraConfig` as `guestinfo.metadata` / `guestinfo.userdata`, so the seed is
+   in the VMX **before** the VM has ever run.
+3. The VM is powered on. cloud-init reads the guestinfo datasource, applies the
+   identity and the static address, writes `/etc/cloud/cloud-init.disabled` so
+   no later boot re-personalizes, and starts sshd.
+4. Bootwright waits for SSH, records the host key, and authenticates as the
+   account the seed created.
+5. `nmstatectl apply` lays down the **full** authored network — bonds, VLANs,
+   the cluster network, everything the seed could not carry.
+6. The install marker is stamped over SSH, and the ownership record is written.
+   Day-2 work (repositories, RHSM registration, the storage roles) follows on
+   the normal machines-phase path.
+
+The address in the seed is produced by the **same** renderer that produces the
+kickstart `network` line, so a clone and an Anaconda install of the same machine
+come up on the same address by construction. The
+[kickstart network subset](#kickstart-network-subset) rules apply here too, with
+one extra restriction: the seed brings up a single **ethernet**, so a machine
+whose primary is a bond or a VLAN is refused on this arm. Put the primary
+address on an ethernet — a vDS port group can carry the VLAN tag — and let
+nmstate build the rest at step 5.
+
+### What is and is not personalized
+
+The clone arrives carrying the template's OS, packages, locale, SELinux mode,
+firewall state and partitioning. Bootwright adds only the identity and the
+address. Every Anaconda customization that describes something the installer
+does while partitioning is **refused** on this arm rather than accepted and
+ignored — the full table, one row per refusal, is
+[Customizations the clone refuses](../concepts/machines.md#customizations-the-clone-refuses).
+The template contract — what the image must ship for any of this to work — is
+[What the template must ship](../concepts/machines.md#what-the-template-must-ship).
+
+The refusals are worth reading before you build the template, because they tell
+you what the template has to own: the package set, the locale, SELinux, the
+firewall, FIPS, and disk encryption.
+
+!!! warning "vSphere guest customization is never used, and must not be enabled"
+    Bootwright does not attach a `CustomizationSpec` to the clone. It cannot:
+    the legacy Linux customization path can set a hostname and a timezone but
+    cannot create a user or place an SSH key, which is the whole job. It is also
+    not idempotent — it reports a change on every run.
+
+    Enabling it alongside the seed is worse than useless. The VMware Tools
+    `deployPkg` path and cloud-init would both write the hostname and the
+    addressing on the same first boot, non-deterministically and only on that
+    boot, which presents as flaky infrastructure. That is why the machine's
+    vCenter NIC definition deliberately carries no IP, netmask, gateway, DNS or
+    domain keys: any one of them makes vCenter attach a customization spec
+    implicitly. A repository guard test pins this.
+
+!!! note "Re-personalizing is a rebuild"
+    A second `apply` changes nothing: the `extraConfig` is diffed and matches,
+    the guest has cloud-init disabled, and the install marker matches. The only
+    way to re-run the seed is `apply --mode rebuild`, which **deletes and
+    re-clones** the VM. "Re-personalize" and "re-provision" are therefore the
+    same operation, and anything on the machine's data disks goes with it. This
+    is the existing managed-OS contract, not a new one.
+
+### vCenter privileges for this mode
+
+On top of the
+[base vCenter role](../concepts/infrastructure.md#vcenter-privileges), the
+template-clone mode needs:
+
+```
+VirtualMachine.Inventory.CreateFromExisting
+VirtualMachine.Provisioning.DeployTemplate
+VirtualMachine.Provisioning.Clone
+VirtualMachine.Config.AdvancedConfig
+VirtualMachine.Config.DiskExtend
+```
+
+`DeployTemplate` covers a source marked as a **Template**, `Clone` a plain
+powered-off VM; grant both unless you pin which kind you publish. `DiskExtend`
+is needed only when `diskGiB` exceeds the template's root disk.
+
+`VirtualMachine.Config.AdvancedConfig` is the one that is easy to miss. It is
+**not** in the base role, because nothing in the Anaconda path ever writes
+`extraConfig`. Without it the clone is created and the guestinfo write fails, so
+the VM boots unpersonalized and then times out waiting for SSH — the same
+symptom as a template missing cloud-init, with a completely different cause.
+
+`VirtualMachine.Provisioning.Customize` and
+`VirtualMachine.Provisioning.ReadCustSpecs` are deliberately **not** required;
+see the warning above. And the VM-folder grant must **propagate** — without it
+the VM is created but never annotated, which strands it outside Bootwright's
+ownership model.
+
+### Worked example: three Ceph arbiter candidates
+
+One vSphere provider with a single failure domain and a mon-sized profile that
+names the template:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: vsphere-dc3
+spec:
+  type: vsphere
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        port: 443
+        datacenters:
+          - dc3
+        credentialsRef: vcenter-credentials
+    failureDomains:
+      - name: dc3-arbiter
+        region: dc3
+        zone: arbiter
+        server: vcenter.example.test
+        topology:
+          datacenter: dc3
+          computeCluster: /dc3/host/cluster1
+          datastore: /dc3/datastore/ds1
+          folder: /dc3/vm/bootwright
+          networks:
+            - dvpg-ceph-public
+    machineProfiles:
+      - name: ceph-arbiter
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 35
+        template: /dc3/vm/templates/rhel-9.4-golden
+        failureDomainRef: dc3-arbiter
+
+  networkAttachments:
+    - name: ceph-public
+      vsphere:
+        portgroup: dvpg-ceph-public
+        distributedSwitch: dvs-dc3
+```
+
+`diskGiB: 35` is the arbiter's root-filesystem budget — 20 GiB base plus 15 GiB
+for the `mon` role — chosen **before** the first apply, because the vSphere
+adapter refuses an in-place root-disk resize. See
+[Node root-filesystem budget](../concepts/storage.md#node-root-filesystem-budget).
+
+The install profile selects the clone arm and carries only the day-2
+customizations that survive it:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-arbiter
+spec:
+  os:
+    family: rhel
+    version: "9.4"
+    architecture: x86_64
+  installer:
+    templateClone:
+      seed:
+        cloudInit: {}
+  subscription:
+    entitlementRef: redhat-rhel
+  customizations:
+    services:
+      enabled:
+        - sshd
+    repositories:
+      subscription:
+        enable:
+          - rhel-9-for-x86_64-baseos-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+        disable:
+          - "*"
+```
+
+Each candidate is an ordinary managed-OS machine — `os.provided: false`, an
+`installProfileRef`, no `access` block, and a static IPv4 primary on the vDS
+port group:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-arbiter-a
+spec:
+  capabilities:
+    - ceph-node
+    - ceph-arbiter
+  substrate:
+    providerRef: vsphere-dc3
+    profileRef: ceph-arbiter
+  os:
+    provided: false
+    installProfileRef: rhel-9-arbiter
+  network:
+    config:
+      networkConfigRef: ceph-arbiter-net
+      attachmentRef: ceph-public
+      overrides:
+        interfaces:
+          - name: ens192
+            type: ethernet
+            state: up
+            ipv4:
+              enabled: true
+              dhcp: false
+              address:
+                - ip: 10.30.0.11
+                  prefix-length: 24
+  addresses:
+    - name: ssh
+      address: 10.30.0.11
+```
+
+Declare `ceph-arbiter-b` and `ceph-arbiter-c` the same way on `.12` and `.13`.
+Marking every candidate with the `ceph-arbiter` capability is what makes
+`storage-cluster replace-arbiter` able to move the tiebreaker onto one later —
+see [Ceph topologies → Replacing the arbiter](ceph-topologies.md#replacing-the-arbiter).
 
 ## Staging media
 

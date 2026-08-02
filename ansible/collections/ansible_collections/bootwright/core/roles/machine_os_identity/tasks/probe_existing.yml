@@ -63,7 +63,9 @@
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) == 0
 
 - name: Record managed OS SSH host key before install when reachable
-  ansible.builtin.include_tasks: ssh_trust.yml
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: ssh_trust.yml
   vars:
     bootwright_os_ssh_keyscan_required: false
     bootwright_os_ssh_keyscan_retries: 1

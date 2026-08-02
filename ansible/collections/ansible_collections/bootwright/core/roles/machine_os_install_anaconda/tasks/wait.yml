@@ -55,7 +55,9 @@
     - (bootwright_component.cleanupMediaRole | default('') | length) > 0
 
 - name: Record managed OS SSH host key
-  ansible.builtin.include_tasks: ssh_trust.yml
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: ssh_trust.yml
   vars:
     bootwright_os_ssh_keyscan_required: true
     bootwright_os_ssh_keyscan_retries: 60

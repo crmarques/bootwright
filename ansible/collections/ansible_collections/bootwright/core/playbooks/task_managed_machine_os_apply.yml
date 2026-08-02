@@ -68,6 +68,11 @@
         bootwright_component: "{{ bootwright_current_machines | first }}"
       changed_when: false
 
+    - name: Seed guest personalization for the selected managed OS machine
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.osInstallRole }}"
+        tasks_from: seed.yml
+
     - name: Dispatch substrate per managed OS machine
       ansible.builtin.include_role:
         name: "{{ bootwright_component.substrateApplyRole }}"
@@ -75,4 +80,4 @@
 
     - name: Install managed operating system on selected machine
       ansible.builtin.include_role:
-        name: bootwright.core.machine_os_install_anaconda
+        name: "{{ bootwright_component.osInstallRole }}"

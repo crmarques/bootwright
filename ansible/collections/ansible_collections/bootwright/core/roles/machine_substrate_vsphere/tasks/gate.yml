@@ -27,6 +27,53 @@
     - bootwright_vsphere_probe.instance is defined
     - not (bootwright_vsphere_managed_os_reset | bool)
 
+- name: Probe the vSphere clone template disk layout
+  community.vmware.vmware_guest_disk_info:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ (bootwright_vsphere.template | dirname) | default(omit, true) }}"
+    name: "{{ bootwright_vsphere.template | basename }}"
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_template_disk_probe
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - (bootwright_vsphere.template | default('') | length) > 0
+    - not (bootwright_vsphere_vm_exists | bool)
+
+- name: Resolve the probed vSphere template disk layout
+  ansible.builtin.set_fact:
+    bootwright_vsphere_template_root_gib: >-
+      {{ (((bootwright_vsphere_template_disk_probe.guest_disk_info | default({})).get('0', {})).get('capacity_in_kb', 0) | int) // 1048576 }}
+    bootwright_vsphere_template_disk_count: "{{ (bootwright_vsphere_template_disk_probe.guest_disk_info | default({})) | length }}"
+  changed_when: false
+  when:
+    - (bootwright_vsphere.template | default('') | length) > 0
+    - not (bootwright_vsphere_vm_exists | bool)
+
+- name: Refuse a vSphere template the declared root disk cannot hold
+  ansible.builtin.assert:
+    that:
+      - (bootwright_vsphere_template_root_gib | int) <= (bootwright_component.profile.diskGiB | int)
+      - (bootwright_vsphere_template_disk_count | int) == 1
+    fail_msg: >-
+      vSphere template {{ bootwright_vsphere.template }} has a
+      {{ bootwright_vsphere_template_root_gib }} GiB root disk across
+      {{ bootwright_vsphere_template_disk_count }} disk(s), but machine
+      {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
+      and {{ (bootwright_vsphere_disks | length) - 1 }} data disk(s). A clone can grow a root disk
+      but never shrink one, and Bootwright adds machineProfiles[].dataDisks[] itself, so this
+      profile could never converge. Raise machineProfiles[].diskGiB to at least
+      {{ bootwright_vsphere_template_root_gib }}, or point machineProfiles[].template at a
+      single-disk template no larger than the declared root disk.
+  when:
+    - (bootwright_vsphere.template | default('') | length) > 0
+    - not (bootwright_vsphere_vm_exists | bool)
+
 - name: Refuse an in-place vSphere root disk resize
   ansible.builtin.assert:
     that:

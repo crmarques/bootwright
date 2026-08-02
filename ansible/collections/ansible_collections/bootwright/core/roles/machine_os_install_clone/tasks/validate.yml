@@ -1,0 +1,31 @@
+---
+- name: Validate cloned managed OS install inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.osInstall is mapping
+      - bootwright_component.osInstall.guest is mapping
+      - (bootwright_component.osInstall.guest.hostname | default('') | length) > 0
+      - (bootwright_component.osInstall.guest.sshUser | default('') | length) > 0
+      - (bootwright_component.osInstall.guest.sshPublicKeyPath | default('') | length) > 0
+      - (bootwright_component.osInstall.guest.sudoersPath | default('') | length) > 0
+      - (bootwright_component.osInstall.guest.instanceId | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.address | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.privateKeyPath | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.path | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.desiredHash | default('') | length) > 0
+    fail_msg: >-
+      cloned managed OS install needs a guest seed (hostname, install identity, sudoers path,
+      instance id), an SSH endpoint, and a marker contract.
+
+- name: Validate cloned managed OS bootstrap addressing
+  ansible.builtin.assert:
+    that:
+      - (bootwright_component.osInstall.guest.network.bootproto | default('dhcp')) == 'static'
+      - (bootwright_component.osInstall.guest.network.ip | default('') | length) > 0
+      - (bootwright_component.osInstall.guest.network.prefix | default(0) | int) > 0
+      - (bootwright_component.osInstall.guest.network.device | default('') | length) > 0
+    fail_msg: >-
+      cloned machine {{ bootwright_component.name }} has no static IPv4 address to seed.
+      The cloud-init seed is the only thing that brings a clone onto the network before SSH
+      answers, so it needs a static address, prefix and the primary NIC's MAC.
+      Declare them in the machine's NetworkConfig.

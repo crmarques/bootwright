@@ -1,0 +1,57 @@
+---
+- name: Report cloned managed OS personalization in progress
+  ansible.builtin.debug:
+    msg: >-
+      Cloning {{ bootwright_component.name }} from the vSphere template and letting cloud-init
+      apply Bootwright's install identity and static address on first boot. The next step waits
+      for SSH at {{ bootwright_component.osInstall.ssh.address }}. If it never answers, the
+      template is missing open-vm-tools, cloud-init with the VMware datasource enabled, or
+      openssh-server.
+  when:
+    - bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool
+
+- name: Wait for cloned managed OS SSH port
+  ansible.builtin.wait_for:
+    host: "{{ bootwright_component.osInstall.ssh.address }}"
+    port: 22
+    state: started
+    timeout: "{{ bootwright_os_clone_ssh_timeout_seconds | int }}"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Record cloned managed OS SSH host key
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_identity
+    tasks_from: ssh_trust.yml
+  vars:
+    bootwright_os_ssh_keyscan_required: true
+    bootwright_os_ssh_keyscan_retries: 30
+    bootwright_os_ssh_keyscan_delay: 10
+    bootwright_os_ssh_keyscan_replace: >-
+      {{ bootwright_managed_os_install_required | default(not (bootwright_managed_os_already_ready | default(false) | bool)) | bool }}
+  when: (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+
+- name: Resolve cloned managed OS post-install SSH identity
+  ansible.builtin.set_fact:
+    bootwright_os_effective_user: "{{ bootwright_component.osInstall.ssh.user }}"
+  changed_when: false
+
+- name: Verify cloned managed OS SSH authentication
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      exec ssh \
+        -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=yes \
+        -o UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }} \
+        {{ ((bootwright_component.osInstall.ssh.user) ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
+        true
+  delegate_to: localhost
+  register: bootwright_os_clone_ssh_auth
+  retries: 30
+  delay: 10
+  until: bootwright_os_clone_ssh_auth.rc == 0
+  changed_when: false
+  failed_when: bootwright_os_clone_ssh_auth.rc != 0

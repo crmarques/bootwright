@@ -1,0 +1,12 @@
+---
+- name: Validate cloned managed OS seed inputs
+  ansible.builtin.import_tasks: validate.yml
+
+- name: Render the cloud-init guest seed for the cloned machine
+  ansible.builtin.set_fact:
+    bootwright_machine_guest_seed:
+      cloudInit:
+        metadata: "{{ lookup('ansible.builtin.template', 'cloud-init-meta-data.yaml.j2') }}"
+        userData: "{{ lookup('ansible.builtin.template', 'cloud-init-user-data.yaml.j2') }}"
+  changed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"

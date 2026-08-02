@@ -224,3 +224,28 @@ func TestVSphereCleanupRemovesVirtualMediaDrive(t *testing.T) {
 		t.Fatal("vsphere cleanup must attempt device removal before falling back to a disconnect")
 	}
 }
+
+func TestVSphereApplyNeverUsesGuestCustomization(t *testing.T) {
+	rel := "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/apply.yml"
+	for _, task := range flattenAnsibleTasks(readAnsibleTasks(t, rel)) {
+		guest, ok := task["community.vmware.vmware_guest"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"customization", "customization_spec", "wait_for_customization"} {
+			if _, present := guest[key]; present {
+				t.Fatalf("%s: vmware_guest must not set %q; the clone is personalized by the cloud-init guestinfo seed, and enabling vSphere guest customization would fight it for the guest's network identity", rel, key)
+			}
+		}
+	}
+}
+
+func TestVSphereNetworksCarryNoGuestCustomizationKeys(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/layout.yml")
+	networks := body[strings.Index(body, "bootwright_vsphere_networks"):]
+	for _, key := range []string{"'ip'", "'netmask'", "'gateway'", "'domain'", "'dns_servers'"} {
+		if strings.Contains(networks, key) {
+			t.Fatalf("%s: bootwright_vsphere_networks must not carry %s; any per-NIC address key makes vmware_guest attach a CustomizationSpec, which would overwrite the cloud-init seed's network identity", "layout.yml", key)
+		}
+	}
+}

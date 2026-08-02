@@ -143,7 +143,7 @@ func TestSharedMachineStateDirectoryStaysWorldTraversable(t *testing.T) {
 }
 
 func TestManagedOSMarkerProbeFallsBackToPrivilegedRead(t *testing.T) {
-	rel := bootwrightCollectionRoleRoot + "/machine_os_install_anaconda/tasks/probe_existing.yml"
+	rel := bootwrightCollectionRoleRoot + "/machine_os_identity/tasks/probe_existing.yml"
 	tasks := readAnsibleTasks(t, rel)
 	task := tasks[findAnsibleTask(t, tasks, "Read managed OS install marker before install")]
 	body, ok := task["ansible.builtin.command"].(map[string]any)

@@ -347,6 +347,27 @@ its descriptor open while SSH runs, and gives OpenSSH the corresponding
 SSH exits. The encrypted context envelope is never passed to OpenSSH and no
 named plaintext key remains after the command.
 
+## Guest Personalization Seed
+
+`MachineInstallProfile.spec.installer.templateClone` personalizes a cloned VM
+from a cloud-init seed Bootwright writes into the VM's vCenter `extraConfig`
+(`guestinfo.metadata` / `guestinfo.userdata`). That store is **plaintext in the
+VMX file**, readable by any vCenter principal holding read privilege on the VM,
+and it is collected into vCenter support bundles. `no_log` hides the payload
+from Bootwright's own output; it does not hide it from vCenter.
+
+The seed therefore carries public and non-secret material only: the machine's
+hostname, its static IPv4 address, gateway and DNS servers, the created account
+name, the **public** half of `Environment.spec.machineAccess.keyRef`, the
+`!requiretty` sudoers drop-in, and the sshd hardening drop-in. It carries no
+password, no private key, no activation key and no passphrase.
+
+`customizations.ssh.initialPassword` is refused under this arm for that reason —
+a console password is a secret and this delivery channel cannot keep one. Any
+field added to the seed must be re-checked against this rule before it ships.
+Secrets reach a cloned machine after the install, over SSH, on the same day-2
+paths every other managed-OS machine uses.
+
 ## Direct SSH
 
 Every durable direct SSH connection follows one crypto and trust policy.

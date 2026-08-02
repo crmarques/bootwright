@@ -313,6 +313,148 @@ spec:
         failureDomainRef: dc1-zone-a
 ```
 
+#### vCenter privileges
+
+Bootwright reaches vCenter as the account in
+`vsphere.vcenters[].credentialsRef` and never as anything else — there is no
+second identity, no ESXi login, and no host-side agent. Everything below is what
+that one account must be able to do. Give it a **custom role** built from
+privilege IDs rather than a stock role: `Administrator` is far broader than the
+work, and `Virtual machine power user` is missing pieces Bootwright needs.
+
+Create the role once, then assign it on the inventory objects the failure domain
+names. The two halves are equally load-bearing — a correct role granted on the
+wrong object, or granted without propagation, fails exactly like a missing
+privilege.
+
+**The base role.** These are required whenever Bootwright creates the VM. The
+CD-media and ISO-datastore entries are additionally exercised by the Anaconda
+install mode and by OpenShift agent-ISO boot; a fleet whose every profile
+selects `installer.templateClone` never stages or attaches an ISO. Paste the IDs into the role editor's search
+box; the vSphere Client finds each one by ID.
+
+```
+Datastore.AllocateSpace
+Datastore.Browse
+Datastore.DeleteFile
+Datastore.FileManagement
+Network.Assign
+Resource.AssignVMToPool
+VirtualMachine.Config.AddNewDisk
+VirtualMachine.Config.AddRemoveDevice
+VirtualMachine.Config.Annotation
+VirtualMachine.Config.CPUCount
+VirtualMachine.Config.EditDevice
+VirtualMachine.Config.Memory
+VirtualMachine.Config.Settings
+VirtualMachine.Interact.DeviceConnection
+VirtualMachine.Interact.PowerOff
+VirtualMachine.Interact.PowerOn
+VirtualMachine.Interact.SetCDMedia
+VirtualMachine.Inventory.Create
+VirtualMachine.Inventory.Delete
+```
+
+**Add these only for the template-clone install mode** — a fleet where some
+`MachineInstallProfile` selects
+[`installer.templateClone`](machines.md#cloning-a-golden-image). A fleet that
+installs every machine with Anaconda does not need any of them:
+
+```
+VirtualMachine.Inventory.CreateFromExisting
+VirtualMachine.Provisioning.DeployTemplate
+VirtualMachine.Provisioning.Clone
+VirtualMachine.Config.AdvancedConfig
+VirtualMachine.Config.DiskExtend
+```
+
+`CreateFromExisting` replaces `Inventory.Create` on the clone path; keep both in
+one role when the fleet mixes profiles with and without
+`machineProfiles[].template`. `DeployTemplate` applies when the named source is
+an object marked as a **Template**, `Clone` when it is a plain powered-off VM —
+Bootwright accepts either, so grant both unless you pin which kind you publish.
+`Config.AdvancedConfig` is the one that carries the cloud-init seed into the
+VM's `extraConfig`; without it the clone is created and boots unpersonalized.
+`Config.DiskExtend` is needed only when `machineProfiles[].diskGiB` exceeds the
+template's root disk. `VirtualMachine.Provisioning.Customize` and
+`VirtualMachine.Provisioning.ReadCustSpecs` are deliberately **not** required —
+Bootwright never attaches a vSphere guest customization spec.
+
+**Add these only if the declared `topology.resourcePool` can change for a VM
+that already exists** — a stable failure-domain topology needs neither:
+
+```
+Resource.ColdMigrate
+Resource.HotMigrate
+```
+
+**Where each grant goes.** Assign in this order.
+
+| Inventory object | Grant | Propagate | Needed for |
+| --- | --- | --- | --- |
+| Datacenter (`topology.datacenter`) | Read-only | **Yes** | Every mode. Bootwright resolves the cluster, pool, datastore, portgroup and template **by name**; an object it cannot see reports "unable to find …", not "permission denied". |
+| VM folder (`topology.folder`) | the custom role | **Yes — mandatory** | Every mode. Creating, configuring, annotating, powering, media-attaching and deleting the VM. |
+| Compute cluster (`topology.computeCluster`) | the custom role (only `Resource.AssignVMToPool` is consumed) | Yes | Every mode when `topology.resourcePool` is empty — the target is then the cluster's **root** resource pool, not "no pool". |
+| Resource pool (`topology.resourcePool`) | the custom role (`Resource.AssignVMToPool`, plus the migrate pair if the pool can change) | Yes | Every mode where a pool is declared. |
+| VM datastore (`topology.datastore`) | the custom role (only `Datastore.*` is consumed) | Yes if granted on a datastore folder or datastore cluster | Every mode. Root and data disk allocation. |
+| ISO datastore (`isoStaging.datastore`, defaults to `topology.datastore`) | the custom role (`Datastore.Browse`, `FileManagement`, `DeleteFile`, `AllocateSpace`) | n/a on a leaf datastore | Anaconda install mode and agent-ISO boot. ISO upload, probe and cleanup over the datastore file service. |
+| Portgroup or distributed port group (`networkAttachments[].vsphere.portgroup`) | the custom role (only `Network.Assign` is consumed) | Yes if granted on the vDS or the datacenter's network folder | Every mode. |
+| Source template or source VM (`machineProfiles[].template`) | the custom role plus Read-only | No on the object itself; Yes if granted on a template folder | Template-clone mode only. |
+| ESXi hosts | nothing | — | — |
+
+!!! warning "The VM-folder grant must propagate, and losing it strands a VM"
+    `VirtualMachine.Inventory.Create` / `CreateFromExisting` is checked on the
+    **folder**, but every privilege after it — `Config.Annotation`,
+    `Config.Settings`, `Interact.PowerOn`/`PowerOff`, `Interact.SetCDMedia`,
+    `Inventory.Delete` — is checked on the **VM**, a child of that folder. With
+    propagation off, the VM is created and then nothing else works.
+
+    The worst case is losing `VirtualMachine.Config.Annotation` alone.
+    Bootwright stamps the VM's ownership marker into its annotation with a
+    **second** reconfigure after the create succeeds. Without that privilege the
+    VM exists and carries no marker, so every later `apply` refuses it ("it
+    already exists but carries no Bootwright ownership marker") and `destroy`
+    will not clean it up without
+    [`--authorize unowned-vms`](../advanced/ownership-and-safety.md). A
+    partially-privileged role therefore leaves unmanageable VMs behind. Treat
+    `Config.Annotation` as a correctness privilege, not a cosmetic one.
+
+!!! warning "Datastores, networks and resource pools are not children of the VM folder"
+    They hang off the datacenter's `datastore`, `network` and `host` branches. A
+    permission on the VM folder — propagating or not — grants **nothing** on
+    them. `Datastore.AllocateSpace`, `Network.Assign` and
+    `Resource.AssignVMToPool` need their own grants, or a propagating grant at
+    the datacenter. Read-only on the datacenter must propagate for the same
+    reason: without it the adapter fails with `Unable to find cluster "…"`,
+    which reads like a typo in your input and sends you to fix the wrong thing.
+
+!!! note "`preflight` proves the credentials, never the role"
+    `bootwright preflight` opens and closes a vCenter session. That proves the
+    server is reachable, TLS is acceptable and the credentials authenticate —
+    vCenter issues a session to an account holding **zero** inventory
+    permissions. Bootwright does not probe privileges, so the first proof that a
+    minimal role is sufficient is a real `apply`. Build the role before the first
+    apply, not after the first failure.
+
+!!! note "Build the role from IDs, then verify against your own vCenter"
+    Every privilege ID above is byte-identical on vSphere 7.0 and 8.0. What has
+    moved between releases is the **vSphere Client labels and grouping** —
+    `VirtualMachine.Config.*` sits under "Change Configuration" on 6.7 and later
+    but under "Configuration" before it, and `Config.Settings` was once just
+    "Settings". Build from IDs and confirm with
+    `AuthorizationManager.privilegeList` (pyVmomi) or `Get-VIPrivilege -Id …`
+    (PowerCLI). One ID is written inconsistently by third-party guides —
+    `VirtualMachine.Provisioning.Customize` is sometimes published as
+    `…CustomizeGuest`; check yours before scripting, though Bootwright does not
+    need it.
+
+!!! note "Lab quick-start: one grant at the vCenter root"
+    Assigning the custom role once on the **vCenter Server root object** with
+    propagation on also works, and is what most labs do. It is strictly broader
+    than the map above — it reaches every datacenter, datastore and network on
+    the vCenter — so use it to get a lab moving and never as the production
+    posture. The object-by-object assignment is the recommendation.
+
 ### KubeVirt
 
 KubeVirt provider profiles create child-cluster VMs on a host OpenShift
@@ -369,7 +511,7 @@ are rejected, so the required/applies-to columns differ per arm.
 | `machineProfiles[].cpu` | No | — | vCPU count; must be non-negative, and greater than zero on vSphere. |
 | `machineProfiles[].memoryMiB` | No | — | Memory in MiB; must be non-negative, and greater than zero on vSphere. |
 | `machineProfiles[].diskGiB` | No | — | Root disk size in GiB; must be non-negative, and greater than zero on vSphere. |
-| `machineProfiles[].template` | No | — | vSphere template to clone from; rejected on non-vSphere providers. |
+| `machineProfiles[].template` | No | — | vCenter inventory path of the golden image to clone. Required when the machine's `MachineInstallProfile` selects `installer.templateClone`; refused when it selects `installer.anaconda`, which would wipe the clone. Rejected on non-vSphere providers. |
 | `machineProfiles[].failureDomainRef` | No | — | vSphere failure-domain name; rejected on non-vSphere providers. See the multiplicity note below. |
 | `machineProfiles[].dataDisks[]` | No | — | Additional data disks (libvirt and vSphere); rejected on baremetal and kubevirt. |
 | `machineProfiles[].dataDisks[].name` | Yes (per entry) | — | Data disk name. |
@@ -377,10 +519,27 @@ are rejected, so the required/applies-to columns differ per arm.
 | `machineProfiles[].tpm` | No | — (no TPM) | Presence attaches an emulated TPM 2.0 (libvirt and kubevirt only). See [Emulated TPM](#emulated-tpm). |
 | `machineProfiles[].tpm.persistent` | No | `true` | Whether the vTPM keeps its state across VM restarts. KubeVirt only; rejected on libvirt. |
 
-!!! note "vSphere clones from a sized template"
+!!! note "vSphere needs an explicit VM shape"
     A vSphere profile whose `cpu`, `memoryMiB` or `diskGiB` is zero or omitted is
-    rejected: the clone has no shape to apply. The other providers accept a
-    partial profile and fall back to their own defaults.
+    rejected: the vCenter adapter derives no defaults, so there is no shape to
+    create the VM with. The other providers accept a partial profile and fall
+    back to their own defaults. This holds in both install modes — it is a
+    property of the adapter, not of `template`.
+
+!!! note "`template` is consumed only by the template-clone install mode"
+    Naming a `template` does **not** by itself change how the OS gets onto the
+    machine. It is consumed when the machine's `MachineInstallProfile` selects
+    `installer.templateClone`, in which case the VM is created by cloning that
+    object and personalized with cloud-init. Under `installer.anaconda` the
+    installer partitions the disk from scratch, so cloning a golden image only to
+    wipe it is refused rather than silently ignored — see
+    [Cloning a golden image](machines.md#cloning-a-golden-image).
+
+    Two disk rules follow from the clone: a clone can **grow** a root disk but
+    never shrink one, so `diskGiB` must be at least the template's root disk;
+    and the template must ship **exactly one** disk, because Bootwright adds
+    `dataDisks[]` itself. Both are checked before the clone, naming the
+    template.
 
 !!! note "`failureDomainRef` multiplicity"
     On a vSphere provider with **multiple** failure domains, each machine profile

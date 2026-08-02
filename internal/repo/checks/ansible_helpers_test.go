@@ -205,6 +205,10 @@ func assertIncludeTasksFile(t *testing.T, task map[string]any, want string) {
 	if include == nil {
 		include = task["ansible.builtin.import_tasks"]
 	}
+	if include == nil {
+		assertIncludeRoleTasksFrom(t, task, want)
+		return
+	}
 	switch got := include.(type) {
 	case string:
 		if strings.TrimSpace(got) != want {
@@ -220,6 +224,21 @@ func assertIncludeTasksFile(t *testing.T, task map[string]any, want string) {
 		}
 	default:
 		t.Fatalf("%s is not an include_tasks or import_tasks task", task["name"])
+	}
+}
+
+func assertIncludeRoleTasksFrom(t *testing.T, task map[string]any, want string) {
+	t.Helper()
+	include, ok := task["ansible.builtin.include_role"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an include_tasks, import_tasks or include_role task", task["name"])
+	}
+	if name, _ := include["name"].(string); name != "bootwright.core.machine_os_identity" {
+		t.Fatalf("%s includes role %q, want the shared identity role bootwright.core.machine_os_identity", task["name"], name)
+	}
+	from, _ := include["tasks_from"].(string)
+	if strings.TrimSpace(from) != want {
+		t.Fatalf("%s tasks_from got %q, want %q", task["name"], from, want)
 	}
 }
 

@@ -1,0 +1,12 @@
+---
+- name: Resolve cloned managed OS state paths
+  ansible.builtin.set_fact:
+    bootwright_os_install_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_os_group.name }}/{{ bootwright_component.name }}"
+  changed_when: false
+
+- name: Resolve cloned managed OS marker contract
+  ansible.builtin.set_fact:
+    bootwright_os_marker_path: "{{ bootwright_component.osInstall.marker.path }}"
+    bootwright_os_marker_desired_hash: "{{ bootwright_component.osInstall.marker.desiredHash }}"
+    bootwright_os_marker_payload: "{{ bootwright_component.osInstall.marker | to_json }}"
+  changed_when: false

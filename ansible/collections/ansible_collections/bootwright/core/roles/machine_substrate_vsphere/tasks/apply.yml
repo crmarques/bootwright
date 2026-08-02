@@ -15,6 +15,7 @@
     template: "{{ bootwright_vsphere.template | default(omit, true) }}"
     guest_id: "{{ omit if (bootwright_vsphere.template | default('') | length > 0) else bootwright_vsphere_guest_id }}"
     annotation: "{{ bootwright_vsphere_ownership_marker }}"
+    advanced_settings: "{{ bootwright_vsphere_advanced_settings | default([]) }}"
     hardware:
       num_cpus: "{{ bootwright_component.profile.cpu }}"
       memory_mb: "{{ bootwright_component.profile.memoryMiB }}"
@@ -47,9 +48,23 @@
     name: "{{ omit if (bootwright_vsphere_vm_moid | length > 0) else bootwright_vsphere_vm_name }}"
     boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
     secure_boot_enabled: "{{ bootwright_vsphere_secure_boot }}"
-    boot_order:
-      - disk
-      - cdrom
+    boot_order: "{{ ['disk'] if ((bootwright_vsphere.template | default('')) | length > 0) else ['disk', 'cdrom'] }}"
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
+- name: Power on the cloned vSphere machine
+  community.vmware.vmware_guest_powerstate:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: powered-on
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when: (bootwright_vsphere.template | default('') | length) > 0

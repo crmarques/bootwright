@@ -1,0 +1,27 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+{% set guest = bootwright_component.osInstall.guest %}
+{% set net = guest.network | default({}) %}
+instance-id: {{ guest.instanceId }}
+local-hostname: {{ guest.hostname }}
+network:
+  version: 2
+  ethernets:
+    bootwright-primary:
+      match:
+        macaddress: "{{ net.device }}"
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ net.ip }}/{{ net.prefix }}
+{% if (net.gateway | default('')) | length > 0 %}
+      routes:
+        - to: default
+          via: {{ net.gateway }}
+{% endif %}
+{% if (net.dnsServers | default([])) | length > 0 %}
+      nameservers:
+        addresses:
+{% for server in net.dnsServers %}
+          - {{ server }}
+{% endfor %}
+{% endif %}

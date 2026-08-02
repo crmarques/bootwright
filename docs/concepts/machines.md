@@ -21,10 +21,15 @@ rules on this kind:
   Bootwright neither provisions a substrate nor installs an OS; it reaches the
   machine over `access.ssh` with the credential you declare, or as you.
 - **Bootwright-installed** (`os.provided: false` plus `os.installProfileRef`) —
-  Bootwright installs the OS through Anaconda before any cluster or storage work,
-  using a [`MachineImage`](#machineimage) and a
+  Bootwright lays the OS down before any cluster or storage work, using a
   [`MachineInstallProfile`](#machineinstallprofile). It creates and owns the
-  machine's login, so the `Machine` authors no `access`.
+  machine's login, so the `Machine` authors no `access`. The profile picks one of
+  two install sources: **Anaconda**, which boots a
+  [`MachineImage`](#machineimage) and installs from scratch, or
+  [**template clone**](#cloning-a-golden-image), which copies a vSphere golden
+  image that already carries the OS and personalizes it on first boot. Both keep
+  `os.provided: false`, so both keep `spec.network.config` and the machine's
+  static install address.
 - **installer-provisioned** (`os.provided: false`, no `os.installProfileRef`) —
   the cluster agent installer lays the OS down (RHCOS for OpenShift); Bootwright
   provisions the substrate and boots the agent ISO.
@@ -626,16 +631,23 @@ external proxy.
 
 ## MachineInstallProfile
 
-`MachineInstallProfile` declares how Bootwright installs and customizes an OS
-through Anaconda.
+`MachineInstallProfile` declares how Bootwright lays an OS down and customizes
+it. `spec.installer` is the discriminator: exactly one of `anaconda` (install
+from scratch off boot media) or `templateClone` (copy a golden image that already
+carries the OS, then personalize it) — see
+[Cloning a golden image](#cloning-a-golden-image).
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.os.family` | Yes | — | OS family, for example `rhel`. |
 | `spec.os.version` | Yes | — | OS version string. |
 | `spec.os.architecture` | Yes | — | Architecture such as `x86_64`. |
-| `spec.installer.anaconda` | Yes | — | Anaconda installer block (its presence is the installer discriminator). |
-| `spec.installer.anaconda.imageRef` | Yes | — | Names a `MachineImage`. |
+| `spec.installer.anaconda` | No | — | Anaconda installer block. `spec.installer` must set exactly one of `anaconda`, `templateClone`. |
+| `spec.installer.anaconda.imageRef` | Yes | — | Names a `MachineImage`. Read within the `anaconda` arm: required once that arm is set. |
+| `spec.installer.templateClone` | No | — | Clone-a-golden-image installer block. `spec.installer` must set exactly one of `anaconda`, `templateClone`. |
+| `spec.installer.templateClone.seed` | Yes | — | How the clone is personalized on first boot. Exactly one arm. Read within the `templateClone` arm. |
+| `spec.installer.templateClone.seed.cloudInit` | No | — | Deliver instance metadata and user data to cloud-init in the guest. On vSphere this is `guestinfo.metadata` / `guestinfo.userdata` in the VM's `extraConfig`. |
+| `spec.installer.templateClone.seed.cloudInit.growRootFilesystem` | No | `true` | Grow the root partition and filesystem to the cloned disk on first boot. Set `false` for a template whose root is on LVM and grows some other way. |
 | `spec.installer.anaconda.packageSource` | No | — (⇒ full DVD) | Where Anaconda fetches packages when `imageRef` names a boot ISO. Omit for a full DVD image. |
 | `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` | No | — | Selects the managed artifact-server endpoint that serves this profile's managed-OS boot ISO to the BMC over Redfish virtual media. `serverRef` may inherit the default `Environment.spec.infraComponents.artifactServers[]` entry; `endpointRef` must resolve to a **managed** artifact server. |
 | `spec.subscription.entitlementRef` | No | — | Post-install RHSM registration of the installed node: names the `redhat-rhel` `Entitlement` (registered as `managed`) the node's OS registers against after install. Must resolve to a `redhat-rhel` entitlement, and **cannot** be combined with `installer.anaconda.packageSource.fromSubscription` (which already registers the node during install). |
@@ -672,6 +684,8 @@ through Anaconda.
 | `spec.customizations.security.diskEncryption.recoveryPassphraseRef` | No | — | `opaque` or `token` Secret holding the passphrase Anaconda creates the LUKS container from. The keyslot is kept as the way back in when the TPM stops releasing the key. |
 
 !!! warning "Profile coupling rules"
+    - `spec.installer` must set **exactly one** of `anaconda`, `templateClone`.
+      Neither, or both, is a validation error.
     - A profile referenced by a managed-install machine (`os.installProfileRef`)
       must list `sshd` in `customizations.services.enabled`, or the referencing
       `Machine` fails validation.
@@ -692,6 +706,111 @@ through Anaconda.
       registered — set `spec.subscription.entitlementRef` or
       `installer.anaconda.packageSource.fromSubscription`. Without one, use
       `customizations.repositories.configure` instead.
+
+### Cloning a golden image
+
+`installer.templateClone` installs the OS by **not installing it**: the vSphere
+adapter clones a template that already carries RHEL, and the clone personalizes
+itself on first boot from a cloud-init seed Bootwright writes into the VM's
+`extraConfig`. There is no boot ISO, no kickstart and no `MachineImage` — the
+profile omits `installer.anaconda` entirely.
+
+The source is named by the provider, not by the profile:
+[`machineProfiles[].template`](infrastructure.md#machine-profiles) holds the
+vCenter inventory path of the golden image, and it is the machine's
+`substrate.profileRef` that picks it. That split is deliberate — the *method* is
+a property of the install profile, the *inventory path of one image inside one
+vCenter* is placement data that only vSphere can express. A `templateClone`
+profile on a machine whose profile sets no `template` is refused, and so is an
+`anaconda` profile on a machine whose profile **does** set one (Anaconda would
+wipe the image you cloned).
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-arbiter
+spec:
+  os:
+    family: rhel
+    version: "9.4"
+    architecture: x86_64
+  installer:
+    templateClone:
+      seed:
+        cloudInit: {}
+  customizations:
+    services:
+      enabled:
+        - sshd
+```
+
+#### What the template must ship
+
+Bootwright cannot read inside a template — vCenter answers questions about its
+disks, not its filesystem — so none of this is checked before the clone. A
+template that fails the contract clones fine, boots, and never answers SSH.
+
+- **cloud-init**, 21.3 or later, with `DataSourceVMware` in `datasource_list`.
+  That datasource is what reads `guestinfo.metadata` / `guestinfo.userdata`.
+- **`open-vm-tools`**, enabled. The guestinfo channel runs over the Tools RPC
+  transport.
+- **No pre-existing `/etc/cloud/cloud-init.disabled`**, and
+  `preserve_hostname` **not** set in `/etc/cloud/cloud.cfg` — either one makes
+  the seed a silent no-op, and the second would leave the node answering to the
+  template's hostname instead of the one the cluster expects.
+- **`openssh-server`**, enabled. `customizations.services.enabled` must still
+  list `sshd`; on this arm that list declares the template contract as much as it
+  configures anything.
+- **`nmstate`**. The seed brings up only the primary address; the day-2 network
+  apply calls `nmstatectl` for the full desired state.
+- **Exactly one virtual disk**, no larger than `machineProfiles[].diskGiB`. A
+  clone can grow a root disk but never shrink one, and Bootwright adds
+  `dataDisks[]` itself.
+- **A root filesystem `growpart`/`resizefs` can extend**, unless you set
+  `seed.cloudInit.growRootFilesystem: false`.
+- **A SATA controller with a CD-ROM at 0:0**, if any ISO is ever attached to
+  these machines. vCenter silently drops CD-ROM changes made while cloning from
+  a marked template, so the clone inherits whatever CD-ROM topology the template
+  has.
+
+#### Customizations the clone refuses
+
+Anything Anaconda applies while partitioning and installing is a property of the
+template on this arm. Bootwright refuses those fields rather than accepting them
+and doing nothing:
+
+| Refused field | Refused because | What to do instead |
+| --- | --- | --- |
+| `customizations.storage.rootDevice` | A clone inherits the template's partitioning; Bootwright never runs `clearpart` on it. | Partition the template, or switch to `installer.anaconda`. |
+| `customizations.packages` | The package set is fixed when the template is built. | Build the packages in, or declare day-2 `customizations.repositories`. |
+| `customizations.localization` | The template owns its locale, keyboard and timezone. | Set them when the template is built. |
+| `customizations.security.selinux` | SELinux mode is a property of the template. | Set it when the template is built. |
+| `customizations.security.firewall` | The firewall state is a property of the template. | Set it when the template is built. |
+| `customizations.security.fips` | FIPS is turned on by an installer kernel argument (`fips=1`) only Anaconda can pass. | Build the template with `fips-mode-setup --enable`, or switch to `installer.anaconda`. |
+| `customizations.security.diskEncryption` | The LUKS container is created by the installer's partitioner, and a clone never partitions. | Build the template with an encrypted root, or switch to `installer.anaconda`. |
+| `customizations.ssh.initialPassword` | The seed travels in vCenter `extraConfig`, which is plaintext in the VMX and readable by any principal with VM read privilege. Only a **public** key goes that way. | Reach the machine over SSH with the key in `access.ssh`, or switch to `installer.anaconda`. |
+
+What **does** still apply: `customizations.services` (cloud-init enables them on
+first boot), `customizations.repositories` (written day-2 by the machines-phase
+task), `spec.subscription` (day-2 RHSM registration), and
+`customizations.ssh.passwordAuthentication`.
+
+#### What the seed can and cannot address
+
+The seed exists to get SSH answering; nmstate does everything else once
+Bootwright can log in. So a `templateClone` machine must declare a **static IPv4
+address on an ethernet interface carrying the default route**. A machine whose
+primary is a bond or a VLAN is refused — put the address on an ethernet (a vDS
+port group can carry the VLAN tag) and let nmstate build the rest afterwards.
+The seed carries no search domain, no MTU and no IPv6; if the SSH handshake needs
+one of those to complete, this arm cannot bring the machine up.
+
+Re-personalizing a clone is `apply --mode rebuild`, which deletes and re-clones
+the VM — the same contract every managed-OS install already has, and the reason
+routine `apply` never re-runs cloud-init. The operator walkthrough, the vCenter
+privilege delta and a worked three-arbiter example are in
+[Managed OS installs → Installing from a vSphere template](../advanced/managed-os.md#installing-from-a-vsphere-template).
 
 ### Anaconda package source
 

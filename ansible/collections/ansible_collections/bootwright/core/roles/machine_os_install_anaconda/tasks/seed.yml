@@ -1,0 +1,5 @@
+---
+- name: Clear the guest seed for an Anaconda-installed machine
+  ansible.builtin.set_fact:
+    bootwright_machine_guest_seed: {}
+  changed_when: false

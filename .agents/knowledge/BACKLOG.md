@@ -837,3 +837,32 @@ learned; this file records what it still owes.
 - Related: [0008](../../specs/adr/0008-ceph-declarative-cephadm-compat.md),
   [0018](../../specs/adr/0018-environment-domain-model.md),
   [0025](../../specs/adr/0025-composed-names-are-labels-plus-explicit-overrides.md)
+
+## B-070 — The published `ceph-mon` lab profile is under the hard preflight floor
+- Status: open
+- Area: examples / docs / ceph-preflight
+- Origin: Ceph arbiter sizing pass alongside ADR 0045
+- Severity: medium
+- Problem: `examples/ceph-ibm-libvirt-lab/infra/providers/libvirt.yaml:34` ships
+  a `ceph-mon` machine profile with `diskGiB: 16`, and
+  `docs/getting-started/ceph.md:170` publishes that number as part of the first
+  managed-OS + Ceph walkthrough. Meanwhile
+  `ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml:82-89`
+  asserts a **hard** floor of `20971520` KiB (20 GiB) **free** on the filesystem
+  holding `/var/lib`, and `docs/concepts/storage.md` publishes the same 20 GiB
+  absolute floor plus a mon-node budget of 20 base + 15 mon = 35 GiB. A 16 GiB
+  root cannot clear a 20 GiB *free* assert; neither can a 20 GiB one once an OS
+  is installed on it. So either the shipped lab fails its own preflight, or the
+  preflight is not reached on that path — and the docs advertise a sizing the
+  product refuses. Correcting it after the fact is expensive by design: the
+  libvirt and vSphere substrate gates both refuse an in-place root-disk resize
+  and a disk-count change, naming `destroy --stage infra` as the only exit.
+- Exit: maintainer's call on the right lab-scale value. Either raise the
+  example profile (and the `docs/getting-started/ceph.md` prose that mirrors it)
+  to a size that clears the floor, or introduce an explicit lab-scale relaxation
+  of the absolute floor with its own opt-in and refusal message. Do **not**
+  silently change the example's numbers without deciding which of the two it is;
+  a lab that cannot complete preflight and a floor that does not apply to labs
+  are different products.
+- Related: [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md),
+  [examples-wip-fixtures.md](examples-wip-fixtures.md)
