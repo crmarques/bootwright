@@ -38,12 +38,15 @@ results, `preflight` included.
 | `diff` / `diff --recorded` | no | The comparison report (exit `3` is still the sync signal). |
 | `machine list`, `cluster list`, `cluster info`, `machine trust`, `secret list`, `secret check`, `secret encryption status`, `add-ons list`, `media list` | no | The listed inventory or check result of that verb. |
 | `render`, `render effective`, `render installer`, `render storage` | no | The render report (for `render --output-dir`, the manifest of exported files). |
-| `preflight infra\|clusters\|container-cluster\|storage-cluster\|all\|add-ons` | no | The executed check results of that live preflight: `checks[]` of `{name, target, status, detail, impact, fix}` and a `summary` of `{total, failed}`, plus `ok`, `context`, `target`, and the run `log`. With `--dry-run` it returns the planned preflight command graph instead. |
+| `preflight infra\|clusters\|container-cluster\|storage-cluster\|all` | no | The executed check results of that live preflight: `checks[]` of `{name, target, status, detail, impact, fix}` and a `summary` of `{total, failed}`, plus `ok`, `context`, `target`, and the run `log`. With `--dry-run` it returns the planned preflight command graph instead. |
+| `preflight add-ons` | no | The same executed check results, in the same shape. It has no `--dry-run`. |
 | `plan` | always a preview | The planned task graph. |
 | `apply`, `destroy` | **yes** | The plan, plus `requiredAuthorizations` — a real mutating run has no JSON mode. |
 
-Every `preflight` target reports results in that one shape; `preflight bastion`
-is the only one that accepts neither flag.
+Every `preflight` target reports results in that one shape. Only the targets
+that run an Ansible preflight accept `--dry-run` to describe the plan instead;
+`preflight add-ons` has no `--dry-run`, and `preflight bastion` accepts neither
+flag.
 
 A live preflight reports every check it executed, and its exit code still
 carries the verdict — `0` when nothing failed, `1` when any check did. `status`

@@ -48,14 +48,29 @@ func TestSyntaxCheckJSONCarriesExcludedResourceFiles(t *testing.T) {
 	if err := writeSyntaxCheckJSON(&stdout, v1alpha1.State{}, excludedResourceFixture(), nil); err != nil {
 		t.Fatal(err)
 	}
-	var report syntaxCheckReport
-	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+	var wire map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &wire); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout.String())
 	}
-	if len(report.ExcludedResourceFiles) != 1 {
-		t.Fatalf("excludedResourceFiles = %+v, want one entry", report.ExcludedResourceFiles)
+	entries, ok := wire["excludedResourceFiles"].([]any)
+	if !ok || len(entries) != 1 {
+		t.Fatalf("excludedResourceFiles = %v, want one entry", wire["excludedResourceFiles"])
 	}
-	if report.ExcludedResourceFiles[0].Path != "add-ons/extra.yaml" {
-		t.Errorf("excluded path = %q, want add-ons/extra.yaml", report.ExcludedResourceFiles[0].Path)
+	entry, ok := entries[0].(map[string]any)
+	if !ok {
+		t.Fatalf("excludedResourceFiles[0] = %v, want an object", entries[0])
+	}
+	for _, key := range []string{"environment", "path", "objects", "loadPath"} {
+		if _, present := entry[key]; !present {
+			t.Errorf("excludedResourceFiles[0] has no %q key: %v", key, entry)
+		}
+	}
+	for _, key := range []string{"Environment", "Path", "Objects", "LoadPath"} {
+		if _, present := entry[key]; present {
+			t.Errorf("excludedResourceFiles[0] carries PascalCase key %q; the report is lowerCamelCase", key)
+		}
+	}
+	if entry["path"] != "add-ons/extra.yaml" {
+		t.Errorf("excluded path = %v, want add-ons/extra.yaml", entry["path"])
 	}
 }

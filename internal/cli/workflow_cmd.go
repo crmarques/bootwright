@@ -25,14 +25,13 @@ the process exit code: 0 when every check passes, non-zero when any check
 fails. Per-check pass/fail detail is in the terminal output and the run, task,
 and cluster logs under Bootwright storage.
 
-In CI, gate on the live preflight exit code. Structured --output json behavior
-varies by target: infra, clusters, container-cluster and storage-cluster emit
+In CI, gate on the live preflight exit code. Every target reports --output json
+in one shape: infra, clusters, container-cluster, storage-cluster and all emit
 the executed check results (checks[] plus a total/failed summary) from a live
 run, and return the planned preflight command graph instead when --dry-run is
-also given; 'preflight add-ons' emits live pass/fail JSON and has no --dry-run;
-'preflight all' accepts --output json only with --dry-run, and returns the plan;
-'preflight bastion' has neither flag. For offline desired-state validation with
-structured result JSON, use 'validate'.`,
+also given; 'preflight add-ons' emits the same live results and has no
+--dry-run; 'preflight bastion' has neither flag. For offline desired-state
+validation with structured result JSON, use 'validate'.`,
 	}
 	cmd.AddCommand(
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),

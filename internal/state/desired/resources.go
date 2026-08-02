@@ -486,10 +486,10 @@ func uniqueFiles(groups ...[]string) []string {
 }
 
 type ExcludedResourceFile struct {
-	Environment string
-	Path        string
-	Objects     []string
-	LoadPath    string
+	Environment string   `json:"environment"`
+	Path        string   `json:"path"`
+	Objects     []string `json:"objects"`
+	LoadPath    string   `json:"loadPath"`
 }
 
 func (e ExcludedResourceFile) Warning() string {
