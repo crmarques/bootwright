@@ -785,6 +785,11 @@ Rules:
   defaults to `ClusterUserDefinedNetwork` and `apiGroup` defaults from the kind —
   `k8s.ovn.org` for `ClusterUserDefinedNetwork`/`UserDefinedNetwork`,
   `k8s.cni.cncf.io` for `NetworkAttachmentDefinition`.
+- A `vsphere` attachment binds an existing portgroup by name; Bootwright never
+  creates one. Optional `vsphere.distributedSwitch` names the vDS that owns the
+  portgroup and is required in practice whenever the portgroup name is not unique
+  across the vCenter, because portgroup resolution is not datacenter-scoped. The
+  attachment a machine selects applies to every NIC of that machine.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.
   `hostClusterRef` references a Bootwright `ContainerCluster`; `kubeconfigRef`
   references a secret containing an external virtualization kubeconfig. They also

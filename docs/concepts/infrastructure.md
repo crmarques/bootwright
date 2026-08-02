@@ -434,11 +434,22 @@ kind, so there is no separate discriminator.
 | --- | --- | --- | --- | --- |
 | `libvirt` | `bridge` | Yes | — | Host bridge name. |
 | `baremetal` | `vlan` | No | — | VLAN id; must be `0..4094`. |
-| `vsphere` | `portgroup` | Yes | — | Portgroup name. |
+| `vsphere` | `portgroup` | Yes | — | Portgroup name — a standard-switch portgroup or a vDS distributed portgroup. |
+| `vsphere` | `distributedSwitch` | No | — | vDS name that owns `portgroup`; set it when the portgroup name is not unique across the vCenter. |
 | `kubevirt` | `networkRef.apiGroup` | No | `k8s.ovn.org` (with kind) | API group of the network object; pairs with `kind`. |
 | `kubevirt` | `networkRef.kind` | No | `ClusterUserDefinedNetwork` | `ClusterUserDefinedNetwork`, `UserDefinedNetwork`, `NetworkAttachmentDefinition`, or any kind. |
 | `kubevirt` | `networkRef.name` | Yes | — | Network object name on the host cluster. |
 | `kubevirt` | `networkRef.namespace` | No | `spec.kubevirt.namespace` | Selected VM namespace (CUDN) / object namespace (UDN, NAD); must be a DNS label. |
+
+!!! note "vSphere portgroups must already exist"
+    Bootwright binds a NIC to `portgroup` by name and never creates a portgroup —
+    author the standard-switch portgroup or the vDS distributed portgroup out of
+    band. Resolution is not datacenter-scoped, so a name repeated on two switches
+    or two datacenters binds unpredictably: set `distributedSwitch` to name the
+    vDS that owns it, and the attach fails loudly instead. A machine's
+    `network.config.attachmentRef` selects one attachment, and it applies to every
+    NIC of that machine. `failureDomains[].topology.networks[]` is not this
+    binding — it is install-config data for OpenShift node addressing.
 
 KubeVirt `networkRef` is the API's sole object-form reference because the network
 object lives on the host cluster, outside the loaded desired state. It is
