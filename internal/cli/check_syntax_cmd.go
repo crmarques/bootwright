@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -113,7 +114,7 @@ func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, desi
 }
 
 func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusions) []preflightCheck {
-	checks := make([]preflightCheck, 0, len(exclusions.ContainerClusters)+len(exclusions.StorageClusters))
+	checks := make([]preflightCheck, 0, len(exclusions.ContainerClusters)+len(exclusions.StorageClusters)+len(exclusions.Resources))
 	for _, name := range exclusions.ContainerClusters {
 		checks = append(checks, warnCheck(
 			"Environment selection",
@@ -130,6 +131,15 @@ func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusio
 			"loaded but excluded by Environment cluster selection",
 			"excluded clusters are not validated and apply never touches them",
 			fmt.Sprintf("add %q to Environment spec.storageClusters or remove its YAML", name),
+		))
+	}
+	for _, excluded := range exclusions.Resources {
+		checks = append(checks, warnCheck(
+			"Environment selection",
+			excluded.Path,
+			fmt.Sprintf("excluded by %s/%s spec.resources (%s)", v1alpha1.KindEnvironment, excluded.Environment, strings.Join(excluded.Objects, ", ")),
+			"excluded files are never loaded, so the add-ons, playbooks, and objects they declare never run",
+			fmt.Sprintf("remove the path from spec.resources or add %q to load it", excluded.LoadPath),
 		))
 	}
 	return checks
@@ -192,13 +202,14 @@ func newStateCensus(state v1alpha1.State) stateCensus {
 }
 
 type syntaxCheckReport struct {
-	OK                        bool                     `json:"ok"`
-	ExitCode                  int                      `json:"exitCode"`
-	Error                     string                   `json:"error,omitempty"`
-	ExcludedContainerClusters []string                 `json:"excludedContainerClusters,omitempty"`
-	ExcludedStorageClusters   []string                 `json:"excludedStorageClusters,omitempty"`
-	Diagnostics               []Diagnostic             `json:"diagnostics,omitempty"`
-	Advisories                []advice.StorageAdvisory `json:"advisories,omitempty"`
+	OK                        bool                                `json:"ok"`
+	ExitCode                  int                                 `json:"exitCode"`
+	Error                     string                              `json:"error,omitempty"`
+	ExcludedContainerClusters []string                            `json:"excludedContainerClusters,omitempty"`
+	ExcludedStorageClusters   []string                            `json:"excludedStorageClusters,omitempty"`
+	ExcludedResourceFiles     []desiredstate.ExcludedResourceFile `json:"excludedResourceFiles,omitempty"`
+	Diagnostics               []Diagnostic                        `json:"diagnostics,omitempty"`
+	Advisories                []advice.StorageAdvisory            `json:"advisories,omitempty"`
 	stateCensus
 }
 
@@ -212,6 +223,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		ExitCode:                  exitCode,
 		ExcludedContainerClusters: exclusions.ContainerClusters,
 		ExcludedStorageClusters:   exclusions.StorageClusters,
+		ExcludedResourceFiles:     exclusions.Resources,
 		Advisories:                advice.StorageAdvisories(state),
 		stateCensus:               newStateCensus(state),
 	}
