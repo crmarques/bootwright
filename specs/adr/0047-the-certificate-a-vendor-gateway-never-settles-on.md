@@ -89,5 +89,7 @@ again, the loop stops, and the daemons settle.
   certificates do not loop.
 - The service-readiness failure now also collects `journalctl` tails over the
   cluster SSH identity from every node whose daemon cephadm reports in
-  `error`, `unknown`, or `stopped`, so a daemon that dies at start is diagnosed
-  from the failure output instead of a follow-up session on the nodes.
+  `error`, `unknown`, `stopped`, or still `starting` after the readiness window
+  is exhausted, so a daemon that dies at start — or never finishes starting —
+  is diagnosed from the failure output instead of a follow-up session on the
+  nodes.

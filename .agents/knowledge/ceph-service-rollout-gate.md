@@ -18,7 +18,8 @@ it is really an ungated rollout still in flight — and a genuinely stuck servic
 as success forever.
 
 **Contract:** `bootstrap_steps/service_readiness.yml` runs after the late service
-specs and the secret-bearing management services, and before the late operations
+specs and the management services phase (which runs for every declared
+mgmt-gateway, secrets or not), and before the late operations
 and the final health gate. It polls `ceph orch ls --format json` until every
 managed non-`osd` service satisfies `status.running >= status.size`, then fails
 closed with the per-service running/declared counts, `ceph orch ps`, and

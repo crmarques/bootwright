@@ -46,6 +46,17 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_mgr_major | default(0) | int) > 0
 
+- name: Resolve a dashboard HTTP port that stays off the management gateway port
+  ansible.builtin.set_fact:
+    bootwright_ceph_dashboard_http_port_effective: >-
+      {{
+        ((bootwright_ceph_dashboard_http_port | default(8081) | int) + 1)
+        if ((bootwright_ceph_management.port | default(0) | int)
+            == (bootwright_ceph_dashboard_http_port | default(8081) | int))
+        else (bootwright_ceph_dashboard_http_port | default(8081) | int)
+      }}
+  when: bootwright_ceph_management.hosts is defined
+
 - name: Assemble management service specs
   ansible.builtin.set_fact:
     bootwright_ceph_management_specs: >-
@@ -172,13 +183,13 @@
       - set
       - mgr
       - mgr/dashboard/server_port
-      - "{{ bootwright_ceph_dashboard_http_port | default(8081) | int }}"
+      - "{{ bootwright_ceph_dashboard_http_port_effective | int }}"
   register: bootwright_ceph_dashboard_port_set
   changed_when: true
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_dashboard_port_current | default(''))
-        != (bootwright_ceph_dashboard_http_port | default(8081) | string)
+        != (bootwright_ceph_dashboard_http_port_effective | string)
 
 - name: Record whether the Ceph dashboard's SSL/port settings changed
   ansible.builtin.set_fact:
@@ -224,7 +235,7 @@
           and not (
             (bootwright_ceph_dashboard_live_url is match('http://'))
             and (bootwright_ceph_dashboard_live_url
-                 is search(':' ~ (bootwright_ceph_dashboard_http_port | default(8081) | string)))
+                 is search(':' ~ (bootwright_ceph_dashboard_http_port_effective | string)))
           )
         )
       }}
@@ -410,7 +421,7 @@
          | default('(no declared storage node matched a live manager daemon hostname)', true) }}.
       Restart the ceph-<fsid>@mgr.* systemd units on the manager hosts, confirm
       `ceph mgr services` reports the dashboard on
-      http://<mgr>:{{ bootwright_ceph_dashboard_http_port | default(8081) }}/, and
+      http://<mgr>:{{ bootwright_ceph_dashboard_http_port_effective }}/, and
       re-run this apply.
   when: >-
     bootwright_ceph_management.hosts is defined
