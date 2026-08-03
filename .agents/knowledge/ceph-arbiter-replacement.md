@@ -106,7 +106,12 @@ name the `bootwright apply` that converges the rest.
   it and use `ceph orch host rm --offline --force`, plus an explicit
   `ceph mon rm` because the daemon path cannot reach the daemon. Gated, never
   inferred: a host that answers and *refuses an identity* is not an absent host
-  (same rule as `unreachable-nodes` on destroy).
+  (same rule as `unreachable-nodes` on destroy). The token alone is not the
+  proof, and this lane cannot borrow destroy's proof — the replaced arbiter left
+  the topology, so it is in no play's inventory and `ignore_unreachable` never
+  sees it. The orchestrator's own view is the evidence: take the offline path
+  only when `ceph orch host ls` reports that host offline, and refuse the token
+  when it does not, naming what the orchestrator reported.
 - **Mons outside quorum.** `set_new_tiebreaker` needs a quorum to commit, and
   swapping the arbiter while a data site is down removes the vote holding the
   remaining quorum together. Refuse by default.

@@ -47,6 +47,6 @@ func replaceArbiterRequiredAuthorizations(auth *authorizations, sameSite bool, d
 	forecast := newAuthorizationForecast(auth)
 	forecast.consult(authorizeSameSiteArbiter, sameSite, sameSiteReason)
 	forecast.consult(authorizeDegradedQuorum, degraded != "", degraded)
-	forecast.mayConsult(authorizeUnreachableNodes, true, "retiring the replaced arbiter needs its host; whether it proves unreachable is decided when the run contacts it, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnreachableNodes, true, "retiring the replaced arbiter needs its host; the offline path is taken only once `ceph orch host ls` reports that host offline, which is decided on the cluster, so a preview cannot settle it")
 	return forecast.list()
 }

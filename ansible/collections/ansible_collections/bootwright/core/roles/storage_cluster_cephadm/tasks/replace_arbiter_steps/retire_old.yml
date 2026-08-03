@@ -86,6 +86,47 @@
     ((bootwright_arbiter_retire_dump.stdout | default('{}', true) | from_json).mons
      | default([]) | map(attribute='name') | list)
 
+- name: Read the orchestrator's view of the replaced arbiter host
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, orch, host, ls, --format, json]
+  register: bootwright_arbiter_retire_hosts
+  changed_when: false
+  failed_when: false
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
+- name: Resolve whether the orchestrator reports the replaced arbiter host offline
+  ansible.builtin.set_fact:
+    bootwright_arbiter_live_host_offline: >-
+      {{ (bootwright_arbiter_retire_hosts.stdout | default('[]', true) | from_json)
+         | selectattr('hostname', 'defined')
+         | selectattr('hostname', 'equalto', bootwright_arbiter_live_node)
+         | selectattr('status', 'defined')
+         | map(attribute='status')
+         | map('lower')
+         | select('search', 'offline')
+         | list | length > 0 }}
+  changed_when: false
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
+- name: Refuse an offline retirement the orchestrator does not corroborate
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_live_host_offline | default(false) | bool
+    fail_msg: >-
+      --authorize unreachable-nodes was supplied, but `ceph orch host ls` still reports
+      host {{ bootwright_arbiter_live_node }} of storage cluster
+      {{ bootwright_arbiter_cluster_name }} as reachable, so this run has no proof the
+      host is absent. The offline path skips `ceph orch host drain` and removes the host
+      with `--offline --force`, which leaves its mon container and /var/lib/ceph state
+      running on a host cephadm no longer manages — that is why the token needs proved
+      absence, not an operator's expectation. Re-run without the token to retire the host
+      normally, or power it down first and re-run.
+      Hosts: {{ bootwright_arbiter_retire_hosts.stdout | default('') | trim }}
+    quiet: true
+  when:
+    - (bootwright_arbiter_live_node | default('') | length) > 0
+    - bootwright_arbiter_old_host_offline | default(false) | bool
+
 - name: Drain the remaining daemons of the replaced arbiter host
   ansible.builtin.command:
     argv: [cephadm, shell, --, ceph, orch, host, drain, "{{ bootwright_arbiter_live_node }}"]
@@ -127,7 +168,9 @@
       ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}, so the cluster is correct
       but still carries the retired host. Drain it by hand with
       `ceph orch host drain {{ bootwright_arbiter_live_node }}` and re-run the command to
-      finish the retirement.
+      finish the retirement; if the host is gone for good, power it down and re-run with
+      --authorize unreachable-nodes, which takes the offline path once `ceph orch host ls`
+      reports it offline.
       rc: {{ bootwright_arbiter_host_rm.rc | default('<none>') }}
       stdout: {{ bootwright_arbiter_host_rm.stdout | default('') }}
       stderr: {{ bootwright_arbiter_host_rm.stderr | default('') }}

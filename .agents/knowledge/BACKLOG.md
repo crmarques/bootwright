@@ -894,6 +894,35 @@ learned; this file records what it still owes.
   catch the unambiguous case.
 - Related: [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)
 
+## B-073 — `replace-arbiter` inherits the retiring arbiter's site, which can be a lie
+- Status: open (deferred by the operator during the 2026-08-02 implementation audit)
+- Area: storage/arbiter · api/validation
+- Origin: implementation quality audit (2026-08-02)
+- Problem: `arbiter.ComputePromotion` (`internal/storage/arbiter/promote.go`)
+  carries `Site: current.Site` from the retiring tiebreaker onto the
+  replacement, and `rewriteTiebreaker` rewrites `name` and `machineRef` but
+  never `site`. Moving the arbiter to a machine in a different third site — dc3
+  to dc4, the estate shape the `ceph-arbiter` candidate pool exists for —
+  therefore records the new node as `site: dc3`. Two consequences: the mon's
+  `crush_locations` entry (`arbiterMonLocations`,
+  `internal/cli/storage_cluster_cmd.go`) tells Ceph a location the host is not
+  in, and the same-site predicate (`dump.MonsAtSite(domain, desired.Site)`)
+  compares against the inherited label, so a replacement that really does land
+  inside a data site is refused neither by `--authorize same-site-arbiter` nor
+  by Ceph's own `--yes-i-really-mean-it` check. The truthful state is also
+  inexpressible through the authored path: `validate_storage_stretch.go`
+  refuses a tiebreaker site that is a data site, and refuses a tiebreaker node
+  whose `site` differs from `stretch.tiebreaker.site`, so an operator cannot
+  author the emergency fallback that the same-site refusal itself advertises.
+- Exit: pick one of two shapes. (a) An optional `--new-arbiter-site` written to
+  both `nodes[].site` and `stretch.tiebreaker.site`, surfaced in the preview and
+  the confirmation, keeping the data-site refusal for every path that is not the
+  acknowledged emergency. (b) Refuse `--new-arbiter-machine` outright when the
+  replacement's site would differ from the retiring node's, leaving a cross-site
+  move to a hand-edited input, which already validates. Either way the same-site
+  predicate must read a site the machine is actually in.
+- Related: [ceph-arbiter-replacement.md](ceph-arbiter-replacement.md)
+
 ## B-072 — Standby `ceph-arbiter` candidates are built only on promotion
 - Status: open (by design today — recorded so it is a decision, not a surprise)
 - Area: storage/arbiter · apply scope
