@@ -233,12 +233,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.machineRef", p.Metadata.Name),
 				v1alpha1.KindMachine, p.Spec.Libvirt.MachineRef.Name)
 		}
-		for _, profile := range providerProfiles(p) {
-			if profile.FailureDomainRef.Name != "" && p.Spec.Type == v1alpha1.ProvisionerVSphere {
-				require(fmt.Sprintf("InfraProvider/%s spec.%s.machineProfiles[%s].failureDomainRef", p.Metadata.Name, p.Spec.Type, profile.Name),
-					v1alpha1.KindInfraProvider, p.Metadata.Name)
-			}
-		}
 	}
 	for _, image := range state.MachineInstallProfiles {
 		if image.Spec.Installer.Anaconda != nil {

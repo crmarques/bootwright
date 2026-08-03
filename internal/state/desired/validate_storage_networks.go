@@ -93,12 +93,12 @@ func validateStorageCephMonPublicNetwork(prefix string, cluster v1alpha1.Storage
 	return errs
 }
 
-func validateStorageCephUnusedPublicNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+func validateStorageCephUnusedPublicNetwork(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, state v1alpha1.State) []string {
 	ceph := cluster.Spec.Ceph
 	if ceph == nil || len(ceph.Networks.PublicCIDRs) < 2 {
 		return nil
 	}
-	footprints := make([]storagePublicFootprint, 0, len(ceph.Topology.Nodes))
+	declared := make([]storagePublicFootprint, 0, len(ceph.Topology.Nodes))
 	for _, node := range ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok {
@@ -108,37 +108,85 @@ func validateStorageCephUnusedPublicNetwork(prefix string, cluster v1alpha1.Stor
 		if !ok {
 			return nil
 		}
-		footprints = append(footprints, footprint)
+		declared = append(declared, footprint)
 	}
-	if len(footprints) == 0 {
+	if len(declared) == 0 {
 		return nil
 	}
+	var errs []string
+	for _, cidr := range ceph.Networks.PublicCIDRs {
+		if storageFootprintsStandOn(declared, cidr) {
+			continue
+		}
+		if storageArbiterCandidateStandsOn(state, cluster, machines, declared, cidr) {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("%s.networks.publicCIDRs: no declared Ceph host stands on %s; public_network is the network Ceph daemons bind within and clients reach them on, so an entry no host of this cluster sits in binds nothing and reaches nobody — it is a declaration this estate does not serve. This is what an arbiter subnet copied from another environment looks like: check it against the addresses under spec.ceph.topology.nodes and against the Machines declaring capability %q — an arbiter candidate names no cluster, so it holds an entry of this one only when it shares a network with a declared topology node or stands on a subnet no other StorageCluster declares — then drop the entry or correct the host that was meant to stand on it", prefix, cidr, v1alpha1.MachineCapabilityCephArbiter))
+	}
+	return errs
+}
+
+func storageFootprintsStandOn(footprints []storagePublicFootprint, cidr string) bool {
+	for _, footprint := range footprints {
+		if len(footprint.subnets) > 0 {
+			if storageNetworksOverlapAny(footprint.subnets, []string{cidr}) {
+				return true
+			}
+			continue
+		}
+		if footprint.address != "" && storageIPWithinAny(footprint.address, []string{cidr}) {
+			return true
+		}
+	}
+	return false
+}
+
+func storageArbiterCandidateStandsOn(state v1alpha1.State, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, declared []storagePublicFootprint, cidr string) bool {
+	ceph := cluster.Spec.Ceph
+	exclusive := !storageCIDRDeclaredElsewhere(state, cluster.Metadata.Name, cidr)
 	for _, machine := range machines {
 		if !v1alpha1.MachineHasCapability(machine, v1alpha1.MachineCapabilityCephArbiter) {
 			continue
 		}
-		if footprint, ok := storageMachinePublicFootprint(ceph, machine); ok {
-			footprints = append(footprints, footprint)
+		footprint, ok := storageMachinePublicFootprint(ceph, machine)
+		if !ok {
+			continue
+		}
+		if !storageFootprintsStandOn([]storagePublicFootprint{footprint}, cidr) {
+			continue
+		}
+		if exclusive || storageFootprintNeighborsAny(footprint, declared) {
+			return true
 		}
 	}
-	var errs []string
-	for _, cidr := range ceph.Networks.PublicCIDRs {
-		stood := false
-		for _, f := range footprints {
-			if len(f.subnets) > 0 && storageNetworksOverlapAny(f.subnets, []string{cidr}) {
-				stood = true
-				break
-			}
-			if len(f.subnets) == 0 && f.address != "" && storageIPWithinAny(f.address, []string{cidr}) {
-				stood = true
-				break
-			}
+	return false
+}
+
+func storageCIDRDeclaredElsewhere(state v1alpha1.State, clusterName string, cidr string) bool {
+	for _, other := range state.StorageClusters {
+		if other.Metadata.Name == clusterName || other.Spec.Ceph == nil {
+			continue
 		}
-		if !stood {
-			errs = append(errs, fmt.Sprintf("%s.networks.publicCIDRs: no declared Ceph host stands on %s; public_network is the network Ceph daemons bind within and clients reach them on, so an entry no host of this cluster sits in binds nothing and reaches nobody — it is a declaration this estate does not serve. This is what an arbiter subnet copied from another environment looks like: check it against the addresses under spec.ceph.topology.nodes and against the Machines declaring capability %q, and drop the entry or correct the host that was meant to stand on it", prefix, cidr, v1alpha1.MachineCapabilityCephArbiter))
+		if storageNetworksOverlapAny([]string{cidr}, other.Spec.Ceph.Networks.PublicCIDRs) {
+			return true
 		}
 	}
-	return errs
+	return false
+}
+
+func storageFootprintNeighborsAny(footprint storagePublicFootprint, others []storagePublicFootprint) bool {
+	for _, other := range others {
+		if len(footprint.subnets) > 0 && len(other.subnets) > 0 && storageNetworksOverlapAny(footprint.subnets, other.subnets) {
+			return true
+		}
+		if len(footprint.subnets) > 0 && other.address != "" && storageIPWithinAny(other.address, footprint.subnets) {
+			return true
+		}
+		if footprint.address != "" && len(other.subnets) > 0 && storageIPWithinAny(footprint.address, other.subnets) {
+			return true
+		}
+	}
+	return false
 }
 
 type storagePublicFootprint struct {

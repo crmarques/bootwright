@@ -93,3 +93,36 @@ them, naming the network the host actually sits on.
 cover the arbiter. The overlap test would accept it, but `public_network` is
 also what every mon binds within, so a supernet changes where the whole cluster
 believes its public network is. Declare the two subnets separately.
+
+## Attributing an arbiter candidate to a cluster
+
+`validateStorageCephUnusedPublicNetwork` reports a `publicCIDRs` entry no host of
+the cluster stands on. A standby arbiter candidate is a Machine carrying
+capability `ceph-arbiter` that is deliberately *not* a topology node — it holds no
+cluster reference of any kind — yet its own subnet is unioned into the cluster's
+`publicCIDRs` by the chart, so the check has to credit it or it would refuse every
+estate holding a spare tiebreaker.
+
+Crediting *every* candidate in the context, as the check first did, silences the
+entry for the whole context: in a multi-cluster context a candidate authored for
+one StorageCluster satisfied another's CIDR, which is exactly the copied-subnet
+mistake the refusal names. Two relations scope it, and a candidate is credited
+when **either** holds:
+
+- it shares a network with a footprint derived from this cluster's declared
+  topology nodes (`storageFootprintNeighborsAny`), or
+- no other StorageCluster in the state declares a `publicCIDRs` entry overlapping
+  the one under test (`storageCIDRDeclaredElsewhere`).
+
+Adjacency alone is **not** sufficient and must not be made the only rule. The
+whole point of a third-site arbiter is that it stands on a routed subnet of its
+own with no L2 or L3 overlap with either data site — `environment-ha`'s
+`values/example.yaml` authors exactly that (`ceph-dc4-arbiter`, its own `cidr`,
+`provided: true`, no interface wiring). An adjacency-only rule refuses that
+tracked example. The exclusivity branch is what keeps every single-Ceph-cluster
+context — which is every current estate — behaving as before.
+
+Both relations are heuristics because the data carries no candidate-to-cluster
+edge. When two clusters declare the same subnet and only a candidate stands in it,
+neither can claim it and both are reported; that is the intended reading, since one
+of the two declarations is wrong.

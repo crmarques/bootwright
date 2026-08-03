@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func validateProviders(state v1alpha1.State) []string {
@@ -423,10 +422,6 @@ func joinSortedNames(names []string) string {
 	out := append([]string(nil), names...)
 	sort.Strings(out)
 	return strings.Join(out, ", ")
-}
-
-func providerProfiles(provider v1alpha1.InfraProvider) []v1alpha1.MachineProfile {
-	return stateview.ProviderMachineProfiles(provider)
 }
 
 func providerVSphereFailureDomains(provider v1alpha1.InfraProvider) []string {

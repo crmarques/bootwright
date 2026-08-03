@@ -92,7 +92,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	}
 	errs = append(errs, validateStorageCephBootstrapPublicNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephMonPublicNetwork(prefix, cluster, machines)...)
-	errs = append(errs, validateStorageCephUnusedPublicNetwork(prefix, cluster, machines)...)
+	errs = append(errs, validateStorageCephUnusedPublicNetwork(prefix, cluster, machines, state)...)
 	errs = append(errs, validateStorageCephClusterNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)

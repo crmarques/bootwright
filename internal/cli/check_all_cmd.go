@@ -45,7 +45,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if output == outputJSON {
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
 			if !dryRun {
-				return runAllPreflightJSON(c, stdout, stderr, cf, scopeFlags, state, verbose)
+				return runAllPreflightJSON(c, stdout, cf, scopeFlags, state, verbose)
 			}
 			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
