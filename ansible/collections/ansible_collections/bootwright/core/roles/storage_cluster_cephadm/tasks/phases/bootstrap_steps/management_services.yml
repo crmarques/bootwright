@@ -481,3 +481,93 @@
          | regex_replace('got "[\s\S]*', 'got <spec redacted>')
          | regex_replace('-----BEGIN[\s\S]*', '<redacted>') }}
   when: bootwright_ceph_management.hosts is defined
+
+- name: Read the persisted management gateway spec from the cephadm store
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config-key
+      - get
+      - mgr/cephadm/spec.mgmt-gateway
+  register: bootwright_ceph_management_persisted
+  changed_when: false
+  failed_when: false
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_management.sslDisabled | default(false) | bool)
+
+- name: Re-persist the ssl switch the cephadm spec store serialized away
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config-key
+      - set
+      - mgr/cephadm/spec.mgmt-gateway
+      - >-
+        {{ bootwright_ceph_management_envelope
+           | combine({'spec': bootwright_ceph_management_stored_doc
+                              | combine({'spec': bootwright_ceph_management_stored_spec
+                                                 | combine({'ssl': false})})})
+           | to_json }}
+  vars:
+    bootwright_ceph_management_envelope: >-
+      {{ bootwright_ceph_management_persisted.stdout | default('') | trim | default('{}', true) | from_json }}
+    bootwright_ceph_management_stored_doc: "{{ bootwright_ceph_management_envelope.spec | default({}) }}"
+    bootwright_ceph_management_stored_spec: "{{ bootwright_ceph_management_stored_doc.spec | default({}) }}"
+  changed_when: true
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_management.sslDisabled | default(false) | bool)
+    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+    and (bootwright_ceph_management_envelope.spec is defined)
+    and ('ssl' not in bootwright_ceph_management_stored_spec)
+
+- name: Read back the persisted management gateway spec after the repair
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - config-key
+      - get
+      - mgr/cephadm/spec.mgmt-gateway
+  register: bootwright_ceph_management_persisted_verify
+  changed_when: false
+  failed_when: false
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_management.sslDisabled | default(false) | bool)
+    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+
+- name: Assert the persisted management gateway spec keeps ssl disabled
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_management_verified_spec.ssl is defined
+      - not (bootwright_ceph_management_verified_spec.ssl | bool)
+    fail_msg: >-
+      The cephadm spec store for {{ bootwright_selected_storage_cluster.name }} does not
+      hold `ssl: false` for the management gateway even after re-persisting it. The
+      vendor build's spec serializer drops falsy fields, so `ceph orch apply` keeps the
+      running (in-memory) spec correct while the stored copy silently loses the switch;
+      a manager failover or restart then reloads the stored copy, `ssl` resurrects to
+      its class default `true`, and the gateway resumes the reconfigure loop this apply
+      just prevented. The store now reports:
+      {{ bootwright_ceph_management_persisted_verify.stdout | default('<empty>') | trim }}
+    success_msg: >-
+      The persisted management gateway spec holds `ssl: false`; a manager failover
+      reloads it unchanged.
+  vars:
+    bootwright_ceph_management_verified_spec: >-
+      {{ ((bootwright_ceph_management_persisted_verify.stdout | default('') | trim | default('{}', true) | from_json).spec
+          | default({})).spec | default({}) }}
+  when: >-
+    bootwright_ceph_management.hosts is defined
+    and (bootwright_ceph_management.sslDisabled | default(false) | bool)
+    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0

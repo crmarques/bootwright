@@ -115,6 +115,30 @@ that build, so bootwright pins `ssl: false` in the vendor gateway spec (a
 plain-HTTP gateway on the authored port); oss keeps cephadm-signed HTTPS,
 which converges upstream (ADR 0047).
 
+**Trap, fifth order (fixed):** `ssl: false` does not survive the spec store.
+`ServiceSpec.to_json` drops every falsy field (`if val:` on the spec dict,
+`if self.ssl:` on the TLS block) and the store persists specs through it, so
+`ceph orch apply` of the pinned document leaves the in-memory spec correct
+(loop stops, cephadm-signed certs get removed on the next reconfigure) while
+`mgr/cephadm/spec.mgmt-gateway` stores an inner spec with no `ssl` key at all
+— field-observed as `{"port": 8443, "virtual_ip": ...}` and a vanished
+`enable_auth: false`. Any mgr failover/restart reloads the stored copy and
+resurrects `ssl: true`, restarting the loop with nothing having changed. Two
+corollaries: `ceph orch ls --export` round-trips the same serializer and
+prints the resurrected default (`ssl: true`) for a gateway that provably runs
+ssl-off — read the config-key, not the export — and the management phase now
+repairs the stored copy (`ceph config-key set` with `ssl: false` injected)
+and asserts the read-back, failing the apply closed if the switch is still
+missing. Related but distinct: a spec change alone never rewrites a *running*
+daemon's config (only a dependency mismatch does), so gateways deployed
+during a loop keep serving stale HTTPS until `ceph orch reconfig
+mgmt-gateway` — and the dashboard's Prometheus/Alertmanager calls go through
+the gateway's always-on internal mTLS server on 29443, a port cephadm never
+registers with firewalld (`get_port_start` returns only `spec.port`); the
+dependencies phase opens 29443/tcp on storage nodes whenever a gateway is
+declared, or every monitoring panel dies with no-route-to-host while the
+dashboard itself works.
+
 **Constraint (revised):** cephadm ingress inline TLS is the `ssl_cert` +
 `ssl_key` PAIR with `ssl: true` — never one combined PEM bundle. The certmgr
 lineage (IBM 9.x, upstream main) routes ingress certificates through the

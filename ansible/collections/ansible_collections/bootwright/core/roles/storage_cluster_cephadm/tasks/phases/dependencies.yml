@@ -29,6 +29,16 @@
     immediate: true
   when: bootwright_firewalld_available | default(false)
 
+- name: Open the management gateway internal port cephadm never registers
+  ansible.posix.firewalld:
+    port: "{{ bootwright_ceph_management_internal_port | default(29443) }}/tcp"
+    state: enabled
+    permanent: true
+    immediate: true
+  when: >-
+    (bootwright_firewalld_available | default(false))
+    and (bootwright_selected_storage_cluster.management.hosts is defined)
+
 - name: Configure the declared NTP sources on the storage node
   ansible.builtin.blockinfile:
     path: /etc/chrony.conf

@@ -84,6 +84,40 @@ so on subscription-backed distributions Bootwright emits `ssl: false`
 the management-phase document, and the gateway serves plain HTTP on its
 authored port. Community builds keep cephadm's HTTPS default, which converges.
 
+**The management phase re-persists the `ssl: false` the spec store serializes
+away, and proves it.** The same lineage's `ServiceSpec.to_json` drops every
+falsy field, and the spec store persists specs through it: `ceph orch apply`
+of the `ssl: false` document leaves the *running* (in-memory) spec correct —
+the loop stops, a reconfigure removes the cephadm-signed certificates — while
+the stored copy under `mgr/cephadm/spec.mgmt-gateway` silently loses the
+switch (observed in the field: the stored inner spec held only `port` and
+`virtual_ip`; `enable_auth: false` vanished the same way). A manager failover
+or restart reloads the stored copy, `ssl` resurrects to its class default
+`true`, and the loop returns with nothing having been applied. So after
+applying the document on a subscription-backed distribution, the management
+phase reads the stored spec back, injects `ssl: false` into its inner block
+through `ceph config-key set` when the store dropped it, and asserts on a
+second read that the stored copy now carries the switch — the apply fails
+closed rather than leaving a time bomb armed. The repair narrows the exposure
+to spec-store rewrites cephadm itself performs between bootwright runs; each
+apply re-checks. For the same reason, `ceph orch ls --export` on these builds
+is not evidence: it round-trips through the falsy-dropping serializer and
+prints resurrected class defaults (`ssl: true`) for fields the live spec
+holds as `false`.
+
+**The dependencies phase opens the gateway's internal port.** The gateway's
+nginx always terminates an internal mutual-TLS server on port 29443 — the
+dashboard reaches Prometheus and Alertmanager through
+`https://<vip>:29443/internal/...` — but cephadm registers only the spec's
+public port with firewalld (`get_port_start` returns just `spec.port`), so on
+a firewalld host every monitoring call from the dashboard dies with
+no-route-to-host while the dashboard itself, on the registered public port,
+works. When the cluster declares a management gateway, the per-node
+dependencies phase opens 29443/tcp alongside the existing VRRP allowance, on
+every storage node rather than only the placement hosts, because the virtual
+IP can land on any host the placement may later include and the endpoint
+itself refuses clients without the cephadm-internal client certificate.
+
 **Ingress inline TLS is the `ssl_cert`/`ssl_key` pair with `ssl` enabled,
 never a combined bundle.** The same certmgr backport routes ingress
 certificates through the generic certificate machinery, whose inline source is
@@ -111,6 +145,16 @@ spec when recording dependencies, so recorded and computed lists agree.
 - `StorageObjectGateway` ingress TLS is untouched: cephadm's ingress spec has
   no `ssl` attribute feeding the same base dependency computation, so haproxy
   certificates do not loop.
+- cephadm rewrites a running daemon's configuration only when its dependency
+  list changes, and the `ssl: false` fix works precisely by making the lists
+  agree — so gateways deployed during a loop keep serving their stale HTTPS
+  configuration (the cephadm-signed certificate, a dead backend map) until
+  something rewrites it. One `ceph orch reconfig mgmt-gateway` after the first
+  corrected apply re-renders them; subsequent applies converge on their own.
+- On subscription-backed builds, `ceph orch ls --export` shows `ssl: true`
+  for a gateway that verifiably runs with `ssl: false`; the stored truth is
+  `ceph config-key get mgr/cephadm/spec.mgmt-gateway`, and the management
+  phase's read-back assert is the guard that actually proves it.
 - The service-readiness failure now also collects `journalctl` tails over the
   cluster SSH identity from every node whose daemon cephadm reports in
   `error`, `unknown`, `stopped`, or still `starting` after the readiness window

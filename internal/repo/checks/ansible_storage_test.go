@@ -3619,6 +3619,60 @@ func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
 	}
 }
 
+func TestStorageManagementSpecRepairsThePersistedSSLSwitch(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
+	tasks := readAnsibleTasks(t, path)
+	applyIdx := findAnsibleTask(t, tasks, "Apply management service spec")
+	readIdx := findAnsibleTask(t, tasks, "Read the persisted management gateway spec from the cephadm store")
+	repairIdx := findAnsibleTask(t, tasks, "Re-persist the ssl switch the cephadm spec store serialized away")
+	verifyIdx := findAnsibleTask(t, tasks, "Read back the persisted management gateway spec after the repair")
+	assertIdx := findAnsibleTask(t, tasks, "Assert the persisted management gateway spec keeps ssl disabled")
+	if !(applyIdx < readIdx && readIdx < repairIdx && repairIdx < verifyIdx && verifyIdx < assertIdx) {
+		t.Fatalf("the persisted-spec repair must run after the apply and prove the stored copy afterwards (apply=%d read=%d repair=%d verify=%d assert=%d)", applyIdx, readIdx, repairIdx, verifyIdx, assertIdx)
+	}
+	if tasks[readIdx]["changed_when"] != false || tasks[readIdx]["failed_when"] != false {
+		t.Fatalf("the persisted-spec read must be a read-only tolerated absence, got %v", tasks[readIdx])
+	}
+	repairWhen := fmt.Sprint(tasks[repairIdx]["when"])
+	if !strings.Contains(repairWhen, "sslDisabled") || !strings.Contains(repairWhen, "'ssl' not in") {
+		t.Fatalf("the repair must run only for a vendor gateway whose stored spec lost the ssl key; the vendor spec serializer drops falsy fields on persistence while the in-memory spec stays correct, and a mgr failover reloads the stored copy with ssl back at its class default true, got when=%v", tasks[repairIdx]["when"])
+	}
+	repairCmd := fmt.Sprint(tasks[repairIdx]["ansible.builtin.command"])
+	if !strings.Contains(repairCmd, "config-key") || !strings.Contains(repairCmd, "'ssl': false") {
+		t.Fatalf("the repair must write the stored spec back through config-key with ssl false injected into the inner spec block, got %v", tasks[repairIdx]["ansible.builtin.command"])
+	}
+	verify, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the persisted-spec proof must be an assert, got %v", tasks[assertIdx])
+	}
+	if got := fmt.Sprint(verify["that"]); !strings.Contains(got, "ssl is defined") {
+		t.Fatalf("the proof must check the stored copy carries the ssl key at all — its absence is exactly the relapse the repair exists for, got that=%v", verify["that"])
+	}
+	if got := fmt.Sprint(verify["fail_msg"]); !strings.Contains(got, "failover") {
+		t.Fatalf("the refusal must explain the relapse a manager failover triggers, got fail_msg=%v", verify["fail_msg"])
+	}
+}
+
+func TestStorageDependenciesOpenTheGatewayInternalPort(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/dependencies.yml"
+	tasks := readAnsibleTasks(t, path)
+	idx := findAnsibleTask(t, tasks, "Open the management gateway internal port cephadm never registers")
+	fw, ok := tasks[idx]["ansible.posix.firewalld"].(map[string]any)
+	if !ok {
+		t.Fatalf("the internal-port opening must use the firewalld module like the VRRP allowance above it, got %v", tasks[idx])
+	}
+	if got := fmt.Sprint(fw["port"]); !strings.Contains(got, "29443") || !strings.Contains(got, "/tcp") {
+		t.Fatalf("cephadm registers only the gateway's public port with firewalld, so the dashboard's monitoring calls to https://<vip>:29443/internal/... die with no-route-to-host unless this task opens the internal port, got port=%v", fw["port"])
+	}
+	if fw["permanent"] != true || fw["immediate"] != true {
+		t.Fatalf("the internal-port opening must be permanent and immediate, got %v", fw)
+	}
+	when := fmt.Sprint(tasks[idx]["when"])
+	if !strings.Contains(when, "bootwright_firewalld_available") || !strings.Contains(when, "management.hosts") {
+		t.Fatalf("the internal-port opening must follow the firewalld probe and apply only when the cluster declares a management gateway, got when=%v", tasks[idx]["when"])
+	}
+}
+
 func TestStorageRefusesNodesRunningAForeignCephadmCluster(t *testing.T) {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
 	main := readRepoFile(t, base+"main.yml")
