@@ -506,7 +506,7 @@ func seedRenamedStretchRule(t *testing.T, ctx workspace.Context) {
 
 const (
 	safetyArbiterTiebreakerBlock = "        tiebreaker:\n          node: node-07\n"
-	safetyArbiterNodeBlock       = "      - name: node-07\n        machineRef: ceph-arbiter\n        site: dc3\n        roles:\n        - mon\n"
+	safetyArbiterNodeBlock       = "      - name: node-07\n        machineRef: ceph-arbiter\n        roles:\n        - mon\n"
 )
 
 func seedRetiredStretchArbiter(t *testing.T, ctx workspace.Context) {
