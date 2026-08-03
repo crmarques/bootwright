@@ -237,6 +237,9 @@ func ValidateCandidate(state v1alpha1.State, cluster v1alpha1.StorageCluster, ma
 	if owner, node, ok := boundElsewhere(state, cluster.Metadata.Name, machineName); ok {
 		return fmt.Errorf("the arbiter candidate Machine/%s is already node %q of %s; a machine is node-bound by at most one cluster, so it cannot also become the arbiter of %s — pick an unbound arbiter candidate or release that node first", machineName, node, owner, cluster.Metadata.Name)
 	}
+	if v1alpha1.MachineSite(machine) == "" {
+		return fmt.Errorf("the arbiter candidate Machine/%s declares no spec.placement.site; the replacement mon's CRUSH location and the same-site refusal both read the site the machine stands in, so set spec.placement.site and run `bootwright context update`", machineName)
+	}
 	return nil
 }
 

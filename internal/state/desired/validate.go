@@ -24,6 +24,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateEnvironments(state))...)
 	errs = append(errs, notes(validateEntitlements(state))...)
 	errs = append(errs, notes(validateMachines(state))...)
+	errs = append(errs, notes(validateSites(state))...)
 	errs = append(errs, validateNetworkConfigs(state)...)
 	errs = append(errs, notes(validateProviders(state))...)
 	errs = append(errs, notes(validateInfraComponents(state))...)

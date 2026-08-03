@@ -52,7 +52,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		if err := arbiter.ValidateCandidate(state, cluster, flags.machineName); err != nil {
 			return failErr(2, err)
 		}
-		if promotion, err = arbiter.ComputePromotion(ctx, cluster, flags.machineName); err != nil {
+		if promotion, err = arbiter.ComputePromotion(ctx, state, cluster, flags.machineName); err != nil {
 			return failErr(1, err)
 		}
 	}

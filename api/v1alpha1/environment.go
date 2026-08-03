@@ -17,6 +17,7 @@ type Environment struct {
 
 type EnvironmentSpec struct {
 	Domains           EnvironmentDomainsSpec                   `yaml:"domains" json:"domains"`
+	Sites             []EnvironmentSiteSpec                    `yaml:"sites,omitempty" json:"sites,omitempty"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
@@ -29,6 +30,30 @@ type EnvironmentSpec struct {
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
 	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
+}
+
+type EnvironmentSiteSpec struct {
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+func EnvironmentSiteNames(env Environment) []string {
+	out := make([]string, 0, len(env.Spec.Sites))
+	for _, site := range env.Spec.Sites {
+		if site.Name != "" {
+			out = append(out, site.Name)
+		}
+	}
+	return out
+}
+
+func EnvironmentHasSite(env Environment, name string) bool {
+	for _, site := range env.Spec.Sites {
+		if site.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 type EnvironmentMachineAccessSpec struct {

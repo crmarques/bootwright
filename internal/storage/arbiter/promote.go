@@ -28,13 +28,20 @@ type Promotion struct {
 
 func (p Promotion) Empty() bool { return len(p.Content) == 0 }
 
-func ComputePromotion(ctx workspace.Context, cluster v1alpha1.StorageCluster, machineName string) (Promotion, error) {
+func ComputePromotion(ctx workspace.Context, state v1alpha1.State, cluster v1alpha1.StorageCluster, machineName string) (Promotion, error) {
 	current, err := DesiredArbiter(cluster)
 	if err != nil {
 		return Promotion{}, err
 	}
+	site := CandidateSite(state, machineName)
 	if current.MachineRef.Name == machineName {
-		return Promotion{Cluster: cluster.Metadata.Name, FromNode: current.Name, ToNode: current.Name, Machine: machineName, Site: current.Site}, nil
+		if site == "" {
+			site = current.Site
+		}
+		return Promotion{Cluster: cluster.Metadata.Name, FromNode: current.Name, ToNode: current.Name, Machine: machineName, Site: site}, nil
+	}
+	if site == "" {
+		return Promotion{}, fmt.Errorf("the arbiter candidate Machine/%s declares no spec.placement.site, so the replacement mon's CRUSH location would be guessed from the arbiter it retires; set spec.placement.site to the site the machine stands in and run `bootwright context update`", machineName)
 	}
 	nodeName := machineName
 	if existing, ok := topology.HostByName(cluster, nodeName); ok && existing.Name != current.Name {
@@ -47,7 +54,7 @@ func ComputePromotion(ctx workspace.Context, cluster v1alpha1.StorageCluster, ma
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return Promotion{}, fmt.Errorf("StorageCluster/%s is declared outside the context input directory (%s), so its tiebreaker cannot be rewritten", cluster.Metadata.Name, cluster.SourcePath)
 	}
-	content, err := rewriteTiebreaker(cluster.SourcePath, cluster.Metadata.Name, current.Name, nodeName, machineName)
+	content, err := rewriteTiebreaker(cluster.SourcePath, cluster.Metadata.Name, current.Name, nodeName, machineName, site)
 	if err != nil {
 		return Promotion{}, err
 	}
@@ -56,10 +63,19 @@ func ComputePromotion(ctx workspace.Context, cluster v1alpha1.StorageCluster, ma
 		FromNode: current.Name,
 		ToNode:   nodeName,
 		Machine:  machineName,
-		Site:     current.Site,
+		Site:     site,
 		RelPath:  filepath.ToSlash(rel),
 		Content:  content,
 	}, nil
+}
+
+func CandidateSite(state v1alpha1.State, machineName string) string {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == machineName {
+			return v1alpha1.MachineSite(machine)
+		}
+	}
+	return ""
 }
 
 func WithPromotedTiebreaker(cluster v1alpha1.StorageCluster, promotion Promotion) v1alpha1.StorageCluster {
@@ -75,9 +91,15 @@ func WithPromotedTiebreaker(cluster v1alpha1.StorageCluster, promotion Promotion
 		nodes[i].Name = promotion.ToNode
 		nodes[i].FQDN = ""
 		nodes[i].MachineRef = v1alpha1.LocalObjectReference{Name: promotion.Machine}
+		if promotion.Site != "" {
+			nodes[i].Site = promotion.Site
+		}
 	}
 	stretch := *cluster.Spec.Ceph.Topology.Stretch
 	stretch.Tiebreaker.Node = promotion.ToNode
+	if promotion.Site != "" {
+		stretch.Tiebreaker.Site = promotion.Site
+	}
 	ceph := *cluster.Spec.Ceph
 	ceph.Topology.Nodes = nodes
 	ceph.Topology.Stretch = &stretch
@@ -92,7 +114,7 @@ func Apply(ctx workspace.Context, promotion Promotion) (string, error) {
 	return workspace.ApplyInputEdits(ctx, "replace arbiter", []workspace.InputEdit{{RelPath: promotion.RelPath, Content: promotion.Content}})
 }
 
-func rewriteTiebreaker(path, clusterName, fromNode, toNode, machineName string) ([]byte, error) {
+func rewriteTiebreaker(path, clusterName, fromNode, toNode, machineName, site string) ([]byte, error) {
 	docs, err := loadDocuments(path)
 	if err != nil {
 		return nil, err
@@ -111,6 +133,7 @@ func rewriteTiebreaker(path, clusterName, fromNode, toNode, machineName string) 
 	}
 	setMappingScalar(node, "name", toNode)
 	removeMappingKey(node, "fqdn")
+	setMappingScalarIfPresent(node, "site", site)
 	machineRef := mappingChild(node, "machineRef")
 	if machineRef == nil || machineRef.Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("spec.ceph.topology.nodes[] entry %q for StorageCluster/%s has no machineRef mapping", fromNode, clusterName)
@@ -125,6 +148,7 @@ func rewriteTiebreaker(path, clusterName, fromNode, toNode, machineName string) 
 		return nil, fmt.Errorf("no spec.ceph.topology.stretch.tiebreaker mapping for StorageCluster/%s in %s", clusterName, path)
 	}
 	setMappingScalar(tiebreaker, "node", toNode)
+	setMappingScalarIfPresent(tiebreaker, "site", site)
 	return marshalDocuments(docs)
 }
 
@@ -249,6 +273,13 @@ func setMappingScalar(mapping *yaml.Node, key, value string) {
 	mapping.Content = append(mapping.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+}
+
+func setMappingScalarIfPresent(mapping *yaml.Node, key, value string) {
+	if value == "" || mappingChild(mapping, key) == nil {
+		return
+	}
+	setMappingScalar(mapping, key, value)
 }
 
 func removeMappingKey(mapping *yaml.Node, key string) {

@@ -34,8 +34,6 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 	if !tiebreakerDeferred {
 		if stretch.Tiebreaker.Site == "" {
 			errs = append(errs, prefix+".tiebreaker.site is required")
-		} else if dataSites[stretch.Tiebreaker.Site] {
-			errs = append(errs, fmt.Sprintf("%s.tiebreaker.site %q must be distinct from dataSites", prefix, stretch.Tiebreaker.Site))
 		}
 		if stretch.Tiebreaker.Node == "" {
 			errs = append(errs, prefix+".tiebreaker.node is required")
@@ -61,18 +59,24 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		errs = append(errs, prefix+".ruleName is required")
 	}
 	monBySite := map[string]int{}
+	tiebreakerMons := 0
 	for _, node := range nodes {
-		if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
-			monBySite[node.Site]++
+		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
+			continue
 		}
+		if storageNodeIsTiebreaker(node, stretch.Tiebreaker.Node) {
+			tiebreakerMons++
+			continue
+		}
+		monBySite[node.Site]++
 	}
 	for _, site := range stretch.DataSites {
 		if monBySite[site] != 2 {
-			errs = append(errs, fmt.Sprintf("%s requires exactly two mon nodes in data site %q (got %d)", prefix, site, monBySite[site]))
+			errs = append(errs, fmt.Sprintf("%s requires exactly two non-tiebreaker mon nodes in data site %q (got %d)", prefix, site, monBySite[site]))
 		}
 	}
-	if !tiebreakerDeferred && monBySite[stretch.Tiebreaker.Site] != 1 {
-		errs = append(errs, fmt.Sprintf("%s requires exactly one tiebreaker mon in site %q (got %d)", prefix, stretch.Tiebreaker.Site, monBySite[stretch.Tiebreaker.Site]))
+	if !tiebreakerDeferred && stretch.Tiebreaker.Node != "" && tiebreakerMons != 1 {
+		errs = append(errs, fmt.Sprintf("%s.tiebreaker.node %q must carry the %q role; stretch mode places the tiebreaker mon by name, not by site", prefix, stretch.Tiebreaker.Node, v1alpha1.StorageCephRoleMON))
 	}
 	return errs
 }

@@ -183,6 +183,9 @@ func machinesVars(state v1alpha1.State) []any {
 			"addresses":    machineAddressesVars(h),
 			"capabilities": h.Spec.Capabilities,
 		}
+		if site := v1alpha1.MachineSite(h); site != "" {
+			entry["site"] = site
+		}
 		if h.Spec.Access.SSH != nil {
 			entry["sshAddress"] = v1alpha1.MachineSSHAddress(h)
 			entry["sshAddressName"] = h.Spec.Access.SSH.AddressRef.Name

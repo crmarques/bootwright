@@ -375,7 +375,21 @@ func normalizeNodeNames(state *v1alpha1.State) {
 			}
 		}
 		normalizeStorageNodeTokens(state, cluster, renamed)
+		normalizeStorageNodeSites(state, cluster)
 		normalizeStorageStretch(cluster)
+	}
+}
+
+func normalizeStorageNodeSites(state *v1alpha1.State, cluster *v1alpha1.StorageCluster) {
+	machines := indexMachines(state.Machines)
+	for i := range cluster.Spec.Ceph.Topology.Nodes {
+		node := &cluster.Spec.Ceph.Topology.Nodes[i]
+		if node.Site != "" || node.MachineRef.Name == "" {
+			continue
+		}
+		if machine, ok := machines[node.MachineRef.Name]; ok {
+			node.Site = v1alpha1.MachineSite(machine)
+		}
 	}
 }
 
@@ -480,7 +494,7 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	}
 	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Node != "" {
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			if node.Name == stretch.Tiebreaker.Node || stateview.NodeShortName(node.Name) == stretch.Tiebreaker.Node {
+			if storageNodeIsTiebreaker(node, stretch.Tiebreaker.Node) {
 				stretch.Tiebreaker.Site = node.Site
 				break
 			}
@@ -489,7 +503,14 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	if len(stretch.DataSites) == 0 {
 		seen := map[string]bool{}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			if node.Site == "" || node.Site == stretch.Tiebreaker.Site || seen[node.Site] {
+			if node.Site == "" || seen[node.Site] {
+				continue
+			}
+			if stretch.Tiebreaker.Node != "" {
+				if storageNodeIsTiebreaker(node, stretch.Tiebreaker.Node) {
+					continue
+				}
+			} else if node.Site == stretch.Tiebreaker.Site {
 				continue
 			}
 			seen[node.Site] = true
@@ -497,6 +518,13 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 		}
 		sort.Strings(stretch.DataSites)
 	}
+}
+
+func storageNodeIsTiebreaker(node v1alpha1.StorageCephNode, tiebreaker string) bool {
+	if tiebreaker == "" {
+		return false
+	}
+	return node.Name == tiebreaker || stateview.NodeShortName(node.Name) == tiebreaker
 }
 
 func applyClusterNetworkDefaults(state *v1alpha1.State) {

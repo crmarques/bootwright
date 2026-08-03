@@ -20,6 +20,7 @@ const (
 	cephBestPracticeGroup  = "Ceph best practice"
 	stretchPoolGroup       = "Stretch pools"
 	stretchTiebreakerGroup = "Stretch tiebreaker"
+	estateSiteGroup        = "Estate sites"
 )
 
 type StorageAdvisory struct {
@@ -33,7 +34,7 @@ type StorageAdvisory struct {
 
 func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 	disconnected := environmentIsDisconnected(state)
-	var out []StorageAdvisory
+	out := unreferencedSiteAdvisories(state)
 	for _, cluster := range state.StorageClusters {
 		if cluster.Spec.Ceph == nil || v1alpha1.StorageClusterExternal(cluster) {
 			continue
@@ -45,8 +46,68 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)
+		out = append(out, storageStretchDataSiteTiebreakerAdvisories(object, cluster)...)
 	}
 	return out
+}
+
+func unreferencedSiteAdvisories(state v1alpha1.State) []StorageAdvisory {
+	if len(state.Environments) == 0 {
+		return nil
+	}
+	env := state.Environments[0]
+	used := map[string]bool{}
+	for _, machine := range state.Machines {
+		if site := v1alpha1.MachineSite(machine); site != "" {
+			used[site] = true
+		}
+	}
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.Site != "" {
+				used[node.Site] = true
+			}
+		}
+	}
+	var out []StorageAdvisory
+	for _, site := range v1alpha1.EnvironmentSiteNames(env) {
+		if used[site] {
+			continue
+		}
+		out = append(out, StorageAdvisory{
+			Severity:    SeverityInfo,
+			Group:       estateSiteGroup,
+			Object:      fmt.Sprintf("%s/%s", v1alpha1.KindEnvironment, env.Metadata.Name),
+			Finding:     fmt.Sprintf("site %q is declared but no Machine stands in it", site),
+			Impact:      "a site no machine references places nothing; if it was meant to hold a standby arbiter, the candidate machine is missing, and replace-arbiter will have nowhere to move the tiebreaker",
+			Remediation: fmt.Sprintf("declare a Machine with spec.placement.site %q, or drop the site from spec.sites", site),
+		})
+	}
+	return out
+}
+
+func storageStretchDataSiteTiebreakerAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
+	stretch := cluster.Spec.Ceph.Topology.Stretch
+	if stretch == nil || stretch.Tiebreaker.Node == "" || stretch.Tiebreaker.Site == "" {
+		return nil
+	}
+	for _, site := range stretch.DataSites {
+		if site != stretch.Tiebreaker.Site {
+			continue
+		}
+		return []StorageAdvisory{{
+			Severity:    SeverityWarn,
+			Group:       stretchTiebreakerGroup,
+			Object:      object,
+			Finding:     fmt.Sprintf("the tiebreaker mon stands in data site %q rather than a third site", site),
+			Impact:      "losing that data site takes its two replicas and the tiebreaker vote at once, so the surviving site cannot win the monitor election and the cluster stops serving; a cluster not already in stretch mode also cannot enter it in this shape, because Ceph refuses enable_stretch_mode when the tiebreaker shares a data site",
+			Remediation: fmt.Sprintf("this is the acknowledged emergency shape after `--authorize same-site-arbiter`; move the tiebreaker back with `bootwright storage-cluster replace-arbiter %s --new-arbiter-machine <machine outside %s>` once a third site is available", strings.TrimPrefix(object, v1alpha1.KindStorageCluster+"/"), strings.Join(stretch.DataSites, " and ")),
+		}}
+	}
+	return nil
 }
 
 func storageStretchTiebreakerAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
