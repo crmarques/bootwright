@@ -244,11 +244,11 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 		if !found {
 			continue
 		}
-		matched, err := recordMatchesTask(record, applyTaskByID(before, task.Entry.ID))
+		rebaselinable, err := convergeRecordRebaselinable(record, applyTaskByID(before, task.Entry.ID), task)
 		if err != nil {
 			return nil, err
 		}
-		if !matched {
+		if !rebaselinable {
 			carried = append(carried, task.Entry.Label)
 			continue
 		}
@@ -258,6 +258,36 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 	}
 	sort.Strings(carried)
 	return carried, nil
+}
+
+func convergeRecordRebaselinable(record ConvergeSafetyRecord, before *ApplyTask, after ApplyTask) (bool, error) {
+	matched, err := recordMatchesTask(record, before)
+	if err != nil {
+		return false, err
+	}
+	if matched {
+		return true, nil
+	}
+	matched, err = recordMatchesTask(record, &after)
+	if err != nil {
+		return false, err
+	}
+	if matched {
+		return true, nil
+	}
+	return recordTiebreakerOnlyBehind(record, after)
+}
+
+func recordTiebreakerOnlyBehind(record ConvergeSafetyRecord, task ApplyTask) (bool, error) {
+	structuralHash, err := ApplyTaskStructuralHash(task)
+	if err != nil {
+		return false, err
+	}
+	invariantHash, err := applyTaskTiebreakerInvariantHash(task)
+	if err != nil {
+		return false, err
+	}
+	return IsTiebreakerOnlyStructuralDrift(record, structuralHash, invariantHash, applyTaskTiebreakerNodes(task)), nil
 }
 
 func applyTaskByID(tasks []ApplyTask, id string) *ApplyTask {

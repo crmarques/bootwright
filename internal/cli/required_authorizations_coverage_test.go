@@ -34,7 +34,7 @@ func forecastTokensForVerb(t *testing.T, verb string) []string {
 		tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
 		entries = applyRequiredAuthorizations(auth, workflow.ApplyModeRebuild, state, state, tasks, t.TempDir(), t.TempDir(), []string{"ceph-storage"}, "all")
 	case authorizeVerbReplaceArbiter:
-		entries = replaceArbiterRequiredAuthorizations(auth, true, "mon(s) mon-b are outside quorum", "mon.mon-c shares its site with mon-a")
+		entries = replaceArbiterRequiredAuthorizations(auth, true, "mon(s) mon-b are outside quorum", "mon.mon-c shares its site with mon-a", true)
 	default:
 		t.Fatalf("verb %q has no forecast builder in this guard; add one with the verb", verb)
 	}

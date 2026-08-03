@@ -50,6 +50,8 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 	var parts []string
 	switch {
+	case len(drifted) > 0 && stretchArbiterShapeDriftSet(drifted):
+		parts = append(parts, stretchArbiterShapeRefusal(drifted))
 	case len(drifted) > 0 && tiebreakerOnlyDriftSet(drifted):
 		parts = append(parts, tiebreakerDriftRefusal(drifted))
 	case len(drifted) > 0:
@@ -81,6 +83,50 @@ func tiebreakerOnlyDriftSet(drifted []ObjectClassification) bool {
 
 func TiebreakerReplacementCommand(cluster string) string {
 	return "bootwright storage-cluster replace-arbiter --name " + cluster
+}
+
+func WithoutTiebreakerDrift(objects []ObjectClassification, cluster string) []ObjectClassification {
+	kept := make([]ObjectClassification, 0, len(objects))
+	for _, o := range objects {
+		if o.Cluster == cluster && o.TiebreakerOnlyStructuralDrift() {
+			continue
+		}
+		kept = append(kept, o)
+	}
+	return kept
+}
+
+func stretchArbiterShapeDriftSet(drifted []ObjectClassification) bool {
+	named := 0
+	for _, o := range drifted {
+		if !o.StretchArbiterShapeChange() {
+			return false
+		}
+		if storageClusterObjectName(o) != "" {
+			named++
+		}
+	}
+	return named == len(drifted) && named > 0
+}
+
+func stretchArbiterShapeRefusal(drifted []ObjectClassification) string {
+	labels := make([]string, 0, len(drifted))
+	added := false
+	for _, o := range drifted {
+		labels = append(labels, o.Label)
+		if o.StretchArbiterAdded() {
+			added = true
+		}
+	}
+	sort.Strings(labels)
+	change := "removes the stretch tiebreaker of"
+	shape := "a stretch cluster without an arbiter"
+	if added {
+		change = "adds a stretch tiebreaker to"
+		shape = "a stretch cluster arbitrated by a tiebreaker mon"
+	}
+	return fmt.Sprintf("apply refuses this change to %s: it %s a cluster that is already built, and whether a stretch cluster carries an arbiter is fixed when the cluster is bootstrapped. Bootwright has no path that moves a running cluster between the two shapes — not this apply, and not `bootwright storage-cluster replace-arbiter`, which moves an existing tiebreaker between nodes and cannot create or retire one. Revert the change to match the recorded desired state and keep running the shape you have, or rebuild the cluster deliberately as %s: that is `bootwright destroy` for this cluster followed by a fresh apply, and it destroys all OSD data. `--mode rebuild` is not the remedy here either — it reaches the same data loss (cephadm rm-cluster --zap-osds) without saying so",
+		strings.Join(labels, ", "), change, shape)
 }
 
 func tiebreakerDriftRefusal(drifted []ObjectClassification) string {

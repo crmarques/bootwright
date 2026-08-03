@@ -118,6 +118,32 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"--authorize " + authorizeDataLoss},
 	}, {
+		name:    "apply/preview: the json dialect names the tokenless refusal its real run makes",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"\"refusals\"", "could not be read", "no authorization skips this on apply"},
+	}, {
+		name:    "destroy/preview: the json dialect discloses the history purge the text dialect warns about",
+		args:    []string{"destroy", "--purge-history", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"\"purgeHistory\""},
+	}, {
+		name: "destroy/preview: a dry run forecasts installed-cluster-node as required instead of refusing",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedInstalledCluster(t, ctx, "dc1-metal-ocp")
+		},
+		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeInstalledClusterNode + ": " + authorizationRequired},
+		deny:    []string{"refusing to destroy machine(s)"},
+	}, {
+		name:    "destroy/preview: a dry run forecasts shared-infra as required instead of refusing",
+		args:    []string{"destroy", "--stage", "infra", "--clusters", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeSharedInfra + ": " + authorizationRequired},
+		deny:    []string{"refusing to"},
+	}, {
 		name:    "destroy/preview: a dry run forecasts protected alongside data-loss",
 		seed:    seedProtectedEnvironment,
 		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
@@ -207,6 +233,12 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"dc1-metal-ocp-old", "the signature of a rename"},
+	}, {
+		name:    "apply/all: the blanket token does not clear the tokenless unreadable-ownership refusal",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"could not be read", "no authorization skips this on apply"},
 	}}
 }
 
@@ -366,6 +398,27 @@ func safetyReplaceArbiterCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"re-run with `bootwright apply --mode rebuild`"},
 	}, {
+		name:    "apply/adding an arbiter to a built cluster is refused as a day-1 shape, naming no command that refuses",
+		seed:    seedEnabledStretchArbiter,
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"fixed when the cluster is bootstrapped", "Bootwright has no path that moves a running cluster between the two shapes"},
+		deny:    []string{"bootwright storage-cluster replace-arbiter --name", "re-run with `bootwright apply --mode rebuild`"},
+	}, {
+		name:    "apply/removing an arbiter from a built cluster is refused without naming a rebuild remedy",
+		seed:    seedDisabledStretchArbiter,
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"fixed when the cluster is bootstrapped", "destroys all OSD data"},
+		deny:    []string{"bootwright storage-cluster replace-arbiter --name", "re-run with `bootwright apply --mode rebuild`"},
+	}, {
+		name:    "replace-arbiter/an active apply run is refused before the input is rewritten",
+		seed:    seedUndecodableRunLease,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--new-arbiter-machine", "ceph-arbiter", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"rm -f"},
+		deny:    []string{"now declares tiebreaker", "input-history"},
+	}, {
 		name:    "replace-arbiter/preview: a dry run names every gate the real run consults, in one refusal-free pass",
 		seed:    seedLiveStretchClusterOffItsArbiter,
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
@@ -449,6 +502,51 @@ func seedRenamedStretchRule(t *testing.T, ctx workspace.Context) {
 	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
 		{"        failureDomain: datacenter", "        failureDomain: datacenter\n        ruleName: stretch-rule-alt"},
 	})
+}
+
+const (
+	safetyArbiterTiebreakerBlock = "        tiebreaker:\n          node: node-07\n"
+	safetyArbiterNodeBlock       = "      - name: node-07\n        machineRef: ceph-arbiter\n        site: dc3\n        roles:\n        - mon\n"
+)
+
+func seedRetiredStretchArbiter(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
+		{safetyArbiterTiebreakerBlock, ""},
+		{safetyArbiterNodeBlock, ""},
+	})
+}
+
+func seedRestoredStretchArbiter(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
+		{"        failureDomain: datacenter\n", "        failureDomain: datacenter\n" + safetyArbiterTiebreakerBlock},
+	})
+	path := safetyStorageClusterInputPath(t, ctx)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	body := string(data)
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	if err := os.WriteFile(path, []byte(body+safetyArbiterNodeBlock), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func seedEnabledStretchArbiter(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedRetiredStretchArbiter(t, ctx)
+	seedSuccessfulApply(t, ctx)
+	seedRestoredStretchArbiter(t, ctx)
+}
+
+func seedDisabledStretchArbiter(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	seedRetiredStretchArbiter(t, ctx)
 }
 
 func seedArbiterConvergeRecordRefresh(t *testing.T, ctx workspace.Context, rewrite func(*testing.T, workspace.Context)) {

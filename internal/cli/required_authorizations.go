@@ -99,7 +99,18 @@ type dryRunReportWithAuthorizations struct {
 	RequiredAuthorizations []requiredAuthorization `json:"requiredAuthorizations"`
 }
 
-func runScopeDryRunJSONAuthorized(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, action string, state v1alpha1.State, selected []converge.Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety, transitions *converge.DryRunTransitions, forks int, required []requiredAuthorization) error {
+type dryRunDisclosure struct {
+	refusals     []string
+	purgeHistory *converge.DryRunPurgeHistory
+}
+
+func (d dryRunDisclosure) applyTo(report converge.DryRunReport) converge.DryRunReport {
+	report.Refusals = d.refusals
+	report.PurgeHistory = d.purgeHistory
+	return report
+}
+
+func runScopeDryRunJSONAuthorized(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, action string, state v1alpha1.State, selected []converge.Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety, transitions *converge.DryRunTransitions, forks int, required []requiredAuthorization, disclosure dryRunDisclosure) error {
 	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		return failErr(1, err)
@@ -108,21 +119,21 @@ func runScopeDryRunJSONAuthorized(cmd *cobra.Command, stdout io.Writer, cf *comm
 	if err != nil {
 		return failErr(1, err)
 	}
-	return output.JSON(stdout, dryRunReportWithAuthorizations{DryRunReport: report, RequiredAuthorizations: emptyWhenNil(required)})
+	return output.JSON(stdout, dryRunReportWithAuthorizations{DryRunReport: disclosure.applyTo(report), RequiredAuthorizations: emptyWhenNil(required)})
 }
 
-func runDestroyDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, plan converge.WorkflowPlan, playbook, artifactsBaseName string, artifactServerOnly bool, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization) error {
+func runDestroyDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, plan converge.WorkflowPlan, playbook, artifactsBaseName string, artifactServerOnly bool, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization, disclosure dryRunDisclosure) error {
 	if artifactServerOnly {
-		return runScopeDryRunJSONAuthorized(cmd, stdout, cf, flags, scope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, destroySafety, nil, 0, required)
+		return runScopeDryRunJSONAuthorized(cmd, stdout, cf, flags, scope, "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, destroySafety, nil, 0, required, disclosure)
 	}
 	tasks, err := workflow.PlanDestroyTasks(scope.Name, plan.State, plan.Limit, plan.ExtraVarPairs, plan.StorageWorkNames)
 	if err != nil {
 		return failErr(1, err)
 	}
-	return runFullDestroyDryRunJSONAuthorized(stdout, cf, scope, plan, tasks, destroySafety, required)
+	return runFullDestroyDryRunJSONAuthorized(stdout, cf, scope, plan, tasks, destroySafety, required, disclosure)
 }
 
-func runFullDestroyDryRunJSONAuthorized(stdout io.Writer, cf *commonFlags, scope converge.Scope, plan converge.WorkflowPlan, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization) error {
+func runFullDestroyDryRunJSONAuthorized(stdout io.Writer, cf *commonFlags, scope converge.Scope, plan converge.WorkflowPlan, tasks []workflow.ApplyTask, destroySafety *converge.DryRunDestroySafety, required []requiredAuthorization, disclosure dryRunDisclosure) error {
 	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		return failErr(1, err)
@@ -131,5 +142,5 @@ func runFullDestroyDryRunJSONAuthorized(stdout io.Writer, cf *commonFlags, scope
 	if err != nil {
 		return failErr(1, err)
 	}
-	return output.JSON(stdout, dryRunReportWithAuthorizations{DryRunReport: report, RequiredAuthorizations: emptyWhenNil(required)})
+	return output.JSON(stdout, dryRunReportWithAuthorizations{DryRunReport: disclosure.applyTo(report), RequiredAuthorizations: emptyWhenNil(required)})
 }

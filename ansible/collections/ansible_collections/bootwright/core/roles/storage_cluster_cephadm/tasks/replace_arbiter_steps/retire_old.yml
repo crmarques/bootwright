@@ -130,6 +130,32 @@
     - bootwright_arbiter_old_host_offline | default(false) | bool
     - not (bootwright_arbiter_live_host_offline | default(false) | bool)
 
+- name: Create the arbiter replacement artifact directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ansible_artifacts_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
+- name: Record which retirement path the orchestrator's evidence selected
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ansible_artifacts_dir }}/arbiter-retire-result.json"
+    content: >-
+      {{
+        {
+          'host': bootwright_arbiter_live_node,
+          'authorized': (bootwright_arbiter_old_host_offline | default(false) | bool),
+          'corroborated': (bootwright_arbiter_live_host_offline | default(false) | bool),
+          'offline': (bootwright_arbiter_retire_offline | default(false) | bool)
+        } | to_nice_json
+      }}
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
 - name: Drain the remaining daemons of the replaced arbiter host
   ansible.builtin.command:
     argv: [cephadm, shell, --, ceph, orch, host, drain, "{{ bootwright_arbiter_live_node }}"]

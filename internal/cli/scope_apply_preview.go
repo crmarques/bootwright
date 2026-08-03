@@ -71,37 +71,68 @@ func forecastReinstallDescriptors(names []string) []string {
 	return out
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
+func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) []string {
 	var refusals []error
 	if len(ownershipSkipped) > 0 {
 		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped))
 	}
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
-		printApplyGateRefusals(stdout, refusals)
-		return
+		return applyGateRefusalMessages(refusals)
 	}
 	if err := converge.CheckApplyRenameOrphan(fullState, objects, clustersDir, ownershipRecords); err != nil {
 		refusals = append(refusals, err)
 	}
+	rebuiltHosts := forecastRebuiltHosts(objects, tasks, runsDir, mode, reinstallDrift)
 	if mode == workflow.ApplyModeRebuild {
 		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, forecastReinstallDescriptors(reinstallDrift)); err != nil {
 			refusals = append(refusals, err)
 		}
-		if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, reinstallDrift); err != nil {
-			refusals = append(refusals, err)
-		}
+	}
+	if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, rebuiltHosts); err != nil {
+		refusals = append(refusals, err)
 	}
 	if reclaimDevices != "" {
-		if err := converge.CheckReclaimDestroyProtection(planState, converge.OwnedStorageClusters(objects), allowDestroy); err != nil {
+		owned := converge.OwnedStorageClusters(objects)
+		if err := converge.CheckReclaimDestroyProtection(planState, owned, allowDestroy); err != nil {
 			refusals = append(refusals, err)
 		}
+		if len(owned) > 0 {
+			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, owned, reclaimDevices); len(unmatched) > 0 {
+				refusals = append(refusals, reclaimUnmatchedError(unmatched, owned, declared))
+			}
+		}
 	}
-	printApplyGateRefusals(stdout, refusals)
+	return applyGateRefusalMessages(refusals)
 }
 
-func printApplyGateRefusals(stdout io.Writer, refusals []error) {
+func forecastRebuiltHosts(objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode, reinstallDrift []string) []string {
+	released, err := workflow.ConsumableSubstrateReleases(runsDir, tasks)
+	if err != nil {
+		released = nil
+	}
+	hosts := workflow.UnionClusterNames(reinstallDrift, workflow.SubstrateReleaseClusterNames(released))
+	if mode == workflow.ApplyModeRebuild {
+		_, substrateReset := workflow.OverrideDestructiveMachineSubstrate(objects)
+		hosts = workflow.UnionClusterNames(hosts, substrateReset)
+	}
+	return hosts
+}
+
+func applyGateRefusalMessages(refusals []error) []string {
+	out := make([]string, 0, len(refusals))
 	for _, e := range refusals {
-		cliout.NewContinuation(stdout).Warning("change plan", "a real run refuses before any prompt: "+e.Error())
+		out = append(out, e.Error())
+	}
+	return out
+}
+
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
+	printApplyGateRefusals(stdout, applyGateForecastRefusals(fullState, planState, tasks, runsDir, clustersDir, mode, allowDestroy, reclaimDevices, sel, reinstallDrift, ownershipDir, ownershipRecords, ownershipSkipped))
+}
+
+func printApplyGateRefusals(stdout io.Writer, refusals []string) {
+	for _, msg := range refusals {
+		cliout.NewContinuation(stdout).Warning("change plan", "a real run refuses before any prompt: "+msg)
 	}
 }

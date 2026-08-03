@@ -37,6 +37,12 @@ type DryRunReport struct {
 	ApplyPlan          *DryRunApply         `json:"applyPlan,omitempty"`
 	DestroyPlan        *DryRunDestroyPlan   `json:"destroyPlan,omitempty"`
 	DestroySafety      *DryRunDestroySafety `json:"destroySafety,omitempty"`
+	Refusals           []string             `json:"refusals,omitempty"`
+	PurgeHistory       *DryRunPurgeHistory  `json:"purgeHistory,omitempty"`
+}
+
+type DryRunPurgeHistory struct {
+	Scope string `json:"scope"`
 }
 
 type DryRunDestroyPlan struct {

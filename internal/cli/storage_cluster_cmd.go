@@ -129,7 +129,7 @@ func printArbiterPlan(stdout io.Writer, plan arbiter.Plan, promotion arbiter.Pro
 	fields := []cliout.Field{
 		{Key: "Cluster", Value: plan.Cluster},
 		{Key: "Failure domain", Value: plan.FailureDomain},
-		{Key: "Replaces", Value: "mon." + plan.LiveMon + " (" + plan.FailureDomain + "=" + emptyAccessValue(plan.LiveSite) + ")"},
+		{Key: "Replaces", Value: arbiterRetiredSubject(plan)},
 		{Key: "With", Value: "mon." + plan.DesiredMon + " on Machine/" + plan.DesiredMachine + " (" + plan.FailureDomain + "=" + plan.DesiredSite + ")"},
 	}
 	if !promotion.Empty() {
@@ -147,7 +147,7 @@ func printArbiterPlan(stdout io.Writer, plan arbiter.Plan, promotion arbiter.Pro
 		{Key: "1", Value: "prepare and install Machine/" + plan.DesiredMachine + ", then Ceph on it (apply --through deps)"},
 		{Key: "2", Value: "deploy mon." + plan.DesiredMon + " with its stretch location and wait for quorum"},
 		{Key: "3", Value: "ceph mon set_new_tiebreaker " + plan.DesiredMon},
-		{Key: "4", Value: "retire mon." + plan.LiveMon + " and remove host " + plan.LiveNode},
+		{Key: "4", Value: arbiterRetirementStep(plan)},
 	})
 	if dryRun {
 		cliout.NewContinuation(stdout).Warning("dry-run", "plan only; nothing was changed and the context input was not rewritten")
@@ -169,7 +169,24 @@ func arbiterMonLocations(cluster v1alpha1.StorageCluster, plan arbiter.Plan, hos
 	return out
 }
 
+func arbiterRetiredSubject(plan arbiter.Plan) string {
+	if plan.LiveMon == "" {
+		return "host " + plan.LiveNode + ", which still runs a mon no topology node declares"
+	}
+	return "mon." + plan.LiveMon + " (" + plan.FailureDomain + "=" + emptyAccessValue(plan.LiveSite) + ")"
+}
+
+func arbiterRetirementStep(plan arbiter.Plan) string {
+	if plan.LiveMon == "" {
+		return "remove host " + plan.LiveNode + ", which no topology node declares"
+	}
+	return "retire mon." + plan.LiveMon + " and remove host " + plan.LiveNode
+}
+
 func replaceArbiterConfirmPrompt(plan arbiter.Plan) string {
+	if plan.LiveMon == "" {
+		return "Retire host " + plan.LiveNode + " of " + plan.Cluster + ", which an interrupted replacement left running a mon no topology node declares?"
+	}
 	return "Move the stretch tiebreaker of " + plan.Cluster + " from mon." + plan.LiveMon + " to mon." + plan.DesiredMon + "?"
 }
 

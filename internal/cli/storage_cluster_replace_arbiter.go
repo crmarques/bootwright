@@ -31,6 +31,11 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		return e
 	}
 	printMutatingRunPreamble(stdout, outputText, "storage-cluster replace-arbiter")
+	if !flags.dryRun {
+		if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
+			return failErr(1, err)
+		}
+	}
 	state, err := loadDesiredState(cf)
 	if err != nil {
 		return failErr(1, err)
@@ -76,7 +81,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		return nil
 	}
 	printArbiterPlan(stdout, plan, promotion, flags.dryRun)
-	requiredAuth := replaceArbiterRequiredAuthorizations(auth, plan.SameSite(), plan.Degraded, arbiterSameSiteReason(plan))
+	requiredAuth := replaceArbiterRequiredAuthorizations(auth, plan.SameSite(), plan.Degraded, arbiterSameSiteReason(plan), plan.LiveNode != "")
 	if flags.dryRun {
 		printRequiredAuthorizations(stdout, requiredAuth)
 		warnUnusedAuthorizations(stdout, auth, true)
@@ -124,13 +129,14 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		MonLocationsAfter:  arbiterMonLocations(cluster, plan, plan.MonHostsAfter),
 		AllowSameSite:      plan.SameSite() && auth.has(authorizeSameSiteArbiter),
 		AllowDegraded:      plan.Degraded != "" && auth.has(authorizeDegradedQuorum),
-		OldHostOffline:     auth.allows(authorizeUnreachableNodes),
+		OldHostOffline:     auth.has(authorizeUnreachableNodes),
 		BecomePasswordFile: become.PasswordFile,
 		Verbose:            flags.verbose,
 	}, reporter)
 	if runErr != nil {
 		return failErr(1, runErr)
 	}
+	reportArbiterRetirement(stdout, auth, ctx.RunsDir)
 	carried, refreshErr := refreshArbiterConvergeRecords(ctx, preRewriteState, state, plan.Cluster)
 	reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr)
 	cliout.New(stdout).Summary(cliout.StatusOK, plan.Cluster, "stretch tiebreaker is now mon."+plan.DesiredMon+" on Machine/"+plan.DesiredMachine)
@@ -145,11 +151,11 @@ func printRetiredArbiterDisposal(stdout io.Writer, plan arbiter.Plan, promotion 
 		if plan.LiveNode == "" {
 			return
 		}
-		p.Status(cliout.StatusSkip, "host "+plan.LiveNode, "left the storage cluster but keeps running; no Machine of this context declares it, so decommission it out of band")
+		p.Status(cliout.StatusSkip, "host "+plan.LiveNode, "left the storage cluster but keeps running; no topology node declares it, so decommission it out of band")
 		return
 	}
 	if !promotion.Empty() {
-		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; this run re-authored the tiebreaker, so it is no longer a declared node and `bootwright destroy --machines "+plan.LiveMachine+"` refuses it — decommission it out of band")
+		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; this run re-authored the tiebreaker, so the Machine stays declared but has no provisioning work and `bootwright destroy --machines "+plan.LiveMachine+"` refuses it as an orphan — decommission it out of band, or remove the Machine document once it is gone")
 		return
 	}
 	p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")
@@ -208,6 +214,15 @@ func prepareArbiterMachine(c *cobra.Command, stdout, stderr io.Writer, ctx works
 	}
 	applyTarget, tasks, limits, _, err := converge.PlanScopedApply(c.Context(), runScope, &plan, state, workflow.ApplyModeReconcile, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
 	if err != nil {
+		return failErr(1, err)
+	}
+	if _, _, err := applyOwnershipRecords(ctx, false); err != nil {
+		return failErr(1, err)
+	}
+	if err := converge.ArbiterPreparePreflight(tasks, ctx.RunsDir, clusterName); err != nil {
+		return failErr(1, arbiterPrepareDriftRefusal(clusterName, err))
+	}
+	if err := arbiterPrepareReleasedSubstrateRefusal(ctx.RunsDir, clusterName, tasks); err != nil {
 		return failErr(1, err)
 	}
 	converge.ApplyVerboseExtraVar(&plan, flags.verbose)

@@ -113,6 +113,24 @@ func TestMarkSubstrateMachinesReleasedMergesAndYieldsToWholeCluster(t *testing.T
 	}
 }
 
+func TestSubstrateReleaseIsConsumedByATaskSkippedAsAlreadyConverged(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Unix(1700000000, 0)
+	if err := MarkSubstrateReleased(runsDir, "ceph-prd", now); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	task := ApplyTask{Entry: TaskLedgerEntry{ID: "machineos.ceph-prd", Kind: ApplyTaskKindManagedMachineOS, Cluster: "ceph-prd"}}
+	if !SubstrateReleaseClearKind(task.Entry.Kind) {
+		t.Fatalf("the managed-OS install is the task that satisfies a release")
+	}
+	if err := ConsumeSubstrateRelease(runsDir, task.Entry.Cluster, nil, nil); err != nil {
+		t.Fatalf("consume on skip: %v", err)
+	}
+	if _, found, _ := loadSubstrateRelease(runsDir, "ceph-prd"); found {
+		t.Fatalf("a task skipped as already converged proves the machine matches, so the release it authorized is satisfied; leaving the record re-arms a provider-side VM delete on every later reconcile apply")
+	}
+}
+
 func TestConsumeSubstrateReleaseCoverageSemantics(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)

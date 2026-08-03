@@ -1,16 +1,18 @@
 package workflow
 
 type ObjectClassification struct {
-	ObjectKey      string                               `json:"objectKey"`
-	Kind           string                               `json:"kind"`
-	Label          string                               `json:"label"`
-	Cluster        string                               `json:"cluster,omitempty"`
-	Class          ConvergeSafetyClassification         `json:"class"`
-	counts         map[ConvergeSafetyClassification]int `json:"-"`
-	reconcilable   int
-	tiebreakerOnly int
-	Reconcilable   bool     `json:"reconcilable,omitempty"`
-	TaskIDs        []string `json:"taskIDs,omitempty"`
+	ObjectKey       string                               `json:"objectKey"`
+	Kind            string                               `json:"kind"`
+	Label           string                               `json:"label"`
+	Cluster         string                               `json:"cluster,omitempty"`
+	Class           ConvergeSafetyClassification         `json:"class"`
+	counts          map[ConvergeSafetyClassification]int `json:"-"`
+	reconcilable    int
+	tiebreakerOnly  int
+	arbiterAdded    int
+	arbiterRemoved  int
+	Reconcilable    bool     `json:"reconcilable,omitempty"`
+	TaskIDs         []string `json:"taskIDs,omitempty"`
 }
 
 func (o ObjectClassification) Recorded() bool {
@@ -29,6 +31,13 @@ func (o ObjectClassification) TiebreakerOnlyStructuralDrift() bool {
 	structural := o.counts[ConvergeSafetyDrift] - o.reconcilable
 	return structural > 0 && o.tiebreakerOnly == structural
 }
+
+func (o ObjectClassification) StretchArbiterShapeChange() bool {
+	structural := o.counts[ConvergeSafetyDrift] - o.reconcilable
+	return structural > 0 && o.arbiterAdded+o.arbiterRemoved == structural
+}
+
+func (o ObjectClassification) StretchArbiterAdded() bool { return o.arbiterAdded > 0 }
 
 func (o ObjectClassification) HasForeign() bool { return o.counts[ConvergeSafetyForeign] > 0 }
 
@@ -58,7 +67,7 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
-	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable, tiebreakerOnly bool, taskID string) {
+	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable, tiebreakerOnly bool, shape stretchArbiterShape, taskID string) {
 		o := objs[key]
 		if o == nil {
 			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, Cluster: cluster, counts: map[ConvergeSafetyClassification]int{}}
@@ -71,6 +80,12 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		}
 		if tiebreakerOnly {
 			o.tiebreakerOnly++
+		}
+		switch shape {
+		case stretchArbiterAdded:
+			o.arbiterAdded++
+		case stretchArbiterRemoved:
+			o.arbiterRemoved++
 		}
 		if taskID != "" {
 			o.TaskIDs = append(o.TaskIDs, taskID)
@@ -100,7 +115,8 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		if err != nil {
 			return nil, err
 		}
-		add(kind, key, label, task.Entry.Cluster, class, reconcilable, tiebreakerOnly, task.Entry.ID)
+		shape := taskStretchArbiterShapeChange(task, record, found, class, reconcilable)
+		add(kind, key, label, task.Entry.Cluster, class, reconcilable, tiebreakerOnly, shape, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true
 			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
@@ -112,7 +128,7 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 				if err != nil {
 					return nil, err
 				}
-				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, false, "")
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, false, stretchArbiterUnchanged, "")
 			}
 		}
 	}
@@ -170,6 +186,37 @@ func taskTiebreakerOnlyStructuralDrift(task ApplyTask, record ConvergeSafetyReco
 		return false, err
 	}
 	return IsTiebreakerOnlyStructuralDrift(record, structuralHash, invariantHash, applyTaskTiebreakerNodes(task)), nil
+}
+
+type stretchArbiterShape int
+
+const (
+	stretchArbiterUnchanged stretchArbiterShape = iota
+	stretchArbiterAdded
+	stretchArbiterRemoved
+)
+
+func taskStretchArbiterShapeChange(task ApplyTask, record ConvergeSafetyRecord, found bool, class ConvergeSafetyClassification, reconcilable bool) stretchArbiterShape {
+	if class != ConvergeSafetyDrift || reconcilable || !found {
+		return stretchArbiterUnchanged
+	}
+	if record.HashSchema < ConvergeHashSchema {
+		return stretchArbiterUnchanged
+	}
+	cluster := task.Entry.Cluster
+	if cluster == "" {
+		return stretchArbiterUnchanged
+	}
+	_, recorded := record.TiebreakerNodes[cluster]
+	_, desired := applyTaskTiebreakerNodes(task)[cluster]
+	switch {
+	case !recorded && desired:
+		return stretchArbiterAdded
+	case recorded && !desired:
+		return stretchArbiterRemoved
+	default:
+		return stretchArbiterUnchanged
+	}
 }
 
 func applyTaskReconcilableDrift(task ApplyTask, record ConvergeSafetyRecord, desiredHash string) (bool, error) {

@@ -229,6 +229,14 @@ func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, run
 	return objects, nil
 }
 
+func ArbiterPreparePreflight(tasks []workflow.ApplyTask, runsDir, cluster string) error {
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+	if err != nil {
+		return err
+	}
+	return workflow.EvaluateApplyModePreflight(workflow.ApplyModeReconcile, workflow.WithoutTiebreakerDrift(objects, cluster))
+}
+
 func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode, streamAnsible bool) workflow.RunOptions {
 	opts := runOptionsForContext(ctx, clustersDir, executable, plan.State)
 	opts.Playbook = runScope.ApplyPlaybook

@@ -17,7 +17,7 @@ func TestReplaceArbiterPreviewNamesBothGatesAsRequiredWithoutAnyToken(t *testing
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
 	var out bytes.Buffer
-	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail))
+	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail, true))
 	text := out.String()
 	for _, want := range []string{
 		"Required authorizations",
@@ -42,7 +42,7 @@ func TestReplaceArbiterPreviewReadsASuppliedTokenAsSatisfied(t *testing.T) {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
 	var out bytes.Buffer
-	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail))
+	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail, true))
 	text := out.String()
 	for _, want := range []string{
 		"--authorize " + authorizeDegradedQuorum + ": " + authorizationSatisfied,
@@ -60,7 +60,7 @@ func TestReplaceArbiterPreviewOmitsAGateTheRunDoesNotReach(t *testing.T) {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
 	var out bytes.Buffer
-	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, false, "", ""))
+	printRequiredAuthorizations(&out, replaceArbiterRequiredAuthorizations(auth, false, "", "", true))
 	text := out.String()
 	for _, deny := range []string{authorizeSameSiteArbiter, authorizeDegradedQuorum} {
 		if strings.Contains(text, "--authorize "+deny) {
@@ -77,7 +77,7 @@ func TestForecastingAGateNeverConsumesTheTokenThatClearsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
-	replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail)
+	replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail, true)
 	unused := auth.unused()
 	for _, name := range []string{authorizeSameSiteArbiter, authorizeDegradedQuorum} {
 		if !strings.Contains(strings.Join(unused, ","), name) {
@@ -91,7 +91,7 @@ func TestBlanketTokenSatisfiesEveryForecastEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
-	for _, entry := range replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail) {
+	for _, entry := range replaceArbiterRequiredAuthorizations(auth, true, arbiterDegradedReason, arbiterSameSiteDetail, true) {
 		if entry.Status != authorizationSatisfied {
 			t.Errorf("--authorize %s must read %q under the blanket token, got %q", entry.Token, authorizationSatisfied, entry.Status)
 		}

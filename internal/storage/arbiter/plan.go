@@ -43,7 +43,7 @@ func DesiredArbiter(cluster v1alpha1.StorageCluster) (v1alpha1.StorageCephNode, 
 		return v1alpha1.StorageCephNode{}, fmt.Errorf("StorageCluster/%s declares no spec.ceph.topology.stretch, so it has no arbiter; a stretch tiebreaker exists only in a stretch topology", cluster.Metadata.Name)
 	}
 	if strings.TrimSpace(stretch.Tiebreaker.Node) == "" {
-		return v1alpha1.StorageCephNode{}, fmt.Errorf("StorageCluster/%s declares spec.ceph.topology.stretch without a tiebreaker, so there is no arbiter to replace; author spec.ceph.topology.stretch.tiebreaker.node and run `bootwright apply` to add one", cluster.Metadata.Name)
+		return v1alpha1.StorageCephNode{}, fmt.Errorf("StorageCluster/%s declares spec.ceph.topology.stretch without a tiebreaker, so there is no arbiter to replace; whether a stretch cluster carries an arbiter is fixed when it is bootstrapped, so spec.ceph.topology.stretch.tiebreaker.node has to be declared before the first apply builds the cluster — on a cluster that is already running, no command adds one", cluster.Metadata.Name)
 	}
 	name := topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)
 	node, ok := topology.HostByName(cluster, name)
@@ -74,7 +74,7 @@ func Compute(cluster v1alpha1.StorageCluster, live cephstate.Discovery) (Plan, e
 		return Plan{}, fmt.Errorf("read the live monmap of storage cluster %s: %w; `bootwright storage-cluster replace-arbiter` reconciles the live tiebreaker, so it cannot plan without one", cluster.Metadata.Name, err)
 	}
 	if !dump.StretchMode {
-		return Plan{}, fmt.Errorf("storage cluster %s is not in stretch mode on the cluster itself (`ceph mon dump` reports stretch_mode false), so it carries no tiebreaker to replace; run `bootwright apply --clusters %s` to converge the authored stretch topology first", cluster.Metadata.Name, cluster.Metadata.Name)
+		return Plan{}, fmt.Errorf("storage cluster %s is not in stretch mode on the cluster itself (`ceph mon dump` reports stretch_mode false), so it carries no tiebreaker to replace; if this cluster was authored as a stretch cluster before it was bootstrapped, converge it with `bootwright apply --clusters %s`, but if the stretch topology was added to an already-built cluster, apply refuses it as a shape change Bootwright cannot make in place", cluster.Metadata.Name, cluster.Metadata.Name)
 	}
 	plan.TiebreakerMon = dump.TiebreakerMon
 	if plan.TiebreakerMon == "" {

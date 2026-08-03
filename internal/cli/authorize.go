@@ -62,7 +62,7 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "acting on state whose Environment sets spec.safety.destroyProtection or spec.safety.protectedKinds",
 	inert:      "no selected object is protected by an Environment spec.safety rule",
 	verbs:      []string{authorizeVerbDestroy},
-	elsewhere:  "destroying protected state must cross the destroy boundary, so run `bootwright destroy --authorize protected` for the affected scope and then re-apply",
+	elsewhere:  "destroying protected state must cross the destroy boundary, so run `bootwright destroy --authorize protected` for the affected scope and then re-apply; the one apply-side exception is `apply --reclaim-devices`, whose protected-state wipe is authorized by --authorize data-loss",
 }, {
 	name:       authorizeInstalledClusterNode,
 	gloss:      "a --machines teardown naming a node of an installed cluster",

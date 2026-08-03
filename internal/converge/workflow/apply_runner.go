@@ -126,6 +126,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		}
 	}
 	if result.Skipped {
+		if SubstrateReleaseClearKind(task.Entry.Kind) {
+			if recordErr := ConsumeSubstrateRelease(runsDir, task.Entry.Cluster, opts.SelectedMachines, ClusterSubstrateMachineNames(task.State, task.Entry.Cluster)); recordErr != nil {
+				return applyTaskResult{id: task.Entry.ID, skipped: true, err: recordErr}
+			}
+		}
 		return applyTaskResult{id: task.Entry.ID, skipped: true, err: nil}
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster || task.Entry.Kind == ApplyTaskKindInstallWait || task.Entry.Kind == ApplyTaskKindBootstrapWait {

@@ -172,7 +172,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
 			}
 		}
-		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope)
+		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope, dryRun)
 		if consumerErr != nil {
 			return failErr(1, consumerErr)
 		}
@@ -180,7 +180,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if sel.MachineSelection {
 			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots, sel.StorageRoots, ownershipRecords); err != nil {
 				installedClusterNodeReached = true
-				if !auth.allows(authorizeInstalledClusterNode) {
+				if !auth.allows(authorizeInstalledClusterNode) && !dryRun {
 					return failErr(1, err)
 				}
 			}
@@ -195,7 +195,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if artifactServerOnly {
 				blocksState = state
 			}
-			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly)
+			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly, dryRun)
 			sharedInfraReached = sharedInfraReached || blocked
 			if blocksErr != nil {
 				return failErr(1, blocksErr)
@@ -260,7 +260,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth)
+			disclosure := dryRunDisclosure{refusals: destroyGateForecastRefusals(destroySafety, inputSkipped, ownershipSkipped, componentDecision, auth)}
+				if purgeHistory && !plan.NoRemoteWork {
+					disclosure.purgeHistory = &converge.DryRunPurgeHistory{Scope: destroyPurgeHistoryNotice(true)}
+				}
+				return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
 			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))
@@ -375,16 +379,14 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if resetErr != nil {
 				return failErr(1, resetErr)
 			}
+			if partialErr != nil {
+				return failErr(1, partialErr)
+			}
 			renderResult = result
 		default:
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter)
 			if derr != nil {
 				return failErr(1, derr)
-			}
-			if !dryRun && !artifactServerOnly && !plan.NoRemoteWork {
-				if resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, nil, nil, purgeHistory, skipUnreachable); resetErr != nil {
-					return failErr(1, resetErr)
-				}
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)
