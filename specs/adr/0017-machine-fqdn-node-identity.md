@@ -9,8 +9,11 @@ per-class `Environment.spec.domains`;
 [ADR 0025](0025-composed-names-are-labels-plus-explicit-overrides.md) replaces
 the dotted-value FQDN escape with an explicit `nodes[].fqdn` field;
 [ADR 0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md)
-enforces the node-name contract on storage nodes. The node-identity model
-itself stands.
+enforces the node-name contract on storage nodes;
+[ADR 0046](0046-the-hosts-preflight-cannot-reach-yet.md) extends the
+"Name resolution" preflight group below to a cluster-bound machine whose
+`os.provided: true` forbids it from referencing a resolver. The node-identity
+model itself stands.
 
 ## Context
 

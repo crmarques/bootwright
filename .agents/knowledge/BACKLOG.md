@@ -854,7 +854,11 @@ learned; this file records what it still owes.
   root cannot clear a 20 GiB *free* assert; neither can a 20 GiB one once an OS
   is installed on it. So either the shipped lab fails its own preflight, or the
   preflight is not reached on that path — and the docs advertise a sizing the
-  product refuses. Correcting it after the fact is expensive by design: the
+  product refuses. ADR 0046 answered the second horn: the play could not reach a
+  node whose OS the same run installs, so the floor was never asserted on a
+  day-1 lab. It is now asserted on the next preflight after the machines phase,
+  which makes the sizing question below live rather than theoretical.
+  Correcting it after the fact is expensive by design: the
   libvirt and vSphere substrate gates both refuse an in-place root-disk resize
   and a disk-count change, naming `destroy --stage infra` as the only exit.
 - Exit: maintainer's call on the right lab-scale value. Either raise the

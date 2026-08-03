@@ -246,6 +246,15 @@ hosts. Validate the same key and address declared on the `Machine` before
 retrying. A machine used over SSH must declare `access.ssh.addressRef`,
 `keyRef`, and a matching address.
 
+Preflight does not require SSH to a machine whose OS the same run installs. Such
+a host is reported as deferred in the preflight log — Bootwright installs it in
+the machines phase, which runs before the phase that logs in to it — and its
+host checks run on the next preflight. Every other unreachable host fails
+preflight by name, with the address and user it tried: nothing the run does
+makes it reachable. A machine with `os.provided: true` and no `spec.access`
+defaults to the controller identity as `root`, so its public key has to be in
+that account's `authorized_keys` before the first run.
+
 If the host check fails with a missing SSH host-trust record (`fix: bootwright
 machine trust`), either run `bootwright machine trust`, or rerun `preflight`/`apply`
 interactively: they show each unknown host's key fingerprint and ask before

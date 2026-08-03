@@ -3,14 +3,50 @@
 
 - name: Check host prerequisites
   hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_boot_hosts:bootwright_storage_hosts
-  gather_subset:
-    - "!all"
-    - min
-    - env
+  gather_facts: false
   become: false
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
   pre_tasks:
+    - name: Open the host connection
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - min
+          - env
+      register: bootwright_preflight_connection
+      ignore_unreachable: true
+
+    - name: Report a host this run installs before anything logs in to it
+      ansible.builtin.debug:
+        msg: >-
+          {{ bootwright_host_name }} is not reachable yet:
+          {{ bootwright_preflight_connection.msg | default('no connection') }}.
+          Bootwright installs this machine's OS in the machines phase, which runs
+          before the phase that logs in to it, so the host checks below are
+          deferred to the next preflight instead of failing this one.
+      when:
+        - bootwright_preflight_connection.unreachable | default(false) | bool
+        - not (bootwright_os_provided | default(true) | bool)
+
+    - name: Refuse an unreachable host this run does not install
+      ansible.builtin.fail:
+        msg: >-
+          {{ bootwright_host_name }} is unreachable at
+          {{ ansible_host | default(bootwright_host_name) }} as
+          {{ ansible_user | default('the connection default user') }}:
+          {{ bootwright_preflight_connection.msg | default('no connection') }}.
+          Bootwright does not install this machine's OS, so nothing this run does
+          makes it reachable. Bring the host up and authorize the declared login
+          before apply.
+      when:
+        - bootwright_preflight_connection.unreachable | default(false) | bool
+        - bootwright_os_provided | default(true) | bool
+
+    - name: Stop checking a host that is not reachable
+      ansible.builtin.meta: end_host
+      when: bootwright_preflight_connection.unreachable | default(false) | bool
+
     - name: Resolve proxy environment
       ansible.builtin.import_role:
         name: bootwright.core.machine_proxy

@@ -443,14 +443,7 @@ func summarizeFailure(logPath string, tailLines int) string {
 	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
 		return fmt.Sprintf("  (output log %s is empty)", logPath)
 	}
-	failingTask := ""
-	for _, line := range lines {
-		clean := strings.TrimSpace(stripANSI(line))
-		if strings.HasPrefix(clean, "TASK [") {
-			failingTask = clean
-		}
-	}
-	failureReason := ansibleFailureReason(lines)
+	failingTask, failureReason := ansibleFailure(lines)
 	start := len(lines) - tailLines
 	if start < 0 {
 		start = 0
@@ -476,27 +469,51 @@ var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 func stripANSI(s string) string { return ansiEscape.ReplaceAllString(s, "") }
 
-func ansibleFailureReason(lines []string) string {
-	rawFatal := ""
-	enriched := ""
+type ansibleFailureCandidate struct {
+	task   string
+	reason string
+}
+
+func ansibleFailure(lines []string) (string, string) {
+	task := ""
+	lastTask := ""
+	var failed, enriched, unreachable, rawFatal ansibleFailureCandidate
 	for _, raw := range lines {
 		line := strings.TrimSpace(stripANSI(raw))
 		switch {
+		case strings.HasPrefix(line, "TASK ["):
+			task = line
+			lastTask = line
 		case strings.HasPrefix(line, "fatal:"):
-			if rawFatal == "" {
-				rawFatal = line
+			if rawFatal.reason == "" {
+				rawFatal = ansibleFailureCandidate{task: task, reason: line}
 			}
-			if msg := ansibleResultMessage(line); msg != "" {
-				return msg
+			msg := ansibleResultMessage(line)
+			switch {
+			case msg == "":
+			case strings.Contains(line, "UNREACHABLE!"):
+				if unreachable.reason == "" {
+					unreachable = ansibleFailureCandidate{task: task, reason: msg}
+				}
+			case failed.reason == "":
+				failed = ansibleFailureCandidate{task: task, reason: msg}
 			}
-		case enriched == "" && strings.HasPrefix(line, "[ERROR]:"):
-			enriched = ansibleEnrichedMessage(line)
+		case strings.HasPrefix(line, "[ERROR]:"):
+			if enriched.reason == "" {
+				enriched = ansibleFailureCandidate{task: task, reason: ansibleEnrichedMessage(line)}
+			}
 		}
 	}
-	if enriched != "" {
-		return enriched
+	for _, candidate := range []ansibleFailureCandidate{failed, enriched, unreachable, rawFatal} {
+		if candidate.reason == "" {
+			continue
+		}
+		if candidate.task == "" {
+			return lastTask, candidate.reason
+		}
+		return candidate.task, candidate.reason
 	}
-	return rawFatal
+	return lastTask, ""
 }
 
 func ansibleResultMessage(line string) string {

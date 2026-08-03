@@ -30,7 +30,7 @@ below.
 | [0014](0014-api-grammar.md) | Public API Grammar — References, Unions, Collections, Enablement | |
 | [0015](0015-machine-scope-rhsm-registration.md) | Machine-Scope RHSM Registration and External Management | |
 | [0016](0016-secret-first-class-kind.md) | Secret as a First-Class Kind | |
-| [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | revised by 0018, 0025; enforced by 0035 |
+| [0017](0017-machine-fqdn-node-identity.md) | Machine fqdn Address and Independent Node Identity | revised by 0018, 0025; enforced by 0035; name-resolution group extended by 0046 |
 | [0018](0018-environment-domain-model.md) | Environment Domain Model | refines 0017 |
 | [0019](0019-node-root-posture-and-orchestration-identity.md) | Node Root Posture and Ceph Orchestration Identity | revised by 0024, 0027 |
 | [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | |
@@ -59,3 +59,4 @@ below.
 | [0043](0043-one-cluster-one-address-family.md) | One Cluster, One Address Family | extended by 0044 |
 | [0044](0044-the-endpoint-a-single-node-cluster-answers-at.md) | The Endpoint a Single-Node Cluster Answers At | extends 0043; follows the source union of 0014 |
 | [0045](0045-installing-the-os-a-golden-image-already-carries.md) | Installing the OS a Golden Image Already Carries | follows the second-backend dispatch rule of 0002; follows the presence-union grammar of 0014 |
+| [0046](0046-the-hosts-preflight-cannot-reach-yet.md) | The Hosts Preflight Cannot Reach Yet | extends the name-resolution group of 0017; closes the coverage gap 0035 recorded |

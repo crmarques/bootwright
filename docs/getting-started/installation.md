@@ -240,7 +240,7 @@ pre-apply ritual, in the order the guides run it:
 | `secret check` | Reports any declared secret still missing. | the local context store, read-only |
 | `machine trust` | Records the declared hosts' SSH host keys for strict checking. | reads host keys over the network; writes the local trust store |
 | `bastion setup` | Installs the managed Ansible runtime, and — when the context declares an OpenShift/OKD release — the release-matched cluster CLIs and `helm`. | the bastion host only |
-| `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. | reads hosts over SSH |
+| `preflight all` | Checks the bastion, infrastructure hosts, and cluster prerequisites before any mutation. A machine whose OS this run installs is not reachable yet, so its host checks defer to the next preflight rather than failing this one. | reads hosts over SSH |
 | `render effective` | Writes the desired state with all defaults applied, so you can see exactly what will be acted on. | nothing — renders locally |
 | `plan` | Shows the apply task graph. | nothing — offline |
 | `diff` (after a first apply exists) | Reports drift from desired state; exit code `3` means out of sync. | reads the live cluster |

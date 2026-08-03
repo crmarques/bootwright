@@ -34,7 +34,7 @@ func nameResolutionChecks(state v1alpha1.State, selected []Phase, deps Deps, sco
 			continue
 		}
 		fqdn := v1alpha1.MachineFQDNAddress(machine)
-		if fqdn == "" || !stateview.MachineReferencesNameResolution(state, machine) {
+		if fqdn == "" || !machineNameResolutionChecked(state, machine) {
 			continue
 		}
 		expected := v1alpha1.MachineSSHAddress(machine)
@@ -122,6 +122,24 @@ func warnResolutionCheck(name, evidence, impact, remediation string) Check {
 		Impact:      impact,
 		Remediation: remediation,
 	}
+}
+
+func machineNameResolutionChecked(state v1alpha1.State, machine v1alpha1.Machine) bool {
+	if stateview.MachineReferencesNameResolution(state, machine) {
+		return true
+	}
+	return machineInheritsEnvironmentNameResolution(state, machine)
+}
+
+func machineInheritsEnvironmentNameResolution(state v1alpha1.State, machine v1alpha1.Machine) bool {
+	if !v1alpha1.MachineOSProvided(machine) {
+		return false
+	}
+	if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); !ok || hostname == "" {
+		return false
+	}
+	env := stateview.Environment(state)
+	return env != nil && len(env.Spec.InfraComponents.NameResolution) > 0
 }
 
 func machineNameResolutionManaged(state v1alpha1.State, machine v1alpha1.Machine) bool {

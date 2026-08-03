@@ -427,6 +427,16 @@ missing or points at the wrong address; under managed resolution the same
 checks warn instead of failing — converging the resolver is exactly what
 apply does — and point at the apply command.
 
+A machine with `os.provided: true` cannot declare `spec.network.config` at all,
+so it can never reference a name-resolution entry. When such a machine is a
+cluster node — a provided stretch arbiter, say — and the environment declares
+any name-resolution entry, both of its records are checked against the
+environment's declaration and fail when missing. They fail rather than warn
+even under managed resolution: the managed resolver's record set is built from
+the machines that reference it, so no apply produces a record for a machine
+that references none. Placing that one is the operator's, wherever their
+resolver lives.
+
 ### Cluster records
 
 Managed name-resolution services render records for `api`, `api-int`, and the
