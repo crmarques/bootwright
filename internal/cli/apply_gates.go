@@ -3,7 +3,22 @@ package cli
 import (
 	"fmt"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
+
+func applyOwnershipRecords(ctx workspace.Context, dryRun bool) ([]ownership.ResourceRecord, []error, error) {
+	records, skipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(skipped) > 0 && !dryRun {
+		return nil, nil, applyUnreadableOwnershipRefusal(ctx.OwnershipDir, skipped)
+	}
+	return records, skipped, nil
+}
 
 func applyUnreadableOwnershipRefusal(ownershipDir string, skipped []error) error {
 	details := make([]string, 0, len(skipped))

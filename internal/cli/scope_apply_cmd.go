@@ -217,12 +217,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactServerTargets := installOnlyArtifactServerTargets(state)
 		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
-		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		ownershipRecords, ownershipSkipped, err := applyOwnershipRecords(ctx, dryRun)
 		if err != nil {
 			return failErr(1, err)
-		}
-		if len(ownershipSkipped) > 0 && !dryRun {
-			return failErr(1, applyUnreadableOwnershipRefusal(ctx.OwnershipDir, ownershipSkipped))
 		}
 		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
 			cliout.NewContinuation(c.ErrOrStderr()).Warning("artifact-server retention", serr.Error())
