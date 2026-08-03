@@ -71,12 +71,16 @@ func forecastReinstallDescriptors(names []string) []string {
 	return out
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipRecords []ownership.ResourceRecord) {
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
+	var refusals []error
+	if len(ownershipSkipped) > 0 {
+		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped))
+	}
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
+		printApplyGateRefusals(stdout, refusals)
 		return
 	}
-	var refusals []error
 	if err := converge.CheckApplyRenameOrphan(fullState, objects, clustersDir, ownershipRecords); err != nil {
 		refusals = append(refusals, err)
 	}
@@ -93,6 +97,10 @@ func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.Stat
 			refusals = append(refusals, err)
 		}
 	}
+	printApplyGateRefusals(stdout, refusals)
+}
+
+func printApplyGateRefusals(stdout io.Writer, refusals []error) {
 	for _, e := range refusals {
 		cliout.NewContinuation(stdout).Warning("change plan", "a real run refuses before any prompt: "+e.Error())
 	}

@@ -510,6 +510,19 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictAuthorized,
 		want:    []string{"Skipped ownership records"},
 	}, {
+		name:    "apply/unreadable-records: a corrupt ownership record refuses before the rename-orphan gate reads it",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"could not be read", "Repair or remove the reported record file(s)"},
+		deny:    []string{"--authorize unreadable-records to"},
+	}, {
+		name:    "apply/unreadable-records: a dry run forecasts the refusal its real counterpart makes",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"a real run refuses before any prompt", "could not be read"},
+	}, {
 		name:    "destroy/unowned-networks: the token arms the wider blast radius only when asked for",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unowned-vms,unowned-networks", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

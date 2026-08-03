@@ -55,8 +55,14 @@ func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 
 func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string) []requiredAuthorization {
 	forecast := newAuthorizationForecast(auth)
-	if objects, err := workflow.ClassifyApplyObjects(tasks, runsDir); err == nil {
-		released, _ := workflow.ConsumableSubstrateReleases(runsDir, tasks)
+	objects, classifyErr := workflow.ClassifyApplyObjects(tasks, runsDir)
+	if classifyErr != nil {
+		forecast.mayConsult(authorizeDataLoss, true, "this preview could not classify the run's objects against its run records ("+classifyErr.Error()+"), so it cannot settle what a real run destroys; the real run recomputes the same classification and fails closed on that error")
+	} else {
+		released, releaseErr := workflow.ConsumableSubstrateReleases(runsDir, tasks)
+		if releaseErr != nil {
+			forecast.mayConsult(authorizeDataLoss, true, "a destroyed cluster's rebuild authorization could not be read ("+releaseErr.Error()+"), so this preview cannot settle whether a real run reinstalls its machines and wipes their disks")
+		}
 		var substrateReset []string
 		if mode == workflow.ApplyModeRebuild {
 			_, substrateReset = workflow.OverrideDestructiveMachineSubstrate(objects)

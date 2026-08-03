@@ -217,9 +217,15 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactServerTargets := installOnlyArtifactServerTargets(state)
 		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
-		ownershipRecords, _, _ := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		if err != nil {
+			return failErr(1, err)
+		}
+		if len(ownershipSkipped) > 0 && !dryRun {
+			return failErr(1, applyUnreadableOwnershipRefusal(ctx.OwnershipDir, ownershipSkipped))
+		}
 		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
-			cliout.NewContinuation(stdout).Warning("artifact-server retention", serr.Error())
+			cliout.NewContinuation(c.ErrOrStderr()).Warning("artifact-server retention", serr.Error())
 		} else {
 			converge.ApplyArtifactServerSkipExtraVar(&plan, skip)
 		}
@@ -354,7 +360,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, reinstallDrift, ownershipRecords)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices))
 			warnUnusedAuthorizations(stdout, auth, true)
