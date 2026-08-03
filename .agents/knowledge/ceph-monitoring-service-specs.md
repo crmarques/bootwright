@@ -103,24 +103,39 @@ fronts it (nginx reverse-proxies to it over the container network), so the
 exact port number has no external meaning — it only has to avoid whatever
 else is already bound on that host.
 
-**Constraint:** cephadm's ingress spec (RGW/NFS HAProxy+keepalived) takes TLS
-material through a single `ssl_cert` field — one PEM blob containing both the
-certificate chain and the private key concatenated, with source `inline`.
-This is a different shape from the management gateway and oauth2-proxy, which
-take two separate fields — but the field *names* are the same short pair,
-`ssl_cert`/`ssl_key`, not the `ssl_certificate`/`ssl_certificate_key` the
-upstream oauth2-proxy example still prints
+**Trap, fourth order (fixed):** the TLS-free vendor gateway loops too. On IBM
+9.9.1 the base dependency computation appends `certificate_source:
+cephadm-signed` for a spec carrying no certificate fields (ssl defaults true
+on MgmtGatewaySpec), the recording side still drops it, and all six gateways
+reconfigure every ~30s forever — observed as `diff {'certificate_source:
+cephadm-signed'}` spam, gateways cycling through `starting` (the service polls
+0/6..6/6 unstably), and downstream churn such as ceph-exporter redeploy loops
+whose deps list the gateway daemons. No ssl-enabled gateway shape converges on
+that build, so bootwright pins `ssl: false` in the vendor gateway spec (a
+plain-HTTP gateway on the authored port); oss keeps cephadm-signed HTTPS,
+which converges upstream (ADR 0047).
+
+**Constraint (revised):** cephadm ingress inline TLS is the `ssl_cert` +
+`ssl_key` PAIR with `ssl: true` — never one combined PEM bundle. The certmgr
+lineage (IBM 9.x, upstream main) routes ingress certificates through the
+generic certificate machinery whose inline source is defined as the pair; its
+spec normalization refuses a cert without a key, and the 9.9.1 build in the
+field accepted a lone bundled `ssl_cert` but rendered a haproxy.cfg whose
+`ssl crt /var/lib/haproxy/haproxy.pem` referenced a file it never wrote —
+every haproxy daemon crash-looped with `unable to stat SSL certificate from
+file '/var/lib/haproxy/haproxy.pem'` (ingress.rgw stuck at N/2N with all
+keepaliveds running). Upstream tentacle writes the pair as `haproxy.pem` plus
+`haproxy.pem.key`, which haproxy loads as certificate and companion key, so
+the pair deploys on BOTH lineages; `rgw_ingress_tls.yml` emits it. Ingress
+does not inherit the mgmt-gateway reconfigure loop: IngressService's
+generate_config passes the spec when recording deps, so recorded and computed
+lists agree. The field NAMES are still the short pair `ssl_cert`/`ssl_key`
 ([ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)).
-Match the count, not the name: one bundled field for ingress, two for the
-gateway.
 `StorageObjectGatewayIngress.tls` (`certificateRef`+`keyRef`, both a
-`tlsCertificate` Secret) mirrors the two-ref user-facing shape everywhere
-else in the schema for consistency, and `rgw_ingress_tls.yml` concatenates
-the two files' content (`cert + "\n" + key + "\n"`) into `ssl_cert` at apply
-time. Like `management_services.yml`, the Go-rendered `late-services.yaml`
-(shared with the native `apply.sh` path) never carries the cert bytes — it
-still emits the plain cert-less ingress doc unconditionally (see
-[ceph-service-rollout-gate.md](ceph-service-rollout-gate.md) for why
+`tlsCertificate` Secret) maps one ref to each field, and the Go-rendered
+`late-services.yaml` (shared with the native `apply.sh` path) never carries the
+cert bytes — it still emits the plain cert-less ingress doc unconditionally
+(see [ceph-service-rollout-gate.md](ceph-service-rollout-gate.md) for why
 secret-bearing specs are always a separate ansible-side reapply rather than
 baked into a rendered/state-tracked asset file); `rgw_ingress_tls.yml` reapplies
 the complete spec immediately afterward for every ingress that declares

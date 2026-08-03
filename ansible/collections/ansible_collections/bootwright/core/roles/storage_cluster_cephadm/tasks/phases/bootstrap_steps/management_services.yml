@@ -71,6 +71,7 @@
                 'virtual_ip': bootwright_ceph_management.virtualIP,
                 'enable_auth': bootwright_ceph_management.enableAuth
               }
+              | combine({'ssl': false} if (bootwright_ceph_management.sslDisabled | default(false) | bool) else {})
               | combine(
                   {
                     'ssl_cert': lookup('ansible.builtin.file', bootwright_ceph_management.tls.certificatePath),

@@ -73,6 +73,30 @@ cluster previously wedged by an inline-TLS spec self-heals on the next apply —
 re-applying the TLS-free document makes the computed and recorded lists agree
 again, the loop stops, and the daemons settle.
 
+**The vendor gateway spec pins `ssl: false`, because the dependency asymmetry
+covers every certificate source.** The first TLS-free apply on the same build
+looped identically with `diff {'certificate_source: cephadm-signed'}`: the
+vendor base dependency computation appends the `certificate_source` entry for
+its own self-signed path too, and the recording side still drops it. No
+ssl-enabled gateway shape converges — inline, reference, or cephadm-signed —
+so on subscription-backed distributions Bootwright emits `ssl: false`
+(`MgmtGatewaySpec` defaults it to true) in both the late-services document and
+the management-phase document, and the gateway serves plain HTTP on its
+authored port. Community builds keep cephadm's HTTPS default, which converges.
+
+**Ingress inline TLS is the `ssl_cert`/`ssl_key` pair with `ssl` enabled,
+never a combined bundle.** The same certmgr backport routes ingress
+certificates through the generic certificate machinery, whose inline source is
+defined as the pair — the spec-level normalization on that lineage refuses a
+cert without a key, and the build in the field accepted the lone bundle but
+rendered a haproxy.cfg whose `ssl crt /var/lib/haproxy/haproxy.pem` directive
+referenced a file it never wrote, crash-looping every haproxy daemon with
+"unable to stat SSL certificate". Upstream tentacle writes the pair as
+`haproxy.pem` plus `haproxy.pem.key`, which haproxy loads as certificate and
+companion key, so the pair is the one shape both lineages deploy. Ingress does
+not inherit the gateway's reconfigure loop: its `generate_config` passes the
+spec when recording dependencies, so recorded and computed lists agree.
+
 ## Consequences
 
 - A vendor-distribution dashboard is reached through the cephadm-managed

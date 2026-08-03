@@ -3206,15 +3206,18 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 	}
 	assemble := tasks[assembleIdx]
 	assertRedactsByDefault(t, "Assemble RGW ingress TLS certificate specs", assemble["no_log"])
-	if got := fmt.Sprint(assemble["ansible.builtin.set_fact"]); !strings.Contains(got, "ssl_cert") || !strings.Contains(got, "item.serviceID") {
-		t.Fatalf("RGW ingress TLS assembly must keep the concatenated ssl_cert and the rendered service id, got %v", assemble["ansible.builtin.set_fact"])
-	}
-	if got := fmt.Sprint(assemble["ansible.builtin.set_fact"]); strings.Contains(got, `\n`) {
-		t.Fatalf("a block scalar hands Jinja the two characters backslash and n, so the PEM bundle must not be joined with an escape there, got %v", assemble["ansible.builtin.set_fact"])
+	assembled := fmt.Sprint(assemble["ansible.builtin.set_fact"])
+	for _, want := range []string{"'ssl': true", "'ssl_cert'", "'ssl_key'", "item.serviceID"} {
+		if !strings.Contains(assembled, want) {
+			t.Fatalf("certmgr-era cephadm treats inline ingress TLS as the ssl_cert/ssl_key pair with ssl enabled and never writes haproxy.pem from a lone combined bundle, so the assembly must carry %s, got %v", want, assemble["ansible.builtin.set_fact"])
+		}
 	}
 	pem := fmt.Sprint(assemble["vars"])
-	if !strings.Contains(pem, "certificatePath") || !strings.Contains(pem, "keyPath") || !strings.Contains(pem, "join('\n')") {
-		t.Fatalf("the PEM bundle must join the certificate and the key on a real newline, which only a quoted scalar yields, got vars=%v", assemble["vars"])
+	if !strings.Contains(pem, "certificatePath") || !strings.Contains(pem, "keyPath") {
+		t.Fatalf("the certificate and key must be read from their own secret paths, got vars=%v", assemble["vars"])
+	}
+	if strings.Contains(pem, "join(") {
+		t.Fatalf("the certificate and key must stay separate fields; a joined bundle renders a haproxy.cfg whose ssl directive references a haproxy.pem cephadm never writes, got vars=%v", assemble["vars"])
 	}
 	write := tasks[writeIdx]
 	assertRedactsByDefault(t, "Write RGW ingress TLS certificate spec", write["no_log"])

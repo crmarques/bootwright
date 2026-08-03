@@ -20,7 +20,9 @@
                   'virtual_ip': item.virtualIP,
                   'frontend_port': item.frontendPort,
                   'monitor_port': item.monitorPort,
-                  'ssl_cert': bootwright_ceph_rgw_ingress_tls_pem
+                  'ssl': true,
+                  'ssl_cert': bootwright_ceph_rgw_ingress_tls_cert,
+                  'ssl_key': bootwright_ceph_rgw_ingress_tls_key
                 }
                 | combine({'virtual_interface_networks': item.virtualInterfaceNetworks} if (item.virtualInterfaceNetworks | default([]) | length > 0) else {})
                 | combine({'first_virtual_router_id': item.firstVirtualRouterID} if (item.firstVirtualRouterID | default(0) | int > 0) else {})
@@ -29,7 +31,8 @@
           ]
       }}
   vars:
-    bootwright_ceph_rgw_ingress_tls_pem: "{{ [(lookup('ansible.builtin.file', item.certificatePath) | trim), (lookup('ansible.builtin.file', item.keyPath) | trim), ''] | join('\n') }}"
+    bootwright_ceph_rgw_ingress_tls_cert: "{{ lookup('ansible.builtin.file', item.certificatePath) | trim }}"
+    bootwright_ceph_rgw_ingress_tls_key: "{{ lookup('ansible.builtin.file', item.keyPath) | trim }}"
   loop: "{{ bootwright_ceph_rgw_ingress_tls | default([]) }}"
   loop_control:
     label: "{{ item.serviceID }}"
@@ -76,9 +79,13 @@
       and `ceph orch apply -i` can reject one document while accepting the rest, exiting
       zero — a rejected document leaves that gateway's ingress without the supplied
       certificate, which no later readiness gate notices because the service is never
-      created at all. The certificate and key are concatenated into one PEM bundle, so a
-      key that does not match its certificate, or a path holding something other than PEM
-      text, is refused here. rc: {{ bootwright_ceph_rgw_ingress_tls_apply.rc | default('<none>') }}
+      created at all. The certificate and key travel as the separate ssl_cert/ssl_key
+      pair with ssl enabled: certmgr-era cephadm builds treat inline TLS as that pair
+      and never write haproxy.pem from a lone combined bundle (haproxy then dies with
+      "unable to stat SSL certificate"), while upstream tentacle writes the pair as
+      haproxy.pem plus haproxy.pem.key. A key that does not match its certificate, or
+      a path holding something other than PEM text, is refused here.
+      rc: {{ bootwright_ceph_rgw_ingress_tls_apply.rc | default('<none>') }}
       cephadm said: {{ bootwright_ceph_rgw_ingress_tls_apply_output }}
     success_msg: >-
       cephadm accepted every RGW ingress TLS document.
