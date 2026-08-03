@@ -20,9 +20,9 @@ type MachineDefaultedRefs struct {
 }
 
 type MachineSpec struct {
-	Capabilities []string         `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
-	Placement    MachinePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
-	Substrate    MachineSubstrate `yaml:"substrate,omitempty" json:"substrate,omitempty"`
+	Capabilities []string          `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Placement    *MachinePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+	Substrate    MachineSubstrate  `yaml:"substrate,omitempty" json:"substrate,omitempty"`
 	Hardware     MachineHardware  `yaml:"hardware,omitempty" json:"hardware,omitempty"`
 	OS           MachineOSSpec    `yaml:"os" json:"os"`
 	Network      MachineNetwork   `yaml:"network,omitempty" json:"network,omitempty"`
@@ -34,7 +34,12 @@ type MachinePlacement struct {
 	Site string `yaml:"site,omitempty" json:"site,omitempty"`
 }
 
-func MachineSite(machine Machine) string { return machine.Spec.Placement.Site }
+func MachineSite(machine Machine) string {
+	if machine.Spec.Placement == nil {
+		return ""
+	}
+	return machine.Spec.Placement.Site
+}
 
 type MachineSubstrate struct {
 	ProviderRef LocalObjectReference `yaml:"providerRef,omitempty" json:"providerRef,omitempty"`

@@ -585,7 +585,6 @@ spec:
       nodes:
         - name: node01
           machineRef: ceph-0
-          site: lab
           roles: [ROLES]
 `
 	cases := []struct {
@@ -732,7 +731,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].Roles = []string{v1alpha1.StorageCephRoleOSD}
 			},
-			want: `requires exactly two mon nodes in data site "dc1"`,
+			want: `requires exactly two non-tiebreaker mon nodes in data site "dc1"`,
 		},
 		{
 			name: "stretch-host-missing-site",

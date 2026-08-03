@@ -24,7 +24,6 @@ spec:
       nodes:
         - name: node01
           machineRef: ceph-0
-          site: lab
           roles:
             - mon
             - mgr
@@ -37,7 +36,6 @@ spec:
             - /dev/vdc
         - name: node02
           machineRef: ceph-1
-          site: lab
           roles:
             - mon
             - mgr
@@ -50,7 +48,6 @@ spec:
             - /dev/vdc
         - name: node03
           machineRef: ceph-2
-          site: lab
           roles:
             - mon
             - mgr

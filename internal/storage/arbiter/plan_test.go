@@ -210,6 +210,17 @@ func TestValidateCandidateRefusesAMachineBoundToAnotherCluster(t *testing.T) {
 	}
 }
 
+func TestValidateCandidateRequiresAPlacementSite(t *testing.T) {
+	state := v1alpha1.State{Machines: []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: "arb-new"},
+		Spec:     v1alpha1.MachineSpec{Capabilities: []string{v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephArbiter}},
+	}}}
+	err := ValidateCandidate(state, stretchCluster(), "arb-new")
+	if err == nil || !strings.Contains(err.Error(), "spec.placement.site") {
+		t.Fatalf("ValidateCandidate on a siteless candidate = %v, want a refusal naming spec.placement.site; without it the replacement mon's CRUSH location is guessed from the arbiter it retires", err)
+	}
+}
+
 func TestValidateCandidateRequiresTheArbiterCapability(t *testing.T) {
 	state := v1alpha1.State{Machines: []v1alpha1.Machine{{
 		Metadata: v1alpha1.Metadata{Name: "arb-new"},
@@ -266,7 +277,7 @@ func TestComputePromotionRewritesTheAuthoredTiebreaker(t *testing.T) {
 			},
 		}},
 	}
-	promotion, err := ComputePromotion(workspace.Context{Name: "lab", InputDir: dir}, cluster, "arb-new")
+	promotion, err := ComputePromotion(workspace.Context{Name: "lab", InputDir: dir}, candidateState("arb-new", "dc4"), cluster, "arb-new")
 	if err != nil {
 		t.Fatalf("ComputePromotion: %v", err)
 	}
@@ -285,13 +296,78 @@ func TestComputePromotionRewritesTheAuthoredTiebreaker(t *testing.T) {
 	if strings.Contains(got, "arb-old.old.example.test") {
 		t.Fatalf("promoted document kept the replaced host's fqdn override:\n%s", got)
 	}
-	if !strings.Contains(got, "site: dc3") {
-		t.Fatalf("promoted document dropped the arbiter site:\n%s", got)
+	if strings.Contains(got, "site: dc3") {
+		t.Fatalf("promoted document kept the retiring arbiter's site; a dc3 to dc4 move must record dc4 or the mon's crush_location lies to Ceph:\n%s", got)
+	}
+	if !strings.Contains(got, "site: dc4") {
+		t.Fatalf("promoted document must carry the candidate machine's site on the node it rewrote:\n%s", got)
+	}
+	if promotion.Site != "dc4" {
+		t.Fatalf("promotion site = %q, want the candidate machine's site dc4; the same-site predicate compares against it", promotion.Site)
+	}
+}
+
+func TestComputePromotionRewritesAnAuthoredTiebreakerSite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cluster.yaml")
+	authored := strings.Replace(clusterFixtureYAML, "        tiebreaker:\n          node: arb-old\n", "        tiebreaker:\n          node: arb-old\n          site: dc3\n", 1)
+	if err := os.WriteFile(path, []byte(authored), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cluster := v1alpha1.StorageCluster{
+		Metadata:   v1alpha1.Metadata{Name: "ceph-prd-01"},
+		SourcePath: path,
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{
+				Stretch: &v1alpha1.StorageCephStretch{FailureDomain: "datacenter", Tiebreaker: v1alpha1.StorageCephTiebreaker{Node: "arb-old", Site: "dc3"}},
+				Nodes: []v1alpha1.StorageCephNode{
+					{Name: "node-01", MachineRef: v1alpha1.LocalObjectReference{Name: "m-01"}, Site: "dc1", Roles: []string{"mon", "osd"}},
+					{Name: "arb-old", MachineRef: v1alpha1.LocalObjectReference{Name: "m-arb-old"}, Site: "dc3", Roles: []string{"mon"}},
+				},
+			},
+		}},
+	}
+	promotion, err := ComputePromotion(workspace.Context{Name: "lab", InputDir: dir}, candidateState("arb-new", "dc4"), cluster, "arb-new")
+	if err != nil {
+		t.Fatalf("ComputePromotion: %v", err)
+	}
+	got := string(promotion.Content)
+	if strings.Contains(got, "dc3") {
+		t.Fatalf("an authored tiebreaker site must follow the candidate machine, or validation refuses the input the verb just wrote:\n%s", got)
+	}
+	if strings.Count(got, "site: dc4") != 2 {
+		t.Fatalf("both the node site and the authored tiebreaker site must read dc4:\n%s", got)
+	}
+}
+
+func candidateState(machine, site string) v1alpha1.State {
+	return v1alpha1.State{Machines: []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: machine},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephNode, v1alpha1.MachineCapabilityCephArbiter},
+			Placement:    &v1alpha1.MachinePlacement{Site: site},
+		},
+	}}}
+}
+
+func TestWithPromotedTiebreakerCarriesTheCandidateSite(t *testing.T) {
+	promoted := WithPromotedTiebreaker(stretchCluster(), Promotion{
+		Cluster: "ceph-prd-01", FromNode: "arb-new", ToNode: "arb-dc4", Machine: "arb-dc4", Site: "dc4",
+		Content: []byte("x"),
+	})
+	stretch := promoted.Spec.Ceph.Topology.Stretch
+	if stretch.Tiebreaker.Site != "dc4" {
+		t.Fatalf("promoted tiebreaker site = %q, want dc4", stretch.Tiebreaker.Site)
+	}
+	for _, node := range promoted.Spec.Ceph.Topology.Nodes {
+		if node.Name == "arb-dc4" && node.Site != "dc4" {
+			t.Fatalf("promoted node site = %q, want dc4; arbiterMonLocations reads it to build crush_locations", node.Site)
+		}
 	}
 }
 
 func TestComputePromotionIsANoOpWhenTheMachineAlreadyHoldsTheArbiter(t *testing.T) {
-	promotion, err := ComputePromotion(workspace.Context{Name: "lab", InputDir: t.TempDir()}, stretchCluster(), "arb-new")
+	promotion, err := ComputePromotion(workspace.Context{Name: "lab", InputDir: t.TempDir()}, candidateState("arb-new", "dc3"), stretchCluster(), "arb-new")
 	if err != nil {
 		t.Fatalf("ComputePromotion: %v", err)
 	}
