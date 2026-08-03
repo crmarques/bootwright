@@ -47,6 +47,19 @@ that don't run mgr — the service readiness gate
 `mgmt-gateway (running/mon-count)` stuck partway forever while every other
 service reaches full count.
 
+**Trap, third order (fixed):** the whole mitigation above lives in
+`management_services.yml`, and the Go inventory only emitted the `management`
+context vars that drive it when the gateway carried TLS or oauth2-proxy
+material. A declared gateway *without* secrets — the only shape a vendor
+build accepts since ADR 0047 — therefore skipped the SSL flip, the port move,
+and the mgr restarts entirely, and the late-services gateway doc placed
+daemons only on the mgr-less hosts. Observed 2026-08-03 on a fresh prd apply:
+`mgmt-gateway (2/6)` with exactly the two ingress nodes that run no mgr up.
+`storageMgmtGatewayVars` now emits the vars for every declared gateway
+(tls/oauth2 keys only when authored), so the management phase always frees
+the port and (re)applies the gateway document after it; only the material
+inside the assembled spec stays secrets-gated.
+
 **Trap:** `ceph mgr fail` does not fix this. It only tells the mons to hand
 "active" to an already-running standby — it never restarts the standby mgr
 processes, so their dashboards never re-read `mgr/dashboard/ssl=false` or

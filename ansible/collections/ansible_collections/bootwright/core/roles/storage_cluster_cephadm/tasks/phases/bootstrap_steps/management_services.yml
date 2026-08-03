@@ -46,7 +46,7 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_mgr_major | default(0) | int) > 0
 
-- name: Assemble secret-bearing management service specs
+- name: Assemble management service specs
   ansible.builtin.set_fact:
     bootwright_ceph_management_specs: >-
       {{

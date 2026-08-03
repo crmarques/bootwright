@@ -3300,7 +3300,7 @@ func assertCephSpecApplyIsVerified(t *testing.T, tasks []map[string]any, refusal
 func TestStorageManagementSpecAppliesOneMultiDocumentSpec(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
 	tasks := readAnsibleTasks(t, path)
-	assemble := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Assemble secret-bearing management service specs")]["ansible.builtin.set_fact"])
+	assemble := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Assemble management service specs")]["ansible.builtin.set_fact"])
 	if strings.Contains(assemble, "ssl_certificate") {
 		t.Fatalf("cephadm's MgmtGatewaySpec and OAuth2ProxySpec take the certificate as ssl_cert/ssl_key; ssl_certificate/ssl_certificate_key is refused as an unexpected keyword argument, got %v", assemble)
 	}
@@ -3580,7 +3580,7 @@ func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
 	probeIdx := findAnsibleTask(t, tasks, "Read the Ceph release the daemons run")
 	majorIdx := findAnsibleTask(t, tasks, "Resolve the lowest Ceph major release running a manager daemon")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse a management gateway on a Ceph release that has no such service")
-	assembleIdx := findAnsibleTask(t, tasks, "Assemble secret-bearing management service specs")
+	assembleIdx := findAnsibleTask(t, tasks, "Assemble management service specs")
 	if !(probeIdx < majorIdx && majorIdx < refuseIdx && refuseIdx < assembleIdx) {
 		t.Fatalf("the release gate must refuse before the spec is assembled and applied (probe=%d major=%d refuse=%d assemble=%d)", probeIdx, majorIdx, refuseIdx, assembleIdx)
 	}

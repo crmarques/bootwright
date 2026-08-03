@@ -272,7 +272,7 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 }
 
 func storageMgmtGatewayVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
-	if !cephrender.MgmtGatewayHasSecrets(cluster) {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.MgmtGateway == nil {
 		return nil
 	}
 	mgmt := cluster.Spec.Ceph.MgmtGateway

@@ -132,7 +132,7 @@
       {{
         (bootwright_ceph_service_daemon_ps_json.stdout | default('') | trim | default('[]', true) | from_json)
         | selectattr('status_desc', 'defined')
-        | selectattr('status_desc', 'in', ['error', 'unknown', 'stopped'])
+        | selectattr('status_desc', 'in', ['error', 'unknown', 'stopped', 'starting'])
         | selectattr('systemd_unit', 'defined')
         | selectattr('hostname', 'defined')
         | list

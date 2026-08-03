@@ -53,7 +53,7 @@
     - name: Apply secret-bearing RGW ingress TLS certificates
       ansible.builtin.include_tasks: bootstrap_steps/rgw_ingress_tls.yml
 
-    - name: Apply secret-bearing management services
+    - name: Apply management services and free their gateway port
       ansible.builtin.include_tasks: bootstrap_steps/management_services.yml
 
     - name: Wait for declared Ceph services to be deployed

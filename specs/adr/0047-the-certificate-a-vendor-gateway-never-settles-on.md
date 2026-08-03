@@ -59,12 +59,19 @@ wedges a cluster is not an authorization decision, so no token applies
 (ADR 0030 governs consequences an operator may accept; a permanently
 reconfiguring gateway is not one).
 
-The apply path is already shaped for the refusal's happy side: a gateway
-without TLS or OAuth2 renders into the ordinary late-services spec, the
-secret-bearing management apply no-ops, and a cluster previously wedged by an
-inline-TLS spec self-heals on the next apply — re-applying the TLS-free
-document makes the computed and recorded lists agree again, the loop stops,
-and the daemons settle.
+**The management phase runs for every declared gateway, secrets or not.** A
+gateway without TLS or OAuth2 renders into the ordinary late-services spec for
+the native script path, but the Ansible management phase still runs: disabling
+the classic dashboard's SSL listener and moving its HTTP port off the gateway's
+— the mitigation that frees the gateway port on every mgr host — is not
+certificate work, and gating it on secrets strands the gateway daemons on
+every host that also runs a mgr (observed on the first TLS-free apply:
+`mgmt-gateway (2/6)`, running only on the two mgr-less nodes). The phase then
+(re)applies the gateway document after the port is freed; only the certificate
+and oauth2-proxy material stays secrets-gated inside the spec it assembles. A
+cluster previously wedged by an inline-TLS spec self-heals on the next apply —
+re-applying the TLS-free document makes the computed and recorded lists agree
+again, the loop stops, and the daemons settle.
 
 ## Consequences
 
