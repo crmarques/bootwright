@@ -134,10 +134,11 @@ Prompt-specific additions:
   Ansible executes mutations from rendered contracts and must not infer
   selection, cleanup scope, or operator authorization from names or filesystem
   layout.
-- **Shared comparison primitive.** `apply`'s mode preflight and `diff` must
-  classify objects through the same path (per-task converge-safety
-  classification aggregated per object) so the drift a state check reports is
-  the drift an apply acts on — verify the two cannot disagree.
+- **Shared comparison primitive.** `apply`'s mode preflight and `diff
+  --recorded` classify objects through the same path (`ClassifyConvergeSafety`
+  per task, aggregated per object), so a divergence the recorded check reports
+  is the same divergence a default `apply` fails on — verify the two cannot
+  drift apart.
 
 ## The Baseline Environment
 
@@ -163,7 +164,9 @@ alongside it: enumerate the example directories, inventory the kinds and flows
 each represents, and compare them against each other and the baseline to surface
 stale patterns, duplicated flow logic, provider leaks, and missing coverage. If
 the user supplies scenario files or input directories, fold them in as primary
-scenarios — but never sample one happy path and generalize.
+scenarios — and when they name gitignored trees, include ignored files in
+searches intentionally (e.g. `rg --no-ignore`). Never sample one happy path and
+generalize.
 
 ## Step 1 — Map and Cross-Check the Command Contract
 
@@ -250,14 +253,17 @@ recording the matrix below:
 9. **Diff and converge/force pairs.** Trace `diff` (live, `--recorded`,
    `--adopt`) against the scenario: absent selected roots reported succinctly,
    granular drift once the root exists (missing declared pools, filesystems,
-   gateways, add-ons, VMs, services; undeclared live resources), and no mode
-   but `--adopt` writing. Trace `apply` under all three modes and `destroy`
+   gateways, add-ons, VMs, services; undeclared live resources), no mode but
+   `--adopt` writing, and exit codes and JSON output shape matching the
+   documented contract — automation gates on them. Trace `apply` under all
+   three modes and `destroy`
    with and without `--force`: which refusal disappears, which mutations become
    allowed, and which read-only guarantees remain.
 10. **Final state and rerun.** After success, failure, interruption, or aborted
     confirmation: what records exist, and does the same command no-op, resume
-    safely, or fail closed? Refusals name the exact command to proceed —
-    missing or wrong remedial guidance is itself a finding.
+    safely, or fail closed? Refusals name the exact command to proceed, with
+    the right exit code — missing or wrong remedial guidance is itself a
+    finding.
 11. **Tests.** Which tests already prove the behavior, and which are missing.
 
 **Trace matrix** (one row per scenario × flag variant): **Scenario** · **Command
