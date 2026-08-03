@@ -594,7 +594,7 @@ kind, so there is no separate discriminator.
 | `libvirt` | `bridge` | Yes | — | Host bridge name. |
 | `baremetal` | `vlan` | No | — | VLAN id; must be `0..4094`. |
 | `vsphere` | `portgroup` | Yes | — | Portgroup name — a standard-switch portgroup or a vDS distributed portgroup. |
-| `vsphere` | `distributedSwitch` | No | — | vDS name that owns `portgroup`; set it when the portgroup name is not unique across the vCenter. |
+| `vsphere` | `distributedSwitch` | Yes with multiple `failureDomains` | — | vDS name that owns `portgroup`; set it whenever the portgroup name is not unique across the vCenter. |
 | `kubevirt` | `networkRef.apiGroup` | No | `k8s.ovn.org` (with kind) | API group of the network object; pairs with `kind`. |
 | `kubevirt` | `networkRef.kind` | No | `ClusterUserDefinedNetwork` | `ClusterUserDefinedNetwork`, `UserDefinedNetwork`, `NetworkAttachmentDefinition`, or any kind. |
 | `kubevirt` | `networkRef.name` | Yes | — | Network object name on the host cluster. |
@@ -605,7 +605,9 @@ kind, so there is no separate discriminator.
     author the standard-switch portgroup or the vDS distributed portgroup out of
     band. Resolution is not datacenter-scoped, so a name repeated on two switches
     or two datacenters binds unpredictably: set `distributedSwitch` to name the
-    vDS that owns it, and the attach fails loudly instead. A machine's
+    vDS that owns it, and the attach fails loudly instead. A provider that spans
+    more than one failure domain is refused without it, because a bare portgroup
+    name is not uniquely resolvable there. A machine's
     `network.config.attachmentRef` selects one attachment, and it applies to every
     NIC of that machine. `failureDomains[].topology.networks[]` is not this
     binding — it is install-config data for OpenShift node addressing.

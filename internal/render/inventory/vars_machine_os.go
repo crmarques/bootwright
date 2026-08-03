@@ -43,6 +43,8 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 						}
 						component["boot"] = boot
 					}
+				} else {
+					dropInstallMediaVars(component)
 				}
 				components = append(components, component)
 			}
@@ -58,6 +60,12 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) 
 		})
 	}
 	return out
+}
+
+func dropInstallMediaVars(component map[string]any) {
+	for _, key := range []string{"boot", "mediaPrepareRole", "cleanupMediaRole"} {
+		delete(component, key)
+	}
 }
 
 func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster) (v1alpha1.ClusterInstall, bool) {

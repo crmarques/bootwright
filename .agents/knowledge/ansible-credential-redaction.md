@@ -48,6 +48,19 @@ messages — the operator's only signal for which `credentialsRef` is
 malformed). Callers wrap the include with their own `when:` (preconditions
 differ per site), and all tasks are `no_log: true`.
 
+**The cloned-guest seed is public by contract, so it carries no `no_log`:**
+`machine_os_install_clone/tasks/seed.yml` renders the cloud-init metadata and
+user-data, and `machine_substrate_vsphere/tasks/layout.yml` re-derives the same
+payload into `guestinfo.*` advanced settings. Everything under `osInstall.guest`
+is public material by contract — the desired-state validator refuses
+`ssh.initialPassword` for a clone precisely because vCenter `extraConfig` is
+plaintext to any principal that can read the VM — so none of those three tasks
+sets `no_log`. `no_log` on the render is actively harmful: it replaces the whole
+task result, including the user-data template's `undef(hint=...)` naming the
+missing public key, with the censored notice, leaving a silent SSH-wait timeout
+as the only symptom. The operator diagnostic instead comes from a plain `stat`
+plus `assert` on `guest.sshPublicKeyPath` before the render.
+
 **Kickstart proxy credentials never enter vars.yaml:** the kickstart template
 builds the credentialed proxy URL for `spec.proxyFor.machineOSInstall` at
 render time from the unauthenticated `proxy.url` plus the credentials file

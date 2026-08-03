@@ -303,6 +303,10 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 		if attachment.VSphere.Portgroup == "" {
 			errs = append(errs, prefix+".vsphere.portgroup is required")
 		}
+		if domains := providerVSphereFailureDomains(provider); len(domains) > 1 && attachment.VSphere.DistributedSwitch == "" {
+			errs = append(errs, fmt.Sprintf("%s.vsphere.distributedSwitch is required because InfraProvider/%s spans %d failureDomains (%s) and portgroup resolution is not datacenter-scoped: vCenter binds the first portgroup named %q it finds, so a name carried by two vDS attaches the machine to whichever fabric it matched first and reports no error at all. Name the vDS that owns the portgroup in vsphere.distributedSwitch",
+				prefix, provider.Metadata.Name, len(domains), joinSortedNames(domains), attachment.VSphere.Portgroup))
+		}
 	}
 	if attachment.KubeVirt != nil {
 		set++
@@ -423,4 +427,15 @@ func joinSortedNames(names []string) string {
 
 func providerProfiles(provider v1alpha1.InfraProvider) []v1alpha1.MachineProfile {
 	return stateview.ProviderMachineProfiles(provider)
+}
+
+func providerVSphereFailureDomains(provider v1alpha1.InfraProvider) []string {
+	if provider.Spec.VSphere == nil {
+		return nil
+	}
+	out := make([]string, 0, len(provider.Spec.VSphere.FailureDomains))
+	for _, domain := range provider.Spec.VSphere.FailureDomains {
+		out = append(out, domain.Name)
+	}
+	return out
 }

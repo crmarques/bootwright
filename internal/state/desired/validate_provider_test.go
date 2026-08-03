@@ -184,6 +184,49 @@ func TestVSphereDuplicateVCenterServer(t *testing.T) {
 	}
 }
 
+func TestVSphereNetworkAttachmentNeedsTheOwningVDSAcrossFailureDomains(t *testing.T) {
+	failureDomain := func(name string) v1alpha1.VSphereFailureDomain {
+		return v1alpha1.VSphereFailureDomain{
+			Name: name, Region: name, Zone: "a", Server: "vc.example.com",
+			Topology: v1alpha1.VSphereFailureTopology{
+				Datacenter: name, ComputeCluster: "compute", Datastore: "datastore1", Networks: []string{"dvpg-ceph"},
+			},
+		}
+	}
+	provider := func(domains ...v1alpha1.VSphereFailureDomain) v1alpha1.InfraProvider {
+		return v1alpha1.InfraProvider{
+			Metadata: v1alpha1.Metadata{Name: "vsphere-metro"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type:    v1alpha1.ProvisionerVSphere,
+				VSphere: &v1alpha1.InfraProviderVSphere{FailureDomains: domains},
+			},
+		}
+	}
+	attachment := func(dvs string) v1alpha1.NetworkAttachmentCapability {
+		return v1alpha1.NetworkAttachmentCapability{
+			Name:    "ceph-network",
+			VSphere: &v1alpha1.NetworkAttachmentVSphere{Portgroup: "dvpg-ceph", DistributedSwitch: dvs},
+		}
+	}
+	single := provider(failureDomain("dc1"))
+	if errs := validateProviderNetworkAttachment(single, attachment("")); len(errs) != 0 {
+		t.Fatalf("errs = %v, want a bare portgroup accepted on a single-failure-domain provider", errs)
+	}
+	metro := provider(failureDomain("dc1"), failureDomain("dc2"))
+	errs := validateProviderNetworkAttachment(metro, attachment(""))
+	if len(errs) != 1 {
+		t.Fatalf("errs = %v, want one refusal: a portgroup name spanning two failure domains is not uniquely resolvable", errs)
+	}
+	for _, want := range []string{"InfraProvider/vsphere-metro", "networkAttachments[ceph-network]", "vsphere.distributedSwitch", "dc1, dc2", `"dvpg-ceph"`} {
+		if !strings.Contains(errs[0], want) {
+			t.Fatalf("missing %q in %q", want, errs[0])
+		}
+	}
+	if errs := validateProviderNetworkAttachment(metro, attachment("dvs-metro")); len(errs) != 0 {
+		t.Fatalf("errs = %v, want the named vDS accepted across failure domains", errs)
+	}
+}
+
 func TestBareMetalProviderBMCDefaults(t *testing.T) {
 	mk := func(bmc *v1alpha1.BMCDefaults) v1alpha1.InfraProvider {
 		return v1alpha1.InfraProvider{

@@ -2,6 +2,27 @@
 - name: Validate cloned managed OS seed inputs
   ansible.builtin.import_tasks: validate.yml
 
+- name: Stat the public key the cloned guest seed authorizes
+  ansible.builtin.stat:
+    path: "{{ bootwright_component.osInstall.guest.sshPublicKeyPath }}"
+    get_checksum: false
+  delegate_to: localhost
+  register: bootwright_clone_seed_public_key
+  changed_when: false
+
+- name: Assert the cloned guest seed has a public key to authorize
+  ansible.builtin.assert:
+    that:
+      - bootwright_clone_seed_public_key.stat.exists | default(false) | bool
+      - (bootwright_clone_seed_public_key.stat.size | default(0) | int) > 0
+    fail_msg: >-
+      cloned managed OS seed has no public key to authorize for
+      {{ bootwright_component.osInstall.guest.sshUser }}:
+      {{ bootwright_component.osInstall.guest.sshPublicKeyPath }} is missing or empty.
+      Environment spec.machineAccess.keyRef must resolve to an sshKeyPair Secret whose
+      public half is materialized, otherwise the cloned machine would accept no login at
+      all and this apply would only fail once the SSH wait timed out.
+
 - name: Render the cloud-init guest seed for the cloned machine
   ansible.builtin.set_fact:
     bootwright_machine_guest_seed:
@@ -9,4 +30,3 @@
         metadata: "{{ lookup('ansible.builtin.template', 'cloud-init-meta-data.yaml.j2') }}"
         userData: "{{ lookup('ansible.builtin.template', 'cloud-init-user-data.yaml.j2') }}"
   changed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"

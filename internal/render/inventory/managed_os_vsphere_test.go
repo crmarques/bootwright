@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -82,6 +83,34 @@ func TestManagedOSInstallVarsFromCephVSphereFixture(t *testing.T) {
 	}
 	if _, ok := boot["redfish"]; ok {
 		t.Fatalf("managed OS boot redfish = %v, want omitted for vsphere", boot["redfish"])
+	}
+}
+
+func TestManagedOSTemplateCloneComponentCarriesNoInstallMedia(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "008-ceph-3nodes-vsphere-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	for i := range state.MachineInstallProfiles {
+		installerArm := &state.MachineInstallProfiles[i].Spec.Installer
+		installerArm.Anaconda = nil
+		installerArm.TemplateClone = &v1alpha1.MachineInstallTemplateClone{
+			Seed: v1alpha1.MachineInstallCloneSeed{CloudInit: &v1alpha1.MachineInstallCloudInitSeed{}},
+		}
+	}
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	component := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	if got := component["osInstallRole"]; got != "bootwright.core.machine_os_install_clone" {
+		t.Fatalf("osInstallRole = %v, want the clone role", got)
+	}
+	if _, ok := component["osInstall"].(map[string]any)["guest"]; !ok {
+		t.Fatalf("clone component osInstall = %v, want a guest seed", component["osInstall"])
+	}
+	for _, key := range []string{"boot", "mediaPrepareRole", "cleanupMediaRole"} {
+		if _, ok := component[key]; ok {
+			t.Fatalf("clone component carries %q = %v; a clone consumes no installer media and never boots from virtual media", key, component[key])
+		}
 	}
 }
 

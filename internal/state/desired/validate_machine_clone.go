@@ -41,15 +41,17 @@ func validateMachineInstallCloneSubstrate(state v1alpha1.State) []string {
 	return errs
 }
 
+const machineCloneSeedNetworkNeed = "The cloud-init seed is the only thing that brings the clone onto the network before SSH answers, so a clone needs a static IPv4 primary."
+
 func validateMachineCloneSeedNetwork(machine v1alpha1.Machine, networks map[string]v1alpha1.NetworkConfig) []string {
 	config := machine.Spec.Network.Config
 	effective, source := machineCloneEffectiveNetwork(machine, config, networks)
 	if effective == nil {
-		return nil
+		return []string{fmt.Sprintf("Machine/%s selects installer.templateClone but resolves no network config at all, so it declares no static IPv4 address on the interface carrying the default route. %s Declare one in a NetworkConfig named by spec.network.config.networkConfigRef or inline under spec.network.config.spec, or switch the profile to installer.anaconda", machine.Metadata.Name, machineCloneSeedNetworkNeed)}
 	}
 	routed, ok := nmstate.NetworkConfigRoutedInterface(effective)
 	if !ok || routed.IPv4 == "" {
-		return []string{fmt.Sprintf("Machine/%s selects installer.templateClone but its network config declares no static IPv4 address on the interface carrying the default route. The cloud-init seed is the only thing that brings the clone onto the network before SSH answers, so a clone needs a static IPv4 primary. Declare one in %s, or switch the profile to installer.anaconda", machine.Metadata.Name, source)}
+		return []string{fmt.Sprintf("Machine/%s selects installer.templateClone but its network config declares no static IPv4 address on the interface carrying the default route. %s Declare one in %s, or switch the profile to installer.anaconda", machine.Metadata.Name, machineCloneSeedNetworkNeed, source)}
 	}
 	if routed.Type != "" && routed.Type != "ethernet" {
 		return []string{fmt.Sprintf("Machine/%s selects installer.templateClone but the interface carrying its default route is type %q. The cloud-init seed configures a single ethernet so SSH can answer; bonds and VLANs are applied afterwards by nmstate, which cannot run before Bootwright can log in. Put the machine's primary address on an ethernet (a vDS portgroup can carry the VLAN tag), or switch the profile to installer.anaconda", machine.Metadata.Name, routed.Type)}
