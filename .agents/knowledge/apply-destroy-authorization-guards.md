@@ -50,6 +50,53 @@ Ceph arbitrated across both, one bare-metal OCP per DC, one nested virtualized
 OCP per DC) so cross-DC scope closure and host-to-guest substrate ordering are
 exercised, not assumed.
 
+**A third verb runs a scoped apply, so it inherits that apply's gates.**
+`storage-cluster replace-arbiter` builds the replacement machine through
+`prepareArbiterMachine`, a real `PlanScopedApply`/`ExecuteApply` over
+`fabric,machines,deps`. A scoped apply hidden inside another verb silently
+skipped everything `bootwright apply` runs before mutating, so unrelated
+structural drift sitting in the same input commit was converged in reconcile
+mode with no refusal — on task kinds whose own consequence text is "reinstall
+the machine — its disks wiped". It now calls `applyOwnershipRecords` and
+`converge.ArbiterPreparePreflight`, which is reconcile-mode
+`EvaluateApplyModePreflight` over `WithoutTiebreakerDrift(objects, cluster)`:
+the tiebreaker drift this run just authored is the one legitimate difference,
+and everything else refuses with apply's own words. It also refuses when a
+substrate-release record intersects the scope (that reinstall is data loss the
+verb has no token for), takes `checkCurrentApplyBeforeMutation` *before* the
+input rewrite rather than after it, and sets `AcquireRunLease` so the mon swap
+is not the one mutating run without a lease. The rule generalizes: **a verb that
+embeds a scoped apply must run that apply's gate set, minus exactly the drift it
+is authorized to converge.**
+
+**A shape change is not a drift the same refusal can route.** Whether a stretch
+cluster carries an arbiter is fixed at bootstrap. Enabling or disabling one was
+classified as ordinary structural drift, so `continueDriftRefusal` sent the
+operator to `--mode rebuild` (`cephadm rm-cluster --zap-osds` on a live cluster,
+to add or remove one mon) or — when the edit happened to touch nothing else —
+to `replace-arbiter`, which refuses a cluster whose live monmap reports
+`stretch_mode false` and points back at `apply`. Both directions of that loop
+are closed by `taskStretchArbiterShapeChange`, which compares the record's
+`TiebreakerNodes` against the desired ones for that cluster and drives a
+terminal `stretchArbiterShapeRefusal` naming no command that would refuse.
+`IsTiebreakerOnlyStructuralDrift` and `stateWithoutStretchTiebreaker` — the
+predicate pair deciding "move one mon" versus "wipe the cluster" — had no direct
+test at all and now have a table each.
+
+**A record the run converged is not carried drift.**
+`RefreshStorageClusterConvergeSafety` compared each record only against the
+*pre-rewrite* task, so the `nodeaccess`/`storageinfra` records that
+`prepareArbiterMachine` had just stamped read as "left recorded as drifted" on
+every successful promotion, with a remedy (`apply --stage clusters`) that cannot
+reach the machines phase. Worse, an interruption between the completed
+retirement and the refresh left a record matching neither side, and the settled
+branch (which refreshes `before == after`) could never re-stamp it: every later
+`apply` refused to `replace-arbiter`, which reported "nothing to replace" — a
+permanent loop whose only named exit was destroying the cluster.
+`convergeRecordRebaselinable` now re-stamps a record that matches the before
+task, *or* already matches the after task, *or* differs from it only by the
+tiebreaker.
+
 **Baseline coverage boundary.** Machine-substrate tasks in that example come
 only from the KubeVirt-hosted child clusters: `applyMachineHost` returns `""` for
 a bare-metal machine, so a bare-metal cluster root plans no
@@ -121,9 +168,13 @@ cannot promise one that does not exist. It also requires every token to appear i
 a `safetyMatrixCases()` row (a token that unblocks a refusal must be exercised),
 to declare the verbs whose gates consume it, and — for a token a verb's gates
 cannot consume — to be refused there as a usage error naming what resolves it
-instead. Eight of the twelve are destroy-only; `data-loss` and `unowned-devices`
-(ADR 0034) and `all` (ADR 0040) have gates on both verbs, and `foreign-daemons`
-(ADR 0038) is the first apply-only one, refused on `destroy`. `unowned-devices` is reachable on `apply` only under
+instead. Seven of the fourteen are destroy-only (`protected`, `installed-cluster-node`,
+`unowned-vms`, `unowned-networks`, `unreadable-records`, `shared-infra`,
+`stale-input`); `data-loss` and `unowned-devices` (ADR 0034) span apply and
+destroy; `foreign-daemons` (ADR 0038) is the one apply-only token, refused on
+`destroy`; `unreachable-nodes` spans destroy and `replace-arbiter`;
+`same-site-arbiter` and `degraded-quorum` are `replace-arbiter`-only (ADR 0042);
+and `all` (ADR 0040) resolves per-verb across all three. `unowned-devices` is reachable on `apply` only under
 `--reclaim-devices`, so its matrix row is a `--dry-run` (which by contract
 consumes no token); the real consumption path — the warning and the
 `bootwright_ceph_authorize_unowned_devices` extra var — is pinned by
@@ -173,6 +224,43 @@ on a host the preview may not contact is disclosed as *may be required* — a
 preview performs no probe to settle one, and silence would read as "none
 needed". Matrix rows assert a dry run names every token its non-dry counterpart
 refuses on.
+
+**A gate that refuses on a dry run cannot be forecast, and a forecast the CLI
+cannot reach proves nothing.** `shared-infra` and `installed-cluster-node`
+refused unconditionally, so their `consult()` entries could only ever render
+*satisfied* — the `required` branch was dead in production, and an operator had
+to clear refusals one at a time to learn the blast radius. Both now carry
+`!dryRun` (matching `unreadable-records`), so a single preview lists them.
+`stale-input` deliberately still refuses on a dry run, because whole-input
+validation holds before anything else. The reason this survived a coverage guard
+is worth remembering: `TestEveryTokenAVerbAcceptsIsNamedByItsPreviewForecast`
+called `destroyRequiredAuthorizations` directly with a hand-built
+`destroyGateForecast{staleInput: true, sharedInfra: true, installedNode: true}`
+— a struct value no real preview could produce. **A forecast test that bypasses
+the CLI tests the forecast function, not the contract.**
+
+**Both output dialects disclose the same run.** `--dry-run --output json`
+returned before every tokenless-refusal forecast and before the
+`--purge-history` notice, so a CI wrapper reading `requiredAuthorizations: []`
+concluded a run was clear while the real run fails closed on a gate the machine
+dialect never mentioned. `converge.DryRunReport` now carries `refusals` and
+`purgeHistory`, and the text dialect renders from the same
+`applyGateForecastRefusals` slice, so the two cannot drift apart. The apply
+forecast also unions destroy-released clusters into the KubeVirt-collateral
+check the way the real gate does, and evaluates `UnmatchedReclaimDevices`, which
+previously exited 2 on the real run after a preview had affirmed the device.
+
+**A skipped task still satisfies the release that authorized it.**
+`runApplyTask` returned early on `result.Skipped` before reaching
+`ConsumeSubstrateRelease`, so a destroy-written substrate release survived an
+apply whose managed-OS install was skipped as already converged. On libvirt and
+vSphere the leftover is inert (`bootwright_*_managed_os_reset` also requires
+`bootwright_apply_mode == 'rebuild'`), but KubeVirt's
+`bootwright_kubevirt_rebuild_authorized` reads membership in
+`bootwright_substrate_reset_clusters` with no mode check, so the VM and root
+DataVolume delete tasks stayed armed on every later reconcile apply of a cluster
+that already matched. A skip is positive evidence the machine matches, which is
+exactly when the release is satisfied, so the consume now runs on that path too.
 
 **The published contract is guard-synced in both directions.** The `accepted by`
 column of the `--authorize` tables in `specs/state-model.md` and

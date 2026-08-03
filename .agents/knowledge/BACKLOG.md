@@ -893,6 +893,23 @@ learned; this file records what it still owes.
   refuses a tiebreaker site that is a data site, and refuses a tiebreaker node
   whose `site` differs from `stretch.tiebreaker.site`, so an operator cannot
   author the emergency fallback that the same-site refusal itself advertises.
+- Also (apply/destroy safety contract review 2026-08-03, re-confirmed deferred):
+  the inheritance is threefold and self-reinforcing, so neither gate can catch
+  it. `WithPromotedTiebreaker` (`internal/storage/arbiter/promote.go:71-78`)
+  rewrites `Name`/`FQDN`/`MachineRef` and leaves `Site`; `rewriteTiebreaker`
+  (`:112-127`) writes `name` and `machineRef.name` and never `site`; and
+  `internal/state/desired/normalize.go:481-487` then *derives*
+  `stretch.tiebreaker.site` from that inherited node site, so the
+  reload-and-re-gate at `internal/cli/storage_cluster_replace_arbiter.go:98-109`
+  — which exists precisely to stop a stale plan — re-derives the same wrong site
+  and re-gates against it. Beyond the ungated same-site landing already recorded
+  above, `arbiterMonLocations` (`internal/cli/storage_cluster_cmd.go:161-163`)
+  writes `<domain>=<old site>` into the mon service spec for a host that is not
+  in that datacenter, and step 4's retirement then empties the old site, leaving
+  the CRUSH map asserting a mon in a site with no hosts. The Ansible-side second
+  opinion is blind too — `replace_arbiter_steps/probe.yml:45-54` computes
+  `same_site_mons` against the CLI-supplied `bootwright_arbiter_desired_site` —
+  so the CLI gate and the Ansible gate are not independent checks.
 - Exit: pick one of two shapes. (a) An optional `--new-arbiter-site` written to
   both `nodes[].site` and `stretch.tiebreaker.site`, surfaced in the preview and
   the confirmation, keeping the data-site refusal for every path that is not the

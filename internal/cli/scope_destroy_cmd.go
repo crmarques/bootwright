@@ -260,11 +260,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			disclosure := dryRunDisclosure{refusals: destroyGateForecastRefusals(destroySafety, inputSkipped, ownershipSkipped, componentDecision, auth)}
-				if purgeHistory && !plan.NoRemoteWork {
-					disclosure.purgeHistory = &converge.DryRunPurgeHistory{Scope: destroyPurgeHistoryNotice(true)}
-				}
-				return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
+			disclosure := destroyDryRunDisclosure(destroySafety, inputSkipped, ownershipSkipped, componentDecision, auth, purgeHistory && !plan.NoRemoteWork)
+			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
 			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))

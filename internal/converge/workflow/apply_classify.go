@@ -1,18 +1,18 @@
 package workflow
 
 type ObjectClassification struct {
-	ObjectKey       string                               `json:"objectKey"`
-	Kind            string                               `json:"kind"`
-	Label           string                               `json:"label"`
-	Cluster         string                               `json:"cluster,omitempty"`
-	Class           ConvergeSafetyClassification         `json:"class"`
-	counts          map[ConvergeSafetyClassification]int `json:"-"`
-	reconcilable    int
-	tiebreakerOnly  int
-	arbiterAdded    int
-	arbiterRemoved  int
-	Reconcilable    bool     `json:"reconcilable,omitempty"`
-	TaskIDs         []string `json:"taskIDs,omitempty"`
+	ObjectKey      string                               `json:"objectKey"`
+	Kind           string                               `json:"kind"`
+	Label          string                               `json:"label"`
+	Cluster        string                               `json:"cluster,omitempty"`
+	Class          ConvergeSafetyClassification         `json:"class"`
+	counts         map[ConvergeSafetyClassification]int `json:"-"`
+	reconcilable   int
+	tiebreakerOnly int
+	arbiterAdded   int
+	arbiterRemoved int
+	Reconcilable   bool     `json:"reconcilable,omitempty"`
+	TaskIDs        []string `json:"taskIDs,omitempty"`
 }
 
 func (o ObjectClassification) Recorded() bool {

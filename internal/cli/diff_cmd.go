@@ -36,8 +36,9 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 			"(hosts, services and placements, OSD device layout, CRUSH rules, pools and\n" +
 			"replication, config, mgr modules, health) and diffs it field by field; for each\n" +
 			"ContainerCluster it runs a shallow reachability/ClusterVersion check. It is\n" +
-			"read-only: it runs only read commands and writes no records (use --adopt on a\n" +
-			"future run to fold real state back into desired state).\n\n" +
+			"read-only by default: it runs only read commands and writes no records.\n" +
+			"--adopt is the one mutating form — it rewrites this context's desired-state\n" +
+			"YAML in place, snapshotting the prior input to input-history first.\n\n" +
 			"--recorded skips all cluster contact and instead reports drift between desired\n" +
 			"state and the last recorded apply (match/drift/foreign/missing), the fast\n" +
 			"offline check for automation. Exit codes: 0 in sync, 3 out of sync (a live\n" +

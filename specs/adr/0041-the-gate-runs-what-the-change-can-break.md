@@ -21,8 +21,10 @@ Three causes, in descending order of cost.
 
 **The CLI tests executed real Ansible.** `workspace.ResolveAnsiblePlaybook()`
 falls back to whatever `ansible-playbook` is on `PATH` when no explicit
-executable is configured. `TestApplyDestroySafetyMatrix` drives 21 cases through
-`apply`/`destroy` with `--yes` and no `--dry-run`, so each one spawned the real
+executable is configured. `TestApplyDestroySafetyMatrix` drove 21 cases at the
+time, most of them through `apply`/`destroy` with `--yes` and no `--dry-run`
+(it has since grown well past that and now spans three verbs), so each one
+spawned the real
 `ansible-playbook`, which opened SSH connections to fixture hosts that do not
 exist and waited out a 30-second connect timeout apiece. Those cases assert only
 that no gate-refusal marker appears in the output — they never assert the run's

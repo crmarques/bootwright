@@ -158,23 +158,35 @@ treats resources Bootwright does **not** own:
   foreign ownership; `create` additionally refuses if any selected object
   already exists — a guardrail for first builds, so a stale context or a name
   collision fails loudly instead of half-converging.
-- `--mode rebuild` is the only mode that destroys, and only over resources a
-  Bootwright ownership marker proves it created (see below).
+- `--mode rebuild` is the only mode that destroys **owned drift**, and only over
+  resources a Bootwright ownership marker proves it created (see below).
 
-!!! danger "`--mode rebuild` can destroy data"
-    `apply --mode rebuild` is the only `apply` form that destroys. It may reinstall a
-    managed-OS machine (the substrate VM is undefined, **disks are wiped**, then
-    rebuilt) and cleanly rebuild a managed Ceph cluster via
-    `cephadm rm-cluster --zap-osds` — and only when a Bootwright ownership marker
-    proves the live cluster is the one Bootwright created. It **never** touches
-    foreign objects, run leases, validation, or secret checks. Beyond the mode
-    itself there is a **separate** data-loss gate: a destructive rebuild is
-    authorized only by the interactive data-loss prompt, or by
-    `--authorize data-loss` paired with `--yes` for automation — `--yes` alone
-    does **not** authorize data loss (see
-    [Operations](operations.md#the-fail-closed-mode-rebuild-contract)). Always
-    `plan`/`--dry-run` a rebuild first and read exactly what it intends to
-    rebuild.
+!!! danger "`apply` can destroy data — in four forms, not one"
+    `--mode rebuild` is the form that rebuilds drifted objects, but it is not the
+    only `apply` that destroys. Four paths reach data loss:
+
+    - **`--mode rebuild`** may reinstall a managed-OS machine (the substrate VM is
+      undefined, **disks are wiped**, then rebuilt) and cleanly rebuild a managed
+      Ceph cluster via `cephadm rm-cluster --zap-osds`.
+    - **`--reclaim-devices`** wipes the named OSD devices under the default
+      `--mode reconcile`. It is the one deliberate exception to "reconcile never
+      destroys" (ADR 0007).
+    - **A reinstall a prior `destroy` released.** Once teardown records a
+      substrate release, the next plain `apply` re-creates those machines and
+      wipes their disks — that release *is* the authorization, so no mode flag is
+      involved.
+    - **`--authorize foreign-daemons`** removes another cluster's cephadm daemons,
+      units and `/var/lib/ceph` state from a node being enrolled (checkpoint 8
+      above). It zaps no disk, and it carries its own token rather than the
+      data-loss gate.
+
+    The first three share a **separate** data-loss gate: they are authorized only
+    by the interactive data-loss prompt, or by `--authorize data-loss` paired with
+    `--yes` for automation — `--yes` alone does **not** authorize data loss (see
+    [Operations](operations.md#the-fail-closed-mode-rebuild-contract)). None of
+    them touches foreign objects, run leases, validation, or secret checks. Always
+    `plan`/`--dry-run` first: the preview prints a `Required authorizations` block
+    naming every token the real run would consult.
 
 ## Avoiding accidental destruction
 
