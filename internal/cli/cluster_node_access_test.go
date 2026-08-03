@@ -64,7 +64,7 @@ func TestClusterNodeMachineSNOAutoConnect(t *testing.T) {
 	}
 }
 
-func TestClusterNodeMachineMultiNodeRequiresSelector(t *testing.T) {
+func TestClusterNodeMachineMultiNodeDefaultsToFirstNode(t *testing.T) {
 	state := v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ha"},
 		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
@@ -72,7 +72,38 @@ func TestClusterNodeMachineMultiNodeRequiresSelector(t *testing.T) {
 			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-1"}, Role: v1alpha1.NodeRoleMaster},
 		}},
 	}}}
-	if _, err := clusterNodeMachine(state, "ha", ""); err == nil || !strings.Contains(err.Error(), "select one with --node") {
-		t.Fatalf("multi-node empty selector err = %v", err)
+	m, err := clusterNodeMachine(state, "ha", "")
+	if err != nil || m != "cp-0" {
+		t.Fatalf("multi-node empty selector = %q, %v; want the first declared node", m, err)
+	}
+}
+
+func TestClusterNodeMachineStorageDefaultsToFirstTopologyNode(t *testing.T) {
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+				{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
+				{Name: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-1"}},
+			}},
+		}},
+	}}}
+	m, err := clusterNodeMachine(state, "ceph", "")
+	if err != nil || m != "ceph-dc1-0" {
+		t.Fatalf("storage empty selector = %q, %v; want the first declared topology node", m, err)
+	}
+}
+
+func TestClusterNodeMachineUnknownSelectorListsRoster(t *testing.T) {
+	state := v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ha"},
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
+			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-0"}, Role: v1alpha1.NodeRoleMaster},
+			{MachineRef: v1alpha1.LocalObjectReference{Name: "cp-1"}, Role: v1alpha1.NodeRoleMaster},
+		}},
+	}}}
+	_, err := clusterNodeMachine(state, "ha", "ghost")
+	if err == nil || !strings.Contains(err.Error(), "no node \"ghost\"") || !strings.Contains(err.Error(), "master-1") {
+		t.Fatalf("unknown selector err = %v; want the refusal plus the node roster", err)
 	}
 }

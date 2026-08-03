@@ -17,16 +17,20 @@ func clusterNodeMachine(state v1alpha1.State, clusterName, selector string) (str
 		return "", fmt.Errorf("cluster %q has no nodes to connect to", clusterName)
 	}
 	if selector == "" {
-		if len(nodes) == 1 {
-			return nodes[0].MachineName, nil
-		}
-		return "", fmt.Errorf("cluster %q has %d nodes; select one with --node:\n%s", clusterName, len(nodes), clusterNodeRoster(nodes))
+		return nodes[0].MachineName, nil
 	}
 	machine, err := resolveClusterNode(nodes, selector)
 	if err != nil {
 		return "", fmt.Errorf("%w:\n%s", err, clusterNodeRoster(nodes))
 	}
 	return machine, nil
+}
+
+func clusterNodeFlagHint(selector string) string {
+	if selector == "" {
+		return ""
+	}
+	return " --node " + selector
 }
 
 func resolveClusterNode(nodes []stateview.ClusterNode, selector string) (string, error) {

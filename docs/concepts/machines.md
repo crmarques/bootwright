@@ -599,7 +599,10 @@ To reach a node cluster-first — by cluster and node rather than by Machine nam
 use `bootwright cluster rsh --name <cluster> --node <node>` (and `cluster exec`
 for a one-off command); the node selector accepts the node name (FQDN or
 its short label) or a `<role>-<ordinal>` such as `master-0` — a Machine name is
-rejected with a hint naming the node. Container-cluster access
+rejected with a hint naming the node. Leave `--node` off and the command lands
+on the cluster's first declared node, whatever the cluster's size; the node
+roster `bootwright cluster info --name <cluster>` prints is in that same order.
+Container-cluster access
 uses `install.nodeSSH`, the `core` user, and the node's primary install IP, so
 its backing Machine does not need `access.ssh`. An unknown node key prompts for
 explicit acceptance on an interactive first connection; a changed key fails

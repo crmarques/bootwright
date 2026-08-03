@@ -26,26 +26,26 @@ cluster's install.nodeSSH private key on a container cluster, and
 spec.ceph.cephadm.clusterSSH (user and key) on a managed storage cluster. Reach
 the node as its own login instead with 'machine rsh'. Override the login account
 for this invocation with --ssh-user. Select the node by its node name, its FQDN,
-or its <role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be
-omitted. Run a single command instead with 'cluster exec'.
+or its <role>-<ordinal> (e.g. master-0); omitting --node connects to the
+cluster's first declared node. Run a single command instead with 'cluster exec'.
 
     bootwright cluster rsh --name managed-01 --node master-0`,
 		Args: cobra.ArbitraryArgs,
 		Example: `  # Interactive shell on a node
   bootwright cluster rsh --name managed-01 --node master-0
 
-  # Single-node (SNO) cluster: --node is optional
+  # Omit --node to land on the cluster's first declared node
   bootwright cluster rsh --name sno-libvirt`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name (required)")
-	cmd.Flags().StringVar(&node, "node", "", "node to connect to: node name, FQDN, or <role>-<ordinal> (default: the only node)")
+	cmd.Flags().StringVar(&node, "node", "", "node to connect to: node name, FQDN, or <role>-<ordinal> (default: the cluster's first declared node)")
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)
 	cf := addCommonFlags()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
-			return failErr(2, fmt.Errorf("cluster rsh opens an interactive shell and takes no command; run one with 'cluster exec --name %s --node %s -- %s'", clusterName, node, strings.Join(args, " ")))
+			return failErr(2, fmt.Errorf("cluster rsh opens an interactive shell and takes no command; run one with 'cluster exec --name %s%s -- %s'", clusterName, clusterNodeFlagHint(node), strings.Join(args, " ")))
 		}
 		user, err := resolveSSHUser()
 		if err != nil {
@@ -69,16 +69,20 @@ func newClusterExecCmd() *cobra.Command {
 return its output, as the cluster's own orchestration identity. Reach the node as
 its own login instead with 'machine exec'. Override the login account for this
 invocation with --ssh-user. Select the node by its node name, its FQDN, or its
-<role>-<ordinal> (e.g. master-0); on a single-node cluster --node may be omitted.
-Drop into an interactive shell instead with 'cluster rsh'.
+<role>-<ordinal> (e.g. master-0); omitting --node runs the command on the
+cluster's first declared node. Drop into an interactive shell instead with
+'cluster rsh'.
 
     bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet`,
 		Args: cobra.ArbitraryArgs,
 		Example: `  # Run one command on a node
-  bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet`,
+  bootwright cluster exec --name managed-01 --node master-0 -- systemctl status kubelet
+
+  # Omit --node to run it on the cluster's first declared node
+  bootwright cluster exec --name managed-01 -- systemctl status kubelet`,
 	}
 	cmd.Flags().StringVar(&clusterName, "name", "", "ContainerCluster or StorageCluster name (required)")
-	cmd.Flags().StringVar(&node, "node", "", "node to run the command on: node name, FQDN, or <role>-<ordinal> (default: the only node)")
+	cmd.Flags().StringVar(&node, "node", "", "node to run the command on: node name, FQDN, or <role>-<ordinal> (default: the cluster's first declared node)")
 	_ = cmd.MarkFlagRequired("name")
 	registerAccessClusterNameCompletion(cmd)
 	registerClusterNodeCompletion(cmd)

@@ -1116,7 +1116,11 @@ Rules:
   no cluster credential, so those nodes keep the `Machine` identity. The
   `--node` selector accepts the node name (FQDN or short label) or a
   `<role>-<ordinal>`; a machine name is rejected with guidance naming the
-  node. Container-node
+  node, and an unresolvable selector is refused with the cluster's node
+  roster. Omitting `--node` selects the cluster's first declared node —
+  `spec.nodes[0]` on a `ContainerCluster`, `spec.ceph.topology.nodes[0]` on a
+  `StorageCluster` — at every cluster size, so neither verb prints anything of
+  its own before the SSH stream. Container-node
   first use requires an interactive OpenSSH confirmation. A verified changed
   key is rotated by removing only its effective address from the context
   known-hosts file with `ssh-keygen -R`, then reconnecting interactively.
