@@ -6,6 +6,9 @@ spec:
   domains:
     base: bootwright.test
 
+  sites:
+    - name: lab
+
   machineAccess:
     keyRef: bootwright-machine-key
 

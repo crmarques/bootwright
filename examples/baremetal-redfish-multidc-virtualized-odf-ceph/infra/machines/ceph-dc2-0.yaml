@@ -6,6 +6,9 @@ spec:
   capabilities:
     - ceph-node
 
+  placement:
+    site: dc2
+
   os:
     provided: true
 

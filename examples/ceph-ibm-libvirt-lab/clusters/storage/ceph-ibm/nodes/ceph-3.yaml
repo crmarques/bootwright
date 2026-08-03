@@ -6,6 +6,9 @@ spec:
   capabilities:
     - ceph-node
 
+  placement:
+    site: lab
+
   substrate:
     providerRef: lab-libvirt-provider
     profileRef: ceph-mon

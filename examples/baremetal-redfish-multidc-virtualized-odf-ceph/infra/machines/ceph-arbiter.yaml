@@ -7,6 +7,9 @@ spec:
     - ceph-node
     - ceph-arbiter
 
+  placement:
+    site: dc3
+
   os:
     provided: true
 

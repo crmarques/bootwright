@@ -6,6 +6,12 @@ spec:
   domains:
     base: bootwright.test
 
+  sites:
+    - name: dc1
+    - name: dc2
+    - name: dc3
+      description: arbiter-only site holding the stretch tiebreaker
+
   infraComponents:
     artifactServers:
       - name: default

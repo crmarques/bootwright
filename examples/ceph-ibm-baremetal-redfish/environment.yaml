@@ -6,6 +6,9 @@ spec:
   domains:
     base: example.com
 
+  sites:
+    - name: dc1
+
   machineAccess:
     keyRef: bootwright-machine-key
 

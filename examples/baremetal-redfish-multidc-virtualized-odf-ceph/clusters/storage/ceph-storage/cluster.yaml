@@ -30,7 +30,6 @@ spec:
       nodes:
       - name: node-01
         machineRef: ceph-dc1-0
-        site: dc1
         roles:
         - mon
         - mgr
@@ -42,7 +41,6 @@ spec:
         - /dev/sdb
       - name: node-02
         machineRef: ceph-dc1-1
-        site: dc1
         roles:
         - mon
         - mgr
@@ -54,7 +52,6 @@ spec:
         - /dev/sdb
       - name: node-03
         machineRef: ceph-dc1-2
-        site: dc1
         roles:
         - osd
         - mds
@@ -64,7 +61,6 @@ spec:
         - /dev/sdb
       - name: node-04
         machineRef: ceph-dc2-0
-        site: dc2
         roles:
         - mon
         - mgr
@@ -76,7 +72,6 @@ spec:
         - /dev/sdb
       - name: node-05
         machineRef: ceph-dc2-1
-        site: dc2
         roles:
         - mon
         - mgr
@@ -88,7 +83,6 @@ spec:
         - /dev/sdb
       - name: node-06
         machineRef: ceph-dc2-2
-        site: dc2
         roles:
         - osd
         - mds
@@ -98,6 +92,5 @@ spec:
         - /dev/sdb
       - name: node-07
         machineRef: ceph-arbiter
-        site: dc3
         roles:
         - mon

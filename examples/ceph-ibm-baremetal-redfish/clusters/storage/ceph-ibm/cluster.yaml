@@ -47,7 +47,6 @@ spec:
       nodes:
         - name: node-01
           machineRef: ceph-1
-          site: dc1
           roles:
             - mon
             - mgr
@@ -61,7 +60,6 @@ spec:
             - /dev/sdd
         - name: node-02
           machineRef: ceph-2
-          site: dc1
           roles:
             - mon
             - mgr
@@ -75,6 +73,5 @@ spec:
             - /dev/sdd
         - name: node-03
           machineRef: ceph-3
-          site: dc1
           roles:
             - mon
