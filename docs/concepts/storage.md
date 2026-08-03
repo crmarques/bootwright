@@ -422,7 +422,7 @@ available, so it has no meaning without one. The walkthrough is in
 | `mgmtGateway.dnsLabel` | No | `mgr` | Leftmost label only; the published name is `<dnsLabel>.<cluster>.<domains.storageClusters>`. A dotted value is rejected. |
 | `mgmtGateway.port` | No | `8443` | Gateway listening port; `0..65535`. |
 | `mgmtGateway.enableAuth` | No | `false` | `true` puts the dashboard behind `oauth2Proxy`, which then becomes required (and is rejected when auth is off). |
-| `mgmtGateway.tls.certificateRef` / `.keyRef` | No | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. A `tls` block, once present, must set both. Omit the block for cephadm's self-signed certificate. |
+| `mgmtGateway.tls.certificateRef` / `.keyRef` | No | — | Serving certificate and key for the gateway; each must name a `tlsCertificate` `Secret`. A `tls` block, once present, must set both, and is accepted only when `distribution` is `oss`: vendor cephadm builds record gateway daemon dependencies without the certificate entries they recompute from the spec, so a certificate-bearing spec reconfigures the gateways forever and apply fails closed at service readiness (ADR 0047). Omit the block for cephadm's self-signed certificate. |
 | `mgmtGateway.oauth2Proxy.providerDisplayName` | Yes | — | Provider name shown on the login page. |
 | `mgmtGateway.oauth2Proxy.clientId` | Yes | — | OIDC client ID. |
 | `mgmtGateway.oauth2Proxy.clientSecretRef` | Yes | — | `Secret` holding the OIDC client secret. |

@@ -125,3 +125,29 @@ certificate ref's primary material and the key ref's `tls-key` material for the
 owning storage cluster in the base phase; generated-material checks must resolve
 the requested role so a missing key reports `<name>.key`, not the certificate
 path.
+
+**Root cause, vendor-build gateway TLS (ADR 0047):** on IBM Storage Ceph 9.9.1
+(`20.2.1-324.el9cp`) a `mgmt-gateway` spec carrying `ssl_cert`/`ssl_key` makes
+cephadm reconfigure every gateway daemon **each serve pass, forever**. The
+vendor build backports upstream `main`'s certificate dependencies: the
+scheduler computes daemon deps *with* the spec (appending `certificate_source:
+inline` plus `ssl_cert`/`ssl_key` md5 hashes), but
+`MgmtGatewayService.generate_config` — whose return value is what gets
+*recorded* as the daemon's deps — calls `get_dependencies(self.mgr)` with no
+spec, so the recorded list can never contain a certificate entry and
+`last_deps != deps` holds on every pass. Signature: `ceph log last cephadm`
+dominated by `Reconfiguring mgmt-gateway.<node> deps [...] (diff {'ssl_cert:
+<md5>', 'ssl_key: <md5>', 'certificate_source: inline'})`, gateways stuck
+`starting` with `pending_daemon_config: true`, apply failing closed at service
+readiness with `mgmt-gateway (N/M)`. Routing the certificate through the
+cephadm cert store (`certificate_source: reference`) loops identically — the
+`certificate_source:` entry alone breaks the match — and a TLS-free spec
+serves the cephadm-managed certificate, not a store-held user one, so **no
+spec shape carries a user certificate convergently on such a build**.
+Validation therefore refuses `spec.ceph.mgmtGateway.tls` on
+subscription-backed distributions
+(`validateStorageCephMgmtGatewayTLSDistribution`); upstream community
+`v20.2.x` computes no certificate dependencies and keeps the block. A cluster
+already wedged by an inline-TLS spec self-heals on the next apply: the
+late-services TLS-free document makes computed and recorded deps agree again
+and the daemons settle.
