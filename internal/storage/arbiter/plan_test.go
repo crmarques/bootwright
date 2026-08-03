@@ -62,8 +62,23 @@ func liveMonDump(tiebreaker string, quorum []int) map[string]any {
 	}
 }
 
+func settledMonDump() map[string]any {
+	return map[string]any{
+		"stretch_mode":   true,
+		"tiebreaker_mon": "arb-new",
+		"quorum":         []int{0, 1, 2, 3, 4},
+		"mons": []map[string]any{
+			{"rank": 0, "name": "node-01", "crush_location": map[string]string{"datacenter": "dc1"}},
+			{"rank": 1, "name": "node-02", "crush_location": map[string]string{"datacenter": "dc1"}},
+			{"rank": 2, "name": "node-03", "crush_location": map[string]string{"datacenter": "dc2"}},
+			{"rank": 3, "name": "node-04", "crush_location": map[string]string{"datacenter": "dc2"}},
+			{"rank": 4, "name": "arb-new", "crush_location": map[string]string{"datacenter": "dc3"}},
+		},
+	}
+}
+
 func TestComputePlansTheSwapAgainstTheLiveTiebreaker(t *testing.T) {
-	plan, err := Compute(v1alpha1.State{}, stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-old", []int{0, 1, 2, 3, 4})))
+	plan, err := Compute(stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-old", []int{0, 1, 2, 3, 4})))
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -92,18 +107,48 @@ func TestComputePlansTheSwapAgainstTheLiveTiebreaker(t *testing.T) {
 	}
 }
 
-func TestComputeReportsSettledWhenTheDesiredArbiterAlreadyHoldsIt(t *testing.T) {
-	plan, err := Compute(v1alpha1.State{}, stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-new", []int{0, 1, 2, 3, 4})))
+func TestComputeReportsSettledOnlyWhenNothingIsLeftToRetire(t *testing.T) {
+	plan, err := Compute(stretchCluster(), discoveryWithMonDump(t, settledMonDump()))
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
 	if !plan.Settled {
-		t.Fatal("a live tiebreaker equal to the desired node must report settled so a re-run is a no-op")
+		t.Fatalf("a monmap that names the desired tiebreaker and carries no replaced mon must report settled, got residue %v", plan.Residue)
+	}
+	if plan.LiveMon != "" {
+		t.Fatalf("a settled plan must name no mon to retire, got %q", plan.LiveMon)
+	}
+}
+
+func TestComputeResumesWhenTheTiebreakerSwitchedButTheReplacedMonRemains(t *testing.T) {
+	plan, err := Compute(stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-new", []int{0, 1, 2, 3, 4})))
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if plan.Settled {
+		t.Fatal("a run interrupted after the tiebreaker switch must not report settled while the replaced mon is still in the monmap, or the re-run that finishes the retirement exits 0 having done nothing")
+	}
+	if plan.LiveMon != "arb-old" {
+		t.Fatalf("the resumed plan must retire the mon the topology no longer declares, got %q", plan.LiveMon)
+	}
+	if len(plan.Residue) == 0 {
+		t.Fatal("the resumed plan must name what is left to retire")
+	}
+}
+
+func TestComputeRefusesAMonmapCarryingSeveralUndeclaredMons(t *testing.T) {
+	dump := settledMonDump()
+	dump["mons"] = append(dump["mons"].([]map[string]any),
+		map[string]any{"rank": 5, "name": "arb-old", "crush_location": map[string]string{"datacenter": "dc3"}},
+		map[string]any{"rank": 6, "name": "arb-older", "crush_location": map[string]string{"datacenter": "dc3"}})
+	_, err := Compute(stretchCluster(), discoveryWithMonDump(t, dump))
+	if err == nil || !strings.Contains(err.Error(), "arb-old") || !strings.Contains(err.Error(), "arb-older") {
+		t.Fatalf("Compute with two undeclared mons = %v, want a refusal naming both rather than a guess", err)
 	}
 }
 
 func TestComputeReportsMonsOutsideQuorumAsDegraded(t *testing.T) {
-	plan, err := Compute(v1alpha1.State{}, stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-old", []int{0, 1, 4})))
+	plan, err := Compute(stretchCluster(), discoveryWithMonDump(t, liveMonDump("arb-old", []int{0, 1, 4})))
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -113,9 +158,34 @@ func TestComputeReportsMonsOutsideQuorumAsDegraded(t *testing.T) {
 }
 
 func TestComputeRefusesAClusterThatIsNotInStretchModeLive(t *testing.T) {
-	_, err := Compute(v1alpha1.State{}, stretchCluster(), discoveryWithMonDump(t, map[string]any{"stretch_mode": false}))
+	_, err := Compute(stretchCluster(), discoveryWithMonDump(t, map[string]any{"stretch_mode": false}))
 	if err == nil || !strings.Contains(err.Error(), "not in stretch mode") {
 		t.Fatalf("Compute on a non-stretch cluster = %v, want a stretch-mode refusal", err)
+	}
+}
+
+func TestComputeRefusesAStretchMonmapWithNoTiebreaker(t *testing.T) {
+	dump := settledMonDump()
+	dump["tiebreaker_mon"] = ""
+	_, err := Compute(stretchCluster(), discoveryWithMonDump(t, dump))
+	if err == nil || !strings.Contains(err.Error(), "no tiebreaker_mon") {
+		t.Fatalf("Compute on a stretch monmap without a tiebreaker = %v, want a refusal before the input is rewritten", err)
+	}
+}
+
+func TestComputeResolvesTheRetiredHostFromTheOrchestrator(t *testing.T) {
+	live := discoveryWithMonDump(t, liveMonDump("arb-old", []int{0, 1, 2, 3, 4}))
+	hosts, err := json.Marshal([]map[string]any{{"hostname": "arb-old.ceph.example.com", "addr": "198.51.100.9"}})
+	if err != nil {
+		t.Fatalf("marshal host list fixture: %v", err)
+	}
+	live.Reads[cephstate.ReadOrchHostLS] = hosts
+	plan, err := Compute(stretchCluster(), live)
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if plan.LiveNode != "arb-old.ceph.example.com" {
+		t.Fatalf("live node = %q, want the hostname cephadm registered; `ceph orch host rm` takes the registered hostname, not the mon daemon name", plan.LiveNode)
 	}
 }
 

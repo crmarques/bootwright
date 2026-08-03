@@ -17,6 +17,7 @@ type Plan struct {
 	DesiredMon     string   `json:"desiredMon"`
 	DesiredSite    string   `json:"desiredSite"`
 	DesiredMachine string   `json:"desiredMachine"`
+	TiebreakerMon  string   `json:"tiebreakerMon,omitempty"`
 	LiveMon        string   `json:"liveMon,omitempty"`
 	LiveNode       string   `json:"liveNode,omitempty"`
 	LiveMachine    string   `json:"liveMachine,omitempty"`
@@ -24,18 +25,14 @@ type Plan struct {
 	MonHostsDuring []string `json:"monHostsDuring"`
 	MonHostsAfter  []string `json:"monHostsAfter"`
 	Settled        bool     `json:"settled"`
+	Residue        []string `json:"residue,omitempty"`
 	SameSiteMons   []string `json:"sameSiteMons,omitempty"`
 	Degraded       string   `json:"degraded,omitempty"`
 }
 
 func (p Plan) SameSite() bool { return len(p.SameSiteMons) > 0 }
 
-type Refusal struct {
-	Reason string
-	Token  string
-}
-
-func (r Refusal) Error() string { return r.Reason }
+func (p Plan) TiebreakerSwitched() bool { return p.TiebreakerMon == p.DesiredMon }
 
 func DesiredArbiter(cluster v1alpha1.StorageCluster) (v1alpha1.StorageCephNode, error) {
 	if cluster.Spec.Ceph == nil {
@@ -56,7 +53,7 @@ func DesiredArbiter(cluster v1alpha1.StorageCluster) (v1alpha1.StorageCephNode, 
 	return node, nil
 }
 
-func Compute(state v1alpha1.State, cluster v1alpha1.StorageCluster, live cephstate.Discovery) (Plan, error) {
+func Compute(cluster v1alpha1.StorageCluster, live cephstate.Discovery) (Plan, error) {
 	desired, err := DesiredArbiter(cluster)
 	if err != nil {
 		return Plan{}, err
@@ -79,17 +76,29 @@ func Compute(state v1alpha1.State, cluster v1alpha1.StorageCluster, live cephsta
 	if !dump.StretchMode {
 		return Plan{}, fmt.Errorf("storage cluster %s is not in stretch mode on the cluster itself (`ceph mon dump` reports stretch_mode false), so it carries no tiebreaker to replace; run `bootwright apply --clusters %s` to converge the authored stretch topology first", cluster.Metadata.Name, cluster.Metadata.Name)
 	}
-	plan.LiveMon = dump.TiebreakerMon
+	plan.TiebreakerMon = dump.TiebreakerMon
+	if plan.TiebreakerMon == "" {
+		return Plan{}, fmt.Errorf("storage cluster %s reports stretch mode but names no tiebreaker_mon in its live monmap, so Bootwright will not guess which mon to retire; repair the monmap with `ceph mon set_new_tiebreaker <mon>` on the cluster, or converge the authored stretch topology with `bootwright apply --clusters %s`", cluster.Metadata.Name, cluster.Metadata.Name)
+	}
+	strays := undeclaredMons(cluster, dump, plan.DesiredMon)
+	switch {
+	case !plan.TiebreakerSwitched():
+		plan.LiveMon = plan.TiebreakerMon
+	case len(strays) == 1:
+		plan.LiveMon = strays[0]
+	case len(strays) > 1:
+		return Plan{}, fmt.Errorf("storage cluster %s already answers with mon.%s as its stretch tiebreaker, but its monmap still carries mon(s) %s that no node of the authored topology declares, so Bootwright cannot tell which one an interrupted replacement left behind; remove the leftover mon(s) with `ceph mon rm <mon>` and `ceph orch host rm <host>` on the cluster, then re-run", cluster.Metadata.Name, plan.DesiredMon, strings.Join(strays, ", "))
+	}
 	if plan.LiveMon != "" {
 		plan.LiveSite = dump.SiteOf(plan.LiveMon, domain)
 		if node, ok := topology.HostByName(cluster, plan.LiveMon); ok {
 			plan.LiveNode = node.Name
 			plan.LiveMachine = node.MachineRef.Name
-		} else {
-			plan.LiveNode = plan.LiveMon
 		}
 	}
-	plan.Settled = plan.LiveMon != "" && plan.LiveMon == plan.DesiredMon
+	plan.LiveNode = retirementHost(cluster, live, plan)
+	plan.Residue = retirementResidue(cluster, live, plan)
+	plan.Settled = plan.TiebreakerSwitched() && len(plan.Residue) == 0
 	plan.MonHostsDuring = unionHosts(plan.MonHostsAfter, plan.LiveNode)
 	for _, mon := range dump.MonsAtSite(domain, desired.Site) {
 		if mon == plan.DesiredMon || mon == plan.LiveMon {
@@ -116,6 +125,85 @@ func degradedReason(dump cephstate.MonDump, plan Plan) string {
 	}
 	sort.Strings(absent)
 	return "mon(s) " + strings.Join(absent, ", ") + " are outside quorum"
+}
+
+func undeclaredMons(cluster v1alpha1.StorageCluster, dump cephstate.MonDump, desiredMon string) []string {
+	var out []string
+	for _, name := range dump.MonNames() {
+		if name == desiredMon {
+			continue
+		}
+		if _, ok := topology.HostByName(cluster, name); ok {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func undeclaredMonHosts(cluster v1alpha1.StorageCluster, live cephstate.Discovery) []string {
+	daemons, err := live.Daemons()
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, daemon := range daemons {
+		if daemon.DaemonType != "mon" || daemon.Hostname == "" || seen[daemon.Hostname] {
+			continue
+		}
+		if _, ok := topology.HostByName(cluster, daemon.Hostname); ok {
+			continue
+		}
+		seen[daemon.Hostname] = true
+		out = append(out, daemon.Hostname)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func retirementHost(cluster v1alpha1.StorageCluster, live cephstate.Discovery, plan Plan) string {
+	if plan.LiveMon != "" {
+		if host, ok := registeredHostFor(live, plan.LiveMon); ok {
+			return host
+		}
+		if plan.LiveNode != "" {
+			return plan.LiveNode
+		}
+		return plan.LiveMon
+	}
+	if strays := undeclaredMonHosts(cluster, live); len(strays) == 1 {
+		return strays[0]
+	}
+	return ""
+}
+
+func registeredHostFor(live cephstate.Discovery, mon string) (string, bool) {
+	hosts, err := live.Hosts()
+	if err != nil {
+		return "", false
+	}
+	for _, host := range hosts {
+		if host.Hostname == mon || topology.CephDaemonName(host.Hostname) == mon {
+			return host.Hostname, true
+		}
+	}
+	return "", false
+}
+
+func retirementResidue(cluster v1alpha1.StorageCluster, live cephstate.Discovery, plan Plan) []string {
+	var out []string
+	if plan.LiveMon != "" {
+		out = append(out, "mon."+plan.LiveMon+" is still in the monmap")
+	}
+	for _, host := range undeclaredMonHosts(cluster, live) {
+		if plan.LiveMon != "" && host == plan.LiveNode {
+			continue
+		}
+		out = append(out, "host "+host+" still runs a mon daemon the authored topology declares no node for")
+	}
+	return out
 }
 
 func unionHosts(hosts []string, extra string) []string {

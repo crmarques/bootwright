@@ -60,14 +60,17 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return failErr(1, err)
 	}
-	plan, err := arbiter.Compute(state, arbiterDesiredCluster(cluster, promotion), live)
+	plan, err := arbiter.Compute(arbiterDesiredCluster(cluster, promotion), live)
 	if err != nil {
 		return failErr(1, err)
 	}
 	if plan.Settled && promotion.Empty() {
-		cliout.New(stdout).Summary(cliout.StatusSkip, plan.Cluster, "mon."+plan.DesiredMon+" already holds the stretch tiebreaker; nothing to replace")
+		cliout.New(stdout).Summary(cliout.StatusSkip, plan.Cluster, "mon."+plan.DesiredMon+" already holds the stretch tiebreaker and no replaced mon or host is left to retire; nothing to replace")
 		if flags.dryRun {
 			printRequiredAuthorizations(stdout, nil)
+		} else {
+			carried, refreshErr := refreshArbiterConvergeRecords(ctx, state, state, plan.Cluster)
+			reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr)
 		}
 		warnUnusedAuthorizations(stdout, auth, flags.dryRun)
 		return nil
@@ -79,17 +82,13 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		warnUnusedAuthorizations(stdout, auth, true)
 		return nil
 	}
-	if plan.SameSite() && !auth.allows(authorizeSameSiteArbiter) {
-		return failErr(1, fmt.Errorf("refusing to make mon.%s the stretch tiebreaker of %s: it sits at %s=%s, which already holds non-tiebreaker mon(s) %s. An arbiter inside a data site cannot break a tie between the two data sites — lose that site and two votes go at once, leaving the survivor without quorum, which is why Ceph itself refuses this without --yes-i-really-mean-it. Put the replacement arbiter in a third site, or, if this is the deliberate emergency fallback while the third site is gone, re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
-			plan.DesiredMon, plan.Cluster, plan.FailureDomain, plan.DesiredSite, strings.Join(plan.SameSiteMons, ", "), plan.Cluster, plan.DesiredMachine, authorizeSameSiteArbiter))
-	}
-	if plan.Degraded != "" && !auth.allows(authorizeDegradedQuorum) {
-		return failErr(1, fmt.Errorf("refusing to move the stretch tiebreaker of %s while %s: `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together. Bring those mons back, or re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
-			plan.Cluster, plan.Degraded, plan.Cluster, plan.DesiredMachine, authorizeDegradedQuorum))
+	if err := replaceArbiterGateRefusals(auth, plan); err != nil {
+		return failErr(1, err)
 	}
 	if !flags.yes && !confirm(stdin, stdout, replaceArbiterConfirmPrompt(plan)) {
 		return failErr(1, errArbiterAborted())
 	}
+	preRewriteState := state
 	if !promotion.Empty() {
 		snapshot, aerr := arbiter.Apply(ctx, promotion)
 		if aerr != nil {
@@ -100,6 +99,12 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 			return failErr(1, err)
 		}
 		if cluster, err = resolveArbiterCluster(state, flags.clusterName); err != nil {
+			return failErr(1, err)
+		}
+		if plan, err = arbiter.Compute(cluster, live); err != nil {
+			return failErr(1, err)
+		}
+		if err := replaceArbiterGateRefusals(auth, plan); err != nil {
 			return failErr(1, err)
 		}
 	}
@@ -117,8 +122,8 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		Address:            topology.NodeAddress(state, cluster, plan.DesiredNode),
 		MonLocations:       arbiterMonLocations(cluster, plan, monHosts),
 		MonLocationsAfter:  arbiterMonLocations(cluster, plan, plan.MonHostsAfter),
-		AllowSameSite:      auth.has(authorizeSameSiteArbiter),
-		AllowDegraded:      auth.has(authorizeDegradedQuorum),
+		AllowSameSite:      plan.SameSite() && auth.has(authorizeSameSiteArbiter),
+		AllowDegraded:      plan.Degraded != "" && auth.has(authorizeDegradedQuorum),
 		OldHostOffline:     auth.allows(authorizeUnreachableNodes),
 		BecomePasswordFile: become.PasswordFile,
 		Verbose:            flags.verbose,
@@ -126,12 +131,39 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if runErr != nil {
 		return failErr(1, runErr)
 	}
-	if refreshErr := refreshArbiterConvergeRecords(ctx, state, plan.Cluster); refreshErr != nil {
-		cliout.NewContinuation(stdout).Warning("converge records", refreshErr.Error()+"; the recorded desired state of StorageCluster/"+plan.Cluster+" still names the previous tiebreaker, so the next `bootwright apply` refuses on drift this run created — re-run `"+workflow.TiebreakerReplacementCommand(plan.Cluster)+"` once the records are writable")
-	}
+	carried, refreshErr := refreshArbiterConvergeRecords(ctx, preRewriteState, state, plan.Cluster)
+	reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr)
 	cliout.New(stdout).Summary(cliout.StatusOK, plan.Cluster, "stretch tiebreaker is now mon."+plan.DesiredMon+" on Machine/"+plan.DesiredMachine)
-	cliout.NewContinuation(stdout).Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")
+	printRetiredArbiterDisposal(stdout, plan, promotion)
 	warnUnusedAuthorizations(stdout, auth, false)
+	return nil
+}
+
+func printRetiredArbiterDisposal(stdout io.Writer, plan arbiter.Plan, promotion arbiter.Promotion) {
+	p := cliout.NewContinuation(stdout)
+	if plan.LiveMachine == "" {
+		if plan.LiveNode == "" {
+			return
+		}
+		p.Status(cliout.StatusSkip, "host "+plan.LiveNode, "left the storage cluster but keeps running; no Machine of this context declares it, so decommission it out of band")
+		return
+	}
+	if !promotion.Empty() {
+		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; this run re-authored the tiebreaker, so it is no longer a declared node and `bootwright destroy --machines "+plan.LiveMachine+"` refuses it — decommission it out of band")
+		return
+	}
+	p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")
+}
+
+func replaceArbiterGateRefusals(auth *authorizations, plan arbiter.Plan) error {
+	if plan.SameSite() && !auth.allows(authorizeSameSiteArbiter) {
+		return fmt.Errorf("refusing to make mon.%s the stretch tiebreaker of %s: it sits at %s=%s, which already holds non-tiebreaker mon(s) %s. An arbiter inside a data site cannot break a tie between the two data sites — lose that site and two votes go at once, leaving the survivor without quorum, which is why Ceph itself refuses this without --yes-i-really-mean-it. Put the replacement arbiter in a third site, or, if this is the deliberate emergency fallback while the third site is gone, re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
+			plan.DesiredMon, plan.Cluster, plan.FailureDomain, plan.DesiredSite, strings.Join(plan.SameSiteMons, ", "), plan.Cluster, plan.DesiredMachine, authorizeSameSiteArbiter)
+	}
+	if plan.Degraded != "" && !auth.allows(authorizeDegradedQuorum) {
+		return fmt.Errorf("refusing to move the stretch tiebreaker of %s while %s: `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together. Bring those mons back, or re-run with `bootwright storage-cluster replace-arbiter --name %s --new-arbiter-machine %s --authorize %s --yes`",
+			plan.Cluster, plan.Degraded, plan.Cluster, plan.DesiredMachine, authorizeDegradedQuorum)
+	}
 	return nil
 }
 

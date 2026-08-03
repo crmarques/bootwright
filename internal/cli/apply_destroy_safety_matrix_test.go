@@ -350,12 +350,21 @@ func safetyReplaceArbiterCases() []safetyCase {
 		name: "replace-arbiter/refreshing the storage records leaves the next apply no drift to refuse",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedSuccessfulApply(t, ctx)
-			seedRetargetedTiebreaker(t, ctx)
-			seedArbiterConvergeRecordRefresh(t, ctx)
+			seedArbiterConvergeRecordRefresh(t, ctx, seedRetargetedTiebreaker)
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictAuthorized,
 		deny:    []string{"not a safe in-place reconcile", "bootwright storage-cluster replace-arbiter --name"},
+	}, {
+		name: "replace-arbiter/the record refresh never rebaselines a change the arbiter run did not converge",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSuccessfulApply(t, ctx)
+			seedRenamedStretchRule(t, ctx)
+			seedArbiterConvergeRecordRefresh(t, ctx, seedRetargetedTiebreaker)
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"re-run with `bootwright apply --mode rebuild`"},
 	}, {
 		name:    "replace-arbiter/preview: a dry run names every gate the real run consults, in one refusal-free pass",
 		seed:    seedLiveStretchClusterOffItsArbiter,
@@ -442,13 +451,18 @@ func seedRenamedStretchRule(t *testing.T, ctx workspace.Context) {
 	})
 }
 
-func seedArbiterConvergeRecordRefresh(t *testing.T, ctx workspace.Context) {
+func seedArbiterConvergeRecordRefresh(t *testing.T, ctx workspace.Context, rewrite func(*testing.T, workspace.Context)) {
 	t.Helper()
-	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	before, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
 	if err != nil {
-		t.Fatalf("load desired state: %v", err)
+		t.Fatalf("load desired state before the rewrite: %v", err)
 	}
-	if err := refreshArbiterConvergeRecords(ctx, state, safetyAdvancedCephCluster); err != nil {
+	rewrite(t, ctx)
+	after, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state after the rewrite: %v", err)
+	}
+	if _, err := refreshArbiterConvergeRecords(ctx, before, after, safetyAdvancedCephCluster); err != nil {
 		t.Fatalf("refreshArbiterConvergeRecords: %v", err)
 	}
 }

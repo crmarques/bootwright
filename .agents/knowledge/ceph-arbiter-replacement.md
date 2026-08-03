@@ -58,8 +58,47 @@ the readiness gate sits between 3 and 4 rather than after the swap.
 
 **Behavior:** the procedure is resumable by construction. Step 3's poll and the
 `set_new_tiebreaker` guard both read live state, so a re-run after a failure at
-any step picks up where it stopped; a run whose desired arbiter already answers
-as `tiebreaker_mon` is a reported no-op.
+any step picks up where it stopped.
+
+**The no-op predicate is not `tiebreaker_mon`.** "Resume" and "nothing to do"
+must not read the same variable. `tiebreaker_mon == desired` becomes true at
+step 3, while the retirement in step 4 is still outstanding, so keying the no-op
+on it makes every re-run after a post-swap failure exit 0 with the replaced mon
+still voting and its host still enrolled — and `apply` then refuses on the
+tiebreaker drift the interrupted run created and routes back to a command that
+reports nothing to do. Settled therefore means the tiebreaker matches **and**
+there is no retirement residue: no mon in the monmap that the authored topology
+declares no node for, and no such host still running a mon daemon. The residue
+also names what to retire, so the resumed run knows its target without the
+promotion that first identified it. Two or more undeclared mons is ambiguous and
+refuses rather than guessing which one an interrupted run left behind.
+
+**A mon daemon name is not a cephadm host name.** `mon rm` takes the daemon
+name; `orch host drain`/`orch host rm` take the hostname cephadm registered,
+which is the FQDN the node identity wrote (ADR 0035/0036). Resolve the host from
+`orch host ls` and keep the two names apart in the rendered vars — deriving the
+host from the monmap works only while short name and registered hostname
+coincide, and `orch host rm` treats `Unknown host` as success, so a wrong name
+retires nothing and reports success. `verify.yml` asserts against `orch host ls`
+for that reason, not against the monmap alone.
+
+**The plan must be recomputed after the input is re-authored.**
+`--new-arbiter-machine` writes the bare machine name into the input, but the
+loader composes node names into FQDNs from `Environment.spec.domains`. A plan
+built from the in-memory promotion therefore carries a bare name that
+`ceph orch host add` fails `check-host` on in any domain-bearing context. Reload
+the state after the rewrite, recompute the plan from it, and re-run the
+authorization gates against the recomputed plan — the loader stays the single
+owner of node-name normalization, and no gate is skipped because the plan
+changed under it.
+
+**Refreshing the converge records must not rebaseline what the run never
+converged.** The arbiter playbook converges the tiebreaker only, so re-stamping
+every `storageCluster` record with the current desired hash also marks any
+unrelated edit in the same commit as reconciled, destroying the drift refusal
+that would have caught it. Refresh a record only when it still matches the
+desired state as it stood *before* the rewrite; otherwise leave it drifted and
+name the `bootwright apply` that converges the rest.
 
 **When it bites — the disaster variants:**
 

@@ -35,9 +35,7 @@
   ansible.builtin.set_fact:
     bootwright_arbiter_mon_dump_raw: "{{ bootwright_arbiter_mon_dump.stdout | default('') | trim }}"
     bootwright_arbiter_stretch_live: "{{ bootwright_arbiter_monmap.stretch_mode | default(false) | bool }}"
-    bootwright_arbiter_live_mon: "{{ bootwright_arbiter_monmap.tiebreaker_mon | default('') }}"
-    bootwright_arbiter_live_mon_names: >-
-      {{ bootwright_arbiter_monmap.mons | default([]) | map(attribute='name') | list }}
+    bootwright_arbiter_live_tiebreaker: "{{ bootwright_arbiter_monmap.tiebreaker_mon | default('') }}"
     bootwright_arbiter_absent_mons: >-
       {{ bootwright_arbiter_monmap.mons | default([])
          | rejectattr('rank', 'in', bootwright_arbiter_monmap.quorum | default([]))
@@ -69,19 +67,34 @@
       Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
     quiet: true
 
-- name: Record whether the desired arbiter already holds the tiebreaker
+- name: Record whether the replacement is complete, mon and host alike
   ansible.builtin.set_fact:
     bootwright_arbiter_settled: >-
-      {{ bootwright_arbiter_live_mon == bootwright_arbiter_desired_mon }}
+      {{ bootwright_arbiter_live_tiebreaker == bootwright_arbiter_desired_mon
+         and (bootwright_arbiter_live_mon | default('') | length) == 0
+         and (bootwright_arbiter_live_node | default('') | length) == 0 }}
   changed_when: false
 
 - name: Refuse a tiebreaker the live monmap does not name
   ansible.builtin.assert:
     that:
-      - (bootwright_arbiter_live_mon | length) > 0
+      - (bootwright_arbiter_live_tiebreaker | length) > 0
     fail_msg: >-
       Storage cluster {{ bootwright_arbiter_cluster_name }} reports stretch mode but names
       no `tiebreaker_mon` in its monmap. Bootwright will not guess which mon to retire.
       Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
     quiet: true
-  when: not (bootwright_arbiter_settled | bool)
+
+- name: Refuse a replacement whose planned tiebreaker no longer matches the live monmap
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_live_tiebreaker == bootwright_arbiter_tiebreaker_mon
+        or bootwright_arbiter_live_tiebreaker == bootwright_arbiter_desired_mon
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} now reports
+      mon.{{ bootwright_arbiter_live_tiebreaker }} as its stretch tiebreaker, but this run
+      planned the move from mon.{{ bootwright_arbiter_tiebreaker_mon }}. The tiebreaker
+      changed between the read that built the plan and this step, so the plan no longer
+      describes the cluster. Re-run the command to plan against the monmap as it stands.
+      Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
+    quiet: true

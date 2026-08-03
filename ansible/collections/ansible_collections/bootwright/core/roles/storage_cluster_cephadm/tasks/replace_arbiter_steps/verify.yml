@@ -8,10 +8,11 @@
   retries: 12
   delay: 10
   until: >-
-    bootwright_arbiter_final_dump.rc | default(1) | int == 0
-    and bootwright_arbiter_live_mon not in
-        ((bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json).mons
-         | default([]) | map(attribute='name') | list)
+    ((bootwright_arbiter_final_dump.rc | default(1) | int == 0)
+     and bootwright_arbiter_live_mon not in
+         ((bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json).mons
+          | default([]) | map(attribute='name') | list))
+    or ((bootwright_arbiter_final_dump.attempts | default(1) | int) >= 12)
 
 - name: Assert the replacement arbiter holds the tiebreaker and the replaced mon is gone
   vars:
@@ -36,6 +37,33 @@
       command resumes from wherever the procedure stopped.
       Live monmap: {{ bootwright_arbiter_final_dump.stdout | default('') | trim }}
     quiet: true
+
+- name: Read the orchestrator host list once the replacement has settled
+  ansible.builtin.command:
+    argv: [cephadm, shell, --, ceph, orch, host, ls, --format, json]
+  register: bootwright_arbiter_final_hosts
+  changed_when: false
+  failed_when: false
+
+- name: Assert the orchestrator no longer manages the replaced arbiter host
+  vars:
+    bootwright_arbiter_final_host_names: >-
+      {{ bootwright_arbiter_final_hosts.stdout | default('[]', true) | from_json
+         | map(attribute='hostname') | list }}
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_final_hosts.rc | default(1) | int == 0
+      - bootwright_arbiter_live_node not in bootwright_arbiter_final_host_names
+    fail_msg: >-
+      Storage cluster {{ bootwright_arbiter_cluster_name }} still manages host
+      {{ bootwright_arbiter_live_node }} in `ceph orch host ls`, so the replaced arbiter
+      host remains eligible for daemon placement even though its mon is gone. The
+      tiebreaker has ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}. Remove the
+      host with `ceph orch host rm {{ bootwright_arbiter_live_node }}` and re-run the
+      command to finish the retirement. Hosts:
+      {{ bootwright_arbiter_final_host_names | join(', ') }}
+    quiet: true
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
 
 - name: Report the settled stretch tiebreaker
   ansible.builtin.debug:

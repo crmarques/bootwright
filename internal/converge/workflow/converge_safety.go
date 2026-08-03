@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -226,27 +227,61 @@ var storageClusterConvergeTaskKinds = map[string]bool{
 	ApplyTaskKindStorageCluster:    true,
 }
 
-func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster string, tasks []ApplyTask, now time.Time) error {
+func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster string, before, after []ApplyTask, now time.Time) ([]string, error) {
 	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(cluster) == "" {
-		return nil
+		return nil, nil
 	}
-	for i := range tasks {
-		task := tasks[i]
+	var carried []string
+	for i := range after {
+		task := after[i]
 		if task.Entry.Cluster != cluster || !storageClusterConvergeTaskKinds[task.Entry.Kind] {
 			continue
 		}
-		_, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+		record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !found {
 			continue
 		}
+		matched, err := recordMatchesTask(record, applyTaskByID(before, task.Entry.ID))
+		if err != nil {
+			return nil, err
+		}
+		if !matched {
+			carried = append(carried, task.Entry.Label)
+			continue
+		}
 		if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusReconciled, now); err != nil {
-			return err
+			return nil, err
+		}
+	}
+	sort.Strings(carried)
+	return carried, nil
+}
+
+func applyTaskByID(tasks []ApplyTask, id string) *ApplyTask {
+	for i := range tasks {
+		if tasks[i].Entry.ID == id {
+			return &tasks[i]
 		}
 	}
 	return nil
+}
+
+func recordMatchesTask(record ConvergeSafetyRecord, task *ApplyTask) (bool, error) {
+	if task == nil {
+		return false, nil
+	}
+	desiredHash, err := ApplyTaskDesiredHash(*task)
+	if err != nil {
+		return false, err
+	}
+	structuralHash, err := ApplyTaskStructuralHash(*task)
+	if err != nil {
+		return false, err
+	}
+	return record.DesiredHash == desiredHash && record.StructuralHash == structuralHash, nil
 }
 
 type applyTaskHashCache struct {

@@ -65,6 +65,8 @@
   until: >-
     bootwright_arbiter_daemon_rm.rc | default(1) | int == 0
     or (bootwright_arbiter_daemon_rm.stderr | default('') is search('Unable to find|does not exist|not found'))
+    or ((bootwright_arbiter_daemon_rm.attempts | default(1) | int) >= 12)
+  when: (bootwright_arbiter_live_mon | default('') | length) > 0
 
 - name: Read the monmap after retiring the replaced arbiter daemon
   ansible.builtin.command:
@@ -110,6 +112,26 @@
   until: >-
     bootwright_arbiter_host_rm.rc | default(1) | int == 0
     or (bootwright_arbiter_host_rm.stderr | default('') is search('Unknown host|does not exist|not found'))
+    or ((bootwright_arbiter_host_rm.attempts | default(1) | int) >= 12)
+  when: (bootwright_arbiter_live_node | default('') | length) > 0
+
+- name: Refuse a replaced arbiter host the orchestrator still carries
+  ansible.builtin.assert:
+    that:
+      - bootwright_arbiter_host_rm.rc | default(0) | int == 0
+        or (bootwright_arbiter_host_rm.stderr | default('') is search('Unknown host|does not exist|not found'))
+    fail_msg: >-
+      `ceph orch host rm {{ bootwright_arbiter_live_node }}` on storage cluster
+      {{ bootwright_arbiter_cluster_name }} did not remove the replaced arbiter host, so
+      cephadm still manages it and can still place daemons on it. The tiebreaker has
+      ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}, so the cluster is correct
+      but still carries the retired host. Drain it by hand with
+      `ceph orch host drain {{ bootwright_arbiter_live_node }}` and re-run the command to
+      finish the retirement.
+      rc: {{ bootwright_arbiter_host_rm.rc | default('<none>') }}
+      stdout: {{ bootwright_arbiter_host_rm.stdout | default('') }}
+      stderr: {{ bootwright_arbiter_host_rm.stderr | default('') }}
+    quiet: true
   when: (bootwright_arbiter_live_node | default('') | length) > 0
 
 - name: Remove the arbiter replacement work directory from the seed
