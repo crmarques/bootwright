@@ -37,6 +37,7 @@ current specs and code before judging.
 | `provisioning-logic-review.md` | Reviewing the provisioning graph — closure, dependency ordering, locks, parallelism, and resumability |
 | `idempotency-safety-audit.md` | Auditing idempotency and destructive-operation safety against a user-supplied scenario file (read-only) |
 | `apply-destroy-safety-contract.md` | Reviewing `apply`/`destroy` command and flag semantics for spec/docs/code coherence — no input; self-generated scenarios from a fixed two-DC baseline, then implements the guardrails |
+| `usage-flow-review.md` | The combined scenario-driven sweep (merges `code-flow-review`, `idempotency-safety-audit`, `apply-destroy-safety-contract`) — self-generated scenarios from the advanced two-DC baseline traced through all code for bugs, unhandled cases, missing gates, idempotency breaks, and duplication; outputs findings and a prioritized fix plan |
 | `security-audit.md` | Running a dedicated deep security pass — secrets, privilege, TLS/trust, and supply chain |
 | `state-lifecycle-scenario-review.md` | Pressure-testing lifecycle transitions (apply/destroy/recreate) across many ownership and state scenarios — read-only matrix; proposes safety locks, edits nothing |
 
