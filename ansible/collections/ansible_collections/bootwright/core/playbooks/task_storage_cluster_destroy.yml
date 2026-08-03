@@ -57,37 +57,28 @@
         - not (bootwright_node_access_connection_available | default(false) | bool)
 
     - name: Classify how a storage host refused its teardown connection
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_node_access
+        tasks_from: classify_absence.yml
       vars:
-        bootwright_storage_absence_pattern: >-
-          No route to host|Network is unreachable|Host is down|Connection timed out|Operation
-          timed out|Connection refused|port 22: Connection|Destination Host Unreachable
+        bootwright_node_access_absence_diagnostic: >-
+          {{ bootwright_storage_reachable_probe.msg | default('') }}
+      when:
+        - bootwright_storage_reachable_probe.unreachable | default(false) | bool
+        - >-
+          bootwright_node_access is not defined
+          or (bootwright_node_access_connection_available | default(false) | bool)
+
+    - name: Record how a storage host refused its teardown connection
+      vars:
         bootwright_storage_identity_refused: >-
           {{ (bootwright_node_access is defined)
              and not (bootwright_node_access_connection_available | default(false) | bool) }}
-        bootwright_storage_identity_detail: >-
-          {{ (bootwright_node_access_target_endpoint | default(inventory_hostname))
-             ~ ' exited ' ~ (bootwright_node_access_target_probe.rc | default('unknown') | string)
-             ~ ' for `sudo -n true` (' ~ (bootwright_node_access_target_probe.stderr | default('') | trim) ~ '); '
-             ~ (bootwright_node_access_install_endpoint | default(inventory_hostname))
-             ~ ' exited ' ~ (bootwright_node_access_install_probe.rc | default('unknown') | string)
-             ~ ' for `true` (' ~ (bootwright_node_access_install_probe.stderr | default('') | trim) ~ ')' }}
-        bootwright_storage_probe_timed_out: >-
-          {{ [(bootwright_node_access_target_probe.rc | default(0) | int),
-               (bootwright_node_access_install_probe.rc | default(0) | int)]
-             | select('in', [124, 137, 143]) | list | length > 0 }}
       ansible.builtin.set_fact:
         bootwright_storage_node_absent: >-
-          {{
-            (
-              (bootwright_storage_identity_detail is search(bootwright_storage_absence_pattern))
-              or (bootwright_storage_probe_timed_out | bool)
-            )
-            if (bootwright_storage_identity_refused | bool)
-            else ((bootwright_storage_reachable_probe.msg | default(''))
-                  is search(bootwright_storage_absence_pattern))
-          }}
+          {{ bootwright_node_access_node_absent | default(false) | bool }}
         bootwright_storage_node_refusal: >-
-          {{ bootwright_storage_identity_detail | trim
+          {{ bootwright_node_access_node_refusal | default('') | trim
              if (bootwright_storage_identity_refused | bool)
              else (bootwright_storage_reachable_probe.msg | default('') | trim) }}
       changed_when: false

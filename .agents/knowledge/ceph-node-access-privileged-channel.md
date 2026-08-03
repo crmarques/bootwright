@@ -284,19 +284,26 @@ the node — a token given for an absent node silently consuming a running one.
 Teardown sets `bootwright_node_access_probe_fail_when_unreachable: false`, so
 `probe.yml`'s accurate multi-cause message (apply-only) was discarded.
 
-**Fix (ADR 0039):** the destroy play classifies before it may skip, and **absence
-is matched positively**. `Classify how a storage host refused its teardown
-connection` reads the two probe registers (identity path) or the ping `msg`
-(unmanaged-access path) and sets `bootwright_storage_node_absent` — true ONLY for
-a connection-level failure (`No route to host`, `Network is unreachable`,
-`Host is down`, `Connection timed out`, `Operation timed out`,
-`Connection refused`, `port 22: Connection`, `Destination Host Unreachable`) or a
-probe the `timeout` wrapper killed (rc 124/137/143). `Refuse a storage host this
+**Fix (ADR 0039):** every teardown classifies before it may skip, and **absence
+is matched positively**. The classification lives once, in the node-access role's
+`classify_absence.yml`: it reads `bootwright_node_access_absence_diagnostic` plus
+`bootwright_node_access_absence_timed_out` and sets
+`bootwright_node_access_node_absent` — true ONLY for a connection-level failure
+(`No route to host`, `Network is unreachable`, `Host is down`,
+`Connection timed out`, `Operation timed out`, `Connection refused`,
+`port 22: Connection`, `Destination Host Unreachable`) or a probe the `timeout`
+wrapper killed (rc 124/137/143). `select_connection.yml` records
+`bootwright_node_access_node_refusal` (endpoint, rc and stderr of both probes),
+defaults the verdict to false, and classifies only when
+`bootwright_node_access_connection_available` is false — **a node that answered
+is never absent**. The plays feed the ping `msg` to the same file on the paths
+where an identity did answer, and never re-derive the pattern.
+`bootwright_storage_node_absent` / `bootwright_storage_node_refusal` are the
+destroy play's thin aliases over that verdict. `Refuse a storage host this
 teardown cannot prove absent` is a hard assert with NO token in its `when`,
 before the reachability assert and the `end_host` skip, so `any_errors_fatal`
-aborts. Both messages print `bootwright_storage_node_refusal` (endpoint, rc and
-stderr of both probes), and the skip warning plus the controller-side
-`skippedNodeReasons` carry it per node.
+aborts. Both messages print the refusal, and the skip warning plus the
+controller-side `skippedNodeReasons` carry it per node.
 
 **The default is the whole fix — do NOT invert it back.** The first cut
 enumerated the *refusals* (`Permission denied`, `sudo:`, host-key errors) and
@@ -306,10 +313,22 @@ tasks are `changed_when: false` + `failed_when: false`, so the default ansible
 callback prints no rc/stderr for them: an evidence-free skip is invisible in the
 run log too. Whatever cannot be read as absence is not absence.
 
-**Rule:** any future consumer of `bootwright_node_access_connection_available`
-that can SKIP work must classify first. `task_machine_registration_deregister.yml`
-and `task_storage_node_access_destroy.yml` still collapse the two (they wipe no
-device, so the blast radius is a still-registered RHSM host, not a live OSD).
+**Rule:** any consumer of `bootwright_node_access_connection_available` that can
+SKIP work must classify first — read `bootwright_node_access_node_absent`, never
+the availability flag, in the `when` of an `end_host`. The two best-effort plays
+close B-059 by **skipping with a visible warning** rather than failing closed,
+because neither wipes a device: `task_machine_registration_deregister.yml` ends
+the node it proved absent silently, then warns per node that the RHSM
+registration was NOT released and the subscription stays consumed against the
+hardware's DMI system UUID (it collides with the next install of the same
+machine) before ending the rest; `task_storage_node_access_destroy.yml` does the
+same and names the cephadm cluster key and the Bootwright-authored access that
+stay authorized. Only `task_storage_cluster_destroy.yml` fails closed, because
+only it wipes OSD devices — do not weaken that asymmetry into a single policy.
+Guarded by TestStorageNodeAbsenceIsClassifiedOnceForEveryTeardown,
+TestMachineRegistrationDeregisterEndsOnlyANodeItProvesAbsent,
+TestStorageNodeAccessDestroyEndsOnlyANodeItProvesAbsent and
+TestStorageCephadmDestroySkipsOnlyANodeItProvesAbsent.
 
 ## Related invariants
 

@@ -1,0 +1,16 @@
+---
+- name: Classify a storage node teardown refusal as proven absence
+  vars:
+    bootwright_node_access_absence_pattern: >-
+      No route to host|Network is unreachable|Host is down|Connection timed out|Operation
+      timed out|Connection refused|port 22: Connection|Destination Host Unreachable
+  ansible.builtin.set_fact:
+    bootwright_node_access_node_absent: >-
+      {{
+        ((bootwright_node_access_absence_diagnostic | default('', true))
+         is search(bootwright_node_access_absence_pattern))
+        or (bootwright_node_access_absence_timed_out | default(false) | bool)
+      }}
+  delegate_to: localhost
+  become: false
+  changed_when: false

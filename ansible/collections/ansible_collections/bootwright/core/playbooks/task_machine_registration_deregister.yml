@@ -82,6 +82,45 @@
         - bootwright_node_access is defined
         - not (bootwright_node_access_connection_available | default(false) | bool)
 
+    - name: Classify how a node refused its deregistration connection
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_node_access
+        tasks_from: classify_absence.yml
+      vars:
+        bootwright_node_access_absence_diagnostic: >-
+          {{ bootwright_registration_reachable_probe.msg | default('') }}
+      when:
+        - bootwright_registration_reachable_probe.unreachable | default(false) | bool
+        - >-
+          bootwright_node_access is not defined
+          or (bootwright_node_access_connection_available | default(false) | bool)
+
+    - name: End nodes this deregistration proved absent
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_registration_reachable_probe.unreachable | default(false) | bool
+        - bootwright_node_access_node_absent | default(false) | bool
+
+    - name: Warn that a node Bootwright could not reach keeps its RHSM registration
+      vars:
+        bootwright_registration_refusal: >-
+          {{ bootwright_node_access_node_refusal | default('') | trim
+             if ((bootwright_node_access is defined)
+                 and not (bootwright_node_access_connection_available | default(false) | bool))
+             else (bootwright_registration_reachable_probe.msg | default('') | trim) }}
+      ansible.builtin.debug:
+        msg: >-
+          Machine {{ bootwright_storage_node_name | default(inventory_hostname) }} was skipped by
+          RHSM deregistration and this run could not prove the node absent:
+          {{ bootwright_registration_refusal | default('no connection diagnostic was recorded', true) }}.
+          Its RHSM registration was NOT released, so the subscription stays consumed against this
+          hardware's DMI system UUID and the stale consumer will reject the next install of the
+          same machine. Fix the identity named above (re-authorize the key, restore the NOPASSWD
+          grant of {{ bootwright_node_access.user | default('the orchestration account') }}, or
+          pass --ssh-sudo-password) and re-run destroy, or delete the stale content host on the
+          subscription service by hand.
+      when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
+
     - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host
       when: bootwright_registration_reachable_probe.unreachable | default(false) | bool

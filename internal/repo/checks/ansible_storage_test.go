@@ -16,18 +16,55 @@ func TestStorageNodeAccessDestroySelectsAReachableIdentity(t *testing.T) {
 	}
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
 	selectIdx := findAnsibleTask(t, tasks, "Select storage node teardown connection")
-	endIdx := findAnsibleTask(t, tasks, "End nodes with no reachable storage node identity")
 	pingIdx := findAnsibleTask(t, tasks, "Probe node reachability and escalation before revoking node access")
+	recordIdx := findAnsibleTask(t, tasks, "Record an unreachable node when no storage identity answers")
 	revokeIdx := findAnsibleTask(t, tasks, "Revoke storage node orchestration access")
-	if !(selectIdx < endIdx && endIdx < pingIdx && pingIdx < revokeIdx) {
-		t.Fatalf("node-access destroy must select a reachable identity, verify escalation, then revoke (select=%d end=%d ping=%d revoke=%d)", selectIdx, endIdx, pingIdx, revokeIdx)
+	if !(selectIdx < pingIdx && pingIdx < recordIdx && recordIdx < revokeIdx) {
+		t.Fatalf("node-access destroy must select a reachable identity, verify escalation, then revoke (select=%d ping=%d record=%d revoke=%d)", selectIdx, pingIdx, recordIdx, revokeIdx)
 	}
 	include, ok := tasks[selectIdx]["ansible.builtin.include_role"].(map[string]any)
 	if !ok || include["name"] != "bootwright.core.storage_node_access" || include["tasks_from"] != "select_connection.yml" {
 		t.Fatalf("node-access destroy must use the shared teardown connection selector, got %v", tasks[selectIdx])
 	}
-	if got := fmt.Sprint(tasks[endIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
-		t.Fatalf("node-access destroy must end hosts when neither identity answers, got when=%v", tasks[endIdx]["when"])
+	if got := fmt.Sprint(tasks[pingIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("node-access destroy must not run a second SSH probe when neither identity answers, got when=%v", tasks[pingIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[recordIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Fatalf("node-access destroy must record an unavailable managed identity as unreachable, got when=%v", tasks[recordIdx]["when"])
+	}
+}
+
+func TestStorageNodeAccessDestroyEndsOnlyANodeItProvesAbsent(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_node_access_destroy.yml"
+	plays := readAnsiblePlays(t, path)
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify how a node refused its node access teardown connection")
+	absentIdx := findAnsibleTask(t, tasks, "End nodes this node access teardown proved absent")
+	warnIdx := findAnsibleTask(t, tasks, "Warn that a node Bootwright could not reach keeps its authorized access")
+	endIdx := findAnsibleTask(t, tasks, "End nodes Bootwright cannot reach or escalate on")
+	revokeIdx := findAnsibleTask(t, tasks, "Revoke storage node orchestration access")
+	if !(classifyIdx < absentIdx && absentIdx < warnIdx && warnIdx < endIdx && endIdx < revokeIdx) {
+		t.Fatalf("node-access destroy must classify absence, end the nodes it proved absent, then warn before it ends the rest (classify=%d absent=%d warn=%d end=%d revoke=%d)", classifyIdx, absentIdx, warnIdx, endIdx, revokeIdx)
+	}
+	include, ok := tasks[classifyIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.storage_node_access" || include["tasks_from"] != "classify_absence.yml" {
+		t.Fatalf("node-access destroy must classify through the shared absence classifier, not a private copy, got %v", tasks[classifyIdx])
+	}
+	when := fmt.Sprint(tasks[absentIdx]["when"])
+	if !strings.Contains(when, "bootwright_node_access_node_absent") {
+		t.Errorf("the silent end_host must read proven absence, got when=%v", tasks[absentIdx]["when"])
+	}
+	if strings.Contains(when, "bootwright_node_access_connection_available") {
+		t.Errorf("an identity refusal is not absence: ending the host on the availability flag revokes nothing and leaves the cephadm cluster key authorized while the run reports success, got when=%v", tasks[absentIdx]["when"])
+	}
+	if _, isEnd := tasks[endIdx]["ansible.builtin.meta"]; !isEnd {
+		t.Fatalf("the unproven-absence path must still end the host, got %v", tasks[endIdx])
+	}
+	warn := fmt.Sprint(tasks[warnIdx]["ansible.builtin.debug"])
+	for _, want := range []string{"could not prove the node absent", "cephadm cluster key", "stay authorized"} {
+		if !strings.Contains(warn, want) {
+			t.Errorf("the skip warning must name the residue it leaves; missing %q in %v", want, tasks[warnIdx]["ansible.builtin.debug"])
+		}
 	}
 }
 
@@ -1727,6 +1764,40 @@ func TestMachineRegistrationDeregisterSelectsStorageTeardownConnection(t *testin
 	}
 }
 
+func TestMachineRegistrationDeregisterEndsOnlyANodeItProvesAbsent(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_registration_deregister.yml"
+	plays := readAnsiblePlays(t, path)
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify how a node refused its deregistration connection")
+	absentIdx := findAnsibleTask(t, tasks, "End nodes this deregistration proved absent")
+	warnIdx := findAnsibleTask(t, tasks, "Warn that a node Bootwright could not reach keeps its RHSM registration")
+	endIdx := findAnsibleTask(t, tasks, "End nodes Bootwright cannot reach or escalate on")
+	deregisterIdx := findAnsibleTask(t, tasks, "Deregister machine from RHSM")
+	if !(classifyIdx < absentIdx && absentIdx < warnIdx && warnIdx < endIdx && endIdx < deregisterIdx) {
+		t.Fatalf("deregistration must classify absence, end the nodes it proved absent, then warn before it ends the rest (classify=%d absent=%d warn=%d end=%d deregister=%d)", classifyIdx, absentIdx, warnIdx, endIdx, deregisterIdx)
+	}
+	include, ok := tasks[classifyIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.storage_node_access" || include["tasks_from"] != "classify_absence.yml" {
+		t.Fatalf("deregistration must classify through the shared absence classifier, not a private copy, got %v", tasks[classifyIdx])
+	}
+	when := fmt.Sprint(tasks[absentIdx]["when"])
+	if !strings.Contains(when, "bootwright_node_access_node_absent") {
+		t.Errorf("the silent end_host must read proven absence, got when=%v", tasks[absentIdx]["when"])
+	}
+	if strings.Contains(when, "bootwright_node_access_connection_available") {
+		t.Errorf("an identity refusal is not absence: ending the host on the availability flag leaves the subscription consumed against the hardware DMI UUID and it collides with the next install, got when=%v", tasks[absentIdx]["when"])
+	}
+	if _, isEnd := tasks[endIdx]["ansible.builtin.meta"]; !isEnd {
+		t.Fatalf("the unproven-absence path must still end the host, got %v", tasks[endIdx])
+	}
+	warn := fmt.Sprint(tasks[warnIdx]["ansible.builtin.debug"])
+	for _, want := range []string{"could not prove the node absent", "RHSM registration was NOT released", "DMI system UUID"} {
+		if !strings.Contains(warn, want) {
+			t.Errorf("the skip warning must name the residue it leaves; missing %q in %v", want, tasks[warnIdx]["ansible.builtin.debug"])
+		}
+	}
+}
+
 func TestStorageCephadmReclaimSkipsMarkerRecordedDevices(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve OSD devices to reclaim on this host")
@@ -2017,11 +2088,12 @@ func TestStorageCephadmDestroySkipsOnlyANodeItProvesAbsent(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
 	classifyIdx := findAnsibleTask(t, tasks, "Classify how a storage host refused its teardown connection")
+	recordIdx := findAnsibleTask(t, tasks, "Record how a storage host refused its teardown connection")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage host this teardown cannot prove absent")
 	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --authorize unreachable-nodes")
 	skipIdx := findAnsibleTask(t, tasks, "Stop tearing down unreachable storage hosts")
-	if !(classifyIdx < refuseIdx && refuseIdx < reachableIdx && reachableIdx < skipIdx) {
-		t.Fatalf("destroy must classify the refusal and fail closed on a node it cannot prove absent before it may skip anything (classify=%d refuse=%d reachable=%d skip=%d)", classifyIdx, refuseIdx, reachableIdx, skipIdx)
+	if !(classifyIdx < recordIdx && recordIdx < refuseIdx && refuseIdx < reachableIdx && reachableIdx < skipIdx) {
+		t.Fatalf("destroy must classify the refusal and fail closed on a node it cannot prove absent before it may skip anything (classify=%d record=%d refuse=%d reachable=%d skip=%d)", classifyIdx, recordIdx, refuseIdx, reachableIdx, skipIdx)
 	}
 	if _, ok := tasks[refuseIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("the unproven-absence refusal must be a hard assert so any_errors_fatal aborts the teardown, got %v", tasks[refuseIdx])
@@ -2036,21 +2108,70 @@ func TestStorageCephadmDestroySkipsOnlyANodeItProvesAbsent(t *testing.T) {
 	if !strings.Contains(assertion, "bootwright_storage_node_refusal") {
 		t.Errorf("the refusal must print what the probes reported, or the operator is told a node was skipped with no evidence, got %v", tasks[refuseIdx]["ansible.builtin.assert"])
 	}
-	classify := fmt.Sprint(tasks[classifyIdx]["vars"]) + fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"])
-	for _, want := range []string{"bootwright_node_access_target_probe", "bootwright_node_access_install_probe", "bootwright_storage_reachable_probe"} {
-		if !strings.Contains(classify, want) {
-			t.Errorf("the classification must read %s so the teardown reports what actually refused instead of the power-off reading, got %v", want, tasks[classifyIdx])
+	include, ok := tasks[classifyIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.storage_node_access" || include["tasks_from"] != "classify_absence.yml" {
+		t.Fatalf("storage destroy must classify through the shared absence classifier, not a private copy, got %v", tasks[classifyIdx])
+	}
+	if got := fmt.Sprint(tasks[classifyIdx]["vars"]); !strings.Contains(got, "bootwright_storage_reachable_probe") {
+		t.Errorf("the unmanaged-access path must feed the ping diagnostic to the classifier, got vars=%v", tasks[classifyIdx]["vars"])
+	}
+	record := fmt.Sprint(tasks[recordIdx]["vars"]) + fmt.Sprint(tasks[recordIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_node_access_node_absent", "bootwright_node_access_node_refusal", "bootwright_storage_reachable_probe"} {
+		if !strings.Contains(record, want) {
+			t.Errorf("the classification must read %s so the teardown reports what actually refused instead of the power-off reading, got %v", want, tasks[recordIdx])
 		}
 	}
-	for _, want := range []string{"No route to host", "Connection timed out", "Connection refused"} {
-		if !strings.Contains(classify, want) {
-			t.Errorf("absence must be matched positively; %q is one of the connection-level failures that prove a node could not be contacted, got %v", want, tasks[classifyIdx]["vars"])
+	if strings.Contains(record, "No route to host") {
+		t.Errorf("the destroy play must consume the hoisted absence verdict, not re-derive one from its own copy of the pattern, got %v", tasks[recordIdx])
+	}
+}
+
+func TestStorageNodeAbsenceIsClassifiedOnceForEveryTeardown(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_node_access/tasks/"
+	classifyTasks := readAnsibleTasks(t, base+"classify_absence.yml")
+	if len(classifyTasks) != 1 {
+		t.Fatalf("the shared absence classifier must be one task, got %d", len(classifyTasks))
+	}
+	pattern := fmt.Sprint(classifyTasks[0]["vars"])
+	for _, want := range []string{"No route to host", "Network is unreachable", "Host is down", "Connection timed out", "Operation timed out", "Connection refused", "port 22: Connection", "Destination Host Unreachable"} {
+		if !strings.Contains(pattern, want) {
+			t.Errorf("absence must be matched positively; %q is one of the connection-level failures that prove a node could not be contacted, got %s", want, pattern)
 		}
 	}
-	for _, reject := range []string{"Permission denied", "Host key verification"} {
-		if strings.Contains(classify, reject) {
-			t.Errorf("the classification must not enumerate identity refusals like %q: anything that is not proven absence already fails closed, and listing them invites the inverse default, got %v", reject, tasks[classifyIdx]["vars"])
+	for _, reject := range []string{"Permission denied", "Host key verification", "sudo:"} {
+		if strings.Contains(pattern, reject) {
+			t.Errorf("the classification must not enumerate identity refusals like %q: anything that is not proven absence is not absence, and listing them invites the inverse default, got %s", reject, pattern)
 		}
+	}
+	setFact, ok := classifyTasks[0]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the shared absence classifier must be a set_fact, got %v", classifyTasks[0])
+	}
+	verdict := fmt.Sprint(setFact["bootwright_node_access_node_absent"])
+	for _, want := range []string{"bootwright_node_access_absence_diagnostic", "bootwright_node_access_absence_timed_out"} {
+		if !strings.Contains(verdict, want) {
+			t.Errorf("the shared verdict must read %q so every teardown gets the same answer, got %v", want, setFact)
+		}
+	}
+
+	selector := readAnsibleTasks(t, base+"select_connection.yml")
+	availableIdx := findAnsibleTask(t, selector, "Record whether a storage node identity is reachable for teardown")
+	refusalIdx := findAnsibleTask(t, selector, "Record how the storage node answered its teardown identities")
+	classifyIdx := findAnsibleTask(t, selector, "Classify whether the storage node teardown refusal proves absence")
+	if !(availableIdx < refusalIdx && refusalIdx < classifyIdx) {
+		t.Fatalf("the selector must record the refusal before it classifies it (available=%d refusal=%d classify=%d)", availableIdx, refusalIdx, classifyIdx)
+	}
+	refusal := fmt.Sprint(selector[refusalIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_node_access_target_probe", "bootwright_node_access_install_probe", "bootwright_node_access_node_absent"} {
+		if !strings.Contains(refusal, want) {
+			t.Errorf("the recorded refusal must name what each identity reported and default the verdict, missing %q in %v", want, selector[refusalIdx])
+		}
+	}
+	if got := fmt.Sprint(selector[classifyIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
+		t.Errorf("a node that answered is never absent, so the selector must classify only a refusal, got when=%v", selector[classifyIdx]["when"])
+	}
+	if got := fmt.Sprint(selector[classifyIdx]["vars"]); !strings.Contains(got, "124") || !strings.Contains(got, "137") || !strings.Contains(got, "143") {
+		t.Errorf("a probe the timeout wrapper killed is proof the node never answered, got vars=%v", selector[classifyIdx]["vars"])
 	}
 }
 

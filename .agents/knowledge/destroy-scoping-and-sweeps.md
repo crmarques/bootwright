@@ -282,9 +282,12 @@ first repairs a missing canonical-FQDN alias by copying the already-trusted raw
 address entry under a `flock`; it never scans a new key or names a host-key
 algorithm, so FIPS and non-FIPS crypto policy remain owned by the installed SSH
 client. Existing canonical entries and explicit `knownHostsRef` content are
-never rewritten. If neither identity answers, storage destroy feeds that result
-through its normal fail-closed/`--authorize unreachable-nodes` classification, while the
-best-effort deregistration and final revoke plays end that host.
+never rewritten. If neither identity answers, the selector classifies the refusal
+once (`bootwright_node_access_node_absent`); storage destroy feeds that verdict
+through its fail-closed/`--authorize unreachable-nodes` gate, while the
+best-effort deregistration and final revoke plays end that host — silently only
+when the verdict proves it absent, otherwise after a per-node warning naming the
+RHSM registration and the authorized access they leave behind.
 
 The final revoke treats an already-absent orchestration account as a completed
 cleanup state. `ansible.posix.authorized_key` resolves the target user's home

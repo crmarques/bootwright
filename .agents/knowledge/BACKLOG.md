@@ -778,31 +778,6 @@ learned; this file records what it still owes.
 - Related: [disk-encryption-tpm.md](disk-encryption-tpm.md),
   [0037](../../specs/adr/0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md)
 
-## B-059 — Machine deregistration and node-access teardown still collapse "unreachable"
-- Status: open
-- Area: ceph / diagnostics
-- Origin: ceph-prd-01 full-context destroy 2026-08-01, a running node skipped as unreachable
-- Severity: low
-- Problem: ADR 0039 classified the teardown connection refusal in
-  `task_storage_cluster_destroy.yml` — a node that answers SSH and then rejects
-  every identity is no longer skippable — but the two other consumers of
-  `bootwright_node_access_connection_available` were left as they were.
-  `task_machine_registration_deregister.yml` ("End nodes Bootwright cannot reach
-  or escalate on") and `task_storage_node_access_destroy.yml` still read an
-  identity refusal as an absent node and end the host silently. Neither wipes a
-  device, so the blast radius is bounded: a node whose RHSM registration is never
-  released (it collides with the next install of the same hardware) and an
-  install account whose Bootwright-authored access is never revoked. See
-  [destroy-scoping-and-sweeps.md](destroy-scoping-and-sweeps.md) for how both
-  plays end a host today.
-- Exit: hoist the classification the destroy play now performs into the
-  `storage_node_access` selector so all three consumers read one
-  answered/no-answer fact, then decide per consumer whether an answering node
-  fails closed or is reported as skipped-with-cause. Pin with a test per play.
-- Related: [ceph-node-access-privileged-channel.md](ceph-node-access-privileged-channel.md),
-  [0039](../../specs/adr/0039-the-node-a-teardown-left-serving-the-cluster.md),
-  B-020
-
 ## B-069 — UX-review decisions still awaiting a product call
 - Status: open
 - Area: api / decisions

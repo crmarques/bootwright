@@ -34,6 +34,30 @@
   become: false
   changed_when: false
 
+- name: Record how the storage node answered its teardown identities
+  ansible.builtin.set_fact:
+    bootwright_node_access_node_refusal: >-
+      {{ (bootwright_node_access_target_endpoint | default(inventory_hostname))
+         ~ ' exited ' ~ (bootwright_node_access_target_probe.rc | default('unknown') | string)
+         ~ ' for `sudo -n true` (' ~ (bootwright_node_access_target_probe.stderr | default('') | trim) ~ '); '
+         ~ (bootwright_node_access_install_endpoint | default(inventory_hostname))
+         ~ ' exited ' ~ (bootwright_node_access_install_probe.rc | default('unknown') | string)
+         ~ ' for `true` (' ~ (bootwright_node_access_install_probe.stderr | default('') | trim) ~ ')' }}
+    bootwright_node_access_node_absent: false
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Classify whether the storage node teardown refusal proves absence
+  ansible.builtin.include_tasks: classify_absence.yml
+  vars:
+    bootwright_node_access_absence_diagnostic: "{{ bootwright_node_access_node_refusal }}"
+    bootwright_node_access_absence_timed_out: >-
+      {{ [(bootwright_node_access_target_probe.rc | default(0) | int),
+           (bootwright_node_access_install_probe.rc | default(0) | int)]
+         | select('in', [124, 137, 143]) | list | length > 0 }}
+  when: not (bootwright_node_access_connection_available | bool)
+
 - name: Select the reachable storage node identity for teardown
   ansible.builtin.set_fact:
     ansible_user: >-

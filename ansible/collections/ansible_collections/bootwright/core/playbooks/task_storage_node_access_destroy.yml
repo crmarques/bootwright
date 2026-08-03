@@ -40,11 +40,8 @@
         name: bootwright.core.storage_node_access
         tasks_from: select_connection.yml
 
-    - name: End nodes with no reachable storage node identity
-      ansible.builtin.meta: end_host
-      when: not (bootwright_node_access_connection_available | bool)
-
     - name: Probe node reachability and escalation before revoking node access
+      when: bootwright_node_access_connection_available | bool
       block:
         - name: Probe node reachability before revoking node access
           ansible.builtin.ping:
@@ -56,6 +53,47 @@
           ansible.builtin.set_fact:
             bootwright_node_access_reachable_probe:
               unreachable: true
+
+    - name: Record an unreachable node when no storage identity answers
+      ansible.builtin.set_fact:
+        bootwright_node_access_reachable_probe:
+          unreachable: true
+      when: not (bootwright_node_access_connection_available | bool)
+
+    - name: Classify how a node refused its node access teardown connection
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_node_access
+        tasks_from: classify_absence.yml
+      vars:
+        bootwright_node_access_absence_diagnostic: >-
+          {{ bootwright_node_access_reachable_probe.msg | default('') }}
+      when:
+        - bootwright_node_access_reachable_probe.unreachable | default(false) | bool
+        - bootwright_node_access_connection_available | bool
+
+    - name: End nodes this node access teardown proved absent
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_node_access_reachable_probe.unreachable | default(false) | bool
+        - bootwright_node_access_node_absent | default(false) | bool
+
+    - name: Warn that a node Bootwright could not reach keeps its authorized access
+      vars:
+        bootwright_node_access_destroy_refusal: >-
+          {{ bootwright_node_access_node_refusal | default('') | trim
+             if not (bootwright_node_access_connection_available | bool)
+             else (bootwright_node_access_reachable_probe.msg | default('') | trim) }}
+      ansible.builtin.debug:
+        msg: >-
+          Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }} was
+          skipped by the node access teardown and this run could not prove the node absent:
+          {{ bootwright_node_access_destroy_refusal | default('no connection diagnostic was recorded', true) }}.
+          Its cephadm cluster key and the Bootwright-authored access of
+          {{ bootwright_node_access.user | default('the orchestration account') }} stay authorized
+          on that node, and its root login stays as this run left it. Fix the identity named above
+          (re-authorize the key, restore the NOPASSWD grant, or pass --ssh-sudo-password) and
+          re-run destroy, or remove those authorized keys by hand before the hardware is reused.
+      when: bootwright_node_access_reachable_probe.unreachable | default(false) | bool
 
     - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host
