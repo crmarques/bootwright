@@ -126,6 +126,25 @@ name the `bootwright apply` that converges the rest.
   fallback, so it is gated on its own token rather than shared with the healthy
   path.
 
+**Where the replacement's site comes from (ADR 0048).** The promoted node takes
+its site from the candidate `Machine.spec.placement.site`, never from the
+arbiter it retires — that inheritance was B-073, and it made a dc3→dc4 move
+record dc3, so `crush_locations` named a datacenter the host was not in and the
+same-site predicate compared a label no host held. `ValidateCandidate` refuses a
+candidate with no site, and `rewriteTiebreaker` updates an authored `site` on the
+node and on `stretch.tiebreaker` **only when the key is already present**: an
+input that derived its sites keeps deriving them, and one that stated them keeps
+them true. There is deliberately no `--new-arbiter-site` flag — the site is a
+property of the machine, so moving sites means naming a machine that stands
+there.
+
+Because of that, the same-site emergency above is now *authorable*: a tiebreaker
+inside a data site is a WARN advisory rather than a validation error, so the
+input the verb writes still loads and re-applies. The hard stop stays with Ceph
+— `enable_stretch_mode` is idempotency-guarded on live `stretch_mode`, so an
+already-stretched cluster skips it, while a cluster that has never entered
+stretch mode still runs it and Ceph refuses the data-site tiebreaker outright.
+
 **Sources:** Red Hat Ceph Storage 7/8 *Troubleshooting Guide* — "Troubleshooting
 clusters in stretch mode"; IBM Storage Ceph 7.1 — "Replacing a tiebreaker with a
 new monitor" and "Replacing a tiebreaker with a monitor in quorum"; upstream

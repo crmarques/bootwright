@@ -95,6 +95,16 @@ Rules:
   `spec.containerClusters[]` / `spec.storageClusters[]` selection lists below.
   A single-zone fleet sets only `domains: {base: x}`; every other key then
   defaults to it.
+- `sites[]` is the estate's site registry: every site the estate spans, each an
+  object with a required DNS-label `name` (it renders as a CRUSH bucket name)
+  and an optional `description`. Names are unique. The registry is optional —
+  an estate that never names a site declares nothing — but as soon as anything
+  names a site (`Machine.spec.placement.site`, a topology node's `site`,
+  `stretch.dataSites`, or any `placement.sites` filter) it becomes required and
+  every reference must name a declared site. That is what makes a mistyped site
+  fail at load instead of silently becoming an extra CRUSH bucket. A declared
+  site no `Machine` stands in is an INFO advisory, not an error: a fallback
+  arbiter site may be declared before its candidate exists (ADR 0048).
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
@@ -490,6 +500,18 @@ Rules:
   `storage-cluster replace-arbiter --new-arbiter-machine` selects a candidate
   from. It requires `ceph-node`, because an arbiter candidate is first a storage
   node.
+- `spec.placement.site` names the site the machine physically stands in, from
+  the `Environment.spec.sites` registry. It is the **single writer** for
+  location: a `StorageCluster` topology node takes its `site` from the machine
+  it binds, and a node that authors a different one is refused. It is optional
+  in general and required exactly where a site has effect — a machine bound by
+  a cluster that declares `stretch` or narrows a placement by `sites`, and every
+  `ceph-arbiter`-capable machine once any `StorageCluster` declares stretch, so
+  `replace-arbiter` can place a promoted tiebreaker truthfully without
+  inheriting the retiring arbiter's label (ADR 0048). It is rendered as an
+  inventory fact on every machine; outside stretch mode nothing else consumes
+  it. `placement` is the home for finer topology (zone, rack) if CRUSH depth is
+  ever needed.
 
 ## MachineImage
 
@@ -1466,10 +1488,15 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
 - `spec.ceph.topology.nodes[]` require a `machineRef` to a `ceph-node`
   `Machine` and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
-  `site` is required exactly where it has effect — when
-  `spec.ceph.topology.stretch` is set (it becomes the cephadm CRUSH location)
-  or when any placement narrows by `sites` — and optional otherwise (no
-  location is rendered without stretch).
+  `site` is optional and **derived from the bound Machine's
+  `spec.placement.site`**; authoring it is allowed and then cross-checked — a
+  node whose site disagrees with its machine is a hard error, because a machine
+  stands in one site and the cluster cannot place it in another. A site is
+  required exactly where it has effect — when `spec.ceph.topology.stretch` is
+  set (it becomes the cephadm CRUSH location) or when any placement narrows by
+  `sites` — and optional otherwise (no location is rendered without stretch).
+  Where it is required, the requirement lands on the Machine
+  (`spec.placement.site`), which is the single writer.
   Optional `labels[]` pass additional free-form cephadm host labels (for
   example `_admin`) through verbatim; roles always become labels.
   `devices[]` is the lean OSD shorthand (literal paths ==
@@ -1546,22 +1573,26 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
     arbiter mon in a third site the cluster loses quorum if either data site
     fails, and `enable_stretch_mode` is skipped until a tiebreaker is authored.
     A *partially* authored tiebreaker (only `node`, or only `site`) is a hard
-    error, as is a `tiebreaker.node` that is not mon-only, carries OSD devices,
-    or sits in a data site.
-  - **Normalized:** `dataSites` from the topology's non-tiebreaker sites,
-    `tiebreaker.site` from the tiebreaker host's `site`, `ruleName` to
-    `stretch-rule`. Author `dataSites` only to exclude OSD-only sites the
-    derivation would wrongly include.
+    error, as is a `tiebreaker.node` that is not mon-only or carries OSD
+    devices. A tiebreaker that sits **in a data site** is a WARN advisory, not
+    an error: it is the acknowledged emergency shape `--authorize
+    same-site-arbiter` produces while the third site is gone, and it must load
+    and re-apply. Ceph still refuses `enable_stretch_mode` in that shape, so a
+    cluster not already stretched cannot enter stretch mode this way.
+  - **Normalized:** `dataSites` from the sites of the topology's non-tiebreaker
+    hosts (the tiebreaker is excluded **by node name**, so a tiebreaker sharing
+    a data site does not erase that site), `tiebreaker.site` from the
+    tiebreaker host's `site`, `ruleName` to `stretch-rule`. Author `dataSites`
+    only to exclude OSD-only sites the derivation would wrongly include.
   - **Replication:** not authorable; policy-less replicated pools always render
     `size: 4` / `minSize: 2` (the two-site stretch requirement); non-4/2 is
     unsupported. Authoring `stretch` on an existing cluster re-rules and resizes
     every policy-less pool on the next apply with no `StoragePool` change;
     `bootwright validate` prints a one-line notice naming the inheriting pools.
   - **Validation (post-normalize):** `dataSites` holds exactly two sites; each
-    data site holds exactly two `mon` hosts. When a tiebreaker is authored,
-    `tiebreaker.site` is distinct from the data sites and holds exactly one
-    `mon` host, and that host is mon-only
-    with no OSD `devices`. Erasure-coded pools are rejected; MDS, RGW, and
+    data site holds exactly two **non-tiebreaker** `mon` hosts. When a
+    tiebreaker is authored it carries the `mon` role and is mon-only with no
+    OSD `devices`. Erasure-coded pools are rejected; MDS, RGW, and
     ingress placement include at least two role-capable hosts per data site.
 
 ## StoragePlacementPolicy

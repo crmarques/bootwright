@@ -774,6 +774,13 @@ that proceeds:
   data-site mons (the emergency fallback while the third site is gone);
 - `--authorize degraded-quorum` — when declared mons are already out of quorum.
 
+The replacement's site comes from the candidate machine's
+`spec.placement.site`, so moving the arbiter to a *different* third site is just
+naming a machine that stands there — there is no site flag. A candidate with no
+`placement.site` is refused before anything runs: without it the promoted mon
+would inherit the retiring arbiter's location and report a datacenter it is not
+in.
+
 See [Replacing the arbiter](advanced/ceph-topologies.md#replacing-the-arbiter)
 for the full procedure and its preconditions.
 

@@ -54,6 +54,7 @@ The tables below describe only `spec`.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.capabilities[]` | No | — | Roles a machine fulfills. See the canonical set below. |
+| `spec.placement.site` | No | — | The site the machine stands in, from `Environment.spec.sites`. Required where a site has effect — a stretch storage node, or any `ceph-arbiter` machine in a stretched estate. See [Placement](#placement). |
 | `spec.substrate.providerRef` | No | — | Names the `InfraProvider` that supplies the substrate. |
 | `spec.substrate.profileRef` | No | — | Names a provider `machineProfiles[]` entry. Must be empty for `baremetal`. |
 | `spec.hardware.nics[]` | No | — | Physical NIC inventory. |
@@ -91,6 +92,40 @@ fails validation. Every one of them gates something:
 An `InfraComponent` host needs `container-runtime` — **not** a capability named
 after the service. Tagging a proxy host `capabilities: [proxy]` and nothing else
 is rejected — `proxy` is not a capability at all.
+
+### Placement
+
+`spec.placement.site` says where the machine physically stands, naming one site
+from [`Environment.spec.sites`](environment.md#sites):
+
+```yaml
+spec:
+  capabilities:
+    - ceph-node
+    - ceph-arbiter
+  placement:
+    site: dc3
+```
+
+This is the single place location is authored. A `StorageCluster` topology node
+takes its `site` from the machine it binds, so you do not repeat it there —
+and if a node does author one that disagrees with its machine, validation
+refuses both documents by name. A machine stands in one site; the cluster
+cannot place it in another.
+
+It is optional in general, and required exactly where a site has effect:
+
+- a machine bound by a `StorageCluster` that declares `stretch`, or one that
+  narrows any placement by `sites` — the site becomes the host's CRUSH location;
+- every `ceph-arbiter`-capable machine once any `StorageCluster` declares
+  stretch, even a standby that holds no tiebreaker today. That is what lets
+  [`replace-arbiter`](../advanced/ceph-topologies.md#replacing-the-arbiter)
+  move the tiebreaker to a different third site and record where it actually
+  landed.
+
+Outside stretch mode a site is inert — the CRUSH failure domain is `host` and
+nothing renders it — but it is still published as an inventory fact for every
+machine, so playbooks can read it.
 
 ### OS mode
 

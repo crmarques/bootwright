@@ -329,12 +329,19 @@ a reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-o
 ## Stretch mode
 
 `spec.ceph.topology.stretch` is enabled by presence and models a two-site
-cluster with a tiebreaker monitor. Each `spec.ceph.topology.nodes[].site` is the
-host's failure-domain bucket: outside stretch mode the failure domain is `host`
-and `site` renders nothing; under stretch it becomes the host's cephadm CRUSH
-location, and `placement.sites` (on monitoring, passthrough services, and the
-gateway/filesystem surfaces) selects against it. Because it is inert otherwise,
-`site` is required *exactly where it has effect* — when `stretch` is set or any
+cluster with a tiebreaker monitor. Each node's site is its failure-domain
+bucket: outside stretch mode the failure domain is `host` and the site renders
+nothing; under stretch it becomes the host's cephadm CRUSH location, and
+`placement.sites` (on monitoring, passthrough services, and the
+gateway/filesystem surfaces) selects against it.
+
+A node's site comes from the machine it binds —
+[`Machine.spec.placement.site`](../concepts/machines.md#placement), checked
+against the [`Environment.spec.sites`](../concepts/environment.md#sites)
+registry — so you author it once, on the machine. `nodes[].site` may still be
+stated, and is then cross-checked: a node whose site disagrees with its machine
+is refused, naming both. Because a site is inert outside stretch, it is
+required *exactly where it has effect* — when `stretch` is set or any
 `placement` narrows by `sites` — and may be omitted everywhere else.
 
 Two-site stretch comes with **fixed pool replication**: Ceph requires `size: 4`
@@ -343,28 +350,45 @@ stretch CRUSH rule and that replication — including pools that pre-date the
 stretch block. Author a `placementPolicyRef` only for genuinely divergent
 placement, and note that erasure pools are not allowed on stretch-mode clusters.
 
-The tiebreaker monitor lives at a third site:
+The tiebreaker monitor lives at a third site. The estate declares its sites,
+each machine says which one it stands in, and the topology just binds machines:
 
 ```yaml
+# Environment
+spec:
+  sites:
+    - name: dc1
+    - name: dc2
+    - name: dc3
+      description: arbiter-only site
+```
+
+```yaml
+# Machine/ceph-arbiter
+spec:
+  capabilities: [ceph-node, ceph-arbiter]
+  placement:
+    site: dc3
+```
+
+```yaml
+# StorageCluster — no site is repeated here
 ceph:
   topology:
     stretch:
       tiebreaker:
         node: node-03             # the tiebreaker monitor node
     nodes:
-    - machineRef: ceph-dc1-0
+    - machineRef: ceph-dc1-0      # site dc1, from the machine
       name: node-01
-      site: dc1
       roles: [mon, mgr, osd]
       devices: [/dev/vdb]
-    - machineRef: ceph-dc2-0
+    - machineRef: ceph-dc2-0      # site dc2
       name: node-02
-      site: dc2
       roles: [mon, mgr, osd]
       devices: [/dev/vdb]
-    - machineRef: ceph-arbiter    # tiebreaker node -> node-03
+    - machineRef: ceph-arbiter    # site dc3; tiebreaker node -> node-03
       name: node-03
-      site: dc3
       roles: [mon]
 ```
 
@@ -397,8 +421,8 @@ bootwright storage-cluster replace-arbiter --name ceph-prd-01 \
     `storage-cluster replace-arbiter` is the verb that moves it.
 
 Mark every machine that may hold the tiebreaker with the `ceph-arbiter`
-capability (it requires `ceph-node`), and keep them declared whether or not they
-carry the arbiter today:
+capability (it requires `ceph-node`), give it the site it stands in, and keep it
+declared whether or not it carries the arbiter today:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -409,7 +433,18 @@ spec:
   capabilities:
     - ceph-node
     - ceph-arbiter
+  placement:
+    site: dc4
 ```
+
+`placement.site` is required on every arbiter candidate in a stretched estate,
+including a standby that holds no tiebreaker today. It is what lets the
+tiebreaker move to a **different** third site — dc3 to dc4 — and be recorded
+where it actually landed: the promotion takes the candidate machine's site, so
+the replacement mon's CRUSH location is true and the same-site check compares
+against a site the host is really in. There is no `--new-arbiter-site` flag;
+moving the arbiter to another site means pointing `--new-arbiter-machine` at a
+machine that stands there.
 
 !!! warning "Size an arbiter's root disk before you apply it"
     An arbiter is usually a mon-only node, and a mon-only node's root-filesystem
@@ -452,6 +487,19 @@ Three situations fail closed and name the token that proceeds:
 
 The machine that was replaced keeps running with its OS intact; only its Ceph
 membership is removed. Tear it down separately when you no longer want it.
+
+!!! warning "The same-site fallback is a shape you have to leave"
+    `--authorize same-site-arbiter` puts the tiebreaker inside a data site while
+    the third site is gone. That state is authorable and re-appliable — the
+    input the verb writes loads cleanly and `bootwright validate` reports it as
+    a WARN rather than refusing it — precisely so an emergency is not also a
+    validation dead end. It is still a cluster that stops serving if that data
+    site fails, because its two replicas and the tiebreaker vote go together.
+    Move the arbiter back to a third site as soon as one exists. Note the
+    asymmetry: a cluster *already* in stretch mode tolerates this, but one that
+    has never entered stretch mode cannot be bootstrapped this way — Ceph
+    refuses `enable_stretch_mode` outright when the tiebreaker shares a data
+    site.
 
 ## The management gateway and HA dashboard
 

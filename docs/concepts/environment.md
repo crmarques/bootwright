@@ -31,6 +31,7 @@ spec:
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.domains` | Yes | — | Per-class DNS zones (`base` required, the others default from it). Seeds each machine's implicit `fqdn` address, the composed cluster node FQDNs, and each container cluster's `install-config.yaml` `baseDomain`; see [Machines](machines.md#the-fqdn-address) and [Domain model](#domain-model). |
+| `spec.sites[]` | No | — | The estate's site registry — every site it spans. Each entry has a required DNS-label `name` (rendered as a CRUSH bucket name) and an optional `description`. Required as soon as anything names a site, and every reference must match one; see [Sites](#sites). |
 | `spec.machineAccess.keyRef` | No | — | Names the `sshKeyPair` `Secret` whose public half every machine Bootwright installs authorizes for its `bootwright` service account, and whose private half Bootwright connects with. Required as soon as any `Machine` sets `os.installProfileRef`. See [Machine access](#machine-access). |
 | `spec.resources[]` | No | Discover workspace YAML | YAML files or directories, relative to the Environment file, to load. Omitted loads discovered YAML from the context workspace; when set it must list at least one relative, in-tree path. |
 | `spec.safety.destroyProtection` | No | `allow` | `allow` or `protected`; empty means `allow`. `protected` state needs `destroy --authorize protected`. |
@@ -99,6 +100,37 @@ outside the zone, author `nodes[].fqdn`, which is used verbatim.
 
 `spec.domains` (DNS zones) is distinct from the `spec.containerClusters[]` /
 `spec.storageClusters[]` selection lists (cluster membership) above.
+
+## Sites
+
+`spec.sites[]` declares every site — datacenter, room, availability zone —
+the estate spans. It is the vocabulary every other site reference is checked
+against:
+
+```yaml
+spec:
+  sites:
+    - name: dc1
+    - name: dc2
+    - name: dc3
+      description: arbiter-only site holding the stretch tiebreaker
+```
+
+A machine then says where it stands with
+[`spec.placement.site`](machines.md#placement), and a Ceph topology node takes
+its site from the machine it binds — you do not repeat it.
+
+The registry is optional: an estate that never names a site declares nothing
+and nothing changes. It becomes **required** the moment anything names one — a
+machine's `placement.site`, a storage node's `site`, `stretch.dataSites`, or a
+`placement.sites` filter. Every reference must then match a declared name.
+That is the point: a mistyped `dc9` fails when you load the input, instead of
+becoming a third CRUSH bucket that quietly breaks stretch mode.
+
+A site name is a DNS label because it is rendered verbatim as a CRUSH bucket
+name. Declaring a site no machine stands in is allowed and reported as an INFO
+advisory by `bootwright validate` — a fallback arbiter site is often declared
+before its candidate machine exists.
 
 ## Machine access
 

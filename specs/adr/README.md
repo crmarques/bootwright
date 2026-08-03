@@ -61,3 +61,4 @@ below.
 | [0045](0045-installing-the-os-a-golden-image-already-carries.md) | Installing the OS a Golden Image Already Carries | follows the second-backend dispatch rule of 0002; follows the presence-union grammar of 0014 |
 | [0046](0046-the-hosts-preflight-cannot-reach-yet.md) | The Hosts Preflight Cannot Reach Yet | extends the name-resolution group of 0017; closes the coverage gap 0035 recorded |
 | [0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md) | The Certificate a Vendor Gateway Never Settles On | |
+| [0048](0048-the-site-a-machine-stands-in.md) | The Site a Machine Stands In | extends the arbiter move of 0042; the site registry backs the placement grammar of 0018 |
