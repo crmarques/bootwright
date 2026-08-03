@@ -29,17 +29,18 @@ source the vendor build carries. Two paths compute a daemon's dependencies:
   the stored list can never contain any certificate entry.
 
 `last_deps != deps` therefore holds on every pass, forever. The asymmetry rules
-out every shape that carries a user certificate on such a build: inline
-`ssl_cert`/`ssl_key` loops (observed); routing the certificate through the
-cephadm certificate store with `certificate_source: reference` loops the same
-way, because the `certificate_source:` entry alone breaks the match; only a
-spec with no certificate fields computes no certificate dependencies and
-converges — which is how certificate-less clusters on the same build always
-deployed cleanly. A TLS-free spec serves the cephadm-managed certificate, not
-the operator's: the store entity a previous inline apply ingested is read only
-on the inline and reference paths. Upstream community `v20.2.x` carries neither
-the certificate dependencies nor the mismatch, so the same block converges on
-`distribution: oss`.
+out every certificate source on such a build: inline `ssl_cert`/`ssl_key`
+loops (observed); routing the certificate through the cephadm certificate
+store with `certificate_source: reference` loops the same way, because the
+`certificate_source:` entry alone breaks the match; and a spec with no
+certificate fields at all takes the `cephadm-signed` default — `ssl` defaults
+to true on `MgmtGatewaySpec` — whose `certificate_source` entry loops
+identically (observed on the first TLS-free apply). Only a spec with `ssl`
+disabled computes no certificate dependencies and converges; the
+certificate-less clusters that had deployed cleanly were community builds,
+whose tentacle code computes no certificate dependencies at all. Upstream
+community `v20.2.x` carries neither the certificate dependencies nor the
+mismatch, so the same block converges on `distribution: oss`.
 
 There is no knob on Bootwright's side of the contract that repairs this. The
 code that disagrees with itself runs inside the vendor's manager container, and
@@ -51,8 +52,9 @@ no released vendor build fixes the recording.
 distributions** (`redhat`, `ibm`). The refusal names the loop it prevents —
 dependencies recomputed with the certificate but recorded without it, gateways
 reconfigured every pass, apply failing closed at service readiness — and both
-exits: omit the block and serve the cephadm-managed certificate, or run
-`distribution: oss`, whose tentacle builds compute no certificate dependencies.
+exits: omit the block, which on these distributions yields a gateway pinned to
+`ssl: false` serving plain HTTP, or run `distribution: oss`, whose tentacle
+builds compute no certificate dependencies and keep HTTPS.
 A vendor build that records certificate dependencies lifts the refusal by
 narrowing the gate, not by an operator override; a spec that deterministically
 wedges a cluster is not an authorization decision, so no token applies
@@ -98,9 +100,15 @@ applying the document on a subscription-backed distribution, the management
 phase reads the stored spec back, injects `ssl: false` into its inner block
 through `ceph config-key set` when the store dropped it, and asserts on a
 second read that the stored copy now carries the switch — the apply fails
-closed rather than leaving a time bomb armed. The repair narrows the exposure
-to spec-store rewrites cephadm itself performs between bootwright runs; each
-apply re-checks. For the same reason, `ceph orch ls --export` on these builds
+closed rather than leaving a time bomb armed. The repair waits for the store
+to settle first: the apply itself schedules one more rewrite, because the
+serve pass that configures the service ends with `mark_configured`, which
+re-serializes the in-memory spec through the same serializer and would clobber
+a repair written too early. The read therefore polls until the stored envelope
+reports `needs_configuration: false` before repairing, and the closing assert
+also refuses a store that never settled or could not be read. Exposure then
+narrows to spec rewrites cephadm performs on later spec events; each apply
+re-checks. For the same reason, `ceph orch ls --export` on these builds
 is not evidence: it round-trips through the falsy-dropping serializer and
 prints resurrected class defaults (`ssl: true`) for fields the live spec
 holds as `false`.
@@ -133,11 +141,12 @@ spec when recording dependencies, so recorded and computed lists agree.
 
 ## Consequences
 
-- A vendor-distribution dashboard is reached through the cephadm-managed
-  certificate until the vendor repairs the recording; operators who need their
-  own certificate on the management VIP need `distribution: oss` or a fixed
-  vendor build. Environment templates that mint a management-gateway
-  certificate must author the `tls` block only for the community arm.
+- A vendor-distribution dashboard is plain HTTP on the authored port until the
+  vendor repairs the recording; operators who need TLS on the management VIP —
+  their own certificate or cephadm's — need `distribution: oss`, a fixed
+  vendor build, or a reverse proxy of their own in front of the gateway.
+  Environment templates that mint a management-gateway certificate must author
+  the `tls` block only for the community arm.
 - The gate is deliberately wider than the one observed build. Both vendor
   streams ship the same downstream source, no released build is known fixed,
   and the failure mode — a production cluster restarting its gateway tier

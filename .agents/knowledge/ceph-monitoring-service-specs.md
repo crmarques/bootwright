@@ -129,7 +129,13 @@ prints the resurrected default (`ssl: true`) for a gateway that provably runs
 ssl-off — read the config-key, not the export — and the management phase now
 repairs the stored copy (`ceph config-key set` with `ssl: false` injected)
 and asserts the read-back, failing the apply closed if the switch is still
-missing. Related but distinct: a spec change alone never rewrites a *running*
+missing. The repair must wait for the store to settle: `orch apply` persists
+with `needs_configuration: true`, and the serve pass that configures the
+service ends with `mark_configured`, which re-serializes the in-memory spec
+through the same falsy-dropping serializer — a repair written before that
+rewrite is silently clobbered minutes after the apply goes green, so the
+read polls until the envelope reports `needs_configuration: false` and the
+assert refuses an unsettled or unreadable store. Related but distinct: a spec change alone never rewrites a *running*
 daemon's config (only a dependency mismatch does), so gateways deployed
 during a loop keep serving stale HTTPS until `ceph orch reconfig
 mgmt-gateway` — and the dashboard's Prometheus/Alertmanager calls go through

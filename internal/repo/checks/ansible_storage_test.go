@@ -3623,30 +3623,36 @@ func TestStorageManagementSpecRepairsThePersistedSSLSwitch(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
 	tasks := readAnsibleTasks(t, path)
 	applyIdx := findAnsibleTask(t, tasks, "Apply management service spec")
-	readIdx := findAnsibleTask(t, tasks, "Read the persisted management gateway spec from the cephadm store")
+	readIdx := findAnsibleTask(t, tasks, "Read the persisted management gateway spec once cephadm settles it")
 	repairIdx := findAnsibleTask(t, tasks, "Re-persist the ssl switch the cephadm spec store serialized away")
 	verifyIdx := findAnsibleTask(t, tasks, "Read back the persisted management gateway spec after the repair")
 	assertIdx := findAnsibleTask(t, tasks, "Assert the persisted management gateway spec keeps ssl disabled")
 	if !(applyIdx < readIdx && readIdx < repairIdx && repairIdx < verifyIdx && verifyIdx < assertIdx) {
 		t.Fatalf("the persisted-spec repair must run after the apply and prove the stored copy afterwards (apply=%d read=%d repair=%d verify=%d assert=%d)", applyIdx, readIdx, repairIdx, verifyIdx, assertIdx)
 	}
-	if tasks[readIdx]["changed_when"] != false || tasks[readIdx]["failed_when"] != false {
-		t.Fatalf("the persisted-spec read must be a read-only tolerated absence, got %v", tasks[readIdx])
+	readUntil := fmt.Sprint(tasks[readIdx]["until"])
+	if !strings.Contains(readUntil, "needs_configuration") || !strings.Contains(readUntil, "attempts") || tasks[readIdx]["retries"] == nil {
+		t.Fatalf("the store read must poll until the envelope reports needs_configuration false: the orch apply itself schedules one more store rewrite — the serve pass ends with mark_configured, which re-serializes the in-memory spec through the falsy-dropping serializer — so a repair written before the store settles is silently clobbered minutes after the apply goes green, got until=%v retries=%v", tasks[readIdx]["until"], tasks[readIdx]["retries"])
 	}
 	repairWhen := fmt.Sprint(tasks[repairIdx]["when"])
-	if !strings.Contains(repairWhen, "sslDisabled") || !strings.Contains(repairWhen, "'ssl' not in") {
-		t.Fatalf("the repair must run only for a vendor gateway whose stored spec lost the ssl key; the vendor spec serializer drops falsy fields on persistence while the in-memory spec stays correct, and a mgr failover reloads the stored copy with ssl back at its class default true, got when=%v", tasks[repairIdx]["when"])
+	if !strings.Contains(repairWhen, "sslDisabled") || !strings.Contains(repairWhen, "'ssl' not in") || !strings.Contains(repairWhen, "needs_configuration") {
+		t.Fatalf("the repair must run only for a vendor gateway whose SETTLED stored spec lost the ssl key; the vendor spec serializer drops falsy fields on persistence while the in-memory spec stays correct, and a mgr failover reloads the stored copy with ssl back at its class default true, got when=%v", tasks[repairIdx]["when"])
 	}
 	repairCmd := fmt.Sprint(tasks[repairIdx]["ansible.builtin.command"])
 	if !strings.Contains(repairCmd, "config-key") || !strings.Contains(repairCmd, "'ssl': false") {
 		t.Fatalf("the repair must write the stored spec back through config-key with ssl false injected into the inner spec block, got %v", tasks[repairIdx]["ansible.builtin.command"])
 	}
+	for _, idx := range []int{verifyIdx, assertIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); strings.Contains(got, "persisted.rc") {
+			t.Fatalf("the verify read and the closing assert must not gate on the first read's rc — a transient read failure would then skip the proof and the apply would go green with the store still poisoned, the exact fail-open the assert exists to prevent, got when=%v", tasks[idx]["when"])
+		}
+	}
 	verify, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("the persisted-spec proof must be an assert, got %v", tasks[assertIdx])
 	}
-	if got := fmt.Sprint(verify["that"]); !strings.Contains(got, "ssl is defined") {
-		t.Fatalf("the proof must check the stored copy carries the ssl key at all — its absence is exactly the relapse the repair exists for, got that=%v", verify["that"])
+	if got := fmt.Sprint(verify["that"]); !strings.Contains(got, "ssl is defined") || !strings.Contains(got, "needs_configuration") {
+		t.Fatalf("the proof must check the stored copy carries the ssl key AND that the store had settled — an unsettled store still has a clobbering rewrite pending, got that=%v", verify["that"])
 	}
 	if got := fmt.Sprint(verify["fail_msg"]); !strings.Contains(got, "failover") {
 		t.Fatalf("the refusal must explain the relapse a manager failover triggers, got fail_msg=%v", verify["fail_msg"])

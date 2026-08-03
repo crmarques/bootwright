@@ -482,7 +482,7 @@
          | regex_replace('-----BEGIN[\s\S]*', '<redacted>') }}
   when: bootwright_ceph_management.hosts is defined
 
-- name: Read the persisted management gateway spec from the cephadm store
+- name: Read the persisted management gateway spec once cephadm settles it
   ansible.builtin.command:
     argv:
       - cephadm
@@ -495,6 +495,15 @@
   register: bootwright_ceph_management_persisted
   changed_when: false
   failed_when: false
+  retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_management_persisted.rc == 0
+      and not ((bootwright_ceph_management_persisted.stdout | default('') | trim | default('{}', true) | from_json).needs_configuration | default(false) | bool)
+    )
+    or ((bootwright_ceph_management_persisted.attempts | default(1) | int)
+        >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)
@@ -525,6 +534,7 @@
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)
     and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+    and not (bootwright_ceph_management_envelope.needs_configuration | default(false) | bool)
     and (bootwright_ceph_management_envelope.spec is defined)
     and ('ssl' not in bootwright_ceph_management_stored_spec)
 
@@ -544,30 +554,36 @@
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)
-    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
 
 - name: Assert the persisted management gateway spec keeps ssl disabled
   ansible.builtin.assert:
     that:
+      - not (bootwright_ceph_management_verified_envelope.needs_configuration | default(false) | bool)
       - bootwright_ceph_management_verified_spec.ssl is defined
       - not (bootwright_ceph_management_verified_spec.ssl | bool)
     fail_msg: >-
       The cephadm spec store for {{ bootwright_selected_storage_cluster.name }} does not
-      hold `ssl: false` for the management gateway even after re-persisting it. The
-      vendor build's spec serializer drops falsy fields, so `ceph orch apply` keeps the
-      running (in-memory) spec correct while the stored copy silently loses the switch;
-      a manager failover or restart then reloads the stored copy, `ssl` resurrects to
-      its class default `true`, and the gateway resumes the reconfigure loop this apply
-      just prevented. The store now reports:
+      provably hold `ssl: false` for the management gateway. The vendor build's spec
+      serializer drops falsy fields, so `ceph orch apply` keeps the running (in-memory)
+      spec correct while the stored copy silently loses the switch; a manager failover
+      or restart then reloads the stored copy, `ssl` resurrects to its class default
+      `true`, and the gateway resumes the reconfigure loop this apply just prevented.
+      The repair also refuses to write while the store still reports
+      `needs_configuration: true`, because the serve pass that flag announces ends by
+      re-serializing the in-memory spec over the key — a repair written earlier is
+      silently clobbered minutes after this apply goes green. A store that never
+      settled, could not be read, or still lacks the `ssl` key all mean that time bomb
+      is armed. The store now reports:
       {{ bootwright_ceph_management_persisted_verify.stdout | default('<empty>') | trim }}
     success_msg: >-
-      The persisted management gateway spec holds `ssl: false`; a manager failover
-      reloads it unchanged.
+      The persisted management gateway spec holds `ssl: false` in a settled store; a
+      manager failover reloads it unchanged.
   vars:
+    bootwright_ceph_management_verified_envelope: >-
+      {{ bootwright_ceph_management_persisted_verify.stdout | default('') | trim | default('{}', true) | from_json }}
     bootwright_ceph_management_verified_spec: >-
-      {{ ((bootwright_ceph_management_persisted_verify.stdout | default('') | trim | default('{}', true) | from_json).spec
+      {{ (bootwright_ceph_management_verified_envelope.spec
           | default({})).spec | default({}) }}
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)
-    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
