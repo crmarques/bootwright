@@ -455,6 +455,7 @@ func validateStorageCephMgmtGateway(prefix string, cluster v1alpha1.StorageClust
 		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress, nil)...)
 	}
 	if mgmt.TLS != nil {
+		errs = append(errs, validateStorageCephMgmtGatewayTLSDistribution(prefix, cluster)...)
 		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
 		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
 	}

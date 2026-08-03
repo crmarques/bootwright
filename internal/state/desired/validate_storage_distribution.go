@@ -87,6 +87,18 @@ func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.Stora
 		prefix, cephprovider.MgmtGatewayMinimumCephMajor, strconv.Quote(resolved), major)}
 }
 
+func validateStorageCephMgmtGatewayTLSDistribution(prefix string, cluster v1alpha1.StorageCluster) []string {
+	mgmt := cluster.Spec.Ceph.MgmtGateway
+	if mgmt == nil || mgmt.TLS == nil {
+		return nil
+	}
+	distribution := storageCephDistribution(cluster)
+	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s.tls is refused when distribution=%s: vendor cephadm builds compute mgmt-gateway daemon dependencies from the spec's certificate (certificate_source plus ssl_cert/ssl_key hashes) but record each daemon's dependencies without them, so the lists never match and every orchestrator pass reconfigures all gateway daemons — nginx restarts each cycle, the service never holds its declared count, and apply fails closed at the service-readiness gate after ~15 minutes. Omit spec.ceph.mgmtGateway.tls so the gateway serves the cephadm-managed certificate; distribution: oss on tentacle computes no certificate dependencies and accepts the block", prefix, distribution)}
+}
+
 func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	var errs []string
 	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)

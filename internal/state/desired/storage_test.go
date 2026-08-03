@@ -1327,6 +1327,70 @@ func TestStorageMgmtGatewayRequiresAReleaseThatHasTheService(t *testing.T) {
 	}
 }
 
+func TestStorageMgmtGatewayTLSIsRefusedOnVendorBuilds(t *testing.T) {
+	state := v1alpha1.State{Secrets: []v1alpha1.Secret{
+		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+	}}
+	tls := &v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "cert"}}
+	clusterWith := func(distribution string, tls *v1alpha1.StorageCephMgmtGatewayTLS) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: distribution,
+			MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
+				TLS:     tls,
+				Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+			},
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+		}}}
+	}
+	cases := []struct {
+		name         string
+		distribution string
+		tls          *v1alpha1.StorageCephMgmtGatewayTLS
+		want         string
+	}{
+		{name: "ibm-with-tls", distribution: v1alpha1.StorageCephDistributionIBM, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=ibm"},
+		{name: "redhat-with-tls", distribution: v1alpha1.StorageCephDistributionRedHat, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=redhat"},
+		{name: "oss-with-tls", distribution: v1alpha1.StorageCephDistributionOSS, tls: tls},
+		{name: "default-distribution-with-tls", tls: tls},
+		{name: "ibm-without-tls", distribution: v1alpha1.StorageCephDistributionIBM},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.mgmtGateway", clusterWith(tc.distribution, tc.tls), state), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
+			}
+			if !strings.Contains(got, "reconfigures all gateway daemons") {
+				t.Fatalf("the refusal must explain the reconfigure loop it prevents, got %q", got)
+			}
+		})
+	}
+}
+
+func TestStorageMgmtGatewayVendorTLSRefusalNamesTheAuthoredField(t *testing.T) {
+	state := storageValidationState()
+	for i := range state.StorageClusters {
+		if state.StorageClusters[i].Spec.Ceph == nil {
+			continue
+		}
+		state.StorageClusters[i].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionIBM
+		state.StorageClusters[i].Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{
+			TLS:     &v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "mgmt-tls"}, KeyRef: v1alpha1.LocalObjectReference{Name: "mgmt-tls"}},
+			Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+		}
+	}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "spec.ceph.mgmtGateway.tls is refused when distribution=ibm") {
+		t.Fatalf("errors = %q, want the vendor TLS refusal under the authored path spec.ceph.mgmtGateway.tls", got)
+	}
+}
+
 func TestStorageGatewayIngressTLSValidation(t *testing.T) {
 	baseState := v1alpha1.State{Secrets: []v1alpha1.Secret{
 		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},

@@ -110,6 +110,69 @@
   failed_when: false
   when: not (bootwright_ceph_services_ready | default(false) | bool)
 
+- name: Collect Ceph daemon states as JSON when declared services did not become ready
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - ps
+      - --format
+      - json
+  register: bootwright_ceph_service_daemon_ps_json
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_ceph_services_ready | default(false) | bool)
+
+- name: Resolve the daemons cephadm reports outside the running state
+  ansible.builtin.set_fact:
+    bootwright_ceph_service_failed_daemons: >-
+      {{
+        (bootwright_ceph_service_daemon_ps_json.stdout | default('') | trim | default('[]', true) | from_json)
+        | selectattr('status_desc', 'defined')
+        | selectattr('status_desc', 'in', ['error', 'unknown', 'stopped'])
+        | selectattr('systemd_unit', 'defined')
+        | selectattr('hostname', 'defined')
+        | list
+      }}
+  when: not (bootwright_ceph_services_ready | default(false) | bool)
+
+- name: Collect journal tails for the daemons that are not running
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      ssh -F {{ bootwright_ceph_remote_ssh_config | quote }} -o ConnectTimeout=10 \
+        {{ bootwright_ceph_failed_daemon_address | quote }} \
+        {{ bootwright_ceph_failed_daemon_journal | quote }} 2>&1 | tail -n 40
+  vars:
+    bootwright_ceph_failed_daemon_address: >-
+      {{
+        (dict((bootwright_selected_storage_cluster.hosts | default([])
+               | map(attribute='cephHostname') | map('split', '.') | map('first') | list)
+              | zip(bootwright_selected_storage_cluster.hosts | default([])
+                    | map(attribute='address') | list)))
+        [bootwright_ceph_failed_daemon.hostname | split('.') | first]
+        | default(bootwright_ceph_failed_daemon.hostname, true)
+      }}
+    bootwright_ceph_failed_daemon_journal: >-
+      {{ ('' if bootwright_selected_storage_cluster.clusterSSH.user == 'root' else 'sudo -n ')
+         ~ 'journalctl -u ' ~ (bootwright_ceph_failed_daemon.systemd_unit | quote)
+         ~ ' -n 40 --no-pager' }}
+  loop: "{{ (bootwright_ceph_service_failed_daemons | default([]))[:8] }}"
+  loop_control:
+    loop_var: bootwright_ceph_failed_daemon
+    label: "{{ bootwright_ceph_failed_daemon.daemon_name | default(bootwright_ceph_failed_daemon.systemd_unit) }}"
+  register: bootwright_ceph_service_failed_daemon_journals
+  changed_when: false
+  failed_when: false
+  when:
+    - not (bootwright_ceph_services_ready | default(false) | bool)
+    - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
+    - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
+
 - name: Assert declared Ceph services reached their daemon count
   vars:
     bootwright_ceph_service_short: >-
@@ -145,3 +208,13 @@
       Recent cephadm events (ceph log last 100 cephadm):
       {{ (bootwright_ceph_service_cephadm_log.stdout | default('') | trim)
       or '(cephadm event log unavailable)' }}
+      Journal tails from the nodes whose daemons are not running
+      (journalctl -u <unit> over the cluster SSH identity):
+      {% for bootwright_ceph_failed_journal in (bootwright_ceph_service_failed_daemon_journals.results | default([])) %}
+      --- {{ (bootwright_ceph_failed_journal.bootwright_ceph_failed_daemon | default({})).daemon_name | default('(daemon)') }}
+      on {{ (bootwright_ceph_failed_journal.bootwright_ceph_failed_daemon | default({})).hostname | default('(host)') }} ---
+      {{ bootwright_ceph_failed_journal.stdout | default('(no journal collected)') }}
+      {% else %}
+      (no journal collected: either every daemon reports running or the cluster
+      SSH identity is not configured for this cluster)
+      {% endfor %}
