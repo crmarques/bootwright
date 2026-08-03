@@ -110,8 +110,12 @@ name the `bootwright apply` that converges the rest.
   proof, and this lane cannot borrow destroy's proof — the replaced arbiter left
   the topology, so it is in no play's inventory and `ignore_unreachable` never
   sees it. The orchestrator's own view is the evidence: take the offline path
-  only when `ceph orch host ls` reports that host offline, and refuse the token
-  when it does not, naming what the orchestrator reported.
+  only when `ceph orch host ls` reports that host offline. The token widens what
+  the run *may* do, so a supplied token against a host that answers degrades to
+  the normal drain-and-remove and says so — it must not refuse, or
+  `--authorize all` would abort every healthy retirement after the tiebreaker
+  has already moved. The reverse case (host offline, token absent) is the one
+  that fails closed, and the refusal names the token.
 - **Mons outside quorum.** `set_new_tiebreaker` needs a quorum to commit, and
   swapping the arbiter while a data site is down removes the vote holding the
   remaining quorum together. Refuse by default.
