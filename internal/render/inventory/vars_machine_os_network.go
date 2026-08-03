@@ -21,7 +21,7 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	if len(config) == 0 {
 		return network
 	}
-	if iface := kickstartPrimaryInterface(config); len(iface) > 0 {
+	if iface := kickstartStaticNetworkStanza(kickstartPrimaryInterfaceEntry(config)); len(iface) > 0 {
 		for k, v := range iface {
 			network[k] = v
 		}
@@ -30,7 +30,7 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	if len(ifaces) > 0 {
 		network["interfaces"] = ifaces
 	}
-	if gateway := networkConfigGatewayFromMap(config); gateway != "" {
+	if gateway := nmstate.NetworkConfigGateway(config); gateway != "" {
 		network["gateway"] = gateway
 	}
 	if dns := nmstate.NetworkConfigDNSServers(config); len(dns) > 0 {
@@ -63,38 +63,6 @@ func markEthernetMACIdentity(config map[string]any) {
 		}
 		entry["identifier"] = "mac-address"
 	}
-}
-
-func kickstartPrimaryInterface(config map[string]any) map[string]any {
-	raw, ok := config["interfaces"].([]any)
-	if !ok {
-		return nil
-	}
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := entry["name"].(string)
-		mac, _ := entry["mac-address"].(string)
-		ip, prefix := networkConfigFamilyIPPrefix(entry, "ipv4")
-		if ip == "" {
-			continue
-		}
-		out := map[string]any{
-			"bootproto": "static",
-			"ip":        ip,
-			"prefix":    prefix,
-			"netmask":   prefixNetmask(prefix),
-		}
-		if mac != "" {
-			out["device"] = mac
-		} else if name != "" {
-			out["device"] = name
-		}
-		return out
-	}
-	return nil
 }
 
 func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
@@ -141,7 +109,7 @@ func kickstartNetworkInterfaces(config map[string]any) []map[string]any {
 func kickstartStaticNetworkStanza(entry map[string]any) map[string]any {
 	name, _ := entry["name"].(string)
 	mac, _ := entry["mac-address"].(string)
-	ip, prefix := networkConfigFamilyIPPrefix(entry, "ipv4")
+	ip, prefix := nmstate.NetworkConfigFamilyIPPrefix(entry, "ipv4")
 	if ip == "" {
 		return nil
 	}
@@ -193,18 +161,10 @@ func kickstartBondOptions(aggregation map[string]any) string {
 }
 
 func kickstartPrimaryInterfaceEntry(config map[string]any) map[string]any {
-	raw, ok := config["interfaces"].([]any)
-	if !ok {
-		return nil
-	}
-	routed := networkConfigDefaultRouteInterface(config)
+	routed := nmstate.NetworkConfigDefaultRouteInterface(config)
 	var first map[string]any
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		ip, _ := networkConfigFamilyIPPrefix(entry, "ipv4")
+	for _, entry := range nmstate.NetworkConfigInterfaceEntries(config) {
+		ip, _ := nmstate.NetworkConfigFamilyIPPrefix(entry, "ipv4")
 		if ip == "" {
 			continue
 		}
@@ -218,96 +178,14 @@ func kickstartPrimaryInterfaceEntry(config map[string]any) map[string]any {
 	return first
 }
 
-func networkConfigDefaultRouteInterface(config map[string]any) string {
-	routes, ok := config["routes"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	rawConfig, ok := routes["config"].([]any)
-	if !ok {
-		return ""
-	}
-	for _, item := range rawConfig {
-		route, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
-			continue
-		}
-		iface, _ := route["next-hop-interface"].(string)
-		if iface != "" {
-			return iface
-		}
-	}
-	return ""
-}
-
 func networkConfigInterfacesByName(config map[string]any) map[string]map[string]any {
 	out := map[string]map[string]any{}
-	raw, ok := config["interfaces"].([]any)
-	if !ok {
-		return out
-	}
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := entry["name"].(string)
-		if name != "" {
+	for _, entry := range nmstate.NetworkConfigInterfaceEntries(config) {
+		if name, _ := entry["name"].(string); name != "" {
 			out[name] = entry
 		}
 	}
 	return out
-}
-
-func networkConfigFamilyIPPrefix(entry map[string]any, family string) (string, int) {
-	familyConfig, ok := entry[family].(map[string]any)
-	if !ok {
-		return "", 0
-	}
-	rawAddresses, ok := familyConfig["address"].([]any)
-	if !ok {
-		return "", 0
-	}
-	for _, raw := range rawAddresses {
-		address, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		ip, _ := address["ip"].(string)
-		if ip == "" {
-			continue
-		}
-		return ip, intFromYAML(address["prefix-length"])
-	}
-	return "", 0
-}
-
-func networkConfigGatewayFromMap(config map[string]any) string {
-	routes, ok := config["routes"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	rawConfig, ok := routes["config"].([]any)
-	if !ok {
-		return ""
-	}
-	for _, item := range rawConfig {
-		route, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
-			continue
-		}
-		nextHop, _ := route["next-hop-address"].(string)
-		if nextHop != "" {
-			return nextHop
-		}
-	}
-	return ""
 }
 
 func intFromYAML(value any) int {

@@ -3,6 +3,8 @@ package inventory
 import (
 	"reflect"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
 func nmstateIPv4(ip string, prefix int) map[string]any {
@@ -152,7 +154,7 @@ func TestKickstartNetworkPrefersIPv4DefaultRoute(t *testing.T) {
 	if len(stanzas) != 1 || stanzas[0]["ip"] != "10.7.7.129" {
 		t.Fatalf("stanzas = %v, want the IPv4-routed bond0.743 VLAN", stanzas)
 	}
-	if gateway := networkConfigGatewayFromMap(config); gateway != "10.7.7.142" {
+	if gateway := nmstate.NetworkConfigGateway(config); gateway != "10.7.7.142" {
 		t.Fatalf("gateway = %v, want the IPv4 default route next-hop", gateway)
 	}
 }
@@ -177,6 +179,41 @@ func TestKickstartNetworkInterfacesFallsBackWhenRoutedInterfaceHasNoIPv4(t *test
 	stanzas := kickstartNetworkInterfaces(config)
 	if len(stanzas) != 1 || stanzas[0]["ip"] != "10.7.7.193" {
 		t.Fatalf("stanzas = %v, want fallback to the first interface with an IPv4", stanzas)
+	}
+}
+
+func TestKickstartFlatNetworkFollowsDefaultRouteInterface(t *testing.T) {
+	config := map[string]any{
+		"interfaces": []any{
+			map[string]any{
+				"name": "ens160", "type": "ethernet",
+				"mac-address": "00:50:56:aa:00:01",
+				"ipv4":        nmstateIPv4("10.30.30.9", 24),
+			},
+			map[string]any{
+				"name": "ens192", "type": "ethernet",
+				"mac-address": "00:50:56:aa:00:02",
+				"ipv4":        nmstateIPv4("10.20.30.41", 24),
+			},
+		},
+		"routes": map[string]any{
+			"config": []any{map[string]any{
+				"destination":        "0.0.0.0/0",
+				"next-hop-address":   "10.20.30.1",
+				"next-hop-interface": "ens192",
+			}},
+		},
+	}
+	flat := kickstartStaticNetworkStanza(kickstartPrimaryInterfaceEntry(config))
+	want := map[string]any{
+		"bootproto": "static",
+		"device":    "00:50:56:aa:00:02",
+		"ip":        "10.20.30.41",
+		"prefix":    24,
+		"netmask":   "255.255.255.0",
+	}
+	if !reflect.DeepEqual(flat, want) {
+		t.Fatalf("flat network = %v, want the default-route interface ens192, not the first addressed interface", flat)
 	}
 }
 

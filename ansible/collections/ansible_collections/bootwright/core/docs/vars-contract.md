@@ -453,9 +453,17 @@ bootwright_managed_os_install_groups:
               device: 00:50:56:aa:bb:cc
               ip: 10.20.30.41
               prefix: 24
+              netmask: 255.255.255.0
               gateway: 10.20.30.1
               dnsServers:
                 - 10.20.30.10
+              interfaces:
+                - bootproto: static
+                  device: 00:50:56:aa:bb:cc
+                  ip: 10.20.30.41
+                  prefix: 24
+                  netmask: 255.255.255.0
+                  hostname: true
           ssh:
             address: 10.20.30.41
             connectionAddress: 10.20.30.41
@@ -470,7 +478,10 @@ bootwright_managed_os_install_groups:
 ```
 
 `guest.network` is the same projection that feeds `kickstart.network` in the
-Anaconda mode, so both install modes read one rendered addressing contract.
+Anaconda mode, so both install modes read one rendered addressing contract. Its
+flat `device`/`ip`/`prefix`/`netmask` fields describe the interface carrying the
+default route, which is the one interface the cloud-init seed configures;
+`interfaces` carries the Anaconda stanza list, which a clone ignores.
 `guest` carries only public material: a hostname, an install user, that user's
 **public** key, a sudoers path and a static IPv4 primary. The clone role turns it
 into a cloud-init payload, and on vSphere that payload travels in the VM's

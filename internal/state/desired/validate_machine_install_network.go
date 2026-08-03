@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
 const machineInstallNetworkProvidedRemedy = "or set spec.os.provided: true to hand this machine to your own OS install"
@@ -85,16 +86,8 @@ func installNetworkInterfaceNames(interfaces []installNetworkInterface) []string
 }
 
 func installNetworkInterfaces(config map[string]any) []installNetworkInterface {
-	raw, ok := config["interfaces"].([]any)
-	if !ok {
-		return nil
-	}
 	var out []installNetworkInterface
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, entry := range nmstate.NetworkConfigInterfaceEntries(config) {
 		name, _ := entry["name"].(string)
 		if name == "" {
 			continue
@@ -103,50 +96,16 @@ func installNetworkInterfaces(config map[string]any) []installNetworkInterface {
 		out = append(out, installNetworkInterface{
 			name:  name,
 			kind:  kind,
-			v4:    networkConfigFamilyAddresses(entry, "ipv4"),
-			v6:    networkConfigFamilyAddresses(entry, "ipv6"),
-			dhcp4: networkConfigFamilyUsesDHCP(entry, "ipv4"),
+			v4:    nmstate.NetworkConfigFamilyAddresses(entry, "ipv4"),
+			v6:    nmstate.NetworkConfigFamilyAddresses(entry, "ipv6"),
+			dhcp4: nmstate.NetworkConfigFamilyUsesDHCP(entry, "ipv4"),
 		})
 	}
 	return out
 }
 
-func networkConfigFamilyUsesDHCP(entry map[string]any, family string) bool {
-	familyConfig, ok := entry[family].(map[string]any)
-	if !ok {
-		return false
-	}
-	if enabled, ok := familyConfig["enabled"].(bool); ok && !enabled {
-		return false
-	}
-	dhcp, _ := familyConfig["dhcp"].(bool)
-	return dhcp
-}
-
-func networkConfigFamilyAddresses(entry map[string]any, family string) []string {
-	familyConfig, ok := entry[family].(map[string]any)
-	if !ok {
-		return nil
-	}
-	rawAddresses, ok := familyConfig["address"].([]any)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, raw := range rawAddresses {
-		address, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		if ip, _ := address["ip"].(string); ip != "" {
-			out = append(out, ip)
-		}
-	}
-	return out
-}
-
 func installNetworkPrimaryInterface(config map[string]any, addressed []installNetworkInterface) installNetworkInterface {
-	routed := networkConfigDefaultRouteInterfaceName(config)
+	routed := nmstate.NetworkConfigDefaultRouteInterface(config)
 	if routed != "" {
 		for _, iface := range addressed {
 			if iface.name == routed {
@@ -155,28 +114,4 @@ func installNetworkPrimaryInterface(config map[string]any, addressed []installNe
 		}
 	}
 	return addressed[0]
-}
-
-func networkConfigDefaultRouteInterfaceName(config map[string]any) string {
-	routes, ok := config["routes"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	rawConfig, ok := routes["config"].([]any)
-	if !ok {
-		return ""
-	}
-	for _, item := range rawConfig {
-		route, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if destination, _ := route["destination"].(string); destination != "0.0.0.0/0" {
-			continue
-		}
-		if iface, _ := route["next-hop-interface"].(string); iface != "" {
-			return iface
-		}
-	}
-	return ""
 }

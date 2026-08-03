@@ -1,6 +1,6 @@
 #jinja2: trim_blocks: True, lstrip_blocks: True
-{% set guest = bootwright_component.osInstall.guest %}
-{% set net = guest.network | default({}) %}
+{% set guest = bootwright_component.osInstall.guest -%}
+{% set net = guest.network | default({}) -%}
 instance-id: {{ guest.instanceId }}
 local-hostname: {{ guest.hostname }}
 network:
@@ -8,7 +8,11 @@ network:
   ethernets:
     bootwright-primary:
       match:
+{% if net.device | regex_search('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$') %}
         macaddress: "{{ net.device }}"
+{% else %}
+        name: "{{ net.device }}"
+{% endif %}
       dhcp4: false
       dhcp6: false
       addresses:

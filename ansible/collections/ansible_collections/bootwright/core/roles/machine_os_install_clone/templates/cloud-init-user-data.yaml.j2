@@ -1,9 +1,9 @@
 #jinja2: trim_blocks: True, lstrip_blocks: True
-{% set guest = bootwright_component.osInstall.guest %}
-{% set ssh_key = lookup('ansible.builtin.file', guest.sshPublicKeyPath) | trim %}
-{% if ssh_key | length == 0 %}
+{% set guest = bootwright_component.osInstall.guest -%}
+{% set ssh_key = lookup('ansible.builtin.file', guest.sshPublicKeyPath) | trim -%}
+{% if ssh_key | length == 0 -%}
 {{ undef(hint='cloned managed OS seed has no public key to authorize for ' ~ guest.sshUser ~ '. Environment spec.machineAccess.keyRef must resolve to an sshKeyPair Secret whose public half is materialized, otherwise the cloned machine would accept no login at all.') }}
-{% endif %}
+{%- endif -%}
 #cloud-config
 hostname: {{ guest.hostname.split('.') | first }}
 fqdn: {{ guest.hostname }}

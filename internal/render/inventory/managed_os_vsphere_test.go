@@ -84,3 +84,48 @@ func TestManagedOSInstallVarsFromCephVSphereFixture(t *testing.T) {
 		t.Fatalf("managed OS boot redfish = %v, want omitted for vsphere", boot["redfish"])
 	}
 }
+
+func TestManagedOSInstallNetworkFollowsTheDefaultRouteInterface(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "008-ceph-3nodes-vsphere-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	for i := range state.NetworkConfigs {
+		template := state.NetworkConfigs[i].Spec.Template.NetworkConfig
+		unrouted := map[string]any{
+			"name":  "storage",
+			"type":  "ethernet",
+			"state": "up",
+			"ipv4": map[string]any{
+				"enabled": true,
+				"dhcp":    false,
+				"address": []any{map[string]any{"ip": "10.99.99.9", "prefix-length": 24}},
+			},
+		}
+		existing, _ := template["interfaces"].([]any)
+		template["interfaces"] = append([]any{unrouted}, existing...)
+	}
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	component := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	network := component["osInstall"].(map[string]any)["kickstart"].(map[string]any)["network"].(map[string]any)
+	if got := network["ip"]; got != "192.168.142.20" {
+		t.Fatalf("network ip = %v, want the default-route interface address; the seed statics whichever NIC this names", got)
+	}
+	if got := network["prefix"]; got != 24 {
+		t.Fatalf("network prefix = %v, want 24", got)
+	}
+	var routedMAC string
+	for _, raw := range component["interfaces"].([]any) {
+		entry := raw.(map[string]any)
+		if entry["name"] == "primary" {
+			routedMAC, _ = entry["macAddress"].(string)
+		}
+	}
+	if routedMAC == "" {
+		t.Fatalf("component interfaces = %v, want a MAC on the routed interface", component["interfaces"])
+	}
+	if got := network["device"]; got != routedMAC {
+		t.Fatalf("network device = %v, want the routed interface MAC %s", got, routedMAC)
+	}
+}

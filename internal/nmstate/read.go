@@ -1,29 +1,30 @@
 package nmstate
 
-func NetworkConfigPrimaryIP(config map[string]any) string {
-	if ip := networkConfigInterfaceIP(config, "", "ipv4"); ip != "" {
-		return ip
-	}
-	return networkConfigInterfaceIP(config, "", "ipv6")
-}
+import "strconv"
 
-func networkConfigInterfaceIP(config map[string]any, interfaceName string, family string) string {
+func NetworkConfigInterfaceEntries(config map[string]any) []map[string]any {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {
-		return ""
+		return nil
 	}
-	if family == "" {
-		family = "ipv4"
-	}
+	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
+		if entry, ok := item.(map[string]any); ok {
+			out = append(out, entry)
 		}
-		name, _ := entry["name"].(string)
-		if interfaceName != "" && name != interfaceName {
-			continue
-		}
+	}
+	return out
+}
+
+func NetworkConfigPrimaryIP(config map[string]any) string {
+	if ip := networkConfigFirstFamilyIP(config, "ipv4"); ip != "" {
+		return ip
+	}
+	return networkConfigFirstFamilyIP(config, "ipv6")
+}
+
+func networkConfigFirstFamilyIP(config map[string]any, family string) string {
+	for _, entry := range NetworkConfigInterfaceEntries(config) {
 		if ip := networkConfigFamilyIP(entry, family); ip != "" {
 			return ip
 		}
@@ -32,25 +33,62 @@ func networkConfigInterfaceIP(config map[string]any, interfaceName string, famil
 }
 
 func networkConfigFamilyIP(entry map[string]any, family string) string {
+	addresses := NetworkConfigFamilyAddresses(entry, family)
+	if len(addresses) == 0 {
+		return ""
+	}
+	return addresses[0]
+}
+
+func NetworkConfigFamilyAddresses(entry map[string]any, family string) []string {
+	var out []string
+	for _, address := range networkConfigFamilyAddressEntries(entry, family) {
+		if ip, _ := address["ip"].(string); ip != "" {
+			out = append(out, ip)
+		}
+	}
+	return out
+}
+
+func NetworkConfigFamilyIPPrefix(entry map[string]any, family string) (string, int) {
+	for _, address := range networkConfigFamilyAddressEntries(entry, family) {
+		ip, _ := address["ip"].(string)
+		if ip == "" {
+			continue
+		}
+		return ip, intFromYAML(address["prefix-length"])
+	}
+	return "", 0
+}
+
+func NetworkConfigFamilyUsesDHCP(entry map[string]any, family string) bool {
 	familyConfig, ok := entry[family].(map[string]any)
 	if !ok {
-		return ""
+		return false
+	}
+	if enabled, ok := familyConfig["enabled"].(bool); ok && !enabled {
+		return false
+	}
+	dhcp, _ := familyConfig["dhcp"].(bool)
+	return dhcp
+}
+
+func networkConfigFamilyAddressEntries(entry map[string]any, family string) []map[string]any {
+	familyConfig, ok := entry[family].(map[string]any)
+	if !ok {
+		return nil
 	}
 	rawAddresses, ok := familyConfig["address"].([]any)
 	if !ok {
-		return ""
+		return nil
 	}
+	out := make([]map[string]any, 0, len(rawAddresses))
 	for _, raw := range rawAddresses {
-		address, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		ip, _ := address["ip"].(string)
-		if ip != "" {
-			return ip
+		if address, ok := raw.(map[string]any); ok {
+			out = append(out, address)
 		}
 	}
-	return ""
+	return out
 }
 
 type RoutedInterface struct {
@@ -60,16 +98,11 @@ type RoutedInterface struct {
 }
 
 func NetworkConfigRoutedInterface(config map[string]any) (RoutedInterface, bool) {
-	name := networkConfigDefaultRouteInterface(config)
+	name := NetworkConfigDefaultRouteInterface(config)
 	if name == "" {
 		return RoutedInterface{}, false
 	}
-	raw, _ := config["interfaces"].([]any)
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, entry := range NetworkConfigInterfaceEntries(config) {
 		if got, _ := entry["name"].(string); got != name {
 			continue
 		}
@@ -79,7 +112,15 @@ func NetworkConfigRoutedInterface(config map[string]any) (RoutedInterface, bool)
 	return RoutedInterface{Name: name}, true
 }
 
-func networkConfigDefaultRouteInterface(config map[string]any) string {
+func NetworkConfigDefaultRouteInterface(config map[string]any) string {
+	return networkConfigDefaultRouteField(config, "next-hop-interface")
+}
+
+func NetworkConfigGateway(config map[string]any) string {
+	return networkConfigDefaultRouteField(config, "next-hop-address")
+}
+
+func networkConfigDefaultRouteField(config map[string]any, field string) string {
 	routes, ok := config["routes"].(map[string]any)
 	if !ok {
 		return ""
@@ -93,12 +134,11 @@ func networkConfigDefaultRouteInterface(config map[string]any) string {
 		if !ok {
 			continue
 		}
-		destination, _ := entry["destination"].(string)
-		if destination != "0.0.0.0/0" {
+		if destination, _ := entry["destination"].(string); destination != "0.0.0.0/0" {
 			continue
 		}
-		if name, _ := entry["next-hop-interface"].(string); name != "" {
-			return name
+		if value, _ := entry[field].(string); value != "" {
+			return value
 		}
 	}
 	return ""
@@ -124,4 +164,21 @@ func NetworkConfigDNSServers(config map[string]any) []string {
 		}
 	}
 	return out
+}
+
+func intFromYAML(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case uint64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		out, _ := strconv.Atoi(v)
+		return out
+	}
+	return 0
 }
