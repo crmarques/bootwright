@@ -191,6 +191,29 @@
       were kept intact.
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
 
+- name: Resolve storage nodes whose device wipe did not run
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_unwiped_hosts: >-
+      {{ (bootwright_ceph_destroy_cluster_live_hosts
+          | rejectattr('bootwright_ceph_wipefs', 'defined')
+          | map(attribute='inventory_hostname') | list)
+         + (bootwright_ceph_destroy_cluster_live_hosts
+            | selectattr('bootwright_ceph_wipefs', 'defined')
+            | selectattr('bootwright_ceph_wipefs.unreachable', 'defined')
+            | selectattr('bootwright_ceph_wipefs.unreachable')
+            | map(attribute='inventory_hostname') | list) }}
+  vars:
+    bootwright_ceph_destroy_cluster_live_hosts: >-
+      {{ ansible_play_hosts_all
+         | map('extract', hostvars)
+         | selectattr('bootwright_storage_cluster_name', 'defined')
+         | selectattr('bootwright_storage_cluster_name', 'equalto', bootwright_selected_storage_cluster.name)
+         | selectattr('bootwright_storage_reachable_probe', 'defined')
+         | rejectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
+         | list }}
+  changed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
 - name: Remove storage cluster ownership record
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -204,6 +227,21 @@
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - not (bootwright_storage_cluster_partial | default(false) | bool)
+    - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length == 0
+
+- name: Keep the storage cluster ownership record for nodes lost mid-teardown
+  ansible.builtin.debug:
+    msg: >-
+      Keeping the Bootwright ownership record for
+      {{ bootwright_selected_storage_cluster.name }}: storage node(s)
+      {{ bootwright_ceph_destroy_unwiped_hosts | join(', ') }} were reachable when this
+      teardown began but stopped answering before their declared OSD devices were wiped,
+      so their disks may still carry this cluster's data. The record preserves the
+      partial-destroy marker; re-run destroy once the node(s) answer again, or wipe them
+      manually, before reusing the hardware.
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length > 0
 
 - name: Remove Ceph package ownership records
   ansible.builtin.include_role:

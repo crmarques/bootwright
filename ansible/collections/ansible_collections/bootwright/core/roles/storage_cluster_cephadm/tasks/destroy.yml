@@ -13,3 +13,10 @@
 
 - name: Reclaim Ceph-signed disks that no declared path covers
   ansible.builtin.import_tasks: destroy_steps/filter_device_reclaim.yml
+
+- name: Confirm the storage node completed its teardown
+  ansible.builtin.command:
+    argv:
+      - "true"
+  register: bootwright_ceph_destroy_completion
+  changed_when: false

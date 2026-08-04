@@ -2188,6 +2188,61 @@ func TestStorageCephadmDestroyReportsWhyEachSkippedNodeWasSkipped(t *testing.T) 
 	}
 }
 
+func TestStorageCephadmDestroyConfirmsCompletionWithARemoteWitness(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	idx := findAnsibleTask(t, tasks, "Confirm the storage node completed its teardown")
+	if idx != len(tasks)-1 {
+		t.Fatalf("the completion witness must be the LAST task of the destroy chain so reaching it proves every teardown step ran on the node (idx=%d len=%d)", idx, len(tasks))
+	}
+	if _, ok := tasks[idx]["ansible.builtin.command"]; !ok {
+		t.Fatalf("the witness must be a remote command: under ignore_unreachable a dropped host still runs local actions like set_fact and debug, so only a task that needs the SSH connection proves the node stayed reachable through its wipe, got %v", tasks[idx])
+	}
+	if got := fmt.Sprint(tasks[idx]["register"]); got != "bootwright_ceph_destroy_completion" {
+		t.Fatalf("the witness must register bootwright_ceph_destroy_completion for the mid-teardown audit, got %v", tasks[idx]["register"])
+	}
+}
+
+func TestStorageCephadmDestroyAuditsNodesLostMidTeardown(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	roleIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
+	auditIdx := findAnsibleTask(t, tasks, "Audit storage nodes lost after their teardown began")
+	if auditIdx < roleIdx {
+		t.Fatalf("the mid-teardown audit must run after the destroy role, or the completion witness it reads has not run yet (role=%d audit=%d)", roleIdx, auditIdx)
+	}
+	audit := fmt.Sprint(tasks[auditIdx])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_completion",
+		"bootwright_storage_reachable_probe.unreachable",
+		"storage-destroy-result.json",
+		"connection lost during teardown",
+		"bootwright_destroy_skip_unreachable",
+	} {
+		if !strings.Contains(audit, want) {
+			t.Errorf("the audit must retain %q: with --authorize unreachable-nodes the play runs under ignore_unreachable, so a node that drops after the reachability probe has its device wipe silently skipped and only this audit records the partial destroy, got %v", want, tasks[auditIdx])
+		}
+	}
+}
+
+func TestStorageCephadmDestroyKeepsOwnershipRecordForUnwipedNodes(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
+	tasks := readAnsibleTasks(t, base+"wipe_and_cleanup.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve storage nodes whose device wipe did not run")
+	removeIdx := findAnsibleTask(t, tasks, "Remove storage cluster ownership record")
+	if resolveIdx > removeIdx {
+		t.Fatalf("the unwiped-node resolution must precede the ownership-record removal it gates (resolve=%d remove=%d)", resolveIdx, removeIdx)
+	}
+	resolve := fmt.Sprint(tasks[resolveIdx])
+	for _, want := range []string{"bootwright_ceph_wipefs", "bootwright_storage_reachable_probe"} {
+		if !strings.Contains(resolve, want) {
+			t.Errorf("the unwiped-node resolution must read %q to tell a node that dropped before its wipe from one skipped at the probe, got %v", want, tasks[resolveIdx])
+		}
+	}
+	if got := fmt.Sprint(tasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_ceph_destroy_unwiped_hosts") {
+		t.Errorf("the ownership-record removal must be gated on every reachable node having wiped its devices: removing the record after a mid-teardown drop erases the only anchor the partial-destroy marker can be written to, got when=%v", tasks[removeIdx]["when"])
+	}
+}
+
 func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	classifyIdx := findAnsibleTask(t, tasks, "Classify declared Ceph destroy devices by presence")
