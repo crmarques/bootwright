@@ -532,6 +532,16 @@ the previous cluster's LVM.
     bootwright apply --clusters ceph-01 --reclaim-devices /dev/disk/by-id/wwn-0x...
     ```
 
+    or pass the single word `all` to select every declared OSD device of the
+    selected owned cluster(s):
+
+    ```bash
+    bootwright apply --clusters ceph-01 --reclaim-devices all
+    ```
+
+    Either way only a declared device whose host marker does not already record
+    it is wiped, so the healthy nodes stay untouched.
+
     If the reclaim itself refuses the device — *"it carries LVM or dm-crypt
     holders"* — the disk still belongs to something. The refusal says which
     something: it reports whether the node carries a Ceph daemon tree at

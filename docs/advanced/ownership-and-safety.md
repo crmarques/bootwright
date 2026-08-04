@@ -168,7 +168,8 @@ treats resources Bootwright does **not** own:
     - **`--mode rebuild`** may reinstall a managed-OS machine (the substrate VM is
       undefined, **disks are wiped**, then rebuilt) and cleanly rebuild a managed
       Ceph cluster via `cephadm rm-cluster --zap-osds`.
-    - **`--reclaim-devices`** wipes the named OSD devices under the default
+    - **`--reclaim-devices`** wipes the named OSD devices (or, with `all`, every
+      declared OSD device of the selected owned cluster(s)) under the default
       `--mode reconcile`. It is the one deliberate exception to "reconcile never
       destroys" (ADR 0007).
     - **A reinstall a prior `destroy` released.** Once teardown records a

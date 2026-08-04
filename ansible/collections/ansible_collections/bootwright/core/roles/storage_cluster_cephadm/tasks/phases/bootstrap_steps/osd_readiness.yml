@@ -350,7 +350,8 @@
     bootwright_ceph_osd_remedy_manual: >-
       Remedy: this cluster declares no data_devices.all=true host, so the automatic
       all-devices reclaim does not apply to it. For a statically named selection
-      (paths/pathSpecs) re-run `bootwright apply --reclaim-devices <paths>`; for a
+      (paths/pathSpecs) re-run `bootwright apply --reclaim-devices <paths>`, or
+      `bootwright apply --reclaim-devices all` to name every declared path; for a
       narrowing filter (model/size/rotational/vendor/limit) there is no automatic
       reclaim — confirm each disk is disposable, clean it on its host (`wipefs --all`
       / `sgdisk --zap-all`) or exclude it from the OSD device selection, then

@@ -188,6 +188,23 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"--yes does not authorize data loss", "--authorize " + authorizeDataLoss},
 	}, {
+		name:    "apply/preview: --reclaim-devices all expands to the declared devices in the forecast",
+		seed:    seedSuccessfulApply,
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "all", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Required authorizations", "--authorize " + authorizeDataLoss + ": " + authorizationRequired, "reclaim-devices /dev/sdb", "every declared OSD device"},
+	}, {
+		name:    "apply/reclaim-devices all in the non-dry counterpart refuses with the expanded devices",
+		seed:    seedSuccessfulApply,
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"--yes does not authorize data loss", "reclaim-devices /dev/sdb", "--authorize " + authorizeDataLoss},
+	}, {
+		name:    "apply/reclaim-devices all mixed with a path is a usage error",
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "all,/dev/sdb", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--reclaim-devices lists all together", "bootwright apply --reclaim-devices all"},
+	}, {
 		name:    "apply/preview: host-decided apply tokens are disclosed as may be required",
 		args:    []string{"apply", "--stage", "base", "--clusters", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

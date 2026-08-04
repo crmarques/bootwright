@@ -91,7 +91,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	addModeFlag(cmd, &modeFlag, action)
 	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbApply)
 	if usesAnsible {
-		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a named device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
+		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply, or the single word "+converge.ReclaimDevicesAll+" to select every declared OSD device of the selected owned cluster(s) (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a selected device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
+		registerFlagCompletion(cmd, "reclaim-devices", []string{converge.ReclaimDevicesAll})
 	}
 	if options.stageSelector {
 		if usesAnsible {
@@ -164,6 +165,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !stageProvided {
 				runCommandLabel = "machines " + action
 			}
+		}
+		if err := converge.ValidateReclaimDevicesFlag(reclaimDevices); err != nil {
+			return failErr(2, err)
 		}
 		if reclaimDevices != "" && !converge.ScopeIncludesApplyPhase(runScope, converge.PhaseDeps) {
 			return failErr(2, errors.New("--reclaim-devices wipes devices during the deps phase, which is not in this run's scope; re-run with a scope that includes it (--stage deps, --through base, or the full graph)"))
@@ -274,6 +278,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, auth.has(authorizeDataLoss)); err != nil {
 					return failErr(1, err)
 				}
+				resolvedReclaim, rerr := converge.ResolveReclaimDevices(plan.State, ownedReclaim, reclaimDevices)
+				if rerr != nil {
+					return failErr(2, rerr)
+				}
+				reclaimDevices = resolvedReclaim
 				if len(ownedReclaim) > 0 {
 					if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, ownedReclaim, reclaimDevices); len(unmatched) > 0 {
 						return failErr(2, reclaimUnmatchedError(unmatched, ownedReclaim, declared))
@@ -348,7 +357,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
-				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE device(s) "+reclaimDevices+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by --authorize "+authorizeDataLoss+" or the interactive data-loss confirm")
+				describedReclaim := "device(s) " + reclaimDevices
+				if converge.ReclaimDevicesRequestsAll(reclaimDevices) {
+					describedReclaim = "every declared OSD device"
+				}
+				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE "+describedReclaim+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by --authorize "+authorizeDataLoss+" or the interactive data-loss confirm")
 			}
 			planEntries := workflow.TaskLedgerEntries(dryRunTasks)
 			reporter.DryRunTasks(runCommandLabel, planEntries, limits, applyPlanGroups(planEntries, buildClusterDisplays(state)))

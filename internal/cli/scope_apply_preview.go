@@ -97,8 +97,10 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 		if err := converge.CheckReclaimDestroyProtection(planState, owned, allowDestroy); err != nil {
 			refusals = append(refusals, err)
 		}
-		if len(owned) > 0 {
-			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, owned, reclaimDevices); len(unmatched) > 0 {
+		if resolved, resolveErr := converge.ResolveReclaimDevices(planState, owned, reclaimDevices); resolveErr != nil {
+			refusals = append(refusals, resolveErr)
+		} else if len(owned) > 0 {
+			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, owned, resolved); len(unmatched) > 0 {
 				refusals = append(refusals, reclaimUnmatchedError(unmatched, owned, declared))
 			}
 		}

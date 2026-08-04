@@ -1,12 +1,15 @@
 package converge
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
+
+const ReclaimDevicesAll = "all"
 
 func SplitReclaimDevices(devices string) []string {
 	var out []string
@@ -42,6 +45,57 @@ func DeclaredOwnedOSDDevices(state v1alpha1.State, owned []string) []string {
 		out = append(out, dev)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func ReclaimDevicesRequestsAll(devices string) bool {
+	entries := SplitReclaimDevices(devices)
+	return len(entries) == 1 && entries[0] == ReclaimDevicesAll
+}
+
+func ValidateReclaimDevicesFlag(devices string) error {
+	entries := SplitReclaimDevices(devices)
+	if len(entries) < 2 {
+		return nil
+	}
+	for _, entry := range entries {
+		if entry == ReclaimDevicesAll {
+			return fmt.Errorf("--reclaim-devices lists %s together with other entries: %s already selects every declared OSD device of the selected owned cluster(s), so run `bootwright apply --reclaim-devices %s` alone, or name only explicit device paths", ReclaimDevicesAll, ReclaimDevicesAll, ReclaimDevicesAll)
+		}
+	}
+	return nil
+}
+
+func ResolveReclaimDevices(state v1alpha1.State, owned []string, devices string) (string, error) {
+	if !ReclaimDevicesRequestsAll(devices) || len(owned) == 0 {
+		return devices, nil
+	}
+	declared := DeclaredOwnedOSDDevices(state, owned)
+	if len(declared) == 0 {
+		return "", reclaimAllNoneDeclaredError(state, owned)
+	}
+	return strings.Join(declared, ","), nil
+}
+
+func reclaimAllNoneDeclaredError(state v1alpha1.State, owned []string) error {
+	remedy := "declare the OSD devices with static paths (nodes[].devices, dataDevices.paths, or pathSpecs), re-apply, and then re-run `bootwright apply --reclaim-devices " + ReclaimDevicesAll + "`"
+	if clusters := allDevicesSelectionClusters(state, owned); len(clusters) > 0 {
+		remedy = "host(s) of cluster(s) " + strings.Join(clusters, ", ") + " declare their OSDs with data_devices.all=true, whose dirty disks are reclaimed by `bootwright apply --mode rebuild --authorize data-loss` instead"
+	}
+	return fmt.Errorf("--reclaim-devices %s matched no device: owned Ceph cluster(s) %s declare no static OSD device path; %s", ReclaimDevicesAll, strings.Join(owned, ", "), remedy)
+}
+
+func allDevicesSelectionClusters(state v1alpha1.State, owned []string) []string {
+	ownedSet := map[string]bool{}
+	for _, name := range owned {
+		ownedSet[name] = true
+	}
+	var out []string
+	for _, sc := range state.StorageClusters {
+		if ownedSet[sc.Metadata.Name] && sc.Spec.Ceph != nil && topology.ClusterHasAllDevicesOSDHost(sc) {
+			out = append(out, sc.Metadata.Name)
+		}
+	}
 	return out
 }
 

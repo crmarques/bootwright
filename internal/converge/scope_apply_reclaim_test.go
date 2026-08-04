@@ -2,6 +2,7 @@ package converge
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -123,5 +124,93 @@ func TestUnmatchedReclaimDevicesEmptyInput(t *testing.T) {
 	state := reclaimTestState()
 	if unmatched, declared := UnmatchedReclaimDevices(state, []string{"ceph1"}, "  ,  "); unmatched != nil || declared != nil {
 		t.Fatalf("empty device input must yield no unmatched/declared, got %v / %v", unmatched, declared)
+	}
+}
+
+func TestReclaimDevicesRequestsAll(t *testing.T) {
+	cases := map[string]bool{
+		"all":           true,
+		" all ":         true,
+		"":              false,
+		"/dev/sdb":      false,
+		"all,/dev/sdb":  false,
+		"ALL":           false,
+		"all,all":       false,
+		"/dev/disk/all": false,
+	}
+	for devices, want := range cases {
+		if got := ReclaimDevicesRequestsAll(devices); got != want {
+			t.Errorf("ReclaimDevicesRequestsAll(%q) = %v, want %v", devices, got, want)
+		}
+	}
+}
+
+func TestValidateReclaimDevicesFlagRejectsAllMixedWithPaths(t *testing.T) {
+	err := ValidateReclaimDevicesFlag("all,/dev/sdb")
+	if err == nil {
+		t.Fatal("mixing the all keyword with explicit paths must be rejected before any run work")
+	}
+	for _, want := range []string{"bootwright apply --reclaim-devices all", "explicit device path"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("mixing error must contain %q, got %v", want, err)
+		}
+	}
+	for _, ok := range []string{"", "all", "/dev/sdb,/dev/sdc"} {
+		if err := ValidateReclaimDevicesFlag(ok); err != nil {
+			t.Errorf("ValidateReclaimDevicesFlag(%q) = %v, want nil", ok, err)
+		}
+	}
+}
+
+func TestResolveReclaimDevicesExpandsAllToDeclaredOwnedDevices(t *testing.T) {
+	state := reclaimTestState()
+	resolved, err := ResolveReclaimDevices(state, []string{"ceph1", "ceph2"}, "all")
+	if err != nil {
+		t.Fatalf("ResolveReclaimDevices = %v, want the declared device expansion", err)
+	}
+	if resolved != "/dev/nvme0n1,/dev/sdb" {
+		t.Fatalf("resolved = %q, want %q", resolved, "/dev/nvme0n1,/dev/sdb")
+	}
+}
+
+func TestResolveReclaimDevicesLeavesExplicitPathsAlone(t *testing.T) {
+	state := reclaimTestState()
+	resolved, err := ResolveReclaimDevices(state, []string{"ceph1"}, "/dev/sdb,/dev/sdc")
+	if err != nil || resolved != "/dev/sdb,/dev/sdc" {
+		t.Fatalf("ResolveReclaimDevices = %q/%v, want the explicit list unchanged", resolved, err)
+	}
+}
+
+func TestResolveReclaimDevicesAllWithoutOwnedClusters(t *testing.T) {
+	state := reclaimTestState()
+	resolved, err := ResolveReclaimDevices(state, nil, "all")
+	if err != nil || resolved != "all" {
+		t.Fatalf("ResolveReclaimDevices = %q/%v, want the literal kept so the no-owned-cluster warning still fires", resolved, err)
+	}
+}
+
+func TestResolveReclaimDevicesAllRefusesFilterOnlySelections(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph1"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+						Name:  "node-01",
+						Roles: []string{v1alpha1.StorageCephRoleOSD},
+						OSD:   &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}},
+					}}},
+				},
+			},
+		}},
+	}
+	_, err := ResolveReclaimDevices(state, []string{"ceph1"}, "all")
+	if err == nil {
+		t.Fatal("an all:true selection names no static path, so --reclaim-devices all must refuse and steer to the rebuild reclaim")
+	}
+	for _, want := range []string{"no static OSD device path", "--mode rebuild --authorize data-loss"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal must contain %q, got %v", want, err)
+		}
 	}
 }

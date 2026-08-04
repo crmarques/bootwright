@@ -68,6 +68,11 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 			_, substrateReset = workflow.OverrideDestructiveMachineSubstrate(objects)
 		}
 		substrateReset = workflow.UnionClusterNames(substrateReset, workflow.SubstrateReleaseClusterNames(released))
+		ownedReclaim := converge.OwnedStorageClusters(objects)
+		resolvedReclaim, resolveErr := converge.ResolveReclaimDevices(planState, ownedReclaim, reclaimDevices)
+		if resolveErr != nil {
+			resolvedReclaim = ""
+		}
 		descriptors := applyDestructiveDescriptors(applyDestructiveSet{
 			mode:            mode,
 			objects:         objects,
@@ -77,8 +82,8 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 			reinstalls:      forecastReinstallDescriptors(reinstallDrift),
 			releasedRecords: released,
 			rebuiltHosts:    workflow.UnionClusterNames(reinstallDrift, substrateReset),
-			reclaimDevices:  reclaimDevices,
-			ownedReclaim:    converge.OwnedStorageClusters(objects),
+			reclaimDevices:  resolvedReclaim,
+			ownedReclaim:    ownedReclaim,
 			allowDestroy:    auth.has(authorizeDataLoss),
 		})
 		forecast.consult(authorizeDataLoss, len(descriptors) > 0, "a real run would "+strings.Join(descriptors, ", ")+" — target disks wiped and any Ceph OSD data zapped")
