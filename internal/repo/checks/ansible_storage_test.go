@@ -1686,6 +1686,82 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmDestroyLiveFsidProbeIsBounded(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+
+	confIdx := findAnsibleTask(t, tasks, "Check existing Ceph configuration on seed host")
+	scanIdx := findAnsibleTask(t, tasks, "Scan the seed host for Ceph cluster directories")
+	stateIdx := findAnsibleTask(t, tasks, "Resolve whether the seed host still carries Ceph cluster state")
+	probeIdx := findAnsibleTask(t, tasks, "Check Ceph fsid on seed host")
+	if !(confIdx < stateIdx && scanIdx < stateIdx && stateIdx < probeIdx) {
+		t.Fatalf("ceph destroy must resolve the seed's local cluster state before probing it live (conf=%d scan=%d state=%d probe=%d)", confIdx, scanIdx, stateIdx, probeIdx)
+	}
+
+	state, ok := tasks[stateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("seed local Ceph state must be a set_fact, got %v", tasks[stateIdx])
+	}
+	local := fmt.Sprint(state["bootwright_ceph_destroy_local_state"])
+	for _, want := range []string{"bootwright_ceph_destroy_conf_check.rc", "bootwright_ceph_destroy_state_dirs.files"} {
+		if !strings.Contains(local, want) {
+			t.Fatalf("seed local Ceph state must read %s: a seed carrying /var/lib/ceph/<fsid> but no ceph.conf still answers `ceph fsid`, and skipping the probe there would fail the ownership gate open, got %v", want, state["bootwright_ceph_destroy_local_state"])
+		}
+	}
+
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph destroy live fsid probe must be a command, got %v", tasks[probeIdx])
+	}
+	argv := fmt.Sprint(probe["argv"])
+	if !strings.Contains(argv, "timeout") {
+		t.Fatalf("ceph destroy live fsid probe must be wrapped in `timeout`: `cephadm shell` pulls a container image and `ceph fsid` retries a dead mon forever, so an unbounded probe parks the whole teardown with no output, got argv=%v", probe["argv"])
+	}
+	when := fmt.Sprint(tasks[probeIdx]["when"])
+	if !strings.Contains(when, "bootwright_ceph_destroy_local_state") {
+		t.Fatalf("ceph destroy live fsid probe must be gated on the seed still carrying Ceph cluster state, got when=%v", tasks[probeIdx]["when"])
+	}
+}
+
+func TestStorageCephadmDestroyOwnershipRefusalNamesItsEvidence(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+
+	evidenceIdx := findAnsibleTask(t, tasks, "Resolve the unproven Ceph destroy ownership evidence on seed host")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
+	if evidenceIdx >= refuseIdx {
+		t.Fatalf("ceph destroy must resolve its ownership evidence before refusing on it (evidence=%d refuse=%d)", evidenceIdx, refuseIdx)
+	}
+
+	evidence, ok := tasks[evidenceIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph destroy ownership evidence must be a set_fact, got %v", tasks[evidenceIdx])
+	}
+	unproven := fmt.Sprint(evidence["bootwright_ceph_destroy_unproven"])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_record.stat.exists",
+		"bootwright_ceph_destroy_owned_fsid",
+		"bootwright_ceph_destroy_conf_fsid",
+		"bootwright_ceph_destroy_live_fsid",
+	} {
+		if !strings.Contains(unproven, want) {
+			t.Fatalf("ceph destroy refusal must be able to name %s as the unproven factor, got %v", want, evidence["bootwright_ceph_destroy_unproven"])
+		}
+	}
+
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph destroy ownership guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	msg := fmt.Sprint(refuse["fail_msg"])
+	for _, want := range []string{"bootwright_ceph_destroy_unproven", "bootwright_ceph_destroy_evidence", "--recover-ceph-ownership"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("ceph destroy ownership refusal must report %s: an operator cannot act on a refusal that lists three possible causes and names none, got %v", want, refuse["fail_msg"])
+		}
+	}
+	if strings.Contains(msg, "either no ownership record exists") {
+		t.Fatalf("ceph destroy ownership refusal must not fall back to the undiagnosable either/or prose, got %v", refuse["fail_msg"])
+	}
+}
+
 func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	if len(plays) != 1 {

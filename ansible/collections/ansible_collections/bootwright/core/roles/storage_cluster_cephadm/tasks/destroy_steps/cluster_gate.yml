@@ -1,17 +1,4 @@
 ---
-- name: Check Ceph fsid on seed host
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - shell
-      - --
-      - ceph
-      - fsid
-  register: bootwright_ceph_fsid
-  changed_when: false
-  failed_when: false
-  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
-
 - name: Read existing Ceph configuration on seed host
   ansible.builtin.slurp:
     src: /etc/ceph/ceph.conf
@@ -30,6 +17,42 @@
   changed_when: false
   failed_when: false
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Scan the seed host for Ceph cluster directories
+  ansible.builtin.find:
+    paths: /var/lib/ceph
+    file_type: directory
+  register: bootwright_ceph_destroy_state_dirs
+  changed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Resolve whether the seed host still carries Ceph cluster state
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_local_state: >-
+      {{ (bootwright_ceph_destroy_conf_check.rc | default(1) | int == 0)
+         or ((bootwright_ceph_destroy_state_dirs.files | default([])
+              | map(attribute='path') | map('basename')
+              | select('match', '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+              | list | length) > 0) }}
+  changed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Check Ceph fsid on seed host
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "60"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - fsid
+  register: bootwright_ceph_fsid
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_local_state | default(false) | bool
 
 - name: Resolve existing Ceph configuration fsid on seed host
   ansible.builtin.set_fact:
@@ -160,6 +183,64 @@
       }}
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
+- name: Resolve the unproven Ceph destroy ownership evidence on seed host
+  vars:
+    bootwright_ceph_destroy_record_path: "{{ bootwright_ownership_dir }}/resources/storage-cluster/{{ bootwright_selected_storage_cluster.name }}.json"
+    bootwright_ceph_destroy_live_fsid: "{{ bootwright_ceph_fsid.stdout | default('') | trim }}"
+    bootwright_ceph_destroy_live_reading: >-
+      {{ (bootwright_ceph_fsid.stdout | default('') | trim | default('<no answer>', true))
+         if (bootwright_ceph_destroy_local_state | default(false) | bool)
+         else '<not probed: this seed carries no Ceph cluster state>' }}
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_unproven: >-
+      {{
+        (['/etc/ceph/ceph.conf is absent, but this node answered `ceph fsid` with '
+          ~ bootwright_ceph_destroy_live_fsid]
+         if ((bootwright_ceph_destroy_conf_check.rc | default(1) | int != 0)
+             and (bootwright_ceph_destroy_live_fsid | length > 0))
+         else [])
+        + (['/etc/ceph/ceph.conf carries no fsid']
+           if ((bootwright_ceph_destroy_conf_check.rc | default(1) | int == 0)
+               and (bootwright_ceph_destroy_conf_fsid | default('') | length == 0))
+           else [])
+        + (['the controller holds no ownership record at '
+            ~ bootwright_ceph_destroy_record_path]
+           if ((bootwright_ceph_destroy_conf_fsid | default('') | length > 0)
+               and not (bootwright_ceph_destroy_record.stat.exists | default(false) | bool))
+           else [])
+        + (['the on-host ownership marker ' ~ bootwright_ceph_ownership_marker_path
+            ~ ' is missing or carries no fsid']
+           if ((bootwright_ceph_destroy_conf_fsid | default('') | length > 0)
+               and (bootwright_ceph_destroy_owned_fsid | default('') | length == 0))
+           else [])
+        + (['the on-host ownership marker fsid '
+            ~ (bootwright_ceph_destroy_owned_fsid | default(''))
+            ~ ' does not match the configuration fsid']
+           if ((bootwright_ceph_destroy_owned_fsid | default('') | length > 0)
+               and (bootwright_ceph_destroy_owned_fsid | default('')
+                    != bootwright_ceph_destroy_conf_fsid | default('')))
+           else [])
+        + (['the reachable cluster fsid ' ~ bootwright_ceph_destroy_live_fsid
+            ~ ' does not match the configuration fsid']
+           if ((bootwright_ceph_destroy_conf_fsid | default('') | length > 0)
+               and (bootwright_ceph_destroy_live_fsid | length > 0)
+               and (bootwright_ceph_destroy_live_fsid
+                    != bootwright_ceph_destroy_conf_fsid | default('')))
+           else [])
+      }}
+    bootwright_ceph_destroy_evidence: >-
+      configuration fsid
+      {{ bootwright_ceph_destroy_conf_fsid | default('') | trim | default('<none>', true) }};
+      on-host marker fsid
+      {{ bootwright_ceph_destroy_owned_fsid | default('') | trim | default('<missing>', true) }};
+      controller record
+      {{ 'present' if (bootwright_ceph_destroy_record.stat.exists | default(false) | bool) else 'absent' }}
+      at {{ bootwright_ceph_destroy_record_path }};
+      reachable cluster fsid
+      {{ bootwright_ceph_destroy_live_reading }}
+  changed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
 - name: Refuse to destroy a non-Bootwright Ceph cluster on seed host
   ansible.builtin.assert:
     that:
@@ -167,11 +248,14 @@
     fail_msg: >-
       Refusing to tear down the cephadm cluster on {{ inventory_hostname }}
       (fsid {{ bootwright_ceph_destroy_conf_fsid | default('<unreadable>') | trim }}):
-      /etc/ceph holds a running Ceph cluster whose fsid is not proven to be Bootwright's
-      on this seed — either no ownership record exists, or the on-host ownership marker is
-      missing, or the marker, configuration, and reachable cluster fsids do not agree — so
-      it may be a foreign or co-resident cluster. If you independently verified this
-      cluster and fsid, retry with
+      this seed carries a Ceph cluster whose fsid is not proven to be Bootwright's, so it
+      may be a foreign or co-resident cluster. Unproven because
+      {{ bootwright_ceph_destroy_unproven | default([]) | join('; and ') }}.
+      Evidence read on this seed: {{ bootwright_ceph_destroy_evidence | default('none') }}.
+      A missing controller record or host marker is the residue of a teardown that already
+      began, or of an install whose ownership stamping never completed; a fsid that
+      disagrees is a different cluster. If you independently verified this cluster and
+      fsid, retry with
       --recover-ceph-ownership
       {{ bootwright_selected_storage_cluster.name }}={{
       bootwright_ceph_destroy_conf_fsid | default('<fsid>') }} to reconstruct the

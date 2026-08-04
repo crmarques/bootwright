@@ -34,6 +34,40 @@ removable. Teardown resolves the live fsid when the cluster answers, else the
 conf fsid — `cephadm rm-cluster` operates on local daemons/state by fsid, not
 on the live cluster.
 
+**Semantics (the live probe is bounded and conditional).** The destroy gate's
+`ceph fsid` probe runs `timeout 60 cephadm shell -- ceph fsid` and only when
+the seed still carries Ceph cluster state — `/etc/ceph/ceph.conf` exists, or
+`/var/lib/ceph/<uuid>` does. Unbounded it parks the whole teardown: on a
+SECOND destroy the first run removed the local state, so `cephadm shell` can
+infer no image and falls back to pulling one (unbounded behind a proxy), and
+where the conf survived with mons that are gone the `ceph` CLI retries the mon
+connection forever. Neither is a connection failure, so the SSH keepalives in
+`ansible.cfg` never fire. The state gate is not merely an optimization but
+must not narrow to the conf alone: a seed with `/var/lib/ceph/<fsid>` and no
+conf still answers `ceph fsid` (cephadm infers the cluster from the directory),
+and skipping the probe there would let a seed running daemons take the
+"no conf and no live cluster ⇒ nothing to protect" branch and fail the gate
+OPEN. With no conf and no fsid directory the probe is structurally incapable
+of finding a cluster — there is no config for the CLI to find a mon with — so
+not running it changes no verdict. A timeout reads as "cluster unreachable",
+the same as a down cluster, and unreachability alone never authorizes: the
+conf/marker/record triple still has to agree.
+
+**Semantics (the refusal names which factor is unproven).** The gate has three
+independent ways to fail and the operator must be told which one fired.
+`destroy_steps/cluster_gate.yml` resolves `bootwright_ceph_destroy_unproven`
+— an ordered list of the specific factors that did not hold (no controller
+record at `<path>`, marker missing or fsid-less, marker/conf disagreement, live
+cluster/conf disagreement, conf without an fsid, conf absent but a live cluster
+answering) — plus `bootwright_ceph_destroy_evidence`, the four readings
+themselves. Both go into the refusal. The prior message listed all three causes
+joined by "either … or …" and named none, so the reader could not tell whether
+`--recover-ceph-ownership` was the right exit (it is, for a missing record or
+marker) or would refuse anyway (it does, for a contradiction). Observed on
+ceph-prd-01 2026-08-04: a repeat destroy refused on seed srv4203 for
+`6a1388fa-9021-11f1-bf15-303ea72d7724` with no way to tell from the run which
+evidence had gone missing.
+
 **Semantics:** `cephadm rm-cluster` is host-local: run on the seed it stops and
 removes only the SEED's daemons/state. Non-seed hosts keep their
 mon/mgr/mds/osd systemd units and podman containers running, so wiping their
