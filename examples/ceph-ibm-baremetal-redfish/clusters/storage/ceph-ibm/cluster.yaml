@@ -32,6 +32,7 @@ spec:
 
     mgmtGateway:
       dnsLabel: dashboard
+      exposure: http
       ingress:
         name: mgmt
         address: 10.20.30.81

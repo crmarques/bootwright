@@ -1331,12 +1331,13 @@ func TestStorageMgmtGatewayTLSIsRefusedOnVendorBuilds(t *testing.T) {
 		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
 	}}
 	tls := &v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "cert"}}
-	clusterWith := func(distribution string, tls *v1alpha1.StorageCephMgmtGatewayTLS) v1alpha1.StorageCluster {
+	clusterWith := func(distribution, exposure string, tls *v1alpha1.StorageCephMgmtGatewayTLS) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: distribution,
 			MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
-				TLS:     tls,
-				Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+				Exposure: exposure,
+				TLS:      tls,
+				Ingress:  v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
 			},
 			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
 		}}}
@@ -1344,18 +1345,19 @@ func TestStorageMgmtGatewayTLSIsRefusedOnVendorBuilds(t *testing.T) {
 	cases := []struct {
 		name         string
 		distribution string
+		exposure     string
 		tls          *v1alpha1.StorageCephMgmtGatewayTLS
 		want         string
 	}{
-		{name: "ibm-with-tls", distribution: v1alpha1.StorageCephDistributionIBM, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=ibm"},
-		{name: "redhat-with-tls", distribution: v1alpha1.StorageCephDistributionRedHat, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=redhat"},
+		{name: "ibm-with-tls", distribution: v1alpha1.StorageCephDistributionIBM, exposure: v1alpha1.StorageCephMgmtGatewayExposureHTTPS, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=ibm"},
+		{name: "redhat-with-tls", distribution: v1alpha1.StorageCephDistributionRedHat, exposure: v1alpha1.StorageCephMgmtGatewayExposureHTTPS, tls: tls, want: "spec.ceph.mgmtGateway.tls is refused when distribution=redhat"},
 		{name: "oss-with-tls", distribution: v1alpha1.StorageCephDistributionOSS, tls: tls},
 		{name: "default-distribution-with-tls", tls: tls},
-		{name: "ibm-without-tls", distribution: v1alpha1.StorageCephDistributionIBM},
+		{name: "ibm-without-tls", distribution: v1alpha1.StorageCephDistributionIBM, exposure: v1alpha1.StorageCephMgmtGatewayExposureHTTP},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.mgmtGateway", clusterWith(tc.distribution, tc.tls), state), "; ")
+			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.mgmtGateway", clusterWith(tc.distribution, tc.exposure, tc.tls), state), "; ")
 			if tc.want == "" {
 				if got != "" {
 					t.Fatalf("unexpected errors: %s", got)
@@ -1367,6 +1369,65 @@ func TestStorageMgmtGatewayTLSIsRefusedOnVendorBuilds(t *testing.T) {
 			}
 			if !strings.Contains(got, "reconfigures all gateway daemons") {
 				t.Fatalf("the refusal must explain the reconfigure loop it prevents, got %q", got)
+			}
+		})
+	}
+}
+
+func TestStorageMgmtGatewayExposureRules(t *testing.T) {
+	state := v1alpha1.State{Secrets: []v1alpha1.Secret{
+		{Metadata: v1alpha1.Metadata{Name: "cert"}, Spec: v1alpha1.SecretSpec{Type: v1alpha1.SecretTypeTLSCertificate}},
+	}}
+	enable := true
+	oauth := &v1alpha1.StorageCephOAuth2Proxy{ProviderDisplayName: "sso", ClientID: "id", ClientSecretRef: v1alpha1.LocalObjectReference{Name: "cert"}, OIDCIssuerURL: "https://idp"}
+	clusterWith := func(mutate func(*v1alpha1.StorageCephMgmtGateway), distribution string) v1alpha1.StorageCluster {
+		mgmt := &v1alpha1.StorageCephMgmtGateway{
+			Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "m", Address: "10.0.0.9", PrefixLength: 24},
+		}
+		mutate(mgmt)
+		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: "ceph"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: distribution,
+			MgmtGateway:  mgmt,
+			Topology:     v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Roles: []string{"ingress"}}}},
+		}}}
+	}
+	cases := []struct {
+		name         string
+		distribution string
+		mutate       func(*v1alpha1.StorageCephMgmtGateway)
+		want         string
+	}{
+		{name: "vendor-unset-exposure-is-refused", distribution: v1alpha1.StorageCephDistributionIBM, mutate: func(m *v1alpha1.StorageCephMgmtGateway) {}, want: "exposure must be declared explicitly when distribution=ibm"},
+		{name: "vendor-http-passes", distribution: v1alpha1.StorageCephDistributionIBM, mutate: func(m *v1alpha1.StorageCephMgmtGateway) { m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP }},
+		{name: "vendor-explicit-https-passes", distribution: v1alpha1.StorageCephDistributionRedHat, mutate: func(m *v1alpha1.StorageCephMgmtGateway) { m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTPS }},
+		{name: "oss-unset-exposure-passes", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {}},
+		{name: "http-contradicts-tls", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+			m.TLS = &v1alpha1.StorageCephMgmtGatewayTLS{CertificateRef: v1alpha1.LocalObjectReference{Name: "cert"}, KeyRef: v1alpha1.LocalObjectReference{Name: "cert"}}
+		}, want: "tls contradicts exposure: http"},
+		{name: "http-refuses-oauth2", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+			m.EnableAuth = &enable
+			m.OAuth2Proxy = oauth
+		}, want: "oauth2Proxy requires exposure: https"},
+		{name: "vendor-refuses-oauth2", distribution: v1alpha1.StorageCephDistributionIBM, mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTPS
+			m.EnableAuth = &enable
+			m.OAuth2Proxy = oauth
+		}, want: "oauth2Proxy is refused when distribution=ibm"},
+		{name: "unknown-exposure-is-refused", mutate: func(m *v1alpha1.StorageCephMgmtGateway) { m.Exposure = "tls" }, want: `exposure "tls" must be "https" or "http"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(validateStorageCephMgmtGateway("spec.ceph.mgmtGateway", clusterWith(tc.mutate, tc.distribution), state), "; ")
+			if tc.want == "" {
+				if got != "" {
+					t.Fatalf("unexpected errors: %s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("errors = %q, want substring %q", got, tc.want)
 			}
 		})
 	}

@@ -242,7 +242,7 @@ sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-cluster
 # service, a mgmt-gateway, and three ingress services.
 
 bootwright cluster info --name ceph-ibm
-# Dashboard: https://dashboard.ceph-ibm.example.com:8443  (user admin; password file printed)
+# Dashboard: http://dashboard.ceph-ibm.example.com:8443  (user admin; password file printed)
 ```
 
 The S3 endpoint is `http://rgw.ceph-ibm.example.com` (RGW ingress VIP

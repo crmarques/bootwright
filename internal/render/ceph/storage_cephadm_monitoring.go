@@ -99,7 +99,7 @@ func cephadmMgmtGatewaySpecs(cluster v1alpha1.StorageCluster) []any {
 			"port":       port,
 			"virtual_ip": endpoint.Address,
 		}
-		if v1alpha1.StorageCephDistributionSubscriptionBacked(cluster.Spec.Ceph.Distribution) {
+		if v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) == v1alpha1.StorageCephMgmtGatewayExposureHTTP {
 			gatewaySpec["ssl"] = false
 		}
 		if mgmt.EnableAuth != nil {

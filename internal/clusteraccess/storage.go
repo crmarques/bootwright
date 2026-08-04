@@ -82,7 +82,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 	}
 	if mgmt := cluster.Spec.Ceph.MgmtGateway; mgmt != nil {
 		if fqdn := stateview.StorageMgmtGatewayFQDN(state, cluster); fqdn != "" {
-			summary.DashboardURL = "https://" + fqdn + ":" + cephMgmtGatewayPort(mgmt.Port)
+			summary.DashboardURL = v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) + "://" + fqdn + ":" + cephMgmtGatewayPort(mgmt.Port)
 		}
 	}
 	if management == v1alpha1.StorageClusterManagementManaged {

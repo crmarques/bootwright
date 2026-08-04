@@ -60,5 +60,6 @@ below.
 | [0044](0044-the-endpoint-a-single-node-cluster-answers-at.md) | The Endpoint a Single-Node Cluster Answers At | extends 0043; follows the source union of 0014 |
 | [0045](0045-installing-the-os-a-golden-image-already-carries.md) | Installing the OS a Golden Image Already Carries | follows the second-backend dispatch rule of 0002; follows the presence-union grammar of 0014 |
 | [0046](0046-the-hosts-preflight-cannot-reach-yet.md) | The Hosts Preflight Cannot Reach Yet | extends the name-resolution group of 0017; closes the coverage gap 0035 recorded |
-| [0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md) | The Certificate a Vendor Gateway Never Settles On | |
+| [0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md) | The Certificate a Vendor Gateway Never Settles On | revised by 0049: the vendor ssl pin becomes the declared exposure field |
 | [0048](0048-the-site-a-machine-stands-in.md) | The Site a Machine Stands In | extends the arbiter move of 0042; the site registry backs the placement grammar of 0018 |
+| [0049](0049-the-scheme-a-gateway-declares-out-loud.md) | The Scheme a Gateway Declares Out Loud | revises the implicit vendor ssl pin of 0047; its repair machinery remains |

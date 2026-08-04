@@ -108,7 +108,7 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 }
 
 func TestStorageAccessSummaryUsesMgmtGatewayVIPDashboardURL(t *testing.T) {
-	managementCluster := func(label string, port int) v1alpha1.StorageCluster {
+	managementCluster := func(label string, port int, exposure string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{
 			Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
 			Spec: v1alpha1.StorageClusterSpec{
@@ -118,6 +118,7 @@ func TestStorageAccessSummaryUsesMgmtGatewayVIPDashboardURL(t *testing.T) {
 					MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
 						DNSLabel: label,
 						Port:     port,
+						Exposure: exposure,
 						Ingress: v1alpha1.StorageCephMgmtGatewayIngress{
 							Name: "lab", Address: "192.168.140.81", PrefixLength: 24,
 						},
@@ -134,19 +135,21 @@ func TestStorageAccessSummaryUsesMgmtGatewayVIPDashboardURL(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name  string
-		label string
-		port  int
-		want  string
+		name     string
+		label    string
+		port     int
+		exposure string
+		want     string
 	}{
-		{"default port", "dashboard", 0, "https://dashboard.ceph-ibm.bootwright.test:8443"},
-		{"explicit port", "dashboard", 9443, "https://dashboard.ceph-ibm.bootwright.test:9443"},
-		{"default label", "", 0, "https://mgr.ceph-ibm.bootwright.test:8443"},
+		{"default port", "dashboard", 0, "", "https://dashboard.ceph-ibm.bootwright.test:8443"},
+		{"explicit port", "dashboard", 9443, "", "https://dashboard.ceph-ibm.bootwright.test:9443"},
+		{"default label", "", 0, "", "https://mgr.ceph-ibm.bootwright.test:8443"},
+		{"http exposure", "dashboard", 0, v1alpha1.StorageCephMgmtGatewayExposureHTTP, "http://dashboard.ceph-ibm.bootwright.test:8443"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := v1alpha1.State{
 				Environments:    []v1alpha1.Environment{environment},
-				StorageClusters: []v1alpha1.StorageCluster{managementCluster(tc.label, tc.port)},
+				StorageClusters: []v1alpha1.StorageCluster{managementCluster(tc.label, tc.port, tc.exposure)},
 			}
 			summaries := StorageSummaries(state, "")
 			if len(summaries) != 1 {

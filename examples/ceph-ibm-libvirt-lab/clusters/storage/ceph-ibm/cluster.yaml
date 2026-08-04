@@ -36,6 +36,7 @@ spec:
 
     mgmtGateway:
       dnsLabel: dashboard
+      exposure: http
       ingress:
         name: lab
         address: 192.168.140.81

@@ -111,9 +111,15 @@ reconfigure every ~30s forever — observed as `diff {'certificate_source:
 cephadm-signed'}` spam, gateways cycling through `starting` (the service polls
 0/6..6/6 unstably), and downstream churn such as ceph-exporter redeploy loops
 whose deps list the gateway daemons. No ssl-enabled gateway shape converges on
-that build, so bootwright pins `ssl: false` in the vendor gateway spec (a
-plain-HTTP gateway on the authored port); oss keeps cephadm-signed HTTPS,
-which converges upstream (ADR 0047).
+that build, so the gateway spec carries `ssl: false` whenever
+`spec.ceph.mgmtGateway.exposure: http` is declared (a plain-HTTP gateway on
+the authored port) — and on subscription-backed distributions the exposure
+field is REQUIRED explicitly, so the cleartext choice is the operator's, not
+a render side effect (ADR 0047, ADR 0049). oss defaults to cephadm-signed
+HTTPS, which converges upstream; an explicit `exposure: https` on a vendor
+build is accepted as the forward declaration for a build that repairs the
+recording. `oauth2Proxy` is refused on vendor builds outright — upstream
+names oauth2-proxy as sharing the same spec-less dependency recording.
 
 **Trap, fifth order (fixed):** `ssl: false` does not survive the spec store.
 `ServiceSpec.to_json` drops every falsy field (`if val:` on the spec dict,

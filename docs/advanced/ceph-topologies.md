@@ -528,11 +528,22 @@ optional, and follow the RGW ingress rules below):
 ceph:
   mgmtGateway:
     dnsLabel: dashboard
+    exposure: http
     ingress:
       name: lab
       address: 192.168.140.81
       prefixLength: 24
 ```
+
+`exposure` declares the scheme the gateway itself serves and defaults to
+`https`. On `redhat`/`ibm` it must be authored explicitly: current vendor
+cephadm builds reconfigure any https gateway forever — cephadm's own
+certificate included — so `exposure: http` (plain HTTP on the authored port)
+is the only shape that converges there today, and an explicit
+`exposure: https` is the deliberate flip for a vendor build that repairs the
+dependency recording (ADR 0047 and ADR 0049 tell that story). With `http`,
+`tls` and `oauth2Proxy` are rejected — neither certificates nor SSO cookies
+belong on a cleartext listener.
 
 The `ceph-ibm-libvirt-lab` and
 `ceph-ibm-baremetal-redfish` [reference examples](examples.md) build the HA
@@ -549,8 +560,9 @@ Two optional blocks secure the gateway:
 
 - `spec.ceph.mgmtGateway.tls` (`certificateRef` + `keyRef`, both required
   together) supplies a real certificate for the gateway frontend (cephadm
-  `ssl_cert` / `ssl_key`). Without it the composed name
-  serves a self-signed cert that browsers reject.
+  `ssl_cert` / `ssl_key`). Without it an https gateway
+  serves a self-signed cert that browsers reject. Accepted only with
+  `distribution: oss` and `exposure: https` (ADR 0047).
 - `spec.ceph.mgmtGateway.enableAuth: true` puts the dashboard behind SSO and
   **requires** `spec.ceph.mgmtGateway.oauth2Proxy` — Bootwright deploys the
   cephadm `oauth2-proxy` daemon (`providerDisplayName`, `clientId`,

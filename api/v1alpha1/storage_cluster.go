@@ -355,10 +355,23 @@ type StorageCephDevicePath struct {
 type StorageCephMgmtGateway struct {
 	DNSLabel    string                        `yaml:"dnsLabel,omitempty" json:"dnsLabel,omitempty"`
 	Port        int                           `yaml:"port,omitempty" json:"port,omitempty"`
+	Exposure    string                        `yaml:"exposure,omitempty" json:"exposure,omitempty"`
 	EnableAuth  *bool                         `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
 	TLS         *StorageCephMgmtGatewayTLS    `yaml:"tls,omitempty" json:"tls,omitempty"`
 	OAuth2Proxy *StorageCephOAuth2Proxy       `yaml:"oauth2Proxy,omitempty" json:"oauth2Proxy,omitempty"`
 	Ingress     StorageCephMgmtGatewayIngress `yaml:"ingress" json:"ingress"`
+}
+
+const (
+	StorageCephMgmtGatewayExposureHTTPS = "https"
+	StorageCephMgmtGatewayExposureHTTP  = "http"
+)
+
+func StorageCephMgmtGatewayExposureEffective(mgmt *StorageCephMgmtGateway) string {
+	if mgmt != nil && mgmt.Exposure != "" {
+		return mgmt.Exposure
+	}
+	return StorageCephMgmtGatewayExposureHTTPS
 }
 
 type StorageCephMgmtGatewayTLS struct {

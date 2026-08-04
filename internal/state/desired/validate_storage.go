@@ -438,6 +438,7 @@ func validateStorageCephMgmtGateway(prefix string, cluster v1alpha1.StorageClust
 	}
 	var errs []string
 	errs = append(errs, validateStorageCephMgmtGatewayRelease(prefix, cluster)...)
+	errs = append(errs, validateStorageCephMgmtGatewayExposure(prefix, cluster)...)
 	if mgmt.DNSLabel != "" && !IsDNSLabel(mgmt.DNSLabel) {
 		errs = append(errs, fmt.Sprintf("%s.dnsLabel %q is not a valid DNS label", prefix, mgmt.DNSLabel))
 	}

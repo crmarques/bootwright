@@ -1460,13 +1460,23 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   `sites`/`hosts` (under stretch it must cover both data sites regardless of
   narrowing — unlike StorageObjectGateway, there is only ever one management
   ingress, so there is no sibling to cover the other site). `port` sets the
-  gateway port (`0`–`65535`). `tls`, when set,
+  gateway port (`0`–`65535`). `exposure` declares the scheme the gateway itself
+  serves: `https` (the default) keeps cephadm's TLS, `http` pins the gateway
+  spec to `ssl: false` and forbids `tls` and `oauth2Proxy`. On
+  subscription-backed distributions (`redhat`, `ibm`) the field is required
+  explicitly — their cephadm builds record gateway daemon dependencies without
+  the certificate entries they recompute, so every https shape reconfigures
+  forever (ADR 0047); `http` converges today, and an explicit `https` is the
+  declaration for a vendor build that repairs the recording (ADR 0049).
+  `tls`, when set,
   supplies the gateway certificate through `certificateRef`+`keyRef`, each of
-  which must name a `tlsCertificate` Secret. `enableAuth`
+  which must name a `tlsCertificate` Secret (accepted only on `oss`). `enableAuth`
   and `oauth2Proxy` are coupled: `enableAuth: true` requires an `oauth2Proxy`
   block (`providerDisplayName`, `clientId`, `oidcIssuerUrl`, and `clientSecretRef`
   required; optional `redirectUrl`, `httpsAddress`, `allowlistDomains[]`,
-  `cookieSecretRef`), and an `oauth2Proxy` block requires `enableAuth: true`.
+  `cookieSecretRef`), and an `oauth2Proxy` block requires `enableAuth: true`;
+  `oauth2Proxy` additionally requires `exposure: https` and is refused on
+  `redhat`/`ibm`, whose builds loop the `oauth2-proxy` service the same way.
 - `spec.ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
   (rejected for `oss`) and gates the cluster on FIPS-mode Ceph hosts: every host
   that installs a managed OS must reference a `MachineInstallProfile` whose

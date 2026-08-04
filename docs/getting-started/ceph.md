@@ -418,7 +418,7 @@ Expect 3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1 CephFS, an RGW
 service, and the mgmt-gateway plus ingress services.
 
 The Ceph Dashboard is served HA through the native mgmt-gateway at
-`https://dashboard.ceph-ibm.bootwright.test:8443` (its keepalived VIP is
+`http://dashboard.ceph-ibm.bootwright.test:8443` (its keepalived VIP is
 `192.168.140.81`); the S3 endpoint is `http://rgw.ceph-ibm.bootwright.test` (RGW
 ingress VIP `192.168.140.80`).
 

@@ -294,7 +294,7 @@ func storageMgmtGatewayVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Envir
 		"hosts":      hosts,
 		"enableAuth": mgmt.EnableAuth != nil && *mgmt.EnableAuth,
 	}
-	if v1alpha1.StorageCephDistributionSubscriptionBacked(cluster.Spec.Ceph.Distribution) {
+	if v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) == v1alpha1.StorageCephMgmtGatewayExposureHTTP {
 		out["sslDisabled"] = true
 	}
 	if mgmt.TLS != nil {

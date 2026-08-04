@@ -4,6 +4,13 @@
 
 Accepted
 
+Revised by [ADR 0049](0049-the-scheme-a-gateway-declares-out-loud.md): the
+distribution-keyed `ssl: false` pin became the operator-declared
+`spec.ceph.mgmtGateway.exposure` field, which vendor distributions must author
+explicitly. The store-repair and settle-wait machinery below now keys to
+`exposure: http`; the dashboard-port vacation and the internal firewall-port
+opening key to gateway presence and run for https gateways too.
+
 ## Context
 
 `spec.ceph.mgmtGateway.tls` injects an operator-provided certificate into the

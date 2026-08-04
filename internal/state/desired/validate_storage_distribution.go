@@ -87,6 +87,38 @@ func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.Stora
 		prefix, cephprovider.MgmtGatewayMinimumCephMajor, strconv.Quote(resolved), major)}
 }
 
+func validateStorageCephMgmtGatewayExposure(prefix string, cluster v1alpha1.StorageCluster) []string {
+	mgmt := cluster.Spec.Ceph.MgmtGateway
+	if mgmt == nil {
+		return nil
+	}
+	switch mgmt.Exposure {
+	case "", v1alpha1.StorageCephMgmtGatewayExposureHTTPS, v1alpha1.StorageCephMgmtGatewayExposureHTTP:
+	default:
+		return []string{fmt.Sprintf("%s.exposure %q must be %q or %q", prefix, mgmt.Exposure, v1alpha1.StorageCephMgmtGatewayExposureHTTPS, v1alpha1.StorageCephMgmtGatewayExposureHTTP)}
+	}
+	var errs []string
+	if mgmt.Exposure == v1alpha1.StorageCephMgmtGatewayExposureHTTP {
+		if mgmt.TLS != nil {
+			errs = append(errs, fmt.Sprintf("%s.tls contradicts exposure: http — a plain-HTTP gateway serves no certificate; drop the tls block or set exposure: https", prefix))
+		}
+		if mgmt.OAuth2Proxy != nil {
+			errs = append(errs, fmt.Sprintf("%s.oauth2Proxy requires exposure: https — SSO cookies and access tokens must not cross the network in cleartext", prefix))
+		}
+	}
+	distribution := storageCephDistribution(cluster)
+	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
+		return errs
+	}
+	if mgmt.Exposure == "" {
+		errs = append(errs, fmt.Sprintf("%s.exposure must be declared explicitly when distribution=%s: these vendor cephadm builds record mgmt-gateway daemon dependencies without the certificate entries they recompute every pass, so any https gateway — cephadm's own certificate included — reconfigures its daemons forever and apply fails closed at the service-readiness gate. Set exposure: http to converge today (the gateway serves plain HTTP on its authored port, ADR 0047/0049), or set exposure: https deliberately on a vendor build that repairs the dependency recording", prefix, distribution))
+	}
+	if mgmt.OAuth2Proxy != nil {
+		errs = append(errs, fmt.Sprintf("%s.oauth2Proxy is refused when distribution=%s: the oauth2-proxy service records its daemon dependencies without the spec on these builds — the same defect that loops the gateway — so SSO daemons reconfigure forever; drop the block or run distribution: oss", prefix, distribution))
+	}
+	return errs
+}
+
 func validateStorageCephMgmtGatewayTLSDistribution(prefix string, cluster v1alpha1.StorageCluster) []string {
 	mgmt := cluster.Spec.Ceph.MgmtGateway
 	if mgmt == nil || mgmt.TLS == nil {
@@ -96,7 +128,7 @@ func validateStorageCephMgmtGatewayTLSDistribution(prefix string, cluster v1alph
 	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
 		return nil
 	}
-	return []string{fmt.Sprintf("%s.tls is refused when distribution=%s: vendor cephadm builds compute mgmt-gateway daemon dependencies from the spec's certificate (certificate_source plus ssl_cert/ssl_key hashes) but record each daemon's dependencies without them, so the lists never match and every orchestrator pass reconfigures all gateway daemons — nginx restarts each cycle, the service never holds its declared count, and apply fails closed at the service-readiness gate after ~15 minutes. Omit spec.ceph.mgmtGateway.tls — on this distribution the gateway then runs with ssl disabled and serves plain HTTP on its authored port, because the same dependency mismatch covers cephadm's own certificate too; distribution: oss on tentacle computes no certificate dependencies and accepts the block with HTTPS intact", prefix, distribution)}
+	return []string{fmt.Sprintf("%s.tls is refused when distribution=%s: vendor cephadm builds compute mgmt-gateway daemon dependencies from the spec's certificate (certificate_source plus ssl_cert/ssl_key hashes) but record each daemon's dependencies without them, so the lists never match and every orchestrator pass reconfigures all gateway daemons — nginx restarts each cycle, the service never holds its declared count, and apply fails closed at the service-readiness gate after ~15 minutes. Drop spec.ceph.mgmtGateway.tls and set spec.ceph.mgmtGateway.exposure: http — the gateway then serves plain HTTP on its authored port, the only shape that converges here, because the same dependency mismatch covers cephadm's own certificate too; distribution: oss on tentacle computes no certificate dependencies and accepts the block with HTTPS intact", prefix, distribution)}
 }
 
 func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
