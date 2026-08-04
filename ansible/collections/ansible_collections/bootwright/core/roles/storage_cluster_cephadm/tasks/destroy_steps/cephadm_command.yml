@@ -1,0 +1,65 @@
+---
+- name: Probe this storage host for the cephadm command
+  ansible.builtin.shell:
+    cmd: set -o pipefail; command -v cephadm
+    executable: /bin/bash
+  register: bootwright_ceph_destroy_cephadm_probe
+  changed_when: false
+  failed_when: false
+
+- name: Find the cephadm binary this cluster deployed on a storage host without the package
+  ansible.builtin.find:
+    paths: "/var/lib/ceph/{{ bootwright_ceph_destroy_host_fsid }}"
+    patterns: cephadm.*
+    file_type: file
+  register: bootwright_ceph_destroy_deployed_cephadm
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_destroy_host_fsid | default('') | length > 0
+    - bootwright_ceph_destroy_cephadm_probe.rc | default(1) | int != 0
+
+- name: Resolve the cephadm command that removes this cluster from a storage host
+  vars:
+    bootwright_ceph_destroy_deployed_paths: >-
+      {{ (bootwright_ceph_destroy_deployed_cephadm | default({})).files | default([])
+         | sort(attribute='mtime') | map(attribute='path') | list }}
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_cephadm: >-
+      {{ 'cephadm'
+         if (bootwright_ceph_destroy_cephadm_probe.rc | default(1) | int == 0)
+         else (bootwright_ceph_destroy_deployed_paths | last
+               if (bootwright_ceph_destroy_deployed_paths | length > 0)
+               else '') }}
+  changed_when: false
+
+- name: Make the deployed cephadm binary executable for the cluster removal
+  ansible.builtin.file:
+    path: "{{ bootwright_ceph_destroy_cephadm }}"
+    mode: "0755"
+  when:
+    - bootwright_ceph_destroy_cephadm_probe.rc | default(1) | int != 0
+    - bootwright_ceph_destroy_cephadm | default('') | length > 0
+
+- name: Refuse to leave a Ceph cluster standing on a host with no cephadm to remove it
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_destroy_cephadm | default('') | length > 0
+    fail_msg: >-
+      Refusing to tear down storage cluster {{ bootwright_selected_storage_cluster.name }}
+      on {{ inventory_hostname }}: it carries Ceph cluster state at
+      /var/lib/ceph/{{ bootwright_ceph_destroy_host_fsid }}, but this host has nothing that
+      can remove it — `cephadm` is not on PATH, and the cluster left no cephadm binary under
+      that directory either. cephadm needs the package only on the host it was bootstrapped
+      from; every other host is enrolled over SSH and runs the copy the manager deploys to
+      /var/lib/ceph/<fsid>/cephadm.<digest>, so a node can hold a complete cluster and carry
+      no cephadm package at all, and a teardown that reaches repositories different from the
+      ones that served the install cannot count on installing one now. Wiping the state
+      without `cephadm rm-cluster` would delete /var/lib/ceph under running daemons and leave
+      their systemd units behind, so this teardown stops here instead of pretending the
+      cluster is gone. Install the package on this host and re-run destroy, or run
+      `cephadm rm-cluster --force --zap-osds --fsid {{ bootwright_ceph_destroy_host_fsid }}`
+      on it by hand first — that destroys ALL OSD data on this node, which is what this
+      teardown was going to do to it anyway. No --authorize token relaxes this.
+    quiet: true
+  when: bootwright_ceph_destroy_host_state | default(true) | bool

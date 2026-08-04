@@ -2457,6 +2457,74 @@ func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(
 	}
 }
 
+func TestStorageCephadmDestroyRunsACephadmItProvedTheHostHas(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+
+	for _, name := range []string{
+		"Remove cephadm cluster on seed host",
+		"Remove cephadm cluster on non-seed hosts",
+	} {
+		cmd, ok := tasks[findAnsibleTask(t, tasks, name)]["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			t.Fatalf("%q must be a command, got %v", name, tasks[findAnsibleTask(t, tasks, name)])
+		}
+		argv, ok := cmd["argv"].([]any)
+		if !ok || len(argv) == 0 {
+			t.Fatalf("%q must invoke cephadm through argv, got %v", name, cmd)
+		}
+		if got := fmt.Sprint(argv[0]); !strings.Contains(got, "bootwright_ceph_destroy_cephadm") {
+			t.Errorf("%q must run the cephadm this teardown resolved for the host, not a bare `cephadm` off PATH: cephadm needs its package only on the host it bootstrapped, so a node enrolled over SSH holds a whole cluster and still answers the binary with ENOENT, which fails the module before the removal runs. Got argv[0]=%v", name, argv[0])
+		}
+	}
+
+	removal := tasks[findAnsibleTask(t, tasks, "Remove cephadm cluster on non-seed hosts")]
+	if got := fmt.Sprint(removal["when"]); !strings.Contains(got, "bootwright_ceph_destroy_cephadm | default('') | length > 0") {
+		t.Errorf("the non-seed cluster removal must be gated on a cephadm the host can run: a gate that proves only that the host carries cluster state runs the binary regardless and fails the whole teardown on ENOENT. Got when=%v", removal["when"])
+	}
+
+	report := tasks[findAnsibleTask(t, tasks, "Report non-seed hosts that hold no Ceph cluster state to remove")]
+	if got := fmt.Sprint(report["when"]); !strings.Contains(got, "bootwright_ceph_destroy_cephadm | default('') | length == 0") {
+		t.Errorf("the already-removed report must be the exact complement of the removal gate, or a host falls through both and its cluster is left standing without a word. Got when=%v", report["when"])
+	}
+}
+
+func TestStorageCephadmDestroyRefusesAClusterNoCephadmCanRemove(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/cephadm_command.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	probeIdx := findAnsibleTask(t, tasks, "Probe this storage host for the cephadm command")
+	findIdx := findAnsibleTask(t, tasks, "Find the cephadm binary this cluster deployed on a storage host without the package")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the cephadm command that removes this cluster from a storage host")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to leave a Ceph cluster standing on a host with no cephadm to remove it")
+	if !(probeIdx < findIdx && findIdx < resolveIdx && resolveIdx < refuseIdx) {
+		t.Fatalf("the host must be probed for cephadm, then for the binary the cluster deployed, before the resolution the refusal reads (probe=%d find=%d resolve=%d refuse=%d)", probeIdx, findIdx, resolveIdx, refuseIdx)
+	}
+
+	find, ok := tasks[findIdx]["ansible.builtin.find"].(map[string]any)
+	if !ok {
+		t.Fatalf("the deployed-binary lookup must be a find, got %v", tasks[findIdx])
+	}
+	if got := fmt.Sprint(find["paths"]); !strings.Contains(got, "/var/lib/ceph/") || !strings.Contains(got, "bootwright_ceph_destroy_host_fsid") {
+		t.Errorf("the deployed cephadm lives under the fsid directory this teardown owns, so the lookup must be scoped to it and never to another cluster's state. Got paths=%v", find["paths"])
+	}
+
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the no-cephadm guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_destroy_cephadm") {
+		t.Errorf("the guard must require a resolved cephadm, got that=%v", refuse["that"])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_destroy_host_state") {
+		t.Errorf("a host that carries no cluster state needs no cephadm, so the refusal must be scoped to hosts that do, got when=%v", tasks[refuseIdx]["when"])
+	}
+	for _, want := range []string{"rm-cluster", "--zap-osds", "systemd units"} {
+		if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, want) {
+			t.Errorf("the refusal must say what it will not do without cephadm and what the operator can run instead, missing %q in %v", want, refuse["fail_msg"])
+		}
+	}
+}
+
 func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
 	if len(plays) != 1 {
