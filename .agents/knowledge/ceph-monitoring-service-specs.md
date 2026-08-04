@@ -151,6 +151,50 @@ dependencies phase opens 29443/tcp on storage nodes whenever a gateway is
 declared, or every monitoring panel dies with no-route-to-host while the
 dashboard itself works.
 
+**Constraint:** deploying a mgmt-gateway arms monitoring-stack security by
+itself. cephadm's `_get_security_config` computes `security_enabled =
+secure_monitoring_stack OR mgmt_gw_enabled`, and the prometheus/alertmanager
+`web.yml` renders `basic_auth_users` whenever security is on and oauth2-proxy
+is absent — so the daemons demand HTTP Basic (default `admin`/`admin`;
+`ceph orch prometheus|alertmanager get-credentials` / `set-credentials`) even
+though bootwright never touches `secure_monitoring_stack`. The gateway's
+`/prometheus` and `/alertmanager` locations proxy the browser through with
+only the internal mTLS client cert — no Authorization header — so the 401
+challenge surfaces browser-side as an origin-wide Basic popup; the dashboard
+(`/`, JWT) and `/grafana` (Authorization stripped by the template) never
+challenge, and the dashboard's own monitoring reads go mgr-side through
+`https://<vip>:29443/internal/...` with the credentials attached, so panels
+keep working while the popup fires.
+
+**Constraint:** alert `generatorURL`s never route through the gateway.
+`--web.external-url` is computed by the cephadm *binary* on the prometheus
+node — scheme hardcoded `http`, host `socket.getfqdn()` (the machine's
+resolver identity, not the inventory addr, not the VIP), port the daemon's
+(9095) — plus `--web.route-prefix=/prometheus/` whenever any mgmt-gateway
+exists, yielding `http://<machine-fqdn>:9095/prometheus`. Prometheus stamps it
+into every alert, and the dashboard renders it verbatim as the Source link.
+No override channel exists: `PrometheusSpec` has no URL field (v20.2.1 and
+main), `extra_entrypoint_args` append AFTER the computed args so the flag
+repeats and prometheus refuses to start, and `set-prometheus-api-host` (the
+mgr-side proxy target) is re-asserted by `config_dashboard`. The working
+access path is the same path+query on the gateway origin, with the monitoring
+credentials.
+
+**Trap:** the gateway's dashboard upstream lists EVERY mgr host
+(`get_dashboard_endpoints` enumerates all mgr daemons); mgmt-gateway flips the
+dashboard module to `standby_behaviour=error` (503) and relies on
+`proxy_next_upstream error timeout invalid_header http_500 http_502 http_503
+http_504` to walk to the active one. With nginx defaults (`max_fails=1`,
+`fail_timeout=10s`), ONE failed exchange with the active dashboard — restart,
+timeout, or a genuine 500 (it is in the next-upstream list) — marks it down
+for 10s, and since standbys are perpetually "failing", the origin answers
+502 "no live upstreams" instantly until the window passes: intermittent 502
+on polled `/api/*` endpoints with everything else fine. Recorded gateway deps
+name mgr daemons WITHOUT ports, so mgr failover and dashboard port moves never
+trigger a reconfig — daemons deployed mid-loop keep stale backend maps (e.g.
+the dashboard's old HTTPS 8443, now the gateway's own port) behind the
+floating VIP until `ceph orch reconfig mgmt-gateway`.
+
 **Constraint (revised):** cephadm ingress inline TLS is the `ssl_cert` +
 `ssl_key` PAIR with `ssl: true` — never one combined PEM bundle. The certmgr
 lineage (IBM 9.x, upstream main) routes ingress certificates through the

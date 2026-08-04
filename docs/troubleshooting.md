@@ -631,6 +631,14 @@ If the nodes are comfortably empty (tens of GiB free and falling by megabytes a
 day), the alerts are the post-install ramp and stop on their own once the
 cluster settles and the two-day window fills with steady-state samples.
 
+Which nodes flap carries little signal on its own — it mostly reflects scrape
+timing. The bootstrap seed's biggest writes (the Ceph and monitoring image
+pulls) land before Prometheus exists to record them, so its window shows a
+level, not a slope, and it stays quiet even though it holds the most data. A
+node added after scraping began carries its whole install ramp inside the
+two-day window, so it flaps hardest. A mon-only arbiter writes too little to
+project full.
+
 If free space is in the single-digit-to-low-double-digit GiB range, the
 filesystem is genuinely undersized for the roles the node carries — see the
 [node root-filesystem budget](concepts/storage.md#node-root-filesystem-budget).
@@ -838,3 +846,110 @@ sudo chmod 0600 "$P"
 A clean reinstall (`bootwright apply ... --mode rebuild`, which clears `/etc/ceph`
 and re-bootstraps) re-captures a fresh dashboard password into the stored file
 automatically.
+
+## A credentials prompt pops up on the Ceph management gateway
+
+While using the dashboard behind a
+[management gateway](advanced/ceph-topologies.md#the-management-gateway-and-ha-dashboard),
+the browser repeatedly raises an HTTP Basic-auth dialog naming only the gateway
+origin, without saying which page asked.
+
+The moment a `mgmt-gateway` is deployed, cephadm treats the monitoring stack as
+secured: Prometheus and Alertmanager start demanding Basic authentication even
+though Bootwright never enables `mgr/cephadm/secure_monitoring_stack`. The
+gateway's `/prometheus` and `/alertmanager` routes proxy the browser's request
+through without injecting credentials, so the daemons' `401` challenge reaches
+the browser attributed to the whole origin. The dashboard itself never triggers
+it — its pages authenticate with a token, and its server-side monitoring calls
+carry the generated credentials — so a popup means some tab, bookmark, or link
+touched `/prometheus` or `/alertmanager` on the gateway directly. Alert
+"Source" links that operators rewrite to the gateway (next section) are the
+usual trigger.
+
+The credentials it wants are cephadm's generated monitoring credentials:
+
+```bash
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch prometheus get-credentials
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch alertmanager get-credentials
+```
+
+They default to `admin`/`admin`; rotate them with the matching
+`set-credentials` verbs. With the credentials in hand, the Prometheus and
+Alertmanager UIs are fully usable through the gateway at `/prometheus/` and
+`/alertmanager/` — that is the supported way in, not the daemons' own ports.
+
+## Ceph alert links point at a machine hostname on port 9095
+
+Clicking an alert's *Source* link opens
+`http://<machine-fqdn>:9095/prometheus/graph?...` — the Prometheus node's own
+machine name and daemon port, which operator networks typically cannot reach —
+instead of going through the management gateway.
+
+cephadm renders the Prometheus daemon with
+`--web.external-url=http://<machine-fqdn>:9095/prometheus`: the scheme is
+hardcoded, the host is the Prometheus node's own resolver FQDN, and the gateway
+VIP is never consulted. Every alert stamps that value as its `generatorURL`,
+Alertmanager passes it through, and the dashboard renders it verbatim. There is
+no supported override — `PrometheusSpec` carries no URL field,
+`extra_entrypoint_args` would emit the flag twice (Prometheus refuses to start
+on a repeated flag), and `ceph dashboard set-prometheus-api-host` only moves
+the mgr's server-side proxy, not the links.
+
+The links still work with one substitution: keep the path and query, and swap
+the scheme, host, and port for the gateway origin (the `DashboardURL` from
+`bootwright cluster info`):
+
+```
+http://<machine-fqdn>:9095/prometheus/graph?g0.expr=...
+        └── becomes ──┘
+http://<gateway-fqdn>:8443/prometheus/graph?g0.expr=...
+```
+
+The gateway path prompts for the monitoring credentials above.
+
+## The dashboard behind the gateway intermittently answers 502
+
+Two nginx-side mechanisms produce sporadic `502` responses on `/api/...`
+endpoints through a gateway origin that otherwise works:
+
+- The gateway's dashboard upstream lists **every** mgr host; standbys
+  deliberately answer `503` and nginx walks the list to find the active one.
+  One failed exchange with the active mgr — a dashboard module restart, a slow
+  or erroring `/api` handler — marks it down for 10 seconds, and with the
+  standbys already failing, nginx answers `502` for everything until the window
+  passes. Continuously polled endpoints surface it; a retry moments later
+  works.
+- A gateway daemon keeps the configuration it was deployed with until its
+  dependency list changes — a corrected spec alone never rewrites a running
+  daemon. Gateways deployed while a vendor build was stuck in the
+  reconfigure loop can keep serving loop-era configuration (TLS answers on a
+  plain-HTTP gateway, or a backend map naming the dashboard's old HTTPS port,
+  which the gateway itself now occupies), and the keepalived VIP floats across
+  the per-host gateways, so the same origin alternates between healthy and
+  stale daemons.
+
+Check the stored spec, then rewrite every gateway daemon from it:
+
+```bash
+# settled store with the ssl switch present ("needs_configuration": false,
+# inner spec carrying "ssl": false on an exposure: http gateway)
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph config-key get mgr/cephadm/spec.mgmt-gateway
+
+# a Reconfiguring storm here means the store relapsed — re-run apply first
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph log last 100 info cephadm
+
+# re-render all gateway daemons from the settled spec, then watch them return
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch reconfig mgmt-gateway
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch ps --daemon-type mgmt-gateway
+```
+
+Never save-and-reapply `ceph orch ls --export` output for the gateway on a
+subscription-backed build: the export prints the class-default `ssl: true` for
+a gateway that provably runs ssl-off, and re-applying it restarts the
+reconfigure loop.
