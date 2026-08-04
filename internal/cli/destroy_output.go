@@ -30,7 +30,7 @@ func destroyPurgeHistoryNotice(dryRun bool) string {
 	if dryRun {
 		lead = "a real run of this destroy would also delete"
 	}
-	return lead + " the destroyed component(s)' whole state tree under clusters/ — installer working directory, install records, kubeconfig, captured cluster secrets — and their per-run task/flow logs under runs/ — this history is not recoverable"
+	return lead + " the destroyed component(s)' whole state tree under clusters/ — installer working directory, install records, kubeconfig, captured cluster secrets — and their per-run task/flow logs under runs/ (a fully successful unscoped destroy sweeps the whole run history, keeping only this destroy run's own record) — this history is not recoverable"
 }
 
 type destroyGateForecast struct {

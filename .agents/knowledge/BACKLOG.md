@@ -896,3 +896,38 @@ learned; this file records what it still owes.
   count validators in `validate_storage_stretch.go`. If not, document the
   build-on-promotion behaviour where candidates are declared.
 - Related: [ceph-arbiter-replacement.md](ceph-arbiter-replacement.md)
+
+## B-074 — Decrypted git SSH keys accumulate under `runs/content/git/` forever
+- Status: open
+- Area: converge/gitsource · secret hygiene
+- Origin: destroy `--purge-history` leftover audit (2026-08-04)
+- Problem: `gitCredential` (`internal/converge/gitsource.go`) materializes a
+  secretRef'd SSH private key with `os.MkdirTemp` under the git content cache
+  (`runs/content/git/git-key-*/id`, mode 0600) so `git fetch` can authenticate,
+  and nothing ever deletes the directory: no deferred cleanup in
+  `ResolveGitSources`, no sweeper (the runtime-secrets sweep covers only
+  `runs/history/`), and `destroy --purge-history` never touches `runs/content/`.
+  Every fetch of an SSH-sourced `CustomPlaybook`/`ClusterAddon` leaves another
+  plaintext private key on the controller for the life of the context. The
+  https twin (`git-cred-*`) is cleaned by a deferred func in
+  `internal/host/gitcontent/fetch.go` and leaks only on a crash.
+- Exit: delete the key directory after the fetch (mirror the `git-cred-*`
+  cleanup), and cover crash leftovers with a sweep of `git-key-*`/`git-cred-*`
+  at the next mutating run; a regression test asserting no `git-key-*` dir
+  survives `ResolveGitSources`.
+
+## B-075 — A stale `arbiter-retire-result.json` outlives every destroy
+- Status: open
+- Area: storage/arbiter · run records
+- Origin: destroy `--purge-history` leftover audit (2026-08-04)
+- Problem: the replace-arbiter retirement report is written to
+  `runs/preflight/storage-replace-arbiter/artifacts/.../arbiter-retire-result.json`
+  (`retire_old.yml`) and read back by `ReadArbiterRetirement`
+  (`internal/converge/storage_replace_arbiter.go`). Nothing removes it: it sits
+  under `runs/preflight/`, which `destroy --purge-history` deliberately never
+  reaches, so after a full destroy and rebuild the context still carries the
+  previous environment's retirement outcome, and reporting paths re-read it as
+  if it belonged to the new cluster.
+- Exit: remove the artifact once consumed (or key it by cluster + run and
+  ignore records older than the current install), and clear it on a full-scope
+  destroy alongside the other per-component records.

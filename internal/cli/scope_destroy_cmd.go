@@ -66,7 +66,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	addYesFlag(cmd, &yes, "destroy")
 	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbDestroy)
 	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks and authorizes no named risk of its own")
-	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: its whole state tree under this context's clusters/<name>/ (installer working directory, install/connection records, kubeconfig, captured cluster secrets) and its per-run task and flow logs under runs/. Scoped identically to --clusters/--machines (the whole context on an unscoped destroy); never touches a component outside that scope, a partially-destroyed cluster kept for retry, an unrelated run's shared ledger, or the provider state of a machine layer this run leaves standing (--stage clusters). Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
+	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: its whole state tree under this context's clusters/<name>/ (installer working directory, install/connection records, kubeconfig, captured cluster secrets) and its per-run task and flow logs under runs/. Scoped identically to --clusters/--machines; a fully successful unscoped destroy instead sweeps the context's whole run history — every archived run, earlier destroy attempts, and crashed runs that never archived a ledger — keeping only this destroy run's own record. Never touches a component outside that scope, a partially-destroyed cluster kept for retry, an unrelated run's shared ledger, or the provider state of a machine layer this run leaves standing (--stage clusters). Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
 	if options.stageSelector {
 		flags.executable = workspace.ResolveAnsiblePlaybook()
@@ -365,13 +365,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), purgeHistory, skipUnreachable)
+				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), ledger.RunID, purgeHistory, skipUnreachable)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, purgeHistory, skipUnreachable)
+			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, ledger.RunID, purgeHistory, skipUnreachable)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			if resetErr != nil {
 				return failErr(1, resetErr)

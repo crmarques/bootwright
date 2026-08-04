@@ -580,10 +580,12 @@ remain redacted.
 
 A `--verbose` run therefore leaves credential plaintext in its persisted log —
 `runs/history/<run-id>/bootwright*.log` for `apply`, `runs/destroy/` or
-`runs/preflight/` for the others. Nothing expires it, and
+`runs/preflight/` for the others. Nothing expires it, and a scoped
 `destroy --purge-history` removes an apply run's directory only when that whole
-run is in its scope (`state-model.md`, CLI Contract). Purging or protecting
-that run directory afterwards is the operator's obligation.
+run is in its scope; only a fully successful unscoped destroy sweeps the whole
+`runs/history/` tree, and `runs/destroy/` and `runs/preflight/` logs are never
+purged (`state-model.md`, CLI Contract). Purging or protecting that run
+directory afterwards is the operator's obligation.
 
 ## Code Surface Hygiene
 

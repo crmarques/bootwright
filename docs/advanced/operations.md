@@ -325,7 +325,13 @@ only the cluster's own history. A cluster left partially destroyed by
 `--authorize unreachable-nodes` keeps its history and its state tree so you can
 still diagnose and retry; a run that also covers a still-live component keeps
 its shared ledger and run log, pruning only the purged component's own task
-directories and log. It leaves the destroy authorization trail (the
+directories and log. A component's history includes its earlier destroy
+attempts, which are matched and purged the same way as its apply runs. A fully
+successful **unscoped** destroy goes further: with no component left alive,
+it sweeps everything under `runs/history/` — old apply runs (including their
+input snapshots), earlier destroy attempts, and crashed runs that never
+archived a ledger — keeping only the record of the destroy run that did the
+purging. It leaves the destroy authorization trail (the
 substrate-release record that lets a later `apply` reinstall the same name) and
 unrelated context state (the ownership store, input-history rollback snapshots)
 untouched, and is **rejected** with the artifact-server literal

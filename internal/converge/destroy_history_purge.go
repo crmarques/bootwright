@@ -91,7 +91,31 @@ func pruneEmptyDirs(root string) error {
 	return nil
 }
 
-func purgeRunHistoryForComponents(runsDir string, clusterNames, machineNames []string) error {
+func purgeAllRunHistory(runsDir, keepRunID string) error {
+	if strings.TrimSpace(runsDir) == "" {
+		return nil
+	}
+	historyDir := filepath.Join(runsDir, "history")
+	entries, err := os.ReadDir(historyDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("list run history: %w", err)
+	}
+	var problems []error
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == keepRunID {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(historyDir, entry.Name())); err != nil {
+			problems = append(problems, fmt.Errorf("purge run history %s: %w", entry.Name(), err))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func purgeRunHistoryForComponents(runsDir string, clusterNames, machineNames []string, keepRunID string) error {
 	if strings.TrimSpace(runsDir) == "" || (len(clusterNames) == 0 && len(machineNames) == 0) {
 		return nil
 	}
@@ -107,7 +131,7 @@ func purgeRunHistoryForComponents(runsDir string, clusterNames, machineNames []s
 	}
 	var problems []error
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || entry.Name() == keepRunID {
 			continue
 		}
 		runID := entry.Name()
@@ -174,7 +198,24 @@ func taskInPurgeScope(task workflow.TaskLedgerEntry, clusters, machines map[stri
 	if task.Node != "" && machines[task.Node] {
 		return true
 	}
-	return false
+	if !workflow.IsDestroyTaskKind(task.Kind) {
+		return false
+	}
+	for _, cluster := range workflow.DestroyTaskClusterKeys(task) {
+		if clusters[cluster] {
+			return true
+		}
+	}
+	machineKeys := workflow.DestroyTaskMachineKeys(task)
+	if len(machineKeys) == 0 || len(machines) == 0 {
+		return false
+	}
+	for _, machine := range machineKeys {
+		if !machines[machine] {
+			return false
+		}
+	}
+	return true
 }
 
 func toPurgeNameSet(names []string) map[string]bool {

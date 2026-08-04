@@ -612,6 +612,32 @@ func DestroyTaskClusterKeys(task TaskLedgerEntry) []string {
 	return out
 }
 
+func DestroyTaskMachineKeys(task TaskLedgerEntry) []string {
+	var out []string
+	for _, key := range task.ResourceKeys {
+		machine := strings.TrimPrefix(key, DestroyMachineResourceKeyPrefix)
+		if machine != key && machine != "" {
+			out = append(out, machine)
+		}
+	}
+	return out
+}
+
+var destroyTaskKinds = map[string]bool{
+	DestroyTaskKindMachineRegistration:     true,
+	DestroyTaskKindMachineInfra:            true,
+	DestroyTaskKindInfraComponents:         true,
+	DestroyTaskKindProviderServices:        true,
+	DestroyTaskKindStorageCluster:          true,
+	DestroyTaskKindContainerCluster:        true,
+	DestroyTaskKindContainerClusterRuntime: true,
+	DestroyTaskKindStorageNodeAccess:       true,
+}
+
+func IsDestroyTaskKind(kind string) bool {
+	return destroyTaskKinds[kind]
+}
+
 func SucceededDestroyTaskKinds(ledger RunLedger) DestroyOutcome {
 	out := DestroyOutcome{}
 	kinds := map[string]bool{}

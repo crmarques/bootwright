@@ -2998,7 +2998,15 @@ verbs that reach machines.
   and retry. A run whose tasks span both a purged and a still-live component
   keeps its ledger and shared run log — only the purged component's task
   directories and per-cluster log are removed — so history for the surviving
-  component is never lost. It never removes the destroy-authorization
+  component is never lost. A component's history includes its prior destroy
+  runs: destroy-run ledgers record their components as task resource keys, and
+  the purge matches those keys the same way it matches an apply task's cluster
+  or node. A fully successful unscoped destroy has no surviving component, so
+  instead of per-component matching it sweeps every entry under `runs/history/`
+  — archived apply and destroy runs alike, and crashed runs that never archived
+  a ledger — keeping only the purging destroy run's own record, which the
+  current-run ledger still references. The purging run never deletes its own
+  record on any path. It never removes the destroy-authorization
   substrate-release record (`runs/substrate-release/`, needed so a later `apply`
   can reinstall the released substrate) or unrelated context state (the
   ownership store, the input-history rollback snapshots). Rejected with the

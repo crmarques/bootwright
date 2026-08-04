@@ -50,7 +50,7 @@ func TestPurgeRunHistoryForComponentsRemovesFullyMatchedRun(t *testing.T) {
 	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
 	touchClusterLog(t, runsDir, "run-1", "ocp")
 
-	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil); err != nil {
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil, ""); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if runDirExists(runsDir, "run-1") {
@@ -69,7 +69,7 @@ func TestPurgeRunHistoryForComponentsKeepsMixedRunButPrunesMatchedTasks(t *testi
 	touchClusterLog(t, runsDir, "run-1", "ocp")
 	touchClusterLog(t, runsDir, "run-1", "other")
 
-	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil); err != nil {
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil, ""); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if !runDirExists(runsDir, "run-1") {
@@ -99,7 +99,7 @@ func TestPurgeRunHistoryForComponentsSkipsUnrelatedRuns(t *testing.T) {
 	})
 	touchTaskDir(t, runsDir, "run-1", "clusters.other.install")
 
-	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil); err != nil {
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil, ""); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if !runDirExists(runsDir, "run-1") {
@@ -119,7 +119,7 @@ func TestPurgeRunHistoryForComponentsMatchesMachinesByNode(t *testing.T) {
 	touchTaskDir(t, runsDir, "run-1", "infra.lab.ceph-0")
 	touchTaskDir(t, runsDir, "run-1", "infra.lab.ceph-1")
 
-	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0"}); err != nil {
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0"}, ""); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if !runDirExists(runsDir, "run-1") {
@@ -250,7 +250,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesClusterRuntimeDir(t 
 	})
 	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, true, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -276,7 +276,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesStorageClusterStateT
 		}
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, true, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -299,7 +299,7 @@ func TestResetConvergeRecordsAfterDestroyPrunesEmptiedStorageClusterStateTree(t 
 		}
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, false, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "", false, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -321,7 +321,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsStandingMachineState(t
 		t.Fatalf("write: %v", err)
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, true, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -340,7 +340,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStor
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, nil, true, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-bm"}, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -363,7 +363,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStor
 	})
 	touchTaskDir(t, runsDir, "run-b", "storage.ceph-b.cluster")
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, nil, true, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 
@@ -372,6 +372,132 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStor
 	}
 	if runDirExists(runsDir, "run-b") {
 		t.Fatal("history for the fully-destroyed sibling cluster must be purged")
+	}
+}
+
+func TestPurgeRunHistoryForComponentsMatchesDestroyRunsByResourceKeys(t *testing.T) {
+	runsDir := t.TempDir()
+	mustArchiveLedger(t, runsDir, "destroy-old", []workflow.TaskLedgerEntry{
+		{ID: "destroy.storage-clusters.ceph", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph", workflow.DestroyMachineResourceKeyPrefix + "ceph-0"}},
+	})
+	touchTaskDir(t, runsDir, "destroy-old", "destroy.storage-clusters.ceph")
+
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ceph"}, nil, ""); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if runDirExists(runsDir, "destroy-old") {
+		t.Fatal("a prior destroy run that recorded the cluster only through resource keys must be purged with it")
+	}
+}
+
+func TestPurgeRunHistoryForComponentsSkipsTheCurrentDestroyRun(t *testing.T) {
+	runsDir := t.TempDir()
+	mustArchiveLedger(t, runsDir, "destroy-current", []workflow.TaskLedgerEntry{
+		{ID: "destroy.storage-clusters.ceph", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph"}},
+	})
+	touchTaskDir(t, runsDir, "destroy-current", "destroy.storage-clusters.ceph")
+
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ceph"}, nil, "destroy-current"); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if !runDirExists(runsDir, "destroy-current") {
+		t.Fatal("the purging destroy run must never purge its own record")
+	}
+}
+
+func TestPurgeRunHistoryForComponentsKeepsDestroyTaskSpanningUnselectedMachines(t *testing.T) {
+	runsDir := t.TempDir()
+	mustArchiveLedger(t, runsDir, "destroy-old", []workflow.TaskLedgerEntry{
+		{ID: "destroy.machine-infra", Kind: workflow.DestroyTaskKindMachineInfra, ResourceKeys: []string{workflow.DestroyMachineResourceKeyPrefix + "ceph-0", workflow.DestroyMachineResourceKeyPrefix + "ceph-1"}},
+	})
+	touchTaskDir(t, runsDir, "destroy-old", "destroy.machine-infra")
+
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0"}, ""); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if !runDirExists(runsDir, "destroy-old") {
+		t.Fatal("a destroy task that also covered an unselected machine must keep its record")
+	}
+
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0", "ceph-1"}, ""); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if runDirExists(runsDir, "destroy-old") {
+		t.Fatal("a destroy task whose machines were all selected must be purged")
+	}
+}
+
+func TestPurgeRunHistoryForComponentsIgnoresApplyTaskResourceKeys(t *testing.T) {
+	runsDir := t.TempDir()
+	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{
+		{ID: "addon.gitops", Kind: "cluster-addon", Cluster: "other", ResourceKeys: []string{"ceph"}},
+	})
+	touchTaskDir(t, runsDir, "run-1", "addon.gitops")
+
+	if err := purgeRunHistoryForComponents(runsDir, []string{"ceph"}, nil, ""); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if !runDirExists(runsDir, "run-1") {
+		t.Fatal("resource keys on non-destroy tasks must not put a live component's run in purge scope")
+	}
+}
+
+func TestResetConvergeRecordsAfterDestroyFullScopePurgeSweepsAllRunHistory(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := destroyResetState(v1alpha1.StorageCephDistributionOSS)
+
+	mustArchiveLedger(t, runsDir, "run-fabric", []workflow.TaskLedgerEntry{
+		{ID: "provider.kvm-host", Kind: "provider", Host: "kvm-host"},
+		{ID: "clusters.ocp.install", Kind: "cluster-install", Cluster: "ocp"},
+	})
+	touchTaskDir(t, runsDir, "run-fabric", "provider.kvm-host")
+	mustArchiveLedger(t, runsDir, "destroy-old", []workflow.TaskLedgerEntry{
+		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ocp"}},
+	})
+	touchTaskDir(t, runsDir, "destroy-old", "destroy.storage-clusters")
+	touchTaskDir(t, runsDir, "run-orphan", "clusters.ocp.install")
+	mustArchiveLedger(t, runsDir, "destroy-current", []workflow.TaskLedgerEntry{
+		{ID: "destroy.cluster-runtime", Kind: workflow.DestroyTaskKindContainerClusterRuntime, ResourceKeys: []string{"ocp"}},
+	})
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "destroy-current", true, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	for _, runID := range []string{"run-fabric", "destroy-old", "run-orphan"} {
+		if runDirExists(runsDir, runID) {
+			t.Fatalf("a fully successful unscoped --purge-history destroy must sweep run history entry %s", runID)
+		}
+	}
+	if !runDirExists(runsDir, "destroy-current") {
+		t.Fatal("the purging destroy run's own record must survive the full-context sweep")
+	}
+}
+
+func TestResetConvergeRecordsAfterDestroyFullScopePartialDisablesHistorySweep(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := twoCephClustersState()
+
+	mustArchiveLedger(t, runsDir, "run-a", []workflow.TaskLedgerEntry{
+		{ID: "storage.ceph-a.cluster", Kind: "storage-cluster", Cluster: "ceph-a"},
+	})
+	touchTaskDir(t, runsDir, "run-a", "storage.ceph-a.cluster")
+	mustArchiveLedger(t, runsDir, "run-fabric", []workflow.TaskLedgerEntry{
+		{ID: "provider.kvm-host", Kind: "provider", Host: "kvm-host"},
+	})
+	touchTaskDir(t, runsDir, "run-fabric", "provider.kvm-host")
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, []string{"ceph-a"}, nil, nil, "", true, false); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if !runDirExists(runsDir, "run-a") {
+		t.Fatal("a partially-destroyed cluster's history must survive even an unscoped --purge-history destroy")
+	}
+	if !runDirExists(runsDir, "run-fabric") {
+		t.Fatal("the full-context sweep must stay off while any cluster is left partially destroyed")
 	}
 }
 
@@ -387,7 +513,7 @@ func TestResetMachineConvergeRecordsAfterDestroyPurgeHistoryScopesToSelectedMach
 	touchTaskDir(t, runsDir, "run-1", "infra.lab.ceph-1")
 
 	machineProvision := map[string]bool{"ceph-0": true}
-	if problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, t.TempDir(), st, machineProvision, nil, true, false); len(problems) != 0 {
+	if problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, t.TempDir(), st, machineProvision, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
 

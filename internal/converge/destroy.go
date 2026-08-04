@@ -102,7 +102,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	return renderResult, ledger, workflow.ApplyRunLogPath(ctx.RunsDir, prepared.RunID), err
 }
 
-func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, fabricHosts map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, purgeHistory, skipUnreachable bool) []error {
+func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, runScope Scope, state v1alpha1.State, storageWorkNames, partialStorageClusters []string, fabricHosts map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, destroyRunID string, purgeHistory, skipUnreachable bool) []error {
 	var problems []error
 	var purgedClusters, resetClusters []string
 	partial := make(map[string]bool, len(partialStorageClusters))
@@ -188,15 +188,21 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 			problems = append(problems, fmt.Errorf("remove remaining converge records: %w", err))
 		}
 	}
-	if purgeHistory && len(purgedClusters) > 0 {
+	if purgeHistory {
 		keepMachineState := !ScopeTearsMachineLayer(runScope)
 		for _, name := range uniqueDestroyedNames(purgedClusters) {
 			if err := purgeClusterRuntimeDir(clustersDir, name, keepMachineState); err != nil {
 				problems = append(problems, fmt.Errorf("purge history for cluster %s: %w", name, err))
 			}
 		}
-		if err := purgeRunHistoryForComponents(runsDir, purgedClusters, nil); err != nil {
-			problems = append(problems, fmt.Errorf("purge run history: %w", err))
+		if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
+			if err := purgeAllRunHistory(runsDir, destroyRunID); err != nil {
+				problems = append(problems, fmt.Errorf("purge run history: %w", err))
+			}
+		} else if len(purgedClusters) > 0 {
+			if err := purgeRunHistoryForComponents(runsDir, purgedClusters, nil, destroyRunID); err != nil {
+				problems = append(problems, fmt.Errorf("purge run history: %w", err))
+			}
 		}
 	}
 	problems = append(problems, pruneDestroyedClusterStateDirs(clustersDir, resetClusters)...)
@@ -245,7 +251,7 @@ func substrateReleaseConfirmed(cluster string, runScope Scope, state v1alpha1.St
 	return false
 }
 
-func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, purgeHistory, skipUnreachable bool) []error {
+func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, destroyRunID string, purgeHistory, skipUnreachable bool) []error {
 	include := destroyKindIncluded(succeededDestroyKinds)
 	if !include(workflow.DestroyTaskKindMachineInfra, "") {
 		return nil
@@ -283,7 +289,7 @@ func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state 
 		for name := range machineProvision {
 			machineNames = append(machineNames, name)
 		}
-		if err := purgeRunHistoryForComponents(runsDir, nil, machineNames); err != nil {
+		if err := purgeRunHistoryForComponents(runsDir, nil, machineNames, destroyRunID); err != nil {
 			problems = append(problems, fmt.Errorf("purge run history: %w", err))
 		}
 	}

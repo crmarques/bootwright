@@ -76,9 +76,9 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, sto
 	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster and destroy whatever data those nodes hold; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --authorize %s to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","), authorizeInstalledClusterNode)
 }
 
-func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, purgeHistory, skipUnreachable bool) error {
+func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, destroyRunID string, purgeHistory, skipUnreachable bool) error {
 	if sel.MachineSelection {
-		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, plan.State, sel.MachineProvision, succeeded, purgeHistory, skipUnreachable))
+		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, plan.State, sel.MachineProvision, succeeded, destroyRunID, purgeHistory, skipUnreachable))
 	}
-	return printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, purgeHistory, skipUnreachable))
+	return printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, destroyRunID, purgeHistory, skipUnreachable))
 }

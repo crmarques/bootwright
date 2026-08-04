@@ -24,7 +24,7 @@ func TestResetConvergeRecordsRemovesStorageClusterDashboardPassword(t *testing.T
 		t.Fatalf("precondition: dashboard-password must exist, %v", err)
 	}
 
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, false, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, nil, "", false, false); len(problems) != 0 {
 		t.Fatalf("ResetConvergeRecordsAfterDestroy: %v", problems)
 	}
 
@@ -54,7 +54,7 @@ func TestResetConvergeRecordsKeepsCapturedSecretsOfTheClusterThatFailed(t *testi
 		{ID: "destroy.storage-clusters.ceph-a", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph-a"}, Status: workflow.TaskStatusOK},
 		{ID: "destroy.storage-clusters.ceph-b", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph-b"}, Status: workflow.TaskStatusFailed},
 	}})
-	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, succeeded, false, false); len(problems) != 0 {
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, nil, nil, succeeded, "", false, false); len(problems) != 0 {
 		t.Fatalf("ResetConvergeRecordsAfterDestroy: %v", problems)
 	}
 
