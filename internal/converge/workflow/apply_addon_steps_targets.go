@@ -127,13 +127,18 @@ func (e *addonStepExecutor) storageClusterMachines(name string) ([]stepTargetMac
 	if !ok || cluster.Spec.Ceph == nil {
 		return nil, fmt.Errorf("storage cluster %q not found or not a Ceph cluster", name)
 	}
-	bootstrap := cluster.Spec.Ceph.Cephadm.Bootstrap.Node
-	ordered := append([]v1alpha1.StorageCephNode(nil), cluster.Spec.Ceph.Topology.Nodes...)
-	for i := range ordered {
-		if ordered[i].Name == bootstrap {
-			ordered[0], ordered[i] = ordered[i], ordered[0]
-			break
+	bootstrap := topology.BootstrapHostname(cluster)
+	var ordered []v1alpha1.StorageCephNode
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		switch {
+		case node.Name == bootstrap:
+			ordered = append([]v1alpha1.StorageCephNode{node}, ordered...)
+		case topology.NodeHasLabel(node, topology.CephAdminLabel):
+			ordered = append(ordered, node)
 		}
+	}
+	if len(ordered) == 0 {
+		return nil, fmt.Errorf("storage cluster %q has no cephadm admin host: bootstrap node %q is not in the topology and no node carries the %s label", name, bootstrap, topology.CephAdminLabel)
 	}
 	var out []stepTargetMachine
 	for _, node := range ordered {

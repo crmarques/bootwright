@@ -607,6 +607,21 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 		t.Fatalf("host labels = %v, want %v", got, wantLabels)
 	}
 
+	cluster.Spec.Ceph.Cephadm.Bootstrap.Node = "ceph-0"
+	cluster.Spec.Ceph.Topology.Nodes[0].Labels = nil
+	cluster.Spec.Ceph.Topology.Nodes = append(cluster.Spec.Ceph.Topology.Nodes, v1alpha1.StorageCephNode{
+		Name: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{"mon"},
+	})
+	adminDocs := CephadmBootstrapSpec(state, cluster)
+	seed := adminDocs[0].(map[string]any)
+	if got := seed["labels"].([]string); !reflect.DeepEqual(got, []string{"mon", "osd", "_admin"}) {
+		t.Fatalf("bootstrap host labels = %v, want implicit _admin appended", got)
+	}
+	other := adminDocs[1].(map[string]any)
+	if got := other["labels"].([]string); !reflect.DeepEqual(got, []string{"mon"}) {
+		t.Fatalf("non-bootstrap host labels = %v, want no _admin", got)
+	}
+
 	coreDocs := CephadmCoreServicesSpec(state, cluster)
 	var osdSpec map[string]any
 	for _, doc := range coreDocs {

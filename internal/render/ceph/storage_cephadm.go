@@ -44,12 +44,16 @@ func CephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 	if stretch != nil {
 		tiebreaker = topology.CanonicalHostname(cluster, stretch.Tiebreaker.Node)
 	}
+	bootstrapHost := topology.BootstrapHostname(cluster)
 	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		labels := append([]string(nil), node.Roles...)
 		for _, label := range node.Labels {
 			if !slices.Contains(labels, label) {
 				labels = append(labels, label)
 			}
+		}
+		if node.Name == bootstrapHost && !slices.Contains(labels, topology.CephAdminLabel) {
+			labels = append(labels, topology.CephAdminLabel)
 		}
 		host := map[string]any{
 			"service_type": "host",

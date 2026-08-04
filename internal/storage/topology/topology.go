@@ -135,6 +135,25 @@ func NodeHasRole(node v1alpha1.StorageCephNode, role string) bool {
 	return false
 }
 
+const CephAdminLabel = "_admin"
+
+func NodeHasLabel(node v1alpha1.StorageCephNode, label string) bool {
+	for _, item := range node.Labels {
+		if item == label {
+			return true
+		}
+	}
+	return false
+}
+
+func BootstrapHostname(cluster v1alpha1.StorageCluster) string {
+	return CanonicalHostname(cluster, cluster.Spec.Ceph.Cephadm.Bootstrap.Node)
+}
+
+func NodeIsCephAdminHost(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode) bool {
+	return node.Name == BootstrapHostname(cluster) || NodeHasLabel(node, CephAdminLabel)
+}
+
 func FilesystemDefaultDataPool(fs v1alpha1.StorageFilesystem) string {
 	for _, ref := range fs.Spec.CephFS.DataPoolRefs {
 		if ref.Default {
