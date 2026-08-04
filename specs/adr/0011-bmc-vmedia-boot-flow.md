@@ -4,6 +4,11 @@
 
 Accepted
 
+Revised by [ADR 0050](0050-the-machine-an-installer-boot-finds-powered-on.md):
+the occupancy probe below became the power-off gate — an installer boot on a
+managed-OS machine now requires `PowerState=Off`, on every substrate and with
+no reinstall-list skip.
+
 ## Context
 
 Bare-metal machines boot their install media — the OpenShift agent ISO or the

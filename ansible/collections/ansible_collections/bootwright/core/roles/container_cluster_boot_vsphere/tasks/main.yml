@@ -8,6 +8,10 @@
 - name: Boot machine from vSphere virtual media
   when: bootwright_vsphere_boot_action == 'boot'
   block:
+    - name: Require a powered-off machine before installer boot
+      ansible.builtin.import_tasks: power_gate.yml
+      when: bootwright_component.osManaged | default(true) | bool
+
     - name: Stage generated agent ISO
       ansible.builtin.import_tasks: stage_agent_iso.yml
 

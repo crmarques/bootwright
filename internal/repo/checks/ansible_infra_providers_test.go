@@ -24,7 +24,6 @@ func TestPackageRemovalGuardedByOwnershipAndRequirements(t *testing.T) {
 
 func TestAuthorizationMembershipRejectsEmptyName(t *testing.T) {
 	for _, path := range []string{
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/apply_mode.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/machine_os_identity/tasks/probe_existing.yml",

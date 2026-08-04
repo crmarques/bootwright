@@ -28,6 +28,12 @@
     - name: Resolve Redfish system
       ansible.builtin.import_tasks: stage/system.yml
 
+    - name: Require a powered-off machine before installer boot
+      ansible.builtin.import_tasks: validation/power.yml
+      when:
+        - bootwright_vmedia_action_effective == 'boot'
+        - bootwright_component.osManaged | default(true) | bool
+
     - name: Prepare Redfish virtual media
       ansible.builtin.import_tasks: media/prepare.yml
       when: bootwright_vmedia_action_effective in ['boot', 'cleanup_media']
@@ -38,13 +44,6 @@
         - bootwright_vmedia_action_effective == 'boot'
         - bootwright_component.boot.redfish.setBootSource | default(true) | bool
         - (bootwright_component.interfaces | default([]) | length) > 0
-
-    - name: Guard against wiping an occupied host
-      ansible.builtin.import_tasks: validation/occupancy.yml
-      when:
-        - bootwright_vmedia_action_effective == 'boot'
-        - bootwright_component.boot.redfish.setBootSource | default(true) | bool
-        - bootwright_current_cluster.name | default('') not in (bootwright_ocp_reinstall_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
     - name: Boot node from Redfish virtual media
       when: bootwright_vmedia_action_effective == 'boot'

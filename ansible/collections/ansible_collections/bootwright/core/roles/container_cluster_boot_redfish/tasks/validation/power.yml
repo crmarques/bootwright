@@ -1,0 +1,32 @@
+---
+- name: Query Redfish system power state before installer boot
+  ansible.builtin.uri:
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+  register: bootwright_redfish_power_gate
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+
+- name: Refuse to boot install media on a machine that is not powered off
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_power_gate.status | default(0) | int) == 200
+      - (bootwright_redfish_power_gate.json.PowerState | default('')) == 'Off'
+    fail_msg: >-
+      refusing to boot install media on machine
+      {{ bootwright_component.name | default(inventory_hostname) }} for cluster
+      {{ bootwright_current_cluster.name | default('<unknown>') }}: its BMC reports
+      PowerState={{ (bootwright_redfish_power_gate.json | default({})).PowerState | default('<not reported>', true) }}
+      (HTTP status {{ bootwright_redfish_power_gate.status | default('unreachable') }})
+      for system {{ bootwright_redfish_system_id }}, and booting the installer
+      disk-wipes whatever the machine is running now. Bootwright installs a
+      managed-OS machine only from PowerState=Off: powering the machine off is the
+      operator's own confirmation that nothing on it is still needed, no
+      --authorize token stands in for it, and an unreadable power state fails
+      closed the same way. Power the machine off through its BMC or console and
+      re-run `bootwright apply`. If a previous bootwright run was interrupted
+      while installing this machine, powering it off is safe — the install
+      restarts from media and loses nothing.
+    quiet: true

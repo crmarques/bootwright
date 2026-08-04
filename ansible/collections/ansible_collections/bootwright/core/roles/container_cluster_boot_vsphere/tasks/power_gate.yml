@@ -1,0 +1,46 @@
+---
+- name: Load vCenter credentials for the power gate
+  ansible.builtin.include_role:
+    name: bootwright.core.support_credentials
+    tasks_from: load.yml
+  vars:
+    bootwright_creds_path: "{{ bootwright_vsphere_boot.credentialsPath }}"
+    bootwright_creds_var: bootwright_vsphere_boot_credentials
+    bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere_boot.server }}"
+
+- name: Query vSphere machine power state before installer boot
+  community.vmware.vmware_guest_info:
+    hostname: "{{ bootwright_vsphere_boot.server }}"
+    port: "{{ bootwright_vsphere_boot.port | default(443) }}"
+    username: "{{ bootwright_vsphere_boot_credentials.username }}"
+    password: "{{ bootwright_vsphere_boot_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere_boot.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere_boot.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere_boot.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_boot_vm_name }}"
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_power_gate
+  failed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
+- name: Refuse to boot install media on a machine that is not powered off
+  ansible.builtin.assert:
+    that:
+      - ((bootwright_vsphere_power_gate.instance | default({})).hw_power_status | default('')) == 'poweredOff'
+    fail_msg: >-
+      refusing to boot install media on machine
+      {{ bootwright_component.name | default(inventory_hostname) }} for cluster
+      {{ bootwright_current_cluster.name | default('<unknown>') }}: vCenter reports
+      power state
+      {{ (bootwright_vsphere_power_gate.instance | default({})).hw_power_status | default('<not readable: ' ~ (bootwright_vsphere_power_gate.msg | default('no probe result')) ~ '>', true) }}
+      for VM {{ bootwright_vsphere_boot_vm_name }}, and booting the installer
+      disk-wipes whatever the machine is running now. Bootwright installs a
+      managed-OS machine only from poweredOff: powering the machine off is the
+      operator's own confirmation that nothing on it is still needed, no
+      --authorize token stands in for it, and an unreadable power state fails
+      closed the same way. Power the VM off in vCenter and re-run
+      `bootwright apply`. If a previous bootwright run was interrupted while
+      installing this machine, powering it off is safe — the install restarts
+      from media and loses nothing.
+    quiet: true

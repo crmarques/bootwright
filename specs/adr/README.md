@@ -24,7 +24,7 @@ below.
 | [0008](0008-ceph-declarative-cephadm-compat.md) | Declarative Ceph API on cephadm Native Concepts | |
 | [0009](0009-renderer-owns-listening-surface.md) | The Renderer Owns the Listening Surface and Dispatch | |
 | [0010](0010-cli-gate-and-flag-conventions.md) | CLI Gate and Flag Conventions | destructive-gate flags revised by 0030 |
-| [0011](0011-bmc-vmedia-boot-flow.md) | Redfish BMC Virtual-Media Boot Flow | |
+| [0011](0011-bmc-vmedia-boot-flow.md) | Redfish BMC Virtual-Media Boot Flow | revised by 0050: the occupancy probe became the power-off gate |
 | [0012](0012-proxy-fanout-per-directive.md) | Proxy Fan-Out, Per-Directive Bypass, and TLS-Inspection Trust | |
 | [0013](0013-addon-catalog-and-hooks.md) | Add-on Catalog, Step Lifecycle, and OLM Readiness Gating | |
 | [0014](0014-api-grammar.md) | Public API Grammar — References, Unions, Collections, Enablement | |
@@ -63,3 +63,4 @@ below.
 | [0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md) | The Certificate a Vendor Gateway Never Settles On | revised by 0049: the vendor ssl pin becomes the declared exposure field |
 | [0048](0048-the-site-a-machine-stands-in.md) | The Site a Machine Stands In | extends the arbiter move of 0042; the site registry backs the placement grammar of 0018 |
 | [0049](0049-the-scheme-a-gateway-declares-out-loud.md) | The Scheme a Gateway Declares Out Loud | revises the implicit vendor ssl pin of 0047; its repair machinery remains |
+| [0050](0050-the-machine-an-installer-boot-finds-powered-on.md) | The Machine an Installer Boot Finds Powered On | revises the occupancy probe of 0011; follows the physical-half rule of 0034 and the one-token-per-refusal grammar of 0030 |

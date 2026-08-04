@@ -51,6 +51,32 @@ The install behavior splits across two reusable kinds:
 A `Machine` ties them together: `os.installProfileRef` names the profile, and the
 profile's `installer.anaconda.imageRef` names the image.
 
+### The machine must be powered off
+
+Booting install media wipes the machine's disks, so Bootwright only boots it on
+a machine that is observably powered off — Redfish `PowerState=Off`, vCenter
+`poweredOff`, or a KubeVirt VirtualMachine with no running instance. Powering
+the machine off is your confirmation that nothing on it is still needed; no
+`--authorize` token stands in for it, and an unreadable power state fails
+closed the same way (ADR 0050).
+
+In practice this costs nothing on a first build — racked machines are powered
+off, and every VM substrate creates its machines stopped. You meet the gate in
+three situations:
+
+- **Reinstalling over a running machine** (`--mode rebuild` drift, or a
+  reinstall a prior `destroy` released): power the machine off through its BMC,
+  vCenter, or `virtctl stop`, then re-run `apply`.
+- **A machine delivered powered on** (parked in BIOS, or running an OS
+  Bootwright cannot see over SSH): the install refuses instead of wiping it.
+  Power it off if it is truly unused.
+- **Re-running after an interrupted install**: the machine is still powered on
+  from the interrupted boot. Powering it off is safe — the install restarts
+  from media and loses nothing.
+
+A machine already running its Bootwright-installed OS is recognized over SSH
+and never re-booted by a plain `apply`, so converge runs need no power action.
+
 ## MachineImage: boot media
 
 `MachineImage` describes only the bootable media. The Anaconda package source

@@ -106,13 +106,6 @@ func ApplySubstrateResetMachinesExtraVar(plan *WorkflowPlan, pairs []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_substrate_reset_machines="+strings.Join(pairs, ","))
 }
 
-func ApplyOCPReinstallClustersExtraVar(plan *WorkflowPlan, names []string) {
-	if len(names) == 0 {
-		return
-	}
-	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ocp_reinstall_clusters="+strings.Join(names, ","))
-}
-
 func ApplyOCPRebuildAuthorizedClustersExtraVar(plan *WorkflowPlan, names []string) {
 	if len(names) == 0 {
 		return

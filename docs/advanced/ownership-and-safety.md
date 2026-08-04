@@ -134,12 +134,20 @@ run *before* any mutation if its precondition is not met:
 5. **Concrete-probe gating.** Install, add-on, managed-OS, provider, and storage
    sites refuse to reinstall or rebuild over existing state without an explicit
    `--mode rebuild`.
-6. **Destroy protection.** When desired state sets `destroyProtection`, even
+6. **Powered-off installer boot.** Booting install media on a managed-OS
+   machine — the OpenShift agent ISO or the Anaconda ISO — requires the machine
+   to be observably powered off first, on every substrate (Redfish
+   `PowerState=Off`, vCenter `poweredOff`, a provenly absent KubeVirt VMI). An
+   unreadable power state fails closed, and no `--authorize` token stands in:
+   powering the machine off is itself the operator's confirmation that nothing
+   on it is still needed. A machine already running its Bootwright-installed OS
+   is never re-booted by this path, so converge runs are untouched (ADR 0050).
+7. **Destroy protection.** When desired state sets `destroyProtection`, even
    `apply --mode rebuild` fails closed on protected rebuilds (see below).
-7. **Render as a second enforcement line.** Rendering fails before writing any
+8. **Render as a second enforcement line.** Rendering fails before writing any
    tool input when an endpoint load-balancer bind or a managed Ceph topology host
    address does not resolve, instead of emitting empty values.
-8. **Foreign state on the node itself.** A storage node still running the
+9. **Foreign state on the node itself.** A storage node still running the
    cephadm units of a Ceph cluster this apply does not own refuses before the
    cluster is bootstrapped, because those daemons hold the host ports its own
    daemons need. `--authorize foreign-daemons` removes exactly those identities
@@ -177,9 +185,13 @@ treats resources Bootwright does **not** own:
       wipes their disks — that release *is* the authorization, so no mode flag is
       involved.
     - **`--authorize foreign-daemons`** removes another cluster's cephadm daemons,
-      units and `/var/lib/ceph` state from a node being enrolled (checkpoint 8
+      units and `/var/lib/ceph` state from a node being enrolled (checkpoint 9
       above). It zaps no disk, and it carries its own token rather than the
       data-loss gate.
+
+    Whichever form authorizes the loss, the wipe itself still passes checkpoint
+    6: a machine whose OS is about to be (re)installed must be powered off when
+    the run reaches its installer boot, and no flag stands in for that.
 
     The first three share a **separate** data-loss gate: they are authorized only
     by the interactive data-loss prompt, or by `--authorize data-loss` paired with

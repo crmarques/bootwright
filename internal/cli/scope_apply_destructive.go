@@ -51,7 +51,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	var substrateReset []string
 	if mode == workflow.ApplyModeRebuild {
 		if len(ocpReinstalls) > 0 {
-			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls ContainerCluster(s) — node disks wiped: "+strings.Join(ocpReinstalls, "; "))
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls ContainerCluster(s) — node disks wiped: "+strings.Join(ocpReinstalls, "; ")+". Each reinstalled node's managed-OS machine must be powered off before the run reaches its installer boot; a powered-on machine is refused there.")
 		}
 		if wiped := converge.OverrideDestructiveStorageClusters(objects); len(wiped) > 0 {
 			cliout.NewContinuation(stdout).Warning("mode rebuild", "wipes and rebuilds Ceph cluster(s) "+strings.Join(wiped, ", ")+": cephadm rm-cluster --zap-osds DESTROYS ALL OSD DATA on the cluster before re-bootstrapping. A change to cluster identity (seedHost/monIP/network) triggers this; an OSD-device add reconciles in place and does NOT wipe.")
@@ -89,12 +89,12 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 			}
 		}
 		if _, reset := workflow.OverrideDestructiveMachineSubstrate(objects); len(reset) > 0 {
-			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running.")
+			cliout.NewContinuation(stdout).Warning("mode rebuild", "reinstalls managed-OS machine(s) of cluster(s) "+strings.Join(reset, ", ")+": their VMs are destroyed and re-created and their disks wiped. Only clusters whose machine set structurally drifted are reset; a matching machine is left running. A bare-metal machine of a reset cluster keeps running its OS until its reinstall boot, which is refused until the machine is first powered off.")
 			substrateReset = reset
 		}
 	}
 	if len(releasedRecords) > 0 {
-		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of "+describeReleasedSubstrates(releasedRecords)+" was destroyed by a previous `bootwright destroy`: this apply re-creates the released machines and reinstalls any managed OS, wiping the target disks.")
+		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of "+describeReleasedSubstrates(releasedRecords)+" was destroyed by a previous `bootwright destroy`: this apply re-creates the released machines and reinstalls any managed OS, wiping the target disks. A released machine still running its OS is refused at that installer boot: power it off first.")
 		substrateReset = workflow.UnionClusterNames(substrateReset, releasedClusters)
 	}
 	if len(substrateReset) > 0 {
@@ -114,9 +114,11 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	}
 	bootProven := workflow.BootProvenContainerClusters(clustersDir, tasks)
 	if firstBoot := workflow.BareMetalFirstInstallClusters(bootProven, tasks, plan.State); len(firstBoot) > 0 {
-		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Before booting, each BMC is checked for an already-running OS (Redfish occupancy guard); confirm the BMC addresses point at unused/authorized machines.")
+		cliout.NewContinuation(stdout).Warning("bare-metal boot", "first apply will boot the OS installer on the bare-metal host(s) of "+strings.Join(firstBoot, ", ")+" and coreos-installer will DISK-WIPE their target disks. Each machine must already be powered off: the installer boot is refused while a machine is powered on or its power state is unreadable (power-off gate). Confirm the BMC addresses point at the intended machines.")
 	}
-	converge.ApplyOCPReinstallClustersExtraVar(plan, workflow.UnionClusterNames(bootProven, releasedContainerClusters(plan.State, releasedClusters)))
+	if firstInstall := workflow.FirstInstallManagedOSBareMetalClusters(objects, tasks); len(firstInstall) > 0 {
+		cliout.NewContinuation(stdout).Warning("managed-OS install", "first apply may boot the OS installer on bare-metal machine(s) of "+strings.Join(firstInstall, ", ")+" and the kickstart install DISK-WIPES their target disks. Each machine that needs installing must be powered off: the installer boot is refused while a machine is powered on or its power state is unreadable (power-off gate); a machine already running its bootwright-installed OS is left untouched.")
+	}
 	return consumedDataLoss
 }
 
@@ -151,7 +153,7 @@ func forecastReleasedReinstallDataLoss(stdout io.Writer, dryRun bool, runsDir st
 	if len(forecast) == 0 {
 		return
 	}
-	cliout.NewContinuation(stdout).Warning("data loss", "a real run of this apply would "+strings.Join(forecast, "; ")+". A previous `bootwright destroy` released that substrate without wiping it, so the reinstall is where the still-running OS is lost. Under --yes it needs --authorize "+authorizeDataLoss+"; interactively it stops at the destructive prompt")
+	cliout.NewContinuation(stdout).Warning("data loss", "a real run of this apply would "+strings.Join(forecast, "; ")+". A previous `bootwright destroy` released that substrate without wiping it, so the reinstall is where the still-running OS is lost, and each released machine must be powered off before its installer boot — a powered-on machine is refused there. Under --yes it needs --authorize "+authorizeDataLoss+"; interactively it stops at the destructive prompt")
 }
 
 func releasedBareMetalReinstallDescriptors(state v1alpha1.State, records []workflow.SubstrateReleaseRecord) []string {
@@ -181,20 +183,6 @@ func releasedBareMetalReinstallDescriptors(state v1alpha1.State, records []workf
 		}
 		if len(bareMetal) > 0 {
 			out = append(out, "reinstall destroy-released bare-metal machine(s) "+strings.Join(bareMetal, ", ")+" of cluster "+record.Cluster+" (still-running OS wiped)")
-		}
-	}
-	return out
-}
-
-func releasedContainerClusters(state v1alpha1.State, released []string) []string {
-	declared := map[string]bool{}
-	for _, cluster := range state.ContainerClusters {
-		declared[cluster.Metadata.Name] = true
-	}
-	var out []string
-	for _, name := range released {
-		if declared[name] {
-			out = append(out, name)
 		}
 	}
 	return out
