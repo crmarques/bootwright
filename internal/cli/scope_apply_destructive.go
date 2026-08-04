@@ -207,6 +207,31 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
 }
 
+func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, objects []workflow.ObjectClassification, reclaimDevices string) (string, []string, error) {
+	owned := converge.OwnedStorageClusters(objects)
+	if err := converge.CheckReclaimDestroyProtection(plan.State, owned, auth.has(authorizeDataLoss)); err != nil {
+		return "", nil, failErr(1, err)
+	}
+	resolved, err := converge.ResolveReclaimDevices(plan.State, owned, reclaimDevices)
+	if err != nil {
+		return "", nil, failErr(2, err)
+	}
+	if len(owned) > 0 {
+		if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, owned, resolved); len(unmatched) > 0 {
+			return "", nil, failErr(2, reclaimUnmatchedError(unmatched, owned, declared))
+		}
+	}
+	applyReclaimUnownedDevices(stdout, plan, auth, resolved)
+	return resolved, owned, nil
+}
+
+func describeReclaimSelection(reclaimDevices string) string {
+	if converge.ReclaimDevicesRequestsAll(reclaimDevices) {
+		return "every declared OSD device"
+	}
+	return "device(s) " + reclaimDevices
+}
+
 func applyReclaimUnownedDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, reclaimDevices string) {
 	if !auth.allows(authorizeUnownedDevices) {
 		return

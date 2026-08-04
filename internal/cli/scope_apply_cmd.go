@@ -274,21 +274,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			if reclaimDevices != "" {
-				ownedReclaim = converge.OwnedStorageClusters(objects)
-				if err := converge.CheckReclaimDestroyProtection(plan.State, ownedReclaim, auth.has(authorizeDataLoss)); err != nil {
-					return failErr(1, err)
+				var rerr error
+				if reclaimDevices, ownedReclaim, rerr = resolveApplyReclaimDevices(stdout, &plan, auth, objects, reclaimDevices); rerr != nil {
+					return rerr
 				}
-				resolvedReclaim, rerr := converge.ResolveReclaimDevices(plan.State, ownedReclaim, reclaimDevices)
-				if rerr != nil {
-					return failErr(2, rerr)
-				}
-				reclaimDevices = resolvedReclaim
-				if len(ownedReclaim) > 0 {
-					if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, ownedReclaim, reclaimDevices); len(unmatched) > 0 {
-						return failErr(2, reclaimUnmatchedError(unmatched, ownedReclaim, declared))
-					}
-				}
-				applyReclaimUnownedDevices(stdout, &plan, auth, reclaimDevices)
 			}
 			applyForeignCephadmDaemons(stdout, &plan, auth, tasks)
 			allowDestroy := auth.has(authorizeDataLoss)
@@ -357,11 +346,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
-				describedReclaim := "device(s) " + reclaimDevices
-				if converge.ReclaimDevicesRequestsAll(reclaimDevices) {
-					describedReclaim = "every declared OSD device"
-				}
-				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE "+describedReclaim+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by --authorize "+authorizeDataLoss+" or the interactive data-loss confirm")
+				cliout.NewContinuation(stdout).Warning("reclaim", "a real run would WIPE "+describeReclaimSelection(reclaimDevices)+" on any selected Bootwright-owned Ceph cluster before apply, on hosts whose OSD marker does not already record the device — irreversible data loss, gated by --authorize "+authorizeDataLoss+" or the interactive data-loss confirm")
 			}
 			planEntries := workflow.TaskLedgerEntries(dryRunTasks)
 			reporter.DryRunTasks(runCommandLabel, planEntries, limits, applyPlanGroups(planEntries, buildClusterDisplays(state)))
