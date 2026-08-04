@@ -31,7 +31,10 @@
 
 - name: Enable subscription-backed Ceph repositories (and disable the rest)
   community.general.rhsm_repository:
-    name: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
+    name: >-
+      {{ ((bootwright_ceph_provider.repository.redhatRepos | default([]))
+          + (bootwright_machine_repositories.subscription.enable | default([])))
+         | unique }}
     purge: true
   when:
     - (bootwright_ceph_provider.repository.redhatRepos | default([]) | length) > 0

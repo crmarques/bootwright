@@ -221,7 +221,27 @@ type StorageCephCommunitySpec struct {
 }
 
 type StorageCephIBMSpec struct {
-	CallHome string `yaml:"callHome" json:"callHome"`
+	CallHome string                      `yaml:"callHome" json:"callHome"`
+	Packages *StorageCephIBMPackagesSpec `yaml:"packages,omitempty" json:"packages,omitempty"`
+}
+
+type StorageCephIBMPackagesSpec struct {
+	Source            string   `yaml:"source" json:"source"`
+	SubscriptionRepos []string `yaml:"subscriptionRepos,omitempty" json:"subscriptionRepos,omitempty"`
+}
+
+func StorageCephIBMPackages(ceph *StorageClusterCephSpec) *StorageCephIBMPackagesSpec {
+	if ceph == nil || ceph.IBM == nil {
+		return nil
+	}
+	return ceph.IBM.Packages
+}
+
+func StorageCephIBMPackageSource(ceph *StorageClusterCephSpec) string {
+	if packages := StorageCephIBMPackages(ceph); packages != nil && packages.Source != "" {
+		return packages.Source
+	}
+	return StorageCephIBMPackageSourceVendor
 }
 
 type StorageCephadmSpec struct {

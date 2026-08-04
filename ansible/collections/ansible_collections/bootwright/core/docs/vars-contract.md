@@ -634,11 +634,21 @@ feeds `provider.rhsm.*` into the `machine_registration_rhsm` role
 binding, proxy CA trust, the node-side Satellite-in-CIDR bypass decision,
 `rhsm.conf` `[server]` proxy and `[rhsm]` `repo_ca_cert` convergence,
 `subscription-manager` registration and refresh, and optional Insights
-enrollment. The shared `subscription.yml` task file then enables
-`repository.redhatRepos` (skipped when `rhsmManagement` is `external`, so
-operator-enabled repo sets are never purged); `ibm.yml` installs the
-`repository.ibmRepoURL` vendor `.repo` and — when `requiresLicense: true` —
-installs and accepts the vendor license. Distributions that set
+enrollment. The shared `subscription.yml` task file then enables the union of
+`repository.redhatRepos` and the host's
+`bootwright_machine_repositories.subscription.enable` ids with a purge, so
+machine-profile-declared repositories survive the storage phase (the task is
+skipped entirely when `rhsmManagement` is `external`, so operator-enabled repo
+sets are never purged); `ibm.yml` installs the `repository.ibmRepoURL` vendor
+`.repo` and — when `requiresLicense: true` — installs and accepts the vendor
+license. When `spec.ceph.ibm.packages.source` is `subscription` the renderer
+folds `packages.subscriptionRepos` into `repository.redhatRepos` and omits
+`repository.ibmRepoURL`; `ibm.yml` keys on that emptiness to remove any
+previously installed vendor `.repo` file and to run a `dnf repoquery` preflight
+proving the enabled repositories serve the pinned `cephadm` build and the
+`ibm-storage-ceph-license` package before any install (the preflight carries the
+same `rhsmManagement` guard as the enable, so it never demands repositories the
+role did not enable). Distributions that set
 `requiresRegistry: true` additionally run a registry stage (after host
 dependencies, before cephadm install) that installs the entitlement's
 `registry.trustBundlePath` and logs in to `registry.url` so every node can pull

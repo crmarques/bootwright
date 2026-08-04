@@ -65,7 +65,8 @@
     fail_msg: >-
       cephadm CLI is required on storage node {{ bootwright_current_storage_host.hostname }} for Ceph
       distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
-      provider repositories, managed OS MachineInstallProfile repositories, preinstalled host packages,
+      provider repositories, spec.ceph.ibm.packages.subscriptionRepos when the IBM package source is
+      subscription, managed OS MachineInstallProfile repositories, preinstalled host packages,
       or — with rhsm management external — that your registration provisioning playbook enabled
       repositories providing the Ceph packages.
       Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}

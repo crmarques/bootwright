@@ -921,6 +921,12 @@ the two listed RHEL repositories stay on. A `configure[]` entry whose `baseURL`
 is not covered by the effective no_proxy inherits the machine-OS-install proxy,
 the same rule Anaconda's own `repo` directives follow.
 
+On a node that also serves a subscription-backed Ceph `StorageCluster`, the
+Ceph deps phase later re-asserts the repository set with its own purge; that
+purge keeps the union of the Ceph provider repositories and this profile's
+`subscription.enable[]` ids, so a repository declared here stays enabled
+through storage applies rather than being toggled off by them.
+
 !!! note "When `%post` skips the subscription block"
     `subscription-manager` has no identity inside the installer chroot until the
     node registers. With `packageSource.fromSubscription` the Kickstart `rhsm`

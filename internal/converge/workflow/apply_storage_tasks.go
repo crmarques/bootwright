@@ -66,6 +66,7 @@ func storageClusterStructuralHashVars(state v1alpha1.State, name string) v1alpha
 		ceph.Monitoring = nil
 		if ceph.IBM != nil {
 			ceph.IBM.CallHome = ""
+			ceph.IBM.Packages = nil
 		}
 	}
 	return clone
@@ -86,6 +87,9 @@ func managedMachineOSStructuralHashVars(state v1alpha1.State, name string) v1alp
 	for i := range clone.StorageClusters {
 		if ceph := clone.StorageClusters[i].Spec.Ceph; ceph != nil {
 			ceph.PackageVersion = ""
+			if ceph.IBM != nil {
+				ceph.IBM.Packages = nil
+			}
 			for j := range ceph.Topology.Nodes {
 				ceph.Topology.Nodes[j].Devices = nil
 				ceph.Topology.Nodes[j].OSD = nil

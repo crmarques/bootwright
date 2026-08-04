@@ -173,15 +173,20 @@ func subscriptionStream(cluster v1alpha1.StorageCluster) string {
 	return ""
 }
 
-func subscriptionRepository(def distributionDef, stream string) Repository {
+func subscriptionRepository(def distributionDef, stream string, packages *v1alpha1.StorageCephIBMPackagesSpec) Repository {
 	repos := append([]string(nil), def.baseRepos...)
 	if def.usesRHCephToolsRepo {
 		repos = append(repos, fmt.Sprintf(rhcephToolsRepoTemplate, stream))
 	}
 	repo := Repository{RedHatRepos: repos}
-	if def.ibmRepoTemplate != "" {
-		repo.IBMRepoURL = fmt.Sprintf(def.ibmRepoTemplate, stream)
+	if def.ibmRepoTemplate == "" {
+		return repo
 	}
+	if packages != nil && packages.Source == v1alpha1.StorageCephIBMPackageSourceSubscription {
+		repo.RedHatRepos = append(repo.RedHatRepos, packages.SubscriptionRepos...)
+		return repo
+	}
+	repo.IBMRepoURL = fmt.Sprintf(def.ibmRepoTemplate, stream)
 	return repo
 }
 
@@ -201,7 +206,7 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 	if distribution == v1alpha1.StorageCephDistributionOSS {
 		provider.Community = communitySource(cluster)
 	} else {
-		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster))
+		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster), v1alpha1.StorageCephIBMPackages(cluster.Spec.Ceph))
 	}
 	if version := cephPackageVersion(cluster); version != "" {
 		provider.CephadmPackageSpec = provider.CephadmPackage + "-" + version

@@ -284,6 +284,9 @@ const (
 	StorageCephIBMCallHomeEnabled  = "enabled"
 	StorageCephIBMCallHomeDisabled = "disabled"
 
+	StorageCephIBMPackageSourceVendor       = "vendor"
+	StorageCephIBMPackageSourceSubscription = "subscription"
+
 	StorageCephRoleMON          = "mon"
 	StorageCephRoleMGR          = "mgr"
 	StorageCephRoleOSD          = "osd"

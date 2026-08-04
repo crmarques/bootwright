@@ -11,6 +11,58 @@
 - name: Configure subscription-backed Ceph package repositories
   ansible.builtin.include_tasks: subscription.yml
 
+- name: Remove vendor Ceph repository definition under subscription package source
+  ansible.builtin.file:
+    path: /etc/yum.repos.d/ibm-storage-ceph.repo
+    state: absent
+  when: bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
+
+- name: Probe declared subscription repositories for the IBM Ceph packages
+  ansible.builtin.command:
+    argv:
+      - dnf
+      - -q
+      - repoquery
+      - "{{ item }}"
+  register: bootwright_ceph_subscription_preflight
+  changed_when: false
+  failed_when: false
+  loop: >-
+    {{ [bootwright_ceph_provider.cephadmPackageSpec
+        | default(bootwright_ceph_provider.cephadmPackage | default('cephadm'))]
+       + (['ibm-storage-ceph-license']
+          if (bootwright_ceph_provider.requiresLicense | default(false) | bool) else []) }}
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  when:
+    - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
+    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
+
+- name: Require the declared subscription repositories to serve the IBM Ceph packages
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - item.stdout | trim | length > 0
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }}: none of the enabled
+      subscription repositories
+      ({{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }})
+      serves {{ item.item }}. spec.ceph.ibm.packages.source=subscription sources the IBM
+      Storage Ceph packages from spec.ceph.ibm.packages.subscriptionRepos instead of the
+      public IBM repository, so those repositories must publish the pinned cephadm build
+      and the ibm-storage-ceph-license package for this release. Check that the Satellite
+      content view publishes the IBM Storage Ceph repository for this release and lifecycle
+      environment, that it carries the license package, and that the published version is
+      not behind spec.ceph.packageVersion; a content view republished since the node's last
+      metadata refresh may also need `dnf clean metadata` on the node.
+    quiet: true
+  loop: "{{ bootwright_ceph_subscription_preflight.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+  when:
+    - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
+    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
+
 - name: Install vendor Ceph repository definition
   ansible.builtin.get_url:
     url: "{{ bootwright_ceph_provider.repository.ibmRepoURL }}"

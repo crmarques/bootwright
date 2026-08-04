@@ -109,14 +109,74 @@ func TestValidateStorageCephNodeOSJudgesNoVendorSupportMatrix(t *testing.T) {
 
 func TestValidateStorageCephIBMCallHomeIntent(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM}}}
-	if errs := validateStorageCephIBM("StorageCluster/ceph spec.ceph.ibm", cluster); len(errs) == 0 {
+	if errs := validateStorageCephIBM("StorageCluster/ceph spec.ceph.ibm", cluster, v1alpha1.State{}); len(errs) == 0 {
 		t.Fatal("missing IBM Call Home intent was accepted")
 	}
 	for _, value := range []string{v1alpha1.StorageCephIBMCallHomeEnabled, v1alpha1.StorageCephIBMCallHomeDisabled} {
 		cluster.Spec.Ceph.IBM = &v1alpha1.StorageCephIBMSpec{CallHome: value}
-		if errs := validateStorageCephIBM("StorageCluster/ceph spec.ceph.ibm", cluster); len(errs) != 0 {
+		if errs := validateStorageCephIBM("StorageCluster/ceph spec.ceph.ibm", cluster, v1alpha1.State{}); len(errs) != 0 {
 			t.Fatalf("IBM Call Home %q rejected: %v", value, errs)
 		}
+	}
+}
+
+func ibmPackagesCluster(packages *v1alpha1.StorageCephIBMPackagesSpec) v1alpha1.StorageCluster {
+	return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution: v1alpha1.StorageCephDistributionIBM,
+		IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled, Packages: packages},
+	}}}
+}
+
+func TestValidateStorageCephIBMPackagesSource(t *testing.T) {
+	cases := []struct {
+		name      string
+		packages  *v1alpha1.StorageCephIBMPackagesSpec
+		wantError string
+	}{
+		{name: "absent block keeps vendor behavior", packages: nil},
+		{name: "explicit vendor", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceVendor}},
+		{name: "subscription with repos", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription, SubscriptionRepos: []string{"Org_IBM_ibm-storage-ceph-9"}}},
+		{name: "unknown source", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: "mirror"}, wantError: "must be one of"},
+		{name: "vendor with repos", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceVendor, SubscriptionRepos: []string{"Org_IBM_ibm-storage-ceph-9"}}, wantError: "must be empty when source=vendor"},
+		{name: "subscription without repos under managed rhsm", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription}, wantError: "must name at least one"},
+		{name: "wildcard repo id", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription, SubscriptionRepos: []string{"*"}}, wantError: "not allowed"},
+		{name: "repo id with whitespace", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription, SubscriptionRepos: []string{"bad id"}}, wantError: "whitespace or quotes"},
+		{name: "duplicated repo id", packages: &v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription, SubscriptionRepos: []string{"repo", "repo"}}, wantError: "duplicated"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateStorageCephIBM("spec.ceph.ibm", ibmPackagesCluster(tc.packages), v1alpha1.State{})
+			joined := strings.Join(errs, "; ")
+			if tc.wantError == "" && len(errs) != 0 {
+				t.Fatalf("valid packages rejected: %v", errs)
+			}
+			if tc.wantError != "" && !strings.Contains(joined, tc.wantError) {
+				t.Fatalf("errors = %v, want %q", errs, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateStorageCephIBMPackagesSubscriptionRequiresReposWhateverTheEntitlementShape(t *testing.T) {
+	cluster := ibmPackagesCluster(&v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceSubscription})
+	cluster.Spec.Ceph.EntitlementRef = v1alpha1.LocalObjectReference{Name: "ibm-ceph"}
+	cluster.Spec.Ceph.OSSubscriptionRef = v1alpha1.LocalObjectReference{Name: "rhel"}
+	state := v1alpha1.State{Entitlements: []v1alpha1.Entitlement{
+		{
+			Metadata: v1alpha1.Metadata{Name: "ibm-ceph"},
+			Spec:     v1alpha1.EntitlementSpec{Type: v1alpha1.EntitlementTypeIBMStorageCeph},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.EntitlementSpec{
+				Type: v1alpha1.EntitlementTypeRedHatRHEL,
+				RHSM: &v1alpha1.EntitlementRHSM{Management: v1alpha1.EntitlementRHSMManagementExternal},
+			},
+		},
+	}}
+	errs := validateStorageCephIBM("spec.ceph.ibm", cluster, state)
+	if len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "must name at least one") {
+		t.Fatalf("empty subscriptionRepos accepted under external OS registration: %v; the ibm arm never renders rhsmManagement external (its own entitlement type forbids rhsm and the OS-subscription fallback resolves managed registrations only), so an empty list would leave the storage phase with no repository serving the Ceph packages", errs)
 	}
 }
 

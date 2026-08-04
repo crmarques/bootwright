@@ -93,7 +93,7 @@ deps-phase repo and registry work reaches the remaining rows.
 | `subscription.rhsm.redhat.com`, `cdn.redhat.com` | RHSM registration (machines phase) and the RHEL BaseOS/AppStream + `rhceph-*-tools` repos (Ceph deps phase). | Red Hat |
 | `registry.redhat.io` | `podman login` + RHCS daemon image (`rhceph/rhceph-*-rhel9`) and cephadm monitoring/ingress sidecars. | Red Hat |
 | `cp.icr.io` | IBM registry login + IBM Storage Ceph daemon image (`cp/ibm-ceph/ceph-*-rhel9`). | IBM |
-| `public.dhe.ibm.com` | IBM Storage Ceph `.repo` file download (unauthenticated). | IBM |
+| `public.dhe.ibm.com` | IBM Storage Ceph `.repo` file download (unauthenticated). Skipped entirely when `spec.ceph.ibm.packages.source: subscription` sources the packages from declared RHSM repositories instead. | IBM |
 | `cert-api.access.redhat.com`, `console.redhat.com` | Red Hat Insights — only when `rhsm.connectToInsights: true`. | Red Hat |
 
 For a mirrored vendor registry, set `Entitlement.spec.registry.url` to the
@@ -106,6 +106,18 @@ arbitrary repositories below the registry root are rejected. The check covers
 the vendor namespace and stream (`rhceph/rhceph-<stream>-rhel`) so the two
 distributions cannot be crossed; the trailing build base is yours to supply and
 is never validated against a release.
+
+For IBM Storage Ceph packages hosted on your Satellite (or any RHSM-served
+repository), set `spec.ceph.ibm.packages.source: subscription` and name the
+repository ids in `spec.ceph.ibm.packages.subscriptionRepos`. The Ceph deps
+phase then enables those repositories alongside BaseOS/AppStream, never fetches
+the public `.repo` file, and removes one an earlier vendor-sourced apply left
+behind; a preflight proves the declared repositories serve the pinned `cephadm`
+build and the `ibm-storage-ceph-license` package before anything installs. The
+storage phase also preserves every repository the node's
+`MachineInstallProfile` `customizations.repositories.subscription.enable[]`
+declares — machine-declared repositories survive the Ceph phase's repository
+purge on all subscription-backed distributions.
 
 **Community Ceph (OSS):** overridable via `spec.ceph.community.mirror` and
 `spec.ceph.image.base`.

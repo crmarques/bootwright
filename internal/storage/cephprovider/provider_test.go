@@ -661,6 +661,44 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 	}
 }
 
+func TestSelectIBMSubscriptionPackageSourceUsesDeclaredRepos(t *testing.T) {
+	cluster := func(packages *v1alpha1.StorageCephIBMPackagesSpec) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionIBM,
+			Release:      "9.9.1.0",
+			IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled, Packages: packages},
+		}}}
+	}
+
+	subscription := Select(cluster(&v1alpha1.StorageCephIBMPackagesSpec{
+		Source:            v1alpha1.StorageCephIBMPackageSourceSubscription,
+		SubscriptionRepos: []string{"Org_IBM_ibm-storage-ceph-9"},
+	}), nil, secret.Index{}, "/context/secrets")
+	if subscription.Repository.IBMRepoURL != "" {
+		t.Fatalf("subscription package source must suppress the vendor repo URL, got %q", subscription.Repository.IBMRepoURL)
+	}
+	repos := subscription.Repository.RedHatRepos
+	if len(repos) != 3 || repos[len(repos)-1] != "Org_IBM_ibm-storage-ceph-9" {
+		t.Fatalf("subscription package source repos = %#v, want base repos plus the declared label", repos)
+	}
+	repo := Vars(subscription)["repository"].(map[string]any)
+	if _, ok := repo["ibmRepoURL"]; ok {
+		t.Fatalf("subscription package source vars must omit ibmRepoURL: %#v", repo)
+	}
+
+	vendor := Select(cluster(&v1alpha1.StorageCephIBMPackagesSpec{Source: v1alpha1.StorageCephIBMPackageSourceVendor}), nil, secret.Index{}, "/context/secrets")
+	if vendor.Repository.IBMRepoURL == "" {
+		t.Fatal("explicit vendor package source must keep the vendor repo URL")
+	}
+	absent := Select(cluster(nil), nil, secret.Index{}, "/context/secrets")
+	if absent.Repository.IBMRepoURL != vendor.Repository.IBMRepoURL {
+		t.Fatalf("absent packages block = %q, explicit vendor = %q; both must fetch the vendor repo", absent.Repository.IBMRepoURL, vendor.Repository.IBMRepoURL)
+	}
+	if len(absent.Repository.RedHatRepos) != 2 {
+		t.Fatalf("absent packages block repos = %#v, want base repos only", absent.Repository.RedHatRepos)
+	}
+}
+
 func TestSelectDerivesPackageSourcesForAReleaseNewerThanBootwright(t *testing.T) {
 	redhat := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution: v1alpha1.StorageCephDistributionRedHat,

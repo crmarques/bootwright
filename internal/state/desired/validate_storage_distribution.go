@@ -138,7 +138,7 @@ func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.Stora
 	errs = append(errs, validateStorageCephPackageVersion(prefix, cluster)...)
 	errs = append(errs, validateStorageCephImage(prefix+".image", cluster, state)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
-	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster)...)
+	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster, state)...)
 	return errs
 }
 
@@ -224,7 +224,7 @@ func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster
 	return errs
 }
 
-func validateStorageCephIBM(prefix string, cluster v1alpha1.StorageCluster) []string {
+func validateStorageCephIBM(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	ibm := cluster.Spec.Ceph.IBM
 	if storageCephDistribution(cluster) != v1alpha1.StorageCephDistributionIBM {
 		if ibm != nil {
@@ -235,12 +235,50 @@ func validateStorageCephIBM(prefix string, cluster v1alpha1.StorageCluster) []st
 	if ibm == nil {
 		return []string{prefix + " is required when distribution=ibm so Call Home outbound-communication intent is explicit"}
 	}
+	var errs []string
 	switch ibm.CallHome {
 	case v1alpha1.StorageCephIBMCallHomeEnabled, v1alpha1.StorageCephIBMCallHomeDisabled:
-		return nil
 	default:
-		return []string{fmt.Sprintf("%s.callHome %q must be one of {%s, %s}", prefix, ibm.CallHome, v1alpha1.StorageCephIBMCallHomeEnabled, v1alpha1.StorageCephIBMCallHomeDisabled)}
+		errs = append(errs, fmt.Sprintf("%s.callHome %q must be one of {%s, %s}", prefix, ibm.CallHome, v1alpha1.StorageCephIBMCallHomeEnabled, v1alpha1.StorageCephIBMCallHomeDisabled))
 	}
+	errs = append(errs, validateStorageCephIBMPackages(prefix+".packages", cluster, state)...)
+	return errs
+}
+
+func validateStorageCephIBMPackages(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
+	packages := v1alpha1.StorageCephIBMPackages(cluster.Spec.Ceph)
+	if packages == nil {
+		return nil
+	}
+	var errs []string
+	switch packages.Source {
+	case v1alpha1.StorageCephIBMPackageSourceVendor:
+		if len(packages.SubscriptionRepos) > 0 {
+			errs = append(errs, prefix+".subscriptionRepos must be empty when source=vendor; the vendor source fetches the IBM repository definition from the public IBM download site instead")
+		}
+	case v1alpha1.StorageCephIBMPackageSourceSubscription:
+		if len(packages.SubscriptionRepos) == 0 {
+			errs = append(errs, prefix+".subscriptionRepos must name at least one RHSM repository serving the IBM Storage Ceph packages when source=subscription; the storage phase enables exactly these repositories and installs the pinned cephadm build and the license package from them")
+		}
+	default:
+		errs = append(errs, fmt.Sprintf("%s.source %q must be one of {%s, %s}", prefix, packages.Source, v1alpha1.StorageCephIBMPackageSourceVendor, v1alpha1.StorageCephIBMPackageSourceSubscription))
+	}
+	seen := map[string]bool{}
+	for i, id := range packages.SubscriptionRepos {
+		owner := fmt.Sprintf("%s.subscriptionRepos[%d]", prefix, i)
+		switch {
+		case id == "":
+			errs = append(errs, owner+" must not be empty")
+		case strings.ContainsAny(id, " \t\"'"):
+			errs = append(errs, fmt.Sprintf("%s %q must not contain whitespace or quotes", owner, id))
+		case id == v1alpha1.MachineInstallSubscriptionRepoAllID:
+			errs = append(errs, fmt.Sprintf("%s %q is not allowed; name concrete repository ids", owner, id))
+		case seen[id]:
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, id))
+		}
+		seen[id] = true
+	}
+	return errs
 }
 
 func isHTTPURL(value string) bool {
