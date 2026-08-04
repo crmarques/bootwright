@@ -47,6 +47,7 @@ func TestStepInventoryScopesTheSSHUserOverrideToOperatorIdentity(t *testing.T) {
 	targets := []stepSSHTarget{
 		{label: "bastion", inventoryName: "step_0", address: "bastion.example.test", user: "admin"},
 		{label: "lab", inventoryName: "step_1", address: "lab.example.test", user: "admin", operatorIdentity: true},
+		{label: "arbiter", inventoryName: "step_2", address: "arbiter.example.test", user: "cephadm", userPinned: true, operatorIdentity: true},
 	}
 	if err := writeStepInventory(path, targets, "", "operator"); err != nil {
 		t.Fatalf("writeStepInventory: %v", err)
@@ -61,5 +62,8 @@ func TestStepInventoryScopesTheSSHUserOverrideToOperatorIdentity(t *testing.T) {
 	}
 	if strings.Count(body, "ansible_user: operator") != 1 {
 		t.Fatalf("only the operatorIdentity target takes the override: %s", body)
+	}
+	if strings.Count(body, "ansible_user: cephadm") != 1 {
+		t.Fatalf("a pinned orchestration login must survive --ssh-user even on operatorIdentity machines: %s", body)
 	}
 }

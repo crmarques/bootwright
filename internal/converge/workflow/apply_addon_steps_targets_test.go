@@ -60,6 +60,9 @@ func TestStorageClusterStepTargetsUsePostInstallSSHIdentity(t *testing.T) {
 	if target.sshUser != "cephadm" {
 		t.Fatalf("target ssh user = %q, want post-install clusterSSH user", target.sshUser)
 	}
+	if !target.sshUserPinned {
+		t.Fatalf("storage step target must pin the clusterSSH user against --ssh-user overrides")
+	}
 	if target.sshKeyRef.Name != "cluster-ssh" {
 		t.Fatalf("target ssh key = %q, want post-install clusterSSH key", target.sshKeyRef.Name)
 	}
@@ -90,5 +93,8 @@ func TestMachineStepTargetKeepsMachineSSHIdentity(t *testing.T) {
 	target := machineStepTarget("Machine/ceph-1", state.Machines[0])
 	if target.sshUser != "root" || target.sshKeyRef.Name != "machine-ssh" {
 		t.Fatalf("machine step target identity = %s/%s, want root/machine-ssh", target.sshUser, target.sshKeyRef.Name)
+	}
+	if target.sshUserPinned {
+		t.Fatalf("machine step targets keep --ssh-user eligibility; only storage targets pin the login")
 	}
 }

@@ -59,6 +59,7 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 			inventoryName:    "step_" + strconv.Itoa(i),
 			address:          address,
 			user:             m.sshUser,
+			userPinned:       m.sshUserPinned,
 			operatorIdentity: v1alpha1.MachineUsesOperatorIdentity(m.machine),
 			port:             m.machine.Spec.Access.SSH.Port,
 			keyPath:          secret.ResolveSSHPrivateKeyPath(m.sshKeyRef.Name, idx, connectionDir),
@@ -316,7 +317,7 @@ func writeStepInventory(path string, targets []stepSSHTarget, preferredIdentityF
 			"ansible_ssh_common_args": shellquote.Quote(render.SSHCommonArgWords(target.knownHostsPath, target.passwordPath != "", preferredIdentityFile)),
 		}
 		user := target.user
-		if sshUser != "" && target.operatorIdentity {
+		if sshUser != "" && target.operatorIdentity && !target.userPinned {
 			user = sshUser
 		}
 		if user != "" {
@@ -345,6 +346,7 @@ type stepSSHTarget struct {
 	inventoryName    string
 	address          string
 	user             string
+	userPinned       bool
 	operatorIdentity bool
 	port             int
 	keyPath          string

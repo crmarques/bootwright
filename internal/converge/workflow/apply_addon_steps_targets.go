@@ -13,6 +13,7 @@ type stepTargetMachine struct {
 	label           string
 	machine         v1alpha1.Machine
 	sshUser         string
+	sshUserPinned   bool
 	sshKeyRef       v1alpha1.SecretRef
 	sshPasswordRef  v1alpha1.SecretRef
 	sudoPasswordRef v1alpha1.SecretRef
@@ -142,6 +143,7 @@ func (e *addonStepExecutor) storageClusterMachines(name string) ([]stepTargetMac
 		}
 		target := machineStepTarget("StorageCluster/"+name+" node/"+node.Name, machine)
 		target.sshUser = v1alpha1.StorageClusterCephadmSSHUser(cluster)
+		target.sshUserPinned = true
 		if ref := cluster.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name; ref != "" {
 			target.sshKeyRef = v1alpha1.SecretRef{Name: ref}
 		}
