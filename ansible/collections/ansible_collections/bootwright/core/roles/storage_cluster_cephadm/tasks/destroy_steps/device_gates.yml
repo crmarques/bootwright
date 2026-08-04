@@ -14,6 +14,25 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+- name: Refuse to destroy a storage node whose declared device probe did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_device_mounts.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_current_storage_host.devices | default([]) | length)
+    fail_msg: >-
+      Refusing to destroy {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the mount probe ran on
+      {{ bootwright_ceph_device_mounts.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_current_storage_host.devices | default([]) | length }} declared
+      device(s) — the connection dropped while the probe ran, or the probe never reached this
+      node ({{ bootwright_ceph_device_mounts.msg | default('no diagnostic was recorded') }}).
+      A probe result that carries no exit status is not a device this teardown examined, and
+      every later device gate classifies devices from these results: an incomplete probe
+      classifies nothing as present, so the mounted, in-use and unowned-device refusals pass
+      over no devices at all, the LVM teardown and the wipe cover no devices at all, and this
+      teardown reports the node destroyed with its OSD devices holding cluster data. Failing
+      closed instead. Re-run destroy once the node answers reliably.
+
 - name: Classify declared Ceph destroy devices by presence
   ansible.builtin.set_fact:
     bootwright_ceph_present_probe: >-
@@ -104,6 +123,22 @@
   loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to wipe present Ceph devices whose signature probe did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_destroy_signatures.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_present_devices | default([]) | length)
+    fail_msg: >-
+      Refusing to wipe the declared Ceph devices of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the signature probe ran on
+      {{ bootwright_ceph_destroy_signatures.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_ceph_present_devices | default([]) | length }} present device(s)
+      ({{ bootwright_ceph_destroy_signatures.msg | default('no diagnostic was recorded') }}).
+      The ownership refusal below reads those results, so an incomplete probe would let a
+      device this node holds no OSD record for through the gate unexamined. Failing closed
+      rather than risk wiping the wrong device.
 
 - name: Refuse to wipe present Ceph devices without a valid Bootwright OSD record
   ansible.builtin.assert:

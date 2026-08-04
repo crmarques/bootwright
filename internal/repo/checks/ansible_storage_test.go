@@ -2356,6 +2356,107 @@ func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmDestroyFailsClosedWhenADeviceProbeDidNotRun(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	for _, probe := range []struct {
+		guard    string
+		consumer string
+		register string
+		expected string
+	}{
+		{
+			guard:    "Refuse to destroy a storage node whose declared device probe did not run",
+			consumer: "Classify declared Ceph destroy devices by presence",
+			register: "bootwright_ceph_device_mounts",
+			expected: "bootwright_current_storage_host.devices",
+		},
+		{
+			guard:    "Refuse to wipe present Ceph devices whose signature probe did not run",
+			consumer: "Refuse to wipe present Ceph devices without a valid Bootwright OSD record",
+			register: "bootwright_ceph_destroy_signatures",
+			expected: "bootwright_ceph_present_devices",
+		},
+		{
+			guard:    "Refuse to wipe devices whose mount re-probe did not run",
+			consumer: "Refuse to wipe devices mounted since the first check",
+			register: "bootwright_ceph_device_mounts_final",
+			expected: "bootwright_ceph_present_devices",
+		},
+	} {
+		guardIdx := findAnsibleTask(t, tasks, probe.guard)
+		consumerIdx := findAnsibleTask(t, tasks, probe.consumer)
+		if guardIdx > consumerIdx {
+			t.Fatalf("%q must precede %q, or the gate it protects has already read the incomplete probe (guard=%d consumer=%d)", probe.guard, probe.consumer, guardIdx, consumerIdx)
+		}
+		assertProbeCompletenessGuard(t, tasks[guardIdx], probe.guard, probe.register, probe.expected)
+	}
+
+	lvm := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/lvm_teardown.yml")
+	guardIdx := findAnsibleTask(t, lvm, "Refuse to wipe when the volume group probe did not run for every device")
+	resolveIdx := findAnsibleTask(t, lvm, "Resolve the Ceph volume groups this teardown must take down before the wipe")
+	if guardIdx > resolveIdx {
+		t.Fatalf("the volume group probe guard must precede the resolution that reads it (guard=%d resolve=%d)", guardIdx, resolveIdx)
+	}
+	assertProbeCompletenessGuard(t, lvm[guardIdx], "Refuse to wipe when the volume group probe did not run for every device", "bootwright_ceph_teardown_pvs", "bootwright_ceph_lvm_teardown_devices")
+}
+
+func assertProbeCompletenessGuard(t *testing.T, task map[string]any, name, register, expected string) {
+	t.Helper()
+	guard, ok := task["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%q must be an assert, got %v", name, task)
+	}
+	that := fmt.Sprint(guard["that"])
+	for _, want := range []string{register + ".results", "selectattr('rc', 'defined')", expected, "length"} {
+		if !strings.Contains(that, want) {
+			t.Errorf("%q must count only %s results that carry an exit status and compare that against %s: a looped probe on a host whose connection dropped still registers one result per item, each carrying `unreachable` and no `rc`, so a count of results alone cannot tell a probe that ran from one that never reached the node. Missing %q in %v", name, register, expected, want, guard["that"])
+		}
+	}
+}
+
+func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	stateIdx := findAnsibleTask(t, tasks, "Resolve whether the seed host still carries Ceph cluster state")
+	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
+	unprovenIdx := findAnsibleTask(t, tasks, "Resolve the unproven Ceph destroy ownership evidence on seed host")
+	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	if !(stateIdx < decideIdx && decideIdx < unprovenIdx && unprovenIdx < removeIdx) {
+		t.Fatalf("the seed must resolve its local Ceph state before it decides ownership, and name its evidence before the removal that gate protects (state=%d decide=%d unproven=%d remove=%d)", stateIdx, decideIdx, unprovenIdx, removeIdx)
+	}
+
+	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the ownership decision must be a set_fact, got %v", tasks[decideIdx])
+	}
+	owned := fmt.Sprint(decide["bootwright_ceph_destroy_owned"])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_conf_check.rc is defined",
+		"bootwright_ceph_destroy_local_state",
+	} {
+		if !strings.Contains(owned, want) {
+			t.Errorf("the already-destroyed branch must require %q: a probe that never answered carries no rc and reads as \"no configuration\", which is exactly what a seed with nothing left reports, so the seed's cluster removal skips — and every other node's with it, because those are scoped to the fsid this seed resolves. Got %v", want, decide["bootwright_ceph_destroy_owned"])
+		}
+	}
+	if strings.Contains(owned, "bootwright_ceph_fsid.stdout | default('') | trim | length == 0)\n          and") {
+		t.Errorf("the already-destroyed branch must not rest on an empty `ceph fsid` answer: cephadm that cannot run answers nothing on a seed whose cluster is alive. Got %v", decide["bootwright_ceph_destroy_owned"])
+	}
+
+	unproven, ok := tasks[unprovenIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the unproven-evidence resolution must be a set_fact, got %v", tasks[unprovenIdx])
+	}
+	reasons := fmt.Sprint(unproven["bootwright_ceph_destroy_unproven"])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_conf_check.rc is not defined",
+		"bootwright_ceph_fsid.rc is not defined",
+		"bootwright_ceph_destroy_local_state",
+	} {
+		if !strings.Contains(reasons, want) {
+			t.Errorf("the refusal must name %q among its causes, or a seed refused for state it never proved reports an empty reason list. Got %v", want, unproven["bootwright_ceph_destroy_unproven"])
+		}
+	}
+}
+
 func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
 	if len(plays) != 1 {

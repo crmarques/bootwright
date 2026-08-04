@@ -24,6 +24,22 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+- name: Refuse to wipe devices whose mount re-probe did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_device_mounts_final.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_present_devices | default([]) | length)
+    fail_msg: >-
+      Refusing to wipe the declared Ceph devices of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the mount re-probe ran on
+      {{ bootwright_ceph_device_mounts_final.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_ceph_present_devices | default([]) | length }} present device(s)
+      ({{ bootwright_ceph_device_mounts_final.msg | default('no diagnostic was recorded') }}).
+      The refusal below reads those results to catch a device that became mounted since the
+      first check, and an incomplete re-probe would let a mounted device through it
+      unexamined. Failing closed instead.
+
 - name: Refuse to wipe devices mounted since the first check
   ansible.builtin.assert:
     that:

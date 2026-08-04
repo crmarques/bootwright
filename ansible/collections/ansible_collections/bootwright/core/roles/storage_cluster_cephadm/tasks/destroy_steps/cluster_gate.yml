@@ -164,8 +164,8 @@
     bootwright_ceph_destroy_owned: >-
       {{
         (
-          (bootwright_ceph_destroy_conf_check.rc | default(1) != 0)
-          and (bootwright_ceph_fsid.stdout | default('') | trim | length == 0)
+          (bootwright_ceph_destroy_conf_check.rc is defined)
+          and not (bootwright_ceph_destroy_local_state | default(true) | bool)
         )
         or (
           (bootwright_ceph_destroy_conf_fsid | default('') | length > 0)
@@ -194,7 +194,23 @@
   ansible.builtin.set_fact:
     bootwright_ceph_destroy_unproven: >-
       {{
-        (['/etc/ceph/ceph.conf is absent, but this node answered `ceph fsid` with '
+        (['this seed did not answer the probes this teardown reads its state from, so its'
+          ~ ' silence cannot be read as an already-destroyed cluster: '
+          ~ (bootwright_ceph_destroy_conf_check.msg
+             | default(bootwright_ceph_fsid.msg | default('no diagnostic was recorded')))]
+         if ((bootwright_ceph_destroy_conf_check.rc is not defined)
+             or ((bootwright_ceph_destroy_local_state | default(true) | bool)
+                 and (bootwright_ceph_fsid.rc is not defined)))
+         else [])
+        + (['/etc/ceph/ceph.conf is absent and `ceph fsid` named no cluster, but /var/lib/ceph'
+            ~ ' still holds Ceph cluster state, which is what a teardown that removed'
+            ~ ' /etc/ceph without removing the cluster leaves behind — its daemons are very'
+            ~ ' likely still running and still holding their OSD devices']
+           if ((bootwright_ceph_destroy_conf_check.rc | default(1) | int != 0)
+               and (bootwright_ceph_destroy_live_fsid | length == 0)
+               and (bootwright_ceph_destroy_local_state | default(true) | bool))
+           else [])
+        + (['/etc/ceph/ceph.conf is absent, but this node answered `ceph fsid` with '
           ~ bootwright_ceph_destroy_live_fsid]
          if ((bootwright_ceph_destroy_conf_check.rc | default(1) | int != 0)
              and (bootwright_ceph_destroy_live_fsid | length > 0))

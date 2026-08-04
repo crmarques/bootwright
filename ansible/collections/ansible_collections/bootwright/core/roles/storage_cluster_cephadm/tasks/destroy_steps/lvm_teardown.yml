@@ -15,6 +15,24 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+- name: Refuse to wipe when the volume group probe did not run for every device
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_lvm_teardown_devices | default([]) | length)
+    fail_msg: >-
+      Refusing to wipe the Ceph devices of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the volume group probe ran on
+      {{ bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_ceph_lvm_teardown_devices | default([]) | length }} device(s)
+      ({{ bootwright_ceph_teardown_pvs.msg | default('no diagnostic was recorded') }}).
+      This teardown takes the LVM stack down from these results, so a probe that did not run
+      resolves no volume groups: nothing is deactivated, nothing is removed, and the OSD
+      volume groups survive the wipe that follows — which is what leaves a destroyed node
+      still showing its Ceph logical volumes in lsblk. Failing closed instead.
+    quiet: true
+
 - name: Resolve the Ceph volume groups this teardown must take down before the wipe
   ansible.builtin.set_fact:
     bootwright_ceph_teardown_pv_devices: >-
