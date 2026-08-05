@@ -5,7 +5,10 @@
 Accepted
 
 Revises [ADR 0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md):
-the implicit vendor `ssl: false` pin becomes this declared field.
+the implicit vendor `ssl: false` pin becomes this declared field. Extended by
+[ADR 0052](0052-the-port-a-scheme-arrives-on.md): the declared scheme also
+decides the gateway's default port, so `exposure: http` no longer serves
+cleartext on the TLS-conventional 8443.
 
 ## Context
 

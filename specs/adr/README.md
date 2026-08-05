@@ -62,6 +62,7 @@ below.
 | [0046](0046-the-hosts-preflight-cannot-reach-yet.md) | The Hosts Preflight Cannot Reach Yet | extends the name-resolution group of 0017; closes the coverage gap 0035 recorded |
 | [0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md) | The Certificate a Vendor Gateway Never Settles On | revised by 0049: the vendor ssl pin becomes the declared exposure field |
 | [0048](0048-the-site-a-machine-stands-in.md) | The Site a Machine Stands In | extends the arbiter move of 0042; the site registry backs the placement grammar of 0018 |
-| [0049](0049-the-scheme-a-gateway-declares-out-loud.md) | The Scheme a Gateway Declares Out Loud | revises the implicit vendor ssl pin of 0047; its repair machinery remains |
+| [0049](0049-the-scheme-a-gateway-declares-out-loud.md) | The Scheme a Gateway Declares Out Loud | revises the implicit vendor ssl pin of 0047; its repair machinery remains; extended by 0052 for the port the scheme implies |
 | [0050](0050-the-machine-an-installer-boot-finds-powered-on.md) | The Machine an Installer Boot Finds Powered On | revises the occupancy probe of 0011; follows the physical-half rule of 0034 and the one-token-per-refusal grammar of 0030 |
 | [0051](0051-the-repository-an-ibm-fleet-already-subscribes-to.md) | The Repository an IBM Fleet Already Subscribes To | extends the distribution tail of 0015; ends the storage-phase purge of machine-declared repositories |
+| [0052](0052-the-port-a-scheme-arrives-on.md) | The Port a Scheme Arrives On | extends the declared scheme of 0049; separates the classic dashboard's TLS port from the gateway's |

@@ -930,6 +930,19 @@ endpoints through a gateway origin that otherwise works:
   the per-host gateways, so the same origin alternates between healthy and
   stale daemons.
 
+The second mechanism is not limited to a build that looped. cephadm computes a
+gateway daemon's dependency list from the manager daemon *names* alone — never
+the dashboard's port or scheme — while the apply's management phase flips
+`mgr/dashboard/ssl` off and moves the dashboard to its own HTTP port. Gateways
+that predate that flip therefore keep proxying an endpoint that no longer
+exists, and answer `502` for **every** request rather than intermittently.
+
+Apply repairs this on `exposure: http` clusters: after service readiness it
+GETs each gateway's own port, and one `ceph orch reconfig mgmt-gateway` runs if
+any of them answers an upstream fault. An `https` gateway serves a
+cephadm-signed certificate that the probe has no trust anchor for, so it is not
+covered — run the commands below by hand there.
+
 Check the stored spec, then rewrite every gateway daemon from it:
 
 ```bash
@@ -953,3 +966,39 @@ Never save-and-reapply `ceph orch ls --export` output for the gateway on a
 subscription-backed build: the export prints the class-default `ssl: true` for
 a gateway that provably runs ssl-off, and re-applying it restarts the
 reconfigure loop.
+
+## The Data Foundation exporter fails to verify the manager endpoint
+
+The external-cluster attach step dies with the exporter's stdout withheld and a
+stderr naming the manager's Prometheus endpoint:
+
+```text
+unable to connect to endpoint: 10.7.7.1:9283, failed error:
+HTTPSConnectionPool(host='10.7.7.1', port=9283): Max retries exceeded with url: /
+(Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]
+certificate verify failed: unable to get local issuer certificate')))
+```
+
+Declaring a `mgmtGateway` is the cause. cephadm computes `security_enabled` as
+`secure_monitoring_stack OR mgmt_gw_enabled`, so a gateway arms monitoring
+security on its own, and the ceph-mgr prometheus module then serves `:9283`
+over TLS with a certificate signed by the per-cluster cephadm root CA. Rook's
+exporter re-dials the endpoint the managers publish and verifies it against the
+system trust store, which has never heard of that CA.
+
+Confirm the scheme the managers publish:
+
+```bash
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph mgr services
+```
+
+An `https://…:9283/` value there means Bootwright will pass
+`--skip-monitoring-endpoint` to the exporter and the external cluster details
+will carry no `MONITORING_ENDPOINT`. That is deliberate rather than a
+workaround: rook's external-mode `MonitoringSpec` has `externalMgrEndpoints`
+and a port, and no scheme, CA or TLS field — so an emitted endpoint becomes an
+OpenShift scrape target that can never succeed. Data Foundation still consumes
+the RBD pool, the filesystem and the object gateway; only the Ceph metrics
+panels in the console stay empty. Removing the management gateway disarms the
+monitoring TLS and restores them.

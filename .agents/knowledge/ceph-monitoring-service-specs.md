@@ -194,6 +194,48 @@ name mgr daemons WITHOUT ports, so mgr failover and dashboard port moves never
 trigger a reconfig — daemons deployed mid-loop keep stale backend maps (e.g.
 the dashboard's old HTTPS 8443, now the gateway's own port) behind the
 floating VIP until `ceph orch reconfig mgmt-gateway`.
+`MgmtGatewayService.get_dependencies` is the proof: prometheus, alertmanager,
+grafana and oauth2-proxy contribute `name:port`, mgr contributes `name` alone,
+and nothing contributes the dashboard's port or scheme. The management phase
+flips `mgr/dashboard/ssl` off and moves the dashboard to 8081 on every apply,
+which changes neither — so on a cluster whose gateways predate that flip the
+apply goes green over six gateways serving 502.
+`management_gateway_health.yml` closes it after service readiness: it GETs
+each gateway's own port, treats 502/503/504 as the stale-config signature,
+runs ONE `ceph orch reconfig mgmt-gateway` when any host shows it, re-probes
+with retries and fails closed if the fault survives (which means the dashboard
+itself is down, not the nginx in front of it). The probe covers gateways on
+`exposure: http` only — an https gateway serves a cephadm-signed certificate,
+and probing it would mean disabling verification, which
+`TestValidateCertsFalseIsAllowlisted` refuses; it needs the cluster's cephadm
+root CA as a trust anchor instead, which nothing publishes yet.
+
+**Constraint:** the same `security_enabled` that arms the Basic popup also
+arms TLS on the ceph-mgr *prometheus module* (`:9283`). The module asks the
+orchestrator for the security config, and when it is on calls
+`orch certmgr generate-certificates --module_name prometheus`, serves cherrypy
+over TLS and publishes `https://<addr>:9283/` through `set_uri` — so
+`ceph mgr services` reports the scheme. There is no basic auth there, only the
+certificate, and it is signed by the per-cluster cephadm root CA. Rook's
+external-cluster exporter reads that URI, re-dials it through `endpoint_dial`
+with no CA argument (`requests.head(ep)` against the system trust store) and
+exits 1 with a bare `CERTIFICATE_VERIFY_FAILED`, killing the Data Foundation
+attach step. Trusting the CA would not rescue the feature: rook's
+`MonitoringSpec` carries `externalMgrEndpoints` and `ExternalMgrPrometheusPort`
+and NO scheme, CA or TLS field, so an emitted `MONITORING_ENDPOINT` becomes a
+scrape target that can never succeed. `export-external-details.yaml` therefore
+probes `ceph mgr services`, and on an `https` prometheus URI asserts the
+exporter offers `--skip-monitoring-endpoint`, passes it, and reports what the
+console loses. Declaring a mgmt-gateway is what costs external Ceph metrics in
+Data Foundation; dropping it restores them.
+
+**Constraint:** the gateway's default port follows `exposure` — 8443 for
+`https`, 8888 for `http` (ADR 0052) — and a port contradicting the scheme
+(`http` on 443/8443, `https` on 80/8080) is refused. 8888 rather than 8080
+because RGW's beast frontend and the classic dashboard both default to 8080
+and the gateway lands on ingress hosts. `CephMgmtGatewayDefaultPort` is gone;
+`CephDashboardDefaultTLSPort` now names the classic dashboard's own listener,
+which is what the gateway-less access summary was always reading.
 
 **Constraint (revised):** cephadm ingress inline TLS is the `ssl_cert` +
 `ssl_key` PAIR with `ssl: true` — never one combined PEM bundle. The certmgr
