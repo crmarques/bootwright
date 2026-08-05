@@ -288,6 +288,54 @@
          else bootwright_ceph_destroy_conf_fsid | default('') }}
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
+- name: Stop the Ceph orchestrator before any host removes the cluster
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "120"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - module
+      - disable
+      - cephadm
+  register: bootwright_ceph_destroy_orch_disable
+  changed_when: bootwright_ceph_destroy_orch_disable.rc == 0
+  failed_when: false
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+
+- name: Refuse to remove a cluster whose orchestrator can still redeploy it
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_destroy_orch_disable.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to tear down storage cluster {{ bootwright_selected_storage_cluster.name }}
+      (fsid {{ bootwright_ceph_destroy_fsid | default('<unresolved>') }}): disabling the
+      cephadm manager module exited
+      {{ bootwright_ceph_destroy_orch_disable.rc | default('without running') }}
+      ({{ bootwright_ceph_destroy_orch_disable.stderr | default('no diagnostic was recorded') | trim }}).
+      This teardown removes the cluster one host at a time, starting with this seed, so every
+      host it purges stays registered with managers still running on the hosts it has not
+      reached yet. A cephadm module that is still enabled reconciles those hosts straight
+      back: it redeploys the daemons the purge removed and, because the purge freed their OSD
+      devices, runs ceph-volume over them again — the node ends this teardown carrying fresh
+      volume groups on disks this run reported wiped, and the next apply refuses them as
+      unowned data. Disabling the module is the first step of the cephadm purge procedure for
+      exactly that reason. Fix what the diagnostic names (a manager that is down, a mon
+      quorum that cannot be reached) and re-run destroy, or run
+      `cephadm shell -- ceph mgr module disable cephadm` on {{ inventory_hostname }} by hand
+      first. No --authorize token relaxes this: the alternative is a teardown that races the
+      orchestrator it is tearing down.
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+
 - name: Resolve the cephadm command for the seed host cluster removal
   ansible.builtin.include_tasks: cephadm_command.yml
   vars:

@@ -2573,6 +2573,88 @@ func TestStorageCephadmDestroyRefusesAClusterNoCephadmCanRemove(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmDestroyStopsTheOrchestratorBeforeAnyRemoval(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	disableIdx := findAnsibleTask(t, tasks, "Stop the Ceph orchestrator before any host removes the cluster")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to remove a cluster whose orchestrator can still redeploy it")
+	seedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	nonSeedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on non-seed hosts")
+	if !(disableIdx < refuseIdx && refuseIdx < seedRmIdx && seedRmIdx < nonSeedRmIdx) {
+		t.Fatalf("destroy must disable the cephadm manager module and refuse on failure before the first host removes the cluster: every host purged while the module is enabled is reconciled back by a manager still running on a host the teardown has not reached, which redeploys its daemons and runs ceph-volume over the OSD devices the purge just freed (disable=%d refuse=%d seed=%d non-seed=%d)", disableIdx, refuseIdx, seedRmIdx, nonSeedRmIdx)
+	}
+
+	cmd := fmt.Sprint(tasks[disableIdx]["ansible.builtin.command"])
+	for _, want := range []string{"cephadm", "shell", "mgr", "module", "disable", "timeout"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("the orchestrator stop must be a bounded `cephadm shell -- ceph mgr module disable cephadm`, missing %q in %v", want, tasks[disableIdx]["ansible.builtin.command"])
+		}
+	}
+	if got := fmt.Sprint(tasks[disableIdx]["failed_when"]); got != "false" {
+		t.Errorf("the stop must not fail the run itself; its result is what the refusal reads to name why the module is still enabled, got failed_when=%v", tasks[disableIdx]["failed_when"])
+	}
+	for _, idx := range []int{disableIdx, refuseIdx} {
+		when := fmt.Sprint(tasks[idx]["when"])
+		if !strings.Contains(when, "bootwright_ceph_fsid.stdout") {
+			t.Errorf("task %q must run only where a live cluster answered, so a teardown of an already-dead cluster never waits on a manager that cannot reply, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+		if !strings.Contains(when, "bootwright_ceph_destroy_owned") {
+			t.Errorf("task %q must run only once ownership is proven: this teardown never touches a cluster it has not claimed, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); strings.Contains(got, "authorize") {
+		t.Errorf("no --authorize token may relax the orchestrator stop: the alternative is a teardown racing the orchestrator it is removing, got when=%v", tasks[refuseIdx]["when"])
+	}
+
+	rebuild := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml")
+	rebuildDisableIdx := findAnsibleTask(t, rebuild, "Stop the Ceph orchestrator before the override rebuild removes the cluster")
+	rebuildRefuseIdx := findAnsibleTask(t, rebuild, "Refuse an override rebuild whose orchestrator can still redeploy the cluster")
+	rebuildRmIdx := findAnsibleTask(t, rebuild, "Remove existing cephadm cluster for override rebuild on every topology host")
+	if !(rebuildDisableIdx < rebuildRefuseIdx && rebuildRefuseIdx < rebuildRmIdx) {
+		t.Fatalf("the override rebuild removes the old cluster from every topology host and must stop the orchestrator first, or the cluster it is replacing reprovisions the disks the rebuild bootstraps onto (disable=%d refuse=%d rm=%d)", rebuildDisableIdx, rebuildRefuseIdx, rebuildRmIdx)
+	}
+	if got := fmt.Sprint(rebuild[rebuildDisableIdx]["when"]); !strings.Contains(got, "bootwright_ceph_override_reachable") {
+		t.Errorf("the rebuild stop must run only where the old cluster answered, got when=%v", rebuild[rebuildDisableIdx]["when"])
+	}
+}
+
+func TestStorageCephadmDestroyVerifiesTheWipeBeforeReleasingTheNode(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
+	tasks := readAnsibleTasks(t, base+"wipe_and_cleanup.yml")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	zapIdx := findAnsibleTask(t, tasks, "Zap declared Ceph device partition tables")
+	verifyIdx := findAnsibleTask(t, tasks, "Re-read the declared Ceph device signatures after the wipe")
+	ranIdx := findAnsibleTask(t, tasks, "Refuse to release a storage node whose wipe verification did not run")
+	signedIdx := findAnsibleTask(t, tasks, "Refuse to release a storage node whose declared device is still signed")
+	stateIdx := findAnsibleTask(t, tasks, "Remove managed Ceph local state")
+	recordIdx := findAnsibleTask(t, tasks, "Remove storage cluster ownership record")
+	if !(wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < ranIdx && ranIdx < signedIdx && signedIdx < stateIdx && stateIdx < recordIdx) {
+		t.Fatalf("destroy must re-read every wiped device and refuse a surviving signature BEFORE it removes the OSD ownership marker and the cluster ownership record: a run that releases its ownership evidence over a disk it did not actually clear leaves a node the next apply refuses as foreign data (wipe=%d zap=%d verify=%d ran=%d signed=%d state=%d record=%d)", wipeIdx, zapIdx, verifyIdx, ranIdx, signedIdx, stateIdx, recordIdx)
+	}
+	if got := fmt.Sprint(tasks[verifyIdx]["ansible.builtin.command"]); !strings.Contains(got, "--no-act") {
+		t.Errorf("the verification must read signatures without touching the device, got %v", tasks[verifyIdx]["ansible.builtin.command"])
+	}
+	if got := fmt.Sprint(tasks[verifyIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_present_devices") {
+		t.Errorf("the verification must cover exactly the devices the wipe ran over, got loop=%v", tasks[verifyIdx]["loop"])
+	}
+	if got := fmt.Sprint(tasks[ranIdx]["ansible.builtin.assert"]); !strings.Contains(got, "selectattr('rc', 'defined')") {
+		t.Errorf("a verification result that carries no exit status is not a device this teardown read, so the completeness gate must count exit statuses, got %v", tasks[ranIdx]["ansible.builtin.assert"])
+	}
+	for _, idx := range []int{ranIdx, signedIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); strings.Contains(got, "authorize") {
+			t.Errorf("no --authorize token may relax the post-wipe verification: it reports what the disk holds now, not who owned it, got when=%v", tasks[idx]["when"])
+		}
+	}
+
+	filter := readAnsibleTasks(t, base+"filter_device_reclaim.yml")
+	filterTasks := nestedAnsibleTasks(t, filter[findAnsibleTask(t, filter, "Reclaim Ceph-signed disks on filter-selected OSD hosts")], "block")
+	filterZapIdx := findAnsibleTask(t, filterTasks, "Zap partition tables on filter-selected OSD disks")
+	filterVerifyIdx := findAnsibleTask(t, filterTasks, "Re-read the filter-selected OSD disk signatures after the wipe")
+	filterSignedIdx := findAnsibleTask(t, filterTasks, "Refuse a filter-selected OSD disk that is still signed after the wipe")
+	if !(filterZapIdx < filterVerifyIdx && filterVerifyIdx < filterSignedIdx) {
+		t.Fatalf("the filter reclaim names no device paths, so its post-wipe re-read is the only proof its disks are clean (zap=%d verify=%d signed=%d)", filterZapIdx, filterVerifyIdx, filterSignedIdx)
+	}
+}
+
 func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
 	if len(plays) != 1 {

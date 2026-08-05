@@ -27,6 +27,52 @@
     hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
     | default(false) | bool
 
+- name: Stop the Ceph orchestrator before the override rebuild removes the cluster
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "120"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - module
+      - disable
+      - cephadm
+  register: bootwright_ceph_override_orch_disable
+  changed_when: bootwright_ceph_override_orch_disable.rc == 0
+  failed_when: false
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - bootwright_ceph_override_reachable | default(false) | bool
+
+- name: Refuse an override rebuild whose orchestrator can still redeploy the cluster
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_override_orch_disable.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to rebuild storage cluster {{ bootwright_selected_storage_cluster.name }}
+      (fsid {{ bootwright_ceph_override_fsid | default('<unresolved>') }}): disabling the
+      cephadm manager module exited
+      {{ bootwright_ceph_override_orch_disable.rc | default('without running') }}
+      ({{ bootwright_ceph_override_orch_disable.stderr | default('no diagnostic was recorded') | trim }}).
+      The rebuild removes the old cluster from every topology host, and a cephadm module left
+      enabled reconciles the hosts it has already removed straight back — redeploying their
+      daemons and running ceph-volume over the OSD devices the removal just freed, so the
+      rebuild bootstraps onto disks the old cluster is still writing to. Fix what the
+      diagnostic names and re-run, or run
+      `cephadm shell -- ceph mgr module disable cephadm` on {{ inventory_hostname }} first.
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - >-
+      hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_rebuild_cleanup_required
+      | default(false) | bool
+    - bootwright_ceph_override_reachable | default(false) | bool
+
 - name: Remove existing cephadm cluster for override rebuild on every topology host
   ansible.builtin.command:
     argv:

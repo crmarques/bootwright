@@ -93,6 +93,62 @@
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
   when: bootwright_ceph_zap_tool_present | default(false) | bool
 
+- name: Re-read the declared Ceph device signatures after the wipe
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item }}"
+  register: bootwright_ceph_wipe_verify
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_present_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to release a storage node whose wipe verification did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_wipe_verify.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_present_devices | default([]) | length)
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the post-wipe signature probe ran on
+      {{ bootwright_ceph_wipe_verify.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_ceph_present_devices | default([]) | length }} wiped device(s)
+      ({{ bootwright_ceph_wipe_verify.msg | default('no diagnostic was recorded') }}).
+      That probe is what proves the wipe reached the disk, and the ownership marker and record
+      this teardown removes next are what the next apply reads to tell its own OSD data from
+      foreign data. Removing them over an unverified wipe is what leaves a node no run can
+      claim and no apply will use. Failing closed instead.
+
+- name: Refuse to release a storage node whose declared device is still signed
+  ansible.builtin.assert:
+    that:
+      - (item.rc | default(1) | int) == 0
+      - (item.stdout | trim | length == 0)
+    fail_msg: >-
+      Storage device {{ item.item }} of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}
+      {% if (item.rc | default(1) | int) != 0 %}could not be re-read after this teardown wiped
+      it (wipefs exited {{ item.rc | default('without running') }}:
+      {{ item.stderr | default('') | trim }}){% else %}still carries data signatures
+      ({{ item.stdout | trim }}) after this teardown wiped and zapped it{% endif %}.
+      A signature that outlives the wipe means something wrote the device behind this run:
+      on a cluster removed host by host that is a cephadm manager still running on a host this
+      teardown has not reached, reprovisioning the OSDs it just freed. This node is therefore
+      not released: its ownership marker and this cluster's ownership record are kept, so a
+      re-run of destroy still recognizes the devices as Bootwright's and wipes them again
+      rather than refusing them as foreign data. If no cluster is left to reprovision them,
+      the device has a holder outside this teardown — name it with
+      `lsblk {{ item.item }}` and `dmsetup ls --tree` before re-running.
+    quiet: true
+  loop: "{{ bootwright_ceph_wipe_verify.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
 - name: Resolve owned Ceph fsid for local state removal
   ansible.builtin.set_fact:
     bootwright_ceph_cleanup_owned_fsid: >-

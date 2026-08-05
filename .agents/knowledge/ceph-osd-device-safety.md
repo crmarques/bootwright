@@ -284,3 +284,40 @@ drivegroup's static paths). A cluster declaring OSDs through `osd.dataDevices.pa
 or a drivegroup therefore got `install.yml`'s gate telling it to run
 `--reclaim-devices <path>` on a path the CLI then rejected as undeclared. Both
 sides now resolve through `OSDHostAllStaticDevices`.
+
+**Constraint (a host-by-host teardown must stop the orchestrator before the
+first host, or the cluster reprovisions the disks behind it):** `cephadm
+rm-cluster` is a LOCAL command — it does not remove the host from `ceph orch
+host ls`, and the manager keeps the SSH access it was enrolled with. So a
+teardown that purges the seed first, then each non-seed, leaves every purged host
+registered with managers still running on the hosts it has not reached, and the
+cephadm module reconciles them straight back: it redeploys the daemons the purge
+removed and, because the purge freed their OSD devices, runs ceph-volume over
+them again. The seed is purged first and is therefore the node that comes back
+signed — matching the observed shape where every peer ends clean and the seed
+alone carries fresh `LVM2_member` PVs (new PV UUIDs, no valid marker, because the
+same teardown removed it). The run is green throughout: every task exited 0. A
+second destroy cleans the node because no manager is left to reprovision it.
+`cluster_gate.yml` now runs `cephadm shell -- ceph mgr module disable cephadm`
+(bounded by `timeout`) on the seed once ownership is proven and the live cluster
+answered, and fails closed when it cannot — this is step one of the upstream
+cephadm purge procedure for exactly this reason. `phases/rebuild.yml` carries the
+same step for `--mode rebuild`, which removes the old cluster from every topology
+host before bootstrapping onto the same disks. A teardown that fails after the
+disable leaves the module off; `ceph mgr module enable cephadm` restores it.
+
+**Constraint (the wipe is verified before the node's ownership evidence is
+released):** every device gate before the wipe reads what the disk held BEFORE
+it; nothing re-read the disk after. A wipe that reached the device and was undone
+afterwards therefore passed unnoticed while the same file went on to remove the
+OSD ownership marker and the cluster ownership record — leaving a node holding
+data no run claims and the next apply refuses as foreign. Both wipe paths
+(`wipe_and_cleanup.yml` for declared devices, `filter_device_reclaim.yml` for
+`all: true` disks) now re-read every wiped device with `wipefs --no-act` after
+the `sgdisk` zap and fail closed on a surviving signature — with the
+probe-completeness assert its siblings carry, since an unreachable-ignored probe
+returns results with no `rc`. Placement is load-bearing: the refusal sits BEFORE
+`Remove managed Ceph local state` and `Remove storage cluster ownership record`,
+so a failed verification keeps the evidence that lets a re-run wipe the devices
+as Bootwright's own. No `--authorize` token relaxes it: it reports what the disk
+holds now, not who owned it.

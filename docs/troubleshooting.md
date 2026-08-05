@@ -771,6 +771,48 @@ that behaviour skipped on any refusal at all and left the node in exactly the
 state above, so read the skip line in the warning: it now names each skipped node
 with the diagnostic the skip was based on.
 
+## A destroy reported complete and the next apply refuses one node's disks
+
+`destroy` ends `[OK] destroy: complete` with no partial-destroy warning, and the
+next `apply` refuses the declared OSD devices of a single node — in practice the
+seed, and only the seed:
+
+```text
+Declared OSD device /dev/nvme0n1 on node-01 already carries data
+(nvme0n1 0x218  LVM2_member jxfRiI-...) and is not recorded as a
+Bootwright-owned OSD device.
+```
+
+The disks were wiped; something signed them again after the wipe. `destroy`
+removes the cluster one host at a time, and until Bootwright disabled it first, a
+still-enabled cephadm manager module reconciled each purged host straight back:
+it redeployed the daemons the purge removed and, seeing the OSD devices it had
+just freed, ran ceph-volume over them again. The seed is purged first, so it is
+the node the surviving managers had the longest to reprovision — and the fresh
+volume groups it ends up with carry no Bootwright OSD ownership marker, because
+the same teardown removed it.
+
+A second `destroy` clears the node: by then no manager is left to reprovision it.
+
+Current runs close both halves. Before any host removes the cluster, the seed
+runs `ceph mgr module disable cephadm` and the teardown fails closed if it
+cannot; after the wipe, every device is re-read with `wipefs --no-act` and a
+surviving signature fails the run *before* the OSD ownership marker and the
+cluster ownership record are removed, so a re-run still recognizes the devices as
+Bootwright's instead of refusing them as foreign data.
+
+If a teardown predating that behaviour left a node in this state, re-run
+`destroy` for the same scope; if its ownership evidence is already gone, wipe the
+named devices with:
+
+```bash
+bootwright apply --reclaim-devices /dev/nvme0n1,/dev/nvme1n1 \
+  --authorize data-loss,unowned-devices
+```
+
+A cluster left with its orchestrator disabled by a failed teardown re-enables
+with `cephadm shell -- ceph mgr module enable cephadm` on the seed.
+
 ## The stretch tiebreaker is on a host that is down or being decommissioned
 
 Do not edit `spec.ceph.topology.stretch.tiebreaker.node` and re-run `apply` —
