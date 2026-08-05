@@ -30,6 +30,13 @@
   changed_when: false
   failed_when: false
   check_mode: false
+  retries: "{{ bootwright_ceph_subscription_probe_retries | default(3) | int }}"
+  delay: "{{ bootwright_ceph_subscription_probe_delay | default(10) | int }}"
+  until: >-
+    ((bootwright_ceph_subscription_preflight.rc | default(1) | int) == 0)
+    or
+    ((bootwright_ceph_subscription_preflight.attempts | default(1) | int)
+     >= (bootwright_ceph_subscription_probe_retries | default(3) | int))
   loop: >-
     {{ [bootwright_ceph_provider.cephadmPackage | default('cephadm')]
        + (['ibm-storage-ceph-license']
@@ -48,9 +55,13 @@
     fail_msg: >-
       Storage node {{ bootwright_current_storage_host.hostname }}:
       {% if item.rc | default(1) != 0 %}dnf could not query the enabled repositories for
-      package {{ item.item }} (dnf exited {{ item.rc | default('?') }}:
-      {{ item.stderr | default('') | trim }}). The repositories could not be read at all,
-      so this says nothing yet about which builds they publish. Check that the node is
+      package {{ item.item }} on any of {{ item.attempts | default(1) }} attempts
+      {{ bootwright_ceph_subscription_probe_delay | default(10) | int }}s apart (the last
+      exited {{ item.rc | default('?') }}: {{ item.stderr | default('') | trim }}). The
+      repositories could not be read at all, so this says nothing yet about which builds
+      they publish, and a read that failed every attempt is a standing fault rather than a
+      blip. dnf loads every enabled repository, so chase the repository its error names,
+      which need not be a Ceph one. Check that the node is
       registered and attached to a subscription carrying
       {{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }},
       that the Satellite or CDN is reachable from the node (through the declared proxy when
