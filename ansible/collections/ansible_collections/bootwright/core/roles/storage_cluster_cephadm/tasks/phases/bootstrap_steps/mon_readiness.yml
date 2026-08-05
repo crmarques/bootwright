@@ -226,8 +226,11 @@
       stretch cluster `ceph mon enable_stretch_mode`), and Ceph answers
       `ENOENT: mon.<name> does not exist` for a mon that is not in the monmap, so this
       apply is failing closed here rather than part-way through the topology
-      reconciliation. A mon the orchestrator never placed is usually a mon-only
-      condition rather than a broken host — OSDs on the same host deploy regardless.
+      reconciliation.
+      {% if bootwright_ceph_mon_runtime_uid_gid_failures | length == 0 %}
+      A mon the orchestrator never placed is usually a mon-only condition rather than
+      a broken host — OSDs on the same host deploy regardless.
+      {% endif %}
       Read the declared mon service below FIRST: if its `placement:` shows a bare
       `count:` rather than the declared `hosts:` list, the mon document of the
       bootstrap spec was rejected and cephadm's bootstrap default is still in force,

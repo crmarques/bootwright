@@ -931,3 +931,31 @@ learned; this file records what it still owes.
 - Exit: remove the artifact once consumed (or key it by cluster + run and
   ignore records older than the current install), and clear it on a full-scope
   destroy alongside the other per-component records.
+
+## B-076 — A base-scoped storage apply bootstraps Ceph with the container-runtime gate never planned
+- Status: open
+- Area: ceph / apply-graph
+- Origin: node-07 monmap failure investigation (2026-08-05)
+- Problem: `phases/container_runtime.yml` — the gate that proves a storage node
+  can start a container at all before any disk is touched — is included from
+  exactly one place, `roles/storage_cluster_cephadm/tasks/main.yml:30-34`, under
+  `when: not bootwright_task_storage_skip_prereqs`. Only the `storageinfra`
+  activity sets `prereqs_only=true`
+  (`internal/converge/workflow/apply_plan_storage.go:338`); the `storage`
+  activity that actually bootstraps sets `skip_prereqs=true` (:383).
+  `planStorageInfraActivities` returns early unless the plan includes
+  `ApplyPhaseDeps` (:307), while `planStorageClusterActivities` needs only
+  `ApplyPhaseBase` (:353). A `--stage base` apply therefore plans the bootstrap
+  without the only task that ever runs the gate, and nothing in the graph, the
+  ledger or the CLI refuses it: a node that can start no container reaches
+  cephadm unproven and fails ten minutes later on the monmap gate instead of in
+  seconds with its own name. Relaxing the `when:` alone does not close it —
+  `bootwright_ceph_bootstrap_image` is resolved only through `phases/context.yml`
+  (`main.yml:8-10` → `context_provider.yml:6`), itself gated on the same
+  `skip_prereqs`, so in the base task the image is undefined and the gate's
+  `length > 0` guard at `main.yml:34` would skip it silently a second time.
+- Exit: resolve the provider context for every host in the base play and prove
+  the runtime there too, so the invariant holds immediately before bootstrap
+  rather than only in a phase the operator can skip; or refuse a `storage`
+  activity planned without its `storageinfra` predecessor. Add a planner test
+  that a base-only stage cannot reach bootstrap without the runtime proof.
