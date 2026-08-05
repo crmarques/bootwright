@@ -30,6 +30,7 @@ func validateFindings(state v1alpha1.State) []Finding {
 	errs = append(errs, notes(validateInfraComponents(state))...)
 	errs = append(errs, notes(validateContainerClusters(state))...)
 	errs = append(errs, notes(validateClusterAddons(state))...)
+	errs = append(errs, notes(validateAddonCatalogCopies(state))...)
 	errs = append(errs, notes(validateClusterAddonProfiles(state))...)
 	errs = append(errs, notes(validateClusterAddonBindings(state))...)
 	errs = append(errs, notes(validateCustomPlaybooks(state))...)

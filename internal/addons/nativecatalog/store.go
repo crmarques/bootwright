@@ -73,6 +73,18 @@ func Digest(files []File) string {
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
 
+func ReleaseDigest(name, version string) (string, error) {
+	release, err := Resolve(name, version)
+	if err != nil {
+		return "", err
+	}
+	files, err := Files(release)
+	if err != nil {
+		return "", err
+	}
+	return Digest(files), nil
+}
+
 func Install(release Release) (dir string, err error) {
 	if err := ValidateStoreName(release.Entry.Name); err != nil {
 		return "", err
@@ -164,7 +176,7 @@ func InstalledAddons() ([]Installed, error) {
 		if err != nil || !found {
 			continue
 		}
-		digest, err := installedDigest(dir)
+		digest, err := DirDigest(dir)
 		if err != nil && !errors.Is(err, errNonRegularStoreFile) {
 			return nil, fmt.Errorf("compute installed digest for %s: %w", entry.Name(), err)
 		}
@@ -180,7 +192,7 @@ func InstalledAddons() ([]Installed, error) {
 
 var errNonRegularStoreFile = errors.New("not a regular file")
 
-func installedDigest(dir string) (string, error) {
+func DirDigest(dir string) (string, error) {
 	var files []File
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
