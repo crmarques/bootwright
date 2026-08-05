@@ -1391,9 +1391,21 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	if !strings.Contains(writeWhen, "bootwright_ceph_runtime_probe.rc") || !strings.Contains(writeWhen, "bootwright_ceph_runtime_cgroupfs_probe.rc") {
 		t.Fatalf("the cgroup manager drop-in must be written only when the default manager provably fails AND cgroupfs provably works — writing it unconditionally would drop cgroup BPF device isolation on every Ceph node. Got when=%v", tasks[writeIdx]["when"])
 	}
+	systemdIdx := findAnsibleTask(t, tasks, "Prove the storage node still needs the cgroupfs cgroup manager Bootwright selected")
+	if !(writeIdx < systemdIdx && systemdIdx < removeIdx) {
+		t.Fatalf("the systemd cgroup manager must be re-proven between writing and removing the drop-in (write=%d systemd=%d remove=%d)", writeIdx, systemdIdx, removeIdx)
+	}
+	systemdProbe := fmt.Sprint(tasks[systemdIdx]["ansible.builtin.command"])
+	if !strings.Contains(systemdProbe, "--cgroup-manager=systemd") {
+		t.Fatalf("the probe that decides whether the drop-in is still needed must pin --cgroup-manager=systemd, or the drop-in answers for the node it is being tested against. Got %v", tasks[systemdIdx]["ansible.builtin.command"])
+	}
+
 	removeWhen := fmt.Sprint(tasks[removeIdx]["when"])
-	if !strings.Contains(removeWhen, "bootwright_ceph_runtime_probe.rc") {
-		t.Fatalf("the drop-in must be removed once the default cgroup manager works again, so clearing Secure Boot is self-healing. Got when=%v", tasks[removeIdx]["when"])
+	if !strings.Contains(removeWhen, "bootwright_ceph_runtime_systemd_probe.rc") {
+		t.Fatalf("the drop-in must be removed only once a probe that pins --cgroup-manager=systemd provably succeeds. Keying the removal on the ordinary probe is self-defeating: the drop-in makes that probe pass, so every later apply deletes the remediation and then hands cephadm a node that can start no container at all. Got when=%v", tasks[removeIdx]["when"])
+	}
+	if strings.Contains(removeWhen, "bootwright_ceph_runtime_probe.rc") {
+		t.Fatalf("the drop-in removal must not depend on the ordinary probe, which runs under whatever cgroup manager the drop-in already selected. Got when=%v", tasks[removeIdx]["when"])
 	}
 	if _, ok := tasks[assertIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("the runtime gate must fail closed with an assert, got %v", tasks[assertIdx])

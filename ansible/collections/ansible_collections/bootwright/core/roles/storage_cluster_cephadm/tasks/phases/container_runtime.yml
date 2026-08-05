@@ -15,6 +15,11 @@
          if '[' in bootwright_ceph_lockdown_text else 'none' }}
   changed_when: false
 
+- name: Read the Bootwright cgroup manager drop-in this storage node already carries
+  ansible.builtin.stat:
+    path: /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf
+  register: bootwright_ceph_cgroup_manager_dropin_state
+
 - name: Prove the storage node container runtime can start a Ceph container
   ansible.builtin.command:
     argv:
@@ -79,11 +84,34 @@
     - bootwright_ceph_runtime_probe.rc | default(1) | int != 0
     - bootwright_ceph_runtime_cgroupfs_probe.rc | default(1) | int == 0
 
+- name: Prove the storage node still needs the cgroupfs cgroup manager Bootwright selected
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --net=host
+      - --cgroup-manager=systemd
+      - --entrypoint
+      - stat
+      - "{{ bootwright_ceph_bootstrap_image }}"
+      - -c
+      - "%u %g"
+      - /var/lib/ceph
+  register: bootwright_ceph_runtime_systemd_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_cgroup_manager_dropin_state.stat.exists | default(false) | bool
+    - bootwright_ceph_runtime_probe.rc | default(1) | int == 0
+
 - name: Remove the Bootwright cgroup manager drop-in the node no longer needs
   ansible.builtin.file:
     path: /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf
     state: absent
-  when: bootwright_ceph_runtime_probe.rc | default(1) | int == 0
+  when:
+    - bootwright_ceph_cgroup_manager_dropin_state.stat.exists | default(false) | bool
+    - bootwright_ceph_runtime_systemd_probe.rc | default(1) | int == 0
 
 - name: Re-prove the storage node container runtime after selecting the cgroup manager
   ansible.builtin.command:
@@ -174,3 +202,20 @@
       this node restores the systemd cgroup manager, and the next apply removes the
       drop-in on its own.
   when: bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool
+
+- name: Report the cgroup manager drop-in this storage node still depends on
+  ansible.builtin.debug:
+    msg: >-
+      Ceph storage node {{ inventory_hostname }} is still running its containers under
+      the cgroupfs cgroup manager that Bootwright selected on an earlier apply
+      (/etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf; kernel
+      lockdown: {{ bootwright_ceph_lockdown_mode }}). This apply re-proved the systemd
+      cgroup manager with `podman run --cgroup-manager=systemd` and it still fails
+      (rc={{ bootwright_ceph_runtime_systemd_probe.rc | default('unknown') }}), so the
+      drop-in stays and daemons on this node remain without cgroup BPF device
+      isolation. Removing the drop-in while systemd still refuses the eBPF device
+      filter would leave cephadm unable to start any container here at all.
+  when:
+    - bootwright_ceph_cgroup_manager_dropin_state.stat.exists | default(false) | bool
+    - bootwright_ceph_runtime_systemd_probe.rc | default(1) | int != 0
+    - not (bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool)
