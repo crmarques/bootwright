@@ -40,6 +40,9 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 		if service.role == "" && service.config == nil {
 			continue
 		}
+		if service.serviceType == "grafana" && v1alpha1.StorageCephGrafanaHasCredential(cluster) {
+			continue
+		}
 		placement := v1alpha1.StoragePlacement{}
 		if service.config != nil {
 			placement = service.config.Placement

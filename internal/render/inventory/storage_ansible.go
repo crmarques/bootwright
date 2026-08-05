@@ -227,6 +227,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
 		}
+		if grafana := storageGrafanaVars(cluster, paths); grafana != nil {
+			entry["grafana"] = grafana
+		}
 		if management := storageMgmtGatewayVars(cluster, env, paths); management != nil {
 			entry["management"] = management
 		}

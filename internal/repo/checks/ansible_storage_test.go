@@ -4007,6 +4007,31 @@ func TestStorageManagementSpecRepairsThePersistedSSLSwitch(t *testing.T) {
 	}
 }
 
+func TestStorageGrafanaCredentialSeedsAnAdminAndRedeploys(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/grafana_credential.yml"
+	tasks := readAnsibleTasks(t, path)
+	assembleIdx := findAnsibleTask(t, tasks, "Assemble the Grafana service spec carrying its administrator credential")
+	applyIdx := findAnsibleTask(t, tasks, "Apply the Grafana service spec")
+	redeployIdx := findAnsibleTask(t, tasks, "Recreate the Grafana daemons so the credential reaches grafana.ini")
+	if !(assembleIdx < applyIdx && applyIdx < redeployIdx) {
+		t.Fatalf("the credential must be assembled, applied, then made live (assemble=%d apply=%d redeploy=%d)", assembleIdx, applyIdx, redeployIdx)
+	}
+	if got := fmt.Sprint(tasks[assembleIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "initial_admin_password") {
+		t.Fatalf("cephadm renders disable_initial_admin_creation into grafana.ini whenever the spec omits initial_admin_password, and Grafana then creates NO administrator — its login page refuses every credential; got %v", tasks[assembleIdx]["ansible.builtin.set_fact"])
+	}
+	for _, idx := range []int{assembleIdx, applyIdx} {
+		if _, ok := tasks[idx]["no_log"]; !ok && idx == assembleIdx {
+			t.Fatalf("the assembly holds the plaintext administrator password and must not reach the run log, got %v", tasks[idx])
+		}
+	}
+	if got := fmt.Sprint(tasks[redeployIdx]["ansible.builtin.command"]); !strings.Contains(got, "redeploy") {
+		t.Fatalf("initial_admin_password reaches grafana.ini only when the daemon is recreated — applying the spec alone leaves the running Grafana with no administrator, got %v", tasks[redeployIdx]["ansible.builtin.command"])
+	}
+	if got := fmt.Sprint(tasks[redeployIdx]["when"]); !strings.Contains(got, "settled") {
+		t.Fatalf("the redeploy must be gated on the stored credential differing, or every apply bounces Grafana, got when=%v", tasks[redeployIdx]["when"])
+	}
+}
+
 func TestStorageManagementGatewayHealthRewritesStaleDaemons(t *testing.T) {
 	bootstrap := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
 	block, ok := bootstrap[0]["block"].([]any)

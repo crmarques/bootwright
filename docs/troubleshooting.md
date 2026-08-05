@@ -967,6 +967,66 @@ subscription-backed build: the export prints the class-default `ssl: true` for
 a gateway that provably runs ssl-off, and re-applying it restarts the
 reconfigure loop.
 
+## Grafana and Alertmanager reject the dashboard's credentials
+
+They are separate accounts from the dashboard's, and they fail for different
+reasons.
+
+**Grafana has no administrator unless you declare one.** The gateway's
+`/grafana` location sets `proxy_set_header Authorization "";`, so no Basic
+credentials ever reach it and what you see is Grafana's own login form. That
+form refuses everything when the cluster never declared
+`spec.ceph.monitoring.grafana.initialAdminPasswordRef`, because cephadm's
+`grafana.ini` template writes `disable_initial_admin_creation = true` whenever
+the Grafana spec carries no `initial_admin_password` — Grafana then creates no
+admin account for any password to match. `bootwright plan` advises on this.
+Declare the reference and re-apply; the apply seeds the account and recreates
+the Grafana daemons, because the password only reaches `grafana.ini` when the
+daemon is rebuilt. The dashboard's embedded Grafana panels are unaffected
+either way: cephadm grants them anonymous viewer access.
+
+**Alertmanager and Prometheus use real Basic auth** — armed by the mere
+presence of a management gateway, not by anything you declared — and the
+gateway does forward the browser's `Authorization` header to them. The
+credentials are simply not the dashboard's:
+
+```bash
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch alertmanager get-credentials
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch prometheus get-credentials
+```
+
+Both start at `admin`/`admin`; the matching `set-credentials` commands change
+them.
+
+## The dashboard's Upgrade page cannot list versions on a vendor build
+
+`Administration > Upgrade` reports `not retrieving upgrades` /
+`Failed to fetch registry information`, often alongside a `502` that clears on
+its own.
+
+The page calls cephadm's `upgrade_ls`, which resolves the image from
+`mgr/cephadm/container_image_base` and then queries the registry
+**anonymously** — `reg = Registry(reg_name); ls = reg.get_tags(bare_image)`
+passes no credentials, and the registry-login store cephadm uses to *pull*
+images is never consulted. On IBM Storage Ceph that base is `cp.icr.io`, which
+is entitled, so the tag listing cannot succeed no matter how the cluster is
+configured. `requests.get` there also carries no timeout, so an unreachable or
+silently-dropping registry blocks the dashboard's API handler until nginx's
+read timeout fires — and because the gateway lists every mgr host with
+`max_fails=1` and standbys answering `503`, that one stall blacks the whole
+origin out with `502` for ten seconds. That is the 502 you see.
+
+Nothing in Bootwright can supply credentials to that query. Upgrades on these
+builds are driven out of band, which is where the product documents them
+anyway:
+
+```bash
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch upgrade start --image <registry>/<repo>:<tag>
+```
+
 ## The Data Foundation exporter fails to verify the manager endpoint
 
 The external-cluster attach step dies with the exporter's stdout withheld and a

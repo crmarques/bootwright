@@ -17,6 +17,7 @@
     bootwright_ceph_cluster_network_declared: >-
       {{ bootwright_selected_storage_cluster.clusterNetworkCIDRs | default([]) | join(',') }}
     bootwright_ceph_management: "{{ bootwright_selected_storage_cluster.management | default({}) }}"
+    bootwright_ceph_grafana: "{{ bootwright_selected_storage_cluster.grafana | default({}) }}"
     bootwright_ceph_rgw_ingress_tls: "{{ bootwright_selected_storage_cluster.rgwIngressTLS | default([]) }}"
     bootwright_ceph_ownership_marker_path: /etc/ceph/.bootwright-owned
     bootwright_ceph_osd_marker_path: /etc/bootwright/ceph-osd-devices.json

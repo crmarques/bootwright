@@ -272,11 +272,20 @@ type StorageCephMonitoring struct {
 }
 
 type StorageCephMonitoringService struct {
-	Placement     StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
-	Port          int              `yaml:"port,omitempty" json:"port,omitempty"`
-	RetentionTime string           `yaml:"retentionTime,omitempty" json:"retentionTime,omitempty"`
-	RetentionSize string           `yaml:"retentionSize,omitempty" json:"retentionSize,omitempty"`
-	Networks      []string         `yaml:"networks,omitempty" json:"networks,omitempty"`
+	Placement               StoragePlacement     `yaml:"placement,omitempty" json:"placement,omitempty"`
+	Port                    int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	RetentionTime           string               `yaml:"retentionTime,omitempty" json:"retentionTime,omitempty"`
+	RetentionSize           string               `yaml:"retentionSize,omitempty" json:"retentionSize,omitempty"`
+	Networks                []string             `yaml:"networks,omitempty" json:"networks,omitempty"`
+	InitialAdminPasswordRef LocalObjectReference `yaml:"initialAdminPasswordRef,omitempty" json:"initialAdminPasswordRef,omitempty"`
+}
+
+func StorageCephGrafanaHasCredential(cluster StorageCluster) bool {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Monitoring == nil {
+		return false
+	}
+	grafana := cluster.Spec.Ceph.Monitoring.Grafana
+	return grafana != nil && grafana.InitialAdminPasswordRef.Name != ""
 }
 
 type StorageCephService struct {

@@ -96,7 +96,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephClusterNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
-	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
+	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster, state)...)
 	errs = append(errs, validateStorageCephMgmtGateway(prefix+".mgmtGateway", cluster, state)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, machines, storageSiteRequirement(state, cluster))...)
@@ -380,7 +380,7 @@ func validateStorageCephMgrModules(prefix string, modules []string) []string {
 	return errs
 }
 
-func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluster) []string {
+func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	monitoring := cluster.Spec.Ceph.Monitoring
 	if monitoring == nil {
 		return nil
@@ -423,6 +423,13 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 		}
 		if item.service.RetentionSize != "" && item.field != "prometheus" {
 			errs = append(errs, owner+".retentionSize applies to prometheus only")
+		}
+		if item.service.InitialAdminPasswordRef.Name != "" {
+			if item.field != "grafana" {
+				errs = append(errs, owner+".initialAdminPasswordRef applies to grafana only: it maps to cephadm's GrafanaSpec.initial_admin_password, and no other monitoring service seeds a login")
+			} else {
+				errs = append(errs, validateStorageSecretRef(owner+".initialAdminPasswordRef", item.service.InitialAdminPasswordRef.Name, state)...)
+			}
 		}
 		for i, cidr := range item.service.Networks {
 			errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks[%d]", owner, i), cidr)...)

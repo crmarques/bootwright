@@ -42,6 +42,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		object := fmt.Sprintf("%s/%s", v1alpha1.KindStorageCluster, cluster.Metadata.Name)
 		out = append(out, storageMonitorAdvisories(object, cluster)...)
 		out = append(out, storageManagerAdvisories(object, cluster)...)
+		out = append(out, storageGrafanaCredentialAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
@@ -201,6 +202,23 @@ func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []
 		}}
 	}
 	return nil
+}
+
+func storageGrafanaCredentialAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
+	if v1alpha1.StorageCephGrafanaHasCredential(cluster) {
+		return nil
+	}
+	if len(topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleGrafana)) == 0 {
+		return nil
+	}
+	return []StorageAdvisory{{
+		Severity:    SeverityInfo,
+		Group:       cephBestPracticeGroup,
+		Object:      object,
+		Finding:     "grafana is deployed with no spec.ceph.monitoring.grafana.initialAdminPasswordRef",
+		Impact:      "cephadm renders disable_initial_admin_creation into grafana.ini when the spec carries no initial_admin_password, so Grafana creates no administrator at all: its login page appears through the management gateway and refuses every credential, including the dashboard's. The dashboard's embedded panels keep working, because cephadm grants them anonymous viewer access",
+		Remediation: "declare spec.ceph.monitoring.grafana.initialAdminPasswordRef naming a Secret; the apply seeds the account and recreates the Grafana daemons so grafana.ini carries it",
+	}}
 }
 
 func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {

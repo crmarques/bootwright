@@ -339,7 +339,7 @@ func TestValidateStorageMonitoringRejectsUnsupportedRetention(t *testing.T) {
 		},
 		Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "node"}}},
 	}}}
-	errs := validateStorageCephMonitoring("StorageCluster/ceph spec.ceph.monitoring", cluster)
+	errs := validateStorageCephMonitoring("StorageCluster/ceph spec.ceph.monitoring", cluster, v1alpha1.State{})
 	if joined := strings.Join(errs, "; "); !strings.Contains(joined, "loki.retentionTime applies to prometheus only") {
 		t.Fatalf("unsupported Loki retention = %v", errs)
 	}

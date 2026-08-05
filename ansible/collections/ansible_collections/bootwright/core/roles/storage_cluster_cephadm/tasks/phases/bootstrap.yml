@@ -53,6 +53,9 @@
     - name: Apply secret-bearing RGW ingress TLS certificates
       ansible.builtin.include_tasks: bootstrap_steps/rgw_ingress_tls.yml
 
+    - name: Apply the secret-bearing Grafana administrator credential
+      ansible.builtin.include_tasks: bootstrap_steps/grafana_credential.yml
+
     - name: Apply management services and free their gateway port
       ansible.builtin.include_tasks: bootstrap_steps/management_services.yml
 
