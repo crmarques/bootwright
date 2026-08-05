@@ -168,6 +168,14 @@
     bootwright_ceph_mon_placement_filters: >-
       {{ bootwright_ceph_mon_cephadm_log.stdout | default('')
          | regex_findall('.*Filtered out host.*') }}
+    bootwright_ceph_mon_runtime_uid_gid_failures: >-
+      {{ ((bootwright_ceph_mon_service_ls.stdout | default('')) ~ ' '
+          ~ (bootwright_ceph_mon_cephadm_log.stdout | default('')))
+         | regex_findall('Failed to extract uid/gid') }}
+    bootwright_ceph_mon_runtime_ebpf_failures: >-
+      {{ ((bootwright_ceph_mon_service_ls.stdout | default('')) ~ ' '
+          ~ (bootwright_ceph_mon_cephadm_log.stdout | default('')))
+         | regex_findall('failed to install eBPF device filter') }}
   ansible.builtin.assert:
     that:
       - bootwright_ceph_mons_ready | default(false) | bool
@@ -179,6 +187,28 @@
       (orchestrator host{{ 's' if (bootwright_ceph_missing_mon_hosts | length) != 1 else '' }}
       {{ bootwright_ceph_missing_mon_hosts | join(', ') or 'unknown' }});
       declared: {{ bootwright_ceph_declared_mon_daemons | join(', ') }}.
+      {% if bootwright_ceph_mon_runtime_uid_gid_failures | length > 0 %}
+      READ THIS FIRST — cephadm could not start a container on a host at all, so no
+      cause below applies. It logged `Failed to extract uid/gid for path /var/lib/ceph`
+      while preparing a daemon: cephadm runs
+      `podman run --entrypoint stat <image> -c '%u %g' /var/lib/ceph` before EVERY
+      deployment to resolve the ceph uid/gid, so a host that fails it places no daemon
+      of any kind — mon, crash and ceph-exporter alike — and its mon simply never
+      appears in the monmap. This is a host container-runtime fault, not a mon, network
+      or placement fault. The mon service events below name the affected host and carry
+      the runtime's own error; read those rather than the mon evidence.
+      {% if bootwright_ceph_mon_runtime_ebpf_failures | length > 0 %}
+      The runtime reported `systemd failed to install eBPF device filter on cgroup`,
+      which is the kernel refusing the cgroup-device BPF program that crun installs
+      through the systemd cgroup manager. Lockdown is what refuses it, and EFI Secure
+      Boot switches lockdown on automatically — confirm on the affected host with
+      `mokutil --sb-state` and `cat /sys/kernel/security/lockdown`. Bootwright gates
+      this before bootstrap and remediates it by selecting the cgroupfs cgroup manager
+      in /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf, so
+      reaching it here means that gate did not run for the affected host this apply —
+      check whether that file is present on it.
+      {% endif %}
+      {% endif %}
       {% if bootwright_ceph_mon_placement_filters | length > 0 %}
       READ THIS FIRST — cephadm logged that it dropped host(s) from a placement because
       they hold no address inside the mon public_network
@@ -208,7 +238,10 @@
       out of the mon placement because it holds no address inside public_network
       ({{ bootwright_ceph_mon_public_networks | join(', ') or 'unset — cephadm normally sets it from the bootstrap --mon-ip subnet' }}),
       which it logs as `does not belong to mon public_network(s)`; the mon container
-      never started (image pull against the registry, mirror or proxy); or the daemon
+      never started, either because the image would not pull (registry, mirror or
+      proxy) or because the host's container runtime cannot start a container at all,
+      which cephadm reports as `Failed to extract uid/gid for path /var/lib/ceph`
+      against that host; or the daemon
       is running but cannot join quorum because the mon ports (3300 and 6789) are
       blocked between the nodes — an OSD only needs to reach the existing mon
       outbound, so OSD health does not clear this. Declared mon service

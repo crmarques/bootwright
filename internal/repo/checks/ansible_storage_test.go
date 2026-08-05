@@ -1412,6 +1412,30 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	}
 }
 
+func TestStorageCephMonReadinessNamesAContainerRuntimeFault(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/mon_readiness.yml"
+	readiness := readRepoFile(t, path)
+	for _, want := range []string{
+		"bootwright_ceph_mon_runtime_uid_gid_failures",
+		"bootwright_ceph_mon_runtime_ebpf_failures",
+		"Failed to extract uid/gid",
+		"eBPF device filter",
+		"20-bootwright-ceph-cgroup-manager.conf",
+	} {
+		if !strings.Contains(readiness, want) {
+			t.Errorf("%s must name a host container-runtime fault out of the evidence it already collects, missing %q: cephadm resolves the ceph uid/gid by starting a container before every deployment, so a host that cannot start one places no daemon of any kind and its mon never reaches the monmap — without this the operator is sent to the network, image-pull and mon-port causes, none of which applies", path, want)
+		}
+	}
+	if !strings.Contains(readiness, "bootwright_ceph_mon_service_ls.stdout | default('')") {
+		t.Errorf("%s must scan the mon service events for the runtime fault, not only the cephadm event log: cephadm records the podman failure as a service event on `ceph orch ls --service_type mon`, and `ceph log last 100 cephadm` can hold nothing but reconfigure lines", path)
+	}
+	runtimeBlock := strings.Index(readiness, "cephadm could not start a container on a host at all")
+	usualCauses := strings.Index(readiness, "the three usual causes")
+	if runtimeBlock < 0 || usualCauses < 0 || runtimeBlock > usualCauses {
+		t.Errorf("the container-runtime block must precede the three usual causes and rule them out (runtime=%d causes=%d)", runtimeBlock, usualCauses)
+	}
+}
+
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
