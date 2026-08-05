@@ -52,10 +52,35 @@ the cgroupfs manager, re-proves the runtime, and reports what it did. If both pr
 fail it asserts with the lockdown mode, both probe stderrs, and the runtime package
 versions.
 
+**Backstop:** for any path that reaches bootstrap without the gate having run for a
+host, the monmap gate (`bootstrap_steps/mon_readiness.yml`) scans the mon service
+events it already collects for `Failed to extract uid/gid` and names the runtime
+fault outright, instead of offering the public_network, image-pull and mon-port
+causes that do not apply. The signature lives in the `ceph orch ls --service_type mon`
+events, not in `ceph log last 100 cephadm`, which in the 2026-08-05 failure held
+nothing but reconfigure lines.
+
 The drop-in is written **only** when the default manager provably fails and cgroupfs
-provably works — never blanket — and it is **removed** on the next apply once the
-default manager works again, so clearing Secure Boot is self-healing. The gate needs
-a resolvable `image.version` pin to have something to run; without one it is skipped.
+provably works — never blanket. Removing it again needs more care than it looks, and
+the first cut of this gate got it wrong: it keyed the removal on the ordinary probe,
+which runs under whatever manager the drop-in has already selected. On the *next*
+apply that probe therefore passed **because** of the drop-in, the gate deleted the
+remediation, asserted green anyway, and handed cephadm a node that could start no
+container at all. That is exactly how ceph-prd-01 node-07 failed a second time on
+2026-08-05, five days after the remediation landed — this time not on the runtime
+gate but ten minutes later on the monmap gate, with the podman error buried in the
+mon service events. The removal is now keyed on a separate probe that pins
+`--cgroup-manager=systemd`, so it asks the kernel rather than the drop-in whether the
+node still needs it, and it only runs when the drop-in is actually present. Clearing
+Secure Boot stays self-healing, and a node that still depends on the drop-in now
+reports it on **every** apply instead of only on the one that wrote it.
+
+A remediation that makes its own precondition stop reproducing cannot be re-tested
+through the channel it repaired. Any future auto-remediation here needs the same
+shape: probe the unremediated path explicitly before withdrawing the remedy.
+
+The gate needs a resolvable `image.version` pin to have something to run; without one
+it is skipped.
 
 **Accept the trade deliberately:** under the cgroupfs manager the daemons on that
 node are not device-isolated by a cgroup BPF program. That is a real, if narrow,
