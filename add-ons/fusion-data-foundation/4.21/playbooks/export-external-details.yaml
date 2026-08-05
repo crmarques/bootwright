@@ -52,6 +52,20 @@
         bootwright_exporter_args: >-
           {{ bootwright_exporter_args + ['--rgw-endpoint', bootwright_gateway.publicFQDN ~ ':' ~ (bootwright_gateway.spec.public.port | default(443))] }}
 
+    - name: Read the endpoint the Ceph managers publish for Prometheus
+      ansible.builtin.command:
+        argv: >-
+          {{ (['cephadm', 'shell', '--'] if bootwright_exporter_use_cephadm_shell | bool else [])
+             + ['ceph', 'mgr', 'services', '--format', 'json'] }}
+      register: bootwright_exporter_mgr_services
+      changed_when: false
+      failed_when: false
+
+    - name: Record the scheme the manager Prometheus endpoint serves
+      ansible.builtin.set_fact:
+        bootwright_exporter_monitoring_url: >-
+          {{ (bootwright_exporter_mgr_services.stdout | default('') | trim | default('{}', true) | from_json).prometheus | default('') }}
+
     - name: Read the exporter script the operator publishes
       when: bootwright_exporter_script | length == 0
       delegate_to: localhost
@@ -101,6 +115,58 @@
     - name: Resolve the exporter script path
       ansible.builtin.set_fact:
         bootwright_exporter_path: "{{ bootwright_exporter_script if bootwright_exporter_script | length > 0 else bootwright_exporter_staged_path }}"
+
+    - name: Probe the exporter for the flag that omits the monitoring endpoint
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.command:
+        argv:
+          - grep
+          - --quiet
+          - --fixed-strings
+          - --
+          - "--skip-monitoring-endpoint"
+          - "{{ bootwright_exporter_path }}"
+      register: bootwright_exporter_skip_flag
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse a TLS-armed monitoring endpoint the exporter cannot omit
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.assert:
+        that:
+          - (bootwright_exporter_skip_flag.rc | default(1) | int) == 0
+        fail_msg: >-
+          The Ceph managers publish {{ bootwright_exporter_monitoring_url }}, and
+          this build of the external-cluster exporter offers no
+          --skip-monitoring-endpoint flag to omit it. Left alone the exporter
+          validates that endpoint with the system trust store, fails on the
+          per-cluster cephadm root CA that signed it, and exits 1 with a bare
+          CERTIFICATE_VERIFY_FAILED. Drop the mgmt-gateway to disarm cephadm's
+          monitoring TLS, or pre-place an exporter that carries the flag and name
+          it in bootwright_exporter_script.
+        success_msg: >-
+          The exporter can omit the TLS-armed monitoring endpoint.
+
+    - name: Omit the monitoring endpoint cephadm has armed with TLS
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.set_fact:
+        bootwright_exporter_args: "{{ bootwright_exporter_args + ['--skip-monitoring-endpoint'] }}"
+
+    - name: Report the console metrics the TLS-armed endpoint costs
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.debug:
+        msg: >-
+          The Ceph managers publish {{ bootwright_exporter_monitoring_url }}, so
+          the external cluster details carry no MONITORING_ENDPOINT. cephadm arms
+          TLS on the manager Prometheus module whenever security is enabled, and
+          declaring a mgmt-gateway enables it on its own — security_enabled is
+          secure_monitoring_stack or mgmt_gw_enabled. The certificate is signed by
+          the per-cluster cephadm root CA, and Rook's external-mode MonitoringSpec
+          carries no scheme, CA or TLS field for externalMgrEndpoints, so an
+          emitted endpoint would become a scrape target that can never succeed.
+          Data Foundation still consumes the RBD pool, CephFS and object gateway;
+          only the Ceph metrics panels in the console stay empty. Drop the
+          mgmt-gateway to restore them.
 
     - name: Resolve the exporter command
       ansible.builtin.set_fact:
