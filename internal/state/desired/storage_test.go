@@ -1416,6 +1416,26 @@ func TestStorageMgmtGatewayExposureRules(t *testing.T) {
 			m.OAuth2Proxy = oauth
 		}, want: "oauth2Proxy is refused when distribution=ibm"},
 		{name: "unknown-exposure-is-refused", mutate: func(m *v1alpha1.StorageCephMgmtGateway) { m.Exposure = "tls" }, want: `exposure "tls" must be "https" or "http"`},
+		{name: "http-on-8443-is-refused", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+			m.Port = 8443
+		}, want: "port 8443 contradicts exposure: http"},
+		{name: "http-on-443-is-refused", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+			m.Port = 443
+		}, want: "drop the field for the http default 8888"},
+		{name: "https-on-8080-is-refused", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTPS
+			m.Port = 8080
+		}, want: "port 8080 contradicts exposure: https"},
+		{name: "http-on-8080-passes", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+			m.Port = 8080
+		}},
+		{name: "https-on-9443-passes", mutate: func(m *v1alpha1.StorageCephMgmtGateway) {
+			m.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTPS
+			m.Port = 9443
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

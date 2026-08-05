@@ -385,6 +385,9 @@ type StorageCephMgmtGateway struct {
 const (
 	StorageCephMgmtGatewayExposureHTTPS = "https"
 	StorageCephMgmtGatewayExposureHTTP  = "http"
+
+	StorageCephMgmtGatewayDefaultPortHTTPS = 8443
+	StorageCephMgmtGatewayDefaultPortHTTP  = 8888
 )
 
 func StorageCephMgmtGatewayExposureEffective(mgmt *StorageCephMgmtGateway) string {
@@ -392,6 +395,20 @@ func StorageCephMgmtGatewayExposureEffective(mgmt *StorageCephMgmtGateway) strin
 		return mgmt.Exposure
 	}
 	return StorageCephMgmtGatewayExposureHTTPS
+}
+
+func StorageCephMgmtGatewayDefaultPort(exposure string) int {
+	if exposure == StorageCephMgmtGatewayExposureHTTP {
+		return StorageCephMgmtGatewayDefaultPortHTTP
+	}
+	return StorageCephMgmtGatewayDefaultPortHTTPS
+}
+
+func StorageCephMgmtGatewayPortEffective(mgmt *StorageCephMgmtGateway) int {
+	if mgmt != nil && mgmt.Port != 0 {
+		return mgmt.Port
+	}
+	return StorageCephMgmtGatewayDefaultPort(StorageCephMgmtGatewayExposureEffective(mgmt))
 }
 
 type StorageCephMgmtGatewayTLS struct {

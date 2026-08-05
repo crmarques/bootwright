@@ -68,6 +68,29 @@ func TestStorageMgmtGatewayVarsFollowTheDeclaredExposure(t *testing.T) {
 	}
 }
 
+func TestStorageMgmtGatewayVarsPortFollowsExposure(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{}
+	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{
+		MgmtGateway: &v1alpha1.StorageCephMgmtGateway{
+			Ingress: v1alpha1.StorageCephMgmtGatewayIngress{Name: "mgmt", Address: "10.0.0.9", PrefixLength: 24},
+		},
+		Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{
+			{Name: "node-01", Roles: []string{v1alpha1.StorageCephRoleIngress}},
+		}},
+	}
+	if got := storageMgmtGatewayVars(cluster, nil, PathOptions{})["port"]; got != 8443 {
+		t.Fatalf("an https gateway must serve the TLS-conventional 8443, got %v", got)
+	}
+	cluster.Spec.Ceph.MgmtGateway.Exposure = v1alpha1.StorageCephMgmtGatewayExposureHTTP
+	if got := storageMgmtGatewayVars(cluster, nil, PathOptions{})["port"]; got != 8888 {
+		t.Fatalf("a cleartext gateway must not default onto a TLS-conventional port — the dashboard-port vacation and every firewall rule read the number, not the spec, got %v", got)
+	}
+	cluster.Spec.Ceph.MgmtGateway.Port = 8080
+	if got := storageMgmtGatewayVars(cluster, nil, PathOptions{})["port"]; got != 8080 {
+		t.Fatalf("an authored port must win over the exposure default, got %v", got)
+	}
+}
+
 func TestStorageMgmtGatewayVarsAreNilWithoutAGateway(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{}
 	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{}

@@ -33,6 +33,28 @@ func TestCephadmMgmtGatewaySpecDisablesSSLForHTTPExposure(t *testing.T) {
 	}
 }
 
+func TestCephadmMgmtGatewaySpecPortFollowsExposure(t *testing.T) {
+	for _, tc := range []struct {
+		exposure string
+		port     int
+		want     int
+	}{
+		{v1alpha1.StorageCephMgmtGatewayExposureHTTP, 0, 8888},
+		{v1alpha1.StorageCephMgmtGatewayExposureHTTPS, 0, 8443},
+		{"", 0, 8443},
+		{v1alpha1.StorageCephMgmtGatewayExposureHTTP, 8080, 8080},
+	} {
+		cluster := mgmtGatewayClusterWithExposure("", tc.exposure)
+		cluster.Spec.Ceph.MgmtGateway.Port = tc.port
+		docs := ceph.CephadmLateServicesSpec(v1alpha1.State{}, cluster)
+		gw := serviceDoc(t, docsFromSpecs(t, docs), "mgmt-gateway", "")
+		spec := gw["spec"].(map[string]any)
+		if got := spec["port"]; got != tc.want {
+			t.Fatalf("exposure %q with authored port %d must serve port %d — a cleartext listener on a TLS-conventional port misreads to every operator, scanner and firewall rule, got %v", tc.exposure, tc.port, tc.want, got)
+		}
+	}
+}
+
 func TestCephadmMgmtGatewaySpecKeepsSSLForHTTPSExposure(t *testing.T) {
 	for _, tc := range []struct{ distribution, exposure string }{
 		{v1alpha1.StorageCephDistributionIBM, v1alpha1.StorageCephMgmtGatewayExposureHTTPS},

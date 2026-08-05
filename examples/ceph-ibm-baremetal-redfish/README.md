@@ -47,7 +47,7 @@ Edit these to match your site (search-and-replace `example.com` and the
 | `ceph-1` / `ceph-2` / `ceph-3` | `10.20.30.21` / `.22` / `.23` |
 | BMCs | `ceph-{1,2,3}-bmc.example.com` (Redfish) |
 | RGW S3 endpoint (ingress VIP) | `rgw.ceph-ibm.example.com` → `10.20.30.80` |
-| Dashboard (mgmt-gateway VIP) | `dashboard.ceph-ibm.example.com:8443` → `10.20.30.81` |
+| Dashboard (mgmt-gateway VIP) | `dashboard.ceph-ibm.example.com:8888` → `10.20.30.81` |
 | NFS export (ingress VIP) | `10.20.30.82` |
 | External DNS resolvers | `10.20.30.2`, `10.20.30.3` |
 | External NTP servers | `ntp1.example.com`, `ntp2.example.com` |
@@ -242,7 +242,7 @@ sudo ssh -i /var/lib/bootwright/contexts/ceph-ibm-baremetal/secrets/ceph-cluster
 # service, a mgmt-gateway, and three ingress services.
 
 bootwright cluster info --name ceph-ibm
-# Dashboard: http://dashboard.ceph-ibm.example.com:8443  (user admin; password file printed)
+# Dashboard: http://dashboard.ceph-ibm.example.com:8888  (user admin; password file printed)
 ```
 
 The S3 endpoint is `http://rgw.ceph-ibm.example.com` (RGW ingress VIP

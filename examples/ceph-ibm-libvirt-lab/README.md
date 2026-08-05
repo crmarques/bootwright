@@ -86,7 +86,7 @@ to run against it, the dashboard URL and user, and â€” under `--secrets` only â€
 dashboard password:
 
 ```text
-Dashboard: http://dashboard.ceph-ibm.bootwright.test:8443
+Dashboard: http://dashboard.ceph-ibm.bootwright.test:8888
 Dashboard user: admin
 Show password: bootwright cluster info --name ceph-ibm --secrets
 ```
@@ -102,7 +102,7 @@ Expect `HEALTH_OK`, 3 mons (`node-01`, `node-02`, `node-03`), 2 mgr, 6 OSDs, 1
 CephFS, an RGW service, a mgmt-gateway, and two ingress services (`rgw.lab` +
 `mgmt-gateway.lab`). The S3 endpoint is `http://rgw.ceph-ibm.bootwright.test`
 (RGW ingress VIP `192.168.140.80`); the dashboard is served HA through the
-native `mgmt-gateway` at `http://dashboard.ceph-ibm.bootwright.test:8443` (a
+native `mgmt-gateway` at `http://dashboard.ceph-ibm.bootwright.test:8888` (a
 separate VIP `192.168.140.81`, fronted by a `keepalive_only` ingress).
 
 ### Resolving the lab names from your workstation

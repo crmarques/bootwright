@@ -89,10 +89,7 @@ func cephadmMgmtGatewaySpecs(cluster v1alpha1.StorageCluster) []any {
 	if len(hosts) == 0 {
 		return nil
 	}
-	port := mgmt.Port
-	if port == 0 {
-		port = topology.CephMgmtGatewayDefaultPort
-	}
+	port := v1alpha1.StorageCephMgmtGatewayPortEffective(mgmt)
 	var docs []any
 	if !MgmtGatewayHasSecrets(cluster) {
 		gatewaySpec := map[string]any{

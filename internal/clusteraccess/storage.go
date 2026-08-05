@@ -13,7 +13,7 @@ import (
 
 const cephDashboardPasswordFile = "dashboard-password"
 
-var cephDashboardPort = strconv.Itoa(topology.CephMgmtGatewayDefaultPort)
+var cephDashboardPort = strconv.Itoa(topology.CephDashboardDefaultTLSPort)
 
 func StorageDashboardPasswordPath(clustersDir, clusterName string) string {
 	if clustersDir == "" {
@@ -82,7 +82,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 	}
 	if mgmt := cluster.Spec.Ceph.MgmtGateway; mgmt != nil {
 		if fqdn := stateview.StorageMgmtGatewayFQDN(state, cluster); fqdn != "" {
-			summary.DashboardURL = v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) + "://" + fqdn + ":" + cephMgmtGatewayPort(mgmt.Port)
+			summary.DashboardURL = v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) + "://" + fqdn + ":" + strconv.Itoa(v1alpha1.StorageCephMgmtGatewayPortEffective(mgmt))
 		}
 	}
 	if management == v1alpha1.StorageClusterManagementManaged {
@@ -94,13 +94,6 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		}
 	}
 	return summary
-}
-
-func cephMgmtGatewayPort(port int) string {
-	if port == 0 {
-		return cephDashboardPort
-	}
-	return strconv.Itoa(port)
 }
 
 func storageSeedSSHTarget(state v1alpha1.State, cluster v1alpha1.StorageCluster, node, address string) string {

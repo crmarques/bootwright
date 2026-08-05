@@ -144,7 +144,8 @@ func TestStorageAccessSummaryUsesMgmtGatewayVIPDashboardURL(t *testing.T) {
 		{"default port", "dashboard", 0, "", "https://dashboard.ceph-ibm.bootwright.test:8443"},
 		{"explicit port", "dashboard", 9443, "", "https://dashboard.ceph-ibm.bootwright.test:9443"},
 		{"default label", "", 0, "", "https://mgr.ceph-ibm.bootwright.test:8443"},
-		{"http exposure", "dashboard", 0, v1alpha1.StorageCephMgmtGatewayExposureHTTP, "http://dashboard.ceph-ibm.bootwright.test:8443"},
+		{"http exposure", "dashboard", 0, v1alpha1.StorageCephMgmtGatewayExposureHTTP, "http://dashboard.ceph-ibm.bootwright.test:8888"},
+		{"http exposure explicit port", "dashboard", 8080, v1alpha1.StorageCephMgmtGatewayExposureHTTP, "http://dashboard.ceph-ibm.bootwright.test:8080"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := v1alpha1.State{

@@ -87,6 +87,33 @@ func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.Stora
 		prefix, cephprovider.MgmtGatewayMinimumCephMajor, strconv.Quote(resolved), major)}
 }
 
+func validateStorageCephMgmtGatewayPortScheme(prefix string, mgmt *v1alpha1.StorageCephMgmtGateway) []string {
+	if mgmt.Port == 0 {
+		return nil
+	}
+	exposure := v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt)
+	conventions := map[string]struct {
+		ports   []int
+		reputed string
+	}{
+		v1alpha1.StorageCephMgmtGatewayExposureHTTP:  {ports: []int{443, 8443}, reputed: "TLS"},
+		v1alpha1.StorageCephMgmtGatewayExposureHTTPS: {ports: []int{80, 8080}, reputed: "cleartext"},
+	}
+	convention, ok := conventions[exposure]
+	if !ok {
+		return nil
+	}
+	for _, port := range convention.ports {
+		if mgmt.Port != port {
+			continue
+		}
+		return []string{fmt.Sprintf("%s.port %d contradicts exposure: %s — %d is a conventional %s port, and every operator, scanner and firewall rule that reads it will assume the scheme this gateway does not serve; author a port whose convention matches, or drop the field for the %s default %d",
+			prefix, mgmt.Port, exposure, mgmt.Port, convention.reputed, exposure,
+			v1alpha1.StorageCephMgmtGatewayDefaultPort(exposure))}
+	}
+	return nil
+}
+
 func validateStorageCephMgmtGatewayExposure(prefix string, cluster v1alpha1.StorageCluster) []string {
 	mgmt := cluster.Spec.Ceph.MgmtGateway
 	if mgmt == nil {
@@ -98,6 +125,7 @@ func validateStorageCephMgmtGatewayExposure(prefix string, cluster v1alpha1.Stor
 		return []string{fmt.Sprintf("%s.exposure %q must be %q or %q", prefix, mgmt.Exposure, v1alpha1.StorageCephMgmtGatewayExposureHTTPS, v1alpha1.StorageCephMgmtGatewayExposureHTTP)}
 	}
 	var errs []string
+	errs = append(errs, validateStorageCephMgmtGatewayPortScheme(prefix, mgmt)...)
 	if mgmt.Exposure == v1alpha1.StorageCephMgmtGatewayExposureHTTP {
 		if mgmt.TLS != nil {
 			errs = append(errs, fmt.Sprintf("%s.tls contradicts exposure: http — a plain-HTTP gateway serves no certificate; drop the tls block or set exposure: https", prefix))

@@ -284,10 +284,7 @@ func storageMgmtGatewayVars(cluster v1alpha1.StorageCluster, env *v1alpha1.Envir
 	if len(hosts) == 0 {
 		return nil
 	}
-	port := mgmt.Port
-	if port == 0 {
-		port = topology.CephMgmtGatewayDefaultPort
-	}
+	port := v1alpha1.StorageCephMgmtGatewayPortEffective(mgmt)
 	out := map[string]any{
 		"port":       port,
 		"virtualIP":  endpoint.Address,
