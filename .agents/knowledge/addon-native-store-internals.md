@@ -39,6 +39,28 @@ entry is later deleted or upgraded. Add-on names come from validated
 ClusterAddon `metadata.name` and must be plain path segments (no separators,
 no leading dot).
 
+**Trap: the catalog reaches a run through two copies, and upgrading refreshes
+neither.** The embedded catalog (`add-ons/embed.go`) is compiled into the
+binary, but a run reads the CONTEXT SNAPSHOT at
+`<context>/input/add-ons/_store/<name>/`, which was copied from the
+machine-local store, which `add-ons add` wrote from whatever binary was
+current then. `make build` refreshes neither, and `apply` repeats neither — so
+a playbook fix that lands in the repo runs nowhere until BOTH
+`bootwright add-ons add` and `bootwright context update` are re-run. Observed
+2026-08-05 on ceph-prd-01: a Data Foundation exporter fix was merged, the
+binary rebuilt, `apply` re-run, and the failure repeated byte-for-byte because
+the snapshot predated `2ac12110` — diagnosable only because the Ansible error's
+`Origin:` line named line 96 while the repo's assert sat at line 122 (the
+26-line `_admin` probe that commit added accounts for the difference exactly).
+`validateAddonCatalogCopies` now refuses this: for every ClusterAddon whose
+directory carries a marker it compares `DirDigest(dir)` against the marker
+(edited/half-written copy) and `ReleaseDigest(marker.Name, marker.Version)`
+against the embedded catalog (copy predating this build), naming both refresh
+commands. A marker-less directory is an authored add-on and is never judged —
+that is what keeps a deliberately customized copy sharing a catalog name legal.
+A retired catalog version reports its own finding rather than a digest
+mismatch nobody can act on.
+
 **Fallback resolution:** `state/desired resolveRegisteredAddons` resolves
 binding/profile `addonRefs` that no authored ClusterAddon matches against the
 store; the registered directory loads like an authored add-on dir

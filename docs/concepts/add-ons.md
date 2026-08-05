@@ -623,6 +623,29 @@ add-on with the same name always wins over the registered one. Referencing a
 catalog name that is neither authored nor registered fails validation with the
 register remedy in the finding.
 
+!!! warning "Upgrading Bootwright does not refresh a registered add-on"
+    The catalog is embedded in the binary, but it reaches a run through two
+    further copies — the machine-local store that `add-ons add` writes, and the
+    context snapshot that `context init`/`update` takes from it. Neither a
+    rebuild nor an `apply` repeats those steps, so a catalog fix shipped in a
+    new build never reaches a context that was snapshotted before it: the
+    playbook that executes is the old copy, and its failures name line numbers
+    from a file that no longer exists in the source tree.
+
+    Validation refuses this rather than letting it run. Each registered copy
+    carries a `.bootwright-addon` marker recording its name, version and
+    content digest; validate compares that digest both against the copy on disk
+    (catching an edited or half-written snapshot) and against the catalog this
+    build embeds. Refresh both copies in order:
+
+    ```text
+    sudo bootwright add-ons add --name <name> --version <version> --yes
+    sudo bootwright context update --name <context> -f <input dir> --yes
+    ```
+
+    An add-on you authored yourself carries no marker and is never compared —
+    it may share a catalog entry's name and still win over it.
+
 !!! note "Rootless validate and the store"
     The store lives under the root-owned Bootwright directory, so a rootless
     `bootwright validate -f <dir>` cannot see it and reports an unresolved
