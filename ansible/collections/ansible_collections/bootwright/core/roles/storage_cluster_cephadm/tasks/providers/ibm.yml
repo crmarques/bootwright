@@ -23,13 +23,15 @@
       - dnf
       - -q
       - repoquery
+      - --qf
+      - 'build %{name}-%{epoch}:%{version}-%{release}.%{arch}\npin %{version}-%{release}\nspec %{name}-%{version}\nspec %{name}-%{version}-%{release}\nspec %{name}-%{version}-%{release}.%{arch}\nspec %{name}-%{epoch}:%{version}\nspec %{name}-%{epoch}:%{version}-%{release}\nspec %{name}-%{epoch}:%{version}-%{release}.%{arch}\n'
       - "{{ item }}"
   register: bootwright_ceph_subscription_preflight
   changed_when: false
   failed_when: false
+  check_mode: false
   loop: >-
-    {{ [bootwright_ceph_provider.cephadmPackageSpec
-        | default(bootwright_ceph_provider.cephadmPackage | default('cephadm'))]
+    {{ [bootwright_ceph_provider.cephadmPackage | default('cephadm')]
        + (['ibm-storage-ceph-license']
           if (bootwright_ceph_provider.requiresLicense | default(false) | bool) else []) }}
   loop_control:
@@ -41,20 +43,31 @@
 - name: Require the declared subscription repositories to serve the IBM Ceph packages
   ansible.builtin.assert:
     that:
-      - item.rc == 0
-      - item.stdout | trim | length > 0
+      - item.rc | default(1) == 0
+      - item.stdout_lines | default([]) | select('match', '^build ') | list | length > 0
     fail_msg: >-
-      Storage node {{ bootwright_current_storage_host.hostname }}: none of the enabled
-      subscription repositories
+      Storage node {{ bootwright_current_storage_host.hostname }}:
+      {% if item.rc | default(1) != 0 %}dnf could not query the enabled repositories for
+      package {{ item.item }} (dnf exited {{ item.rc | default('?') }}:
+      {{ item.stderr | default('') | trim }}). The repositories could not be read at all,
+      so this says nothing yet about which builds they publish. Check that the node is
+      registered and attached to a subscription carrying
+      {{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }},
+      that the Satellite or CDN is reachable from the node (through the declared proxy when
+      one is declared), and that the repository GPG keys and CA are in place; then re-run
+      apply.{% else %}none of the enabled repositories serves any build of
+      {{ item.item }}. spec.ceph.ibm.packages.source=subscription sources the IBM Storage
+      Ceph packages from spec.ceph.ibm.packages.subscriptionRepos
       ({{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }})
-      serves {{ item.item }}. spec.ceph.ibm.packages.source=subscription sources the IBM
-      Storage Ceph packages from spec.ceph.ibm.packages.subscriptionRepos instead of the
-      public IBM repository, so those repositories must publish the pinned cephadm build
-      and the ibm-storage-ceph-license package for this release. Check that the Satellite
-      content view publishes the IBM Storage Ceph repository for this release and lifecycle
-      environment, that it carries the license package, and that the published version is
-      not behind spec.ceph.packageVersion; a content view republished since the node's last
-      metadata refresh may also need `dnf clean metadata` on the node.
+      instead of the public IBM repository, so those repositories must publish the cephadm
+      build and the ibm-storage-ceph-license package for this release. The repositories
+      answered but publish nothing at all under this name, so this is a repository-content
+      problem and not a spec.ceph.packageVersion problem: check that the Satellite content
+      view includes the IBM Storage Ceph repository for this release, that a content view
+      version carrying it is promoted to this host's lifecycle environment, and that the
+      host's activation key subscribes it. `dnf repolist --enabled` on the node lists what
+      it can really see; a content view republished since the node's last metadata refresh
+      also needs `dnf clean metadata` there.{% endif %}
     quiet: true
   loop: "{{ bootwright_ceph_subscription_preflight.results | default([]) }}"
   loop_control:
@@ -62,6 +75,63 @@
   when:
     - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
     - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
+
+- name: Resolve the cephadm builds the declared subscription repositories serve
+  ansible.builtin.set_fact:
+    bootwright_ceph_subscription_cephadm_builds: >-
+      {{ bootwright_ceph_subscription_cephadm_lines | select('match', '^build ')
+         | map('regex_replace', '^build ', '') | unique | sort | list }}
+    bootwright_ceph_subscription_cephadm_pins: >-
+      {{ bootwright_ceph_subscription_cephadm_lines | select('match', '^pin ')
+         | map('regex_replace', '^pin ', '') | unique | sort | list }}
+    bootwright_ceph_subscription_cephadm_specs: >-
+      {{ bootwright_ceph_subscription_cephadm_lines | select('match', '^spec ')
+         | map('regex_replace', '^spec ', '') | unique | list }}
+  vars:
+    bootwright_ceph_subscription_cephadm_lines: >-
+      {{ bootwright_ceph_subscription_preflight.results | default([])
+         | selectattr('item', 'defined')
+         | selectattr('item', 'equalto',
+                      bootwright_ceph_provider.cephadmPackage | default('cephadm'))
+         | selectattr('stdout_lines', 'defined')
+         | map(attribute='stdout_lines') | flatten | map('trim') | list }}
+  changed_when: false
+  when:
+    - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
+    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
+    - bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+
+- name: Require the declared subscription repositories to serve the pinned cephadm build
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_ceph_provider.cephadmPackageSpec
+        in (bootwright_ceph_subscription_cephadm_specs | default([]))
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }}: the enabled repositories
+      ({{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }})
+      serve {{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}, but not the
+      build spec.ceph.packageVersion pins. They publish
+      {{ bootwright_ceph_subscription_cephadm_builds | default([]) | join(', ') }}, and
+      `dnf install {{ bootwright_ceph_provider.cephadmPackageSpec }}` resolves against none
+      of them, so this is a pin/content mismatch and not a missing repository. Either set
+      spec.ceph.packageVersion to a build these repositories publish
+      ({{ bootwright_ceph_subscription_cephadm_pins | default([]) | join(' or ') }}) and
+      re-run apply, or promote a Satellite content view version that publishes
+      {{ bootwright_ceph_provider.cephadmPackageSpec }} to this host's lifecycle
+      environment. The pin is matched against every name-[epoch:]version[-release][.arch]
+      form dnf itself accepts, so an omitted epoch is never the cause; when the pin does
+      carry an explicit epoch, compare it against the published builds above, because an
+      epoch that differs from the one the vendor ships makes dnf reject the spec. A content
+      view republished since the node's last metadata refresh needs `dnf clean metadata` on
+      the node. This fails the apply even where the pinned install would have succeeded as
+      a no-op on a node that already carries that build: the repositories, not this node's
+      disk, are what the next fresh or rebuilt node installs from.
+    quiet: true
+  when:
+    - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
+    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
+    - bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
 
 - name: Install vendor Ceph repository definition
   ansible.builtin.get_url:

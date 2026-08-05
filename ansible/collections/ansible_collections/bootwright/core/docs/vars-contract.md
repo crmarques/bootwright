@@ -645,10 +645,19 @@ license. When `spec.ceph.ibm.packages.source` is `subscription` the renderer
 folds `packages.subscriptionRepos` into `repository.redhatRepos` and omits
 `repository.ibmRepoURL`; `ibm.yml` keys on that emptiness to remove any
 previously installed vendor `.repo` file and to run a `dnf repoquery` preflight
-proving the enabled repositories serve the pinned `cephadm` build and the
-`ibm-storage-ceph-license` package before any install (the preflight carries the
-same `rhsmManagement` guard as the enable, so it never demands repositories the
-role did not enable). Distributions that set
+before any install (the preflight carries the same `rhsmManagement` guard as the
+enable, so it never demands repositories the role did not enable). The preflight
+queries the bare package names and asks dnf to print, per available build, the
+canonical NEVRA, a paste-ready `packageVersion` value, and every
+`name-[epoch:]version[-release][.arch]` spec form dnf itself accepts; it then
+asserts twice against that output. The first assert separates an unreadable
+repository (non-zero rc) from one that answers but publishes no build of the
+package at all. The second runs only when `cephadmPackageSpec` pins a build and
+tests membership of that spec in the emitted spec set, so an omitted epoch can
+never cause a false miss, and the failure names the builds the repositories do
+publish. The pin assert deliberately fails even where the pinned install would
+have been a no-op on a node that already carries the build: what the next fresh
+or rebuilt node installs from is the repository, not the node's disk. Distributions that set
 `requiresRegistry: true` additionally run a registry stage (after host
 dependencies, before cephadm install) that installs the entitlement's
 `registry.trustBundlePath` and logs in to `registry.url` so every node can pull

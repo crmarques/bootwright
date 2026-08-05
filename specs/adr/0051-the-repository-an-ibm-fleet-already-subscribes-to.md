@@ -56,6 +56,24 @@ public-internet package dependency and no override.
   `ibm-storage-ceph-license`, failing with a content-view-shaped message
   before anything installs.
 
+The preflight queries bare package names rather than the pinned spec, and has
+dnf print every spec form it would itself accept for each available build. Two
+asserts then read that output: one separating an unreadable repository from one
+that publishes nothing under the name, and one testing the pin against the
+emitted spec set. Querying the pinned spec directly would have collapsed both
+failures into a single empty result — a repository that is unreachable, one
+that carries no Ceph content, and one that is merely a z-stream behind the pin
+are three different problems with three different remedies, and an operator
+cannot tell them apart from silence. The pin assert reports the builds that
+*are* published, so the remedy is in the message rather than a round trip.
+
+It fails the apply even when every node already carries the pinned build. A
+pinned `dnf install` short-circuits on an already-installed package without
+consulting the repository, so a fleet can run for months on a pin its
+repositories cannot serve, and the break surfaces only when the next node is
+installed or rebuilt. Converging on the repository rather than on the disk is
+the point of the preflight.
+
 No external-registration escape hatch is carved out here. The `ibm` arm never
 renders `rhsmManagement: external`: its own entitlement type forbids an `rhsm`
 block, and the OS-subscription fallback resolves managed registrations only.
