@@ -220,14 +220,34 @@ certificate, and it is signed by the per-cluster cephadm root CA. Rook's
 external-cluster exporter reads that URI, re-dials it through `endpoint_dial`
 with no CA argument (`requests.head(ep)` against the system trust store) and
 exits 1 with a bare `CERTIFICATE_VERIFY_FAILED`, killing the Data Foundation
-attach step. Trusting the CA would not rescue the feature: rook's
-`MonitoringSpec` carries `externalMgrEndpoints` and `ExternalMgrPrometheusPort`
-and NO scheme, CA or TLS field, so an emitted `MONITORING_ENDPOINT` becomes a
-scrape target that can never succeed. `export-external-details.yaml` therefore
-probes `ceph mgr services`, and on an `https` prometheus URI asserts the
-exporter offers `--skip-monitoring-endpoint`, passes it, and reports what the
-console loses. Declaring a mgmt-gateway is what costs external Ceph metrics in
-Data Foundation; dropping it restores them.
+attach step.
+
+**Omitting the endpoint is NOT a legal answer** — this was tried first
+(`--skip-monitoring-endpoint`) and is wrong: ocs-operator treats
+`monitoring-endpoint` as a REQUIRED external resource and parks the
+StorageCluster in `Phase: Error` with `Unable to retrieve
+"monitoring-endpoint" external resource`, so every data path stays down over a
+metrics detail. `export-external-details.yaml` therefore probes
+`ceph mgr services` and, on an `https` prometheus URI, retrieves the cluster's
+own cephadm root CA (`cert_mgr` stores it as `cephadm_root_ca_cert`, and
+`cert_ls` always includes it "for trust chain purposes"), concatenates it onto
+the node trust store into a bundle inside the exporter working directory, and
+runs the exporter as `env REQUESTS_CA_BUNDLE=<bundle> python3 …` with that one
+directory `--mount`ed into the `cephadm shell` container. Three retrieval paths
+are tried in order — `ceph orch certmgr cert get cephadm_root_ca_cert`,
+`ceph orch sd dump cert`, the `mgr/cephadm/cert_store.cert.cephadm_root_ca_cert`
+config-key — and the step fails closed naming all three when none returns a PEM,
+because the alternative is the opaque CERTIFICATE_VERIFY_FAILED. The whole
+working directory is mounted (rather than the script file alone) so one
+`--mount` value covers script and bundle; a pre-placed
+`bootwright_exporter_script` is copied into it for the same reason.
+
+What the emitted endpoint does NOT buy: rook's `MonitoringSpec` carries
+`externalMgrEndpoints` and `ExternalMgrPrometheusPort` and NO scheme, CA or TLS
+field, so the ServiceMonitor built from it scrapes plain HTTP against the TLS
+listener and that target stays down. The StorageCluster reconciles and the data
+paths work; only the Ceph metrics panels stay empty. Declaring a mgmt-gateway is
+what costs those panels; dropping it restores them.
 
 **Constraint:** the gateway's default port follows `exposure` — 8443 for
 `https`, 8888 for `http` (ADR 0052) — and a port contradicting the scheme

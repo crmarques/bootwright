@@ -7,7 +7,10 @@
     bootwright_exporter_configmap: rook-ceph-external-cluster-script-config
     bootwright_exporter_namespace: openshift-storage
     bootwright_exporter_use_cephadm_shell: true
-    bootwright_exporter_staged_path: "/tmp/bootwright-ceph-external-cluster-details-exporter-{{ bootwright_bound_cluster }}.py"
+    bootwright_exporter_workdir: "/tmp/bootwright-df-exporter-{{ bootwright_bound_cluster }}"
+    bootwright_exporter_staged_path: "{{ bootwright_exporter_workdir }}/exporter.py"
+    bootwright_exporter_ca_path: "{{ bootwright_exporter_workdir }}/trust-bundle.crt"
+    bootwright_exporter_system_ca_path: /etc/pki/tls/certs/ca-bundle.crt
     bootwright_df: "{{ bootwright_step_refs['external-storage'].spec.dataFoundation }}"
     bootwright_gateway: "{{ bootwright_step_refs['external-storage'].objectGateway | default(None) }}"
     bootwright_exporter_args:
@@ -66,6 +69,12 @@
         bootwright_exporter_monitoring_url: >-
           {{ (bootwright_exporter_mgr_services.stdout | default('') | trim | default('{}', true) | from_json).prometheus | default('') }}
 
+    - name: Create the exporter working directory
+      ansible.builtin.file:
+        path: "{{ bootwright_exporter_workdir }}"
+        state: directory
+        mode: "0700"
+
     - name: Read the exporter script the operator publishes
       when: bootwright_exporter_script | length == 0
       delegate_to: localhost
@@ -105,77 +114,95 @@
           script on a Ceph node and set bootwright_exporter_script to its path
           to skip the retrieval.
 
-    - name: Stage the exporter script on the Ceph node
+    - name: Stage the exporter script the operator published
       when: bootwright_exporter_script | length == 0
       ansible.builtin.copy:
         content: "{{ bootwright_exporter_configmap_read.stdout | b64decode }}"
         dest: "{{ bootwright_exporter_staged_path }}"
         mode: "0600"
 
+    - name: Stage a pre-placed exporter script beside the trust bundle
+      when: bootwright_exporter_script | length > 0
+      ansible.builtin.copy:
+        src: "{{ bootwright_exporter_script }}"
+        dest: "{{ bootwright_exporter_staged_path }}"
+        remote_src: true
+        mode: "0600"
+
     - name: Resolve the exporter script path
       ansible.builtin.set_fact:
-        bootwright_exporter_path: "{{ bootwright_exporter_script if bootwright_exporter_script | length > 0 else bootwright_exporter_staged_path }}"
+        bootwright_exporter_path: "{{ bootwright_exporter_staged_path }}"
 
-    - name: Probe the exporter for the flag that omits the monitoring endpoint
+    - name: Read the certificate authority that signed the manager Prometheus endpoint
       when: bootwright_exporter_monitoring_url is match('https://')
       ansible.builtin.command:
-        argv:
-          - grep
-          - --quiet
-          - --fixed-strings
-          - --
-          - "--skip-monitoring-endpoint"
-          - "{{ bootwright_exporter_path }}"
-      register: bootwright_exporter_skip_flag
+        argv: "{{ (['cephadm', 'shell', '--'] if bootwright_exporter_use_cephadm_shell | bool else []) + item }}"
+      loop:
+        - [ceph, orch, certmgr, cert, get, cephadm_root_ca_cert]
+        - [ceph, orch, sd, dump, cert]
+        - [ceph, config-key, get, mgr/cephadm/cert_store.cert.cephadm_root_ca_cert]
+      register: bootwright_exporter_ca_probe
       changed_when: false
       failed_when: false
 
-    - name: Refuse a TLS-armed monitoring endpoint the exporter cannot omit
+    - name: Record the certificate authority the probes returned
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.set_fact:
+        bootwright_exporter_ca_pem: >-
+          {{ bootwright_exporter_ca_probe.results | default([])
+             | selectattr('stdout', 'defined')
+             | selectattr('stdout', 'search', 'BEGIN CERTIFICATE')
+             | map(attribute='stdout') | list | first | default('') }}
+
+    - name: Refuse to export against a manager endpoint whose issuer stays unknown
       when: bootwright_exporter_monitoring_url is match('https://')
       ansible.builtin.assert:
         that:
-          - (bootwright_exporter_skip_flag.rc | default(1) | int) == 0
+          - bootwright_exporter_ca_pem | length > 0
         fail_msg: >-
-          The Ceph managers publish {{ bootwright_exporter_monitoring_url }}, and
-          this build of the external-cluster exporter offers no
-          --skip-monitoring-endpoint flag to omit it. Left alone the exporter
-          validates that endpoint with the system trust store, fails on the
-          per-cluster cephadm root CA that signed it, and exits 1 with a bare
-          CERTIFICATE_VERIFY_FAILED. Drop the mgmt-gateway to disarm cephadm's
-          monitoring TLS, or pre-place an exporter that carries the flag and name
-          it in bootwright_exporter_script.
+          The Ceph managers publish {{ bootwright_exporter_monitoring_url }}, so the
+          exporter must verify a certificate this cluster's own cephadm root CA
+          signed, and none of the three retrieval paths returned one:
+          `ceph orch certmgr cert get cephadm_root_ca_cert`, `ceph orch sd dump
+          cert`, or the `mgr/cephadm/cert_store.cert.cephadm_root_ca_cert`
+          config-key. Without it the exporter validates against the system trust
+          store, exits 1 on CERTIFICATE_VERIFY_FAILED, and Data Foundation cannot
+          reconcile — its StorageCluster refuses to come up without the
+          monitoring-endpoint resource. Run those commands on the seed to see
+          which one this build offers.
         success_msg: >-
-          The exporter can omit the TLS-armed monitoring endpoint.
+          The cephadm root CA is available; the exporter can verify the manager
+          Prometheus endpoint instead of failing on it.
 
-    - name: Omit the monitoring endpoint cephadm has armed with TLS
+    - name: Seed the exporter trust bundle from the node trust store
       when: bootwright_exporter_monitoring_url is match('https://')
-      ansible.builtin.set_fact:
-        bootwright_exporter_args: "{{ bootwright_exporter_args + ['--skip-monitoring-endpoint'] }}"
+      ansible.builtin.copy:
+        src: "{{ bootwright_exporter_system_ca_path }}"
+        dest: "{{ bootwright_exporter_ca_path }}"
+        remote_src: true
+        mode: "0600"
 
-    - name: Report the console metrics the TLS-armed endpoint costs
+    - name: Add the cephadm root CA to the exporter trust bundle
       when: bootwright_exporter_monitoring_url is match('https://')
-      ansible.builtin.debug:
-        msg: >-
-          The Ceph managers publish {{ bootwright_exporter_monitoring_url }}, so
-          the external cluster details carry no MONITORING_ENDPOINT. cephadm arms
-          TLS on the manager Prometheus module whenever security is enabled, and
-          declaring a mgmt-gateway enables it on its own — security_enabled is
-          secure_monitoring_stack or mgmt_gw_enabled. The certificate is signed by
-          the per-cluster cephadm root CA, and Rook's external-mode MonitoringSpec
-          carries no scheme, CA or TLS field for externalMgrEndpoints, so an
-          emitted endpoint would become a scrape target that can never succeed.
-          Data Foundation still consumes the RBD pool, CephFS and object gateway;
-          only the Ceph metrics panels in the console stay empty. Drop the
-          mgmt-gateway to restore them.
+      ansible.builtin.blockinfile:
+        path: "{{ bootwright_exporter_ca_path }}"
+        block: "{{ bootwright_exporter_ca_pem }}"
+        marker: "# {mark} BOOTWRIGHT CEPHADM ROOT CA"
+        mode: "0600"
 
     - name: Resolve the exporter command
       ansible.builtin.set_fact:
         bootwright_exporter_argv: "{{ ['python3', bootwright_exporter_path] + bootwright_exporter_args }}"
 
+    - name: Point the exporter at the trust bundle carrying the cephadm root CA
+      when: bootwright_exporter_monitoring_url is match('https://')
+      ansible.builtin.set_fact:
+        bootwright_exporter_argv: "{{ ['env', 'REQUESTS_CA_BUNDLE=' ~ bootwright_exporter_ca_path] + bootwright_exporter_argv }}"
+
     - name: Wrap the exporter in cephadm shell
       when: bootwright_exporter_use_cephadm_shell | bool
       ansible.builtin.set_fact:
-        bootwright_exporter_argv: "{{ ['cephadm', 'shell', '--mount', bootwright_exporter_path ~ ':' ~ bootwright_exporter_path, '--'] + bootwright_exporter_argv }}"
+        bootwright_exporter_argv: "{{ ['cephadm', 'shell', '--mount', bootwright_exporter_workdir ~ ':' ~ bootwright_exporter_workdir, '--'] + bootwright_exporter_argv }}"
 
     - name: Run the Rook external cluster details exporter
       ansible.builtin.command:
@@ -200,10 +227,9 @@
           {{ bootwright_df.rbdPoolRef }} and CephFS {{ bootwright_df.filesystemRef }}
           exist.
 
-    - name: Remove the staged exporter script
-      when: bootwright_exporter_script | length == 0
+    - name: Remove the exporter working directory
       ansible.builtin.file:
-        path: "{{ bootwright_exporter_staged_path }}"
+        path: "{{ bootwright_exporter_workdir }}"
         state: absent
 
     - name: Capture the declared externalDetails output

@@ -993,12 +993,30 @@ bootwright cluster exec --name <storage-cluster> --node <seed> -- \
   sudo cephadm shell -- ceph mgr services
 ```
 
-An `https://…:9283/` value there means Bootwright will pass
-`--skip-monitoring-endpoint` to the exporter and the external cluster details
-will carry no `MONITORING_ENDPOINT`. That is deliberate rather than a
-workaround: rook's external-mode `MonitoringSpec` has `externalMgrEndpoints`
-and a port, and no scheme, CA or TLS field — so an emitted endpoint becomes an
-OpenShift scrape target that can never succeed. Data Foundation still consumes
-the RBD pool, the filesystem and the object gateway; only the Ceph metrics
-panels in the console stay empty. Removing the management gateway disarms the
-monitoring TLS and restores them.
+An `https://…:9283/` value there means the exporter has to *verify* that
+endpoint, so the attach step first retrieves the cluster's own cephadm root CA
+and runs the exporter against a trust bundle that carries it — the node trust
+store plus that CA, mounted into the `cephadm shell` container and named by
+`REQUESTS_CA_BUNDLE`. Omitting the endpoint instead is not an option:
+ocs-operator refuses to reconcile a `StorageCluster` whose external resources
+carry no `monitoring-endpoint`, failing with
+`Unable to retrieve "monitoring-endpoint" external resource` and parking the
+cluster in `Phase: Error`.
+
+If the step fails with the refusal naming three retrieval paths, run them on the
+seed to see which one the build offers:
+
+```bash
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch certmgr cert get cephadm_root_ca_cert
+bootwright cluster exec --name <storage-cluster> --node <seed> -- \
+  sudo cephadm shell -- ceph orch sd dump cert
+```
+
+Note what the emitted endpoint does and does not buy you: rook's external-mode
+`MonitoringSpec` carries `externalMgrEndpoints` and a port, and no scheme, CA or
+TLS field, so the ServiceMonitor OpenShift builds from it scrapes plain HTTP
+against a TLS listener and that one target stays down. The `StorageCluster`
+reconciles and every data path works; only the Ceph metrics panels stay empty.
+Removing the management gateway disarms cephadm's monitoring TLS and restores
+them.
