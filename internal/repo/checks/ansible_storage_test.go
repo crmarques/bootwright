@@ -4007,6 +4007,53 @@ func TestStorageManagementSpecRepairsThePersistedSSLSwitch(t *testing.T) {
 	}
 }
 
+func TestStorageManagementGatewayHealthRewritesStaleDaemons(t *testing.T) {
+	bootstrap := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	block, ok := bootstrap[0]["block"].([]any)
+	if !ok {
+		t.Fatalf("bootstrap.yml must open with the guarded block, got %v", bootstrap[0])
+	}
+	readiness, health := -1, -1
+	for i, entry := range block {
+		task, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch fmt.Sprint(task["ansible.builtin.include_tasks"]) {
+		case "bootstrap_steps/service_readiness.yml":
+			readiness = i
+		case "bootstrap_steps/management_gateway_health.yml":
+			health = i
+		}
+	}
+	if health < 0 || readiness < 0 || health < readiness {
+		t.Fatalf("the gateway health step must run after service readiness — before it, a fresh cluster's daemons are not deployed yet and every probe reads as a fault (readiness=%d health=%d)", readiness, health)
+	}
+
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_gateway_health.yml"
+	tasks := readAnsibleTasks(t, path)
+	probeIdx := findAnsibleTask(t, tasks, "Probe every management gateway for a live dashboard upstream")
+	staleIdx := findAnsibleTask(t, tasks, "Record the gateways whose configuration outlived the dashboard it proxies")
+	reconfigIdx := findAnsibleTask(t, tasks, "Rewrite the management gateway daemons from the settled spec")
+	assertIdx := findAnsibleTask(t, tasks, "Assert every management gateway proxies the dashboard it fronts")
+	if !(probeIdx < staleIdx && staleIdx < reconfigIdx && reconfigIdx < assertIdx) {
+		t.Fatalf("the health step must probe, then rewrite, then prove (probe=%d stale=%d reconfig=%d assert=%d)", probeIdx, staleIdx, reconfigIdx, assertIdx)
+	}
+	if got := fmt.Sprint(tasks[staleIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "502") {
+		t.Fatalf("cephadm computes a gateway daemon's dependencies from the manager daemon NAMES alone, never the dashboard port or scheme, so a corrected spec never rewrites a running daemon and the only symptom of the stale nginx is the upstream fault it answers with, got %v", tasks[staleIdx]["ansible.builtin.set_fact"])
+	}
+	reconfig := fmt.Sprint(tasks[reconfigIdx]["ansible.builtin.command"])
+	if !strings.Contains(reconfig, "reconfig") || !strings.Contains(reconfig, "mgmt-gateway") {
+		t.Fatalf("`ceph orch reconfig mgmt-gateway` is the only command that rewrites a running gateway daemon from the current spec, got %v", tasks[reconfigIdx]["ansible.builtin.command"])
+	}
+	if got := fmt.Sprint(tasks[reconfigIdx]["when"]); !strings.Contains(got, "stale_hosts") {
+		t.Fatalf("the rewrite must fire only on observed staleness — an unconditional reconfigure bounces every gateway on every apply, got when=%v", tasks[reconfigIdx]["when"])
+	}
+	if got := readRepoFile(t, path); strings.Contains(got, "validate_certs") {
+		t.Fatalf("the probe covers only gateways serving plain HTTP, where no certificate is in play; an https gateway needs the cluster's cephadm root CA as a trust anchor, not a disabled verification, got a validate_certs site in %s", path)
+	}
+}
+
 func TestStorageDependenciesOpenTheGatewayInternalPort(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/dependencies.yml"
 	tasks := readAnsibleTasks(t, path)

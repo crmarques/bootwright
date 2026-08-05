@@ -59,6 +59,9 @@
     - name: Wait for declared Ceph services to be deployed
       ansible.builtin.include_tasks: bootstrap_steps/service_readiness.yml
 
+    - name: Prove the management gateways reach the dashboard they front
+      ansible.builtin.include_tasks: bootstrap_steps/management_gateway_health.yml
+
     - name: Run Ceph late operations
       ansible.builtin.include_tasks: bootstrap_steps/late_operations.yml
 

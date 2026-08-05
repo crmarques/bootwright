@@ -1,0 +1,85 @@
+- name: Decide whether the management gateways can be probed without a trust anchor
+  ansible.builtin.set_fact:
+    bootwright_ceph_management_probe_hosts: >-
+      {{ bootwright_ceph_management.hosts | default([])
+         if (bootwright_ceph_management.sslDisabled | default(false) | bool)
+         else [] }}
+
+- name: Probe every management gateway for a live dashboard upstream
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ bootwright_ceph_management.port }}/"
+    method: GET
+    follow_redirects: none
+    timeout: "{{ bootwright_ceph_management_probe_timeout | default(15) | int }}"
+  loop: "{{ bootwright_ceph_management_probe_hosts }}"
+  register: bootwright_ceph_management_probe
+  changed_when: false
+  failed_when: false
+
+- name: Record the gateways whose configuration outlived the dashboard it proxies
+  ansible.builtin.set_fact:
+    bootwright_ceph_management_stale_hosts: >-
+      {{ bootwright_ceph_management_probe.results | default([])
+         | selectattr('status', 'defined')
+         | selectattr('status', 'in', [502, 503, 504])
+         | map(attribute='item') | list }}
+
+- name: Rewrite the management gateway daemons from the settled spec
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - reconfig
+      - mgmt-gateway
+  register: bootwright_ceph_management_reconfig
+  changed_when: true
+  when: (bootwright_ceph_management_stale_hosts | default([]) | length) > 0
+
+- name: Wait for every rewritten management gateway to reach its dashboard
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ bootwright_ceph_management.port }}/"
+    method: GET
+    follow_redirects: none
+    timeout: "{{ bootwright_ceph_management_probe_timeout | default(15) | int }}"
+  loop: "{{ bootwright_ceph_management_stale_hosts | default([]) }}"
+  register: bootwright_ceph_management_reprobe
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_management_probe_retries | default(30) | int }}"
+  delay: "{{ bootwright_ceph_management_probe_delay | default(10) | int }}"
+  until: >-
+    ((bootwright_ceph_management_reprobe.status | default(0) | int) not in [502, 503, 504])
+    or ((bootwright_ceph_management_reprobe.attempts | default(1) | int)
+        >= (bootwright_ceph_management_probe_retries | default(30) | int))
+  when: (bootwright_ceph_management_stale_hosts | default([]) | length) > 0
+
+- name: Assert every management gateway proxies the dashboard it fronts
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_management_unhealthy | length) == 0
+    fail_msg: >-
+      The management gateway on
+      {{ bootwright_ceph_management_unhealthy | join(', ') }} still answers its
+      own port with an upstream fault after `ceph orch reconfig mgmt-gateway`.
+      A gateway daemon keeps the configuration it was deployed with until its
+      dependency list changes, and cephadm computes that list from the manager
+      daemon names alone — never the dashboard's port or its scheme. Moving the
+      dashboard off the gateway's port, or flipping its SSL, therefore leaves a
+      running gateway proxying an endpoint that no longer exists, and every
+      request through the VIP answers 502. The reconfigure above is the only
+      thing that rewrites a running daemon from the current spec, so a fault that
+      survives it means the dashboard itself is not serving: read `ceph mgr
+      services` for the endpoint the managers publish and `ceph -s` for a failed
+      dashboard module.
+    success_msg: >-
+      Every management gateway proxies the dashboard endpoint the managers serve.
+  vars:
+    bootwright_ceph_management_unhealthy: >-
+      {{ bootwright_ceph_management_reprobe.results | default([])
+         | selectattr('status', 'defined')
+         | selectattr('status', 'in', [502, 503, 504])
+         | map(attribute='item') | list }}
+  when: (bootwright_ceph_management_stale_hosts | default([]) | length) > 0
