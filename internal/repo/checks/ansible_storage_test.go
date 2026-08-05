@@ -1407,8 +1407,20 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	if strings.Contains(removeWhen, "bootwright_ceph_runtime_probe.rc") {
 		t.Fatalf("the drop-in removal must not depend on the ordinary probe, which runs under whatever cgroup manager the drop-in already selected. Got when=%v", tasks[removeIdx]["when"])
 	}
-	if _, ok := tasks[assertIdx]["ansible.builtin.assert"]; !ok {
+	if fmt.Sprint(tasks[removeIdx]["register"]) != "bootwright_ceph_cgroup_manager_dropin_removed" {
+		t.Fatalf("the drop-in removal must register its result so the runtime can be re-proven after it, got register=%v", tasks[removeIdx]["register"])
+	}
+	reproveIdx := findAnsibleTask(t, tasks, "Re-prove the storage node container runtime after selecting the cgroup manager")
+	if !strings.Contains(fmt.Sprint(tasks[reproveIdx]["when"]), "bootwright_ceph_runtime_config_changed") {
+		t.Fatalf("the runtime must be re-proven whenever this apply changed the cgroup manager selection in either direction, not only when the drop-in was written. Got when=%v", tasks[reproveIdx]["when"])
+	}
+
+	assertion, ok := tasks[assertIdx]["ansible.builtin.assert"]
+	if !ok {
 		t.Fatalf("the runtime gate must fail closed with an assert, got %v", tasks[assertIdx])
+	}
+	if !strings.Contains(fmt.Sprint(assertion), "bootwright_ceph_runtime_ready") {
+		t.Fatalf("the gate must assert on the runtime as this apply leaves the node, not on a probe taken before it changed the cgroup manager selection: accepting the earlier probe passes a node whose remediation this same task removed moments later. Got %v", assertion)
 	}
 }
 

@@ -109,9 +109,17 @@
   ansible.builtin.file:
     path: /etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf
     state: absent
+  register: bootwright_ceph_cgroup_manager_dropin_removed
   when:
     - bootwright_ceph_cgroup_manager_dropin_state.stat.exists | default(false) | bool
     - bootwright_ceph_runtime_systemd_probe.rc | default(1) | int == 0
+
+- name: Resolve whether Bootwright changed the storage node cgroup manager selection
+  ansible.builtin.set_fact:
+    bootwright_ceph_runtime_config_changed: >-
+      {{ (bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool)
+         or (bootwright_ceph_cgroup_manager_dropin_removed.changed | default(false) | bool) }}
+  changed_when: false
 
 - name: Re-prove the storage node container runtime after selecting the cgroup manager
   ansible.builtin.command:
@@ -129,7 +137,15 @@
   register: bootwright_ceph_runtime_reprobe
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_cgroup_manager_dropin.changed | default(false) | bool
+  when: bootwright_ceph_runtime_config_changed | bool
+
+- name: Resolve whether the storage node container runtime is proven as this apply leaves it
+  ansible.builtin.set_fact:
+    bootwright_ceph_runtime_ready: >-
+      {{ (bootwright_ceph_runtime_reprobe.rc | default(1) | int == 0)
+         or ((bootwright_ceph_runtime_probe.rc | default(1) | int == 0)
+             and not (bootwright_ceph_runtime_config_changed | bool)) }}
+  changed_when: false
 
 - name: Collect the storage node container runtime versions when it cannot start a container
   ansible.builtin.command:
@@ -145,16 +161,12 @@
   register: bootwright_ceph_runtime_versions
   changed_when: false
   failed_when: false
-  when: >-
-    (bootwright_ceph_runtime_probe.rc | default(1) | int != 0)
-    and (bootwright_ceph_runtime_reprobe.rc | default(1) | int != 0)
+  when: not (bootwright_ceph_runtime_ready | bool)
 
 - name: Require a storage node container runtime that can start a Ceph container
   ansible.builtin.assert:
     that:
-      - >-
-        (bootwright_ceph_runtime_probe.rc | default(1) | int == 0)
-        or (bootwright_ceph_runtime_reprobe.rc | default(1) | int == 0)
+      - bootwright_ceph_runtime_ready | bool
     fail_msg: >-
       Ceph storage node {{ inventory_hostname }} cannot start a container from
       {{ bootwright_ceph_bootstrap_image }}, so cephadm can deploy no daemon of any kind
