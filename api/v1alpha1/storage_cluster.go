@@ -24,6 +24,31 @@ func StorageClusterExternal(cluster StorageCluster) bool {
 	return !StorageClusterManaged(cluster)
 }
 
+func StorageCephCephxKeyTypes() []string {
+	return []string{StorageCephCephxKeyTypeAES, StorageCephCephxKeyTypeAES256K}
+}
+
+func StorageClusterCephxKeyType(cluster StorageCluster) string {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Security.Cephx == nil {
+		return ""
+	}
+	return cluster.Spec.Ceph.Security.Cephx.KeyType
+}
+
+func StorageCephCephxKeyPrefix(keyType string) string {
+	if keyType == StorageCephCephxKeyTypeAES256K {
+		return "Ag"
+	}
+	return "AQ"
+}
+
+func StorageCephCephxAllowedCiphers(keyType string) string {
+	if keyType == StorageCephCephxKeyTypeAES {
+		return StorageCephCephxKeyTypeAES + "," + StorageCephCephxKeyTypeAES256K
+	}
+	return StorageCephCephxKeyTypeAES256K
+}
+
 func StorageClusterCephadmSSHUser(cluster StorageCluster) string {
 	if cluster.Spec.Ceph == nil {
 		return RootSSHUser
@@ -163,7 +188,12 @@ type StorageClusterCephSpec struct {
 }
 
 type StorageCephSecurity struct {
-	FIPS StorageCephFIPS `yaml:"fips,omitempty" json:"fips,omitempty"`
+	FIPS  StorageCephFIPS   `yaml:"fips,omitempty" json:"fips,omitempty"`
+	Cephx *StorageCephCephx `yaml:"cephx,omitempty" json:"cephx,omitempty"`
+}
+
+type StorageCephCephx struct {
+	KeyType string `yaml:"keyType,omitempty" json:"keyType,omitempty"`
 }
 
 type StorageCephFIPS struct {

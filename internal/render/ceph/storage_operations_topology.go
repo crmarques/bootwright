@@ -7,8 +7,20 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
+func cephCephxOperations(cluster v1alpha1.StorageCluster) []map[string]any {
+	keyType := v1alpha1.StorageClusterCephxKeyType(cluster)
+	if keyType == "" {
+		return nil
+	}
+	return []map[string]any{
+		operationInPhase("topology", "set-cephx-allowed-ciphers", "ceph", "mon", "set", "auth_allowed_ciphers", v1alpha1.StorageCephCephxAllowedCiphers(keyType)),
+		operationInPhase("topology", "set-cephx-preferred-cipher", "ceph", "mon", "set", "auth_preferred_cipher", keyType),
+	}
+}
+
 func cephTopologyOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 	var ops []map[string]any
+	ops = append(ops, cephCephxOperations(cluster)...)
 	if publics := cluster.Spec.Ceph.Networks.PublicCIDRs; len(publics) > 0 {
 		ops = append(ops, operationInPhase("topology", "set-public-network", "ceph", "config", "set", "global", "public_network", strings.Join(publics, ",")))
 	}

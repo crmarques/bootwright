@@ -625,6 +625,49 @@ RBD and CephFS. Leave it unset for a block/file-only export. Each ODF cluster
 should get its own `StorageExport` naming its own site-local gateway, so
 distinct OCP clusters never share one S3 endpoint.
 
+## Cephx key types
+
+A cephx key is a typed structure, not a bare secret: a crypto-type ID, a
+timestamp, a length, then the secret bytes. A client that does not recognise the
+type ID cannot load the keyring at all — it fails before it ever authenticates.
+
+Some vendor builds mint AES-256 keys (`aes256k`, base64 starting `Ag`) and
+refuse to mint the older AES-128 type (`aes`, starting `AQ`) at all, because the
+set of ciphers they permit is policy held in the **mon map**. A consumer built
+against an older Ceph client — Data Foundation 4.21 is the case in the field —
+has no handler for `aes256k` and reports `Malformed input` and
+`monclient: keyring not found` against a key that is perfectly valid. Upstream
+Ceph does not mint `aes256k` at all, so this is a property of the vendor build
+rather than of the Ceph version number.
+
+`spec.ceph.security.cephx.keyType` declares which cipher this cluster mints:
+
+```yaml
+spec:
+  ceph:
+    security:
+      cephx:
+        keyType: aes
+```
+
+Leave it unset and Bootwright emits no cipher operations, so the build's own
+policy stands. Declaring `aes` widens the mon map's allowed ciphers to
+`aes,aes256k` — never narrowing, so keys already in use keep working — and makes
+`aes` the type new keys are minted with. Declaring `aes256k` restores the
+vendor default, which will break any client still holding an `aes` key.
+Bootwright never touches `auth_service_cipher`: rotating the monitors' own
+service cipher invalidates every client's service key.
+
+Two consequences are worth stating plainly. First, this is a **cluster-wide
+security downgrade** — every client of the cluster, not only Data Foundation,
+gets AES-128 keys from that point on. Prefer a consumer that understands
+`aes256k`, and check the vendor support matrix for the pairing before declaring
+this. Second, policy alone does not rewrite keys that already exist: the Data
+Foundation exporter adopts an existing cephx entity verbatim. When a key type is
+declared, the export step removes the `client.healthchecker` and `client.csi-*`
+entities whose keys were minted at another type so the exporter remints them —
+and never touches `client.admin`, mon, mgr, or OSD keys.
+
 ## Convergence is additive-only
 
 `apply` creates and converges what desired state declares and never removes a

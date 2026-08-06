@@ -124,6 +124,7 @@ spec:
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
 | `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that **every** Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. |
+| `ceph.security.cephx.keyType` | No | — | Cipher new cephx keys are minted with: `aes` (AES-128) or `aes256k` (AES-256). Unset leaves the build's own mon-map policy untouched — declare it only to override a vendor default a client cannot read. `aes` **weakens cephx for every client of this cluster**; see [cephx key types](../advanced/ceph-topologies.md#cephx-key-types). |
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. Keys another field owns are rejected here: `public_network`/`cluster_network` belong to `ceph.networks`, and `container_image` belongs to `ceph.image` — these operations run after the first services are deployed, so a pin declared here would arrive too late for them. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
 | `ceph.monitoring` | No | cephadm default stack (block absent) | cephadm monitoring stack controls; see [Monitoring](#monitoring). |

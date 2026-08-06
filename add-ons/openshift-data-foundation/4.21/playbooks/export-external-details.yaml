@@ -13,6 +13,11 @@
     bootwright_exporter_system_ca_path: /etc/pki/tls/certs/ca-bundle.crt
     bootwright_df: "{{ bootwright_step_refs['external-storage'].spec.dataFoundation }}"
     bootwright_gateway: "{{ bootwright_step_refs['external-storage'].objectGateway | default(None) }}"
+    bootwright_exporter_key_type: "{{ bootwright_step_refs['external-storage'].cephxKeyType | default('') }}"
+    bootwright_exporter_key_prefixes:
+      aes: AQ
+      aes256k: Ag
+    bootwright_exporter_client_entities: '^client\.(healthchecker|csi-)'
     bootwright_exporter_args:
       - --format
       - json
@@ -190,6 +195,37 @@
         marker: "# {mark} BOOTWRIGHT CEPHADM ROOT CA"
         mode: "0600"
 
+    - name: Read the cephx entities this export's clients authenticate with
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.command:
+        argv: >-
+          {{ (['cephadm', 'shell', '--'] if bootwright_exporter_use_cephadm_shell | bool else [])
+             + ['ceph', 'auth', 'ls', '--format', 'json'] }}
+      register: bootwright_exporter_auth_ls
+      changed_when: false
+
+    - name: Record the cephx entities minted at another key type
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.set_fact:
+        bootwright_exporter_stale_entities: >-
+          {{ (bootwright_exporter_auth_ls.stdout | default('') | trim | default('{}', true) | from_json).auth_dump | default([])
+             | selectattr('entity', 'defined')
+             | selectattr('entity', 'match', bootwright_exporter_client_entities)
+             | selectattr('key', 'defined')
+             | rejectattr('key', 'match', '^' ~ bootwright_exporter_key_prefixes[bootwright_exporter_key_type])
+             | map(attribute='entity') | list }}
+
+    - name: Remove the cephx entities minted at another key type so the exporter remints them
+      when:
+        - bootwright_exporter_key_type | length > 0
+        - bootwright_exporter_stale_entities | default([]) | length > 0
+      ansible.builtin.command:
+        argv: >-
+          {{ (['cephadm', 'shell', '--'] if bootwright_exporter_use_cephadm_shell | bool else [])
+             + ['ceph', 'auth', 'rm', item] }}
+      loop: "{{ bootwright_exporter_stale_entities }}"
+      changed_when: true
+
     - name: Resolve the exporter command
       ansible.builtin.set_fact:
         bootwright_exporter_argv: "{{ ['python3', bootwright_exporter_path] + bootwright_exporter_args }}"
@@ -256,16 +292,17 @@
           ExternalClusterConnecting=False with reason ExternalClusterStateError
           until the readiness budget expires, while rook logs "error setting
           modifier ... Malformed input" against
-          client.healthchecker.keyring throughout. Rerunning this step cannot
-          repair it: the exporter adopts an existing cephx entity verbatim.
-          Nor can the entities simply be re-minted — a Ceph build that defaults
-          to AES256KRB5 also refuses "ceph auth get-or-create --key_type aes"
-          with "creating key with insecure key type", because its allowed
-          ciphers are policy held in the mon map. Either relax that policy on
-          the Ceph cluster, which weakens cephx for every client of it and is
-          not something Bootwright will do for you, or pair this cluster with a
-          Data Foundation build whose client parses AES256KRB5. Check the
-          vendor support matrix for this pairing first.
+          client.healthchecker.keyring throughout. Rerunning this step alone
+          cannot repair it: the exporter adopts an existing cephx entity
+          verbatim. Declare spec.ceph.security.cephx.keyType: aes on
+          StorageCluster/{{ bootwright_step_refs['external-storage'].spec.storageClusterRef }}
+          and apply the storage cluster: Bootwright then widens the mon map's
+          allowed ciphers, makes aes the minted default, and removes these
+          entities on the next export so they are reminted at a type this
+          client can read. That weakens cephx for every client of that Ceph
+          cluster, so the alternative is to pair it with a Data Foundation
+          build whose client parses AES256KRB5. Check the vendor support matrix
+          for this pairing before choosing.
         success_msg: >-
           The exported cephx keys use the AES key type this Data Foundation
           build can read.

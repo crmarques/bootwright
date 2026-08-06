@@ -62,40 +62,51 @@ byte for byte. Since 2026-08-05 the exporter playbook refuses the export when
 any entry's `data.userKey` does not start with `AQ`, naming the offending
 entries, rather than attaching keys that cannot work.
 
-**There is no Bootwright-side repair, and no cheap Ceph-side one.** All of the
-following is verified on ceph-prd-01 (`20.2.1-324.el9cp`), 2026-08-05:
+**The mon-map cipher policy, verified on ceph-prd-01 (`20.2.1-324.el9cp`),
+2026-08-05.** `ceph mon dump` carries three fields, and `ceph -h` shows exactly
+one command that writes them — `ceph mon set <auth_service_cipher |
+auth_allowed_ciphers | auth_preferred_cipher> <value>`:
 
-- `ceph auth get-or-create` and `get-or-create-key` do take a per-entity
-  `--key_type <value>` — note the **underscore**, not `--key-type`.
-- `aes` is the right value, and the monitors reject it:
-  `Error EINVAL: creating key with insecure key type ("aes") not allowed`. A
-  build that defaults to AES256KRB5 also forbids minting the legacy type, so
-  re-minting the five entities is not available.
-- The allowed-cipher policy is held in the **mon map**, not in
-  `ceph config`. The only related config option,
-  `mon_auth_emergency_allowed_ciphers`, is `(str, advanced)`, mon-only,
-  `Can update at runtime: false`, and `ceph config set` refuses it —
-  "is special and cannot be stored by the mon". It is a startup-only escape
-  hatch for a cluster that has locked itself out, not a supported way to
-  configure a fleet. `auth_preferred_cipher` / `auth_allowed_ciphers` /
-  `auth_service_cipher`, which circulate in downstream rook source, do **not**
-  exist on this build; rook sets its own with `ceph mon set`, which
-  `spec.ceph.config` (`ceph config set`) cannot reach anyway.
+```
+"auth_service_cipher":   { "name": "aes256k", "value": 2 }
+"auth_allowed_ciphers": [ { "name": "aes256k", "value": 2 } ]
+"auth_preferred_cipher": { "name": "aes256k", "value": 2 }
+```
 
-So the real remedies are both outside Bootwright: relax the cluster's
-allowed-cipher policy — a cephx security downgrade affecting every client of
-that cluster — or pair the cluster with a Data Foundation build whose client
-parses AES256KRB5. Check the vendor support matrix before either: an
-ODF/FDF 4.21 consumer against an IBM Storage Ceph 9.x provider may simply be
-outside it, in which case the answer is a version realignment.
+`auth_allowed_ciphers` holding only `aes256k` is why
+`ceph auth get-or-create ... --key_type aes` answers
+`Error EINVAL: creating key with insecure key type ("aes") not allowed` — the
+flag exists (note the **underscore**) and `aes` is the right value; it is
+policy, not vocabulary, that refuses. These are **mon map** fields:
+`ceph config set` cannot write them, and the only related config option,
+`mon_auth_emergency_allowed_ciphers`, is mon-only, `Can update at runtime:
+false`, and rejected by the config store — "is special and cannot be stored by
+the mon". It is a startup-only lockout escape hatch, not fleet configuration.
 
-Other traps, if a repair is ever attempted:
+`spec.ceph.security.cephx.keyType` declares this (see
+`docs/advanced/ceph-topologies.md`). Bootwright renders `auth_allowed_ciphers`
+then `auth_preferred_cipher`, in that order — a cipher cannot be preferred
+before it is allowed — and **never** `auth_service_cipher`, because rotating the
+monitors' own service cipher invalidates every client's service key. `aes`
+widens the allowed set rather than replacing it, so keys in use keep working.
+
+Declaring `aes` is a cluster-wide cephx downgrade, so the alternative remains
+worth taking first: pair the cluster with a Data Foundation build whose client
+parses AES256KRB5. Check the vendor support matrix — an ODF/FDF 4.21 consumer
+against an IBM Storage Ceph 9.x provider may be outside it, making a version
+realignment the real answer.
+
+Other traps:
 
 - `ceph auth rotate` re-mints with the build default. So does a bare
-  `get-or-create` after `auth rm` — the type only changes with `--key_type`.
+  `get-or-create` after `auth rm` — the type only changes with `--key_type`, or
+  once `auth_preferred_cipher` has been moved.
 - The exporter calls `get-or-create` and adopts an existing entity verbatim
-  (`check_user_exist`), so re-running the export changes nothing: a bad key is
-  never re-minted away, and a repaired one would survive.
+  (`check_user_exist`), so re-running the export changes nothing on its own: a
+  bad key is never re-minted away. This is why declaring a key type also makes
+  the export step delete the mistyped `client.healthchecker` / `client.csi-*`
+  entities first — a whitelist, so `client.admin`, mon, mgr and OSD keys are
+  never in scope even though they carry the same `Ag` prefix.
 - Never flip the type byte on an existing 44-byte blob: `CryptoAES` validates
   only `length >= 16`, so a 32-byte secret relabelled type 1 loads silently and
   uses the first 16 bytes — a silently wrong credential.

@@ -257,6 +257,11 @@ func (e *addonStepExecutor) resolveRefObject(refKind, name string) map[string]an
 			return nil
 		}
 		object := objectToMap(export)
+		if cluster, ok := stateview.ClusterByName(e.state, export.Spec.StorageClusterRef.Name); ok && object != nil {
+			if keyType := v1alpha1.StorageClusterCephxKeyType(cluster); keyType != "" {
+				object["cephxKeyType"] = keyType
+			}
+		}
 		if df := export.Spec.DataFoundation; df != nil && df.ObjectGatewayRef.Name != "" {
 			for _, gw := range e.state.StorageObjectGateways {
 				if gw.Metadata.Name == df.ObjectGatewayRef.Name {

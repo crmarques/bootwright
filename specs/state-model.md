@@ -1481,6 +1481,20 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   (rejected for `oss`) and gates the cluster on FIPS-mode Ceph hosts: every host
   that installs a managed OS must reference a `MachineInstallProfile` whose
   `customizations.security.fips.enabled` is also `true`.
+- `spec.ceph.security.cephx.keyType` declares the cipher new cephx keys are
+  minted with: `aes` or `aes256k`. Unset, Bootwright emits no cipher operations
+  and the build's own mon-map policy stands; the block is a pointer so an absent
+  one never moves a converge hash. Declaring a type renders two ordered
+  `ceph mon set` operations — `auth_allowed_ciphers` first, then
+  `auth_preferred_cipher`, because a cipher cannot be preferred before it is
+  allowed. `aes` widens the allowed set to `aes,aes256k` so keys already in use
+  keep working; `aes256k` restores the vendor default and MUST be understood to
+  break clients still holding an `aes` key. `auth_service_cipher` is never
+  emitted: rotating the monitors' own service cipher invalidates every client's
+  service key. Declaring `aes` is a cluster-wide cephx downgrade, not a
+  per-consumer one — the field exists because a consumer whose bundled Ceph
+  client predates `aes256k` cannot parse such a key at all, failing at keyring
+  load rather than at authentication.
 - `spec.ceph.services[]` is the cephadm service-spec passthrough for service
   types Bootwright does not model first-class (`snmp-gateway`, `oauth2-proxy`, ...):
   `serviceType`, `serviceID`, `placement`, and `spec` render field for field

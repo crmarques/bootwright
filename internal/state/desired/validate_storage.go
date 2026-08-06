@@ -3,6 +3,7 @@ package desiredstate
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -94,6 +95,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephMonPublicNetwork(prefix, cluster, machines)...)
 	errs = append(errs, validateStorageCephUnusedPublicNetwork(prefix, cluster, machines, state)...)
 	errs = append(errs, validateStorageCephClusterNetwork(prefix, cluster, machines)...)
+	errs = append(errs, validateStorageCephCephx(prefix+".security.cephx", ceph.Security.Cephx)...)
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster, state)...)
@@ -304,6 +306,19 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 		errs = append(errs, validateStorageCephNodeOSD(owner, node, fleetCovered[node.Name])...)
 	}
 	return errs
+}
+
+func validateStorageCephCephx(prefix string, cephx *v1alpha1.StorageCephCephx) []string {
+	if cephx == nil {
+		return nil
+	}
+	if cephx.KeyType == "" {
+		return []string{prefix + ".keyType is required when the cephx block is present"}
+	}
+	if !slices.Contains(v1alpha1.StorageCephCephxKeyTypes(), cephx.KeyType) {
+		return []string{fmt.Sprintf("%s.keyType %q must be one of %v", prefix, cephx.KeyType, v1alpha1.StorageCephCephxKeyTypes())}
+	}
+	return nil
 }
 
 func validateStorageCephConfig(prefix string, config map[string]map[string]string) []string {

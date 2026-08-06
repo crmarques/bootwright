@@ -287,6 +287,9 @@ const (
 	StorageCephIBMPackageSourceVendor       = "vendor"
 	StorageCephIBMPackageSourceSubscription = "subscription"
 
+	StorageCephCephxKeyTypeAES     = "aes"
+	StorageCephCephxKeyTypeAES256K = "aes256k"
+
 	StorageCephRoleMON          = "mon"
 	StorageCephRoleMGR          = "mgr"
 	StorageCephRoleOSD          = "osd"
