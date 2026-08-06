@@ -460,6 +460,7 @@
     argv: "{{ bootwright_kubevirt_source_upload_argv }}"
   register: bootwright_kubevirt_iso_source_upload
   changed_when: bootwright_kubevirt_iso_source_upload.rc == 0
+  failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   environment: >-
     {{
@@ -471,6 +472,25 @@
   when:
     - bootwright_kubevirt_iso_source_actor | default(false) | bool
     - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
+- name: Report a failed shared KubeVirt agent ISO source upload
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: uploading shared
+      agent ISO DataVolume {{ bootwright_kubevirt_iso_source_dv_name }} into namespace
+      {{ bootwright_kubevirt_namespace }} failed
+      (rc {{ bootwright_kubevirt_iso_source_upload.rc | default('<unknown>') }}):
+      {{
+        ((bootwright_kubevirt_iso_source_upload.stderr | default('') | trim)
+         | default((bootwright_kubevirt_iso_source_upload.stdout | default('') | trim), true)
+         | default('virtctl reported no output', true))
+        | truncate(800, true)
+      }};
+      every machine in this cluster falls back to a direct virtctl image-upload.
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+    - (bootwright_kubevirt_iso_source_upload.rc | default(1)) != 0
 
 - name: Label KubeVirt agent ISO source DataVolume as Bootwright-managed
   ansible.builtin.command:
@@ -514,8 +534,10 @@
   changed_when: false
   failed_when: false
   until: >-
-    (bootwright_kubevirt_iso_source_wait.rc | default(1)) == 0
-    and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim) == bootwright_kubevirt_iso_source_signature
+    ((bootwright_kubevirt_iso_source_wait.rc | default(1)) == 0
+     and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim) == bootwright_kubevirt_iso_source_signature)
+    or ((bootwright_kubevirt_iso_source_wait.attempts | default(1) | int)
+        >= (bootwright_kubevirt_iso_source_wait_retries | int))
   retries: "{{ bootwright_kubevirt_iso_source_wait_retries }}"
   delay: "{{ bootwright_kubevirt_iso_source_wait_delay }}"
   when:
@@ -672,6 +694,8 @@
   until: >-
     (bootwright_kubevirt_iso_clone_phase.rc | default(1)) != 0
     or (bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim) in ['Succeeded', 'Failed']
+    or ((bootwright_kubevirt_iso_clone_phase.attempts | default(1) | int)
+        >= (bootwright_kubevirt_iso_clone_retries | int))
   retries: "{{ bootwright_kubevirt_iso_clone_retries }}"
   delay: "{{ bootwright_kubevirt_iso_clone_delay }}"
   when: bootwright_kubevirt_iso_source_ready | bool
@@ -750,6 +774,7 @@
     argv: "{{ bootwright_kubevirt_upload_argv }}"
   register: bootwright_kubevirt_iso_upload
   changed_when: bootwright_kubevirt_iso_upload.rc == 0
+  failed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   environment: >-
     {{
@@ -758,6 +783,30 @@
       if (bootwright_kubevirt_host_cluster_ref | length) > 0
       else (bootwright_proxy_env | default({}))
     }}
+  when: not (bootwright_kubevirt_iso_cloned | bool)
+
+- name: Require a successful KubeVirt agent ISO upload
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_iso_upload.rc | default(1) | int) == 0
+    fail_msg: >-
+      uploading the agent ISO for machine
+      {{ bootwright_component.name | default(inventory_hostname) }} of cluster
+      {{ bootwright_current_cluster.name | default('<unknown>') }} failed: virtctl
+      image-upload of DataVolume {{ bootwright_kubevirt_iso_dv_name }} into namespace
+      {{ bootwright_kubevirt_namespace }} exited
+      {{ bootwright_kubevirt_iso_upload.rc | default('<unknown>') }} and reported:
+      {{
+        ((bootwright_kubevirt_iso_upload.stderr | default('') | trim)
+         | default((bootwright_kubevirt_iso_upload.stdout | default('') | trim), true)
+         | default('no output', true))
+        | truncate(800, true)
+      }}.
+      The machine is stopped and its previous agent ISO DataVolume is already gone, so
+      it has no boot media until this succeeds: fix the reported cause and re-run
+      `bootwright apply`. Nothing needs cleaning up by hand — the boot sequence
+      recreates the media from scratch.
+    quiet: true
   when: not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Label KubeVirt agent ISO DataVolume as Bootwright-managed
