@@ -64,7 +64,36 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 	if err != nil {
 		return nil, err
 	}
-	return destroyChain(state, limit, extraVars, steps)
+	return destroyChain(state, limit, extraVars, dropOutOfScopeSharedServiceSteps(state, extraVars, steps))
+}
+
+func dropOutOfScopeSharedServiceSteps(state v1alpha1.State, extraVars []string, steps []destroyStep) []destroyStep {
+	if !destroyClusterScoped(extraVars) {
+		return steps
+	}
+	members := render.HostGroupMembers(state)
+	drop := map[string]bool{
+		destroyInfraComponentsTaskID:  len(members[render.GroupInfraComponentHosts]) == 0,
+		destroyProviderServicesTaskID: len(members[render.GroupProviderHosts]) == 0,
+	}
+	out := make([]destroyStep, 0, len(steps))
+	for _, step := range steps {
+		if drop[step.id] {
+			continue
+		}
+		out = append(out, step)
+	}
+	return out
+}
+
+func destroyClusterScoped(extraVars []string) bool {
+	prefix := DestroyClusterScopeExtraVar + "="
+	for _, pair := range extraVars {
+		if strings.HasPrefix(pair, prefix) && strings.TrimSpace(strings.TrimPrefix(pair, prefix)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 const (

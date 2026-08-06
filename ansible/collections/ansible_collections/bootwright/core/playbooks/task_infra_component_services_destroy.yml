@@ -32,6 +32,12 @@
         | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
         | list
       }}
+    bootwright_infra_component_destroy_scope_names: >-
+      {{
+        bootwright_infra_component_destroy_scope_records.split(',')
+        if bootwright_infra_component_destroy_scope_records is defined
+        else []
+      }}
     bootwright_host_infra_component_record_names: >-
       {{
         bootwright_host_infra_component_services
@@ -61,10 +67,15 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"
-      when: >-
-        bootwright_infra_component_reclaim_records is not defined
-        or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
-           in bootwright_infra_component_reclaim_records.split(',')
+      when:
+        - >-
+          bootwright_infra_component_reclaim_records is not defined
+          or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+             in bootwright_infra_component_reclaim_records.split(',')
+        - >-
+          bootwright_infra_component_destroy_scope_records is not defined
+          or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+             in bootwright_infra_component_destroy_scope_names
 
     - name: Destroy recorded infra component resources
       ansible.builtin.include_role:
@@ -78,4 +89,5 @@
         - bootwright_ownership_record.kind == 'infra-component'
         - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
         - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
         - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names

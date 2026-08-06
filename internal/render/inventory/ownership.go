@@ -26,7 +26,7 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 		if record.Host == "" {
 			continue
 		}
-		out.Hosts[record.Host] = ownershipHostEntry(record)
+		out.Hosts[record.Host] = mergeOwnershipHostEntry(out.Hosts[record.Host], record)
 		group, known := ownership.InventoryGroupForKind(record.Kind)
 		if !known {
 			group = ownership.GroupInfra
@@ -43,6 +43,19 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 		}
 	}
 	return out
+}
+
+func mergeOwnershipHostEntry(current map[string]any, record ownership.ResourceRecord) map[string]any {
+	entry := ownershipHostEntry(record)
+	if current == nil {
+		return entry
+	}
+	for key, value := range entry {
+		if _, exists := current[key]; !exists {
+			current[key] = value
+		}
+	}
+	return current
 }
 
 func ownershipHostEntry(record ownership.ResourceRecord) map[string]any {

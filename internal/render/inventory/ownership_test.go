@@ -33,3 +33,25 @@ func TestInventoryWithOwnershipRecordsAddsRecordedHost(t *testing.T) {
 		t.Fatalf("%s count = %d, want 1", GroupInfraHosts, got)
 	}
 }
+
+func TestInventoryWithOwnershipRecordsMergesHostFactsAcrossRecords(t *testing.T) {
+	records := []ownership.ResourceRecord{{
+		Kind: "infra-component",
+		Name: "InfraComponent-artifact-server",
+		Host: "bastion",
+		HostFacts: map[string]string{
+			"ansible_connection": "local",
+		},
+	}, {
+		Kind: "infra-component",
+		Name: "InfraComponent-registry",
+		Host: "bastion",
+	}}
+
+	inv := InventoryWithOwnershipRecordsAndPathOptions(v1alpha1.State{}, PathOptions{}, records)
+	host := inv["all"].(map[string]any)["hosts"].(map[string]any)["bastion"].(map[string]any)
+
+	if got := host["ansible_connection"]; got != "local" {
+		t.Fatalf("a record without host facts must not strip the connection facts of another record for the same host: %v", host)
+	}
+}

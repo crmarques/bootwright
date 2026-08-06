@@ -25,6 +25,8 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 			plan.ExtraVarPairs = append(plan.ExtraVarPairs, InfraDestroyContextSweepExtraVar+"=true")
 		} else {
 			plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroyClusterScopeExtraVar+"="+strings.Join(resolvedClusterRoots, ","))
+			plan.ExtraVarPairs = append(plan.ExtraVarPairs, workflow.InfraComponentDestroyScopeRecordsExtraVar+"="+
+				strings.Join(workflow.InfraComponentDestroyScopeRecords(plan.State, resolvedClusterRoots), ","))
 		}
 	}
 	if plan.StorageWorkNames != nil {

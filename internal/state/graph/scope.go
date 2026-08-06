@@ -46,6 +46,7 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 	}
 	addSelectedServiceMachines(selectedMachines, state, selectedOCP)
 	state = filterStorageToClusters(state, selectedOCP, selectedMachines)
+	addSelectedServiceMachines(selectedMachines, state, retainedStorageClusterNames(state))
 	state.ContainerClusters = filteredOCP
 	state = filterMachinesAndProviders(state, selectedMachines)
 	state = filterAddonsToClusters(state, selectedOCP)
@@ -69,9 +70,18 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 		}
 	}
 	state.ContainerClusters = containerClusters
+	addSelectedServiceMachines(selectedMachines, state, selectedContainerClusters)
 	state = filterMachinesAndProviders(state, selectedMachines)
 	state = filterAddonsToClusters(state, selectedContainerClusters)
 	return state
+}
+
+func retainedStorageClusterNames(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, cluster := range state.StorageClusters {
+		out[cluster.Metadata.Name] = true
+	}
+	return out
 }
 
 func filterStateToStorageClustersForApply(state v1alpha1.State, names []string) v1alpha1.State {

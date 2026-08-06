@@ -265,6 +265,10 @@ means the run needs none.
   and unscoped `destroy --stage infra`. With `--clusters`, full-lifecycle or
   infra teardown deletes only positively owned machines of the selected roots
   and runs no context-wide cleanup.
+- **Shared-service scope.** With `--clusters`, an infra-component service and its
+  ownership record come down only when every cluster consuming it is inside the
+  selection. A service the selection does not consume — one that belongs to
+  clusters left standing — is left running, as is its record.
 
 !!! warning "Scoped infra destroy refuses shared-service conflicts"
     A scoped full-lifecycle destroy or `destroy --stage infra --clusters …`
