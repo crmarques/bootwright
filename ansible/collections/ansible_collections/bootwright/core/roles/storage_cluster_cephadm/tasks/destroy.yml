@@ -8,11 +8,17 @@
 - name: Guard and remove managed Ceph cluster
   ansible.builtin.import_tasks: destroy_steps/cluster_gate.yml
 
-- name: Wipe Ceph devices and remove local state
+- name: Wipe declared Ceph devices
   ansible.builtin.import_tasks: destroy_steps/wipe_and_cleanup.yml
 
 - name: Reclaim Ceph-signed disks that no declared path covers
   ansible.builtin.import_tasks: destroy_steps/filter_device_reclaim.yml
+
+- name: Prove no Ceph daemon or device signature outlived the teardown
+  ansible.builtin.import_tasks: destroy_steps/settle_gate.yml
+
+- name: Remove local Ceph state and release the storage node
+  ansible.builtin.import_tasks: destroy_steps/release_node.yml
 
 - name: Confirm the storage node completed its teardown
   ansible.builtin.command:

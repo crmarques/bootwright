@@ -307,7 +307,7 @@
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
-    - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+    - bootwright_ceph_destroy_fsid | default('') | length > 0
 
 - name: Refuse to remove a cluster whose orchestrator can still redeploy it
   ansible.builtin.assert:
@@ -334,7 +334,32 @@
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_destroy_fsid | default('') | length > 0
     - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+
+- name: Report an orchestrator this teardown could not disable on an unanswering cluster
+  ansible.builtin.debug:
+    msg: >-
+      Could not disable the cephadm manager module of
+      {{ bootwright_selected_storage_cluster.name }}
+      (fsid {{ bootwright_ceph_destroy_fsid | default('<unresolved>') }}) on
+      {{ inventory_hostname }}: the disable exited
+      {{ bootwright_ceph_destroy_orch_disable.rc | default('without running') }}
+      ({{ bootwright_ceph_destroy_orch_disable.stderr | default('no diagnostic was recorded') | trim }}),
+      and `ceph fsid` did not answer on this seed either. Continuing: a cluster that answers
+      neither probe is very likely already down, and refusing here would strand every teardown
+      of a half-removed cluster. It is not proof that no manager is running — the seed's own
+      mons may be gone while a manager survives on another host, and `cephadm shell` also fails
+      when it cannot pull its image. The teardown therefore proves the outcome instead of the
+      precondition: the settle gate re-reads every wiped device and refuses any Ceph daemon
+      still running once every host has finished, before this run releases any ownership
+      evidence.
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_destroy_fsid | default('') | length > 0
+    - bootwright_ceph_fsid.stdout | default('') | trim | length == 0
+    - (bootwright_ceph_destroy_orch_disable.rc | default(0) | int) != 0
 
 - name: Resolve the cephadm command for the seed host cluster removal
   ansible.builtin.include_tasks: cephadm_command.yml

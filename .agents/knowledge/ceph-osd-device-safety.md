@@ -321,3 +321,54 @@ returns results with no `rc`. Placement is load-bearing: the refusal sits BEFORE
 so a failed verification keeps the evidence that lets a re-run wipe the devices
 as Bootwright's own. No `--authorize` token relaxes it: it reports what the disk
 holds now, not who owned it.
+
+**Constraint (the per-host wipe verification is not the release proof — the
+settle gate is):** the two constraints above each closed one way a green teardown
+could leave the seed signed, and the shape returned anyway. Both share a
+structural weakness: they verify a *precondition* (the module answered a disable)
+or verify the disk *at the moment that host finished*, while other hosts are
+still removing their cluster. Three paths reopen the race, and none of them
+prints anything — `ansible.cfg` sets `display_skipped_hosts = False`, so a task
+whose `when` fails leaves no line at all:
+
+1. **The disable was gated on the probe that fails first.** Both the disable and
+   its fail-closed assert keyed on `bootwright_ceph_fsid.stdout` being non-empty.
+   `Check Ceph fsid on seed host` is `timeout 60 cephadm shell -- ceph fsid` with
+   `failed_when: false`, and it routinely returns nothing while the cluster is
+   very much alive — pulling its container image, or retrying mons that are slow
+   rather than dead. Ownership still resolves (the decision accepts an empty live
+   fsid), `bootwright_ceph_destroy_fsid` falls back to the `ceph.conf` fsid, and
+   every host runs `rm-cluster --zap-osds` with the module still enabled. The
+   disable is now gated on `bootwright_ceph_destroy_fsid` — the same condition
+   that gates `rm-cluster`, so it covers every removal — while the fail-closed
+   assert keeps the live-answer gate so a genuinely dead cluster still tears down;
+   a disable that failed on an unanswering cluster is reported, not silent.
+2. **A whole cluster removal can be skipped.** `rm-cluster` on every host is
+   gated on the SEED resolving an fsid, and per host on that host resolving a
+   `cephadm` command. A seed carrying neither `/etc/ceph/ceph.conf` nor a
+   `/var/lib/ceph/<fsid>` dir resolves no fsid, so NO host removes anything while
+   peers may still run the full cluster; and a host whose `/var/lib/ceph/<fsid>`
+   a previous partial run already deleted resolves no cephadm and is reported as
+   "already done" while its units keep running.
+3. **Ordering between the two wipe paths.** `wipe_and_cleanup.yml` removed the
+   OSD marker and the ownership record before `filter_device_reclaim.yml` had
+   wiped an `osdReclaimAll` host's disks at all.
+
+The fix is to stop proving preconditions per host and prove the outcome once, for
+the whole play. `destroy.yml` is now
+`… → wipe_and_cleanup → filter_device_reclaim → settle_gate → release_node`:
+every ownership-releasing step moved out of `wipe_and_cleanup.yml` into
+`release_node.yml`, and `settle_gate.yml` sits between them. Because the play is
+`linear` + `any_errors_fatal`, a task boundary is a cluster-wide barrier: when
+the settle gate runs, every host has finished both wipes, and a refusal on any
+host stops all of them before any host releases anything. The gate asserts two
+things per host: no Ceph daemon outlived the teardown
+(`systemctl list-units 'ceph-*@*.service'`, fsids parsed from the unit names,
+tolerating only an fsid this host still holds `/var/lib/ceph` state for and this
+teardown does not own — which is exactly the co-resident cluster
+`release_node.yml` preserves), and every device either wipe path touched still
+reads clean (`wipefs --no-act` over `bootwright_ceph_present_devices` +
+`bootwright_ceph_filter_wiped_disks`, with the probe-completeness assert its
+siblings carry). Whatever re-signs a disk — a manager the disable missed, a host
+whose removal was skipped, a daemon whose state is gone while its unit runs — is
+named here instead of being discovered by the next apply.

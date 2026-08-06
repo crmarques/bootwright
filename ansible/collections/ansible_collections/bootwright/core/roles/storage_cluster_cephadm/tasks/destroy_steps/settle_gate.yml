@@ -1,0 +1,159 @@
+---
+- name: Resolve every device this teardown wiped on the storage node
+  ansible.builtin.set_fact:
+    bootwright_ceph_settle_devices: >-
+      {{ ((bootwright_ceph_present_devices | default([]))
+          + (bootwright_ceph_filter_wiped_disks | default([]))) | unique | list }}
+  changed_when: false
+
+- name: List the Ceph daemons still running on the storage node after every wipe
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      systemctl list-units --no-legend --no-pager --plain --state=active,activating
+      'ceph-*@*.service' | awk '{print $1}'
+    executable: /bin/bash
+  register: bootwright_ceph_settle_units
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to release a storage node whose surviving-daemon probe did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_settle_units.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the surviving-daemon probe exited
+      {{ bootwright_ceph_settle_units.rc | default('without running') }}
+      ({{ bootwright_ceph_settle_units.stderr | default('no diagnostic was recorded') | trim }}).
+      That probe is what proves no Ceph daemon outlived this teardown, and a daemon that
+      outlives it can write the OSD devices this run reported clean at any moment — during
+      the run or after it. A probe that did not run proves nothing, so this teardown keeps
+      the node's ownership evidence instead of releasing it. Failing closed.
+
+- name: Resolve the Ceph clusters whose daemons outlived this teardown
+  ansible.builtin.set_fact:
+    bootwright_ceph_settle_running_fsids: >-
+      {{ bootwright_ceph_settle_units.stdout_lines | default([]) | map('trim')
+         | reject('equalto', '')
+         | map('regex_search',
+               '^ceph-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})@',
+               '\1')
+         | reject('none') | flatten | map('trim') | reject('equalto', '') | unique | list }}
+  changed_when: false
+
+- name: Scan the storage node for the Ceph clusters this teardown preserves
+  ansible.builtin.find:
+    paths: /var/lib/ceph
+    file_type: directory
+  register: bootwright_ceph_settle_state_dirs
+  changed_when: false
+
+- name: Resolve the Ceph cluster this teardown owns on the storage node
+  ansible.builtin.set_fact:
+    bootwright_ceph_settle_owned_fsid: >-
+      {{ bootwright_ceph_destroy_fsid | default('') | trim
+         if inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+         else hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid
+              | default('') | trim }}
+  changed_when: false
+
+- name: Resolve the co-resident Ceph clusters this teardown preserves
+  ansible.builtin.set_fact:
+    bootwright_ceph_settle_preserved_fsids: >-
+      {{ bootwright_ceph_settle_state_dirs.files | default([])
+         | map(attribute='path') | map('basename')
+         | select('match',
+                  '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+         | reject('equalto', bootwright_ceph_settle_owned_fsid | default(''))
+         | list }}
+  changed_when: false
+
+- name: Resolve the Ceph daemons this teardown refuses to leave running
+  ansible.builtin.set_fact:
+    bootwright_ceph_settle_stray_fsids: >-
+      {{ bootwright_ceph_settle_running_fsids | default([])
+         | difference(bootwright_ceph_settle_preserved_fsids | default([])) }}
+  changed_when: false
+
+- name: Refuse to release a storage node a Ceph daemon outlived
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_settle_stray_fsids | default([])) | length == 0
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      daemons of Ceph cluster(s)
+      {{ bootwright_ceph_settle_stray_fsids | join(', ') }} are still running on this node
+      after every host of this teardown finished its wipe
+      ({{ bootwright_ceph_settle_units.stdout_lines | default([]) | map('trim')
+          | reject('equalto', '') | join(', ') }}).
+      They belong to no cluster this teardown preserves: either this teardown removed the
+      cluster's /var/lib/ceph state without stopping its units, or a host removal was skipped
+      while its daemons kept running. Either way a manager among them can reconcile the hosts
+      this run purged and run ceph-volume over the OSD devices it just freed — which is how a
+      green teardown ends with fresh volume groups on disks it reported wiped, and why the
+      next apply refuses those disks as foreign data. This node is therefore not released:
+      its ownership marker and this cluster's ownership record are kept, so a re-run still
+      recognizes the devices as Bootwright's and wipes them again rather than refusing them
+      as foreign data. Remove the cluster with
+      `cephadm rm-cluster --force --fsid <fsid>` on every node that still runs it (fsid-scoped:
+      it stops and removes only that cluster's daemons, units and /var/lib/ceph state, and zaps
+      no disk), then re-run destroy. No --authorize token relaxes this.
+
+- name: Re-read every wiped Ceph device once the cluster teardown settled
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item }}"
+  register: bootwright_ceph_settle_verify
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_settle_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to release a storage node whose settled re-read did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_settle_verify.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_settle_devices | default([]) | length)
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the settled signature re-read ran on
+      {{ bootwright_ceph_settle_verify.results | default([]) | selectattr('rc', 'defined') | list | length }}
+      of {{ bootwright_ceph_settle_devices | default([]) | length }} wiped device(s)
+      ({{ bootwright_ceph_settle_verify.msg | default('no diagnostic was recorded') }}).
+      Each wipe path verifies its own devices the moment it finishes, while other hosts are
+      still tearing their cluster down; this re-read is the only one that happens after every
+      host is done, and it is what proves nothing rewrote the disk in between. A re-read that
+      did not run proves nothing. Failing closed instead.
+
+- name: Refuse to release a storage node whose wiped device was signed again
+  ansible.builtin.assert:
+    that:
+      - (item.rc | default(1) | int) == 0
+      - (item.stdout | trim | length == 0)
+    fail_msg: >-
+      Storage device {{ item.item }} of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}
+      {% if (item.rc | default(1) | int) != 0 %}could not be re-read after every host of this
+      teardown finished its wipe (wipefs exited {{ item.rc | default('without running') }}:
+      {{ item.stderr | default('') | trim }}){% else %}carries data signatures
+      ({{ item.stdout | trim }}) again after this teardown wiped it and verified it clean{% endif %}.
+      The per-host wipe verified this device while other hosts were still removing their
+      cluster; a signature that appears between then and now was written by something this
+      teardown left running. This node is therefore not released: its ownership marker and
+      this cluster's ownership record are kept, so a re-run of destroy still recognizes the
+      devices as Bootwright's and wipes them again rather than refusing them as foreign data.
+      Name the writer with `lsblk {{ item.item }}`, `dmsetup ls --tree` and
+      `systemctl list-units 'ceph-*@*.service'` on this node and on its peers before
+      re-running.
+    quiet: true
+  loop: "{{ bootwright_ceph_settle_verify.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"

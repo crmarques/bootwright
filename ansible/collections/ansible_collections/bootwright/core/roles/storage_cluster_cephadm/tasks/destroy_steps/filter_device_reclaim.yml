@@ -46,6 +46,11 @@
           Clean the disks manually (wipefs --all / sgdisk --zap-all) or re-run once the host
           responds to lsblk.
 
+    - name: Record the filter-selected OSD disks this teardown wipes
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_wiped_disks: "{{ bootwright_ceph_filter_destroy_disks }}"
+      changed_when: false
+
     - name: Report filter-selected OSD disks reclaimed by this teardown
       ansible.builtin.debug:
         msg: >-
