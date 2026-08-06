@@ -50,6 +50,10 @@ func StateHasNodeConfigWork(state v1alpha1.State) bool {
 }
 
 func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
+	return len(ocp.Spec.Nodes) > 0
+}
+
+func clusterDeclaresNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	for _, host := range ocp.Spec.Nodes {
 		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {
 			return true
@@ -58,31 +62,59 @@ func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	return false
 }
 
-func nodeConfigManifests(ocp v1alpha1.ContainerCluster) ([]byte, error) {
-	var docs []any
-	hasInfra := false
+func clusterDeclaresInfraNode(ocp v1alpha1.ContainerCluster) bool {
 	for _, host := range ocp.Spec.Nodes {
-		infra := host.Role == v1alpha1.NodeRoleInfra
-		if infra {
-			hasInfra = true
+		if host.Role == v1alpha1.NodeRoleInfra {
+			return true
 		}
-		labels := map[string]string{}
-		for k, v := range host.Labels {
-			labels[k] = v
+	}
+	return false
+}
+
+func nodeConfigDesiredLabels(host v1alpha1.OCPNodeSpec) map[string]string {
+	labels := map[string]string{}
+	for k, v := range host.Labels {
+		labels[k] = v
+	}
+	if host.Role == v1alpha1.NodeRoleInfra {
+		labels[v1alpha1.InfraNodeRoleLabel] = ""
+	}
+	return labels
+}
+
+func nodeConfigDesiredTaints(host v1alpha1.OCPNodeSpec) []v1alpha1.OCPNodeTaint {
+	taints := append([]v1alpha1.OCPNodeTaint(nil), host.Taints...)
+	if host.Role == v1alpha1.NodeRoleInfra {
+		taints = append(taints, v1alpha1.OCPNodeTaint{Key: v1alpha1.InfraNodeRoleLabel, Effect: v1alpha1.TaintEffectNoSchedule})
+	}
+	return dedupeNodeTaints(taints)
+}
+
+func dedupeNodeTaints(taints []v1alpha1.OCPNodeTaint) []v1alpha1.OCPNodeTaint {
+	seen := map[string]bool{}
+	out := make([]v1alpha1.OCPNodeTaint, 0, len(taints))
+	for _, taint := range taints {
+		identity := taint.Key + "\x00" + taint.Effect
+		if seen[identity] {
+			continue
 		}
-		if infra {
-			labels[v1alpha1.InfraNodeRoleLabel] = ""
-		}
-		taints := append([]v1alpha1.OCPNodeTaint(nil), host.Taints...)
-		if infra {
-			taints = append(taints, v1alpha1.OCPNodeTaint{Key: v1alpha1.InfraNodeRoleLabel, Effect: v1alpha1.TaintEffectNoSchedule})
-		}
-		if len(labels) == 0 && len(taints) == 0 {
+		seen[identity] = true
+		out = append(out, taint)
+	}
+	return out
+}
+
+func nodeConfigManifests(ocp v1alpha1.ContainerCluster, live map[string]bool) ([]byte, error) {
+	var docs []any
+	for _, host := range ocp.Spec.Nodes {
+		labels := nodeConfigDesiredLabels(host)
+		taints := nodeConfigDesiredTaints(host)
+		if len(labels) == 0 && len(taints) == 0 && !live[host.Name] {
 			continue
 		}
 		docs = append(docs, nodePatchManifest(host.Name, labels, taints))
 	}
-	if hasInfra {
+	if clusterDeclaresInfraNode(ocp) {
 		docs = append(docs, infraMachineConfigPoolManifest())
 	}
 	if len(docs) == 0 {
@@ -135,7 +167,10 @@ func infraMachineConfigPoolManifest() map[string]any {
 	return map[string]any{
 		"apiVersion": "machineconfiguration.openshift.io/v1",
 		"kind":       "MachineConfigPool",
-		"metadata":   map[string]any{"name": "infra"},
+		"metadata": map[string]any{
+			"name":   "infra",
+			"labels": map[string]any{v1alpha1.ManagedByLabel: v1alpha1.ManagedByLabelValue},
+		},
 		"spec": map[string]any{
 			"machineConfigSelector": map[string]any{
 				"matchExpressions": []any{

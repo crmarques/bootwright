@@ -129,6 +129,9 @@ const (
 
 	InfraNodeRoleLabel = "node-role.kubernetes.io/infra"
 
+	ManagedByLabel      = "bootwright.io/managed-by"
+	ManagedByLabelValue = "bootwright"
+
 	TaintEffectNoSchedule       = "NoSchedule"
 	TaintEffectPreferNoSchedule = "PreferNoSchedule"
 	TaintEffectNoExecute        = "NoExecute"

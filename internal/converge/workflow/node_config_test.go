@@ -42,15 +42,31 @@ func TestClusterNeedsNodeConfig(t *testing.T) {
 		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
 		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
 	)
-	if clusterNeedsNodeConfig(plain) {
-		t.Fatal("a master/worker-only cluster needs no day-2 node config")
+	if !clusterNeedsNodeConfig(plain) {
+		t.Fatal("every cluster with nodes reconciles node config so removals propagate")
+	}
+	if clusterNeedsNodeConfig(ocpWithHosts()) {
+		t.Fatal("a cluster with no nodes has nothing to reconcile")
 	}
 	if !clusterNeedsNodeConfig(ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "i1", Role: v1alpha1.NodeRoleInfra})) {
 		t.Fatal("an infra cluster needs node config")
 	}
+}
+
+func TestClusterDeclaresNodeConfig(t *testing.T) {
+	plain := ocpWithHosts(
+		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
+		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
+	)
+	if clusterDeclaresNodeConfig(plain) {
+		t.Fatal("a master/worker-only cluster declares no day-2 node config")
+	}
+	if !clusterDeclaresNodeConfig(ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "i1", Role: v1alpha1.NodeRoleInfra})) {
+		t.Fatal("an infra cluster declares node config")
+	}
 	labelled := ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "x"}})
-	if !clusterNeedsNodeConfig(labelled) {
-		t.Fatal("a labelled worker needs node config")
+	if !clusterDeclaresNodeConfig(labelled) {
+		t.Fatal("a labelled worker declares node config")
 	}
 }
 
@@ -59,7 +75,7 @@ func TestNodeConfigManifestsInfra(t *testing.T) {
 		v1alpha1.OCPNodeSpec{Name: "master-01", Role: v1alpha1.NodeRoleMaster},
 		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
 	)
-	out, err := nodeConfigManifests(ocp)
+	out, err := nodeConfigManifests(ocp, nil)
 	if err != nil {
 		t.Fatalf("nodeConfigManifests: %v", err)
 	}
@@ -82,7 +98,7 @@ func TestNodeConfigManifestsLabelledWorkerNoMCP(t *testing.T) {
 		Name: "w1", Role: v1alpha1.NodeRoleWorker,
 		Labels: map[string]string{"team": "data"},
 	})
-	out, err := nodeConfigManifests(ocp)
+	out, err := nodeConfigManifests(ocp, nil)
 	if err != nil {
 		t.Fatalf("nodeConfigManifests: %v", err)
 	}
@@ -140,11 +156,139 @@ func TestNodeConfigManifestsEmptyWhenNothingToDo(t *testing.T) {
 		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
 		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
 	)
-	out, err := nodeConfigManifests(ocp)
+	out, err := nodeConfigManifests(ocp, nil)
 	if err != nil {
 		t.Fatalf("nodeConfigManifests: %v", err)
 	}
 	if out != nil {
 		t.Fatalf("expected no manifests, got:\n%s", string(out))
+	}
+}
+
+type fakeMCPRunner struct {
+	getOut  string
+	getErr  error
+	deleted bool
+}
+
+func (f *fakeMCPRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	if args[0] == "delete" {
+		f.deleted = true
+		return nil, nil
+	}
+	return []byte(f.getOut), f.getErr
+}
+
+func TestNodeConfigManifestsDedupesAuthoredInfraTaint(t *testing.T) {
+	ocp := ocpWithHosts(v1alpha1.OCPNodeSpec{
+		Name: "infra-01",
+		Role: v1alpha1.NodeRoleInfra,
+		Taints: []v1alpha1.OCPNodeTaint{
+			{Key: v1alpha1.InfraNodeRoleLabel, Effect: v1alpha1.TaintEffectNoSchedule},
+		},
+	})
+	out, err := nodeConfigManifests(ocp, nil)
+	if err != nil {
+		t.Fatalf("nodeConfigManifests: %v", err)
+	}
+	if got := strings.Count(string(out), "key: "+v1alpha1.InfraNodeRoleLabel); got != 1 {
+		t.Fatalf("expected the authored infra taint to collapse to one entry, got %d:\n%s", got, string(out))
+	}
+}
+
+func TestNodeConfigManifestsDedupesTaintKeyEffectPairAcrossValues(t *testing.T) {
+	ocp := ocpWithHosts(v1alpha1.OCPNodeSpec{
+		Name: "infra-01",
+		Role: v1alpha1.NodeRoleInfra,
+		Taints: []v1alpha1.OCPNodeTaint{
+			{Key: v1alpha1.InfraNodeRoleLabel, Value: "reserved", Effect: v1alpha1.TaintEffectNoSchedule},
+		},
+	})
+	out, err := nodeConfigManifests(ocp, nil)
+	if err != nil {
+		t.Fatalf("nodeConfigManifests: %v", err)
+	}
+	s := string(out)
+	if got := strings.Count(s, "key: "+v1alpha1.InfraNodeRoleLabel); got != 1 {
+		t.Fatalf("kubernetes dedupes taints by key+effect, so one entry must survive, got %d:\n%s", got, s)
+	}
+	if !strings.Contains(s, "value: reserved") {
+		t.Fatalf("the authored taint must win over the synthesized one:\n%s", s)
+	}
+}
+
+func TestNodeConfigManifestsRelinquishesClearedNode(t *testing.T) {
+	ocp := ocpWithHosts(
+		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
+		v1alpha1.OCPNodeSpec{Name: "demoted-01", Role: v1alpha1.NodeRoleWorker},
+	)
+	out, err := nodeConfigManifests(ocp, map[string]bool{"demoted-01": true})
+	if err != nil {
+		t.Fatalf("nodeConfigManifests: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "name: demoted-01") {
+		t.Fatalf("a live node with no declared config needs a bare doc so server-side apply drops what bootwright owned:\n%s", s)
+	}
+	if strings.Contains(s, "demoted-01\n  labels") {
+		t.Fatalf("the relinquish doc must carry no labels:\n%s", s)
+	}
+}
+
+func TestNodeConfigManifestsSkipsAbsentUnconfiguredNode(t *testing.T) {
+	ocp := ocpWithHosts(
+		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
+		v1alpha1.OCPNodeSpec{Name: "never-joined", Role: v1alpha1.NodeRoleWorker},
+	)
+	out, err := nodeConfigManifests(ocp, map[string]bool{})
+	if err != nil {
+		t.Fatalf("nodeConfigManifests: %v", err)
+	}
+	if strings.Contains(string(out), "never-joined") {
+		t.Fatalf("an unregistered node must not be applied, or oc would create a phantom Node:\n%s", string(out))
+	}
+}
+
+func TestInfraMachineConfigPoolCarriesManagedByLabel(t *testing.T) {
+	ocp := ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra})
+	out, err := nodeConfigManifests(ocp, nil)
+	if err != nil {
+		t.Fatalf("nodeConfigManifests: %v", err)
+	}
+	if !strings.Contains(string(out), v1alpha1.ManagedByLabel+": "+v1alpha1.ManagedByLabelValue) {
+		t.Fatalf("the pool must be labelled so pruning can tell it from an operator's own pool:\n%s", string(out))
+	}
+}
+
+func TestPruneInfraMachineConfigPoolDeletesOwnPool(t *testing.T) {
+	runner := &fakeMCPRunner{getOut: "machineconfigpool.machineconfiguration.openshift.io/infra\n"}
+	pruned, err := pruneInfraMachineConfigPool(context.Background(), runner, "kc")
+	if err != nil {
+		t.Fatalf("pruneInfraMachineConfigPool: %v", err)
+	}
+	if !pruned || !runner.deleted {
+		t.Fatal("a bootwright-owned pool must be deleted once the last infra node is gone")
+	}
+}
+
+func TestPruneInfraMachineConfigPoolLeavesForeignPool(t *testing.T) {
+	runner := &fakeMCPRunner{getOut: "\n"}
+	pruned, err := pruneInfraMachineConfigPool(context.Background(), runner, "kc")
+	if err != nil {
+		t.Fatalf("pruneInfraMachineConfigPool: %v", err)
+	}
+	if pruned || runner.deleted {
+		t.Fatal("a pool bootwright does not own must be left alone")
+	}
+}
+
+func TestPruneInfraMachineConfigPoolToleratesMissingKind(t *testing.T) {
+	runner := &fakeMCPRunner{getErr: fmt.Errorf("the server doesn't have a resource type \"machineconfigpool\"")}
+	pruned, err := pruneInfraMachineConfigPool(context.Background(), runner, "kc")
+	if err != nil {
+		t.Fatalf("a cluster without the MachineConfigPool kind must not fail the task: %v", err)
+	}
+	if pruned || runner.deleted {
+		t.Fatal("nothing to prune when the kind is absent")
 	}
 }

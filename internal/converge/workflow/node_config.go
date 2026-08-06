@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -23,29 +24,17 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 	if !ok {
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("node config task %s: cluster %q not in task state", task.Entry.ID, task.Entry.Cluster)}
 	}
-	manifests, err := nodeConfigManifests(ocp)
-	if err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
-	if len(manifests) == 0 {
-		if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {
-			return applyTaskResult{id: task.Entry.ID, err: err}
-		}
-		return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: "no node config to apply"}
-	}
-	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
-	renderDir := filepath.Join(taskRoot, "rendered")
-	if err := os.MkdirAll(renderDir, 0o700); err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
-	manifestPath := filepath.Join(renderDir, "node-config.yaml")
-	if err := os.WriteFile(manifestPath, manifests, 0o600); err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
+	renderDir := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID, "rendered")
 	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
-	err = withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
+	changed := false
+	err := withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
 		checker := extensionoc.CommandRunner{LogPath: logPath}
-		if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, nodeConfigNodeNames(ocp), nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
+		configured := nodeConfigNodeNames(ocp)
+		if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, configured, nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
+			return err
+		}
+		manifests, err := nodeConfigManifests(ocp, liveNodeSet(ctx, checker, kubeconfig, ocp, configured))
+		if err != nil {
 			return err
 		}
 		runner := extensionoc.CommandRunner{
@@ -53,14 +42,39 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 			Stdout:  stdout,
 			Stderr:  stderr,
 		}
-		_, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", "bootwright"}, nil)
-		return err
+		if len(manifests) > 0 {
+			if err := os.MkdirAll(renderDir, 0o700); err != nil {
+				return err
+			}
+			manifestPath := filepath.Join(renderDir, "node-config.yaml")
+			if err := os.WriteFile(manifestPath, manifests, 0o600); err != nil {
+				return err
+			}
+			if _, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", "bootwright", "--force-conflicts"}, nil); err != nil {
+				return err
+			}
+			changed = true
+		}
+		if clusterDeclaresInfraNode(ocp) {
+			return nil
+		}
+		pruned, err := pruneInfraMachineConfigPool(ctx, runner, kubeconfig)
+		if err != nil {
+			return err
+		}
+		if pruned {
+			changed = true
+		}
+		return nil
 	})
 	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
+	if !changed {
+		return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: "no node config to apply"}
 	}
 	return applyTaskResult{id: task.Entry.ID}
 }
@@ -73,6 +87,37 @@ func nodeConfigNodeNames(ocp v1alpha1.ContainerCluster) []string {
 		}
 	}
 	return names
+}
+
+func liveNodeSet(ctx context.Context, runner extensionoc.OCRunner, kubeconfig string, ocp v1alpha1.ContainerCluster, configured []string) map[string]bool {
+	live := map[string]bool{}
+	for _, name := range configured {
+		live[name] = true
+	}
+	for _, host := range ocp.Spec.Nodes {
+		if live[host.Name] {
+			continue
+		}
+		if _, err := runner.Run(ctx, kubeconfig, []string{"get", "node", host.Name, "-o", "name"}, nil); err == nil {
+			live[host.Name] = true
+		}
+	}
+	return live
+}
+
+func pruneInfraMachineConfigPool(ctx context.Context, runner extensionoc.OCRunner, kubeconfig string) (bool, error) {
+	selector := v1alpha1.ManagedByLabel + "=" + v1alpha1.ManagedByLabelValue
+	out, err := runner.Run(ctx, kubeconfig, []string{"get", "machineconfigpool", "-l", selector, "-o", "name"}, nil)
+	if err != nil {
+		return false, nil
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		return false, nil
+	}
+	if _, err := runner.Run(ctx, kubeconfig, []string{"delete", "machineconfigpool", "-l", selector, "--ignore-not-found"}, nil); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func waitNodesRegistered(ctx context.Context, runner extensionoc.OCRunner, kubeconfig, cluster string, names []string, attempts int, interval time.Duration) error {
