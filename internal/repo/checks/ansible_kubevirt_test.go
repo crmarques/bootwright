@@ -162,6 +162,12 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	if !strings.Contains(waitUntil, "bootwright_kubevirt_iso_source_signature") {
 		t.Fatalf("a non-electing machine must wait for the exact shared-media signature, never merely for the object to exist, got until=%v", tasks[waitIdx]["until"])
 	}
+	if !strings.Contains(waitUntil, "bootwright_kubevirt_iso_source_failed_signature") {
+		t.Fatalf("a non-electing machine must stop waiting the moment the shared media fails at this generation instead of polling out its whole budget, got until=%v", tasks[waitIdx]["until"])
+	}
+	if got := fmt.Sprint(elect["bootwright_kubevirt_iso_source_failed_signature"]); !strings.Contains(got, "agent-iso-source") || !strings.Contains(got, "Failed") {
+		t.Fatalf("the failed shared-media signature must pin the same role and generation as the succeeded one, got %v", elect["bootwright_kubevirt_iso_source_failed_signature"])
+	}
 	if tasks[waitIdx]["failed_when"] != false {
 		t.Fatalf("the shared-media wait must degrade to the direct upload instead of failing the boot, got failed_when=%v", tasks[waitIdx]["failed_when"])
 	}
@@ -183,6 +189,15 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	}
 	if got := fmt.Sprint(tasks[clonePhaseIdx]["until"]); !strings.Contains(got, "'Succeeded'") || !strings.Contains(got, "'Failed'") {
 		t.Fatalf("the clone wait must settle on either terminal phase instead of burning the whole timeout, got until=%v", tasks[clonePhaseIdx]["until"])
+	}
+	clonePoll := fmt.Sprint(tasks[clonePhaseIdx]["ansible.builtin.command"])
+	for _, want := range []string{".status.phase", ".status.progress", "Running"} {
+		if !strings.Contains(clonePoll, want) {
+			t.Fatalf("the clone wait must read %q so an exhausted budget can say whether the clone was moving or stuck, got %v", want, tasks[clonePhaseIdx]["ansible.builtin.command"])
+		}
+	}
+	if got := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Report KubeVirt agent ISO clone fallback to direct upload")]["ansible.builtin.debug"]); !strings.Contains(got, "progress") {
+		t.Fatalf("the clone fallback report must carry the observed progress, or the retry budget can only be tuned by guesswork, got %v", got)
 	}
 	for _, idx := range []int{cloneCleanupIdx, uploadIdx} {
 		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_cloned") {
@@ -209,6 +224,56 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	}
 	if !strings.Contains(template, "source:\n    pvc:") {
 		t.Fatal("per-VM agent ISO DataVolume must clone from the shared source PVC")
+	}
+}
+
+func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
+	currentIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO DataVolume currency")
+	current, ok := tasks[currentIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("per-machine media currency must be a set_fact, got %v", tasks[currentIdx])
+	}
+	currentExpr := fmt.Sprint(current["bootwright_kubevirt_boot_iso_current"])
+	for _, want := range []string{"bootwright_kubevirt_boot_iso_owned", "bootwright.io/agent-iso-generation", "'Succeeded'"} {
+		if !strings.Contains(currentExpr, want) {
+			t.Fatalf("per-machine media may only be reused when it is owned, carries this run's generation and imported successfully (missing %q): %v", want, current["bootwright_kubevirt_boot_iso_current"])
+		}
+	}
+
+	guarded := []string{
+		"Stop KubeVirt VirtualMachine before replacing the agent ISO",
+		"Remove previous KubeVirt agent ISO DataVolume",
+		"Clone KubeVirt agent ISO DataVolume from the shared source",
+		"Wait for the KubeVirt agent ISO DataVolume clone",
+		"Remove the failed KubeVirt agent ISO DataVolume clone",
+		"Build virtctl image-upload command",
+		"Upload KubeVirt agent ISO DataVolume",
+		"Require a successful KubeVirt agent ISO upload",
+		"Label KubeVirt agent ISO DataVolume as Bootwright-managed",
+	}
+	for _, name := range guarded {
+		idx := findAnsibleTask(t, tasks, name)
+		if idx < currentIdx {
+			t.Fatalf("%q rebuilds the boot media and must run after the currency verdict (currency=%d task=%d)", name, currentIdx, idx)
+		}
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "not (bootwright_kubevirt_boot_iso_current") {
+			t.Fatalf("%q must be skipped when the machine's DataVolume already holds this run's ISO, or every apply stops the VM and re-materialises media it already has, got when=%v", name, tasks[idx]["when"])
+		}
+	}
+
+	label := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Label KubeVirt agent ISO DataVolume as Bootwright-managed")]["ansible.builtin.command"])
+	if !strings.Contains(label, "bootwright.io/agent-iso-generation=") {
+		t.Fatalf("a directly uploaded per-machine DataVolume must be stamped with the generation, or the next apply cannot tell it is current, got %v", label)
+	}
+	template := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/templates/datavolume-agent-iso.yaml.j2")
+	if !strings.Contains(template, "bootwright.io/agent-iso-generation: {{ bootwright_kubevirt_iso_generation }}") {
+		t.Fatal("a cloned per-machine DataVolume must carry the generation label from birth, or a clone can never be reused")
+	}
+
+	waitIdx := findAnsibleTask(t, tasks, "Wait for the shared KubeVirt agent ISO source DataVolume")
+	if got := fmt.Sprint(tasks[waitIdx]["when"]); !strings.Contains(got, "not (bootwright_kubevirt_boot_iso_current") {
+		t.Fatalf("a machine that keeps its own media never clones and must not wait for the shared source at all, got when=%v", tasks[waitIdx]["when"])
 	}
 }
 

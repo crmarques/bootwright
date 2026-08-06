@@ -82,6 +82,7 @@
         and (bootwright_kubevirt_iso_source_machines | first) == bootwright_component.name
       }}
     bootwright_kubevirt_iso_source_signature: "bootwright|{{ bootwright_kubevirt_context_name }}|{{ bootwright_current_cluster.name }}||agent-iso-source|{{ bootwright_kubevirt_iso_generation }}|Succeeded"
+    bootwright_kubevirt_iso_source_failed_signature: "bootwright|{{ bootwright_kubevirt_context_name }}|{{ bootwright_current_cluster.name }}||agent-iso-source|{{ bootwright_kubevirt_iso_generation }}|Failed"
   changed_when: false
 
 - name: Read KubeVirt boot VirtualMachine identity
@@ -261,6 +262,17 @@
       }}
   changed_when: false
 
+- name: Resolve KubeVirt agent ISO DataVolume currency
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_boot_iso_current: >-
+      {{
+        (bootwright_kubevirt_boot_iso_probe.rc | default(1)) == 0
+        and bootwright_kubevirt_boot_iso_owned | bool
+        and bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {}).get('bootwright.io/agent-iso-generation', '') == bootwright_kubevirt_iso_generation
+        and bootwright_kubevirt_boot_iso_live.get('status', {}).get('phase', '') == 'Succeeded'
+      }}
+  changed_when: false
+
 - name: Enforce KubeVirt agent ISO DataVolume apply mode
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -288,6 +300,15 @@
   register: bootwright_kubevirt_iso_legacy_label
   changed_when: bootwright_kubevirt_iso_legacy_label.rc == 0
   when: bootwright_kubevirt_boot_iso_legacy_owned | bool
+
+- name: Report reusable KubeVirt agent ISO media
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: agent ISO
+      DataVolume {{ bootwright_kubevirt_iso_dv_name }} already holds this run's ISO and
+      reports Succeeded; keeping it instead of stopping the machine to rebuild media it
+      already has.
+  when: bootwright_kubevirt_boot_iso_current | bool
 
 - name: Read managed KubeVirt host cluster ingress CA bundle
   ansible.builtin.command:
@@ -535,7 +556,8 @@
   failed_when: false
   until: >-
     ((bootwright_kubevirt_iso_source_wait.rc | default(1)) == 0
-     and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim) == bootwright_kubevirt_iso_source_signature)
+     and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim)
+         in [bootwright_kubevirt_iso_source_signature, bootwright_kubevirt_iso_source_failed_signature])
     or ((bootwright_kubevirt_iso_source_wait.attempts | default(1) | int)
         >= (bootwright_kubevirt_iso_source_wait_retries | int))
   retries: "{{ bootwright_kubevirt_iso_source_wait_retries }}"
@@ -544,6 +566,7 @@
     - bootwright_kubevirt_iso_source_shared | bool
     - not (bootwright_kubevirt_iso_source_actor | default(false) | bool)
     - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+    - not (bootwright_kubevirt_boot_iso_current | bool)
 
 - name: Resolve KubeVirt agent ISO source DataVolume readiness
   ansible.builtin.set_fact:
@@ -570,6 +593,7 @@
   when:
     - bootwright_kubevirt_iso_source_shared | bool
     - not (bootwright_kubevirt_iso_source_ready | bool)
+    - not (bootwright_kubevirt_boot_iso_current | bool)
 
 - name: Query KubeVirt VirtualMachineInstance before installer boot
   ansible.builtin.command:
@@ -645,6 +669,7 @@
     - bootwright_kubevirt_vm_stop.rc != 0
     - "'not running' not in ((bootwright_kubevirt_vm_stop.stderr | default('')) | lower)"
     - "'not found' not in ((bootwright_kubevirt_vm_stop.stderr | default('')) | lower)"
+  when: not (bootwright_kubevirt_boot_iso_current | bool)
 
 - name: Remove previous KubeVirt agent ISO DataVolume
   ansible.builtin.command:
@@ -660,6 +685,7 @@
       - --ignore-not-found=true
   register: bootwright_kubevirt_iso_delete
   changed_when: "'deleted' in (bootwright_kubevirt_iso_delete.stdout | default(''))"
+  when: not (bootwright_kubevirt_boot_iso_current | bool)
 
 - name: Clone KubeVirt agent ISO DataVolume from the shared source
   ansible.builtin.command:
@@ -673,7 +699,9 @@
     stdin: "{{ lookup('ansible.builtin.template', 'datavolume-agent-iso.yaml.j2') }}"
   register: bootwright_kubevirt_iso_clone_apply
   changed_when: "'unchanged' not in (bootwright_kubevirt_iso_clone_apply.stdout | default(''))"
-  when: bootwright_kubevirt_iso_source_ready | bool
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - bootwright_kubevirt_iso_source_ready | bool
 
 - name: Wait for the KubeVirt agent ISO DataVolume clone
   ansible.builtin.command:
@@ -687,26 +715,34 @@
       - datavolume
       - "{{ bootwright_kubevirt_iso_dv_name }}"
       - -o
-      - 'jsonpath={.status.phase}'
+      - 'jsonpath={.status.phase}|{.status.progress}|{.status.conditions[?(@.type=="Running")].reason}'
   register: bootwright_kubevirt_iso_clone_phase
   changed_when: false
   failed_when: false
   until: >-
     (bootwright_kubevirt_iso_clone_phase.rc | default(1)) != 0
-    or (bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim) in ['Succeeded', 'Failed']
+    or (((bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim).split('|') | first)
+        in ['Succeeded', 'Failed'])
     or ((bootwright_kubevirt_iso_clone_phase.attempts | default(1) | int)
         >= (bootwright_kubevirt_iso_clone_retries | int))
   retries: "{{ bootwright_kubevirt_iso_clone_retries }}"
   delay: "{{ bootwright_kubevirt_iso_clone_delay }}"
-  when: bootwright_kubevirt_iso_source_ready | bool
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - bootwright_kubevirt_iso_source_ready | bool
 
 - name: Resolve KubeVirt agent ISO DataVolume clone outcome
   ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_clone_status: >-
+      {{
+        (((bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('') | trim).split('|')
+         + ['', '', ''])[:3]
+      }}
     bootwright_kubevirt_iso_cloned: >-
       {{
         (bootwright_kubevirt_iso_source_ready | bool)
         and ((bootwright_kubevirt_iso_clone_phase | default({})).rc | default(1)) == 0
-        and ((bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('') | trim) == 'Succeeded'
+        and (((bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('') | trim).split('|') | first) == 'Succeeded'
       }}
   changed_when: false
 
@@ -715,9 +751,15 @@
     msg: >-
       {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: cloning the agent ISO
       from shared DataVolume {{ bootwright_kubevirt_iso_source_dv_name }} did not reach Succeeded
-      (phase {{ (bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('<unavailable>') | trim }});
-      falling back to a direct virtctl image-upload for this machine.
+      after {{ ((bootwright_kubevirt_iso_clone_retries | int) - 1) * (bootwright_kubevirt_iso_clone_delay | int) }}s
+      (phase {{ bootwright_kubevirt_iso_clone_status[0] | default('<unavailable>', true) }},
+      progress {{ bootwright_kubevirt_iso_clone_status[1] | default('<unreported>', true) }},
+      running {{ bootwright_kubevirt_iso_clone_status[2] | default('<unreported>', true) }});
+      falling back to a direct virtctl image-upload for this machine. A clone that sat at the same
+      progress the whole time is queued behind its peers on the shared source or blocked on
+      storage, not slow: raise bootwright_kubevirt_iso_clone_retries only if progress was moving.
   when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
     - bootwright_kubevirt_iso_source_ready | bool
     - not (bootwright_kubevirt_iso_cloned | bool)
 
@@ -736,6 +778,7 @@
   register: bootwright_kubevirt_iso_clone_delete
   changed_when: "'deleted' in (bootwright_kubevirt_iso_clone_delete.stdout | default(''))"
   when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
     - bootwright_kubevirt_iso_source_ready | bool
     - not (bootwright_kubevirt_iso_cloned | bool)
 
@@ -767,7 +810,9 @@
       }}
   changed_when: false
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  when: not (bootwright_kubevirt_iso_cloned | bool)
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Upload KubeVirt agent ISO DataVolume
   ansible.builtin.command:
@@ -783,7 +828,9 @@
       if (bootwright_kubevirt_host_cluster_ref | length) > 0
       else (bootwright_proxy_env | default({}))
     }}
-  when: not (bootwright_kubevirt_iso_cloned | bool)
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Require a successful KubeVirt agent ISO upload
   ansible.builtin.assert:
@@ -807,7 +854,9 @@
       `bootwright apply`. Nothing needs cleaning up by hand — the boot sequence
       recreates the media from scratch.
     quiet: true
-  when: not (bootwright_kubevirt_iso_cloned | bool)
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - not (bootwright_kubevirt_iso_cloned | bool)
 
 - name: Label KubeVirt agent ISO DataVolume as Bootwright-managed
   ansible.builtin.command:
@@ -825,9 +874,11 @@
       - "bootwright.io/cluster={{ bootwright_current_cluster.name }}"
       - "bootwright.io/node={{ bootwright_component.name }}"
       - bootwright.io/role=agent-iso
+      - "bootwright.io/agent-iso-generation={{ bootwright_kubevirt_iso_generation }}"
       - --overwrite
   register: bootwright_kubevirt_iso_label
   changed_when: bootwright_kubevirt_iso_label.rc == 0
+  when: not (bootwright_kubevirt_boot_iso_current | bool)
 
 - name: Start KubeVirt VirtualMachine
   ansible.builtin.command:

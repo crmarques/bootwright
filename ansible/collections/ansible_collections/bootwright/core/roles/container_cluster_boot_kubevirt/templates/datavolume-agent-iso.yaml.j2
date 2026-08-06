@@ -11,6 +11,7 @@ metadata:
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
     bootwright.io/node: {{ bootwright_component.name }}
     bootwright.io/role: agent-iso
+    bootwright.io/agent-iso-generation: {{ bootwright_kubevirt_iso_generation }}
     bootwright.io/managed-by: bootwright
 spec:
   source:
