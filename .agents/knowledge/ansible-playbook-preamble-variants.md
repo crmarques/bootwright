@@ -54,7 +54,15 @@ from the shared preamble in other ways, on purpose:
   media is already published when peers reach their wait, and the polling
   `until`/`wait_for` loops are satisfied on the first attempt instead of
   spinning. Machines run each task concurrently under `Forks`, so wall clock is
-  unchanged for a homogeneous cluster.
+  unchanged for a homogeneous cluster — every machine on one substrate, which is
+  the normal case and every shipped example. A cluster whose machines resolve
+  **different** `bootApplyRole` values is the exception: the templated
+  `include_role` splits the play into one lockstep bucket per boot role and the
+  buckets run in sequence, so its boot phase costs the sum of the substrates'
+  windows rather than the max. That cost is accepted deliberately; see
+  `ansible-linear-lockstep-include-buckets.md`, which also pins the measurement
+  showing `throttle` binds under `free` as well, so retiring `free` activated no
+  previously-dead throttle.
 - `task_machine_infra_prepare.yml`, `task_machine_infra_finalize.yml`,
   `task_provider_services_apply.yml` and `task_infra_component_services_apply.yml`
   use `strategy: linear` because every dispatch of them selects exactly one host,
