@@ -2,9 +2,13 @@ package workflow
 
 import (
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/render"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -17,14 +21,18 @@ func TestMultiDCExampleOrdersChildVMsAfterStorageAndNetworkAddons(t *testing.T) 
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
+	dc1 := assertTaskPresent(t, tasks, "infra.dc1-child-ocp.localhost")
 	for _, machine := range []string{"dc1-child-ocp-infra-master-0", "dc1-child-ocp-infra-worker-2"} {
-		assertTaskHasDeps(t, tasks, "infra.dc1-child-ocp."+machine,
-			"addon.dc1-metal-ocp.openshift-data-foundation",
-			"addon.dc1-metal-ocp.child-network-dc1",
-			"addon.dc1-metal-ocp.openshift-virtualization",
-		)
+		if !slices.Contains(dc1.Entry.Nodes, machine) {
+			t.Fatalf("infra.dc1-child-ocp.localhost nodes = %v, want to provision %s in the same run", dc1.Entry.Nodes, machine)
+		}
 	}
-	assertTaskHasDeps(t, tasks, "infra.dc2-child-ocp.dc2-child-ocp-infra-master-0",
+	assertTaskHasDeps(t, tasks, "infra.dc1-child-ocp.localhost",
+		"addon.dc1-metal-ocp.openshift-data-foundation",
+		"addon.dc1-metal-ocp.child-network-dc1",
+		"addon.dc1-metal-ocp.openshift-virtualization",
+	)
+	assertTaskHasDeps(t, tasks, "infra.dc2-child-ocp.localhost",
 		"addon.dc2-metal-ocp.openshift-data-foundation",
 		"addon.dc2-metal-ocp.child-network-dc2",
 	)
@@ -47,8 +55,10 @@ func TestKubeVirtMachineTasksUsePerVMResourceKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
-	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-worker-0", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-worker-0")
+	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost",
+		"kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0",
+		"kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-worker-0",
+	)
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp",
 		"kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0",
 		"kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-worker-0",
@@ -109,12 +119,12 @@ func TestKubeVirtChildInfraWaitsForReferencedStorageAndNetworkAddons(t *testing.
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskHasDeps(t, tasks, "infra.child-ocp.child-master-0",
+	assertTaskHasDeps(t, tasks, "infra.child-ocp.localhost",
 		"addon.metal-ocp.openshift-data-foundation",
 		"addon.metal-ocp.child-network",
 	)
-	assertTaskDependsTransitively(t, tasks, "infra.child-ocp.child-master-0", "addon.metal-ocp.openshift-data-foundation")
-	assertTaskDependsTransitively(t, tasks, "infra.child-ocp.child-master-0", "addon.metal-ocp.child-network")
+	assertTaskDependsTransitively(t, tasks, "infra.child-ocp.localhost", "addon.metal-ocp.openshift-data-foundation")
+	assertTaskDependsTransitively(t, tasks, "infra.child-ocp.localhost", "addon.metal-ocp.child-network")
 	assertTaskDeps(t, tasks, "addon.metal-ocp.openshift-data-foundation", "wait.metal-ocp")
 	assertTaskDeps(t, tasks, "addon.metal-ocp.child-network", "wait.metal-ocp")
 }
@@ -132,10 +142,10 @@ func TestKubeVirtChildInfraIgnoresUnrelatedAddons(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	infra := assertTaskPresent(t, tasks, "infra.child-ocp.child-master-0")
+	infra := assertTaskPresent(t, tasks, "infra.child-ocp.localhost")
 	for _, dep := range infra.Entry.Dependencies {
 		if dep == "addon.metal-ocp.unrelated" {
-			t.Fatalf("infra.child-ocp.child-master-0 deps = %v, must not wait for an unreferenced add-on", infra.Entry.Dependencies)
+			t.Fatalf("infra.child-ocp.localhost deps = %v, must not wait for an unreferenced add-on", infra.Entry.Dependencies)
 		}
 	}
 }
@@ -160,7 +170,7 @@ func TestKubeVirtChildStorageClassRefResolvesDeclaredStorageClass(t *testing.T) 
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskHasDeps(t, tasks, "infra.child-ocp.child-master-0", "addon.metal-ocp.openshift-data-foundation")
+	assertTaskHasDeps(t, tasks, "infra.child-ocp.localhost", "addon.metal-ocp.openshift-data-foundation")
 }
 
 func TestKubeVirtChildResourceRefsIgnoredWhenAddonsOutOfScope(t *testing.T) {
@@ -170,5 +180,62 @@ func TestKubeVirtChildResourceRefsIgnoredWhenAddonsOutOfScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0")
+	assertTaskDeps(t, tasks, "infra.child-ocp.localhost")
+}
+
+func TestKubeVirtInfraTaskProvisionsEveryMachineInOneRun(t *testing.T) {
+	state := kubeVirtChildPlanningState(true)
+	secondMachine := state.Machines[0]
+	secondMachine.Metadata.Name = "child-worker-0"
+	state.Machines = append(state.Machines, secondMachine)
+	state.ContainerClusters[0].Spec.Nodes = append(state.ContainerClusters[0].Spec.Nodes, v1alpha1.OCPNodeSpec{
+		Name:       "worker-0",
+		MachineRef: v1alpha1.LocalObjectReference{Name: "child-worker-0"},
+	})
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	infraIDs := []string(nil)
+	for _, task := range tasks {
+		if strings.HasPrefix(task.Entry.ID, "infra.child-ocp.") {
+			infraIDs = append(infraIDs, task.Entry.ID)
+		}
+	}
+	if len(infraIDs) != 1 || infraIDs[0] != "infra.child-ocp.localhost" {
+		t.Fatalf("machine infra tasks = %v, want one grouped run so a task banner covers every machine", infraIDs)
+	}
+	task := assertTaskPresent(t, tasks, "infra.child-ocp.localhost")
+	if got, want := task.Forks, 2; got != want {
+		t.Fatalf("forks = %d, want %d so every machine converges concurrently inside the one run", got, want)
+	}
+	wantLimit := render.MachineInfraHostName("child-ocp", "child-master-0") + ":" + render.MachineInfraHostName("child-ocp", "child-worker-0")
+	if task.Limit != wantLimit {
+		t.Fatalf("limit = %q, want the explicit selected machine hosts %q", task.Limit, wantLimit)
+	}
+	if task.HostSlotKey != "" || task.Entry.HostSlotKey != "" {
+		t.Fatalf("host slot key = %q/%q, want empty", task.HostSlotKey, task.Entry.HostSlotKey)
+	}
+	if got, want := task.Entry.Nodes, []string{"child-master-0", "child-worker-0"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("nodes = %v, want %v", got, want)
+	}
+	if task.Entry.Node != "" {
+		t.Fatalf("node = %q, want empty because the task covers more than one machine", task.Entry.Node)
+	}
+}
+
+func TestKubeVirtMachineTasksChargeNoHostSlot(t *testing.T) {
+	state := kubeVirtChildPlanningState(true)
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	task := assertTaskPresent(t, tasks, "infra.child-ocp.localhost")
+	if key, count := taskHostSlot(task); key != "" || count != 0 {
+		t.Fatalf("taskHostSlot = (%q, %d), want (\"\", 0): independent VMs in one namespace must converge concurrently, and a shared slot key would clamp dispatch to ParallelismPerHost", key, count)
+	}
+	if !taskHostSlotAvailable(task, map[string]int{"kubevirt:metal-ocp:bootwright-child-ocp": 99}, 1) {
+		t.Fatal("KubeVirt machine provisioning must not be gated by any host slot budget")
+	}
 }

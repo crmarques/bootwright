@@ -57,6 +57,22 @@ func TestInfraDestroyPlaysHonorSkipUnreachable(t *testing.T) {
 	}
 }
 
+func TestMachineInfraApplyPlayGroupsTaskBannersAcrossMachines(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_apply.yml")
+	if len(plays) != 1 {
+		t.Fatalf("machine infra apply play count = %d, want 1", len(plays))
+	}
+	if got := plays[0]["hosts"]; got != "bootwright_machine_task_hosts" {
+		t.Fatalf("machine infra apply hosts = %v, want the machine pseudo-host group", got)
+	}
+	if got := plays[0]["strategy"]; got != "linear" {
+		t.Fatalf("machine infra apply must match its destroy counterpart so one TASK banner covers every machine in the play, got strategy=%v", got)
+	}
+	if _, ok := plays[0]["any_errors_fatal"]; ok {
+		t.Fatal("one machine failing must not abort its peers' provisions")
+	}
+}
+
 func TestMachineInfraPreparePreparesHostPackages(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_prepare.yml")
 	if len(plays) != 1 {

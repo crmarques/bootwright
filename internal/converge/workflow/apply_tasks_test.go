@@ -1444,15 +1444,15 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
-	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
+	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
+	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
-	assertTaskHasDeps(t, tasks, "boot.child-ocp", "iso.child-ocp", "infra.child-ocp.child-master-0", "infrafinalize.child-ocp.localhost")
+	assertTaskHasDeps(t, tasks, "boot.child-ocp", "iso.child-ocp", "infra.child-ocp.localhost", "infrafinalize.child-ocp.localhost")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 	iso := assertTaskPresent(t, tasks, "iso.child-ocp")
 	for _, dep := range iso.Entry.Dependencies {
-		if dep == "infra.child-ocp.child-master-0" || dep == "infrafinalize.child-ocp.localhost" {
+		if dep == "infra.child-ocp.localhost" || dep == "infrafinalize.child-ocp.localhost" {
 			t.Fatalf("iso.child-ocp deps = %v, must not wait for virtual machine creation", iso.Entry.Dependencies)
 		}
 	}

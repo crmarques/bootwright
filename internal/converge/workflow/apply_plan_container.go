@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
@@ -37,9 +38,19 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 				prepareDepsByCluster[name] = append(prepareDepsByCluster[name], prepareID)
 			}
 		}
+		collapsedByHost := map[string][]string{}
+		collapsedHosts := []string(nil)
 		for _, machineName := range machineNames {
 			host := applyMachineHost(state, machineName)
 			if host == "" {
+				continue
+			}
+			hostSlotKey := applyMachineHostSlotKey(state, machineName)
+			if hostSlotKey == "" {
+				if _, seen := collapsedByHost[host]; !seen {
+					collapsedHosts = append(collapsedHosts, host)
+				}
+				collapsedByHost[host] = append(collapsedByHost[host], machineName)
 				continue
 			}
 			taskID := "infra." + name + "." + machineName
@@ -47,7 +58,6 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 			if prepareID := prepareDepsByHost[host]; prepareID != "" {
 				deps = append(deps, prepareID)
 			}
-			hostSlotKey := applyMachineHostSlotKey(state, machineName)
 			infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
@@ -76,6 +86,57 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 					HostSlotKey:        hostSlotKey,
 					HostSlotCount:      1,
+				},
+			}); err != nil {
+				return nil, nil, err
+			}
+		}
+		sort.Strings(collapsedHosts)
+		for _, host := range collapsedHosts {
+			group := collapsedByHost[host]
+			taskID := "infra." + name + "." + host
+			deps := append([]string(nil), baseDeps...)
+			if prepareID := prepareDepsByHost[host]; prepareID != "" {
+				deps = append(deps, prepareID)
+			}
+			provides := make([]CapabilityRef, 0, len(group))
+			var resourceKeys []string
+			limitHosts := make([]string, 0, len(group))
+			for _, machineName := range group {
+				provides = append(provides, machineInstantiatedCapability(machineName))
+				for _, key := range applyMachineExclusiveResourceKeys(state, name, machineName) {
+					resourceKeys = appendUniqueString(resourceKeys, key)
+				}
+				limitHosts = append(limitHosts, render.MachineInfraHostName(name, machineName))
+			}
+			label := "provision machines " + name
+			if host != "localhost" {
+				label += " on " + host
+			}
+			infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
+			if err := graph.Add(Activity{
+				ID:                   taskID,
+				Requires:             kubeVirtReqsByCluster[name],
+				Provides:             provides,
+				ExplicitDependencies: deps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindClusterInstall,
+						Label:        label,
+						Cluster:      name,
+						ClusterKind:  ApplyClusterKindContainer,
+						Nodes:        append([]string(nil), group...),
+						Host:         host,
+						ResourceKeys: resourceKeys,
+						Status:       TaskStatusPending,
+					},
+					Playbook:           applyClusterInstallPlaybook,
+					Limit:              strings.Join(limitHosts, ":"),
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_names=" + strings.Join(group, ",")},
+					Forks:              len(group),
+					State:              clusterState,
+					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 				},
 			}); err != nil {
 				return nil, nil, err

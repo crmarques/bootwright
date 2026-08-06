@@ -89,14 +89,14 @@ func TestKubeVirtChildMachineTasksStillWaitForFullAddonCompletion(t *testing.T) 
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskHasDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
+	assertTaskHasDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskDeps(t, tasks, "addon.metal-ocp.openshift-virtualization", "wait.metal-ocp")
 
 	byID := map[string]ApplyTask{}
 	for _, task := range tasks {
 		byID[task.Entry.ID] = task
 	}
-	for _, dep := range byID["infra.child-ocp.child-master-0"].Entry.Dependencies {
+	for _, dep := range byID["infra.child-ocp.localhost"].Entry.Dependencies {
 		if dep == "wait-bootstrap.metal-ocp" {
 			t.Fatal("child machine task depends on the parent bootstrap gate; storageClassRef/networkRef objects are only guaranteed after the parent add-on completes")
 		}

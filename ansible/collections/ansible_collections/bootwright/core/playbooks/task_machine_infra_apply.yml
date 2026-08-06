@@ -1,7 +1,7 @@
 ---
 - name: Apply machine infrastructure
   hosts: bootwright_machine_task_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min

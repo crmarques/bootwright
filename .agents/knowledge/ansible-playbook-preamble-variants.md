@@ -5,7 +5,7 @@ Most `playbooks/task_*.yml` plays share one preamble: `strategy: free`,
 `environment: "{{ bootwright_proxy_env | default({}) }}"`, and a
 `machine_proxy tasks_from: facts` pre_task. Ansible cannot factor play
 keywords into an include, so this repetition is structural, not accidental —
-do not try to extract it. Five playbooks deviate on purpose:
+do not try to extract it. These playbooks deviate on purpose:
 
 - `task_bastion_apply_tools.yml` forwards `lookup('env', …)` proxy variables
   and skips the proxy-facts pre_task: bastion setup runs before any rendered
@@ -16,6 +16,20 @@ do not try to extract it. Five playbooks deviate on purpose:
 - `task_managed_machine_os_apply.yml` sets `any_errors_fatal: true` and drops
   `strategy: free`: managed OS installs in one group must abort together
   rather than leave a partially reinstalled group.
+- `task_machine_infra_apply.yml` sets `strategy: linear`: the planner dispatches
+  one process per (cluster, provider host) over the machines' pseudo-hosts with
+  `Forks` equal to the machine count, and only the linear strategy prints one
+  TASK banner per task instead of reprinting it per host. The play carries no
+  `run_once`, `throttle`, `serial` or `any_errors_fatal`, so the flip only adds a
+  barrier; the cost is lockstep — the 10-minute DataVolume wait in
+  `machine_substrate_kubevirt` gates the whole batch at that task rather than per
+  machine. Machines whose substrate charges a host slot (libvirt, vSphere) keep
+  their own single-host task, where free and linear are byte-identical.
+- `task_machine_infra_prepare.yml`, `task_machine_infra_finalize.yml`,
+  `task_provider_services_apply.yml` and `task_infra_component_services_apply.yml`
+  use `strategy: linear` because every dispatch of them selects exactly one host,
+  which makes free and linear byte-identical; linear keeps `free` meaningful as a
+  marker of the one play where it is load-bearing.
 - `task_storage_cluster_apply.yml` uses `strategy: linear` with
   `gather_facts: false` (facts gathered inside the role): the storage role
   coordinates non-seed hosts against seed-host decisions via
