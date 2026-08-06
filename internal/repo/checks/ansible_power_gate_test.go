@@ -82,6 +82,19 @@ func TestKubevirtBootRequiresPoweredOffMachine(t *testing.T) {
 	if !(probe < verdict && verdict < refuse && refuse < stop) {
 		t.Fatalf("kubevirt power gate must refuse before the role stops the VM, got probe=%d verdict=%d refuse=%d stop=%d", probe, verdict, refuse, stop)
 	}
+	for _, mutation := range []string{
+		"Upgrade legacy KubeVirt agent ISO DataVolume ownership labels",
+		"Remove stale KubeVirt agent ISO source DataVolume",
+		"Upload KubeVirt agent ISO source DataVolume",
+	} {
+		if idx := findAnsibleTask(t, tasks, mutation); refuse >= idx {
+			t.Fatalf("kubevirt power gate must refuse before %q, or re-applying a running cluster rebuilds shared media it then refuses to use, got refuse=%d mutation=%d", mutation, refuse, idx)
+		}
+	}
+	wait := findAnsibleTask(t, tasks, "Wait for the shared KubeVirt agent ISO source DataVolume")
+	if until := fmt.Sprint(tasks[wait]["until"]); !strings.Contains(until, "bootwright_kubevirt_iso_generation") {
+		t.Fatalf("the peer wait must give up on a source stuck at another generation, or a refusing elected machine strands its powered-off peers for the full media budget, got until=%q", until)
+	}
 	for _, idx := range []int{probe, verdict, refuse} {
 		if when := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(when, "bootwright_component.osManaged | default(true) | bool") {
 			t.Fatalf("kubevirt power gate task %q when %q must key off osManaged with a managed default", tasks[idx]["name"], when)

@@ -101,3 +101,43 @@ agent ISO through `virtctl image-upload` has no clean declarative CR equivalent
 (evaluated 2026-06-28) — a DataVolume upload source still needs the imperative
 upload-proxy stream. It stays as-is on purpose; do not re-propose replacing it
 with a pure-CR flow.
+
+## The power gate runs before any media mutation, and why the peer wait needs a
+## stale-generation escape
+
+`container_cluster_boot_kubevirt` refuses to boot install media on a machine
+whose VirtualMachineInstance is not provably absent. That refusal sits
+immediately after the owned-VirtualMachine assert, **before** the agent-ISO
+label upgrade, the stale shared-source delete, and the ~1.3 GiB
+`virtctl image-upload`. It used to sit after all of them, so re-applying a
+cluster whose VMs were still running paid a full shared-media rebuild — up to
+`bootwright_kubevirt_boot_iso_timeout` (1800s) — before a single machine
+refused. `internal/repo/checks/ansible_power_gate_test.go` pins the ordering
+against the three mutating task names; the vSphere path has always had the
+equivalent rule.
+
+Moving the gate earlier created one new failure mode that the ordering test
+also pins. In a **mixed** cluster — the elected agent-ISO source machine is
+running, its peers are stopped — the elected machine now refuses before
+refreshing the shared source, so peers poll a source that is present but
+stamped with an older `bootwright.io/agent-iso-generation`. The pre-existing
+escapes did not cover that: the "never appeared" escape is gated on `rc != 0`,
+so a present-but-stale DataVolume fell through to the full
+`bootwright_kubevirt_iso_source_wait_retries` budget — `(1800+60)/5 = 372`
+attempts at 5s, about 31 minutes — before falling back to a direct upload.
+
+The `until` on `Wait for the shared KubeVirt agent ISO source DataVolume`
+therefore carries a fourth clause: give up on the short
+`bootwright_kubevirt_iso_source_appear_retries` budget when the DataVolume is
+present, parses to more than five `|`-separated fields, and field 5 (the
+generation) differs from `bootwright_kubevirt_iso_generation`. The field count
+guard is load-bearing — without it a truncated or empty `stdout` raises an
+index error inside the retry loop.
+
+That clause is safe against a legitimate rebuild because the elected machine
+**deletes** the stale source before re-uploading, so a peer observing a
+rebuild-in-progress sees `rc != 0` (absent), never a present-but-stale
+DataVolume. Present-and-stale is therefore positive evidence that no rebuild is
+coming. Do not "simplify" the clause by dropping either the field-count guard
+or the attempts floor: the floor is what covers the brief race where a peer
+polls before the elected machine has issued its delete.
