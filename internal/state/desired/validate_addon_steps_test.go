@@ -231,3 +231,68 @@ func writeHookFile(t *testing.T, dir, rel, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidateHookRequiresRejectsAnArmlessCheck(t *testing.T) {
+	dir := t.TempDir()
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name:      "h",
+		Requires:  []v1alpha1.ClusterAddonReadinessCheck{{}},
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/s.yaml"}},
+	})
+	errs := validateClusterAddonSteps(v1alpha1.State{}, addon)
+	hookErrsContain(t, errs, "spec.steps[0].requires[0] must set exactly one of csvSucceeded, condition, or resourceExists")
+}
+
+func TestValidateHookRequiresRejectsTwoArms(t *testing.T) {
+	dir := t.TempDir()
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name: "h",
+		Requires: []v1alpha1.ClusterAddonReadinessCheck{{
+			CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "ns", Subscription: "sub"},
+			ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+				APIVersion: "v1", Kind: "Secret", Name: "creds",
+			},
+		}},
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/s.yaml"}},
+	})
+	errs := validateClusterAddonSteps(v1alpha1.State{}, addon)
+	hookErrsContain(t, errs, "spec.steps[0].requires[0] must not set more than one readiness arm")
+}
+
+func TestValidateHookRequiresRejectsAnIncompleteCondition(t *testing.T) {
+	dir := t.TempDir()
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name: "h",
+		Requires: []v1alpha1.ClusterAddonReadinessCheck{{
+			Condition: &v1alpha1.ClusterAddonConditionReadiness{
+				APIVersion: "apiextensions.k8s.io/v1",
+				Kind:       "CustomResourceDefinition",
+			},
+		}},
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/s.yaml"}},
+	})
+	errs := validateClusterAddonSteps(v1alpha1.State{}, addon)
+	hookErrsContain(t, errs, "spec.steps[0].requires[0].condition.name is required")
+	hookErrsContain(t, errs, "spec.steps[0].requires[0].condition.condition.type is required")
+}
+
+func TestValidateHookRequiresAcceptsAnEstablishedCRDCheck(t *testing.T) {
+	dir := t.TempDir()
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name: "h",
+		Requires: []v1alpha1.ClusterAddonReadinessCheck{{
+			Condition: &v1alpha1.ClusterAddonConditionReadiness{
+				APIVersion: "apiextensions.k8s.io/v1",
+				Kind:       "CustomResourceDefinition",
+				Name:       "storageclusters.ocs.openshift.io",
+				Condition:  v1alpha1.ClusterAddonConditionRequirement{Type: "Established", Status: "True"},
+			},
+		}},
+		Manifests: []v1alpha1.ClusterAddonStepManifest{{Path: "manifests/s.yaml"}},
+	})
+	for _, e := range validateClusterAddonSteps(v1alpha1.State{}, addon) {
+		if strings.Contains(e, "requires") {
+			t.Fatalf("valid requires rejected: %s", e)
+		}
+	}
+}

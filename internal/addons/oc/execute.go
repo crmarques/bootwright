@@ -437,7 +437,7 @@ func waitCSVSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespac
 			if parent.Err() != nil {
 				return parent.Err()
 			}
-			diagCtx, diagCancel := context.WithTimeout(parent, 30*time.Second)
+			diagCtx, diagCancel := context.WithTimeout(parent, diagnosisBudget)
 			cause := diagnoseCSVGate(diagCtx, runner, kubeconfig, namespace, subscription, tracker)
 			diagCancel()
 			return &csvGateError{namespace: namespace, subscription: subscription, timeout: timeout, lastObserved: last, cause: cause}
@@ -476,7 +476,7 @@ func waitCatalogSourceReady(ctx context.Context, runner OCRunner, kubeconfig, na
 			if parent.Err() != nil {
 				return parent.Err()
 			}
-			diagCtx, diagCancel := context.WithTimeout(parent, 30*time.Second)
+			diagCtx, diagCancel := context.WithTimeout(parent, diagnosisBudget)
 			cause := diagnoseCatalogGate(diagCtx, runner, kubeconfig, namespace, name, tracker)
 			diagCancel()
 			return &catalogGateError{namespace: namespace, name: name, timeout: timeout, lastObserved: last, cause: cause}

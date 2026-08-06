@@ -46,10 +46,29 @@ func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extensio
 			if parent.Err() != nil {
 				return last, parent.Err()
 			}
-			return last, fmt.Errorf("ClusterAddon/%s readiness timed out after %s; last observed: %s", extension.Metadata.Name, timeout, last)
+			return readinessTimeout(parent, runner, kubeconfig, extension, timeout, last, tracker)
 		case <-ticker.C:
 		}
 	}
+}
+
+func readinessTimeout(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, timeout time.Duration, lastObserved string, tracker *waitProgress) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, diagnosisBudget)
+	defer cancel()
+	pending, observed, err := unsatisfiedChecks(ctx, runner, kubeconfig, extension.Spec.Readiness.Checks)
+	if err == nil && observed != "" {
+		lastObserved = observed
+	}
+	if len(pending) == 0 {
+		return lastObserved, fmt.Errorf("ClusterAddon/%s readiness timed out after %s; last observed: %s", extension.Metadata.Name, timeout, lastObserved)
+	}
+	tracker.line(fmt.Sprintf("diagnosing why ClusterAddon/%s is not ready:", extension.Metadata.Name))
+	cause := diagnoseChecks(ctx, runner, kubeconfig, pending, tracker)
+	base := fmt.Sprintf("ClusterAddon/%s readiness timed out after %s waiting for %s", extension.Metadata.Name, timeout, describeChecks(pending))
+	if strings.TrimSpace(cause) != "" {
+		return lastObserved, fmt.Errorf("%s: %s", base, cause)
+	}
+	return lastObserved, fmt.Errorf("%s; last observed: %s", base, lastObserved)
 }
 
 const readinessFanout = 4

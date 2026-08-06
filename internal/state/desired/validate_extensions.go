@@ -344,8 +344,13 @@ func validateClusterAddonReadiness(extension v1alpha1.ClusterAddon) []string {
 	} else if d <= 0 {
 		errs = append(errs, fmt.Sprintf("%s.timeout %q must be greater than 0", prefix, extension.Spec.Readiness.Timeout))
 	}
-	for i, check := range extension.Spec.Readiness.Checks {
-		owner := fmt.Sprintf("%s.checks[%d]", prefix, i)
+	return append(errs, validateReadinessChecks(prefix+".checks", extension.Spec.Readiness.Checks)...)
+}
+
+func validateReadinessChecks(prefix string, checks []v1alpha1.ClusterAddonReadinessCheck) []string {
+	var errs []string
+	for i, check := range checks {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		arms := 0
 		if csv := check.CSVSucceeded; csv != nil {
 			arms++

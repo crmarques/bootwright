@@ -232,6 +232,38 @@
         path: "{{ bootwright_exporter_workdir }}"
         state: absent
 
+    - name: Record the exported entries whose cephx key type this build cannot parse
+      ansible.builtin.set_fact:
+        bootwright_exporter_unreadable_keys: >-
+          {{ (bootwright_external_details.stdout | default('') | trim | default('[]', true) | from_json)
+             | selectattr('data.userKey', 'defined')
+             | rejectattr('data.userKey', 'match', '^AQ')
+             | map(attribute='name', default='<unnamed>') | list }}
+
+    - name: Refuse to attach cephx keys this Data Foundation build cannot parse
+      ansible.builtin.assert:
+        that:
+          - bootwright_exporter_unreadable_keys | length == 0
+        fail_msg: >-
+          The Ceph cluster minted the cephx keys behind
+          {{ bootwright_exporter_unreadable_keys | join(', ') }} in a format
+          this Data Foundation build cannot read: the exported blobs begin
+          "Ag" (AES256KRB5, a 32-byte secret) rather than "AQ" (AES, a 16-byte
+          secret). IBM Storage Ceph mints AES256KRB5 by default from build
+          20.2.1-297 onwards, while Data Foundation 4.21 bundles a Ceph 20.2.0
+          client whose keyring parser rejects that type outright. Attaching
+          them anyway leaves the StorageCluster reporting
+          ExternalClusterConnecting=False with reason ExternalClusterStateError
+          until the readiness budget expires, while rook logs "error setting
+          modifier ... Malformed input" against
+          client.healthchecker.keyring throughout. Convert the Data Foundation
+          cephx entities on the Ceph cluster to the AES key type, or pair this
+          cluster with a Data Foundation build whose client understands
+          AES256KRB5, then rerun this step.
+        success_msg: >-
+          The exported cephx keys use the AES key type this Data Foundation
+          build can read.
+
     - name: Capture the declared externalDetails output
       ansible.builtin.copy:
         content: "{{ bootwright_external_details.stdout }}"

@@ -1920,6 +1920,15 @@ Rules:
     `follows: ready` (after the readiness checks pass). Steps run in that
     lifecycle order. `gates` cannot be combined with `onFailure: continue` — a
     gate that lets the add-on proceed on failure is not a gate.
+  - `steps[].requires[]` declare API objects the step's own content depends on,
+    each entry taking the same presence union as `spec.readiness.checks[]`
+    (`csvSucceeded`, `condition`, `resourceExists`). Bootwright polls them before
+    the step runs, bounded by `spec.readiness.timeout`, and fails the step
+    without running its playbook or applying its manifests when they never
+    appear. A lifecycle anchor is not a substitute: `follows: operatorReady`
+    proves only that the add-on's own Subscription reached `Succeeded`, which
+    says nothing about CRDs owned by operators OLM installs as its dependencies,
+    so a step whose manifests carry such a kind MUST declare it here.
   - A step ships a `playbook`, `manifests[]`, or both. A manifest-only step (no
     `playbook`) applies templated manifests from values already available to the
     add-on and ignores `target`/`outputs`; a playbook step additionally runs

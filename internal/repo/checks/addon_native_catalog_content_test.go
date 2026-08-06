@@ -110,6 +110,27 @@ func TestNativeCatalogStepRefTokensResolveToAcceptedInputs(t *testing.T) {
 	}
 }
 
+func nativeCatalogStepsYAML(t *testing.T, addOnDir string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(addOnDir, "add-on.yaml"))
+	if err != nil {
+		t.Fatalf("read %s/add-on.yaml: %v", addOnDir, err)
+	}
+	var document struct {
+		Spec struct {
+			Steps yaml.Node `yaml:"steps"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		t.Fatalf("parse %s/add-on.yaml: %v", addOnDir, err)
+	}
+	encoded, err := yaml.Marshal(&document.Spec.Steps)
+	if err != nil {
+		t.Fatalf("encode %s spec.steps: %v", addOnDir, err)
+	}
+	return string(encoded)
+}
+
 func sortedKeys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -145,6 +166,12 @@ func TestNativeCatalogODFFDFStepContentParity(t *testing.T) {
 		if string(a) != string(b) {
 			t.Errorf("openshift-data-foundation and fusion-data-foundation %s have drifted apart; they are documented as sharing identical step content (ADR 0013) -- if the divergence is deliberate, update this test's expectations", rel)
 		}
+	}
+
+	odfSteps := nativeCatalogStepsYAML(t, odf)
+	fdfSteps := nativeCatalogStepsYAML(t, fdf)
+	if odfSteps != fdfSteps {
+		t.Errorf("openshift-data-foundation and fusion-data-foundation spec.steps have drifted apart; they are documented as sharing identical step content (ADR 0013) -- if the divergence is deliberate, update this test's expectations\n  odf:\n%s\n  fdf:\n%s", odfSteps, fdfSteps)
 	}
 
 	rel := "manifests/rook-ceph-external-cluster-details.yaml"

@@ -35,6 +35,7 @@ type addonStepExecutor struct {
 	state          v1alpha1.State
 	plan           extensionPlanView
 	ocRunner       extensionoc.OCRunner
+	readRunner     extensionoc.OCRunner
 	runnerFactory  ApplyTaskRunnerFactory
 	binding        v1alpha1.ClusterAddonBinding
 	inputs         []v1alpha1.ClusterAddonBindingInput
@@ -63,6 +64,7 @@ func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig s
 		state:         task.State,
 		plan:          plan,
 		ocRunner:      extensionoc.CommandRunner{LogPath: logPath, Stdout: stdout, Stderr: stderr, RedactLog: true},
+		readRunner:    extensionoc.CommandRunner{},
 		runnerFactory: runnerFactory,
 		binding:       binding,
 		inputs:        inputs,
@@ -103,6 +105,9 @@ func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAd
 	if v1alpha1.ClusterAddonStepRun(step) == v1alpha1.PlaybookRunOnChange && e.stepConverged(step.Name, digest) {
 		return nil, nil
 	}
+	if err := extensionoc.WaitStepRequirements(ctx, e.readRunner, e.kubeconfig, e.plan.Name, step.Name, step.Requires, e.plan.Addon.Spec.Readiness.Timeout, 0, e.stdout); err != nil {
+		return nil, err
+	}
 	stepRoot := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "steps", step.Name)
 	defer os.RemoveAll(stepRoot)
 	outputs := map[string]string{}
@@ -135,17 +140,19 @@ func (e *addonStepExecutor) stepDigest(step v1alpha1.ClusterAddonStep) (string, 
 		return "", fmt.Errorf("ClusterAddon/%s step %s: %w; fix or remove the unreadable content so bootwright can prove what would run", e.plan.Name, step.Name, err)
 	}
 	projection := struct {
-		Content    string                              `json:"content"`
-		Inputs     []v1alpha1.ClusterAddonBindingInput `json:"inputs,omitempty"`
-		Target     v1alpha1.ClusterAddonStepTarget     `json:"target"`
-		Manifests  []v1alpha1.ClusterAddonStepManifest `json:"manifests,omitempty"`
-		ExtraVars  map[string]any                      `json:"extraVars,omitempty"`
-		SecretRefs []v1alpha1.SecretRef                `json:"secretRefs,omitempty"`
-		Outputs    []v1alpha1.ClusterAddonStepOutput   `json:"outputs,omitempty"`
+		Content    string                                `json:"content"`
+		Inputs     []v1alpha1.ClusterAddonBindingInput   `json:"inputs,omitempty"`
+		Target     v1alpha1.ClusterAddonStepTarget       `json:"target"`
+		Requires   []v1alpha1.ClusterAddonReadinessCheck `json:"requires,omitempty"`
+		Manifests  []v1alpha1.ClusterAddonStepManifest   `json:"manifests,omitempty"`
+		ExtraVars  map[string]any                        `json:"extraVars,omitempty"`
+		SecretRefs []v1alpha1.SecretRef                  `json:"secretRefs,omitempty"`
+		Outputs    []v1alpha1.ClusterAddonStepOutput     `json:"outputs,omitempty"`
 	}{
 		Content:    content,
 		Inputs:     e.inputs,
 		Target:     step.Target,
+		Requires:   step.Requires,
 		Manifests:  step.Manifests,
 		ExtraVars:  step.ExtraVars,
 		SecretRefs: step.SecretRefs,

@@ -355,6 +355,7 @@ everywhere else in the input tree.
 | --- | --- | --- | --- |
 | `steps[].name` | Yes | — | Step name, unique within the add-on. |
 | `steps[].gates` / `steps[].follows` | No | — | `gates: apply` runs the step before the operator install and blocks it until the step succeeds. `follows: operatorReady` runs after the operator CSV reaches Succeeded, before `olm.customResources` (olm add-ons only); `follows: ready` runs after readiness checks pass. `gates` may not be combined with `onFailure: continue`. |
+| `steps[].requires[]` | No | — | API objects that must exist before the step runs, using the same arms as `readiness.checks[]` (`csvSucceeded`, `condition`, `resourceExists`). Bootwright polls them up to `readiness.timeout` and refuses the step — without running its playbook or applying its manifests — if they never appear. Declare the CRD a manifest needs: an operator's own CSV reaching Succeeded does not establish the CRDs its dependencies own. |
 | `steps[].playbook` | No | — | Entry playbook, relative to the add-on file. |
 | `steps[].source.path` | No | — | Absolute directory outside the input tree holding the Ansible content; `playbook`, `rolesPath` and `collectionsPath` then resolve against it. `source.git` is rejected here — a step's content ships with its add-on. See [custom playbooks](custom-playbooks.md#external-ansible-content). |
 | `steps[].rolesPath` / `collectionsPath` | No | — | Vendored Ansible content directories. |

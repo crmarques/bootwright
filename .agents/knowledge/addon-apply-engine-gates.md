@@ -37,14 +37,27 @@ proves the effect executes before the first resource apply and that no resource
 applies after an effect failure.
 
 **CSV gate trigger:** The OLM CSV gate (wait for the operator CSV to reach
-`Succeeded`, establishing the operator's CRDs) runs when the add-on has custom
-resources OR any `follows: operatorReady` step — such a step also needs the CRDs
-established (e.g. the step producing the external-cluster Secret +
-StorageCluster). `TestApplyStepTriggersCSVGateWithoutCustomResources` proves an
-add-on with a `follows: operatorReady` step and zero `customResources` still
-waits, and that `gates: apply` runs before the operator install. Without the
-gate, custom resources race the operator install and fail with
-`no matches for kind`.
+`Succeeded`) runs when the add-on has custom resources OR any
+`follows: operatorReady` step. `TestApplyStepTriggersCSVGateWithoutCustomResources`
+proves an add-on with a `follows: operatorReady` step and zero
+`customResources` still waits, and that `gates: apply` runs before the operator
+install. Without the gate, custom resources race the operator install and fail
+with `no matches for kind`.
+
+**The CSV gate does NOT establish every CRD the add-on then uses.** It proves
+only that the *subscribed* operator's CSV succeeded. A meta-operator creates
+further Subscriptions from its own running pod, so the operators that own the
+interesting kinds install strictly after the gate opens — Data Foundation's
+`odf-operator` CSV reaches `Succeeded`, and only then does it subscribe
+`ocs-operator`, which owns `storageclusters.ocs.openshift.io`. Applying a
+`StorageCluster` right after the gate is therefore not a race that sometimes
+loses; it loses unless something else happened to burn the intervening minutes
+(on prd, the exporter playbook's own 5-minute ConfigMap poll masked it on one
+cluster and not the other). Gating harder on the add-on's own Subscription
+cannot fix this, and waiting for `ocs-operator` to *run* is unsatisfiable —
+odf-operator keeps its Deployment at zero replicas until a `StorageCluster`
+exists. The CRD reaching `Established` is the only signal available before the
+CR exists, so a step declares it in `spec.steps[].requires[]`.
 
 **Gate timeouts are typed, not apply failures:** `catalogGateError` means the
 CatalogSource applied but its registry never reported

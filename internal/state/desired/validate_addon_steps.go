@@ -35,6 +35,7 @@ func validateClusterAddonSteps(state v1alpha1.State, extension v1alpha1.ClusterA
 
 		errs = append(errs, validateHookLifecycle(prefix, extension, hook)...)
 		errs = append(errs, validateHookVocab(prefix, hook)...)
+		errs = append(errs, validateReadinessChecks(prefix+".requires", hook.Requires)...)
 		errs = append(errs, validateReservedExtraVars(prefix+".extraVars", hook.ExtraVars)...)
 		if hook.Playbook == "" && len(hook.Manifests) == 0 {
 			errs = append(errs, prefix+" must set at least one of playbook or manifests")

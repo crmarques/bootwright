@@ -41,10 +41,20 @@ operator-install set and gated on
 races the catalog registry startup; the add-on must subscribe to the catalog
 it ships. The operator-install set (Namespace, OperatorGroup, Subscription)
 then applies, and the engine waits for the operator's CSV to reach
-`Succeeded` — establishing the operator's CRDs — before applying
-`spec.olm.customResources` or running any `follows: operatorReady` step. Gate
-timeouts are typed (`catalogGateError`, `csvGateError`) and never recorded as
-failed applies of the already-applied resources.
+`Succeeded` before applying `spec.olm.customResources` or running any
+`follows: operatorReady` step. Gate timeouts are typed (`catalogGateError`,
+`csvGateError`) and never recorded as failed applies of the already-applied
+resources.
+
+That CSV gate establishes only the CRDs the subscribed operator itself owns. A
+meta-operator whose CSV succeeds and *then* creates Subscriptions for the
+operators that own the interesting kinds — Data Foundation's `odf-operator`
+creating `ocs-operator`, which owns `storageclusters.ocs.openshift.io` — leaves
+the anchor satisfied while the kind is still unresolvable. The anchor is a
+lifecycle position, not a proof of API availability, and no amount of gating on
+the add-on's own Subscription can close that gap. A step therefore declares the
+API its content depends on in `spec.steps[].requires[]`, which the engine polls
+before running the step; see `specs/state-model.md`.
 
 **Step lifecycle.** `ClusterAddon spec.steps` (named `spec.hooks`, with
 `preApply`/`postOperatorReady`/`postReady` lifecycle names, when this decision

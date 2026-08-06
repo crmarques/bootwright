@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 type waitProgress struct {
@@ -44,6 +46,42 @@ func (p *waitProgress) line(msg string) {
 		return
 	}
 	fmt.Fprintln(p.w, msg)
+}
+
+const diagnosisBudget = 30 * time.Second
+
+func diagnoseChecks(ctx context.Context, runner OCRunner, kubeconfig string, checks []v1alpha1.ClusterAddonReadinessCheck, p *waitProgress) string {
+	var cause string
+	for _, check := range checks {
+		var observed string
+		switch {
+		case check.CSVSucceeded != nil:
+			observed = diagnoseCSVGate(ctx, runner, kubeconfig, check.CSVSucceeded.Namespace, check.CSVSucceeded.Subscription, p)
+		case check.Condition != nil:
+			condition := check.Condition
+			observed = diagnoseObject(ctx, runner, kubeconfig, condition.APIVersion, condition.Kind, condition.Namespace, condition.Name, p)
+		case check.ResourceExists != nil:
+			exists := check.ResourceExists
+			observed = diagnoseObject(ctx, runner, kubeconfig, exists.APIVersion, exists.Kind, exists.Namespace, exists.Name, p)
+		}
+		if observed != "" && cause == "" {
+			cause = observed
+		}
+	}
+	return clip(strings.TrimSpace(cause), 400)
+}
+
+func diagnoseObject(ctx context.Context, runner OCRunner, kubeconfig, apiVersion, kind, namespace, name string, p *waitProgress) string {
+	resource := resourceArg(apiVersion, kind) + "/" + name
+	obj, err := getResource(ctx, runner, kubeconfig, apiVersion, kind, namespace, name)
+	if err != nil {
+		p.line(fmt.Sprintf("  %s could not be read: %v", resource, err))
+		return resource + " could not be read"
+	}
+	if phase := nestedString(obj, "status", "phase"); phase != "" {
+		p.line(fmt.Sprintf("  %s phase=%s", resource, phase))
+	}
+	return formatConditions(obj, kind, namespace, name, p)
 }
 
 func diagnoseCSVGate(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string, p *waitProgress) string {
@@ -140,7 +178,7 @@ func diagnosePullFailures(ctx context.Context, runner OCRunner, kubeconfig, name
 
 func formatConditions(obj map[string]any, kind, namespace, name string, p *waitProgress) string {
 	conditions, _ := nestedValue(obj, "status", "conditions").([]any)
-	var cause string
+	var cause, fallback string
 	for _, item := range conditions {
 		cond, ok := item.(map[string]any)
 		if !ok {
@@ -158,22 +196,33 @@ func formatConditions(obj map[string]any, kind, namespace, name string, p *waitP
 		if cmsg != "" {
 			p.line("    " + cmsg)
 		}
-		if cause == "" {
-			cause = strings.TrimSpace(fmt.Sprintf("%s %s: %s", ctype, creason, cmsg))
+		observed := strings.TrimSpace(fmt.Sprintf("%s %s: %s", ctype, creason, cmsg))
+		if conditionProblem(ctype, creason) {
+			if cause == "" {
+				cause = observed
+			}
+			continue
+		}
+		if fallback == "" {
+			fallback = observed
 		}
 	}
-	return cause
+	if cause != "" {
+		return cause
+	}
+	return fallback
 }
 
 func conditionNoteworthy(ctype, cstatus, creason string) bool {
 	if creason == "" {
 		return false
 	}
-	lower := strings.ToLower(ctype)
-	if strings.Contains(lower, "fail") || strings.Contains(lower, "unhealthy") || strings.Contains(lower, "degraded") || strings.Contains(lower, "error") {
-		return true
-	}
-	return cstatus == "False"
+	return conditionProblem(ctype, "") || cstatus == "False"
+}
+
+func conditionProblem(ctype, creason string) bool {
+	lower := strings.ToLower(ctype + " " + creason)
+	return strings.Contains(lower, "fail") || strings.Contains(lower, "unhealthy") || strings.Contains(lower, "degraded") || strings.Contains(lower, "error")
 }
 
 func isPullFailure(reason string) bool {
