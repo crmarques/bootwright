@@ -1056,9 +1056,11 @@ images is never consulted. On IBM Storage Ceph that base is `cp.icr.io`, which
 is entitled, so the tag listing cannot succeed no matter how the cluster is
 configured. `requests.get` there also carries no timeout, so an unreachable or
 silently-dropping registry blocks the dashboard's API handler until nginx's
-read timeout fires — and because the gateway lists every mgr host with
-`max_fails=1` and standbys answering `503`, that one stall blacks the whole
-origin out with `502` for ten seconds. That is the 502 you see.
+read timeout fires — and because the gateway's `upstream dashboard_servers`
+block sets no `max_fails`, nginx's default of `max_fails=1 fail_timeout=10s`
+applies and standbys answer `503`, so that one stall blacks the whole origin
+out with `502` for ten seconds. That is the 502 you see, and it is a reason to
+keep off that page rather than a cosmetic annoyance.
 
 Nothing in Bootwright can supply credentials to that query. Upgrades on these
 builds are driven out of band, which is where the product documents them
@@ -1068,6 +1070,33 @@ anyway:
 bootwright cluster exec --name <storage-cluster> --node <seed> -- \
   sudo cephadm shell -- ceph orch upgrade start --image <registry>/<repo>:<tag>
 ```
+
+### The page cannot be hidden, and the 502 cannot be tuned
+
+Three mitigations get proposed and none of them works; they are recorded here so
+the question stays closed.
+
+**A dashboard feature toggle.** `ceph dashboard feature disable` accepts only
+`rbd`, `mirroring`, `iscsi`, `cephfs`, `rgw`, `nfs`, and `dashboard` — the
+`Features` enum has no upgrade member, so there is nothing to switch off.
+
+**Hiding it with RBAC.** The nav item is gated on `permissions.configOpt.read`,
+so a role without `config-opt` read does hide it — along with **Configuration**,
+**Ceph users**, **Manager modules**, and **Multi-cluster**, which are gated on
+the same scope. The scope is far too coarse to trade for one page, so this only
+makes sense for a deliberately restricted operator role, never for the estate's
+administrators.
+
+**Tuning the upstream so one stall cannot black out the origin.** The
+`max_fails`/`fail_timeout` behaviour comes from nginx's defaults, and cephadm's
+`mgmt-gateway/nginx.conf.j2` exposes no parameter for either. cephadm rewrites
+that file on every reconcile, so overriding it does not survive.
+
+The only change that makes the page work is pointing
+`mgr/cephadm/container_image_base` at a registry that serves tag listings
+anonymously — a local mirror. That same value drives real image pulls, so it is
+worth doing only where a full mirror already exists, and never as a way to
+quiet a cosmetic error.
 
 ## The Data Foundation exporter fails to verify the manager endpoint
 
