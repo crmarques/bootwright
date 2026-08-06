@@ -156,6 +156,16 @@ func TaskUnitName(task workflow.TaskLedgerEntry) string {
 	}
 }
 
+func TaskUnitNames(task workflow.TaskLedgerEntry) []string {
+	if len(task.Nodes) > 0 {
+		return append([]string(nil), task.Nodes...)
+	}
+	if name := TaskUnitName(task); name != "" {
+		return []string{name}
+	}
+	return nil
+}
+
 func PhaseSettledTasks(phase RunPhase) int {
 	settled := 0
 	for _, task := range phase.Tasks {

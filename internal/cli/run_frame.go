@@ -163,12 +163,13 @@ func runPhaseUnits(phase status.RunPhase) string {
 	var units []string
 	seen := map[string]bool{}
 	for _, task := range phase.Tasks {
-		unit := status.TaskUnitName(task)
-		if unit == "" || seen[unit] {
-			continue
+		for _, unit := range status.TaskUnitNames(task) {
+			if unit == "" || seen[unit] {
+				continue
+			}
+			seen[unit] = true
+			units = append(units, unit)
 		}
-		seen[unit] = true
-		units = append(units, unit)
 	}
 	if len(units) > phaseUnitListLimit {
 		rest := len(units) - phaseUnitListLimit

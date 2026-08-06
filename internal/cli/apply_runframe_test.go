@@ -169,3 +169,26 @@ func TestApplyStepDetailSurfacesFailureReason(t *testing.T) {
 		t.Fatalf("blocked detail = %q", got)
 	}
 }
+
+func TestApplyPlanGroupsNameEveryMachineOfACollapsedProvisionTask(t *testing.T) {
+	groups := applyPlanGroups([]workflow.TaskLedgerEntry{
+		{ID: "infra.ocp.localhost", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machines ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Nodes: []string{"node01", "node02"}, Status: workflow.TaskStatusPending},
+	}, nil)
+
+	steps := groups[0].Steps
+	if len(steps) != 1 {
+		t.Fatalf("steps = %+v, want a single prerequisites step", steps)
+	}
+	if steps[0].Detail != "node01, node02" {
+		t.Fatalf("prerequisites detail = %q, want both machines the collapsed task provisions", steps[0].Detail)
+	}
+}
+
+func TestApplyTaskDisplayLabelKeepsSingularAndPluralProvisionLabels(t *testing.T) {
+	if got := applyTaskDisplayLabel("provision machines ocp"); got != "Provision machines ocp" {
+		t.Fatalf("plural label = %q", got)
+	}
+	if got := applyTaskDisplayLabel("provision machine node01"); got != "Provision machine node01" {
+		t.Fatalf("singular label = %q", got)
+	}
+}

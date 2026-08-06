@@ -93,3 +93,40 @@ func TestTasksInDisplayOrderHonoursOrderingDependencies(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskUnitNamesCoversCollapsedAndSingleMachineTasks(t *testing.T) {
+	cases := []struct {
+		name string
+		task workflow.TaskLedgerEntry
+		want []string
+	}{
+		{
+			name: "collapsed task names every machine it provisions",
+			task: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindClusterInstall, Nodes: []string{"node01", "node02"}},
+			want: []string{"node01", "node02"},
+		},
+		{
+			name: "per-machine task still names its single node",
+			task: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindClusterInstall, Node: "node01"},
+			want: []string{"node01"},
+		},
+		{
+			name: "task with no machine identity names nothing",
+			task: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindClusterInstall},
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TaskUnitNames(tc.task)
+			if len(got) != len(tc.want) {
+				t.Fatalf("TaskUnitNames = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("TaskUnitNames = %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}

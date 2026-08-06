@@ -198,6 +198,11 @@ func taskInPurgeScope(task workflow.TaskLedgerEntry, clusters, machines map[stri
 	if task.Node != "" && machines[task.Node] {
 		return true
 	}
+	for _, node := range task.Nodes {
+		if machines[node] {
+			return true
+		}
+	}
 	if !workflow.IsDestroyTaskKind(task.Kind) {
 		return false
 	}

@@ -111,6 +111,7 @@ type TaskLedgerEntry struct {
 	Cluster              string     `json:"cluster,omitempty"`
 	ClusterKind          string     `json:"clusterKind,omitempty"`
 	Node                 string     `json:"node,omitempty"`
+	Nodes                []string   `json:"nodes,omitempty"`
 	Host                 string     `json:"host,omitempty"`
 	ResourceKeys         []string   `json:"resourceKeys,omitempty"`
 	HostSlotKey          string     `json:"hostSlotKey,omitempty"`
