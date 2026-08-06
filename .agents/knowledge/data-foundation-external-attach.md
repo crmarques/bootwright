@@ -107,6 +107,16 @@ Other traps:
   the export step delete the mistyped `client.healthchecker` / `client.csi-*`
   entities first — a whitelist, so `client.admin`, mon, mgr and OSD keys are
   never in scope even though they carry the same `Ag` prefix.
+- **`data.userKey` in the exporter's JSON does not always hold a cephx key.**
+  Six entries carry the field; five are credentials, and
+  `rook-ceph-dashboard-link` puts `ROOK_EXTERNAL_DASHBOARD_LINK` — a URL — in
+  the same field (exporter `:1940-1944`). A key-shape check over every
+  `userKey` therefore flags the dashboard link forever. Worse, it made the
+  refusal cover a **superset** of what the repair deletes, so it could never be
+  satisfied by the remedy it recommended. Both sides now derive from one
+  pattern, `healthchecker|csi-`, matched against `data.userID` for the export
+  and against the entity name for the deletion. `userID` also carries a `.N`
+  generation suffix once keys have been rotated, so match it as a prefix.
 - Never flip the type byte on an existing 44-byte blob: `CryptoAES` validates
   only `length >= 16`, so a 32-byte secret relabelled type 1 loads silently and
   uses the first 16 bytes — a silently wrong credential.

@@ -17,7 +17,7 @@
     bootwright_exporter_key_prefixes:
       aes: AQ
       aes256k: Ag
-    bootwright_exporter_client_entities: '^client\.(healthchecker|csi-)'
+    bootwright_exporter_client_users: 'healthchecker|csi-'
     bootwright_exporter_args:
       - --format
       - json
@@ -210,7 +210,7 @@
         bootwright_exporter_stale_entities: >-
           {{ (bootwright_exporter_auth_ls.stdout | default('') | trim | default('{}', true) | from_json).auth_dump | default([])
              | selectattr('entity', 'defined')
-             | selectattr('entity', 'match', bootwright_exporter_client_entities)
+             | selectattr('entity', 'match', '^client\.(' ~ bootwright_exporter_client_users ~ ')')
              | selectattr('key', 'defined')
              | rejectattr('key', 'match', '^' ~ bootwright_exporter_key_prefixes[bootwright_exporter_key_type])
              | map(attribute='entity') | list }}
@@ -272,6 +272,8 @@
       ansible.builtin.set_fact:
         bootwright_exporter_unreadable_keys: >-
           {{ (bootwright_external_details.stdout | default('') | trim | default('[]', true) | from_json)
+             | selectattr('data.userID', 'defined')
+             | selectattr('data.userID', 'match', '^(' ~ bootwright_exporter_client_users ~ ')')
              | selectattr('data.userKey', 'defined')
              | rejectattr('data.userKey', 'match', '^AQ')
              | map(attribute='name', default='<unnamed>') | list }}
