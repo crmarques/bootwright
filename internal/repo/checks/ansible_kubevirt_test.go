@@ -43,7 +43,7 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 
 	for _, task := range tasks {
 		if _, ok := task["run_once"]; ok {
-			t.Fatalf("%v: the boot play runs with strategy free, which silently ignores run_once, so single-actor election must come from the cluster machine list", task["name"])
+			t.Fatalf("%v: run_once elects the play's first host, but shared agent ISO media is elected per (bootApplyRole, kubeconfig, namespace) sharing group, so single-actor election must come from the cluster machine list", task["name"])
 		}
 	}
 

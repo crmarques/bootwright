@@ -17,12 +17,14 @@ retro-fix existing house-style hits just to drop a skip.
 - `name[play]` — orchestration playbooks are thin import_playbook/strategy
   plays that are not individually named by design.
 - `name[template]` — a few task names embed Jinja mid-string for legibility.
-- `run-once[play]` / `run-once[task]` — `strategy: free` and
-  run_once-under-free are intentional, reviewed idioms.
+- `run-once[play]` / `run-once[task]` — the explicit strategy keywords and the
+  repo's hand-rolled single-actor election are intentional, reviewed idioms.
+  run_once cannot express that election: shared boot media is owned per
+  (bootApplyRole, kubeconfig, namespace) sharing group, not per play.
 - `no-handler` — inline `when: <result> is changed` reactions (systemd
   reloads, trust-store updates, ownership-record writes, destroy-path
   cleanups) are used by design; handler/flush semantics do not fit the
-  run_once / strategy:free / destroy flows.
+  elected-actor and destroy flows.
 - `jinja[invalid]` — static type inference cannot resolve list-typed vars at
   lint time and reports spurious "can only concatenate str/list" on
   runtime-valid templates.

@@ -1,7 +1,7 @@
 ---
 - name: Boot OpenShift agent machines
   hosts: bootwright_agent_node_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min

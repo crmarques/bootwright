@@ -1,11 +1,24 @@
 # Task-playbook preambles: the standard shape and its deliberate variants
 
-Most `playbooks/task_*.yml` plays share one preamble: `strategy: free`,
+Most `playbooks/task_*.yml` plays share one preamble:
 `gather_subset: ['!all', min]`, `become: true`,
 `environment: "{{ bootwright_proxy_env | default({}) }}"`, and a
 `machine_proxy tasks_from: facts` pre_task. Ansible cannot factor play
 keywords into an include, so this repetition is structural, not accidental —
-do not try to extract it. These playbooks deviate on purpose:
+do not try to extract it.
+
+**Strategy is now a decided rule, not a per-play preference.** Every play that
+can be dispatched over more than one machine uses `strategy: linear`, because
+only linear prints one TASK banner per task; `free` reprints the banner every
+time any host reaches the task, which is what the interleaved per-machine
+output looked like before 2026-08-06. `ansible/ansible.cfg` sets
+`display_skipped_hosts = False`, so the banner is emitted lazily from the
+result handler — under linear the results for one task arrive contiguously and
+the banner flips exactly once. `host_pinned` is NOT an alternative: it
+subclasses `FreeStrategyModule` and the default callback tests membership in
+`('free', 'host_pinned')`, so it takes the identical per-host banner branch.
+Only destroy plays that fan out over unrelated real hosts still use `free`.
+These playbooks deviate on purpose:
 
 - `task_bastion_apply_tools.yml` forwards `lookup('env', …)` proxy variables
   and skips the proxy-facts pre_task: bastion setup runs before any rendered
@@ -25,11 +38,22 @@ do not try to extract it. These playbooks deviate on purpose:
   `machine_substrate_kubevirt` gates the whole batch at that task rather than per
   machine. Machines whose substrate charges a host slot (libvirt, vSphere) keep
   their own single-host task, where free and linear are byte-identical.
+- `task_container_cluster_boot_agent_machine.yml` uses `strategy: linear`. It is
+  the most multi-host play in the repo — the planner dispatches it once per
+  cluster with `Limit` = the whole agent-node group and `Forks` = the machine
+  count — so it was the single largest source of per-machine banner spam
+  (`container_cluster_boot_kubevirt` alone has 40+ tasks). Linear is also
+  *better* than free for its shared-media election, not worse: in both the
+  KubeVirt and vSphere boot roles the elected machine's stage/upload task
+  precedes the peers' wait task in file order, so the linear barrier means the
+  media is already published when peers reach their wait, and the polling
+  `until`/`wait_for` loops are satisfied on the first attempt instead of
+  spinning. Machines run each task concurrently under `Forks`, so wall clock is
+  unchanged for a homogeneous cluster.
 - `task_machine_infra_prepare.yml`, `task_machine_infra_finalize.yml`,
   `task_provider_services_apply.yml` and `task_infra_component_services_apply.yml`
   use `strategy: linear` because every dispatch of them selects exactly one host,
-  which makes free and linear byte-identical; linear keeps `free` meaningful as a
-  marker of the one play where it is load-bearing.
+  which makes free and linear byte-identical.
 - `task_storage_cluster_apply.yml` uses `strategy: linear` with
   `gather_facts: false` (facts gathered inside the role): the storage role
   coordinates non-seed hosts against seed-host decisions via

@@ -1544,7 +1544,7 @@ func redfishPowerTasks(t *testing.T) []map[string]any {
 func assertSleepCommand(t *testing.T, task map[string]any, seconds string) {
 	t.Helper()
 	if _, ok := task["ansible.builtin.pause"]; ok {
-		t.Fatalf("%s must not use pause because free strategy does not support host-loop-bypass modules", task["name"])
+		t.Fatalf("%s must not use pause because it bypasses the host loop and would stall every machine in the play", task["name"])
 	}
 	command, ok := task["ansible.builtin.command"].(map[string]any)
 	if !ok {

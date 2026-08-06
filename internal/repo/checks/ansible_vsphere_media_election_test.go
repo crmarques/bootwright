@@ -81,7 +81,7 @@ func TestVSphereMediaNonElecteesWaitForTheUploadMarkerBeforeAttaching(t *testing
 	}
 	wait, ok := tasks[waitIdx]["ansible.builtin.wait_for"].(map[string]any)
 	if !ok {
-		t.Fatalf("upload wait task must use wait_for so it stays free-strategy safe: %v", tasks[waitIdx])
+		t.Fatalf("upload wait task must use wait_for so a waiting machine never bypasses the host loop: %v", tasks[waitIdx])
 	}
 	if got := fmt.Sprint(wait["path"]); !strings.Contains(got, "bootwright_vsphere_media_uploaded_marker_path") {
 		t.Fatalf("upload wait path = %v, want the upload marker", wait["path"])
@@ -110,24 +110,24 @@ func TestVSphereBootStagesTheSharedAgentISOOnce(t *testing.T) {
 		t.Fatal("non-electees must wait for the staging marker and then confirm the staged ISO")
 	}
 	if _, ok := tasks[waitIdx]["ansible.builtin.wait_for"].(map[string]any); !ok {
-		t.Fatalf("staging wait must use wait_for so it stays free-strategy safe: %v", tasks[waitIdx])
+		t.Fatalf("staging wait must use wait_for so a waiting machine never bypasses the host loop: %v", tasks[waitIdx])
 	}
 }
 
-func TestBootAgentMachinePlaybookUsesFreeStrategy(t *testing.T) {
+func TestBootAgentMachinePlaybookGroupsTaskBanners(t *testing.T) {
 	plays := readAnsiblePlays(t, bootAgentMachinePlaybookPath)
 	if len(plays) != 1 {
 		t.Fatalf("boot-agent-machine play count = %d, want 1", len(plays))
 	}
-	if got := plays[0]["strategy"]; got != "free" {
-		t.Fatalf("boot-agent-machine strategy = %v, want free so slow machines never gate their peers", got)
+	if got := plays[0]["strategy"]; got != "linear" {
+		t.Fatalf("boot-agent-machine strategy = %v, want linear so one TASK banner covers every machine instead of being reprinted per host", got)
 	}
 	if _, ok := plays[0]["any_errors_fatal"]; ok {
-		t.Fatal("free strategy silently ignores any_errors_fatal; the boot play must not claim it")
+		t.Fatal("linear honours any_errors_fatal, so claiming it would abort every peer machine when one fails to boot")
 	}
 }
 
-func TestBootPathStaysFreeStrategyCompatible(t *testing.T) {
+func TestBootPathKeepsGroupedOutputAndPerMachineIsolation(t *testing.T) {
 	roots := []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_vsphere",
@@ -141,13 +141,19 @@ func TestBootPathStaysFreeStrategyCompatible(t *testing.T) {
 	for _, root := range roots {
 		for _, rel := range repoYAMLFilesUnder(t, root) {
 			body := readRepoFile(t, rel)
-			for _, forbidden := range []string{"run_once", "any_errors_fatal", "\nserial:", "  serial:"} {
+			if strings.Contains(body, "run_once") {
+				t.Fatalf("%s uses run_once, which elects the play's first host; shared boot media is elected per (bootApplyRole, kubeconfig, namespace) sharing group, so a cluster with more than one group would stage media for only one of them", rel)
+			}
+			if strings.Contains(body, "any_errors_fatal") {
+				t.Fatalf("%s uses any_errors_fatal, which the linear strategy honours; one machine failing to boot must not abort its peers", rel)
+			}
+			for _, forbidden := range []string{"\nserial:", "  serial:"} {
 				if strings.Contains(body, forbidden) {
-					t.Fatalf("%s uses %q, which the free strategy on the agent-boot play ignores or breaks", rel, strings.TrimSpace(forbidden))
+					t.Fatalf("%s uses %q, which splits the play into batches that each reprint the TASK banner, undoing the grouped per-machine output", rel, strings.TrimSpace(forbidden))
 				}
 			}
 			if strings.Contains(body, "ansible.builtin.pause") {
-				t.Fatalf("%s uses pause, which the free strategy cannot run because it bypasses the host loop", rel)
+				t.Fatalf("%s uses pause, which bypasses the host loop and would stall every machine in the play", rel)
 			}
 		}
 	}

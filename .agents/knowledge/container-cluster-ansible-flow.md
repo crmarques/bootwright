@@ -32,13 +32,13 @@ selects the binary per cluster:
 `openshift-install`. The `controller_openshift_tools` role installs both
 binaries whenever any cluster enables FIPS.
 
-**Constraint (no `end_play` in strategy:free diagnostics):**
+**Constraint (no `end_play` in multi-host diagnostics):**
 `diagnostic_cluster_endpoint_dns` runs when a cluster's endpoints use
 `source.type: external` (the operator owns the LB and DNS records) and reports
 hostname resolution from the provider-host vantage point without failing the
 apply. It deliberately has no `meta: end_play` short-circuit: the role runs
-inside a multi-host `strategy: free` play, where `end_play` would abort the
+inside a multi-host play, where `end_play` would abort the
 play for **all** hosts, not just the current one. Its probe/report tasks
 already no-op when `bootwright_external_endpoints` is empty (their loops
 iterate an empty list). The same rule applies to any role added to a
-strategy:free play.
+multi-host play.
