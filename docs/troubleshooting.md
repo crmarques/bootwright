@@ -1151,3 +1151,49 @@ against a TLS listener and that one target stays down. The `StorageCluster`
 reconciles and every data path works; only the Ceph metrics panels stay empty.
 Removing the management gateway disarms cephadm's monitoring TLS and restores
 them.
+
+## A KubeVirt agent ISO clone never leaves CloneInProgress
+
+Booting a virtualized cluster's machines reports, once per machine:
+
+```text
+cloning the agent ISO from shared DataVolume <cluster>-agent-iso-source did not
+reach Succeeded after 24 polls (115s) (phase CloneInProgress, progress N/A,
+running False/Pending); falling back to a direct virtctl image-upload for this
+machine, which builds identical media.
+```
+
+The wait is not a countdown: it re-reads `.status.phase` on every poll and stops
+the moment a clone reports `Succeeded` or `Failed`. What this message says is
+that the clone published no progress figure and never got a running transfer,
+which is CDI declining the clone rather than a copy that needs longer. CDI holds
+such a clone at `CloneInProgress` indefinitely and never marks it `Failed`, so
+bootwright concludes at a start deadline
+(`bootwright_kubevirt_iso_clone_start_retries`, 24 polls) instead of waiting out
+the full budget, then uploads the ISO directly for that machine. The fallback
+produces identical media and the boot continues, so there is nothing to clean up
+by hand.
+
+`CDI recorded:` in the same message carries the DataVolume's own events, read
+before the stalled clone is deleted. Look there first: a size or `volumeMode`
+rejection names itself.
+
+The usual cause is a clone whose two ends were provisioned differently — the
+shared source through CDI's `StorageProfile` and the per-machine target through
+a hand-written claim spec. Bootwright now requests the target through
+`spec.storage` with no `accessModes` or `volumeMode` of its own, so both ends
+inherit the same profile and the host cluster's own clone strategy can apply.
+Confirm what the class offers:
+
+```bash
+kubectl get storageprofile <storage-class> \
+  -o jsonpath='{.status.cloneStrategy}{"\n"}'
+kubectl -n <namespace> get pvc <cluster>-agent-iso-source \
+  -o jsonpath='{.spec.volumeMode}|{.spec.accessModes[*]}{"\n"}'
+```
+
+A `copy` strategy means every machine's clone needs its own pod mounting that one
+source claim; where the claim is not `ReadWriteMany` the machines of a cluster
+cannot all do that at once, and the direct upload is the faster answer anyway.
+Raise `bootwright_kubevirt_iso_clone_retries` only when the report shows progress
+was moving.

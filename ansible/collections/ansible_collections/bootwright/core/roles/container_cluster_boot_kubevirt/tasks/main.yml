@@ -722,9 +722,30 @@
     stdin: "{{ lookup('ansible.builtin.template', 'datavolume-agent-iso.yaml.j2') }}"
   register: bootwright_kubevirt_iso_clone_apply
   changed_when: "'unchanged' not in (bootwright_kubevirt_iso_clone_apply.stdout | default(''))"
+  failed_when: false
   when:
     - not (bootwright_kubevirt_boot_iso_current | bool)
     - bootwright_kubevirt_iso_source_ready | bool
+
+- name: Report a rejected KubeVirt agent ISO DataVolume clone
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: the API server refused
+      the clone DataVolume {{ bootwright_kubevirt_iso_dv_name }}
+      (rc {{ bootwright_kubevirt_iso_clone_apply.rc | default('<unknown>') }}):
+      {{
+        ((bootwright_kubevirt_iso_clone_apply.stderr | default('') | trim)
+         | default((bootwright_kubevirt_iso_clone_apply.stdout | default('') | trim), true)
+         | default('kubectl reported no output', true))
+        | truncate(600, true)
+      }};
+      falling back to a direct virtctl image-upload for this machine. A storage class whose CDI
+      StorageProfile carries no claim property set cannot complete a spec.storage request, and
+      that is the one shape this template may not spell out for itself.
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - bootwright_kubevirt_iso_source_ready | bool
+    - (bootwright_kubevirt_iso_clone_apply.rc | default(1)) != 0
 
 - name: Wait for the KubeVirt agent ISO DataVolume clone
   ansible.builtin.command:
@@ -738,14 +759,27 @@
       - datavolume
       - "{{ bootwright_kubevirt_iso_dv_name }}"
       - -o
-      - 'jsonpath={.status.phase}|{.status.progress}|{.status.conditions[?(@.type=="Running")].reason}'
+      - >-
+        jsonpath={.status.phase}|{.status.progress}|{.status.conditions[?(@.type=="Running")].reason}|{.status.conditions[?(@.type=="Running")].status}
   register: bootwright_kubevirt_iso_clone_phase
   changed_when: false
   failed_when: false
   until: >-
-    (bootwright_kubevirt_iso_clone_phase.rc | default(1)) != 0
+    ((bootwright_kubevirt_iso_clone_phase.rc | default(1)) != 0
+     and 'NotFound' in (bootwright_kubevirt_iso_clone_phase.stderr | default('')))
     or (((bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim).split('|') | first)
         in ['Succeeded', 'Failed'])
+    or ((bootwright_kubevirt_iso_clone_phase.attempts | default(1) | int)
+        >= (bootwright_kubevirt_iso_clone_start_retries | int)
+        and (((bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim).split('|')
+              + ['', '', '', ''])[0]
+             in ['', 'Pending', 'CloneScheduled', 'CloneInProgress'])
+        and (((bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim).split('|')
+              + ['', '', '', ''])[1]
+             in ['', 'N/A'])
+        and (((bootwright_kubevirt_iso_clone_phase.stdout | default('') | trim).split('|')
+              + ['', '', '', ''])[3]
+             != 'True'))
     or ((bootwright_kubevirt_iso_clone_phase.attempts | default(1) | int)
         >= (bootwright_kubevirt_iso_clone_retries | int))
   retries: "{{ bootwright_kubevirt_iso_clone_retries }}"
@@ -759,7 +793,7 @@
     bootwright_kubevirt_iso_clone_status: >-
       {{
         (((bootwright_kubevirt_iso_clone_phase | default({})).stdout | default('') | trim).split('|')
-         + ['', '', ''])[:3]
+         + ['', '', '', ''])[:4]
       }}
     bootwright_kubevirt_iso_cloned: >-
       {{
@@ -769,18 +803,48 @@
       }}
   changed_when: false
 
+- name: Read the KubeVirt agent ISO clone events
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - events
+      - "--field-selector=involvedObject.name={{ bootwright_kubevirt_iso_dv_name }}"
+      - -o
+      - >-
+        jsonpath={range .items[*]}{.reason}: {.message}; {end}
+  register: bootwright_kubevirt_iso_clone_events
+  changed_when: false
+  failed_when: false
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - bootwright_kubevirt_iso_source_ready | bool
+    - not (bootwright_kubevirt_iso_cloned | bool)
+
 - name: Report KubeVirt agent ISO clone fallback to direct upload
   ansible.builtin.debug:
     msg: >-
       {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: cloning the agent ISO
       from shared DataVolume {{ bootwright_kubevirt_iso_source_dv_name }} did not reach Succeeded
-      after {{ ((bootwright_kubevirt_iso_clone_retries | int) - 1) * (bootwright_kubevirt_iso_clone_delay | int) }}s
+      after {{ (bootwright_kubevirt_iso_clone_phase | default({})).attempts | default(1) | int }} polls
+      ({{ (((bootwright_kubevirt_iso_clone_phase | default({})).attempts | default(1) | int) - 1)
+          * (bootwright_kubevirt_iso_clone_delay | int) }}s)
       (phase {{ bootwright_kubevirt_iso_clone_status[0] | default('<unavailable>', true) }},
       progress {{ bootwright_kubevirt_iso_clone_status[1] | default('<unreported>', true) }},
-      running {{ bootwright_kubevirt_iso_clone_status[2] | default('<unreported>', true) }});
-      falling back to a direct virtctl image-upload for this machine. A clone that sat at the same
-      progress the whole time is queued behind its peers on the shared source or blocked on
-      storage, not slow: raise bootwright_kubevirt_iso_clone_retries only if progress was moving.
+      running {{ bootwright_kubevirt_iso_clone_status[3] | default('<unreported>', true) }}/{{
+        bootwright_kubevirt_iso_clone_status[2] | default('<unreported>', true) }});
+      falling back to a direct virtctl image-upload for this machine, which builds identical media.
+      CDI recorded: {{
+        ((bootwright_kubevirt_iso_clone_events | default({})).stdout | default('') | trim)
+        | default('no events', true) | truncate(600, true)
+      }}.
+      A clone that never published a progress figure never started its transfer, so this is storage
+      refusing the clone rather than a retry budget that is too small: raise
+      bootwright_kubevirt_iso_clone_retries only when progress was moving.
   when:
     - not (bootwright_kubevirt_boot_iso_current | bool)
     - bootwright_kubevirt_iso_source_ready | bool

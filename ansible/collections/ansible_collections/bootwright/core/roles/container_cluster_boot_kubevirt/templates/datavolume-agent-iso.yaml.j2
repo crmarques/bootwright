@@ -18,9 +18,15 @@ spec:
     pvc:
       namespace: {{ bootwright_kubevirt_namespace }}
       name: {{ bootwright_kubevirt_iso_source_dv_name }}
-  pvc:
-    accessModes:
-      - ReadWriteOnce
+  # Ask for the target through spec.storage, never spec.pvc, and name neither
+  # accessModes nor volumeMode. CDI copies spec.pvc through verbatim but fills
+  # spec.storage in from the StorageProfile of the class — the same inference
+  # virtctl image-upload used to build the shared source. That symmetry is what
+  # keeps the pair clonable: a hand-written target lands on Filesystem at exactly
+  # the requested size, and cloning a Block source into it disqualifies both
+  # smart-clone strategies and then stalls the host-assisted copy at
+  # CloneInProgress, which CDI never resolves into Failed.
+  storage:
     resources:
       requests:
         storage: {{ bootwright_kubevirt_agent_iso_size }}

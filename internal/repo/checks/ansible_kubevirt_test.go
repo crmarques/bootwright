@@ -192,8 +192,18 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 			t.Fatalf("%v must run only once the shared media is proven ready, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
 		}
 	}
-	if got := fmt.Sprint(tasks[clonePhaseIdx]["until"]); !strings.Contains(got, "'Succeeded'") || !strings.Contains(got, "'Failed'") {
+	cloneUntil := fmt.Sprint(tasks[clonePhaseIdx]["until"])
+	if !strings.Contains(cloneUntil, "'Succeeded'") || !strings.Contains(cloneUntil, "'Failed'") {
 		t.Fatalf("the clone wait must settle on either terminal phase instead of burning the whole timeout, got until=%v", tasks[clonePhaseIdx]["until"])
+	}
+	if !strings.Contains(cloneUntil, "bootwright_kubevirt_iso_clone_start_retries") {
+		t.Fatalf("CDI leaves a clone its storage refused at CloneInProgress forever and never marks it Failed, so the wait must conclude at a start deadline once the transfer has provably not begun instead of polling out the whole budget, got until=%v", tasks[clonePhaseIdx]["until"])
+	}
+	if !strings.Contains(cloneUntil, "NotFound") {
+		t.Fatalf("one transient kubectl error must not abandon a healthy clone: only a conclusive NotFound may end the poll early, as the sibling polls already require, got until=%v", tasks[clonePhaseIdx]["until"])
+	}
+	if !strings.Contains(cloneUntil, "bootwright_kubevirt_iso_clone_retries") {
+		t.Fatalf("the clone wait must keep the house attempts escape so an exhausted budget lands on the fallback instead of failing the boot, got until=%v", tasks[clonePhaseIdx]["until"])
 	}
 	clonePoll := fmt.Sprint(tasks[clonePhaseIdx]["ansible.builtin.command"])
 	for _, want := range []string{".status.phase", ".status.progress", "Running"} {
@@ -201,8 +211,28 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 			t.Fatalf("the clone wait must read %q so an exhausted budget can say whether the clone was moving or stuck, got %v", want, tasks[clonePhaseIdx]["ansible.builtin.command"])
 		}
 	}
-	if got := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Report KubeVirt agent ISO clone fallback to direct upload")]["ansible.builtin.debug"]); !strings.Contains(got, "progress") {
-		t.Fatalf("the clone fallback report must carry the observed progress, or the retry budget can only be tuned by guesswork, got %v", got)
+	cloneReport := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Report KubeVirt agent ISO clone fallback to direct upload")]["ansible.builtin.debug"])
+	if !strings.Contains(cloneReport, "progress") {
+		t.Fatalf("the clone fallback report must carry the observed progress, or the retry budget can only be tuned by guesswork, got %v", cloneReport)
+	}
+	if !strings.Contains(cloneReport, "attempts") {
+		t.Fatalf("the clone fallback report must time itself from the poll's own attempts, or every exit prints the full budget and a wait that concluded early reads as one that ran to exhaustion, got %v", cloneReport)
+	}
+	if strings.Contains(cloneReport, "(bootwright_kubevirt_iso_clone_retries | int) - 1") {
+		t.Fatalf("the clone fallback report must not compute its elapsed time from the configured budget, which is a constant on every path including an immediate exit, got %v", cloneReport)
+	}
+	eventsIdx := findAnsibleTask(t, tasks, "Read the KubeVirt agent ISO clone events")
+	if !(cloneOutcomeIdx < eventsIdx && eventsIdx < cloneCleanupIdx) {
+		t.Fatalf("the clone events must be read after the outcome is known and before the DataVolume is deleted, or the only object naming the reason is destroyed unread (outcome=%d events=%d cleanup=%d)", cloneOutcomeIdx, eventsIdx, cloneCleanupIdx)
+	}
+	if tasks[eventsIdx]["failed_when"] != false {
+		t.Fatalf("reading the clone events is diagnostics on a path that already fell back, and must never fail the boot, got failed_when=%v", tasks[eventsIdx]["failed_when"])
+	}
+	if got := fmt.Sprint(tasks[eventsIdx]["ansible.builtin.command"]); !strings.Contains(got, "bootwright_kubevirt_iso_dv_name") {
+		t.Fatalf("the clone events must be selected on the clone DataVolume itself, got %v", tasks[eventsIdx]["ansible.builtin.command"])
+	}
+	if tasks[cloneIdx]["failed_when"] != false {
+		t.Fatalf("a clone the API server refuses must degrade to the direct upload like every other shared-media failure, not kill the host mid-boot, got failed_when=%v", tasks[cloneIdx]["failed_when"])
 	}
 	for _, idx := range []int{cloneCleanupIdx, uploadIdx} {
 		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_kubevirt_iso_cloned") {
@@ -230,6 +260,17 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	if !strings.Contains(template, "source:\n    pvc:") {
 		t.Fatal("per-VM agent ISO DataVolume must clone from the shared source PVC")
 	}
+	if !strings.Contains(template, "storage:\n    resources:") {
+		t.Fatal("the clone target must be requested through spec.storage so CDI completes accessModes, volumeMode and the filesystem overhead from the same StorageProfile that virtctl image-upload used for the shared source; spec.pvc is copied through verbatim and pairs a Filesystem target with a Block source, which disqualifies both smart-clone strategies and then stalls the host-assisted copy at CloneInProgress forever")
+	}
+	for _, line := range strings.Split(template, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if strings.Contains(line, "accessModes") || strings.Contains(line, "volumeMode") {
+			t.Fatalf("the clone target must name neither accessModes nor volumeMode: the storage class is operator-supplied, and any value spelled out here is a guess that can differ from the shared source it clones, got %q", line)
+		}
+	}
 }
 
 func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *testing.T) {
@@ -251,7 +292,9 @@ func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *te
 		"Remove previous KubeVirt agent ISO DataVolume",
 		"Purge the previous KubeVirt agent ISO PersistentVolumeClaim",
 		"Clone KubeVirt agent ISO DataVolume from the shared source",
+		"Report a rejected KubeVirt agent ISO DataVolume clone",
 		"Wait for the KubeVirt agent ISO DataVolume clone",
+		"Read the KubeVirt agent ISO clone events",
 		"Remove the failed KubeVirt agent ISO DataVolume clone",
 		"Purge the failed KubeVirt agent ISO clone PersistentVolumeClaim",
 		"Build virtctl image-upload command",
@@ -364,7 +407,11 @@ func TestKubeVirtBootClearsTheAgentISOClaimItsDataVolumeLeavesBehind(t *testing.
 	}
 
 	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/defaults/main.yml")
-	for _, want := range []string{"bootwright_kubevirt_media_pvc_settle_retries:", "bootwright_kubevirt_media_pvc_settle_delay:"} {
+	for _, want := range []string{
+		"bootwright_kubevirt_media_pvc_settle_retries:",
+		"bootwright_kubevirt_media_pvc_settle_delay:",
+		"bootwright_kubevirt_iso_clone_start_retries:",
+	} {
 		if !strings.Contains(defaults, want) {
 			t.Fatalf("the claim-settle budget must be tunable from defaults (missing %q)", want)
 		}

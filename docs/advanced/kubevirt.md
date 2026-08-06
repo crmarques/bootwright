@@ -273,6 +273,29 @@ whenever deps is in scope — including a full `apply` with no `--stage` filter.
 is only enforced for a `--stage base` run without deps, where nothing provisions
 `virtctl` and it must already be on the controller's `PATH`.
 
+## Agent ISO media is uploaded once and cloned per machine
+
+A cluster whose machines share one host cluster and namespace uploads its agent
+ISO once, as a shared `<cluster>-agent-iso-source` DataVolume, and every machine
+then clones its own `<cluster>-<machine>-agent-iso` from it. The clone target is
+requested through `spec.storage` and deliberately names neither `accessModes` nor
+`volumeMode`: CDI completes both, and the filesystem overhead, from the storage
+class's `StorageProfile` — the same inference `virtctl image-upload` used for the
+source. Matching the two ends is what lets the host cluster pick its own clone
+strategy; a target spelled out by hand can pair a Filesystem claim with a Block
+source, which rules out both smart-clone strategies and then wedges the
+host-assisted copy.
+
+Cloning is an optimization, never a requirement. A clone that reports no progress
+and no running transfer within `bootwright_kubevirt_iso_clone_start_retries`
+polls is one the storage has declined — CDI never marks such a clone `Failed` —
+so bootwright stops waiting, prints the DataVolume's own events, and uploads the
+ISO directly for that machine instead. The media is identical either way. See
+[Troubleshooting](../troubleshooting.md#a-kubevirt-agent-iso-clone-never-leaves-cloneinprogress).
+
+A machine whose DataVolume already carries this run's generation and reports
+`Succeeded` keeps it: the boot skips the stop, the rebuild and the wait entirely.
+
 ## See also
 
 - [Container clusters](../concepts/container-clusters.md) — child cluster install
