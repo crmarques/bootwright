@@ -165,6 +165,48 @@ func TestNodeConfigManifestsEmptyWhenNothingToDo(t *testing.T) {
 	}
 }
 
+type fakeManagedFieldsRunner struct {
+	managers map[string]string
+	missing  map[string]bool
+}
+
+func (f *fakeManagedFieldsRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	name := args[2]
+	if f.missing[name] {
+		return nil, fmt.Errorf("nodes %q not found", name)
+	}
+	return []byte(f.managers[name]), nil
+}
+
+func TestNodeConfigApplySetCoversOnlyManagedNodes(t *testing.T) {
+	ocp := ocpWithHosts(
+		v1alpha1.OCPNodeSpec{Name: "infra-01", Role: v1alpha1.NodeRoleInfra},
+		v1alpha1.OCPNodeSpec{Name: "demoted-01", Role: v1alpha1.NodeRoleWorker},
+		v1alpha1.OCPNodeSpec{Name: "untouched-01", Role: v1alpha1.NodeRoleWorker},
+		v1alpha1.OCPNodeSpec{Name: "never-joined", Role: v1alpha1.NodeRoleWorker},
+	)
+	runner := &fakeManagedFieldsRunner{
+		managers: map[string]string{
+			"demoted-01":   "kubelet bootwright kube-controller-manager",
+			"untouched-01": "kubelet kube-controller-manager",
+		},
+		missing: map[string]bool{"never-joined": true},
+	}
+	set := nodeConfigApplySet(context.Background(), runner, "kc", ocp, nodeConfigNodeNames(ocp))
+	if !set["infra-01"] {
+		t.Fatal("a node carrying declared config is always applied")
+	}
+	if !set["demoted-01"] {
+		t.Fatal("a node bootwright still manages must be re-applied so its stale fields are relinquished")
+	}
+	if set["untouched-01"] {
+		t.Fatal("a node bootwright never configured must not be written at all")
+	}
+	if set["never-joined"] {
+		t.Fatal("an unregistered node must not be applied")
+	}
+}
+
 type fakeMCPRunner struct {
 	getOut  string
 	getErr  error

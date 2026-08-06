@@ -1182,9 +1182,10 @@ Rules:
   `PreferNoSchedule`, or `NoExecute`) are day-2-owned node intent applied after
   install — reconcilable-in-place drift, not install-config/agent-config identity.
 - Day-2 node config reconciles removal as well as addition. The step runs for
-  every cluster that declares nodes and re-applies every registered node, so
-  clearing a role, label, or taint relinquishes the field under the `bootwright`
-  field manager instead of leaving it live forever. The `infra` MachineConfigPool
+  every cluster that declares nodes and covers both the nodes carrying declared
+  config and every node already listing `bootwright` in `metadata.managedFields`,
+  so clearing a role, label, or taint relinquishes the field instead of leaving it
+  live forever. Nodes Bootwright never configured are never written. The `infra` MachineConfigPool
   is deleted once no `infra` node remains, and only when it carries the
   `bootwright.io/managed-by: bootwright` label. Taints are deduplicated by
   `key`+`effect` before apply — the pair Kubernetes itself requires to be unique —

@@ -17,6 +17,7 @@ import (
 const (
 	nodeRegistrationAttempts = 30
 	nodeRegistrationInterval = 10 * time.Second
+	nodeConfigFieldManager   = "bootwright"
 )
 
 func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
@@ -33,7 +34,7 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 		if err := waitNodesRegistered(ctx, checker, kubeconfig, task.Entry.Cluster, configured, nodeRegistrationAttempts, nodeRegistrationInterval); err != nil {
 			return err
 		}
-		manifests, err := nodeConfigManifests(ocp, liveNodeSet(ctx, checker, kubeconfig, ocp, configured))
+		manifests, err := nodeConfigManifests(ocp, nodeConfigApplySet(ctx, checker, kubeconfig, ocp, configured))
 		if err != nil {
 			return err
 		}
@@ -50,7 +51,7 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 			if err := os.WriteFile(manifestPath, manifests, 0o600); err != nil {
 				return err
 			}
-			if _, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", "bootwright", "--force-conflicts"}, nil); err != nil {
+			if _, err := runner.Run(ctx, kubeconfig, []string{"apply", "-f", manifestPath, "--server-side", "--field-manager", nodeConfigFieldManager, "--force-conflicts"}, nil); err != nil {
 				return err
 			}
 			changed = true
@@ -89,20 +90,27 @@ func nodeConfigNodeNames(ocp v1alpha1.ContainerCluster) []string {
 	return names
 }
 
-func liveNodeSet(ctx context.Context, runner extensionoc.OCRunner, kubeconfig string, ocp v1alpha1.ContainerCluster, configured []string) map[string]bool {
-	live := map[string]bool{}
+func nodeConfigApplySet(ctx context.Context, runner extensionoc.OCRunner, kubeconfig string, ocp v1alpha1.ContainerCluster, configured []string) map[string]bool {
+	apply := map[string]bool{}
 	for _, name := range configured {
-		live[name] = true
+		apply[name] = true
 	}
 	for _, host := range ocp.Spec.Nodes {
-		if live[host.Name] {
+		if apply[host.Name] {
 			continue
 		}
-		if _, err := runner.Run(ctx, kubeconfig, []string{"get", "node", host.Name, "-o", "name"}, nil); err == nil {
-			live[host.Name] = true
+		out, err := runner.Run(ctx, kubeconfig, []string{"get", "node", host.Name, "-o", "jsonpath={.metadata.managedFields[*].manager}"}, nil)
+		if err != nil {
+			continue
+		}
+		for _, manager := range strings.Fields(string(out)) {
+			if manager == nodeConfigFieldManager {
+				apply[host.Name] = true
+				break
+			}
 		}
 	}
-	return live
+	return apply
 }
 
 func pruneInfraMachineConfigPool(ctx context.Context, runner extensionoc.OCRunner, kubeconfig string) (bool, error) {

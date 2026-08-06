@@ -464,8 +464,9 @@ machine-pool fields (`replicas`, `architecture`, `hyperthreading`, `platform`,
 
     Removal reconciles as well. Demote an `infra` node to `worker`, or delete a
     `labels`/`taints` entry, and the next apply clears what Bootwright had set on
-    that node — the step re-applies every registered node in the cluster, so
-    server-side apply relinquishes the fields it no longer declares. Once the last
+    that node — the step also re-applies every node that already lists `bootwright`
+    as a field manager, so server-side apply relinquishes the fields it no longer
+    declares. Nodes Bootwright never configured are not written at all. Once the last
     `infra` node is gone the `infra` `MachineConfigPool` is deleted, but only if it
     carries the `bootwright.io/managed-by: bootwright` label Bootwright stamps on
     the pool it creates; a pool you made yourself is never touched. A
