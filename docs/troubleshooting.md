@@ -1178,6 +1178,61 @@ by hand.
 before the stalled clone is deleted. Look there first: a size or `volumeMode`
 rejection names itself.
 
+## A virtualized node fails "Writing image to disk did not sufficiently progress"
+
+The installer log for a KubeVirt-hosted cluster fails one node and then times
+out on bootstrap:
+
+```text
+Host master-03.<cluster>.<domain>: updated status from installing-in-progress to
+error (Host failed to install because its installation stage Writing image to
+disk did not sufficiently progress in the last 30m0s.)
+...
+Bootstrap failed to complete: : bootstrap process timed out: context deadline
+exceeded
+```
+
+Everything after that first line is a consequence, not a second problem. etcd's
+`DelayedHAScalingStrategy` needs three healthy members, so a lost master leaves
+`CheckSafeToScaleCluster found 2 healthy member(s) out of the 3 required`, the
+bootstrap control plane never hands off, and every worker sits at `Waiting for
+control plane`. `ingress`, `authentication`, `monitoring`, `machine-api` and
+`olm` all report unavailable because no node ever joined — fix the disk write and
+they clear on their own.
+
+The stage that stalled is the agent writing the RHCOS image to the machine's
+root disk, so the question is what that disk is made of. Bootwright requests it
+through `spec.storage` and names neither `accessModes` nor `volumeMode`, which
+lets CDI complete both from the class's `StorageProfile`. A claim that spells
+those out instead falls back to the Kubernetes default `volumeMode: Filesystem`,
+and on a Block class — Ceph RBD, including ODF external — that puts a filesystem
+inside the RBD image and a `disk.img` file inside the filesystem. Every write the
+agent makes then pays journal and extent-allocation overhead on top of the
+network round trip, which is slow enough that a whole cluster's machines writing
+at once can miss the agent's 30-minute no-progress watchdog. Check what the
+machines actually got:
+
+```bash
+kubectl -n <namespace> get pvc <cluster>-<machine>-root \
+  -o jsonpath='{.spec.volumeMode}|{.spec.accessModes[*]}{"\n"}'
+kubectl get storageprofile <storage-class> \
+  -o jsonpath='{.status.claimPropertySets}{"\n"}'
+```
+
+`volumeMode` is immutable once the claim is bound, so a machine that already has
+a Filesystem root disk keeps it — bootwright only ever creates this DataVolume
+and never re-sends its spec, since CDI's webhook refuses a spec update and the
+claim holds the machine's installed OS. Rebuild the affected machines to pick up
+the corrected shape; see
+[Operations and Recovery](advanced/operations.md). A half-installed cluster
+needs its virtual machines stopped first, or `destroy --stage clusters`.
+
+If the claims are already Block, the disks are shaped correctly and the stall is
+capacity, not layout: the host cluster provisions every machine of a cluster
+concurrently, so a backing store that cannot absorb N simultaneous RHCOS writes
+will still miss the watchdog. Confirm against the storage cluster's own metrics
+before changing anything here.
+
 The usual cause is a clone whose two ends were provisioned differently — the
 shared source through CDI's `StorageProfile` and the per-machine target through
 a hand-written claim spec. Bootwright now requests the target through

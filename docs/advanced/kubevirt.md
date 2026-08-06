@@ -296,6 +296,25 @@ ISO directly for that machine instead. The media is identical either way. See
 A machine whose DataVolume already carries this run's generation and reports
 `Succeeded` keeps it: the boot skips the stop, the rebuild and the wait entirely.
 
+## The root disk is created once, shaped by the storage class
+
+Each machine gets a blank `<cluster>-<machine>-root` DataVolume sized from its
+profile's `diskGiB`. Like the agent ISO, it is requested through `spec.storage`
+and names neither `accessModes` nor `volumeMode`, so CDI fills both from the
+class's `StorageProfile`. That matters more here than anywhere else: `spec.pvc`
+is copied through verbatim, so a hand-written claim defaults to `volumeMode:
+Filesystem` regardless of the class, and on a Block class such as Ceph RBD the
+guest's virtio root disk becomes a `disk.img` file on a filesystem inside the RBD
+image. The agent installer writes the whole RHCOS image through that stack and
+can miss its 30-minute no-progress watchdog — see
+[Troubleshooting](../troubleshooting.md#a-virtualized-node-fails-writing-image-to-disk-did-not-sufficiently-progress).
+
+Bootwright only ever **creates** this DataVolume. It never re-sends the spec to a
+live one: CDI's webhook refuses a spec update, and the claim underneath holds the
+machine's installed operating system. A profile's `diskGiB` change therefore
+reaches an existing machine through an authorized rebuild, which deletes the
+DataVolume first, and not through a plain apply.
+
 ## See also
 
 - [Container clusters](../concepts/container-clusters.md) — child cluster install
