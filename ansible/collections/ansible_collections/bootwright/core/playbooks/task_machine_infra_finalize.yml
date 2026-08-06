@@ -1,7 +1,7 @@
 ---
 - name: Finalize machine infrastructure
   hosts: bootwright_infra_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min

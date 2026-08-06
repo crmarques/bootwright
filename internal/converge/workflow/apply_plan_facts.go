@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/render/installer"
+	"github.com/crmarques/bootwright/internal/render"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -203,24 +203,8 @@ func containerFinalizeMutatesHost(state v1alpha1.State, clusterName, host string
 	if host == "" {
 		return false
 	}
-	cluster, ok := containerClusterByName(state, clusterName)
-	if !ok {
-		return false
-	}
-	install, ok := stateview.ClusterInstallForContainerCluster(state, cluster)
-	if !ok {
-		return false
-	}
-	for _, role := range installer.StandardEndpointNames {
-		endpoint, ok := stateview.ContainerEndpoint(install, cluster, role)
-		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent || endpoint.Source.ComponentRef.Name == "" {
-			continue
-		}
-		component, ok := stateview.InfraComponent(state, endpoint.Source.ComponentRef.Name)
-		if !ok || component.Spec.LoadBalancer == nil {
-			continue
-		}
-		if component.Spec.LoadBalancer.MachineRef.Name == host {
+	for _, bound := range render.ContainerClusterLoadBalancerHosts(state, clusterName) {
+		if bound == host {
 			return true
 		}
 	}

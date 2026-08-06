@@ -1,7 +1,7 @@
 ---
 - name: Apply provider setup and services
   hosts: bootwright_provider_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min

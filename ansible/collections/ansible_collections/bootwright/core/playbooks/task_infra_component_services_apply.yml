@@ -1,7 +1,7 @@
 ---
 - name: Apply infra component services
   hosts: bootwright_infra_component_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min

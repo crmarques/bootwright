@@ -111,6 +111,10 @@ func MachineInventoryHosts(state v1alpha1.State, machineName string) []string {
 	return inventory.MachineInventoryHosts(state, machineName)
 }
 
+func ContainerClusterLoadBalancerHosts(state v1alpha1.State, clusterName string) []string {
+	return inventory.ContainerClusterLoadBalancerHosts(state, clusterName)
+}
+
 func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
 	return inventory.StorageSeedHostName(cluster)
 }

@@ -79,6 +79,26 @@ type selectedRegistryComponent struct {
 	component v1alpha1.InfraComponent
 }
 
+func ContainerClusterLoadBalancerHosts(state v1alpha1.State, clusterName string) []string {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name != clusterName {
+			continue
+		}
+		install, ok := stateview.ClusterInstallForContainerCluster(state, cluster)
+		if !ok {
+			return nil
+		}
+		out := []string(nil)
+		for _, component := range loadBalancerComponentsForCluster(state, install, cluster) {
+			if host := component.Spec.LoadBalancer.MachineRef.Name; host != "" {
+				out = append(out, host)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []v1alpha1.InfraComponent {
 	seen := map[string]bool{}
 	out := []v1alpha1.InfraComponent{}
