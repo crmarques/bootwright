@@ -147,6 +147,9 @@ func TestMachineInfraDestroySubstratePlayLoopsDependencyLevels(t *testing.T) {
 	if got := plays[1]["strategy"]; got != "linear" {
 		t.Fatalf("only the linear strategy turns a dependency level into a barrier, got strategy=%v", got)
 	}
+	if got := plays[2]["strategy"]; got != "linear" {
+		t.Fatalf("the record sweep runs over every provider and infra host at once, so it needs linear to print one TASK banner per task, got strategy=%v", got)
+	}
 	throttle, ok := plays[1]["throttle"].(string)
 	if !ok || !strings.Contains(throttle, "default(") {
 		t.Fatalf("every machine-task host of one provider shares a single multiplexed SSH connection, so the per-level fan-out must be capped below the provider sshd MaxSessions, got throttle=%#v", plays[1]["throttle"])

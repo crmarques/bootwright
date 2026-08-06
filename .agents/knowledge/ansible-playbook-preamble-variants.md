@@ -58,11 +58,13 @@ These playbooks deviate on purpose:
   `gather_facts: false` (facts gathered inside the role): the storage role
   coordinates non-seed hosts against seed-host decisions via
   `hostvars[seedHost]`, which requires lockstep task execution.
-- `task_machine_infra_destroy.yml` has three plays: real-host VIP preparation,
-  a synthetic-host machine pass under `strategy: linear`, and a real-host
-  record/sweep cleanup under `strategy: free`. Linear runs each role task
-  concurrently across the current cluster's machine hosts while preserving
-  the planner's child-before-host barrier between cluster passes.
+- `task_machine_infra_destroy.yml` has three plays — real-host VIP preparation,
+  a synthetic-host machine pass, and a real-host record/sweep cleanup — all
+  three under `strategy: linear`. Linear runs each role task concurrently
+  across the current cluster's machine hosts while preserving the planner's
+  child-before-host barrier between cluster passes; the sweep is dispatched
+  over `bootwright_provider_hosts:bootwright_infra_hosts` at once, so it needs
+  linear for the same one-banner-per-task reason as the apply path.
 
 The per-play component-selection blocks (`Resolve selected cluster` /
 `Pick … component`) look alike but differ in source lists

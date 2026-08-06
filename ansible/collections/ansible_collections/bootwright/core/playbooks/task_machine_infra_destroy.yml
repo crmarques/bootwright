@@ -83,7 +83,7 @@
 
 - name: Clean up machine infrastructure records
   hosts: bootwright_provider_hosts:bootwright_infra_hosts
-  strategy: free
+  strategy: linear
   gather_subset:
     - "!all"
     - min
