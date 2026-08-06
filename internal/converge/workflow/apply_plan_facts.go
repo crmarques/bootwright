@@ -196,6 +196,8 @@ func applyRedfishMachineSlots(state v1alpha1.State, machineNames []string) int {
 	return slots
 }
 
+const controllerVirtctlResource = "controller:virtctl"
+
 func hostMutationResource(host string) string {
 	if host == "" {
 		return ""

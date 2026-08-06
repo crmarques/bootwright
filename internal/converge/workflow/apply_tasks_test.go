@@ -1504,6 +1504,7 @@ func TestPlanApplyProvisionsVirtctlPerHostBeforeBoot(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	assertTaskDeps(t, tasks, "virtctl.metal-ocp", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
+	assertTaskResourceKeys(t, tasks, "virtctl.metal-ocp", controllerVirtctlResource)
 	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
 	found := false
 	for _, dep := range boot.Entry.Dependencies {
