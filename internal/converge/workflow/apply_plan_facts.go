@@ -175,6 +175,27 @@ func applyNodeRedfishResource(state v1alpha1.State, clusterName, machineName str
 	return "redfish:" + clusterName + "/" + machineName
 }
 
+func applyRedfishMachineSlots(state v1alpha1.State, machineNames []string) int {
+	providers := providerIndex(state)
+	machines := machineIndex(state)
+	slots := 0
+	for _, machineName := range machineNames {
+		machine, ok := machines[machineName]
+		if !ok {
+			continue
+		}
+		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
+			continue
+		}
+		if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
+			continue
+		}
+		slots++
+	}
+	return slots
+}
+
 func hostMutationResource(host string) string {
 	if host == "" {
 		return ""

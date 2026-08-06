@@ -268,7 +268,7 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 						State:              clusterState,
 						StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
 						Forks:              len(machineNames),
-						RedfishSlots:       len(machineNames),
+						RedfishSlots:       applyRedfishMachineSlots(state, machineNames),
 					},
 				}); err != nil {
 					return err

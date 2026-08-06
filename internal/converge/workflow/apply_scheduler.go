@@ -178,7 +178,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 			redfishSlots := taskRedfishSlots(task, redfishLimit)
 			taskToRun := task
-			if task.Entry.Kind == ApplyTaskKindNodeBoot || task.Entry.Kind == ApplyTaskKindManagedMachineOS {
+			if redfishSlots > 0 && (task.Entry.Kind == ApplyTaskKindNodeBoot || task.Entry.Kind == ApplyTaskKindManagedMachineOS) {
 				taskToRun.Forks = redfishSlots
 			}
 			started[task.Entry.ID] = true

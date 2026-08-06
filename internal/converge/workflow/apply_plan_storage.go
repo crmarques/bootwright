@@ -75,7 +75,7 @@ func planStorageManagedOSInstallActivities(graph *ActivityGraph, state v1alpha1.
 				DesiredHashState:   managedOSDesiredHashState(hashState, cluster.Metadata.Name),
 				StructuralHashVars: managedMachineOSStructuralHashVars(hashState, cluster.Metadata.Name),
 				Forks:              len(managedOSMachines),
-				RedfishSlots:       len(managedOSMachines),
+				RedfishSlots:       applyRedfishMachineSlots(state, managedOSMachines),
 			},
 		}); err != nil {
 			return nil, err

@@ -558,6 +558,9 @@
     ((bootwright_kubevirt_iso_source_wait.rc | default(1)) == 0
      and (bootwright_kubevirt_iso_source_wait.stdout | default('') | trim)
          in [bootwright_kubevirt_iso_source_signature, bootwright_kubevirt_iso_source_failed_signature])
+    or ((bootwright_kubevirt_iso_source_wait.rc | default(1)) != 0
+        and (bootwright_kubevirt_iso_source_wait.attempts | default(1) | int)
+            >= (bootwright_kubevirt_iso_source_appear_retries | int))
     or ((bootwright_kubevirt_iso_source_wait.attempts | default(1) | int)
         >= (bootwright_kubevirt_iso_source_wait_retries | int))
   retries: "{{ bootwright_kubevirt_iso_source_wait_retries }}"

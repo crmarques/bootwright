@@ -1516,6 +1516,58 @@ func TestPlanApplyProvisionsVirtctlPerHostBeforeBoot(t *testing.T) {
 	}
 }
 
+func TestPlanApplyKubeVirtBootChargesNoRedfishSlots(t *testing.T) {
+	state := kubeVirtChildPlanningState(true)
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	boot := assertTaskPresent(t, tasks, "boot.child-ocp")
+	if boot.RedfishSlots != 0 {
+		t.Fatalf("KubeVirt boot RedfishSlots = %d, want 0: a VirtualMachine has no BMC, so charging it a Redfish slot clamps the play's forks below its machine count", boot.RedfishSlots)
+	}
+	if boot.Forks != 1 {
+		t.Fatalf("KubeVirt boot forks = %d, want one worker per machine", boot.Forks)
+	}
+}
+
+func TestRunApplyTaskGraphKeepsForksForBootTasksWithoutRedfishSlots(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &fakeRunner{}
+	task := ApplyTask{
+		Entry: TaskLedgerEntry{
+			ID:     "boot.child-ocp",
+			Kind:   ApplyTaskKindNodeBoot,
+			Label:  "boot child-ocp nodes",
+			Status: TaskStatusPending,
+		},
+		Playbook:     "bootwright.core.task_container_cluster_boot_agent_machine",
+		State:        state,
+		Forks:        9,
+		RedfishSlots: 0,
+	}
+	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "child-ocp", PhaseNames: []string{ApplyPhaseBase}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1, ParallelismRedfish: 8}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	if runner.lastSpec.Forks != 9 {
+		t.Fatalf("boot forks = %d, want the planned 9: a task that charges no Redfish slot must keep its own fork budget instead of falling back to the Ansible default", runner.lastSpec.Forks)
+	}
+}
+
 func TestPlanApplyBaseOnlyDoesNotProvisionVirtctl(t *testing.T) {
 	state := kubeVirtChildPlanningState(false)
 

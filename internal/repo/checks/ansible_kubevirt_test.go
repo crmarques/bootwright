@@ -168,6 +168,9 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	if got := fmt.Sprint(elect["bootwright_kubevirt_iso_source_failed_signature"]); !strings.Contains(got, "agent-iso-source") || !strings.Contains(got, "Failed") {
 		t.Fatalf("the failed shared-media signature must pin the same role and generation as the succeeded one, got %v", elect["bootwright_kubevirt_iso_source_failed_signature"])
 	}
+	if !strings.Contains(waitUntil, "bootwright_kubevirt_iso_source_appear_retries") {
+		t.Fatalf("a non-electing machine must give up on shared media that never appears at all, or an elected uploader that dies before creating the DataVolume idles every peer for the whole upload budget, got until=%v", tasks[waitIdx]["until"])
+	}
 	if tasks[waitIdx]["failed_when"] != false {
 		t.Fatalf("the shared-media wait must degrade to the direct upload instead of failing the boot, got failed_when=%v", tasks[waitIdx]["failed_when"])
 	}
