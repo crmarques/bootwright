@@ -51,12 +51,30 @@ entries, rather than attaching keys that cannot work.
 
 Repairing it is a Ceph-side action on the five Data Foundation entities
 (`client.healthchecker`, `client.csi-rbd-node`, `client.csi-rbd-provisioner`,
-`client.csi-cephfs-node`, `client.csi-cephfs-provisioner`). Traps:
+`client.csi-cephfs-node`, `client.csi-cephfs-provisioner`).
 
-- `ceph auth rotate` and `auth del` + `get-or-create` both re-mint with the
-  build default, so they do not help.
-- The exporter calls `get-or-create` and adopts an existing key verbatim, so a
-  repaired entity survives re-export — and a bad one is never re-minted away.
+IBM Storage Ceph `20.2.1-324.el9cp` accepts a per-entity key type — verified
+from `ceph auth get-or-create -h` on ceph-prd-01, which advertises
+`auth get-or-create <entity> [<caps>...] [--key_type <value>]` and the same
+flag on `get-or-create-key`. Note the **underscore**: `--key_type`, not
+`--key-type`. The only cipher-related config option this build exposes is
+`mon_auth_emergency_allowed_ciphers`; the `auth_preferred_cipher` /
+`auth_allowed_ciphers` / `auth_service_cipher` names that circulate in
+downstream rook source do **not** exist here, and rook sets its own via
+`ceph mon set`, which `spec.ceph.config` (`ceph config set`) cannot reach.
+
+Traps:
+
+- `ceph auth rotate` re-mints with the build default. So does a bare
+  `get-or-create` after `auth rm` — the key type only changes if `--key_type`
+  is passed explicitly.
+- The exporter calls `get-or-create` and adopts an existing key verbatim
+  (`check_user_exist`), so a repaired entity survives re-export — and a bad one
+  is never re-minted away by re-running the export. Repair, or delete and let
+  the exporter recreate; re-running alone changes nothing.
+- Re-creating by hand means re-supplying the exact caps the exporter would set.
+  Capturing `ceph auth get <entity>` first, or deleting the entity and letting
+  the exporter recreate it, avoids transcribing them.
 - Never flip the type byte on an existing 44-byte blob: `CryptoAES` validates
   only `length >= 16`, so a 32-byte secret relabelled type 1 loads silently and
   uses the first 16 bytes — a silently wrong credential.
