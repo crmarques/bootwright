@@ -44,6 +44,15 @@ known-host count the rendezvous node is waiting for and lists every declared
 node.
 
 A give-up that survives the retries is a real missing node, not a slow one.
-Find the machine behind it — on a virtualized cluster, a VM that was created
-but never powered on, or one whose per-VM agent ISO never attached, registers
-nothing while every sibling boots normally.
+
+**Boot-side gate.** The node that never registers should never have reached
+this wait. Every boot driver ends by handing its machine to
+`support_ssh_readiness`, which waits for the node's `primaryIPAddress` to
+answer TCP/22 and then to accept the cluster SSH key — proof the guest booted
+the generated agent ISO, not merely that the hypervisor started it. The
+KubeVirt driver used to stop at `kubectl wait vmi --for=condition=Ready`, which
+only means the virt-launcher pod is up: one VM whose guest never booted the ISO
+passed its boot activity clean and surfaced 9 tasks later as this opaque
+installer give-up. It now runs the same gate as the Redfish and vSphere
+drivers, so a guest that never comes up fails its own machine's boot activity,
+by name.

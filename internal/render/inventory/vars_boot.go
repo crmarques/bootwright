@@ -68,6 +68,8 @@ func machineBootVarsForMedia(state v1alpha1.State, ci v1alpha1.ClusterInstall, m
 			return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
 		case provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil:
 			return vsphereBootVars(state, provider.Spec.VSphere, profile, m, isoBasename, sharing)
+		case provider.Spec.Type == v1alpha1.ProvisionerKubeVirt:
+			return map[string]any{"readiness": sshReadinessVars()}
 		}
 		return nil
 	}

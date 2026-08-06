@@ -371,6 +371,49 @@ func TestKubeVirtBootClearsTheAgentISOClaimItsDataVolumeLeavesBehind(t *testing.
 	}
 }
 
+func TestKubeVirtBootGatesOnGuestReadinessNotJustVirtualMachineInstanceReadiness(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
+	vmiIdx := findAnsibleTask(t, tasks, "Wait for KubeVirt VirtualMachineInstance readiness")
+	readyIdx := findAnsibleTask(t, tasks, "Wait for KubeVirt node readiness")
+	if vmiIdx > readyIdx {
+		t.Fatalf("KubeVirt boot must gate on guest readiness after the VirtualMachineInstance is Ready")
+	}
+	assertIncludeRoleName(t, tasks[readyIdx], "bootwright.core.support_ssh_readiness")
+
+	vars, ok := tasks[readyIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no vars", tasks[readyIdx]["name"])
+	}
+	for key, want := range map[string]string{
+		"bootwright_ssh_ready_readiness":               "bootwright_component.boot.readiness",
+		"bootwright_ssh_ready_address":                 "bootwright_component.primaryIPAddress",
+		"bootwright_ssh_ready_node_name":               "bootwright_component.name",
+		"bootwright_ssh_ready_key_path":                "bootwright_current_cluster.nodeSSHPrivateKeyPath",
+		"bootwright_ssh_ready_default_port":            "bootwright_kubevirt_node_ready_probe_port",
+		"bootwright_ssh_ready_port_timeout_seconds":    "bootwright_kubevirt_node_ready_timeout_seconds",
+		"bootwright_ssh_ready_connect_timeout_seconds": "bootwright_kubevirt_node_ready_ssh_connect_timeout_seconds",
+		"bootwright_ssh_ready_auth_retries":            "bootwright_kubevirt_node_ready_ssh_auth_retries",
+		"bootwright_ssh_ready_auth_delay_seconds":      "bootwright_kubevirt_node_ready_ssh_auth_delay_seconds",
+	} {
+		if got := fmt.Sprint(vars[key]); !strings.Contains(got, want) {
+			t.Fatalf("KubeVirt node readiness %s got %q, want it to carry %q", key, got, want)
+		}
+	}
+
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/defaults/main.yml")
+	for _, want := range []string{
+		"bootwright_kubevirt_node_ready_probe_port:",
+		"bootwright_kubevirt_node_ready_timeout_seconds:",
+		"bootwright_kubevirt_node_ready_ssh_connect_timeout_seconds:",
+		"bootwright_kubevirt_node_ready_ssh_auth_retries:",
+		"bootwright_kubevirt_node_ready_ssh_auth_delay_seconds:",
+	} {
+		if !strings.Contains(defaults, want) {
+			t.Fatalf("KubeVirt boot defaults missing %q", want)
+		}
+	}
+}
+
 func TestKubeVirtDestroyReleasesSharedAgentISOSourceAtClusterScope(t *testing.T) {
 	topTasks := readAnsibleTasks(t, kubeVirtSubstrateDestroyTasks)
 	inputs, ok := topTasks[findAnsibleTask(t, topTasks, "Resolve KubeVirt destroy inputs")]["ansible.builtin.set_fact"].(map[string]any)

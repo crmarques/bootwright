@@ -153,6 +153,23 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if _, found := unmaterializedMachine["kubevirt"].(map[string]any)["kubeconfig"]; found {
 		t.Fatal("execution render emitted a durable host kubeconfig without runtime material")
 	}
+	boot, ok := machine["boot"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt machine component has no boot block: %v", machine)
+	}
+	readiness, ok := boot["readiness"].(map[string]any)
+	if !ok {
+		t.Fatalf("KubeVirt boot block has no readiness gate: %v", boot)
+	}
+	if got := readiness["type"]; got != "ssh" {
+		t.Fatalf("KubeVirt boot readiness type = %v, want ssh", got)
+	}
+	if got := readiness["ssh"].(map[string]any)["user"]; got != "core" {
+		t.Fatalf("KubeVirt boot readiness user = %v, want core", got)
+	}
+	if got := machine["primaryIPAddress"]; got == nil || got == "" {
+		t.Fatalf("KubeVirt machine component needs a primary IP for the readiness gate, got %v", got)
+	}
 	interfaces := machine["interfaces"].([]any)
 	iface := interfaces[0].(map[string]any)
 	mac, _ := iface["macAddress"].(string)

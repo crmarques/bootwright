@@ -960,3 +960,28 @@
       - --for=condition=Ready
       - "--timeout={{ bootwright_kubevirt_boot_vmi_timeout }}s"
   changed_when: false
+
+- name: Wait for KubeVirt node readiness
+  ansible.builtin.include_role:
+    name: bootwright.core.support_ssh_readiness
+  vars:
+    bootwright_ssh_ready_readiness: "{{ bootwright_component.boot.readiness | default({}) }}"
+    bootwright_ssh_ready_node_name: "{{ bootwright_component.name }}"
+    bootwright_ssh_ready_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
+    bootwright_ssh_ready_default_port: "{{ bootwright_kubevirt_node_ready_probe_port }}"
+    bootwright_ssh_ready_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
+    bootwright_ssh_ready_known_hosts_path: >-
+      /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
+    bootwright_ssh_ready_port_timeout_seconds: "{{ bootwright_kubevirt_node_ready_timeout_seconds }}"
+    bootwright_ssh_ready_connect_timeout_seconds: "{{ bootwright_kubevirt_node_ready_ssh_connect_timeout_seconds }}"
+    bootwright_ssh_ready_auth_retries: "{{ bootwright_kubevirt_node_ready_ssh_auth_retries }}"
+    bootwright_ssh_ready_auth_delay_seconds: "{{ bootwright_kubevirt_node_ready_ssh_auth_delay_seconds }}"
+    bootwright_ssh_ready_reject_hint: >-
+      A Ready VirtualMachineInstance only means the virt-launcher pod started;
+      it does not mean the guest booted the generated agent ISO. Check that
+      DataVolume {{ bootwright_kubevirt_iso_dv_name }} carries the current ISO,
+      that the VM boots it ahead of its empty root disk, and that the declared
+      MAC/IP mapping for {{ bootwright_component.name }} matches the network
+      attachment. A node that never answers here never registers with the
+      rendezvous host, and holds the whole cluster short of its declared host
+      count.
