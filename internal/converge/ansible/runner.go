@@ -443,7 +443,7 @@ func summarizeFailure(logPath string, tailLines int) string {
 	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
 		return fmt.Sprintf("  (output log %s is empty)", logPath)
 	}
-	failingTask, failureReason := ansibleFailure(lines)
+	failingTask, failureReason, failureHost := ansibleFailure(lines)
 	start := len(lines) - tailLines
 	if start < 0 {
 		start = 0
@@ -454,7 +454,11 @@ func summarizeFailure(logPath string, tailLines int) string {
 		b.WriteString("  failed task: " + failingTask + "\n")
 	}
 	if failureReason != "" {
-		b.WriteString("  failure: " + failureReason + "\n")
+		if failureHost != "" {
+			b.WriteString("  failure: " + failureReason + " (host " + failureHost + ")\n")
+		} else {
+			b.WriteString("  failure: " + failureReason + "\n")
+		}
 	}
 	if tail != "" {
 		b.WriteString("  last " + strconv.Itoa(len(lines)-start) + " line(s) of output:\n")
@@ -472,9 +476,10 @@ func stripANSI(s string) string { return ansiEscape.ReplaceAllString(s, "") }
 type ansibleFailureCandidate struct {
 	task   string
 	reason string
+	host   string
 }
 
-func ansibleFailure(lines []string) (string, string) {
+func ansibleFailure(lines []string) (string, string, string) {
 	task := ""
 	lastTask := ""
 	var failed, enriched, unreachable, rawFatal ansibleFailureCandidate
@@ -485,18 +490,19 @@ func ansibleFailure(lines []string) (string, string) {
 			task = line
 			lastTask = line
 		case strings.HasPrefix(line, "fatal:"):
+			host := ansibleResultHost(line)
 			if rawFatal.reason == "" {
-				rawFatal = ansibleFailureCandidate{task: task, reason: line}
+				rawFatal = ansibleFailureCandidate{task: task, reason: line, host: host}
 			}
 			msg := ansibleResultMessage(line)
 			switch {
 			case msg == "":
 			case strings.Contains(line, "UNREACHABLE!"):
 				if unreachable.reason == "" {
-					unreachable = ansibleFailureCandidate{task: task, reason: msg}
+					unreachable = ansibleFailureCandidate{task: task, reason: msg, host: host}
 				}
 			case failed.reason == "":
-				failed = ansibleFailureCandidate{task: task, reason: msg}
+				failed = ansibleFailureCandidate{task: task, reason: msg, host: host}
 			}
 		case strings.HasPrefix(line, "[ERROR]:"):
 			if enriched.reason == "" {
@@ -509,11 +515,24 @@ func ansibleFailure(lines []string) (string, string) {
 			continue
 		}
 		if candidate.task == "" {
-			return lastTask, candidate.reason
+			return lastTask, candidate.reason, candidate.host
 		}
-		return candidate.task, candidate.reason
+		return candidate.task, candidate.reason, candidate.host
 	}
-	return lastTask, ""
+	return lastTask, "", ""
+}
+
+func ansibleResultHost(line string) string {
+	open := strings.Index(line, "[")
+	if open < 0 {
+		return ""
+	}
+	rest := line[open+1:]
+	end := strings.Index(rest, "]")
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:end])
 }
 
 func ansibleResultMessage(line string) string {

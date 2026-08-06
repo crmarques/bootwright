@@ -72,3 +72,26 @@ func TestSummarizeFailureAttributesAnUnreachableToItsOwnTask(t *testing.T) {
 		t.Fatalf("summary must carry the unreachable reason:\n%s", got)
 	}
 }
+
+func TestSummarizeFailureNamesTheFailingHost(t *testing.T) {
+	got := summarizeFailure(writeFailureLog(t, []string{
+		"TASK [bootwright.core.machine_substrate_kubevirt : Apply KubeVirt VirtualMachine] *",
+		"ok: [machine__container__hub__m0]",
+		"fatal: [machine__container__hub__m1]: FAILED! => {\"msg\": \"admission webhook denied the request\"}",
+		"PLAY RECAP *",
+	}), 50)
+	if !strings.Contains(got, "failure: admission webhook denied the request (host machine__container__hub__m1)") {
+		t.Fatalf("one task now covers every machine, so the summary must name the failing host:\n%s", got)
+	}
+}
+
+func TestSummarizeFailureOmitsTheHostWhenOnlyAnEnrichedErrorIsPresent(t *testing.T) {
+	got := summarizeFailure(writeFailureLog(t, []string{
+		"TASK [bootwright.core.machine_substrate_kubevirt : Apply KubeVirt VirtualMachine] *",
+		"[ERROR]: the requested kubeconfig was not found",
+		"PLAY RECAP *",
+	}), 50)
+	if strings.Contains(got, "(host ") {
+		t.Fatalf("an [ERROR]: line carries no host, so none may be invented:\n%s", got)
+	}
+}
