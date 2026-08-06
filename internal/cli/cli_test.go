@@ -4365,8 +4365,8 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
 	}
-	if report.ApplyPlan.Limits.Parallelism != 4 {
-		t.Fatalf("parallelism = %d, want 4 safe-auto tasks", report.ApplyPlan.Limits.Parallelism)
+	if report.ApplyPlan.Limits.Parallelism != 5 {
+		t.Fatalf("parallelism = %d, want 5 safe-auto tasks", report.ApplyPlan.Limits.Parallelism)
 	}
 	if report.ApplyPlan.Limits.ParallelismPerHost != 1 {
 		t.Fatalf("per-host parallelism = %d, want 1 safety lock", report.ApplyPlan.Limits.ParallelismPerHost)
@@ -4375,8 +4375,8 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 		t.Fatalf("redfish parallelism = %d, want 3 node boot tasks", report.ApplyPlan.Limits.ParallelismRedfish)
 	}
 	tasks := report.ApplyPlan.Tasks
-	if len(tasks) != 4 {
-		t.Fatalf("planned %d tasks, want 4: %+v", len(tasks), tasks)
+	if len(tasks) != 5 {
+		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
 	}
 	var bootTask *workflow.TaskLedgerEntry
 	for _, task := range tasks {
@@ -4403,19 +4403,26 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("runs", "history", "dry-run", "bootwright-3-nodes-ocp-baremetal.log")) {
 		t.Fatalf("boot cluster log path = %q", bootTask.ClusterLogPath)
 	}
-	bootstrap := tasks[len(tasks)-2]
+	bootstrap := tasks[len(tasks)-3]
 	if bootstrap.ID != "wait-bootstrap.3-nodes-ocp-baremetal" {
-		t.Fatalf("second-to-last task = %s, want wait-bootstrap.3-nodes-ocp-baremetal", bootstrap.ID)
+		t.Fatalf("third-to-last task = %s, want wait-bootstrap.3-nodes-ocp-baremetal", bootstrap.ID)
 	}
 	if len(bootstrap.Dependencies) != 1 || bootstrap.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
 		t.Fatalf("bootstrap wait deps = %v, want boot.3-nodes-ocp-baremetal", bootstrap.Dependencies)
 	}
-	wait := tasks[len(tasks)-1]
+	wait := tasks[len(tasks)-2]
 	if wait.ID != "wait.3-nodes-ocp-baremetal" {
-		t.Fatalf("last task = %s, want wait.3-nodes-ocp-baremetal", wait.ID)
+		t.Fatalf("second-to-last task = %s, want wait.3-nodes-ocp-baremetal", wait.ID)
 	}
 	if len(wait.Dependencies) != 1 || wait.Dependencies[0] != "wait-bootstrap.3-nodes-ocp-baremetal" {
 		t.Fatalf("wait deps = %v, want wait-bootstrap.3-nodes-ocp-baremetal", wait.Dependencies)
+	}
+	nodeConfig := tasks[len(tasks)-1]
+	if nodeConfig.ID != "nodeconfig.3-nodes-ocp-baremetal.apply" {
+		t.Fatalf("last task = %s, want nodeconfig.3-nodes-ocp-baremetal.apply", nodeConfig.ID)
+	}
+	if len(nodeConfig.Dependencies) != 1 || nodeConfig.Dependencies[0] != "wait.3-nodes-ocp-baremetal" {
+		t.Fatalf("node config deps = %v, want wait.3-nodes-ocp-baremetal", nodeConfig.Dependencies)
 	}
 }
 
@@ -4459,6 +4466,7 @@ func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 		"wait-bootstrap.sno-libvirt",
 		"wait.sno-libvirt",
 		"addon.sno-libvirt.openshift-virtualization",
+		"nodeconfig.sno-libvirt.apply",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("addon task IDs = %v, want %v", gotIDs, wantIDs)
@@ -4498,6 +4506,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		"wait-bootstrap.sno-libvirt",
 		"wait.sno-libvirt",
 		"addon.sno-libvirt.openshift-virtualization",
+		"nodeconfig.sno-libvirt.apply",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("apply --stage clusters task IDs = %v, want %v", gotIDs, wantIDs)

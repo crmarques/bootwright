@@ -28,8 +28,8 @@ func planApplyTasks(t *testing.T, target workflow.ApplyTarget, state v1alpha1.St
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
-	if len(tasks) != 9 {
-		t.Fatalf("planned %d tasks, want 9: %+v", len(tasks), tasks)
+	if len(tasks) != 10 {
+		t.Fatalf("planned %d tasks, want 10: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "provider.bastion" {
 		t.Fatalf("first task = %s, want provider.bastion", tasks[0].Entry.ID)
@@ -74,6 +74,10 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 		t.Fatalf("ninth task = %s, want wait.sno-libvirt", tasks[8].Entry.ID)
 	}
 	assertPlannedDeps(t, tasks[8], "wait-bootstrap.sno-libvirt")
+	if tasks[9].Entry.ID != "nodeconfig.sno-libvirt.apply" {
+		t.Fatalf("tenth task = %s, want nodeconfig.sno-libvirt.apply", tasks[9].Entry.ID)
+	}
+	assertPlannedDeps(t, tasks[9], "wait.sno-libvirt")
 }
 
 func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
@@ -86,8 +90,8 @@ func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
 func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
-	if len(tasks) != 4 {
-		t.Fatalf("planned %d tasks, want 4: %+v", len(tasks), tasks)
+	if len(tasks) != 5 {
+		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "iso.sno-libvirt" {
 		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].Entry.ID)
@@ -118,8 +122,8 @@ func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
 	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
-	if len(tasks) != 4 {
-		t.Fatalf("planned %d tasks, want 4: %+v", len(tasks), tasks)
+	if len(tasks) != 5 {
+		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
 	}
 	boot := tasks[1]
 	if boot.Entry.ID != "boot.3-nodes-ocp-baremetal" {
