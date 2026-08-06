@@ -23,6 +23,33 @@ add-on's own Subscription cannot close it, and waiting for `ocs-operator` to run
 is unsatisfiable: `odf-operator` holds its Deployment at zero replicas until a
 `StorageCluster` exists.
 
+## Data Foundation installs with no object storage at all
+
+Symptom: no `ocs-external-storagecluster-ceph-rgw` StorageClass, no
+`rgw-admin-ops-user` Secret, and NooBaa's default backingstore is type
+`pv-pool` (a 50Gi RBD PVC) rather than `s3-compatible`. Everything reports
+healthy — the export step succeeds, the StorageCluster reaches Ready — but the
+S3 the `StorageExport` declares does not exist.
+
+The exporter gates **both** the `ceph-rgw` StorageClass entry and the
+`rgw-admin-ops-user` Secret entry on `if self.out_map["RGW_ENDPOINT"]:`, and
+sets `RGW_ENDPOINT` only when `validate_rgw_endpoint` does not return `"-1"`.
+Two of its three failure paths — `endpoint_dial` failing, and `get_rgw_fsid`
+failing — return `"-1"` **writing nothing to stderr**, and the script exits 0.
+Only an fsid mismatch says anything at all.
+
+The trap that caused it here: the exporter dials the RGW endpoint with
+python-requests, which verifies against **certifi**, not the node's trust store,
+unless `REQUESTS_CA_BUNDLE` is set. Bootwright used to set that only when the
+managers published an *https* Prometheus endpoint — so a cluster whose
+`mgmtGateway.exposure` is `http` (prd) got no bundle at all, and an RGW whose
+certificate is signed by the estate's own CA failed verification silently. The
+trust bundle is now seeded from `/etc/pki/tls/certs/ca-bundle.crt` and passed on
+every run; the cephadm root CA is still appended only when the monitoring
+endpoint is https. The export step also refuses outright when a `StorageExport`
+declares `objectGatewayRef` and the export carries no `ceph-rgw` entry, because
+the exporter itself will not tell you.
+
 ## `error setting modifier for [client.healthchecker] type=key ...: Malformed input [buffer:3]`
 
 Seen in the `StorageCluster` status as `ExternalClusterConnecting=False`, reason

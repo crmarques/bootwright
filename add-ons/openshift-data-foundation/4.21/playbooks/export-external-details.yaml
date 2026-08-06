@@ -180,7 +180,6 @@
           Prometheus endpoint instead of failing on it.
 
     - name: Seed the exporter trust bundle from the node trust store
-      when: bootwright_exporter_monitoring_url is match('https://')
       ansible.builtin.copy:
         src: "{{ bootwright_exporter_system_ca_path }}"
         dest: "{{ bootwright_exporter_ca_path }}"
@@ -230,8 +229,7 @@
       ansible.builtin.set_fact:
         bootwright_exporter_argv: "{{ ['python3', bootwright_exporter_path] + bootwright_exporter_args }}"
 
-    - name: Point the exporter at the trust bundle carrying the cephadm root CA
-      when: bootwright_exporter_monitoring_url is match('https://')
+    - name: Point the exporter at the node trust store
       ansible.builtin.set_fact:
         bootwright_exporter_argv: "{{ ['env', 'REQUESTS_CA_BUNDLE=' ~ bootwright_exporter_ca_path] + bootwright_exporter_argv }}"
 
@@ -267,6 +265,36 @@
       ansible.builtin.file:
         path: "{{ bootwright_exporter_workdir }}"
         state: absent
+
+    - name: Refuse an export that dropped the declared object gateway
+      when: bootwright_gateway is not none
+      ansible.builtin.assert:
+        that:
+          - (bootwright_external_details.stdout | default('') | trim | default('[]', true) | from_json)
+            | selectattr('name', 'defined') | selectattr('name', 'equalto', 'ceph-rgw')
+            | list | length > 0
+        fail_msg: >-
+          StorageExport {{ bootwright_step_refs['external-storage'].metadata.name }}
+          declares objectGatewayRef
+          {{ bootwright_step_refs['external-storage'].spec.dataFoundation.objectGatewayRef }},
+          so the exporter was given --rgw-endpoint
+          {{ bootwright_gateway.publicFQDN }}:{{ bootwright_gateway.spec.public.port | default(443) }},
+          but the export carries no ceph-rgw entry. The exporter validates that
+          endpoint by dialling it and comparing the cluster id its admin-ops API
+          returns against the Ceph cluster fsid; on a dial or fsid failure it
+          drops the endpoint, emits nothing on stderr for either case, and exits
+          0. Data Foundation then installs with no object storage at all and
+          NooBaa quietly falls back to a pv-pool backing store on RBD, so the S3
+          this export declares never exists. From a Ceph node, check that
+          {{ bootwright_gateway.publicFQDN }} resolves, that its ingress VIP
+          answers on port
+          {{ bootwright_gateway.spec.public.port | default(443) }}, and that its
+          TLS certificate verifies against
+          {{ bootwright_exporter_system_ca_path }} — a gateway certificate whose
+          issuer the node does not trust fails here silently.
+        success_msg: >-
+          The export carries the declared object gateway, so Data Foundation
+          gets its S3 endpoint.
 
     - name: Record the exported entries whose cephx key type this build cannot parse
       ansible.builtin.set_fact:
