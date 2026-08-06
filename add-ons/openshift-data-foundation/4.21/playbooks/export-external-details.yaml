@@ -10,9 +10,11 @@
     bootwright_exporter_workdir: "/tmp/bootwright-df-exporter-{{ bootwright_bound_cluster }}"
     bootwright_exporter_staged_path: "{{ bootwright_exporter_workdir }}/exporter.py"
     bootwright_exporter_ca_path: "{{ bootwright_exporter_workdir }}/trust-bundle.crt"
+    bootwright_exporter_gateway_cert_path: "{{ bootwright_exporter_workdir }}/object-gateway.crt"
     bootwright_exporter_system_ca_path: /etc/pki/tls/certs/ca-bundle.crt
     bootwright_df: "{{ bootwright_step_refs['external-storage'].spec.dataFoundation }}"
     bootwright_gateway: "{{ bootwright_step_refs['external-storage'].objectGateway | default(None) }}"
+    bootwright_gateway_cert_paths: "{{ (bootwright_gateway | default({}, true)).certificatePaths | default([]) }}"
     bootwright_exporter_key_type: "{{ bootwright_step_refs['external-storage'].cephxKeyType | default('') }}"
     bootwright_exporter_key_prefixes:
       aes: AQ
@@ -194,6 +196,36 @@
         marker: "# {mark} BOOTWRIGHT CEPHADM ROOT CA"
         mode: "0600"
 
+    - name: Refuse a gateway whose ingresses serve more than one certificate
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.assert:
+        that:
+          - bootwright_gateway_cert_paths | length <= 1
+        fail_msg: >-
+          Object gateway {{ bootwright_gateway.metadata.name }} declares
+          {{ bootwright_gateway_cert_paths | length }} different ingress
+          certificates, but its ingresses all answer the single public name
+          {{ bootwright_gateway.publicFQDN }} and the exporter accepts one
+          --rgw-tls-cert-path. Whichever certificate the export carried would be
+          the only one Data Foundation trusts, so the S3 endpoint would work
+          from some ingress hosts and fail from others. Point every ingress
+          tls.certificateRef at the same certificate.
+        success_msg: >-
+          The declared object gateway serves one certificate.
+
+    - name: Stage the certificate the declared object gateway serves
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.copy:
+        content: "{{ lookup('ansible.builtin.file', bootwright_gateway_cert_paths | first) | trim }}\n"
+        dest: "{{ bootwright_exporter_gateway_cert_path }}"
+        mode: "0600"
+
+    - name: Point the exporter at the certificate the object gateway serves
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.set_fact:
+        bootwright_exporter_args: >-
+          {{ bootwright_exporter_args + ['--rgw-tls-cert-path', bootwright_exporter_gateway_cert_path] }}
+
     - name: Read the cephx entities this export's clients authenticate with
       when: bootwright_exporter_key_type | length > 0
       ansible.builtin.command:
@@ -282,16 +314,21 @@
           but the export carries no ceph-rgw entry. The exporter validates that
           endpoint by dialling it and comparing the cluster id its admin-ops API
           returns against the Ceph cluster fsid; on a dial or fsid failure it
-          drops the endpoint, emits nothing on stderr for either case, and exits
-          0. Data Foundation then installs with no object storage at all and
-          NooBaa quietly falls back to a pv-pool backing store on RBD, so the S3
-          this export declares never exists. From a Ceph node, check that
-          {{ bootwright_gateway.publicFQDN }} resolves, that its ingress VIP
-          answers on port
-          {{ bootwright_gateway.spec.public.port | default(443) }}, and that its
-          TLS certificate verifies against
-          {{ bootwright_exporter_system_ca_path }} — a gateway certificate whose
-          issuer the node does not trust fails here silently.
+          drops the endpoint and still exits 0. Data Foundation then installs
+          with no object storage at all and NooBaa quietly falls back to a
+          pv-pool backing store on RBD, so the S3 this export declares never
+          exists. The exporter said: {{ bootwright_external_details.stderr | default('') | trim | default('<nothing>', true) }}.
+          From a Ceph node, check that {{ bootwright_gateway.publicFQDN }}
+          resolves and that its ingress VIP answers on port
+          {{ bootwright_gateway.spec.public.port | default(443) }}. On TLS: this
+          run staged {{ bootwright_gateway_cert_paths | length }} certificate(s)
+          from {{ bootwright_gateway.metadata.name }}. With one staged, the
+          exporter verifies against exactly that certificate, so an endpoint
+          serving anything else — an ingress still holding a previous
+          certificate, or a load balancer terminating TLS ahead of it — fails
+          here; with none staged it verifies against
+          {{ bootwright_exporter_system_ca_path }} instead, and a certificate
+          whose issuer the node does not trust fails silently.
         success_msg: >-
           The export carries the declared object gateway, so Data Foundation
           gets its S3 endpoint.

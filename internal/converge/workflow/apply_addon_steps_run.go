@@ -43,7 +43,7 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 	if err := store.MaterializeSelected(connectionDir, stepConnectionSecretNames(machines)); err != nil {
 		return nil, err
 	}
-	if err := store.MaterializeSelected(stepSecretsDir, stepSecretNames(step)); err != nil {
+	if err := store.MaterializeSelected(stepSecretsDir, append(stepSecretNames(step), e.stepGatewayCertificateNames()...)); err != nil {
 		return nil, err
 	}
 
@@ -79,7 +79,7 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 	}
 
 	var outputs map[string]string
-	extraVars, err := stepExtraVarPairs(step, e.plan.Name, e.plan.Cluster, outputsDir, stepSecretsDir, e.kubeconfig, e.resolveStepRefs(), e.inputs)
+	extraVars, err := stepExtraVarPairs(step, e.plan.Name, e.plan.Cluster, outputsDir, stepSecretsDir, e.kubeconfig, e.resolveStepRefs(stepSecretsDir), e.inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func (e *addonStepExecutor) resolveExportDetailsToken(arg string) (string, error
 	return string(data), nil
 }
 
-func (e *addonStepExecutor) resolveStepRefs() map[string]any {
+func (e *addonStepExecutor) resolveStepRefs(stepSecretsDir string) map[string]any {
 	refs := map[string]any{}
 	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
 		if accepted.ResourceRef == nil {
@@ -233,11 +233,68 @@ func (e *addonStepExecutor) resolveStepRefs() map[string]any {
 		if name == "" {
 			continue
 		}
-		if object := e.resolveRefObject(accepted.ResourceRef.Kind, name); object != nil {
+		if object := e.resolveRefObject(accepted.ResourceRef.Kind, name, stepSecretsDir); object != nil {
 			refs[accepted.Name] = object
 		}
 	}
 	return refs
+}
+
+func (e *addonStepExecutor) stepGatewayCertificateNames() []string {
+	var names []string
+	for _, accepted := range e.plan.Addon.Spec.Accepts.Inputs {
+		if accepted.ResourceRef == nil || accepted.ResourceRef.Kind != steps.RefKindStorageExport {
+			continue
+		}
+		export, ok := stateview.ExportByName(e.state, e.inputValue(accepted.Name))
+		if !ok {
+			continue
+		}
+		gateway, ok := exportObjectGateway(e.state, export)
+		if !ok {
+			continue
+		}
+		names = appendUniqueStrings(names, gatewayCertificateRefNames(gateway)...)
+	}
+	return names
+}
+
+func exportObjectGateway(state v1alpha1.State, export v1alpha1.StorageExport) (v1alpha1.StorageObjectGateway, bool) {
+	df := export.Spec.DataFoundation
+	if df == nil || df.ObjectGatewayRef.Name == "" {
+		return v1alpha1.StorageObjectGateway{}, false
+	}
+	for _, gateway := range state.StorageObjectGateways {
+		if gateway.Metadata.Name == df.ObjectGatewayRef.Name {
+			return gateway, true
+		}
+	}
+	return v1alpha1.StorageObjectGateway{}, false
+}
+
+func (e *addonStepExecutor) gatewayCertificatePaths(gateway v1alpha1.StorageObjectGateway, stepSecretsDir string) []string {
+	if stepSecretsDir == "" {
+		return nil
+	}
+	idx := secret.NewIndex(e.state)
+	var paths []string
+	for _, name := range gatewayCertificateRefNames(gateway) {
+		if path := secret.ResolvePath(name, idx, stepSecretsDir); path != "" {
+			paths = appendUniqueStrings(paths, path)
+		}
+	}
+	return paths
+}
+
+func gatewayCertificateRefNames(gateway v1alpha1.StorageObjectGateway) []string {
+	var names []string
+	for _, ingress := range gateway.Spec.Ceph.Ingresses {
+		if ingress.TLS == nil || ingress.TLS.CertificateRef.Name == "" {
+			continue
+		}
+		names = appendUniqueStrings(names, ingress.TLS.CertificateRef.Name)
+	}
+	return names
 }
 
 func (e *addonStepExecutor) inputValue(input string) string {
@@ -249,7 +306,7 @@ func (e *addonStepExecutor) inputValue(input string) string {
 	return ""
 }
 
-func (e *addonStepExecutor) resolveRefObject(refKind, name string) map[string]any {
+func (e *addonStepExecutor) resolveRefObject(refKind, name, stepSecretsDir string) map[string]any {
 	switch refKind {
 	case steps.RefKindStorageExport:
 		export, ok := stateview.ExportByName(e.state, name)
@@ -262,17 +319,15 @@ func (e *addonStepExecutor) resolveRefObject(refKind, name string) map[string]an
 				object["cephxKeyType"] = keyType
 			}
 		}
-		if df := export.Spec.DataFoundation; df != nil && df.ObjectGatewayRef.Name != "" {
-			for _, gw := range e.state.StorageObjectGateways {
-				if gw.Metadata.Name == df.ObjectGatewayRef.Name {
-					gateway := objectToMap(gw)
-					if fqdn := stateview.StorageGatewayFQDN(e.state, gw); fqdn != "" && gateway != nil {
-						gateway["publicFQDN"] = fqdn
-					}
-					object["objectGateway"] = gateway
-					break
-				}
+		if gw, ok := exportObjectGateway(e.state, export); ok {
+			gateway := objectToMap(gw)
+			if fqdn := stateview.StorageGatewayFQDN(e.state, gw); fqdn != "" && gateway != nil {
+				gateway["publicFQDN"] = fqdn
 			}
+			if paths := e.gatewayCertificatePaths(gw, stepSecretsDir); len(paths) > 0 && gateway != nil {
+				gateway["certificatePaths"] = paths
+			}
+			object["objectGateway"] = gateway
 		}
 		return object
 	case steps.RefKindStorageCluster:

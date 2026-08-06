@@ -63,7 +63,17 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
 				Public:            v1alpha1.StorageObjectGatewayPublic{DNSLabel: "rgw-dc1", Scheme: "https", Port: 443},
-				Ceph:              v1alpha1.StorageObjectGatewayCephSpec{ServiceID: "odf.dc1"},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.dc1",
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{
+						Name:    "ha",
+						Address: "198.51.100.100",
+						TLS: &v1alpha1.StorageObjectGatewayIngressTLS{
+							CertificateRef: v1alpha1.LocalObjectReference{Name: "ceph-rgw-dc1-tls"},
+							KeyRef:         v1alpha1.LocalObjectReference{Name: "ceph-rgw-dc1-tls"},
+						},
+					}},
+				},
 			},
 		}},
 		StorageExports: []v1alpha1.StorageExport{
@@ -94,7 +104,7 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 	}
 	executor := &addonStepExecutor{state: state}
 
-	withRGW := executor.resolveRefObject(steps.RefKindStorageExport, "with-rgw")
+	withRGW := executor.resolveRefObject(steps.RefKindStorageExport, "with-rgw", "/runs/secrets")
 	gw, ok := withRGW["objectGateway"].(map[string]any)
 	if !ok {
 		t.Fatalf("resolveRefObject did not embed objectGateway for an export with objectGatewayRef set: %v", withRGW)
@@ -108,9 +118,78 @@ func TestResolveRefObjectEmbedsObjectGatewayWhenExportReferencesOne(t *testing.T
 		t.Fatalf("embedded objectGateway.publicFQDN = %v, want the composed rgw-dc1.ceph.example.test the exporter step reads", gw["publicFQDN"])
 	}
 
-	withoutRGW := executor.resolveRefObject(steps.RefKindStorageExport, "no-rgw")
+	paths, _ := gw["certificatePaths"].([]string)
+	if len(paths) != 1 || paths[0] != "/runs/secrets/ceph-rgw-dc1-tls" {
+		t.Fatalf("embedded objectGateway.certificatePaths = %v, want the materialized ingress certificate the exporter verifies against", gw["certificatePaths"])
+	}
+
+	withoutRGW := executor.resolveRefObject(steps.RefKindStorageExport, "no-rgw", "/runs/secrets")
 	if _, ok := withoutRGW["objectGateway"]; ok {
 		t.Fatalf("resolveRefObject must not embed objectGateway when objectGatewayRef is unset: %v", withoutRGW)
+	}
+}
+
+func TestStepGatewayCertificateNamesCoverEveryDeclaredIngress(t *testing.T) {
+	state := v1alpha1.State{
+		StorageObjectGateways: []v1alpha1.StorageObjectGateway{{
+			Metadata: v1alpha1.Metadata{Name: "rgw-all"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf.all",
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{
+						{
+							Name: "dc1",
+							TLS: &v1alpha1.StorageObjectGatewayIngressTLS{
+								CertificateRef: v1alpha1.LocalObjectReference{Name: "ceph-rgw-all-tls"},
+								KeyRef:         v1alpha1.LocalObjectReference{Name: "ceph-rgw-all-tls"},
+							},
+						},
+						{
+							Name: "dc2",
+							TLS: &v1alpha1.StorageObjectGatewayIngressTLS{
+								CertificateRef: v1alpha1.LocalObjectReference{Name: "ceph-rgw-all-tls"},
+								KeyRef:         v1alpha1.LocalObjectReference{Name: "ceph-rgw-all-tls"},
+							},
+						},
+						{Name: "plain"},
+					},
+				},
+			},
+		}},
+		StorageExports: []v1alpha1.StorageExport{{
+			Metadata: v1alpha1.Metadata{Name: "export"},
+			Spec: v1alpha1.StorageExportSpec{
+				Type:              v1alpha1.StorageExportTypeDataFoundation,
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
+					RBDPoolRef:       v1alpha1.LocalObjectReference{Name: "rbd"},
+					FilesystemRef:    v1alpha1.LocalObjectReference{Name: "cephfs"},
+					ObjectGatewayRef: v1alpha1.LocalObjectReference{Name: "rgw-all"},
+				},
+			},
+		}},
+	}
+	executor := &addonStepExecutor{
+		state: state,
+		plan: extensionPlanView{
+			Addon: v1alpha1.ClusterAddon{
+				Spec: v1alpha1.ClusterAddonSpec{
+					Accepts: v1alpha1.ClusterAddonAccepts{
+						Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+							Name:        "external-storage",
+							ResourceRef: &v1alpha1.ClusterAddonInputRef{Kind: steps.RefKindStorageExport},
+						}},
+					},
+				},
+			},
+		},
+		inputs: []v1alpha1.ClusterAddonBindingInput{{Name: "external-storage", Value: "export"}},
+	}
+
+	got := executor.stepGatewayCertificateNames()
+	if len(got) != 1 || got[0] != "ceph-rgw-all-tls" {
+		t.Fatalf("stepGatewayCertificateNames = %v, want the single declared certificate materialized once", got)
 	}
 }
 

@@ -42,13 +42,45 @@ The trap that caused it here: the exporter dials the RGW endpoint with
 python-requests, which verifies against **certifi**, not the node's trust store,
 unless `REQUESTS_CA_BUNDLE` is set. Bootwright used to set that only when the
 managers published an *https* Prometheus endpoint — so a cluster whose
-`mgmtGateway.exposure` is `http` (prd) got no bundle at all, and an RGW whose
-certificate is signed by the estate's own CA failed verification silently. The
-trust bundle is now seeded from `/etc/pki/tls/certs/ca-bundle.crt` and passed on
-every run; the cephadm root CA is still appended only when the monitoring
-endpoint is https. The export step also refuses outright when a `StorageExport`
-declares `objectGatewayRef` and the export carries no `ceph-rgw` entry, because
-the exporter itself will not tell you.
+`mgmtGateway.exposure` is `http` (prd) got no bundle at all. The trust bundle is
+now seeded from `/etc/pki/tls/certs/ca-bundle.crt` and passed on every run; the
+cephadm root CA is still appended only when the monitoring endpoint is https.
+The export step also refuses outright when a `StorageExport` declares
+`objectGatewayRef` and the export carries no `ceph-rgw` entry, because the
+exporter itself will not tell you.
+
+**That trust bundle could never have been enough**, which the refusal then
+proved on the next prd apply. A `StorageObjectGateway` ingress serves the
+certificate its `tls.certificateRef` names, and on prd that `Secret` is
+`source.generated` — a **self-signed** certificate Bootwright mints
+(`SelfSignedCertificatePEM`, `IsCA: true`, so it is a usable trust anchor for
+itself). Nothing publishes it: no node trust store holds it, and it is not in
+`ca-bundle.crt` by any route. So the https dial could only ever fail.
+
+The exporter's own flag is the answer, and it does double duty. The step now
+passes `--rgw-tls-cert-path` with the staged certificate:
+
+- `validate_rgw_endpoint` sets `cert` from that flag and `endpoint_dial` then
+  uses `verify=<cert>` for the https attempt, so the dial verifies against
+  exactly the certificate the gateway declares. Measured on OpenSSL 3.5: a cert
+  file holding the server's own certificate verifies whether that certificate is
+  self-signed **or** signed by a private CA whose chain the server sends — an
+  exact trust-store match is accepted as the anchor either way. So the flag is
+  right for generated and estate-issued certificates alike.
+- the same contents become `RGW_TLS_CERT` and the export's `ceph-rgw-tls-cert`
+  Secret entry. ocs-operator gates on that entry existing:
+  `_, err := r.retrieveSecret(cephRgwTLSSecretKey, initData); if err == nil {
+  tlsEnabled = true }`, and only then sets `gateWay.SSLCertificateRef` and
+  `gateWay.SecurePort`. **Without it an `https` gateway is attached as
+  cleartext on its TLS port** — a second silent defect that survived even a
+  successful dial.
+
+Only one certificate can reach Data Foundation, so the step refuses a gateway
+whose ingresses declare more than one. It also prints the exporter's stderr in
+the refusal: master's `endpoint_dial` does write `unable to connect to
+endpoint: …` before returning `-1`, and `get_rgw_fsid` writes on a timeout and
+on a non-`info` response — the exit code is 0 in every case, so that stream is
+the only account of what happened.
 
 ## `error setting modifier for [client.healthchecker] type=key ...: Malformed input [buffer:3]`
 

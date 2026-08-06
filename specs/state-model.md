@@ -1842,7 +1842,12 @@ Rules:
   `--rgw-endpoint`, so ODF external mode also provisions S3/object storage;
   omitted, the export covers RBD and CephFS only. The step reads that name from
   the resolved `objectGateway.publicFQDN` key the step-ref carries alongside the
-  serialized gateway — the spec itself holds only the label.
+  serialized gateway — the spec itself holds only the label. The step-ref also
+  carries `objectGateway.certificatePaths`, the materialized paths of the
+  certificates the gateway's ingresses declare; the step stages the single
+  certificate they must agree on and passes it as `--rgw-tls-cert-path`, which
+  both verifies the dial and puts the certificate in the export so Data
+  Foundation attaches the endpoint as TLS.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
 - `spec.externalDetails`, when set, requires `fromSecretRef` (its only arm),

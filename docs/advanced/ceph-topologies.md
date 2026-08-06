@@ -625,6 +625,17 @@ RBD and CephFS. Leave it unset for a block/file-only export. Each ODF cluster
 should get its own `StorageExport` naming its own site-local gateway, so
 distinct OCP clusters never share one S3 endpoint.
 
+The step also stages the certificate the gateway's ingresses declare and passes
+it as `--rgw-tls-cert-path`. That is what lets the exporter verify an https
+gateway — the endpoint is dialled with python-requests, which trusts neither the
+node's store nor a certificate Bootwright generated for the ingress — and it is
+also what carries the certificate into the export as its `ceph-rgw-tls-cert`
+entry, from which Data Foundation reads the endpoint as TLS. Without it an
+`https` gateway is attached as cleartext on its TLS port. Every ingress of one
+gateway must therefore point `tls.certificateRef` at the same certificate; the
+step refuses a gateway that declares several, because only one can reach Data
+Foundation.
+
 ## Cephx key types
 
 A cephx key is a typed structure, not a bare secret: a crypto-type ID, a

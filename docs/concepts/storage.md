@@ -980,7 +980,7 @@ spec:
 | --- | --- | --- | --- |
 | `dataFoundation.rbdPoolRef` | Yes | — | RBD `StoragePool` (same cluster). |
 | `dataFoundation.filesystemRef` | Yes | — | CephFS `StorageFilesystem` (same cluster). |
-| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter step passes that gateway's composed public name and `public.port` as `--rgw-endpoint`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
+| `dataFoundation.objectGatewayRef` | No | — | RGW `StorageObjectGateway` (same cluster). When set, the consuming add-on's exporter step passes that gateway's composed public name and `public.port` as `--rgw-endpoint`, and the certificate its ingresses declare as `--rgw-tls-cert-path`, adding S3 to the export; omitted, the export is RBD/CephFS only. |
 
 ### External details
 
