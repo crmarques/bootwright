@@ -54,9 +54,30 @@ This cost is accepted deliberately. Interleaved per-machine output was a
 reported user-facing defect; a slower boot for an unusual mixed-substrate
 topology is not. Do not reintroduce `free` to reclaim it —
 `TestNoPlaybookReintroducesTheFreeStrategy` fails on `free` and `host_pinned`.
-If a mixed-substrate cluster ever needs the overlap back, the fix is to split
-the boot into one planner task per substrate so each gets its own
-`ansible-playbook` process, not to un-group the output.
+## If a mixed-substrate cluster ever does need the overlap back
+
+Do not un-group the output, and do not reach for the planner first. Almost all
+of the serialized time is the *terminal* readiness wait at the end of each
+substrate bucket, and that wait is identical across substrates. Hoisting it out
+of the buckets makes the one long task a single shared uuid, which returns the
+boot to max-of-windows without touching the strategy or the planner:
+
+- replace the readiness include at the end of
+  `container_cluster_boot_kubevirt/tasks/main.yml`,
+  `container_cluster_boot_vsphere/tasks/main.yml` and
+  `container_cluster_boot_redfish/tasks/boot/post_boot.yml` with a `set_fact` of
+  the same `bootwright_ssh_ready_*` inputs;
+- add one **static** `include_role: bootwright.core.support_ssh_readiness` in
+  `container_cluster_agent_install/tasks/actions/boot_machine.yml`, immediately
+  after the templated substrate include;
+- ordering constraint: the disk-boot-override block that currently follows
+  readiness in `post_boot.yml` is deliberately after it, so it has to move to
+  its own file included under a redfish-only guard.
+
+That is a wall-clock fix only — it does not change grouping, because a KubeVirt
+task and a Redfish task are genuinely different tasks and correctly print
+different banners. Splitting the boot into one planner task per substrate would
+also work but costs a new run-tree row per substrate and moves install hashes.
 
 ## Negative pin: `throttle` is NOT affected by the strategy flip
 
