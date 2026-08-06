@@ -444,6 +444,14 @@
     - bootwright_kubevirt_iso_source_actor | default(false) | bool
     - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
 
+- name: Purge the stale KubeVirt agent ISO source PersistentVolumeClaim
+  ansible.builtin.include_tasks: purge_media_pvc.yml
+  vars:
+    bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_source_dv_name }}"
+  when:
+    - bootwright_kubevirt_iso_source_actor | default(false) | bool
+    - not (bootwright_kubevirt_iso_source_current | default(false) | bool)
+
 - name: Build KubeVirt agent ISO source upload command
   ansible.builtin.set_fact:
     bootwright_kubevirt_source_upload_argv: >-
@@ -690,6 +698,12 @@
   changed_when: "'deleted' in (bootwright_kubevirt_iso_delete.stdout | default(''))"
   when: not (bootwright_kubevirt_boot_iso_current | bool)
 
+- name: Purge the previous KubeVirt agent ISO PersistentVolumeClaim
+  ansible.builtin.include_tasks: purge_media_pvc.yml
+  vars:
+    bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_dv_name }}"
+  when: not (bootwright_kubevirt_boot_iso_current | bool)
+
 - name: Clone KubeVirt agent ISO DataVolume from the shared source
   ansible.builtin.command:
     argv:
@@ -780,6 +794,15 @@
       - --ignore-not-found=true
   register: bootwright_kubevirt_iso_clone_delete
   changed_when: "'deleted' in (bootwright_kubevirt_iso_clone_delete.stdout | default(''))"
+  when:
+    - not (bootwright_kubevirt_boot_iso_current | bool)
+    - bootwright_kubevirt_iso_source_ready | bool
+    - not (bootwright_kubevirt_iso_cloned | bool)
+
+- name: Purge the failed KubeVirt agent ISO clone PersistentVolumeClaim
+  ansible.builtin.include_tasks: purge_media_pvc.yml
+  vars:
+    bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_dv_name }}"
   when:
     - not (bootwright_kubevirt_boot_iso_current | bool)
     - bootwright_kubevirt_iso_source_ready | bool

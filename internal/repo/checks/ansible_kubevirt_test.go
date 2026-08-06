@@ -10,6 +10,8 @@ const kubeVirtBootTasks = "ansible/collections/ansible_collections/bootwright/co
 
 const kubeVirtSubstrateDestroyTasks = "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml"
 
+const kubeVirtPurgeMediaPVCTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/purge_media_pvc.yml"
+
 func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
 	groupIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO sharing group")
@@ -247,9 +249,11 @@ func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *te
 	guarded := []string{
 		"Stop KubeVirt VirtualMachine before replacing the agent ISO",
 		"Remove previous KubeVirt agent ISO DataVolume",
+		"Purge the previous KubeVirt agent ISO PersistentVolumeClaim",
 		"Clone KubeVirt agent ISO DataVolume from the shared source",
 		"Wait for the KubeVirt agent ISO DataVolume clone",
 		"Remove the failed KubeVirt agent ISO DataVolume clone",
+		"Purge the failed KubeVirt agent ISO clone PersistentVolumeClaim",
 		"Build virtctl image-upload command",
 		"Upload KubeVirt agent ISO DataVolume",
 		"Require a successful KubeVirt agent ISO upload",
@@ -277,6 +281,93 @@ func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *te
 	waitIdx := findAnsibleTask(t, tasks, "Wait for the shared KubeVirt agent ISO source DataVolume")
 	if got := fmt.Sprint(tasks[waitIdx]["when"]); !strings.Contains(got, "not (bootwright_kubevirt_boot_iso_current") {
 		t.Fatalf("a machine that keeps its own media never clones and must not wait for the shared source at all, got when=%v", tasks[waitIdx]["when"])
+	}
+}
+
+func TestKubeVirtBootClearsTheAgentISOClaimItsDataVolumeLeavesBehind(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
+	for _, site := range []struct {
+		remove  string
+		purge   string
+		claim   string
+		rebuild string
+	}{
+		{
+			remove:  "Remove stale KubeVirt agent ISO source DataVolume",
+			purge:   "Purge the stale KubeVirt agent ISO source PersistentVolumeClaim",
+			claim:   "bootwright_kubevirt_iso_source_dv_name",
+			rebuild: "Upload KubeVirt agent ISO source DataVolume",
+		},
+		{
+			remove:  "Remove previous KubeVirt agent ISO DataVolume",
+			purge:   "Purge the previous KubeVirt agent ISO PersistentVolumeClaim",
+			claim:   "bootwright_kubevirt_iso_dv_name",
+			rebuild: "Clone KubeVirt agent ISO DataVolume from the shared source",
+		},
+		{
+			remove:  "Remove the failed KubeVirt agent ISO DataVolume clone",
+			purge:   "Purge the failed KubeVirt agent ISO clone PersistentVolumeClaim",
+			claim:   "bootwright_kubevirt_iso_dv_name",
+			rebuild: "Upload KubeVirt agent ISO DataVolume",
+		},
+	} {
+		removeIdx := findAnsibleTask(t, tasks, site.remove)
+		purgeIdx := findAnsibleTask(t, tasks, site.purge)
+		rebuildIdx := findAnsibleTask(t, tasks, site.rebuild)
+		if !(removeIdx < purgeIdx && purgeIdx < rebuildIdx) {
+			t.Fatalf("%q must clear the claim between the DataVolume deletion and the media rebuild, or the rebuild meets a claim no DataVolume owns (remove=%d purge=%d rebuild=%d)", site.purge, removeIdx, purgeIdx, rebuildIdx)
+		}
+		if got := fmt.Sprint(tasks[purgeIdx]["ansible.builtin.include_tasks"]); got != "purge_media_pvc.yml" {
+			t.Fatalf("%q must reuse the shared claim purge, got %v", site.purge, tasks[purgeIdx])
+		}
+		vars, ok := tasks[purgeIdx]["vars"].(map[string]any)
+		if !ok || !strings.Contains(fmt.Sprint(vars["bootwright_kubevirt_media_pvc_name"]), site.claim) {
+			t.Fatalf("%q must purge the claim named after the DataVolume it just deleted (%s), got vars=%v", site.purge, site.claim, tasks[purgeIdx]["vars"])
+		}
+		if got, want := fmt.Sprint(tasks[purgeIdx]["when"]), fmt.Sprint(tasks[removeIdx]["when"]); got != want {
+			t.Fatalf("%q must run under exactly the conditions that deleted the DataVolume, or it purges media this run still boots from: got when=%v want when=%v", site.purge, tasks[purgeIdx]["when"], tasks[removeIdx]["when"])
+		}
+	}
+
+	purge := readAnsibleTasks(t, kubeVirtPurgeMediaPVCTasks)
+	deleteIdx := findAnsibleTask(t, purge, "Remove the KubeVirt agent ISO PersistentVolumeClaim")
+	waitIdx := findAnsibleTask(t, purge, "Wait for the KubeVirt agent ISO PersistentVolumeClaim to disappear")
+	requireIdx := findAnsibleTask(t, purge, "Require the KubeVirt agent ISO PersistentVolumeClaim to be gone")
+	if !(deleteIdx < waitIdx && waitIdx < requireIdx) {
+		t.Fatalf("the claim purge must delete, then wait, then prove the claim gone (delete=%d wait=%d require=%d)", deleteIdx, waitIdx, requireIdx)
+	}
+	deleteArgv := fmt.Sprint(purge[deleteIdx]["ansible.builtin.command"])
+	for _, want := range []string{"persistentvolumeclaim", "bootwright_kubevirt_media_pvc_name", "--ignore-not-found=true"} {
+		if !strings.Contains(deleteArgv, want) {
+			t.Fatalf("the claim purge must delete the named claim idempotently (missing %q), got %v", want, purge[deleteIdx]["ansible.builtin.command"])
+		}
+	}
+	if purge[waitIdx]["failed_when"] != false {
+		t.Fatalf("the claim-gone poll must report through its own verdict instead of failing on a kubectl NotFound, got failed_when=%v", purge[waitIdx]["failed_when"])
+	}
+	waitUntil := fmt.Sprint(purge[waitIdx]["until"])
+	if !strings.Contains(waitUntil, "NotFound") {
+		t.Fatalf("a claim still terminating is not gone: the poll must settle on NotFound, got until=%v", purge[waitIdx]["until"])
+	}
+	if !strings.Contains(waitUntil, "attempts") || !strings.Contains(waitUntil, "bootwright_kubevirt_media_pvc_settle_retries") {
+		t.Fatalf("the claim-gone poll must carry the house attempts escape so an exhausted budget lands on the verdict, got until=%v", purge[waitIdx]["until"])
+	}
+	verdict, ok := purge[requireIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the claim-gone verdict must be an assert, got %v", purge[requireIdx])
+	}
+	if got := fmt.Sprint(verdict["that"]); !strings.Contains(got, "NotFound") {
+		t.Fatalf("the claim-gone verdict must require a NotFound probe, not merely a finished poll, got %v", verdict["that"])
+	}
+	if got := fmt.Sprint(verdict["fail_msg"]); !strings.Contains(got, "No DataVolume is associated with the existing PVC") {
+		t.Fatalf("the claim-gone verdict must name the virtctl error a surviving claim produces, or the operator cannot connect the two, got %v", verdict["fail_msg"])
+	}
+
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/defaults/main.yml")
+	for _, want := range []string{"bootwright_kubevirt_media_pvc_settle_retries:", "bootwright_kubevirt_media_pvc_settle_delay:"} {
+		if !strings.Contains(defaults, want) {
+			t.Fatalf("the claim-settle budget must be tunable from defaults (missing %q)", want)
+		}
 	}
 }
 

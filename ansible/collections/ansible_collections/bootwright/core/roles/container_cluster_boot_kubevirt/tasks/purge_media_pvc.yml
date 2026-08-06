@@ -1,0 +1,66 @@
+---
+- name: Remove the KubeVirt agent ISO PersistentVolumeClaim
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - delete
+      - persistentvolumeclaim
+      - "{{ bootwright_kubevirt_media_pvc_name }}"
+      - --ignore-not-found=true
+      - --wait=false
+  register: bootwright_kubevirt_media_pvc_delete
+  changed_when: "'deleted' in (bootwright_kubevirt_media_pvc_delete.stdout | default(''))"
+
+- name: Wait for the KubeVirt agent ISO PersistentVolumeClaim to disappear
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - persistentvolumeclaim
+      - "{{ bootwright_kubevirt_media_pvc_name }}"
+      - -o
+      - 'jsonpath={.status.phase}|{.metadata.deletionTimestamp}'
+  register: bootwright_kubevirt_media_pvc_probe
+  changed_when: false
+  failed_when: false
+  until: >-
+    ((bootwright_kubevirt_media_pvc_probe.rc | default(0)) != 0
+     and 'NotFound' in (bootwright_kubevirt_media_pvc_probe.stderr | default('')))
+    or ((bootwright_kubevirt_media_pvc_probe.attempts | default(1) | int)
+        >= (bootwright_kubevirt_media_pvc_settle_retries | int))
+  retries: "{{ bootwright_kubevirt_media_pvc_settle_retries }}"
+  delay: "{{ bootwright_kubevirt_media_pvc_settle_delay }}"
+
+- name: Require the KubeVirt agent ISO PersistentVolumeClaim to be gone
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_media_pvc_probe.rc | default(0)) != 0
+      - "'NotFound' in (bootwright_kubevirt_media_pvc_probe.stderr | default(''))"
+    fail_msg: >-
+      PersistentVolumeClaim {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_media_pvc_name }}
+      still exists
+      {{ ((bootwright_kubevirt_media_pvc_settle_retries | int) - 1) * (bootwright_kubevirt_media_pvc_settle_delay | int) }}s
+      after its DataVolume was deleted
+      ({{
+        ((bootwright_kubevirt_media_pvc_probe.stdout | default('') | trim)
+         | default((bootwright_kubevirt_media_pvc_probe.stderr | default('') | trim), true)
+         | default('kubectl reported no output', true))
+        | truncate(300, true)
+      }}).
+      CDI creates the claim as a dependent of its DataVolume, so a claim that outlives
+      one blocks every way of rebuilding this media: a new DataVolume of the same name
+      cannot adopt it and virtctl refuses the upload with "No DataVolume is associated
+      with the existing PVC". Inspect it with
+      `kubectl -n {{ bootwright_kubevirt_namespace }} get pvc {{ bootwright_kubevirt_media_pvc_name }} -o yaml`
+      — a claim stuck Terminating is held by a finalizer, usually a CDI populator pod or
+      prime claim that is still running, and releasing it lets the next
+      `bootwright apply` recreate the media from scratch.
+    quiet: true

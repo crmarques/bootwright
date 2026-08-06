@@ -13,3 +13,5 @@ bootwright_kubevirt_iso_source_wait_retries: >-
 bootwright_kubevirt_iso_source_appear_retries: 12
 bootwright_kubevirt_iso_clone_retries: 120
 bootwright_kubevirt_iso_clone_delay: 5
+bootwright_kubevirt_media_pvc_settle_retries: 60
+bootwright_kubevirt_media_pvc_settle_delay: 5
