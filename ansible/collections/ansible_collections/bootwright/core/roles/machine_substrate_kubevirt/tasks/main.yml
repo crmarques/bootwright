@@ -288,11 +288,6 @@
     stdin: "{{ lookup('ansible.builtin.template', 'datavolume-root.yaml.j2') }}"
   register: bootwright_kubevirt_root_apply
   changed_when: "'unchanged' not in (bootwright_kubevirt_root_apply.stdout | default(''))"
-  # Only ever create this DataVolume, never re-send its spec. CDI's validating
-  # webhook refuses a spec update, and the claim underneath carries the machine's
-  # installed operating system: a bigger diskGiB or a template change reaches a
-  # live machine through an authorized rebuild (which deletes it just above), not
-  # through an apply that would fail on every existing machine instead.
   when: >-
     not (bootwright_kubevirt_root_dv_exists | bool)
     or (bootwright_kubevirt_rebuild_authorized | bool)
