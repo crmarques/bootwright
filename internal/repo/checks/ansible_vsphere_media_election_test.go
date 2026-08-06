@@ -158,3 +158,15 @@ func TestBootPathKeepsGroupedOutputAndPerMachineIsolation(t *testing.T) {
 		}
 	}
 }
+
+func TestNoPlaybookReintroducesTheFreeStrategy(t *testing.T) {
+	root := "ansible/collections/ansible_collections/bootwright/core/playbooks"
+	for _, rel := range repoYAMLFilesUnder(t, root) {
+		plays := readAnsiblePlays(t, rel)
+		for i, play := range plays {
+			if got := play["strategy"]; got == "free" || got == "host_pinned" {
+				t.Fatalf("%s play %d uses strategy=%v; both reprint the TASK banner per host and fragment multi-machine output. Use linear — see .agents/knowledge/ansible-playbook-preamble-variants.md", rel, i, got)
+			}
+		}
+	}
+}

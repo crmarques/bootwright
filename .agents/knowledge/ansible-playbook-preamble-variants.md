@@ -17,8 +17,13 @@ result handler — under linear the results for one task arrive contiguously and
 the banner flips exactly once. `host_pinned` is NOT an alternative: it
 subclasses `FreeStrategyModule` and the default callback tests membership in
 `('free', 'host_pinned')`, so it takes the identical per-host banner branch.
-Only destroy plays that fan out over unrelated real hosts still use `free`.
-These playbooks deviate on purpose:
+
+As of 2026-08-06 **no play in the repo uses `strategy: free`** — every
+`playbooks/*.yml` play states `strategy: linear` explicitly, or omits the key
+where another rule already documents the default. Do not reintroduce `free`
+without re-reading this file: the interleaved per-machine output it produces is
+a reported user-facing defect, not a neutral trade-off. These playbooks deviate
+from the shared preamble in other ways, on purpose:
 
 - `task_bastion_apply_tools.yml` forwards `lookup('env', …)` proxy variables
   and skips the proxy-facts pre_task: bastion setup runs before any rendered
