@@ -7,6 +7,19 @@ bootwright_install_timeout_seconds: 5400
 bootwright_install_bootstrap_timeout_seconds: "{{ bootwright_install_timeout_seconds }}"
 bootwright_install_wait_poll_seconds: 15
 bootwright_install_wait_target: install
+bootwright_install_stalled_wait_retries: 20
+bootwright_install_stalled_wait_delay_seconds: 30
+bootwright_install_stalled_wait_pattern: "failed to progress after all hosts available|failed to prepare cluster installation"
+bootwright_install_stalled_wait_hint: >-
+  The cluster reached assisted-service status "ready", but the rendezvous node
+  never started the install. It starts the install only once exactly
+  {{ bootwright_current_cluster.nodes | default({}) | length }} hosts report
+  status "known", one for every declared node
+  ({{ bootwright_current_cluster.nodes | default({}) | list | sort | join(', ') }}).
+  A node that never booted the agent ISO, whose declared NIC MAC address does
+  not match the one it registers with, or whose install disk was rejected never
+  reaches "known", and holds the cluster in "ready" for as long as the install
+  is allowed to run.
 bootwright_install_bootstrap_marker_path: "{{ bootwright_install_work_dir }}/bootstrap-complete"
 bootwright_install_publish_probe_timeout: 60
 bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"

@@ -31,10 +31,36 @@
       async: "{{ bootwright_install_bootstrap_timeout_seconds }}"
       poll: "{{ bootwright_install_wait_poll_seconds }}"
       register: bootwright_install_bootstrap_wait
-      changed_when: bootwright_install_bootstrap_wait.rc == 0
+      until: >-
+        (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
+        or not (bootwright_install_bootstrap_wait.stderr | default('')
+                is search(bootwright_install_stalled_wait_pattern))
+      retries: "{{ bootwright_install_stalled_wait_retries }}"
+      delay: "{{ bootwright_install_stalled_wait_delay_seconds }}"
+      changed_when: (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
+      failed_when: false
       when:
         - bootwright_install_wait_target == 'bootstrap'
         - not bootwright_install_bootstrap_marker_stat.stat.exists
+
+    - name: Fail when the agent bootstrap wait did not complete
+      ansible.builtin.fail:
+        msg: >-
+          {{ bootwright_openshift_install }} agent wait-for bootstrap-complete
+          did not complete for {{ bootwright_current_cluster.name }} after
+          {{ bootwright_install_bootstrap_wait.attempts | default(1) }} attempt(s).
+          {{ bootwright_install_stalled_wait_hint
+             if (bootwright_install_bootstrap_wait.stderr | default('')
+                 is search(bootwright_install_stalled_wait_pattern))
+             else '' }}
+          Installer reported: {{ bootwright_install_bootstrap_wait.msg | default('') }}
+          {{ bootwright_install_bootstrap_wait.stderr_lines | default([])
+             | select('search', 'level=error') | list | join(' | ') }}
+          Follow the install with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log
+      when:
+        - bootwright_install_wait_target == 'bootstrap'
+        - not bootwright_install_bootstrap_marker_stat.stat.exists
+        - (bootwright_install_bootstrap_wait.rc | default(1) | int) != 0
 
     - name: Record agent bootstrap completion
       ansible.builtin.copy:
@@ -59,8 +85,33 @@
       async: "{{ bootwright_install_timeout_seconds }}"
       poll: "{{ bootwright_install_wait_poll_seconds }}"
       register: bootwright_install_wait
-      changed_when: bootwright_install_wait.rc == 0
+      until: >-
+        (bootwright_install_wait.rc | default(1) | int) == 0
+        or not (bootwright_install_wait.stderr | default('')
+                is search(bootwright_install_stalled_wait_pattern))
+      retries: "{{ bootwright_install_stalled_wait_retries }}"
+      delay: "{{ bootwright_install_stalled_wait_delay_seconds }}"
+      changed_when: (bootwright_install_wait.rc | default(1) | int) == 0
+      failed_when: false
       when: bootwright_install_wait_target == 'install'
+
+    - name: Fail when the agent install wait did not complete
+      ansible.builtin.fail:
+        msg: >-
+          {{ bootwright_openshift_install }} agent wait-for install-complete
+          did not complete for {{ bootwright_current_cluster.name }} after
+          {{ bootwright_install_wait.attempts | default(1) }} attempt(s).
+          {{ bootwright_install_stalled_wait_hint
+             if (bootwright_install_wait.stderr | default('')
+                 is search(bootwright_install_stalled_wait_pattern))
+             else '' }}
+          Installer reported: {{ bootwright_install_wait.msg | default('') }}
+          {{ bootwright_install_wait.stderr_lines | default([])
+             | select('search', 'level=error') | list | join(' | ') }}
+          Follow the install with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log
+      when:
+        - bootwright_install_wait_target == 'install'
+        - (bootwright_install_wait.rc | default(1) | int) != 0
 
     - name: Determine agent wait outcome
       ansible.builtin.set_fact:

@@ -771,6 +771,73 @@ func TestInstallAgentWaitsForBootstrapBeforePublishingCredentials(t *testing.T) 
 	}
 }
 
+func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
+	var defaults map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/defaults/main.yml")), &defaults); err != nil {
+		t.Fatalf("decode install_agent defaults: %v", err)
+	}
+	pattern, _ := defaults["bootwright_install_stalled_wait_pattern"].(string)
+	for _, want := range []string{"failed to progress after all hosts available", "failed to prepare cluster installation"} {
+		if !strings.Contains(pattern, want) {
+			t.Fatalf("stalled wait pattern must cover %q, got %v", want, defaults["bootwright_install_stalled_wait_pattern"])
+		}
+	}
+	if got, ok := defaults["bootwright_install_stalled_wait_retries"].(int); !ok || got < 2 {
+		t.Fatalf("stalled wait retries got %v, want at least 2", defaults["bootwright_install_stalled_wait_retries"])
+	}
+	if _, ok := defaults["bootwright_install_stalled_wait_delay_seconds"].(int); !ok {
+		t.Fatalf("stalled wait delay got %v, want an integer", defaults["bootwright_install_stalled_wait_delay_seconds"])
+	}
+	if hint, _ := defaults["bootwright_install_stalled_wait_hint"].(string); !strings.Contains(hint, "bootwright_current_cluster.nodes") {
+		t.Fatalf("stalled wait hint must name the declared nodes, got %q", hint)
+	}
+
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+
+	for _, tc := range []struct {
+		wait     string
+		report   string
+		register string
+	}{
+		{"Wait for agent bootstrap completion", "Fail when the agent bootstrap wait did not complete", "bootwright_install_bootstrap_wait"},
+		{"Wait for agent install completion", "Fail when the agent install wait did not complete", "bootwright_install_wait"},
+	} {
+		waitIdx := findAnsibleTask(t, tasks, tc.wait)
+		reportIdx := findAnsibleTask(t, tasks, tc.report)
+		if waitIdx > reportIdx {
+			t.Fatalf("%s must be reported after it runs", tc.wait)
+		}
+		wait := tasks[waitIdx]
+		until, _ := wait["until"].(string)
+		if !strings.Contains(until, "bootwright_install_stalled_wait_pattern") || !strings.Contains(until, tc.register+".rc | default(1) | int) == 0") {
+			t.Fatalf("%s must retry only the stalled give-up, got until=%v", tc.wait, wait["until"])
+		}
+		if got := wait["retries"]; got != "{{ bootwright_install_stalled_wait_retries }}" {
+			t.Fatalf("%s retries got %v", tc.wait, got)
+		}
+		if got := wait["delay"]; got != "{{ bootwright_install_stalled_wait_delay_seconds }}" {
+			t.Fatalf("%s delay got %v", tc.wait, got)
+		}
+		if got := wait["failed_when"]; got != false {
+			t.Fatalf("%s must defer failure to its report task, got failed_when=%v", tc.wait, got)
+		}
+		if !stringListContains(tasks[reportIdx]["when"], "("+tc.register+".rc | default(1) | int) != 0") {
+			t.Fatalf("%s must fail on a non-zero wait, got when=%v", tc.report, tasks[reportIdx]["when"])
+		}
+		fail, ok := tasks[reportIdx]["ansible.builtin.fail"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no fail body", tc.report)
+		}
+		msg, _ := fail["msg"].(string)
+		for _, want := range []string{"bootwright_install_stalled_wait_hint", "bootwright_install_stalled_wait_pattern", "stderr_lines"} {
+			if !strings.Contains(msg, want) {
+				t.Fatalf("%s message must carry %q, got %q", tc.report, want, msg)
+			}
+		}
+	}
+}
+
 func TestInstallAgentClearsBootstrapMarkerBeforeISOGeneration(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/create_iso.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")
