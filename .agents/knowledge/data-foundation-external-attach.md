@@ -41,8 +41,21 @@ IBM Storage Ceph mints AES256KRB5 by default from build `20.2.1-297` onwards
 (ceph-prd-01 runs `20.2.1-324.el9cp`). Data Foundation 4.21 bundles a Ceph
 `20.2.0` client, whose keyring parser has no handler for type 2 and rejects it
 outright before authentication is ever attempted — no client-side config can
-recover it. Upstream Ceph userspace implements only `CEPH_CRYPTO_NONE` and
-`CEPH_CRYPTO_AES`; the AES256KRB5 type is a downstream/kernel addition.
+recover it.
+
+**The discriminator is the vendor build, NOT the version number.** Upstream Ceph
+userspace — checked at the `tentacle` branch, the `v20.2.1` tag, and `main` —
+implements only `CEPH_CRYPTO_NONE` and `CEPH_CRYPTO_AES`, and every key-minting
+call site hardcodes `CEPH_CRYPTO_AES`; AES256KRB5 is a downstream/kernel
+addition an upstream mon cannot produce. So community Ceph `20.2.2` attaches to
+Data Foundation 4.21 fine (confirmed on a lab cluster 2026-07-31) while IBM's
+`20.2.1-324.el9cp` does not, even though 20.2.2 is the higher number. Do not
+chase the Ceph version when triaging this; ask whether the provider is an IBM
+build. Two fingerprints, both absent upstream and present on IBM builds:
+`ceph auth get-or-create -h` advertising `--key_type`, and
+`ceph config help mon_auth_emergency_allowed_ciphers` resolving. The fastest
+test on any cluster is `ceph auth get-key client.healthchecker | head -c 2` —
+`AQ` parses, `Ag` does not.
 
 Bootwright is a faithful pipe here: the exporter's stdout reaches the Secret
 byte for byte. Since 2026-08-05 the exporter playbook refuses the export when
