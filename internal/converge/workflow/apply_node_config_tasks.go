@@ -53,15 +53,6 @@ func clusterNeedsNodeConfig(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Nodes) > 0
 }
 
-func clusterDeclaresNodeConfig(ocp v1alpha1.ContainerCluster) bool {
-	for _, host := range ocp.Spec.Nodes {
-		if host.Role == v1alpha1.NodeRoleInfra || len(host.Labels) > 0 || len(host.Taints) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func clusterDeclaresInfraNode(ocp v1alpha1.ContainerCluster) bool {
 	for _, host := range ocp.Spec.Nodes {
 		if host.Role == v1alpha1.NodeRoleInfra {

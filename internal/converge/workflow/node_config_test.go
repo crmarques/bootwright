@@ -53,23 +53,6 @@ func TestClusterNeedsNodeConfig(t *testing.T) {
 	}
 }
 
-func TestClusterDeclaresNodeConfig(t *testing.T) {
-	plain := ocpWithHosts(
-		v1alpha1.OCPNodeSpec{Name: "m1", Role: v1alpha1.NodeRoleMaster},
-		v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker},
-	)
-	if clusterDeclaresNodeConfig(plain) {
-		t.Fatal("a master/worker-only cluster declares no day-2 node config")
-	}
-	if !clusterDeclaresNodeConfig(ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "i1", Role: v1alpha1.NodeRoleInfra})) {
-		t.Fatal("an infra cluster declares node config")
-	}
-	labelled := ocpWithHosts(v1alpha1.OCPNodeSpec{Name: "w1", Role: v1alpha1.NodeRoleWorker, Labels: map[string]string{"team": "x"}})
-	if !clusterDeclaresNodeConfig(labelled) {
-		t.Fatal("a labelled worker declares node config")
-	}
-}
-
 func TestNodeConfigManifestsInfra(t *testing.T) {
 	ocp := ocpWithHosts(
 		v1alpha1.OCPNodeSpec{Name: "master-01", Role: v1alpha1.NodeRoleMaster},
