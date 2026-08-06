@@ -33,10 +33,11 @@ func ensureLocalRootForArgs(ctx context.Context, args []string, stdin io.Reader,
 	if !localRootGate.enabled || localRootGate.geteuid() == 0 {
 		return 0, false, nil
 	}
-	if argsHaveUnusableSSHUser(args) {
+	gateArgs := argsBeforeCommandPayload(args)
+	if argsHaveUnusableSSHUser(gateArgs) {
 		return 0, false, nil
 	}
-	decisionArgs := stripLeadingGlobalFlags(args)
+	decisionArgs := stripLeadingGlobalFlags(gateArgs)
 	if !argsNeedLocalRoot(decisionArgs) {
 		return 0, false, nil
 	}

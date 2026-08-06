@@ -32,10 +32,10 @@ touch root-owned state:
 
 - Even read-only inspectors escalate — `plan`, `diff`, `status`,
   `secret generate/list/check/encryption`, `machine list/trust`,
-  `cluster list/info/kubeconfig`, `context list/current`, `media list`,
-  `add-ons list`, and a `validate` that reads the context rather than a
-  `-f` file — because the context and the media/add-ons stores live under
-  `/var/lib/bootwright`.
+  `cluster list/info`, `container-cluster kubeconfig`, `context
+  list/current`, `media list`, `add-ons list`, and a `validate` that reads
+  the context rather than a `-f` file — because the context and the
+  media/add-ons stores live under `/var/lib/bootwright`.
 - Any invocation cobra would reject stays rootless so the user sees
   cobra's error (including its "Did you mean" suggestion) as themselves,
   never after a doomed sudo password prompt: unknown top-level commands
@@ -62,8 +62,9 @@ touch root-owned state:
 - Only `context init`/`use` (and `context delete --purge`) may mutate
   the per-user registry (`argsMayMutateRegistry`); of those, `context use`
   also escalates, while `init`/`update`/`delete` do not. Only `apply`, rootful
-  destroy targets, and `bastion setup` may use a become password
-  (`argsMayUseBecome`).
+  destroy targets, `bastion setup`, and `storage-cluster replace-arbiter`
+  may use a become password (`argsMayUseBecome`) — the four invocations
+  that run Ansible with `become`.
 - `machine rsh`/`exec` and `cluster rsh`/`exec` run and wait for the SSH
   client as root specifically to decrypt root-owned SSH private material.
   The client reads that material through a parent-held anonymous descriptor;
@@ -74,14 +75,29 @@ touch root-owned state:
   exit status.
 - A leading global `--context` is stripped for classification only; the
   original args are forwarded verbatim to the sudo child.
+- The gate classifies Bootwright's own flags only, never the arguments a
+  command forwards to another program (`argsBeforeCommandPayload`). The
+  forwarded region starts at the `--` terminator for `machine`/`cluster`
+  `rsh`/`exec`, and at the first operand for the interspersed-off
+  passthrough verbs `container-cluster oc`/`kubectl`. A `-h`, `--help`, or
+  `help` meant for the wrapped program is therefore not a Bootwright help
+  request, and a `--name` or `--ssh-user` meant for it never classifies the
+  invocation: `cluster exec --name <c> -- ceph auth get-or-create -h` runs
+  the remote command as root, while `cluster exec --name <c> -h` prints
+  Bootwright's help rootlessly.
+
+`TestLocalRootGateClassifiesEveryRunnableCommand` walks the built cobra
+tree and asserts the gate escalates for every runnable leaf except a named
+rootless set, so a command that is added, renamed, or moved between parents
+fails the suite instead of silently losing its escalation.
 
 Alternative, considered but not validated: carry the classification on the
 cobra commands themselves (`Annotations["bootwright.io/root"]` =
-`required` | `forbidden` | `name-gated`), read it from the built command tree,
-and assert coverage with a fitness test — removing the parallel argv parser and
-the drift between it and the command set. It is recorded as an option, not a
-decision: the gate must classify before cobra parses, so the tree would have to
-be built and discarded ahead of execution, and that has not been tried.
+`required` | `forbidden` | `name-gated`) and read it from that same tree,
+removing the parallel argv parser rather than only guarding its drift. It is
+recorded as an option, not a decision: the gate must classify before cobra
+parses, so the tree would have to be built and discarded ahead of execution,
+and that has not been tried.
 
 ### Flag naming coherence
 

@@ -13,6 +13,31 @@ forwarded verbatim to the sudo child. A leading `--context` must neither
 turn a rootless command rootful nor mask a rootful one
 (`TestStripLeadingGlobalFlags`).
 
+**Constraint: cut the forwarded payload before classifying.** The gate
+parses argv itself, so every scan (`argsContainHelp`,
+`argsHaveUnusableSSHUser`, `argsHaveNameValue`, `argsMayUseBecome`) sees
+whatever the operator typed for the wrapped program too.
+`argsBeforeCommandPayload` cuts that region first: at the `--` terminator,
+and — for `container-cluster oc`/`kubectl`, whose flags are
+`SetInterspersed(false)` — at the first operand. Without the cut,
+`cluster exec --name c -- ceph auth get-or-create -h` reads as a help
+request, skips the sudo re-exec, and dies on `lstat` of the root-owned
+context (`permission denied`) while the same command without `-h` works;
+`container-cluster oc --name c get pods --help` fails the same way. The
+cut runs before `stripLeadingGlobalFlags`, so it locates the command path
+through `leadingGlobalFlagCount` rather than assuming `args[0]` is a verb.
+
+**Gotcha: the gate's command table drifts when commands move.**
+`argsNeedLocalRoot` is a hand-written switch over command paths, and
+nothing in the compiler ties it to the cobra tree: moving `oc`, `kubectl`,
+and `kubeconfig` from `cluster` to `container-cluster` left the switch
+naming the dead paths, so all three silently stopped escalating and failed
+with `permission denied` for every non-root caller.
+`TestLocalRootGateClassifiesEveryRunnableCommand` walks the built tree and
+requires an explicit rootless entry for every runnable leaf that does not
+escalate, which fails on the next rename instead of at the operator's
+terminal.
+
 **Constraint: resolve the `-f` workspace path before any re-exec.**
 `ResolveWorkspaceDir` (which expands `~` and relative source paths) must
 be called BEFORE the sudo re-exec so the `-f` source directory resolves

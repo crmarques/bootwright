@@ -10,7 +10,49 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 )
 
+var commandOwnValueFlags = append(slices.Clone(globalValueFlags), "--name")
+
+var tailForwardingCommands = map[string][]string{
+	"container-cluster": {"oc", "kubectl"},
+}
+
+func argsBeforeCommandPayload(args []string) []string {
+	args = argsBeforeCommandTerminator(args)
+	start := leadingGlobalFlagCount(args)
+	command := args[start:]
+	if !commandForwardsTail(command) {
+		return args
+	}
+	return args[:start+forwardedTailStart(command)]
+}
+
+func argsBeforeCommandTerminator(args []string) []string {
+	for i, arg := range args {
+		if arg == "--" {
+			return args[:i]
+		}
+	}
+	return args
+}
+
+func commandForwardsTail(args []string) bool {
+	return len(args) >= 2 && slices.Contains(tailForwardingCommands[args[0]], args[1])
+}
+
+func forwardedTailStart(args []string) int {
+	for i := 2; i < len(args); i++ {
+		if !strings.HasPrefix(args[i], "-") {
+			return i
+		}
+		if slices.Contains(commandOwnValueFlags, args[i]) {
+			i++
+		}
+	}
+	return len(args)
+}
+
 func argsNeedLocalRoot(args []string) bool {
+	args = argsBeforeCommandPayload(args)
 	if len(args) == 0 || argsContainHelp(args) || argsHaveUnusableSSHUser(args) {
 		return false
 	}
@@ -110,9 +152,29 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "list", "info", "kubeconfig":
+		case "list", "info":
 			return true
-		case "rsh", "exec", "oc", "kubectl":
+		case "rsh", "exec":
+			return argsHaveNameValue(args[2:])
+		default:
+			return false
+		}
+	case "container-cluster":
+		if len(args) == 1 {
+			return false
+		}
+		switch args[1] {
+		case "oc", "kubectl", "kubeconfig":
+			return argsHaveNameValue(args[2:])
+		default:
+			return false
+		}
+	case "storage-cluster":
+		if len(args) == 1 {
+			return false
+		}
+		switch args[1] {
+		case "replace-arbiter":
 			return argsHaveNameValue(args[2:])
 		default:
 			return false
@@ -262,19 +324,22 @@ func contextDeleteArgsHavePurge(args []string) bool {
 }
 
 func argsMayUseBecome(args []string) bool {
-	if len(args) >= 1 && args[0] == "apply" {
-		return true
-	}
-	if len(args) >= 1 && args[0] == "destroy" {
-		return destroyArgsMayUseBecome(args[1:])
-	}
-	if len(args) >= 2 && args[0] == "bastion" && args[1] == "setup" {
-		return true
-	}
-	if len(args) < 2 {
+	args = argsBeforeCommandPayload(args)
+	if len(args) == 0 {
 		return false
 	}
-	return false
+	switch args[0] {
+	case "apply":
+		return true
+	case "destroy":
+		return destroyArgsMayUseBecome(args[1:])
+	case "bastion":
+		return len(args) >= 2 && args[1] == "setup"
+	case "storage-cluster":
+		return len(args) >= 2 && args[1] == "replace-arbiter"
+	default:
+		return false
+	}
 }
 
 func destroyArgsMayUseBecome(args []string) bool {

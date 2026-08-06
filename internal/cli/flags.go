@@ -15,25 +15,30 @@ var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-id-file"}
 var globalBoolFlags = []string{"--ssh-ask-sudo-password", "--ssh-user-for-provisioned"}
 
 func stripLeadingGlobalFlags(args []string) []string {
-	for len(args) > 0 {
-		if leadingGlobalBoolFlag(args[0]) {
-			args = args[1:]
+	return args[leadingGlobalFlagCount(args):]
+}
+
+func leadingGlobalFlagCount(args []string) int {
+	i := 0
+	for i < len(args) {
+		if leadingGlobalBoolFlag(args[i]) {
+			i++
 			continue
 		}
-		flag, ok := leadingGlobalValueFlag(args[0])
+		flag, ok := leadingGlobalValueFlag(args[i])
 		if !ok {
-			return args
+			return i
 		}
-		if args[0] == flag {
-			if len(args) < 2 {
-				return nil
+		if args[i] == flag {
+			if i+1 >= len(args) {
+				return len(args)
 			}
-			args = args[2:]
+			i += 2
 			continue
 		}
-		args = args[1:]
+		i++
 	}
-	return args
+	return i
 }
 
 func leadingGlobalBoolFlag(arg string) bool {
