@@ -197,7 +197,7 @@ func formatConditions(obj map[string]any, kind, namespace, name string, p *waitP
 			p.line("    " + cmsg)
 		}
 		observed := strings.TrimSpace(fmt.Sprintf("%s %s: %s", ctype, creason, cmsg))
-		if conditionProblem(ctype, creason) {
+		if problemVocabulary(creason) || problemVocabulary(cmsg) {
 			if cause == "" {
 				cause = observed
 			}
@@ -217,12 +217,20 @@ func conditionNoteworthy(ctype, cstatus, creason string) bool {
 	if creason == "" {
 		return false
 	}
-	return conditionProblem(ctype, "") || cstatus == "False"
+	if problemVocabulary(ctype) {
+		return cstatus != "False"
+	}
+	return cstatus != "True"
 }
 
-func conditionProblem(ctype, creason string) bool {
-	lower := strings.ToLower(ctype + " " + creason)
-	return strings.Contains(lower, "fail") || strings.Contains(lower, "unhealthy") || strings.Contains(lower, "degraded") || strings.Contains(lower, "error")
+func problemVocabulary(value string) bool {
+	lower := strings.ToLower(value)
+	for _, token := range []string{"fail", "unhealthy", "degraded", "mismatch", "error"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func isPullFailure(reason string) bool {

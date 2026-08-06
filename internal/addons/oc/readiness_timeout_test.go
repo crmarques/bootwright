@@ -90,3 +90,30 @@ func TestFormatConditionsPrefersAFailingConditionOverAHealthyFalseOne(t *testing
 		t.Fatalf("formatConditions returned %q, want the failing condition to win", cause)
 	}
 }
+
+func TestFormatConditionsIgnoresHealthyNegativeConditions(t *testing.T) {
+	obj := map[string]any{"status": map[string]any{"phase": "Progressing", "conditions": []any{
+		map[string]any{"type": "VersionMismatch", "status": "False", "reason": "VersionMatched", "message": "Version check successful"},
+		map[string]any{"type": "ReconcileComplete", "status": "True", "reason": "ReconcileCompleted", "message": "Reconcile completed successfully"},
+		map[string]any{"type": "Available", "status": "False", "reason": "CephClusterStatus", "message": "CephCluster resource is not reporting status"},
+		map[string]any{"type": "Progressing", "status": "True", "reason": "NoobaaInitializing", "message": "Waiting on Nooba instance to finish initialization"},
+		map[string]any{"type": "Degraded", "status": "False", "reason": "Init", "message": "Initializing StorageCluster"},
+	}}}
+	var progress bytes.Buffer
+	cause := formatConditions(obj, "StorageCluster", "openshift-storage", "ocs-external-storagecluster", startWaitProgress(&progress))
+	if strings.HasPrefix(cause, "Degraded") {
+		t.Fatalf("cause %q blames Degraded=False, which means the cluster is NOT degraded", cause)
+	}
+	if !strings.HasPrefix(cause, "Available CephClusterStatus") {
+		t.Fatalf("cause = %q, want the unsatisfied Available condition", cause)
+	}
+	printed := progress.String()
+	for _, healthy := range []string{"VersionMismatch", "Degraded", "ReconcileComplete"} {
+		if strings.Contains(printed, healthy) {
+			t.Errorf("diagnostic printed healthy condition %s:\n%s", healthy, printed)
+		}
+	}
+	if !strings.Contains(printed, "Available=False") {
+		t.Errorf("diagnostic omitted the unsatisfied condition:\n%s", printed)
+	}
+}
