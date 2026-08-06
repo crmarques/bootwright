@@ -152,6 +152,10 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 			if prepareID := prepareDepsByHost[host]; prepareID != "" {
 				deps = append(deps, prepareID)
 			}
+			finalizeResourceKeys := []string(nil)
+			if containerFinalizeMutatesHost(state, name, host) {
+				finalizeResourceKeys = []string{hostMutationResource(host)}
+			}
 			infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
@@ -165,7 +169,7 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 						Cluster:      name,
 						ClusterKind:  ApplyClusterKindContainer,
 						Host:         host,
-						ResourceKeys: []string{hostMutationResource(host)},
+						ResourceKeys: finalizeResourceKeys,
 						Status:       TaskStatusPending,
 					},
 					Playbook:           applyMachineInfraFinalize,

@@ -1127,6 +1127,7 @@ func TestPlanApplyISOWaitsForFabricNotVirtualMachines(t *testing.T) {
 	}
 	assertTaskDeps(t, tasks, "iso.sno-libvirt", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
 	assertTaskDeps(t, tasks, "infrafinalize.sno-libvirt.bastion", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
+	assertTaskResourceKeys(t, tasks, "infrafinalize.sno-libvirt.bastion", "host:bastion:mutating")
 	assertTaskDeps(t, tasks, "boot.sno-libvirt", "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
 	assertNoTaskPath(t, tasks, "iso.sno-libvirt", "infra.sno-libvirt.master-0")
 	assertNoTaskPath(t, tasks, "infrafinalize.sno-libvirt.bastion", "infra.sno-libvirt.master-0")
@@ -1447,7 +1448,9 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
 	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization")
-	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
+	if got := assertTaskPresent(t, tasks, "infrafinalize.child-ocp.localhost").Entry.ResourceKeys; len(got) != 0 {
+		t.Fatalf("infrafinalize resource keys = %v, want none: this cluster binds no load balancer to the controller, so finalize mutates nothing and must not block a peer cluster's finalize", got)
+	}
 	assertTaskHasDeps(t, tasks, "boot.child-ocp", "iso.child-ocp", "infra.child-ocp.localhost", "infrafinalize.child-ocp.localhost")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp:vm:child-ocp-child-master-0")
 	iso := assertTaskPresent(t, tasks, "iso.child-ocp")
