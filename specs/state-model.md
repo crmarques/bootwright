@@ -1181,6 +1181,17 @@ Rules:
   (each `key` required, optional `value`, `effect` one of `NoSchedule`,
   `PreferNoSchedule`, or `NoExecute`) are day-2-owned node intent applied after
   install — reconcilable-in-place drift, not install-config/agent-config identity.
+- Day-2 node config reconciles removal as well as addition. The step runs for
+  every cluster that declares nodes and re-applies every registered node, so
+  clearing a role, label, or taint relinquishes the field under the `bootwright`
+  field manager instead of leaving it live forever. The `infra` MachineConfigPool
+  is deleted once no `infra` node remains, and only when it carries the
+  `bootwright.io/managed-by: bootwright` label. Taints are deduplicated by
+  `key`+`effect` before apply — the pair Kubernetes itself requires to be unique —
+  so authoring the infra taint explicitly is a no-op rather than an apply failure.
+  The apply passes `--force-conflicts`, because `Node.spec.taints` is an atomic
+  list co-owned by the node-lifecycle controller and the pool may predate the
+  move to server-side apply.
 - There are no authorable machine pools. `spec.nodes[].role` is the single
   source of the roster: the renderer derives the control-plane and compute
   replica counts from it, and the agent installer renders one

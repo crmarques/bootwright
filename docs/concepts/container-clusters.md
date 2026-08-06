@@ -462,6 +462,17 @@ machine-pool fields (`replicas`, `architecture`, `hyperthreading`, `platform`,
     on a plain `master`/`worker` node are applied day-2 too, without the infra
     label/MCP.
 
+    Removal reconciles as well. Demote an `infra` node to `worker`, or delete a
+    `labels`/`taints` entry, and the next apply clears what Bootwright had set on
+    that node — the step re-applies every registered node in the cluster, so
+    server-side apply relinquishes the fields it no longer declares. Once the last
+    `infra` node is gone the `infra` `MachineConfigPool` is deleted, but only if it
+    carries the `bootwright.io/managed-by: bootwright` label Bootwright stamps on
+    the pool it creates; a pool you made yourself is never touched. A
+    `nodes[].taints` entry that repeats the infra taint collapses into a single
+    entry instead of failing the apply, since Kubernetes requires taints to be
+    unique by key and effect.
+
 !!! note "Where node binding rules are enforced"
     A referenced `Machine` must carry the `openshift-node` capability and may be
     node-bound by at most one cluster — across every `ContainerCluster` and
