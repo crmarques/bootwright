@@ -256,10 +256,16 @@
           ExternalClusterConnecting=False with reason ExternalClusterStateError
           until the readiness budget expires, while rook logs "error setting
           modifier ... Malformed input" against
-          client.healthchecker.keyring throughout. Convert the Data Foundation
-          cephx entities on the Ceph cluster to the AES key type, or pair this
-          cluster with a Data Foundation build whose client understands
-          AES256KRB5, then rerun this step.
+          client.healthchecker.keyring throughout. Rerunning this step cannot
+          repair it: the exporter adopts an existing cephx entity verbatim.
+          Nor can the entities simply be re-minted — a Ceph build that defaults
+          to AES256KRB5 also refuses "ceph auth get-or-create --key_type aes"
+          with "creating key with insecure key type", because its allowed
+          ciphers are policy held in the mon map. Either relax that policy on
+          the Ceph cluster, which weakens cephx for every client of it and is
+          not something Bootwright will do for you, or pair this cluster with a
+          Data Foundation build whose client parses AES256KRB5. Check the
+          vendor support matrix for this pairing first.
         success_msg: >-
           The exported cephx keys use the AES key type this Data Foundation
           build can read.

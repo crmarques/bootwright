@@ -49,35 +49,46 @@ byte for byte. Since 2026-08-05 the exporter playbook refuses the export when
 any entry's `data.userKey` does not start with `AQ`, naming the offending
 entries, rather than attaching keys that cannot work.
 
-Repairing it is a Ceph-side action on the five Data Foundation entities
-(`client.healthchecker`, `client.csi-rbd-node`, `client.csi-rbd-provisioner`,
-`client.csi-cephfs-node`, `client.csi-cephfs-provisioner`).
+**There is no Bootwright-side repair, and no cheap Ceph-side one.** All of the
+following is verified on ceph-prd-01 (`20.2.1-324.el9cp`), 2026-08-05:
 
-IBM Storage Ceph `20.2.1-324.el9cp` accepts a per-entity key type — verified
-from `ceph auth get-or-create -h` on ceph-prd-01, which advertises
-`auth get-or-create <entity> [<caps>...] [--key_type <value>]` and the same
-flag on `get-or-create-key`. Note the **underscore**: `--key_type`, not
-`--key-type`. The only cipher-related config option this build exposes is
-`mon_auth_emergency_allowed_ciphers`; the `auth_preferred_cipher` /
-`auth_allowed_ciphers` / `auth_service_cipher` names that circulate in
-downstream rook source do **not** exist here, and rook sets its own via
-`ceph mon set`, which `spec.ceph.config` (`ceph config set`) cannot reach.
+- `ceph auth get-or-create` and `get-or-create-key` do take a per-entity
+  `--key_type <value>` — note the **underscore**, not `--key-type`.
+- `aes` is the right value, and the monitors reject it:
+  `Error EINVAL: creating key with insecure key type ("aes") not allowed`. A
+  build that defaults to AES256KRB5 also forbids minting the legacy type, so
+  re-minting the five entities is not available.
+- The allowed-cipher policy is held in the **mon map**, not in
+  `ceph config`. The only related config option,
+  `mon_auth_emergency_allowed_ciphers`, is `(str, advanced)`, mon-only,
+  `Can update at runtime: false`, and `ceph config set` refuses it —
+  "is special and cannot be stored by the mon". It is a startup-only escape
+  hatch for a cluster that has locked itself out, not a supported way to
+  configure a fleet. `auth_preferred_cipher` / `auth_allowed_ciphers` /
+  `auth_service_cipher`, which circulate in downstream rook source, do **not**
+  exist on this build; rook sets its own with `ceph mon set`, which
+  `spec.ceph.config` (`ceph config set`) cannot reach anyway.
 
-Traps:
+So the real remedies are both outside Bootwright: relax the cluster's
+allowed-cipher policy — a cephx security downgrade affecting every client of
+that cluster — or pair the cluster with a Data Foundation build whose client
+parses AES256KRB5. Check the vendor support matrix before either: an
+ODF/FDF 4.21 consumer against an IBM Storage Ceph 9.x provider may simply be
+outside it, in which case the answer is a version realignment.
+
+Other traps, if a repair is ever attempted:
 
 - `ceph auth rotate` re-mints with the build default. So does a bare
-  `get-or-create` after `auth rm` — the key type only changes if `--key_type`
-  is passed explicitly.
-- The exporter calls `get-or-create` and adopts an existing key verbatim
-  (`check_user_exist`), so a repaired entity survives re-export — and a bad one
-  is never re-minted away by re-running the export. Repair, or delete and let
-  the exporter recreate; re-running alone changes nothing.
-- Re-creating by hand means re-supplying the exact caps the exporter would set.
-  Capturing `ceph auth get <entity>` first, or deleting the entity and letting
-  the exporter recreate it, avoids transcribing them.
+  `get-or-create` after `auth rm` — the type only changes with `--key_type`.
+- The exporter calls `get-or-create` and adopts an existing entity verbatim
+  (`check_user_exist`), so re-running the export changes nothing: a bad key is
+  never re-minted away, and a repaired one would survive.
 - Never flip the type byte on an existing 44-byte blob: `CryptoAES` validates
   only `length >= 16`, so a 32-byte secret relabelled type 1 loads silently and
   uses the first 16 bytes — a silently wrong credential.
 - Bootwright passes no `--restricted-auth-permission`, so every attached
-  OpenShift cluster shares these five entities: one repair fixes all of them,
-  and one mistake breaks all of them.
+  OpenShift cluster shares the five entities (`client.healthchecker`,
+  `client.csi-rbd-node`, `client.csi-rbd-provisioner`,
+  `client.csi-cephfs-node`, `client.csi-cephfs-provisioner`, all at plain names
+  with no generation suffix): one repair fixes all of them, one mistake breaks
+  all of them.
