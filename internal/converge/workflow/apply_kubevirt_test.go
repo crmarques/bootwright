@@ -239,3 +239,38 @@ func TestKubeVirtMachineTasksChargeNoHostSlot(t *testing.T) {
 		t.Fatal("KubeVirt machine provisioning must not be gated by any host slot budget")
 	}
 }
+
+func TestIndependentVirtualizedClustersProvisionConcurrently(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	dc1 := assertTaskPresent(t, tasks, "infra.dc1-child-ocp.localhost")
+	dc2 := assertTaskPresent(t, tasks, "infra.dc2-child-ocp.localhost")
+
+	for _, a := range dc1.Entry.ResourceKeys {
+		for _, b := range dc2.Entry.ResourceKeys {
+			if a == b {
+				t.Fatalf("independent clusters share resource key %q, which serializes their machine provisioning", a)
+			}
+		}
+	}
+	if key, _ := taskHostSlot(dc1); key != "" {
+		t.Fatalf("dc1 machine provisioning charges host slot %q, which would clamp it to ParallelismPerHost", key)
+	}
+	if key, _ := taskHostSlot(dc2); key != "" {
+		t.Fatalf("dc2 machine provisioning charges host slot %q, which would clamp it to ParallelismPerHost", key)
+	}
+	assertNoTaskPath(t, tasks, "infra.dc1-child-ocp.localhost", "infra.dc2-child-ocp.localhost")
+	assertNoTaskPath(t, tasks, "infra.dc2-child-ocp.localhost", "infra.dc1-child-ocp.localhost")
+
+	for _, id := range []string{"infrafinalize.dc1-child-ocp.localhost", "infrafinalize.dc2-child-ocp.localhost"} {
+		if got := assertTaskPresent(t, tasks, id).Entry.ResourceKeys; len(got) != 0 {
+			t.Fatalf("%s resource keys = %v, want none so a peer cluster's finalize is not blocked", id, got)
+		}
+	}
+}
