@@ -752,8 +752,8 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 
 | Fact | Shape |
 | --- | --- |
-| `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
-| `bootwright_task_machine_name` | Machine name selected for one machine infrastructure task |
+| `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent or machine infrastructure task |
+| `bootwright_task_machine_names` | Comma-separated machine names selected for one machine infrastructure task |
 | `bootwright_task_managed_os_group_name` | StorageCluster-backed managed OS group selected for one managed OS task |
 | `bootwright_task_provider_host_name` | Provider host selected for one shared machine infrastructure prepare/finalize task |
 | `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage or machine registration task |
@@ -770,8 +770,9 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 The OpenShift agent role uses those vars to create and publish one cluster ISO,
 boot all selected node pseudo-hosts through Ansible host fanout, and run the
 final installer wait after the boot-stage task has completed. Machine
-infrastructure tasks select one `bootwright_machine_task_hosts` pseudo-host at a
-time. Managed OS tasks select the storage group's full pseudo-host group so VM
+infrastructure apply tasks select the `bootwright_machine_task_hosts`
+pseudo-hosts they provision; prepare and finalize tasks select one provider
+host. Managed OS tasks select the storage group's full pseudo-host group so VM
 creation, OS install, SSH wait, and trust recording run in Ansible host fanout.
 Managed storage prereq tasks run against the storage-node inventory group and
 reserve seed-only cephadm work for the final storage task.

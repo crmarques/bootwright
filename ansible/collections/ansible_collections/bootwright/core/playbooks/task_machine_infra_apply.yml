@@ -47,7 +47,7 @@
       ansible.builtin.assert:
         that:
           - bootwright_selected_machine_components | length == 1
-          - bootwright_task_machine_name | default('') == bootwright_machine_task_machine_name
+          - bootwright_machine_task_machine_name in (bootwright_task_machine_names | default('')).split(',')
         fail_msg: >-
           Could not resolve machine {{ bootwright_machine_task_machine_name | default('<unset>') }}
           for cluster {{ bootwright_machine_task_cluster_name | default('<unset>') }}.

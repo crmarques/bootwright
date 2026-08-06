@@ -70,7 +70,7 @@ func planContainerMachineInfraActivities(graph *ActivityGraph, state v1alpha1.St
 					},
 					Playbook:           applyClusterInstallPlaybook,
 					Limit:              render.MachineInfraHostName(name, machineName),
-					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
+					ExtraVarPairs:      []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_names=" + machineName},
 					Forks:              1,
 					State:              clusterState,
 					StructuralHashVars: containerClusterInstallStructuralHashVars(clusterState),
