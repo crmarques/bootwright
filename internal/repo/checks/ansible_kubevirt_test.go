@@ -8,6 +8,8 @@ import (
 
 const kubeVirtBootTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml"
 
+const kubeVirtSubstrateTasks = "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml"
+
 const kubeVirtSubstrateDestroyTasks = "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml"
 
 const kubeVirtPurgeMediaPVCTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/purge_media_pvc.yml"
@@ -269,6 +271,49 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 		}
 		if strings.Contains(line, "accessModes") || strings.Contains(line, "volumeMode") {
 			t.Fatalf("the clone target must name neither accessModes nor volumeMode: the storage class is operator-supplied, and any value spelled out here is a guess that can differ from the shared source it clones, got %q", line)
+		}
+	}
+}
+
+func TestKubeVirtRootDiskInheritsVolumeModeFromTheStorageProfile(t *testing.T) {
+	template := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/datavolume-root.yaml.j2")
+	if !strings.Contains(template, "storage:\n    resources:") {
+		t.Fatal("the root disk must be requested through spec.storage so CDI completes accessModes and volumeMode from the class's StorageProfile; spec.pvc is copied through verbatim, so the claim silently defaults to volumeMode Filesystem and a Block class such as Ceph RBD ends up backing the guest's virtio root disk with a disk.img file on a filesystem inside the RBD image, which slows the agent's image write enough to trip its 30-minute no-progress watchdog")
+	}
+	if strings.Contains(template, "  pvc:\n") {
+		t.Fatal("the root disk must not be requested through spec.pvc")
+	}
+	for _, line := range strings.Split(template, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if strings.Contains(line, "accessModes") || strings.Contains(line, "volumeMode") {
+			t.Fatalf("the root disk must name neither accessModes nor volumeMode: the storage class is operator-supplied and only its StorageProfile knows which pair it supports, got %q", line)
+		}
+	}
+	for _, want := range []string{
+		"blank: {}",
+		"cdi.kubevirt.io/storage.bind.immediate.requested",
+		"bootwright.io/role: root",
+		"bootwright.io/managed-by: bootwright",
+		"storage: {{ bootwright_component.profile.diskGiB | default(120, true) }}Gi",
+		"storageClassName: {{ bootwright_kubevirt_storage_class }}",
+	} {
+		if !strings.Contains(template, want) {
+			t.Fatalf("root disk template must keep its blank source, immediate binding, ownership labels and profile-driven size (missing %q)", want)
+		}
+	}
+
+	tasks := readAnsibleTasks(t, kubeVirtSubstrateTasks)
+	deleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt root DataVolume for authorized rebuild")
+	applyIdx := findAnsibleTask(t, tasks, "Apply KubeVirt root disk DataVolume")
+	if deleteIdx > applyIdx {
+		t.Fatalf("an authorized rebuild must delete the root DataVolume before the apply recreates it (delete=%d apply=%d)", deleteIdx, applyIdx)
+	}
+	guard := fmt.Sprint(tasks[applyIdx]["when"])
+	for _, want := range []string{"bootwright_kubevirt_root_dv_exists", "bootwright_kubevirt_rebuild_authorized"} {
+		if !strings.Contains(guard, want) {
+			t.Fatalf("the root DataVolume apply must create only, never re-send a spec to a live claim that CDI's webhook refuses to update and that holds the machine's installed operating system (missing %q), got when=%v", want, tasks[applyIdx]["when"])
 		}
 	}
 }

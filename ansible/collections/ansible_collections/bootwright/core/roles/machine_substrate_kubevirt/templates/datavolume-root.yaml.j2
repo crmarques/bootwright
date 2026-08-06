@@ -18,9 +18,17 @@ metadata:
 spec:
   source:
     blank: {}
-  pvc:
-    accessModes:
-      - ReadWriteOnce
+  # Ask for the disk through spec.storage, never spec.pvc, and name neither
+  # accessModes nor volumeMode. CDI copies spec.pvc through verbatim, so a
+  # hand-written claim inherits the Kubernetes default volumeMode Filesystem no
+  # matter what the class is built for; only spec.storage is completed from the
+  # class's StorageProfile. On a Block class (Ceph RBD) that mistake backs the
+  # guest's virtio root disk with a disk.img file on a filesystem inside the RBD
+  # image, so every write the agent installer makes carries journal and extent
+  # allocation on top of the network round trip. The agent fails a host whose
+  # "Writing image to disk" stage has not progressed in 30 minutes, which is what
+  # a whole cluster's masters writing RHCOS at once used to hit.
+  storage:
     resources:
       requests:
         storage: {{ bootwright_component.profile.diskGiB | default(120, true) }}Gi
