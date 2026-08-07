@@ -393,6 +393,63 @@
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
+- name: Scan a non-seed storage host for Ceph state the seed named no cluster for
+  ansible.builtin.find:
+    paths: /var/lib/ceph
+    file_type: directory
+  register: bootwright_ceph_nonseed_unnamed_state
+  changed_when: false
+  when:
+    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+
+- name: Resolve the Ceph clusters a non-seed storage host carries under no resolved fsid
+  ansible.builtin.set_fact:
+    bootwright_ceph_nonseed_unnamed_fsids: >-
+      {{ bootwright_ceph_nonseed_unnamed_state.files | default([])
+         | map(attribute='path') | map('basename')
+         | select('match', '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+         | list }}
+  changed_when: false
+  when:
+    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+
+- name: Refuse a non-seed storage host still carrying a cluster the seed resolved no fsid for
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_nonseed_unnamed_fsids | default([])) | length == 0
+    fail_msg: >-
+      Refusing to tear down {{ bootwright_selected_storage_cluster.name }} on
+      {{ bootwright_current_storage_host.hostname }}: this node still carries Ceph cluster
+      state at /var/lib/ceph/{{ bootwright_ceph_nonseed_unnamed_fsids | join(', /var/lib/ceph/') }},
+      but seed {{ bootwright_selected_storage_cluster.seedHost }} resolved no cluster fsid at
+      all — it holds neither /etc/ceph/ceph.conf nor a /var/lib/ceph/<fsid> directory, so this
+      teardown read it as a cluster that is already gone.
+      Every per-host removal is scoped to the fsid the seed resolves, so with none resolved
+      this node's cluster is never removed: `cephadm rm-cluster` does not run here, the
+      refusal that would catch a host with no cephadm to remove it never runs either, and the
+      local-state cleanup then reads this node's own cluster as a FOREIGN co-resident cluster
+      and preserves /etc/ceph and /var/lib/ceph. The seed meanwhile removes its own state and
+      this cluster's ownership record, and the run reports the cluster destroyed while these
+      nodes still hold it — which is what leaves a node the next apply refuses as foreign data
+      and the next destroy cannot prove ownership of.
+      A seed that carries nothing is evidence about the seed, not about its peers, so this
+      teardown stops here instead.
+      Read the fsid this node holds and re-run destroy with
+      `--recover-ceph-ownership {{ bootwright_selected_storage_cluster.name }}=<fsid>`, which
+      reconstructs the controller record and seed marker so the teardown resolves an fsid and
+      removes the cluster from every node; or remove it by hand with
+      `cephadm rm-cluster --force --fsid <fsid>` on each node that still carries it
+      (fsid-scoped: it stops and removes only that cluster's daemons, units and /var/lib/ceph
+      state, and zaps no disk) and re-run. No --authorize token relaxes this.
+  when:
+    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+
 - name: Probe non-seed hosts for local Ceph cluster state
   ansible.builtin.stat:
     path: "/var/lib/ceph/{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"

@@ -2581,6 +2581,49 @@ func TestStorageCephadmDestroyRefusesAClusterNoCephadmCanRemove(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmDestroyRefusesPeersWhenTheSeedResolvesNoFsid(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	scanIdx := findAnsibleTask(t, tasks, "Scan a non-seed storage host for Ceph state the seed named no cluster for")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the Ceph clusters a non-seed storage host carries under no resolved fsid")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a non-seed storage host still carrying a cluster the seed resolved no fsid for")
+	nonSeedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on non-seed hosts")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(scanIdx < resolveIdx && resolveIdx < refuseIdx && refuseIdx < nonSeedRmIdx && nonSeedRmIdx < wipeIdx) {
+		t.Fatalf("a peer still carrying cluster state must be refused before the teardown removes anything (scan=%d resolve=%d refuse=%d rm=%d wipe=%d)", scanIdx, resolveIdx, refuseIdx, nonSeedRmIdx, wipeIdx)
+	}
+	if _, ok := tasks[refuseIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("the refusal must be a hard assert so any_errors_fatal stops every host, got %v", tasks[refuseIdx])
+	}
+	when := fmt.Sprint(tasks[refuseIdx]["when"])
+	for _, want := range []string{
+		"inventory_hostname != bootwright_selected_storage_cluster.seedHost",
+		"bootwright_ceph_destroy_fsid | default('') | length == 0",
+	} {
+		if !strings.Contains(when, want) {
+			t.Errorf("the refusal must fire exactly where the seed resolved no fsid and this host is not the seed, missing %q in when=%v", want, tasks[refuseIdx]["when"])
+		}
+	}
+	if strings.Contains(when, "authorize") {
+		t.Errorf("no --authorize token may relax this: skipping it leaves a live cluster on every peer while the run reports it destroyed, got when=%v", tasks[refuseIdx]["when"])
+	}
+	fail := fmt.Sprint(tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)["fail_msg"])
+	for _, want := range []string{"FOREIGN", "recover-ceph-ownership", "rm-cluster"} {
+		if !strings.Contains(fail, want) {
+			t.Errorf("the refusal must name the misclassification it prevents and both exits, missing %q in %v", want, fail)
+		}
+	}
+
+	for _, name := range []string{
+		"Resolve the cephadm command for the non-seed host cluster removal",
+		"Remove cephadm cluster on non-seed hosts",
+	} {
+		got := fmt.Sprint(tasks[findAnsibleTask(t, tasks, name)]["when"])
+		if !strings.Contains(got, "bootwright_ceph_destroy_fsid | default('') | length > 0") {
+			t.Errorf("%q stays scoped to the seed's fsid — that is precisely why an unresolved fsid must be refused above rather than silently skipping every peer removal, got when=%v", name, got)
+		}
+	}
+}
+
 func TestStorageCephadmDestroyStopsTheOrchestratorBeforeAnyRemoval(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	disableIdx := findAnsibleTask(t, tasks, "Stop the Ceph orchestrator before any host removes the cluster")

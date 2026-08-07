@@ -8,6 +8,33 @@ agree with the conf fsid. The record and marker are independent consistency
 checks. A seed with no ceph.conf at all has nothing to protect and is treated
 as owned only when the live fsid probe also finds no cluster.
 
+**Constraint (a seed that carries nothing is evidence about the seed, not about
+its peers):** that "nothing to protect" branch resolves ownership WITHOUT
+resolving an fsid, and every per-host cluster removal downstream is scoped to
+the fsid the seed resolved. With none resolved, and with
+`display_skipped_hosts = False`, the whole peer half of the teardown evaporates
+in silence: `cephadm rm-cluster` never runs on a non-seed host, the
+`cephadm_command.yml` include that carries the "no cephadm to remove it"
+refusal is never reached either, and — the load-bearing part —
+`bootwright_ceph_cleanup_owned_fsid` on a non-seed host is
+`hostvars[seed].bootwright_ceph_destroy_fsid`, so it resolves to the empty
+string and the host's OWN cluster is classified as a foreign co-resident
+cluster and PRESERVED. The seed meanwhile finds no fsid directory of its own,
+takes the full-removal branch, deletes its `/etc/ceph`, and removes the
+cluster's controller ownership record. The run is green; the cluster is intact
+on every peer; and because the seed's evidence is now gone, the next destroy
+cannot prove ownership and the next apply refuses the disks as foreign data.
+Observed on ceph-prd-01 2026-08-07 (seed srv4203), printed verbatim by the
+teardown itself: `Preserving /etc/ceph, /var/lib/ceph and /var/log/ceph on
+srv4204: foreign Ceph cluster fsid(s) 2744de24-… not owned by ceph-prd-01`
+— where that fsid IS ceph-prd-01. Not the same bug as the 2026-08-04 seed
+silent skip, which hardened ENTRY to this branch against probes that never ran;
+this is what the branch does to the other five hosts once entered.
+`cluster_gate.yml` now scans every non-seed host for `/var/lib/ceph/<fsid>`
+directories whenever the seed resolved no fsid and fails closed on any, naming
+both exits (`--recover-ceph-ownership <cluster>=<fsid>`, or a manual
+fsid-scoped `cephadm rm-cluster`). No token relaxes it.
+
 **Semantics:** `destroy --recover-ceph-ownership
 <StorageCluster>=<fsid>[,...]` repairs both controller and host evidence. Go
 requires a selected declared managed cluster and refuses an existing context
