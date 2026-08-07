@@ -104,7 +104,7 @@
           Read the diagnostic above: fix the identity it names (re-authorize the key, restore
           the NOPASSWD grant of
           {{ bootwright_node_access.user | default('the orchestration account') }}, or pass
-          --ssh-sudo-password), or correct the address it could not reach, then re-run
+          --ssh-ask-sudo-password), or correct the address it could not reach, then re-run
           destroy. If the node really is decommissioned, power it off so the teardown can
           prove it absent.
       when: bootwright_storage_reachable_probe.unreachable | default(false) | bool

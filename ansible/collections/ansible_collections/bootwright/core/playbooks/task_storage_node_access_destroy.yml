@@ -91,7 +91,7 @@
           Its cephadm cluster key and the Bootwright-authored access of
           {{ bootwright_node_access.user | default('the orchestration account') }} stay authorized
           on that node, and its root login stays as this run left it. Fix the identity named above
-          (re-authorize the key, restore the NOPASSWD grant, or pass --ssh-sudo-password) and
+          (re-authorize the key, restore the NOPASSWD grant, or pass --ssh-ask-sudo-password) and
           re-run destroy, or remove those authorized keys by hand before the hardware is reused.
       when: bootwright_node_access_reachable_probe.unreachable | default(false) | bool
 

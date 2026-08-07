@@ -779,7 +779,7 @@ probes reported:
 
 - a **rejected identity** (an unauthorized key, an untrusted host key, a refused
   `sudo` escalation) — fix it and re-run: re-authorize the key, restore the
-  account's NOPASSWD grant, or pass `--ssh-sudo-password`;
+  account's NOPASSWD grant, or pass `--ssh-ask-sudo-password`;
 - an **address that does not resolve**, which is a name-resolution fault on the
   controller, not an absent node — correct the address or restore the resolver;
 - an **empty or unreadable diagnostic** — nothing was proven either way, so

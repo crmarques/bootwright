@@ -117,7 +117,7 @@
           hardware's DMI system UUID and the stale consumer will reject the next install of the
           same machine. Fix the identity named above (re-authorize the key, restore the NOPASSWD
           grant of {{ bootwright_node_access.user | default('the orchestration account') }}, or
-          pass --ssh-sudo-password) and re-run destroy, or delete the stale content host on the
+          pass --ssh-ask-sudo-password) and re-run destroy, or delete the stale content host on the
           subscription service by hand.
       when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
 
