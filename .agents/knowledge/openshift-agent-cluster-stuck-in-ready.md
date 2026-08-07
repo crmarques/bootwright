@@ -37,7 +37,11 @@ against the cluster's declared nodes to name it.
 give-ups, `failed to progress after all hosts available` and `failed to prepare
 cluster installation`. Each attempt buys another minute of grace inside the
 installer plus `bootwright_install_stalled_wait_delay_seconds`, bounded by
-`bootwright_install_stalled_wait_retries`; any other failure is not retried.
+`bootwright_install_stalled_wait_retries` and by the wait budget deadline. The
+installer's third client-side give-up, `bootstrap process timed out`, is
+resumed on the same loop under its own pattern and hint — see
+[openshift-agent-wait-installer-window.md](openshift-agent-wait-installer-window.md).
+Any other failure is not retried.
 The waits carry `failed_when: false` and report through a dedicated fail task,
 so the give-up is named rather than dumped: the message states the exact
 known-host count the rendezvous node is waiting for and lists every declared

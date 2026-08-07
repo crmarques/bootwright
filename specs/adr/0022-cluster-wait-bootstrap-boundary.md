@@ -99,5 +99,12 @@ destroy.
   stamped on the next apply, including the verified-installed skip path.
 - Worst-case wall clock for a stuck install is now two waits rather than one;
   the bootstrap wait has its own timeout, defaulting to the install timeout.
+  That timeout is bootwright's budget, not the installer's: `agent wait-for`
+  caps a single invocation at a compiled-in 60 minutes with no flag to raise
+  it, and `install-complete` runs the same bootstrap wait first, so both
+  activities re-invoke the command while their budget lasts rather than
+  treating one `bootstrap process timed out` as a failed install. The budget
+  bounds when a new invocation may start, so each wait can overrun it by up to
+  one 60-minute window.
 - The resume path is unvalidated without a hardware soak, tracked as B-041 in
   [`BACKLOG.md`](../../.agents/knowledge/BACKLOG.md).

@@ -10,6 +10,27 @@ bootwright_install_wait_target: install
 bootwright_install_stalled_wait_retries: 20
 bootwright_install_stalled_wait_delay_seconds: 30
 bootwright_install_stalled_wait_pattern: "failed to progress after all hosts available|failed to prepare cluster installation"
+bootwright_install_timed_out_wait_pattern: "bootstrap process timed out"
+bootwright_install_installer_wait_window_seconds: 3600
+bootwright_install_resumable_wait_pattern: "{{ bootwright_install_stalled_wait_pattern }}|{{ bootwright_install_timed_out_wait_pattern }}"
+bootwright_install_wait_budget_seconds: >-
+  {{ bootwright_install_bootstrap_timeout_seconds
+     if bootwright_install_wait_target == 'bootstrap'
+     else bootwright_install_timeout_seconds }}
+bootwright_install_timed_out_wait_hint: >-
+  openshift-install caps one `agent wait-for` invocation at
+  {{ bootwright_install_installer_wait_window_seconds }} seconds and exposes no
+  flag to raise it, so it stops watching a cluster that is still converging.
+  The rendezvous node keeps installing across that give-up, so bootwright
+  re-ran the wait until its own
+  {{ bootwright_install_wait_budget_seconds | trim }}-second budget was spent.
+  The ClusterOperator conditions below are the cluster's state at the last
+  give-up, not proof of a failed install: a control plane still pulling release
+  images — several clusters installing at once compete for one registry path —
+  can converge past this budget. Confirm the nodes are idle before treating
+  this as a failed install; raise
+  bootwright_install_bootstrap_timeout_seconds to buy another window, or
+  re-run the apply to resume watching where this run stopped.
 bootwright_install_stalled_wait_hint: >-
   The cluster reached assisted-service status "ready", but the rendezvous node
   never started the install. It starts the install only once exactly

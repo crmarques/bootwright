@@ -12,6 +12,13 @@
       ansible.builtin.debug:
         msg: "Follow agent install progress with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log"
 
+    - name: Set the agent wait budget deadline
+      ansible.builtin.set_fact:
+        bootwright_install_wait_deadline: >-
+          {{ (now(utc=true).timestamp() | int)
+             + (bootwright_install_wait_budget_seconds | int) }}
+      changed_when: false
+
     - name: Check recorded agent bootstrap completion
       ansible.builtin.stat:
         path: "{{ bootwright_install_bootstrap_marker_path }}"
@@ -34,7 +41,9 @@
       until: >-
         (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
         or not (bootwright_install_bootstrap_wait.stderr | default('')
-                is search(bootwright_install_stalled_wait_pattern))
+                is search(bootwright_install_resumable_wait_pattern))
+        or (now(utc=true).timestamp() | int)
+           >= (bootwright_install_wait_deadline | int)
       retries: "{{ bootwright_install_stalled_wait_retries }}"
       delay: "{{ bootwright_install_stalled_wait_delay_seconds }}"
       changed_when: (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
@@ -52,7 +61,10 @@
           {{ bootwright_install_stalled_wait_hint
              if (bootwright_install_bootstrap_wait.stderr | default('')
                  is search(bootwright_install_stalled_wait_pattern))
-             else '' }}
+             else (bootwright_install_timed_out_wait_hint
+                   if (bootwright_install_bootstrap_wait.stderr | default('')
+                       is search(bootwright_install_timed_out_wait_pattern))
+                   else '') }}
           Installer reported: {{ bootwright_install_bootstrap_wait.msg | default('') }}
           {{ bootwright_install_bootstrap_wait.stderr_lines | default([])
              | select('search', 'level=error') | list | join(' | ') }}
@@ -88,7 +100,9 @@
       until: >-
         (bootwright_install_wait.rc | default(1) | int) == 0
         or not (bootwright_install_wait.stderr | default('')
-                is search(bootwright_install_stalled_wait_pattern))
+                is search(bootwright_install_resumable_wait_pattern))
+        or (now(utc=true).timestamp() | int)
+           >= (bootwright_install_wait_deadline | int)
       retries: "{{ bootwright_install_stalled_wait_retries }}"
       delay: "{{ bootwright_install_stalled_wait_delay_seconds }}"
       changed_when: (bootwright_install_wait.rc | default(1) | int) == 0
@@ -104,7 +118,10 @@
           {{ bootwright_install_stalled_wait_hint
              if (bootwright_install_wait.stderr | default('')
                  is search(bootwright_install_stalled_wait_pattern))
-             else '' }}
+             else (bootwright_install_timed_out_wait_hint
+                   if (bootwright_install_wait.stderr | default('')
+                       is search(bootwright_install_timed_out_wait_pattern))
+                   else '') }}
           Installer reported: {{ bootwright_install_wait.msg | default('') }}
           {{ bootwright_install_wait.stderr_lines | default([])
              | select('search', 'level=error') | list | join(' | ') }}

@@ -782,6 +782,28 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			t.Fatalf("stalled wait pattern must cover %q, got %v", want, defaults["bootwright_install_stalled_wait_pattern"])
 		}
 	}
+	timedOut, _ := defaults["bootwright_install_timed_out_wait_pattern"].(string)
+	if !strings.Contains(timedOut, "bootstrap process timed out") {
+		t.Fatalf("timed-out wait pattern must cover the installer's own give-up, got %v", defaults["bootwright_install_timed_out_wait_pattern"])
+	}
+	resumable, _ := defaults["bootwright_install_resumable_wait_pattern"].(string)
+	for _, want := range []string{"bootwright_install_stalled_wait_pattern", "bootwright_install_timed_out_wait_pattern"} {
+		if !strings.Contains(resumable, want) {
+			t.Fatalf("resumable wait pattern must union %s, got %v", want, defaults["bootwright_install_resumable_wait_pattern"])
+		}
+	}
+	if got, ok := defaults["bootwright_install_installer_wait_window_seconds"].(int); !ok || got != 3600 {
+		t.Fatalf("installer wait window got %v, want 3600", defaults["bootwright_install_installer_wait_window_seconds"])
+	}
+	budget, _ := defaults["bootwright_install_wait_budget_seconds"].(string)
+	for _, want := range []string{"bootwright_install_bootstrap_timeout_seconds", "bootwright_install_timeout_seconds", "bootwright_install_wait_target"} {
+		if !strings.Contains(budget, want) {
+			t.Fatalf("wait budget must select per target using %s, got %q", want, budget)
+		}
+	}
+	if hint, _ := defaults["bootwright_install_timed_out_wait_hint"].(string); !strings.Contains(hint, "bootwright_install_installer_wait_window_seconds") {
+		t.Fatalf("timed-out wait hint must name the installer window, got %q", hint)
+	}
 	if got, ok := defaults["bootwright_install_stalled_wait_retries"].(int); !ok || got < 2 {
 		t.Fatalf("stalled wait retries got %v, want at least 2", defaults["bootwright_install_stalled_wait_retries"])
 	}
@@ -810,8 +832,11 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 		}
 		wait := tasks[waitIdx]
 		until, _ := wait["until"].(string)
-		if !strings.Contains(until, "bootwright_install_stalled_wait_pattern") || !strings.Contains(until, tc.register+".rc | default(1) | int) == 0") {
-			t.Fatalf("%s must retry only the stalled give-up, got until=%v", tc.wait, wait["until"])
+		if !strings.Contains(until, "bootwright_install_resumable_wait_pattern") || !strings.Contains(until, tc.register+".rc | default(1) | int) == 0") {
+			t.Fatalf("%s must retry only a resumable give-up, got until=%v", tc.wait, wait["until"])
+		}
+		if !strings.Contains(until, "bootwright_install_wait_deadline") || !strings.Contains(until, "now(utc=true).timestamp()") {
+			t.Fatalf("%s must stop retrying once the wait budget is spent, got until=%v", tc.wait, wait["until"])
 		}
 		if got := wait["retries"]; got != "{{ bootwright_install_stalled_wait_retries }}" {
 			t.Fatalf("%s retries got %v", tc.wait, got)
@@ -830,11 +855,32 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			t.Fatalf("%s has no fail body", tc.report)
 		}
 		msg, _ := fail["msg"].(string)
-		for _, want := range []string{"bootwright_install_stalled_wait_hint", "bootwright_install_stalled_wait_pattern", "stderr_lines"} {
+		for _, want := range []string{
+			"bootwright_install_stalled_wait_hint",
+			"bootwright_install_stalled_wait_pattern",
+			"bootwright_install_timed_out_wait_hint",
+			"bootwright_install_timed_out_wait_pattern",
+			"stderr_lines",
+		} {
 			if !strings.Contains(msg, want) {
 				t.Fatalf("%s message must carry %q, got %q", tc.report, want, msg)
 			}
 		}
+	}
+
+	deadlineIdx := findAnsibleTask(t, tasks, "Set the agent wait budget deadline")
+	for _, name := range []string{"Wait for agent bootstrap completion", "Wait for agent install completion"} {
+		if deadlineIdx > findAnsibleTask(t, tasks, name) {
+			t.Fatalf("the wait budget deadline must be stamped before %s", name)
+		}
+	}
+	deadline, ok := tasks[deadlineIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[deadlineIdx]["name"])
+	}
+	stamp := fmt.Sprint(deadline["bootwright_install_wait_deadline"])
+	if !strings.Contains(stamp, "now(utc=true).timestamp()") || !strings.Contains(stamp, "bootwright_install_wait_budget_seconds") {
+		t.Fatalf("wait budget deadline got %q", stamp)
 	}
 }
 
