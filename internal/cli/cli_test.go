@@ -4400,7 +4400,7 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if len(bootTask.ResourceKeys) != 3 {
 		t.Fatalf("boot resource keys = %v, want three Redfish keys", bootTask.ResourceKeys)
 	}
-	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("runs", "history", "dry-run", "bootwright-3-nodes-ocp-baremetal.log")) {
+	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("runs", "history", "dry-run", "clusters", "3-nodes-ocp-baremetal", "cluster.log")) {
 		t.Fatalf("boot cluster log path = %q", bootTask.ClusterLogPath)
 	}
 	bootstrap := tasks[len(tasks)-3]

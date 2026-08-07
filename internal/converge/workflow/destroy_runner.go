@@ -22,7 +22,7 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	taskOpts.Label = task.Entry.Label
 	taskOpts.Forks = task.Forks
 	taskOpts.ArtifactsRoot = filepath.Join(taskRoot, "artifacts")
-	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry.ID)
+	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry)
 	taskOpts.AcquireRunLease = false
 	if runnerFactory == nil {
 		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {
@@ -33,7 +33,7 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	result, err := Run(ctx, taskOpts, runner, nil)
 	if err != nil {
 		failure := conciseApplyTaskFailure(err.Error())
-		logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+		logPath := TaskLogPath(runsDir, runID, task.Entry)
 		return applyTaskResult{
 			id:      task.Entry.ID,
 			skipped: result.Skipped,

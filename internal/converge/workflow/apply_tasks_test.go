@@ -39,7 +39,7 @@ func TestRunOneApplyTaskWritesLogForPreRunnerFailure(t *testing.T) {
 	if result.err == nil {
 		t.Fatal("runOneApplyTask succeeded without an add-on plan")
 	}
-	logPath := TaskLogPath(runsDir, "apply-test", task.Entry.ID)
+	logPath := TaskLogPath(runsDir, "apply-test", task.Entry)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read task log: %v", err)

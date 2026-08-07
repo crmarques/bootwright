@@ -138,6 +138,7 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, hashSta
 						Label:        "addon " + extension.Name,
 						Cluster:      binding.Cluster,
 						ClusterKind:  ApplyClusterKindContainer,
+						Addon:        extension.Name,
 						ResourceKeys: addonSharedResourceKeys(binding.Cluster, extension),
 						Status:       TaskStatusPending,
 					},

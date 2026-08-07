@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	applyLogName          = "bootwright.log"
-	applyClusterLogPrefix = "bootwright-"
+	applyLogName        = "bootwright.log"
+	applyClusterLogName = "cluster.log"
 )
 
 type applyLogSet struct {
@@ -161,16 +161,31 @@ func (w *lockedApplyWriter) Write(p []byte) (int, error) {
 	return w.w.Write(p)
 }
 
-func TaskLogPath(runsDir, runID, taskID string) string {
-	return filepath.Join(runsDir, "history", runID, "tasks", taskID, ansible.OutputLogName)
+func TaskLogPath(runsDir, runID string, entry TaskLedgerEntry) string {
+	return filepath.Join(TaskLogDir(runsDir, runID, entry), ansible.OutputLogName)
+}
+
+func TaskLogDir(runsDir, runID string, entry TaskLedgerEntry) string {
+	if entry.Cluster == "" {
+		return filepath.Join(runsDir, "history", runID, "tasks", entry.ID)
+	}
+	base := ApplyClusterLogDir(runsDir, runID, entry.Cluster)
+	if entry.Addon != "" {
+		return filepath.Join(base, "addons", entry.Addon)
+	}
+	return filepath.Join(base, "steps", entry.ID)
 }
 
 func ApplyRunLogPath(runsDir, runID string) string {
 	return filepath.Join(runsDir, "history", runID, applyLogName)
 }
 
+func ApplyClusterLogDir(runsDir, runID, cluster string) string {
+	return filepath.Join(runsDir, "history", runID, "clusters", cluster)
+}
+
 func ApplyClusterLogPath(runsDir, runID, cluster string) string {
-	return filepath.Join(runsDir, "history", runID, applyClusterLogPrefix+cluster+".log")
+	return filepath.Join(ApplyClusterLogDir(runsDir, runID, cluster), applyClusterLogName)
 }
 
 func OpenShiftInstallerLogPath(clustersDir, cluster string) string {

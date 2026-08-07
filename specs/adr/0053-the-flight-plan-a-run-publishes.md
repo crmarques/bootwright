@@ -72,7 +72,7 @@ edges alone:
   rather than recomputed from `Entry.Kind`.
 
 The `FlightPlan` is written to `history/<run>/flight-plan.json` beside the
-ledger, rendered by `bootwright apply --plan` before anything runs, and read by
+ledger, rendered by the apply plan preview before anything runs, and read by
 `applyRunFrame` so the live tree and `status --watch` display the stages that
 were planned rather than a reconstruction of them.
 
@@ -113,7 +113,7 @@ budget that protects the hypervisor.
 
 - The step rows an operator reads are the strata the scheduler will actually
   fly. A row can no longer imply an ordering the graph does not have.
-- `bootwright apply --plan` answers "what will run in parallel" before the run,
+- The apply plan preview answers "what will run in parallel" before the run,
   from the same value the run publishes — not a second implementation.
 - No fleet gets shorter from this ADR by itself: the parallelism was already
   there. What changes is that losing it now fails a test instead of only

@@ -18,9 +18,13 @@ func mustArchiveLedger(t *testing.T, runsDir, runID string, tasks []workflow.Tas
 	}
 }
 
-func touchTaskDir(t *testing.T, runsDir, runID, taskID string) {
+func touchTaskDir(t *testing.T, runsDir, runID, taskID string, cluster ...string) {
 	t.Helper()
-	path := workflow.TaskLogPath(runsDir, runID, taskID)
+	entry := workflow.TaskLedgerEntry{ID: taskID}
+	if len(cluster) > 0 {
+		entry.Cluster = cluster[0]
+	}
+	path := workflow.TaskLogPath(runsDir, runID, entry)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("mkdir task dir: %v", err)
 	}
@@ -32,6 +36,9 @@ func touchTaskDir(t *testing.T, runsDir, runID, taskID string) {
 func touchClusterLog(t *testing.T, runsDir, runID, cluster string) {
 	t.Helper()
 	path := workflow.ApplyClusterLogPath(runsDir, runID, cluster)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir cluster log dir: %v", err)
+	}
 	if err := os.WriteFile(path, []byte("log\n"), 0o600); err != nil {
 		t.Fatalf("write cluster log: %v", err)
 	}
@@ -47,7 +54,7 @@ func TestPurgeRunHistoryForComponentsRemovesFullyMatchedRun(t *testing.T) {
 	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{
 		{ID: "clusters.ocp.install", Kind: "cluster-install", Cluster: "ocp"},
 	})
-	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
+	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install", "ocp")
 	touchClusterLog(t, runsDir, "run-1", "ocp")
 
 	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil, ""); err != nil {
@@ -64,8 +71,8 @@ func TestPurgeRunHistoryForComponentsKeepsMixedRunButPrunesMatchedTasks(t *testi
 		{ID: "clusters.ocp.install", Kind: "cluster-install", Cluster: "ocp"},
 		{ID: "clusters.other.install", Kind: "cluster-install", Cluster: "other"},
 	})
-	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
-	touchTaskDir(t, runsDir, "run-1", "clusters.other.install")
+	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install", "ocp")
+	touchTaskDir(t, runsDir, "run-1", "clusters.other.install", "other")
 	touchClusterLog(t, runsDir, "run-1", "ocp")
 	touchClusterLog(t, runsDir, "run-1", "other")
 
@@ -78,13 +85,13 @@ func TestPurgeRunHistoryForComponentsKeepsMixedRunButPrunesMatchedTasks(t *testi
 	if _, err := os.Stat(filepath.Join(runsDir, "history", "run-1", "ledger.json")); err != nil {
 		t.Fatalf("ledger.json must survive a mixed-scope purge: %v", err)
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "clusters.ocp.install")); !os.IsNotExist(err) {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "clusters.ocp.install", Cluster: "ocp"})); !os.IsNotExist(err) {
 		t.Fatalf("purged component's task dir must be removed, stat err = %v", err)
 	}
 	if _, err := os.Stat(workflow.ApplyClusterLogPath(runsDir, "run-1", "ocp")); !os.IsNotExist(err) {
 		t.Fatalf("purged component's cluster log must be removed, stat err = %v", err)
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "clusters.other.install")); err != nil {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "clusters.other.install", Cluster: "other"})); err != nil {
 		t.Fatalf("still-live component's task dir must survive: %v", err)
 	}
 	if _, err := os.Stat(workflow.ApplyClusterLogPath(runsDir, "run-1", "other")); err != nil {
@@ -97,7 +104,7 @@ func TestPurgeRunHistoryForComponentsSkipsUnrelatedRuns(t *testing.T) {
 	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{
 		{ID: "clusters.other.install", Kind: "cluster-install", Cluster: "other"},
 	})
-	touchTaskDir(t, runsDir, "run-1", "clusters.other.install")
+	touchTaskDir(t, runsDir, "run-1", "clusters.other.install", "other")
 
 	if err := purgeRunHistoryForComponents(runsDir, []string{"ocp"}, nil, ""); err != nil {
 		t.Fatalf("purge: %v", err)
@@ -105,7 +112,7 @@ func TestPurgeRunHistoryForComponentsSkipsUnrelatedRuns(t *testing.T) {
 	if !runDirExists(runsDir, "run-1") {
 		t.Fatal("a run with no task in the purge scope must be left untouched")
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "clusters.other.install")); err != nil {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "clusters.other.install", Cluster: "other"})); err != nil {
 		t.Fatalf("unrelated task dir must survive: %v", err)
 	}
 }
@@ -125,10 +132,10 @@ func TestPurgeRunHistoryForComponentsMatchesMachinesByNode(t *testing.T) {
 	if !runDirExists(runsDir, "run-1") {
 		t.Fatal("run directory must survive: ceph-1's task is still out of scope")
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "infra.lab.ceph-0")); !os.IsNotExist(err) {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "infra.lab.ceph-0"})); !os.IsNotExist(err) {
 		t.Fatalf("targeted machine's task dir must be removed, stat err = %v", err)
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "infra.lab.ceph-1")); err != nil {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "infra.lab.ceph-1"})); err != nil {
 		t.Fatalf("out-of-scope machine's task dir must survive: %v", err)
 	}
 }
@@ -248,7 +255,7 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryRemovesClusterRuntimeDir(t 
 	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{
 		{ID: "clusters.ocp.install", Kind: "cluster-install", Cluster: "ocp"},
 	})
-	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install")
+	touchTaskDir(t, runsDir, "run-1", "clusters.ocp.install", "ocp")
 
 	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
@@ -357,11 +364,11 @@ func TestResetConvergeRecordsAfterDestroyPurgeHistoryKeepsPartiallyDestroyedStor
 	mustArchiveLedger(t, runsDir, "run-a", []workflow.TaskLedgerEntry{
 		{ID: "storage.ceph-a.cluster", Kind: "storage-cluster", Cluster: "ceph-a"},
 	})
-	touchTaskDir(t, runsDir, "run-a", "storage.ceph-a.cluster")
+	touchTaskDir(t, runsDir, "run-a", "storage.ceph-a.cluster", "ceph-a")
 	mustArchiveLedger(t, runsDir, "run-b", []workflow.TaskLedgerEntry{
 		{ID: "storage.ceph-b.cluster", Kind: "storage-cluster", Cluster: "ceph-b"},
 	})
-	touchTaskDir(t, runsDir, "run-b", "storage.ceph-b.cluster")
+	touchTaskDir(t, runsDir, "run-b", "storage.ceph-b.cluster", "ceph-b")
 
 	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, nil, "", true, false); len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
@@ -432,7 +439,7 @@ func TestPurgeRunHistoryForComponentsIgnoresApplyTaskResourceKeys(t *testing.T) 
 	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{
 		{ID: "addon.gitops", Kind: "cluster-addon", Cluster: "other", ResourceKeys: []string{"ceph"}},
 	})
-	touchTaskDir(t, runsDir, "run-1", "addon.gitops")
+	touchTaskDir(t, runsDir, "run-1", "addon.gitops", "other")
 
 	if err := purgeRunHistoryForComponents(runsDir, []string{"ceph"}, nil, ""); err != nil {
 		t.Fatalf("purge: %v", err)
@@ -456,7 +463,7 @@ func TestResetConvergeRecordsAfterDestroyFullScopePurgeSweepsAllRunHistory(t *te
 		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, ResourceKeys: []string{"ocp"}},
 	})
 	touchTaskDir(t, runsDir, "destroy-old", "destroy.storage-clusters")
-	touchTaskDir(t, runsDir, "run-orphan", "clusters.ocp.install")
+	touchTaskDir(t, runsDir, "run-orphan", "clusters.ocp.install", "ocp")
 	mustArchiveLedger(t, runsDir, "destroy-current", []workflow.TaskLedgerEntry{
 		{ID: "destroy.cluster-runtime", Kind: workflow.DestroyTaskKindContainerClusterRuntime, ResourceKeys: []string{"ocp"}},
 	})
@@ -521,7 +528,7 @@ func TestResetConvergeRecordsAfterDestroyFullScopePartialDisablesHistorySweep(t 
 	mustArchiveLedger(t, runsDir, "run-a", []workflow.TaskLedgerEntry{
 		{ID: "storage.ceph-a.cluster", Kind: "storage-cluster", Cluster: "ceph-a"},
 	})
-	touchTaskDir(t, runsDir, "run-a", "storage.ceph-a.cluster")
+	touchTaskDir(t, runsDir, "run-a", "storage.ceph-a.cluster", "ceph-a")
 	mustArchiveLedger(t, runsDir, "run-fabric", []workflow.TaskLedgerEntry{
 		{ID: "provider.kvm-host", Kind: "provider", Host: "kvm-host"},
 	})
@@ -558,10 +565,10 @@ func TestResetMachineConvergeRecordsAfterDestroyPurgeHistoryScopesToSelectedMach
 	if !runDirExists(runsDir, "run-1") {
 		t.Fatal("run directory must survive: ceph-1 was outside the --machines selection")
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "infra.lab.ceph-0")); !os.IsNotExist(err) {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "infra.lab.ceph-0"})); !os.IsNotExist(err) {
 		t.Fatalf("selected machine's task dir must be purged, stat err = %v", err)
 	}
-	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", "infra.lab.ceph-1")); err != nil {
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", workflow.TaskLedgerEntry{ID: "infra.lab.ceph-1"})); err != nil {
 		t.Fatalf("unselected machine's task dir must survive: %v", err)
 	}
 }

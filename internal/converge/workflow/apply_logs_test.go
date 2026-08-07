@@ -4,17 +4,51 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/ansible"
 )
 
-func TestApplyClusterLogPathLivesBesideRunLog(t *testing.T) {
+func TestApplyClusterLogPathLivesUnderItsClusterDir(t *testing.T) {
 	runsDir := filepath.Join("ctx", "runs")
 	got := ApplyClusterLogPath(runsDir, "apply-1", "dc1-ocp")
-	want := filepath.Join(runsDir, "history", "apply-1", "bootwright-dc1-ocp.log")
+	want := filepath.Join(runsDir, "history", "apply-1", "clusters", "dc1-ocp", "cluster.log")
 	if got != want {
 		t.Fatalf("ApplyClusterLogPath = %q, want %q", got, want)
 	}
-	if filepath.Dir(got) != filepath.Dir(ApplyRunLogPath(runsDir, "apply-1")) {
-		t.Fatalf("cluster log %q not beside run log %q", got, ApplyRunLogPath(runsDir, "apply-1"))
+	if filepath.Dir(got) != ApplyClusterLogDir(runsDir, "apply-1", "dc1-ocp") {
+		t.Fatalf("cluster log %q not inside its cluster dir", got)
+	}
+}
+
+func TestTaskLogPathNestsClusterStepsAndAddons(t *testing.T) {
+	runsDir := filepath.Join("ctx", "runs")
+	clusterDir := ApplyClusterLogDir(runsDir, "apply-1", "dc1-ocp")
+	for _, tc := range []struct {
+		name  string
+		entry TaskLedgerEntry
+		want  string
+	}{
+		{
+			name:  "non-cluster task stays flat",
+			entry: TaskLedgerEntry{ID: "provider.kvm-host"},
+			want:  filepath.Join(runsDir, "history", "apply-1", "tasks", "provider.kvm-host", ansible.OutputLogName),
+		},
+		{
+			name:  "cluster task nests under steps",
+			entry: TaskLedgerEntry{ID: "wait.dc1-ocp", Cluster: "dc1-ocp"},
+			want:  filepath.Join(clusterDir, "steps", "wait.dc1-ocp", ansible.OutputLogName),
+		},
+		{
+			name:  "add-on task nests under addons by name",
+			entry: TaskLedgerEntry{ID: "addon.dc1-ocp.gitops", Cluster: "dc1-ocp", Addon: "gitops"},
+			want:  filepath.Join(clusterDir, "addons", "gitops", ansible.OutputLogName),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := TaskLogPath(runsDir, "apply-1", tc.entry); got != tc.want {
+				t.Fatalf("TaskLogPath = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

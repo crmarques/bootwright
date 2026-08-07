@@ -51,7 +51,7 @@ type extensionPlanView struct {
 func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonStepExecutor {
 	plan := extensionPlanView{Name: task.Extension.Name, Cluster: task.Extension.Cluster, Addon: task.Extension.Extension, Policy: task.Extension.Policy}
 	binding, inputs := addonBindingInputs(task.State, task.Extension.Binding, plan.Name)
-	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	logPath := TaskLogPath(runsDir, runID, task.Entry)
 	return &addonStepExecutor{
 		stdout:        stdout,
 		stderr:        stderr,

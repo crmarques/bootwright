@@ -287,7 +287,7 @@ echo ansible-stderr-line >&2
 	if err != nil {
 		t.Fatalf("read run log: %v", err)
 	}
-	logPath := workflow.TaskLogPath(runsDir, ledger.RunID, "provider")
+	logPath := workflow.TaskLogPath(runsDir, ledger.RunID, workflow.TaskLedgerEntry{ID: "provider"})
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read ansible output log: %v", err)
@@ -463,7 +463,7 @@ echo "ansible stderr ${cluster}" >&2
 		if !strings.Contains(string(data), "ansible stdout "+cluster) || !strings.Contains(string(data), "ansible stderr "+cluster) {
 			t.Fatalf("cluster log %s missing ansible output:\n%s", cluster, data)
 		}
-		taskLogPath := workflow.TaskLogPath(runsDir, ledger.RunID, "iso."+cluster)
+		taskLogPath := workflow.TaskLogPath(runsDir, ledger.RunID, workflow.TaskLedgerEntry{ID: "iso." + cluster, Cluster: cluster})
 		taskLog, err := os.ReadFile(taskLogPath)
 		if err != nil {
 			t.Fatalf("read task log %s: %v", taskLogPath, err)

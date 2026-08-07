@@ -190,7 +190,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 			acquireTaskResources(task, runningResources)
 			acquireTaskHostSlots(task, runningHostSlots)
-			logPath := TaskLogPath(runsDir, ledger.RunID, task.Entry.ID)
+			logPath := TaskLogPath(runsDir, ledger.RunID, task.Entry)
 			ledger.MarkReady(task.Entry.ID)
 			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
 			if cluster := task.Entry.Cluster; cluster != "" && !clusterInitiated[cluster] {

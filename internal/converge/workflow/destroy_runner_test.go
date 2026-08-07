@@ -68,7 +68,7 @@ echo destroy-stderr-line >&2
 		if task.Status != TaskStatusOK {
 			t.Fatalf("task %s status = %s, want ok", task.ID, task.Status)
 		}
-		logData, err := os.ReadFile(TaskLogPath(runsDir, ledger.RunID, task.ID))
+		logData, err := os.ReadFile(TaskLogPath(runsDir, ledger.RunID, task))
 		if err != nil {
 			t.Fatalf("read task log for %s: %v", task.ID, err)
 		}

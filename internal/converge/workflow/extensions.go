@@ -17,7 +17,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	if task.Extension == nil {
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("add-on task %s has no add-on plan", task.Entry.ID)}
 	}
-	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	logPath := TaskLogPath(runsDir, runID, task.Entry)
 	progressLog, err := openAddonProgressLog(logPath)
 	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}

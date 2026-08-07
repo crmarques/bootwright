@@ -27,7 +27,7 @@ func newAddonEffectExecutor(stdout, stderr io.Writer, runsDir, runID string, opt
 	return &addonEffectExecutor{
 		stdout:  stdout,
 		stderr:  stderr,
-		logPath: TaskLogPath(runsDir, runID, task.Entry.ID),
+		logPath: TaskLogPath(runsDir, runID, task.Entry),
 		opts:    opts,
 		plan:    plan,
 		inputs:  inputs,

@@ -21,7 +21,7 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 		return result
 	}
 	failure := conciseApplyTaskFailure(result.err.Error())
-	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	logPath := TaskLogPath(runsDir, runID, task.Entry)
 	taskErr := fmt.Errorf("%s failed: %s (log: %s)", task.Entry.Label, failure, logPath)
 	if logErr := ensureApplyTaskFailureLog(logPath, failure); logErr != nil {
 		taskErr = fmt.Errorf("%w; additionally failed to write task log %s: %v", taskErr, logPath, logErr)
@@ -73,7 +73,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	taskOpts.Label = task.Entry.Label
 	taskOpts.Forks = task.Forks
 	taskOpts.ArtifactsRoot = filepath.Join(taskRoot, "artifacts")
-	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry.ID)
+	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry)
 	if runnerFactory == nil {
 		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 			return ansible.CommandRunner{Stdout: stdout, Stderr: stderr}

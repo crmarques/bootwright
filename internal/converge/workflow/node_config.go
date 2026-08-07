@@ -26,7 +26,7 @@ func runOneNodeConfigTask(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("node config task %s: cluster %q not in task state", task.Entry.ID, task.Entry.Cluster)}
 	}
 	renderDir := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID, "rendered")
-	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	logPath := TaskLogPath(runsDir, runID, task.Entry)
 	changed := false
 	err := withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
 		checker := extensionoc.CommandRunner{LogPath: logPath}

@@ -177,14 +177,14 @@ func purgeRunHistoryEntry(runsDir, historyDir, runID string, clusters, machines 
 		if !taskInPurgeScope(task, clusters, machines) {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(runDir, "tasks", task.ID)); err != nil && !os.IsNotExist(err) {
+		if err := os.RemoveAll(workflow.TaskLogDir(runsDir, runID, task)); err != nil && !os.IsNotExist(err) {
 			problems = append(problems, err)
 		}
 		if task.Cluster == "" || purgedClusterLogs[task.Cluster] {
 			continue
 		}
 		purgedClusterLogs[task.Cluster] = true
-		if err := os.Remove(workflow.ApplyClusterLogPath(runsDir, runID, task.Cluster)); err != nil && !os.IsNotExist(err) {
+		if err := os.RemoveAll(workflow.ApplyClusterLogDir(runsDir, runID, task.Cluster)); err != nil && !os.IsNotExist(err) {
 			problems = append(problems, err)
 		}
 	}
