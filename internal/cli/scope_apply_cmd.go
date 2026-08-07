@@ -166,6 +166,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				runCommandLabel = "machines " + action
 			}
 		}
+		selection := runSelection{stage: stage, through: through, clusters: flags.clusterScope, machines: machinesScope}
 		if err := converge.ValidateReclaimDevicesFlag(reclaimDevices); err != nil {
 			return failErr(2, err)
 		}
@@ -286,7 +287,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if len(destructiveOverride) > 0 {
 				auth.note(authorizeDataLoss)
 			}
-			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy); err != nil {
+			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy, selection); err != nil {
 				return failErr(1, err)
 			}
 			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)
@@ -312,7 +313,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		if !dryRun {
-			warnDestructiveApply(stdout, destructiveOverride)
+			warnDestructiveApply(stdout, destructiveOverride, selection)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 		}
 		if !dryRun && !yes && !plan.NoRemoteWork {

@@ -48,11 +48,11 @@ func destroyConfirmPrompt(dataLossUnauthorized bool) string {
 	return "Continue with destroy? [y/N] (default: no): "
 }
 
-func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool) error {
+func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool, selection runSelection) error {
 	if allowDestroy || !yes || !dataLoss.Planned() {
 		return nil
 	}
-	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: re-run `bootwright destroy --authorize %s --yes` with the same --stage/--clusters/--machines selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with --clusters or --machines to narrow the work set", dataLoss.Consequence(), authorizeDataLoss)
+	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with %s to narrow the work set", dataLoss.Consequence(), selection.command("destroy", "--authorize "+authorizeDataLoss, "--yes"), selection.narrowFlag())
 }
 
 func mergeSkippedInputDocuments(groups ...[]error) []error {

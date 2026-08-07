@@ -130,7 +130,7 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := destructiveOverrideYesGuard(tc.destructive, tc.yes, tc.allow)
+			err := destructiveOverrideYesGuard(tc.destructive, tc.yes, tc.allow, runSelection{clusters: "dc1-ocp"})
 			if tc.wantErr != (err != nil) {
 				t.Fatalf("guard(destructive=%v yes=%v allow=%v) err=%v, wantErr=%v", tc.destructive, tc.yes, tc.allow, err, tc.wantErr)
 			}
@@ -143,8 +143,8 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 				if !strings.Contains(err.Error(), "--authorize data-loss") {
 					t.Fatalf("refusal must point at --authorize data-loss: %v", err)
 				}
-				if !strings.Contains(err.Error(), "--clusters") {
-					t.Fatalf("refusal must name the --clusters escape to narrow the destructive set: %v", err)
+				if !strings.Contains(err.Error(), "--clusters dc1-ocp") {
+					t.Fatalf("refusal must reproduce the run's own selection so the named command is the one to run: %v", err)
 				}
 			}
 		})
@@ -155,7 +155,7 @@ func TestWarnDestructiveApplyDisclosesOnEveryAcceptedPath(t *testing.T) {
 	destructive := []string{"reinstall ContainerCluster/dc1-ocp (installed record matches desired inputs but the cluster does not report Available=True; to keep its data, repair the cluster to Available=True and re-run plain apply — --mode rebuild reinstalls it and wipes its node disks)"}
 
 	var out bytes.Buffer
-	warnDestructiveApply(&out, destructive)
+	warnDestructiveApply(&out, destructive, runSelection{clusters: "dc1-ocp"})
 	for _, want := range []string{"will DESTROY data", "reinstall ContainerCluster/dc1-ocp", "--clusters"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("data-loss warning must contain %q, got %q", want, out.String())
@@ -163,7 +163,7 @@ func TestWarnDestructiveApplyDisclosesOnEveryAcceptedPath(t *testing.T) {
 	}
 
 	out.Reset()
-	warnDestructiveApply(&out, nil)
+	warnDestructiveApply(&out, nil, runSelection{})
 	if out.Len() != 0 {
 		t.Fatalf("no destructive objects must print no warning, got %q", out.String())
 	}

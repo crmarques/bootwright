@@ -69,6 +69,44 @@ func TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix(t *testing.T) {
 	}
 }
 
+func TestRefusalRemedyCarriesTheRunSelection(t *testing.T) {
+	cases := []struct {
+		name      string
+		selection runSelection
+		want      []string
+		deny      []string
+	}{{
+		name:      "machine-scoped destroy",
+		selection: runSelection{machines: "dc1-worker-1"},
+		want:      []string{"--machines dc1-worker-1"},
+		deny:      []string{"--clusters"},
+	}, {
+		name:      "staged cluster-scoped apply",
+		selection: runSelection{stage: "deps", through: "base", clusters: "dc1-ocp"},
+		want:      []string{"--stage deps", "--through base", "--clusters dc1-ocp"},
+		deny:      []string{"--machines"},
+	}, {
+		name:      "unscoped run",
+		selection: runSelection{},
+		deny:      []string{"--clusters", "--machines", "--stage"},
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.selection.command("destroy", "--authorize "+authorizeDataLoss, "--yes")
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("remedy %q must carry %q; a refusal that drops the run's own selection names a command with a wider blast radius than the run the operator asked for", got, want)
+				}
+			}
+			for _, deny := range tc.deny {
+				if strings.Contains(got, deny) {
+					t.Errorf("remedy %q must not invent %q the run never used", got, deny)
+				}
+			}
+		})
+	}
+}
+
 func TestSafetyMatrixFlagExemptionsHoldOnlyLiveFlags(t *testing.T) {
 	commands := mutatingVerbCommands(t)
 	for key := range safetyMatrixFlagExemptions {

@@ -260,11 +260,11 @@ func reclaimUnmatchedError(unmatched, owned, declared []string) error {
 	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of owned Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
 }
 
-func warnDestructiveApply(stdout io.Writer, destructive []string) {
+func warnDestructiveApply(stdout io.Writer, destructive []string, selection runSelection) {
 	if len(destructive) == 0 {
 		return
 	}
-	cliout.NewContinuation(stdout).Warning("data loss", "will DESTROY data — "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible. If the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set.")
+	cliout.NewContinuation(stdout).Warning("data loss", "will DESTROY data — "+strings.Join(destructive, ", ")+" — disks wiped / Ceph OSD data zapped. This is irreversible. If the list names an object you did not intend to rebuild, re-run with "+selection.narrowFlag()+" to narrow the destructive set.")
 }
 
 func destructiveApplyConfirmPrompt(destructive []string, allowDestroy bool) string {
@@ -274,9 +274,9 @@ func destructiveApplyConfirmPrompt(destructive []string, allowDestroy bool) stri
 	return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
 }
 
-func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool) error {
+func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool, selection runSelection) error {
 	if len(destructive) == 0 || allowDestroy || !yes {
 		return nil
 	}
-	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: re-run `bootwright apply --authorize %s --yes` with the same --stage/--clusters selection to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with --clusters to narrow the destructive set", strings.Join(destructive, ", "), authorizeDataLoss)
+	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with %s to narrow the destructive set", strings.Join(destructive, ", "), selection.command("apply", "--authorize "+authorizeDataLoss, "--yes"), selection.narrowFlag())
 }

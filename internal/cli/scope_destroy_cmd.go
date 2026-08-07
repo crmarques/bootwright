@@ -104,6 +104,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return merr
 			}
 		}
+		selection := runSelection{stage: stage, clusters: flags.clusterScope, machines: machinesScope}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
 		forceUnowned, forceUnownedNetworks := false, false
 		if converge.ScopeTearsMachineLayer(runScope) {
@@ -266,7 +267,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
-			return failErr(1, fmt.Errorf("%s; re-run `bootwright destroy --authorize %s` with the same --stage/--clusters selection to destroy it anyway", destroySafety.Summary(), authorizeProtected))
+			return failErr(1, fmt.Errorf("%s; re-run `%s` to destroy it anyway", destroySafety.Summary(), selection.command("destroy", "--authorize "+authorizeProtected)))
 		}
 		if !dryRun {
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
@@ -304,7 +305,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		warnUnusedAuthorizations(stdout, auth, dryRun)
 		if dataLossPlanned {
-			if err := destroyDataLossYesGuard(dataLoss, yes, allowDestroy); err != nil {
+			if err := destroyDataLossYesGuard(dataLoss, yes, allowDestroy, selection); err != nil {
 				return failErr(1, err)
 			}
 		}
