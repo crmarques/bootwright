@@ -66,3 +66,4 @@ below.
 | [0050](0050-the-machine-an-installer-boot-finds-powered-on.md) | The Machine an Installer Boot Finds Powered On | revises the occupancy probe of 0011; follows the physical-half rule of 0034 and the one-token-per-refusal grammar of 0030 |
 | [0051](0051-the-repository-an-ibm-fleet-already-subscribes-to.md) | The Repository an IBM Fleet Already Subscribes To | extends the distribution tail of 0015; ends the storage-phase purge of machine-declared repositories |
 | [0052](0052-the-port-a-scheme-arrives-on.md) | The Port a Scheme Arrives On | extends the declared scheme of 0049; separates the classic dashboard's TLS port from the gateway's |
+| [0053](0053-the-flight-plan-a-run-publishes.md) | The Flight Plan a Run Publishes | extends the wait split of 0022; makes the run-tree strata a lowered value, nests logs per cluster, narrows the OLM and playbook edges |
