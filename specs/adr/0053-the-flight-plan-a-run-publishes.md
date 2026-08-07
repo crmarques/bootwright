@@ -36,11 +36,15 @@ a reason that no longer holds, or copied from a neighbouring planner — silentl
 serializes two clusters that should fly side by side. The plan stays valid, the
 tests stay green, and the only symptom is wall clock.
 
-**Two edges are broader than the resource they protect.** `exclusiveOLMOwner`
-chains every add-on sharing a namespace or catalog source into one serial line,
-including add-ons that only *read* the shared object. The CustomPlaybook anchor
-adds the previous stage's task IDs fleet-wide, so one gating playbook on one
-cluster becomes a barrier across every cluster in the run.
+Two edges were reviewed as suspected over-approximations and both proved
+correctly scoped; they are recorded here so the next reader does not re-open
+them. `exclusiveOLMOwner` keys only on add-ons that *create* the shared object —
+`Namespace.Create || OperatorGroup != nil` for a namespace, a declared
+`CatalogSource` for a catalog — so add-ons that merely subscribe into an
+existing namespace already fly together, and removing the chain would race two
+creators of the same object. `phaseTaskIDsInScope` already restricts a
+CustomPlaybook's anchor to the playbook's own resolved target clusters and
+widens to the fleet only for a genuinely fleet-wide playbook.
 
 **Add-on logs sit outside their cluster.** `TaskLogPath` puts every task's
 output at `history/<run>/tasks/<taskID>/output.log`, beside every other task of
@@ -78,10 +82,8 @@ roots share a stage, that every `ceph -> ocp` edge traces to a declared input,
 and that add-ons without a `requires` relationship share a stage. An edge added
 without a declared reason fails the build.
 
-**The two broad edges narrow to what they protect.** The OLM exclusion chains
-only add-ons that *create* the shared namespace or catalog source, and the
-CustomPlaybook anchor gates on the previous stage within the playbook's own
-cluster lane, fleet-wide only for a fleet-wide playbook.
+**No edge is removed.** The review found no over-approximation to narrow; the
+guard above is what keeps that true as the planners grow.
 
 **Logs nest under the cluster they belong to.** A run writes
 `history/<run>/clusters/<cluster>/cluster.log` for the cluster narration,
@@ -113,9 +115,9 @@ budget that protects the hypervisor.
   fly. A row can no longer imply an ordering the graph does not have.
 - `bootwright apply --plan` answers "what will run in parallel" before the run,
   from the same value the run publishes — not a second implementation.
-- Narrowing the OLM and CustomPlaybook edges shortens real fleets. Both were
-  conservative over-approximations; the test in F2 is what keeps the
-  replacements honest.
+- No fleet gets shorter from this ADR by itself: the parallelism was already
+  there. What changes is that losing it now fails a test instead of only
+  showing up as wall clock.
 - The log tree moves. `TaskLogPath` keeps its shape for non-cluster tasks;
   cluster-owned tasks move under `clusters/<cluster>/`, so anything that
   hardcoded the flat path (docs, the `logs` command, `status`) is updated with
