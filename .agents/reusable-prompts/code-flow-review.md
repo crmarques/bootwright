@@ -105,7 +105,7 @@ verify their current form in `specs/`. Prompt-specific additions:
   explicit `--adopt` YAML/history write, and that it neither explodes an absent root
   into noisy child diffs nor hides missing/undeclared live resources once the root
   exists.
-- **Converge/force pair.** `apply --mode rebuild` and `destroy --force`
+- **Intent/authorization pair.** `apply --mode rebuild` and `destroy --authorize <token>`
   authorize Bootwright-owned destructive rebuilds (drifted-owned rebuild,
   managed-OS reinstall, owned-Ceph wipe-and-rebuild, protected destroy);
   `--authorize data-loss` and `--authorize unreachable-nodes` gate the data-loss cases,
@@ -142,7 +142,7 @@ Walk each reviewed flow in order, then record it in the matrix below:
    succinctly, but reports granular drift when roots exist, such as missing declared
    resources or undeclared live Ceph pools, add-ons, VMs, services, endpoints, or
    storage exports; and that only `--adopt` writes (to desired YAML plus history).
-9. **Converge/force pair.** For `apply --mode rebuild` and `destroy --force`
+9. **Intent/authorization pair.** For `apply --mode rebuild` and `destroy --authorize <token>`
    (and the `--authorize data-loss`/`--authorize unreachable-nodes`/`--mode create` gates), trace
    the same scenario with and without them. Confirm only the documented
    unsafe-mismatch behavior changes, the flag skips already-matching and foreign
@@ -227,7 +227,7 @@ example that could not be traced, with the reason.
 ## 2. Flow Trace
 The trace matrix for each reviewed flow — compact but complete enough to show how
 intent reaches final output. Include desired-vs-real `diff` behavior and
-converge/force behavior (`apply --mode rebuild` / `destroy --force`) vs. its
+intent/authorization behavior (`apply --mode rebuild` / `destroy --authorize <token>`) vs. its
 absence when supported. Call out silent behavior changes and spec/code
 disagreements as you go.
 
@@ -257,7 +257,7 @@ sequencing, a short design pass, or broader coverage), **Later** (larger cleanup
 that should follow evidence from earlier fixes). Per item: affected artifacts,
 approach, validation, and **Risk** (Low/Medium/High). Include tests for
 non-mutating desired-vs-real checks, absent-root reporting, granular drift
-reporting, and `--mode rebuild`/`--force` pairs when relevant. End with any open
+reporting, and `--mode rebuild`/`--authorize <token>` pairs when relevant. End with any open
 question that blocks a safe fix or changes prioritization.
 
 ## Fix Mode (only if the user explicitly requests fixes)

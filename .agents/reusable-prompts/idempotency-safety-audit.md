@@ -57,7 +57,7 @@ description. Treat "explicit" narrowly:
   forcing a clean recreate of a matching object is a `destroy` (which must drop it
   entirely and reset its convergence records) followed by `apply`.
 - Every audited flow must be evaluated under all three modes when the command is
-  `apply`, and with and without `--force` for `destroy`. The destructive-override
+  `apply`, and with and without `--authorize <token>` for `destroy`. The destructive-override
   flags may permit only the documented destructive path (rebuild drift / owned
   teardown); they must not turn a read-only state check into a mutating command,
   suppress drift, or broaden scope silently.
@@ -83,8 +83,8 @@ blocking question when it changes the verdict:
   `ContainerCluster` and `StorageCluster` names, provider and machine roots,
   ignored-example paths when named.
 - **Command intent**: exact command, flags, context, target selection, stage,
-  non-interactive mode, `--yes`, `--mode rebuild`/`--authorize data-loss`/
-  `--force`, dry-run/preview flags, and any environment variables that affect
+  non-interactive mode, `--yes`, `--mode rebuild`, `--authorize <token>`,
+  dry-run/preview flags, and any environment variables that affect
   execution.
 - **Observed environment state**: already provisioned resources, partial state,
   ownership records, install records, safety records, provider metadata,
@@ -95,7 +95,7 @@ blocking question when it changes the verdict:
 - **Destruction authorization**: yes/no, with the exact text, command, or
   environment description that authorizes it.
 - **Converge/force pair**: when the command accepts a destructive-override flag
-  (`apply --mode rebuild` or `destroy --force`), the expected behavior with
+  (`apply --mode rebuild` or `destroy --authorize <token>`), the expected behavior with
   and without it, and the exact safety refusal or continuation it changes.
 
 If no scenario input file is provided and the review depends on it, ask one
@@ -151,7 +151,7 @@ Useful read-only commands:
 ```bash
 git status --short
 rg --files AGENTS.md .agents specs internal api ansible scripts test examples
-rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--mode rebuild|--authorize data-loss|--force|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
+rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|virsh|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--mode rebuild|--authorize|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot' internal ansible scripts Makefile specs docs examples test .github
 rg -n 'func .*Apply|func .*Destroy|cobra.Command|RunE|PreRunE|argsNeedLocalRoot|sudo|ownership|Safety|DestroyProtection|Override|ContextSweep|Ledger|InstallRecord|Lock' internal cmd api test
 go test ./internal/...            # or narrower packages when review scope is narrow
 ansible-playbook --syntax-check <playbook>    # when the playbook is in scope and tools exist
@@ -211,12 +211,12 @@ help, examples, and tests for:
 - `destroy --stage infra|clusters` scope rules, context-wide cleanup rules,
   selected cluster behavior, ownership-record use, and `destroyProtection`.
 - Confirmation semantics: `--yes` vs. the destructive-override and data-loss gates
-  (`--mode rebuild`/`--authorize data-loss`/`--force`), non-interactive behavior,
+  (`--mode rebuild`/`--authorize data-loss`/`--authorize <token>`), non-interactive behavior,
   output that names affected context/resources before mutation, and no hidden
   broadening from environment names.
 - Converge/force semantics across flows: for every supported command, compare
   behavior with and without the destructive-override flags
-  (`--mode rebuild`/`--force`), and verify that read-only state checks ignore,
+  (`--mode rebuild`/`--authorize <token>`), and verify that read-only state checks ignore,
   reject, or strictly no-op the flag rather than mutating or suppressing drift.
 - Runtime-state trust: when ownership records, install records, safety records,
   leases, generated hashes, and provider metadata are sufficient evidence, and
@@ -251,10 +251,10 @@ Walk these checkpoints:
    the graph? Are unselected resources excluded from mutation?
 3. **Authorization.** What exact command flag, environment field, or scenario
    statement authorizes destructive behavior? Are `destroyProtection`, the
-   destructive-override flags (`--mode rebuild`/`--authorize data-loss`/
-   `--force`), and confirmation prompts enforced before mutation?
-4. **Converge/force pair.** If the command supports a destructive-override flag
-   (`apply --mode rebuild` or `destroy --force`), walk the same scenario
+   destructive-override flags (`--mode rebuild`, `--authorize <token>`),
+   and confirmation prompts enforced before mutation?
+4. **Intent/authorization pair.** If the command supports a destructive-override flag
+   (`apply --mode rebuild` or `destroy --authorize <token>`), walk the same scenario
    without it and with it. Which refusal disappears, which mutations become
    allowed, and which read-only guarantees must remain unchanged?
 5. **State comparison command.** Can the operator run a clearly named,
@@ -336,8 +336,8 @@ closed when any selected object already exists. `apply
 must leave matching objects untouched and never rebuild a foreign object. A clean
 recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
 
-**Converge/force safety.** Audit `apply` under all three modes and `destroy` under
-`--force` both ways. `apply --mode rebuild` must rebuild only drifted/owned
+**Intent/authorization safety.** Audit `apply` under all three modes and `destroy`
+with and without each `--authorize` token. `apply --mode rebuild` must rebuild only drifted/owned
 objects (skipping matches, refusing foreign); without it, drift fails closed under
 bare `apply` and any pre-existing object fails closed under `--mode create`. Neither
 `--mode rebuild` nor `--authorize data-loss` may bypass leases, validation,
@@ -375,7 +375,7 @@ the scenarios:
 
 - CLI command setup, flag parsing, pre-run validation, root/sudo handoff,
   confirmation prompts, non-interactive behavior, `--mode rebuild`/
-  `--authorize data-loss`/`--force` behavior, the desired-vs-real `diff` command,
+  `--authorize data-loss`/`--authorize <token>` behavior, the desired-vs-real `diff` command,
   and output routing.
 - Desired-state selection, strict decode, normalization, validation, and scoped
   graph closure.
@@ -412,7 +412,7 @@ that clearly and name the highest residual risk.
 The scenario file(s) reviewed; each scenario extracted from them; command intent;
 current environment state; expected behavior; destruction authorization yes/no
 with evidence; expected behavior with and without the destructive-override flags
-(`--mode rebuild`/`--force`) when supported; missing facts and whether they
+(`--mode rebuild`/`--authorize <token>`) when supported; missing facts and whether they
 block a verdict.
 
 ## 3. Safety Guidance Review
@@ -424,7 +424,7 @@ and should remain unchanged.
 ## 4. Scenario Flow Trace
 The trace matrix for each scenario. Include CLI path, selection, validation,
 planning, locks, records, generated contract, Ansible/script path, external
-commands, the desired-vs-real `diff` path, converge/force behavior vs. its
+commands, the desired-vs-real `diff` path, intent/authorization behavior vs. its
 absence, and final side effect. Mark verdict as **safe**, **unsafe**, **unproven**, or
 **out of scope**.
 
@@ -452,7 +452,7 @@ trace cleared them.
 Existing tests that prove safety; missing tests for each finding; useful checks
 that could not run. Include focused regression tests for no-op rerun, read-only
 commands, confirmation abort, destroy protection, foreign ownership, stale
-records, scoped destroy, `--mode rebuild`/`--force` vs. their absence,
+records, scoped destroy, `--mode rebuild`/`--authorize <token>` vs. their absence,
 non-mutating desired-vs-real state checks, absent-root reporting, granular drift
 reporting, and Ansible role idempotency when relevant.
 

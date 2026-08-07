@@ -36,7 +36,7 @@ Both shapes now hard-refuse unless the machine's substrate release covers it,
 naming the remedies: restore key access for the machine's `access.ssh`
 identity; `bootwright machine trust --replace <machine>` after an authorized
 out-of-band rebuild changed the host key; `bootwright destroy --stage infra
---machines <m> --force` (or `--clusters <c>`) then re-apply; power off a truly
+--machines <m>` (or `--clusters <c>`) then re-apply; power off a truly
 unused host. A greenfield host has the port closed and never trips this.
 
 **Fallback probe identity for root-revoked nodes:** when the Machine sets
@@ -133,11 +133,12 @@ the block inside keeps the same guard as defense-in-depth.
 
 **Destroy-protection remedy routes machine substrate to the infra stage:**
 machine-substrate kinds (managed-OS install, per-host machine-infra steps) are
-torn down ONLY by the infra stage — a clusters-stage `destroy --force` never
+torn down ONLY by the infra stage — a clusters-stage
+`destroy --authorize protected` never
 touches their convergence records, so pointing a blocked managed-OS machine at
 the clusters destroy loops forever (destroy, re-apply, blocked again).
 `overrideDestroyRemedy` therefore emits
-`bootwright destroy --stage infra --clusters <affected> --force`, and hints
+`bootwright destroy --stage infra --clusters <affected> --authorize protected`, and hints
 `--authorize unreachable-nodes` because a machine whose host substrate was never
 provisioned or is powered off (e.g. a nested cluster on a host cluster that
 never came up) would otherwise fail closed at the infra destroy.

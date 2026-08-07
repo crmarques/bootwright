@@ -112,7 +112,7 @@ evidence supports concrete findings, then stop expanding scope:
 ```bash
 git status --short ; rg --files AGENTS.md .agents specs internal api ansible scripts test examples
 go run ./cmd/bootwright apply --help ; go run ./cmd/bootwright destroy --help ; go run ./cmd/bootwright diff --help
-rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--mode|--authorize|--force|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot|foreign|drift|fail.?closed' internal cmd api ansible scripts Makefile specs docs examples test .github
+rg -n 'apply|destroy|reset|cleanup|purge|wipe|remove|delete|undefine|format|mkfs|oc delete|ceph|PowerState|ResetType|InsertMedia|EjectMedia|changed_when|failed_when|creates:|removes:|check_mode|--yes|--mode|--authorize|confirm|dry-run|safety|ownership|install-record|ledger|lease|idempot|foreign|drift|fail.?closed' internal cmd api ansible scripts Makefile specs docs examples test .github
 go test ./internal/...            # or narrower packages when scope is narrow
 ansible-playbook --syntax-check <playbook> ; ansible-lint ; shellcheck scripts/* test/**/*.sh   # when available
 ```
@@ -257,7 +257,7 @@ recording the matrix below:
    `--adopt` writing, and exit codes and JSON output shape matching the
    documented contract — automation gates on them. Trace `apply` under all
    three modes and `destroy`
-   with and without `--force`: which refusal disappears, which mutations become
+   with and without each `--authorize` token: which refusal disappears, which mutations become
    allowed, and which read-only guarantees remain.
 10. **Final state and rerun.** After success, failure, interruption, or aborted
     confirmation: what records exist, and does the same command no-op, resume

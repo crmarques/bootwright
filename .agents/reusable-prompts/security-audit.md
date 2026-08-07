@@ -107,7 +107,7 @@ consumed, a lock cannot be acquired, a kubeconfig or trust source is outside the
 declared secret boundary, or a requested scope reaches resources outside the
 selected desired-state graph. Evaluate commands with and without their destructive
 flags — apply `--mode rebuild` (plus `--authorize data-loss`) and destroy
-`--force`; those flags may alter only the documented command-scoped unsafe-mismatch
+`--authorize <token>`; those flags may alter only the documented command-scoped unsafe-mismatch
 path and must never make read-only checks mutate or suppress drift. Ansible tasks not
 idempotent across reruns: shell/command without intentional
 `changed_when`/`failed_when`/`creates`/`removes`, read-only probes marked changed,
@@ -115,7 +115,7 @@ cleanup that fails on already-absent resources, privileged partial state left
 after failure. Provider/BMC/VM/storage/cluster mutations that bypass capability
 checks, locks, ownership records, official-tool idempotency, or adapter
 boundaries. Missing tests proving a second identical apply, role run, destroy
-preview, `diff` run, `--mode rebuild`/`--force` pair, or aborted confirmation
+preview, `diff` run, `--mode rebuild`/`--authorize <token>` pair, or aborted confirmation
 is a no-op, a precise drift report, or a safe refusal.
 
 **Trust, TLS, and installer security.** TLS verification disabled without a narrow

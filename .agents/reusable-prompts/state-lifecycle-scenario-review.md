@@ -91,7 +91,7 @@ and which safety lock would prevent the surprise.
   load balancers, artifact services, or context-wide cleanup.
 - `--yes`, non-interactive mode, or automation removes the only human review of a
   destructive plan.
-- `--mode rebuild`/`--force`, `--authorize unowned-vms`, or `--authorize unreachable-nodes` is
+- `--mode rebuild`/`--authorize <token>`, `--authorize unowned-vms`, or `--authorize unreachable-nodes` is
   accepted where its effect is unclear, too broad, or not shown before mutation.
 - Two contexts share a provider, BMC, VM namespace, host, disk, Ceph cluster, or
   OpenShift cluster.

@@ -26,6 +26,34 @@ var retiredAuthoredVocabulary = []*regexp.Regexp{
 	regexp.MustCompile(`--skip-unreachable`),
 	regexp.MustCompile(`bootwright check `),
 	regexp.MustCompile(`diff --live`),
+	regexp.MustCompile(`(^|[^\w-])--force([^\w-]|$)`),
+}
+
+var externalToolForceContexts = []string{
+	"wipefs",
+	"vgremove",
+	"pvremove",
+	"lvremove",
+	"cephadm",
+	"ceph ",
+	"rm-cluster",
+	"subscription-manager",
+	"virtctl",
+	"kubectl",
+	"podman",
+	"git ",
+	"--force-conflicts",
+	"--force --fsid",
+	"--force --grace-period",
+}
+
+func lineAllowsRetiredForce(line string) bool {
+	for _, tool := range externalToolForceContexts {
+		if strings.Contains(line, tool) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAgentStoreAvoidsRetiredAuthoredVocabulary(t *testing.T) {
@@ -49,9 +77,13 @@ func TestAgentStoreAvoidsRetiredAuthoredVocabulary(t *testing.T) {
 		}
 		for _, line := range strings.Split(string(body), "\n") {
 			for _, pattern := range retiredAuthoredVocabulary {
-				if pattern.MatchString(line) {
-					findings = append(findings, rel+": "+pattern.String()+": "+strings.TrimSpace(line))
+				if !pattern.MatchString(line) {
+					continue
 				}
+				if strings.Contains(pattern.String(), "--force") && lineAllowsRetiredForce(line) {
+					continue
+				}
+				findings = append(findings, rel+": "+pattern.String()+": "+strings.TrimSpace(line))
 			}
 		}
 		return nil

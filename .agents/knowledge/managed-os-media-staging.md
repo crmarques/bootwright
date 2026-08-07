@@ -34,7 +34,7 @@ download on the provider host and are skipped, and the hostedTree DVD
 (`fromMedia`) is checked alongside `bootMedia`. Symptom and remediation detail
 in managed-os-install-media-missing.md. Replacing an existing media entry is
 authorized by a single `--yes` (or an interactive y), matching `secret set` —
-there is no `--force` flag on `media add`.
+`media add` carries no second overwrite flag of its own.
 
 **Hosted install tree identity and atomicity:** the tree
 (`packageSource.hostedTree`) is extracted once per (cluster, image) with

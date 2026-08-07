@@ -189,7 +189,8 @@ transport.
 
 **Constraint:** RHSM is converged declaratively: `redhat_subscription`
 (machines-phase `machine_registration_rhsm` role) registers only when needed
-(re-registering with `--force` mints a fresh consumer record and rotates
+(re-registering with `subscription-manager register --force` mints a fresh
+consumer record and rotates
 entitlement certs every run), and the storage role's `rhsm_repository` with
 `purge: true` enables exactly the named repos and disables the rest, with
 honest change reporting — skipped under `rhsm.management: external` so

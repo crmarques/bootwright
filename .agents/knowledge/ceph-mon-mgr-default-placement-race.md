@@ -20,8 +20,9 @@ hosts, e.g. a 2-site stretch layout) reports
 `bootwright apply` finishes. `ceph orch ps` shows exactly the declared mon
 set; `ceph mon dump` confirms the stray name is absent from the monmap
 (cephadm demoted it, but didn't clean up the container) — safe to remove
-directly on the affected host with `cephadm rm-daemon --fsid <fsid> --name
-mon.<host> --force` once the monmap check confirms it's not in quorum.
+directly on the affected host with
+`cephadm rm-daemon --fsid <fsid> --name mon.<host> --force`
+once the monmap check confirms it's not in quorum.
 
 **Fix:** `CephadmBootstrapSpec` now appends the `mon`/`mgr` placement docs
 after the host docs, so `bootstrap-spec.yaml` carries hosts + mon + mgr in

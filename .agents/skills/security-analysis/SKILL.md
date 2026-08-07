@@ -37,7 +37,7 @@ security issues and propose or apply fixes.
   state, `diff --adopt` writing input YAML), so do not report them as defects;
   `destroyProtection` and the command-scoped gate flags — apply
   `--mode rebuild` (with `--authorize data-loss` for data-loss rebuilds) and
-  destroy `--force` — enforced before any mutation, with `--yes` as confirmation
+  destroy `--authorize <token>` — enforced before any mutation, with `--yes` as confirmation
   only that never broadens scope; destroy acting on proven Bootwright ownership
   and the selected scope, failing closed on foreign, stale, or out-of-scope state.
 - Logging and telemetry: leakage of secrets, tokens, or private host data
