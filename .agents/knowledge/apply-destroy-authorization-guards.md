@@ -262,6 +262,63 @@ DataVolume delete tasks stayed armed on every later reconcile apply of a cluster
 that already matched. A skip is positive evidence the machine matches, which is
 exactly when the release is satisfied, so the consume now runs on that path too.
 
+**A machine-granular release authorizes only its own machines.** The release a
+`destroy --machines` writes names the released machines, but the three substrate
+roles decided their destructive reset from `bootwright_substrate_reset_clusters`
+alone — the *cluster* name. Only the managed-OS probe
+(`machine_os_identity/tasks/probe_existing.yml`) consulted the machine list. So
+releasing one KubeVirt guest armed `bootwright_kubevirt_rebuild_authorized` for
+every sibling machine of that cluster, and the next plain `apply` force-stopped
+and deleted their live VirtualMachines and root DataVolumes — machines the
+destroy never released, with no descriptor, no data-loss prompt and no token,
+because `applyDestructiveDescriptors` emits nothing for a KubeVirt guest. The
+libvirt and vSphere roles carried the same cluster-wide predicate behind an
+additional `--mode rebuild` check. All three now repeat the probe's predicate:
+released *and* (this cluster names no machines in the pair list, or this exact
+`<cluster>/<machine>` pair is listed). `TestEverySubstrateResetConsumerIsMachineScoped`
+and `TestNoUnlistedSubstrateResetConsumer`
+(`internal/repo/checks/substrate_release_scope_test.go`) close it over new
+providers: a file that reads the cluster var without the machine var fails, and a
+consumer missing from the list fails too, so a new substrate role cannot inherit
+the cluster-wide blast radius.
+
+**A nested tenant is not always a ContainerCluster.** The KubeVirt tenant gate
+proved "installed" only through `workflow.LoadClusterInstallRecord`, which a
+`StorageCluster` never has — so `destroy --clusters <KubeVirt host>` saw no
+conflict for a managed Ceph cluster running on that host's VMs, priced no data
+loss (its `StorageWorkNames` is empty for a container-only selection), previewed
+nothing, and annihilated every OSD under `--yes` alone. The guest→host edge was
+already modeled for both kinds in `KubeVirtHostParentsByChild`; only the
+"provisioned" predicate was container-only. `installedKubeVirtTenants` now also
+accepts the Bootwright-owned `storage-cluster` ownership record
+(`converge.ProvisionedStorageTenants`), the same evidence
+`machineDestroyInstalledClusterGuard` uses, and the in-scope set is `sel.AllRoots`
+rather than `sel.ContainerRoots` so selecting the tenant alongside its host still
+clears the conflict. Pinned by
+`TestKubeVirtTenantConflictsSeeAProvisionedStorageTenant`.
+
+**A retry hint must reproduce the run it retries.** `RunLedger` carried `Target`
+and `Scope` and no machine axis, and `--machines` is mutually exclusive with
+`--clusters`, so `Scope` was always empty on a machine-scoped run. A failed
+`destroy --machines worker-03` therefore made `bootwright status` offer
+`bootwright destroy --yes` — an unscoped full-lifecycle teardown of the whole
+context, with the confirmation already answered — as its first next step. The
+ledger now carries `Machines`, populated from `opts.SelectedMachines` in
+`runPreparedTaskGraph` so both verbs get it from one place, and
+`ledgerRetryCommand` emits `--machines` instead of widening.
+`TestFailedRunRetryHintReproducesTheRunSelection` tables the four shapes; the
+older spine guard only checked that a hint parsed as a registered command, which
+`bootwright destroy --yes` does.
+
+**Every flag on a mutating verb is exercised by the matrix.**
+`TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` walks the registered
+flag set of `apply` and `destroy` and requires each one to appear in a
+`safetyMatrixCases()` row, or in `safetyMatrixFlagExemptions` naming the test
+that pins it instead; `TestSafetyMatrixFlagExemptionsHoldOnlyLiveFlags` rejects a
+dead exemption. Before this, a new flag on either verb could ship with no
+scenario coverage at all — the matrix was comprehensive over *tokens* and merely
+incidental over *flags*.
+
 **The published contract is guard-synced in both directions.** The `accepted by`
 column of the `--authorize` tables in `specs/state-model.md` and
 `docs/advanced/operations.md` is set-compared with each token's verb set
