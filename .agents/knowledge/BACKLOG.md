@@ -985,3 +985,122 @@ learned; this file records what it still owes.
   `%{name}` field the `--qf` already emits. Unreadable-vs-publishes-nothing then
   means the same thing on every node, and the preflight converges on the
   repositories ADR 0051 says it proves.
+
+## B-078 — The infra-component placement closure can make `destroy` unplannable
+- Status: open
+- Area: destroy / task graph
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: when machine-infra is fanned per cluster (any context with two or
+  more clusters that own machines), `destroyInfraComponentsOrdering`
+  (`internal/converge/workflow/destroy_plan.go:210-226`) excludes placement
+  clusters from the infra-components step's ordering dependencies but still
+  appends `destroy.machine-infra-records`. That records step hard-depends on the
+  base `destroy.machine-infra` ID, which `destroyChain`
+  (`destroy_plan.go:303-318`) expands to **every** fanned machine-infra step —
+  including the placement cluster's, which itself orders after
+  `destroy.infra-components` (`destroy_plan.go:117-118`). The result is a cycle
+  `detectDestroyTaskCycle` rejects, so `destroy` (no `--stage`) and
+  `destroy --stage infra` fail planning with "cannot plan destroy: task
+  dependency cycle among …" and the operator has no teardown at all. No shipped
+  example trips it — every `InfraComponent` in `examples/` is placed on a
+  standalone `bastion`, which `destroyClusterOwnerByMachine` maps to no cluster,
+  so `facts.placement` stays empty. The whole placement carve-out has no test.
+- Exit: decide which edge yields. Infra-components already waits on every
+  non-placement machine-infra step, so the records sweep is the removable one:
+  drop `destroy.machine-infra-records` from the infra-components ordering when
+  any fanned cluster is a placement cluster, and add a planner test that builds
+  a two-cluster state with an `InfraComponent` placed on a cluster node and
+  asserts `PlanDestroyTasks` succeeds for both `infra` and `all`.
+
+## B-079 — A ContainerCluster substrate release written by `destroy --machines` can never be consumed
+- Status: open
+- Area: apply / substrate release
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: the release a machine-scoped destroy writes is consumed only at the
+  step that completes the rebuild — `installWait` for a `ContainerCluster` — and
+  `ConsumeSubstrateRelease` runs inside the task executor
+  (`internal/converge/workflow/apply_runner.go:130,154`). A cluster whose
+  install record already reports complete has that task pre-skipped at plan
+  time, so the executor never reaches the consume and the release stays armed on
+  every later apply. Related: `nodeBoot` also consumes the release, which the
+  normative enumeration in `specs/state-model.md` (Teardown safeguards) does not
+  list — the spec names `managedMachineOS` and `installWait` only.
+- Exit: settle where consumption belongs for a `ContainerCluster` whose install
+  is not re-run, then make the code and the spec's enumeration agree; add a
+  matrix row for `destroy --machines <node>` followed by a plain `apply` that
+  asserts the release is cleared exactly once.
+
+## B-080 — `--purge-history` on a machine selection removes a still-live cluster's shared log
+- Status: open
+- Area: destroy / history purge
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: `ResetMachineConvergeRecordsAfterDestroy` passes the selected machine
+  names to `purgeRunHistoryForComponents` (`internal/converge/destroy.go`), which
+  matches a run's task resource keys by node. A task directory that spans several
+  machines, and the parent cluster's per-run flow log, are removed even though the
+  cluster and its unnamed machines are left standing — the contract says the purge
+  "never touches a component outside that scope" and that a run spanning purged and
+  live components keeps its ledger and shared log.
+- Exit: match a task directory only when every resource key it carries is inside
+  the purge scope, and never remove a per-cluster log for a cluster the run did not
+  destroy; pin both with cases in `destroy_history_purge_test.go`.
+
+## B-081 — Silent no-ops from two structural projections that drop identity fields
+- Status: open
+- Area: apply / drift classification
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: two edits an operator can author classify as reconcilable-in-place and
+  then converge nothing. (1) The `ContainerCluster` structural projection nulls
+  `NetworkConfigs`, so an agent-config/install-config identity edit — which needs a
+  reinstall — reads as day-2 drift. (2) An erasure-coded `StoragePool`'s derived
+  crush failure domain is absent from the pool's structural spec, so changing it
+  classifies as reconcilable and `ceph … set` cannot express it. Both are silent
+  no-ops: `apply` reports success and the live object keeps the old identity, which
+  is the quiet failure mode of a desired-state tool. `diff` additionally never
+  prints the reconcilable-vs-rebuild annotation the contract requires per drifted
+  resource, so neither is visible before the run.
+- Exit: fold the identity-bearing inputs into each structural projection (they are
+  hash inputs, so re-baselining rules in `converge-hash-drift-model.md` apply), and
+  emit the per-resource classification in `diff`.
+
+## B-082 — Refusals that name no way forward, and four spec gaps the review surfaced
+- Status: open
+- Area: CLI contract / diagnostics
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: the Diagnostics clause requires every fail-closed refusal to name one
+  way forward. These name none: `Refuse foreign or unmarked reachable managed OS`
+  (`machine_os_identity/tasks/probe_existing.yml`) — which is where `--mode
+  create`'s own remedy lands; the `booting` and unrecognized install-phase
+  refusals; the contradictory-controller-record refusal of
+  `--recover-ceph-ownership`; the cross-context infra-component refusal; and the
+  `--reclaim-devices` protected-environment refusals. Four normative gaps sit
+  alongside them: `--reclaim-devices all` is absent from the CLI Contract; the
+  Global-flags section enumerates three persistent root flags where the binary
+  registers five (`--ssh-ask-sudo-password` and `--ssh-user-for-provisioned`, and
+  the second silently waives the `--ssh-user` refusal the same clause states
+  absolutely); the stretch-arbiter *shape*-change refusal is a third routing arm
+  the spec does not publish; and `storage-cluster replace-arbiter` registers no
+  `--output` although the spec promises its JSON preview carries
+  `requiredAuthorizations`.
+- Exit: give each refusal its `bootwright …` invocation or its sanctioned external
+  remedy, and close the four spec gaps in the same change. The prose-command guard
+  (`TestEveryBootwrightCommandInProseParses`) already proves any command they name
+  parses.
+
+## B-083 — Storage-consumer and `--mode create` gates still key on a stage or a provider
+- Status: open
+- Area: destroy / apply gates
+- Origin: apply/destroy safety-contract review (2026-08-06)
+- Problem: two gates decide on something other than the consequence, which ADR 0031
+  forbids. (1) `destroyStorageConsumerGate` (`internal/cli/destroy_gates.go`) tests
+  `runScope.Name != "infra"` and hard-refuses on every other scope, so the strictly
+  larger full-lifecycle and clusters-stage teardowns carry no token where
+  `--stage infra` takes `--authorize shared-infra` — and, because the refusal is
+  returned before the dry-run branch, `destroy --dry-run --clusters <storage>` exits
+  1 instead of previewing, and the JSON dialect never mentions it. (2) `--mode
+  create`'s live-host existence gate exists only on the KubeVirt substrate; libvirt
+  and vSphere enforce the greenfield assertion against recorded state alone, which
+  the spec says can never make a live host look greenfield.
+- Exit: key the storage-consumer gate on the resolved selection and the consequence
+  and give it one behavior across scopes (previewable, token-or-not decided once);
+  add the live existence check to the libvirt and vSphere substrates.
