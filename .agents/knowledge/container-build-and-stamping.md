@@ -56,6 +56,44 @@ entries `openAnsibleBundleArchive` rejects at startup, so a build can no longer
 produce a binary that fails on its first command.
 `TestContainerfilePacksTheBundleOnlyWithTheFullAnsibleTree` pins the ordering.
 
+**Constraint (proxy credentials reach the build as a BuildKit secret, never as a
+build-arg):** every network-bound RUN sources `/run/secrets/proxy`
+(`--mount=type=secret,id=proxy`), so the credential lives in a tmpfs for the
+duration of that step only. `proxy.env.example` and the README both promise it
+never becomes a build-arg — but `make container-build` passed
+`HTTP_PROXY`/`HTTPS_PROXY`/`http_proxy`/`https_proxy` as `--build-arg` anyway,
+contradicting its own documentation. It now hands BuildKit
+`--secret id=proxy,src=$(CONTAINER_PROXY_ENV)` (default `proxy.env`) when that
+file exists, and otherwise synthesizes a mode-`600` temporary file from the
+environment — `shlex.quote`d so a password containing quotes or `$` still sources
+correctly — removed by a `trap` on `EXIT INT TERM`. `NO_PROXY`/`no_proxy` carry
+no credentials and stay ordinary build-args, which is also why they are the only
+proxy values the Containerfile promotes to `ENV`. The shipped image is unaffected
+either way: the final stage is a fresh `FROM ubi9` that copies only the binary,
+so no builder layer, `ENV`, or secret reaches it.
+`TestContainerBuildPassesProxyCredentialsAsASecret` pins this.
+
+**Constraint (the in-container self-stamp must not ask git for `--dirty`):**
+`.dockerignore` deliberately keeps `docs/`, `examples/`, `specs/`, `test/`,
+`.github/`, `.agents/`, `README.md`, `AGENTS.md`, `mkdocs.yml` and the repo's
+other root files out of the build context. They are all TRACKED, so inside the
+builder's worktree git sees every one of them as deleted and
+`git describe --tags --always --dirty` appends `-dirty` to EVERY container
+build, from a pristine checkout at a tagged commit. Observed 2026-08-07: a
+`docker build` off a clean tree still stamped `…-dirty`.
+The fallback now takes `git describe --tags --always` and appends `-dirty` only
+when `git status --porcelain --untracked-files=no --` over the copied build
+inputs (`Makefile go.mod go.sum api cmd internal add-ons ansible scripts`)
+reports something. `--untracked-files=no` matters: `.gitignore` is NOT copied
+into the builder, so `bin/`, `.state/` and the generated
+`internal/converge/bundle/ansible_bundle.zip` would otherwise register as
+untracked drift. Root-level `.dockerignore` patterns do not match nested paths —
+`internal/clusteraccess/kubeconfig.go` survives `*kubeconfig*`, which is why the
+copied trees are complete and this check is sound.
+The in-container stamp therefore describes the build's INPUTS. `make
+container-build` passes `VERSION`/`GIT_COMMIT` from the host, where the whole
+repository is visible, and that remains the strict answer.
+
 **Version stamping:** `VERSION` may be an explicit tag (set by CI/releases),
 falling back to `git describe --tags --always --dirty`, then the short SHA,
 then `dev`; LDFLAGS inject `internal/cli.versionString` and `.gitCommit`. The

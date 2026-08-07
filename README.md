@@ -131,6 +131,18 @@ bootwright version
 > the finished image and `docker history`. Omit `--secret` entirely to build
 > without a proxy. `NO_PROXY` is not sensitive, so it stays an ordinary build-arg.
 
+`make container-build` runs the same build with a host-backed BuildKit cache in
+`.cache/container-build`, so the toolchain, Go modules and Galaxy collections
+survive a `docker image rm` or a daemon cache prune instead of being fetched
+again. It picks up `proxy.env` automatically when the file exists, falls back to
+`HTTP_PROXY`/`HTTPS_PROXY` from the environment (handed to BuildKit as the same
+secret, never as a build-arg), and passes `VERSION`/`GIT_COMMIT` from the host —
+where the whole repository is visible, so a working tree that differs from HEAD
+is stamped `-dirty` accurately. A raw `docker build` self-stamps inside the
+builder, which sees only the paths the build copies; the `-dirty` suffix there
+reflects those build inputs, because `.dockerignore` deliberately keeps docs,
+examples, specs and tests out of the context.
+
 ## Desired-State Contract
 
 User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and twenty-one kinds:

@@ -387,12 +387,30 @@ func TestContainerfileStampsBuildMetadata(t *testing.T) {
 		"ARG GIT_COMMIT",
 		`version="${VERSION}"`,
 		`git_commit="${GIT_COMMIT}"`,
-		"git describe --tags --always --dirty",
+		"git describe --tags --always",
 		"git rev-parse --short HEAD",
 		`make go-build VERSION="${version}" GIT_COMMIT="${git_commit}"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Containerfile missing build metadata fragment %q", want)
+		}
+	}
+	if strings.Contains(body, "git describe --tags --always --dirty") {
+		t.Fatal("the in-container self-stamp must not ask git describe for --dirty: .dockerignore keeps docs, examples, specs, tests and the repo's own root files out of the build context, so every tracked file it excludes reads as deleted in the builder's worktree and EVERY container build stamps -dirty")
+	}
+	if !strings.Contains(body, "git status --porcelain --untracked-files=no --") {
+		t.Fatal("the self-stamp must assess dirtiness over the paths the build actually copies, so a real local modification to a build input still stamps -dirty")
+	}
+	for _, copied := range []string{"Makefile", "go.mod", "go.sum", "api", "cmd", "internal", "add-ons", "ansible", "scripts"} {
+		copyLine := "COPY " + copied + " " + copied
+		if copied == "go.mod" || copied == "go.sum" {
+			copyLine = "COPY go.mod go.sum ./"
+		}
+		if !strings.Contains(body, copyLine) {
+			t.Fatalf("the dirty check names %q as a copied build input, but the Containerfile does not copy it that way", copied)
+		}
+		if !strings.Contains(body, "--untracked-files=no -- Makefile go.mod go.sum api cmd internal add-ons ansible scripts") {
+			t.Fatalf("the dirty check must cover exactly the copied build inputs, missing %q", copied)
 		}
 	}
 
@@ -428,6 +446,56 @@ func TestContainerfilePacksTheBundleOnlyWithTheFullAnsibleTree(t *testing.T) {
 		if !strings.Contains(sync, want) {
 			t.Fatalf("the bundle writer must refuse an archive the binary would reject at startup, missing %q", want)
 		}
+	}
+}
+
+func TestContainerBuildPassesProxyCredentialsAsASecret(t *testing.T) {
+	makefile := readRepoFile(t, "Makefile")
+	start := strings.Index(makefile, "\ncontainer-build:")
+	if start < 0 {
+		t.Fatal("Makefile must define container-build")
+	}
+	recipe := makefile[start+1:]
+	if end := strings.Index(recipe, "\nsync-bundle:"); end >= 0 {
+		recipe = recipe[:end]
+	}
+	for _, leaked := range []string{
+		`--build-arg "HTTP_PROXY=`,
+		`--build-arg "HTTPS_PROXY=`,
+		`--build-arg "http_proxy=`,
+		`--build-arg "https_proxy=`,
+	} {
+		if strings.Contains(recipe, leaked) {
+			t.Errorf("container-build must not pass proxy credentials as a build arg (%s): proxy.env.example and the README both promise they never become one, and a build arg is recorded against the build rather than living only in the RUN's tmpfs", leaked)
+		}
+	}
+	if !strings.Contains(recipe, "--secret id=proxy,src=") {
+		t.Error("container-build must hand proxy credentials to BuildKit as the `proxy` secret the Containerfile sources")
+	}
+	if !strings.Contains(recipe, "$(CONTAINER_PROXY_ENV)") {
+		t.Error("container-build must read the operator's proxy.env through CONTAINER_PROXY_ENV so the path is overridable")
+	}
+	if !strings.Contains(recipe, "chmod 600") {
+		t.Error("the environment fallback writes credentials to a temporary file, which must not be world-readable")
+	}
+	if !strings.Contains(recipe, "rm -f") || !strings.Contains(recipe, "trap") {
+		t.Error("a generated proxy secret must be removed on every exit path, including an interrupted build")
+	}
+	for _, kept := range []string{`--build-arg "NO_PROXY=`, `--build-arg "no_proxy=`} {
+		if !strings.Contains(recipe, kept) {
+			t.Errorf("NO_PROXY carries no credentials and stays an ordinary build arg, missing %s", kept)
+		}
+	}
+
+	if !strings.Contains(makefile, "CONTAINER_PROXY_ENV ?= proxy.env") {
+		t.Error("CONTAINER_PROXY_ENV must default to the proxy.env path proxy.env.example documents")
+	}
+	example := readRepoFile(t, "proxy.env.example")
+	if !strings.Contains(example, "--mount=type=secret,id=proxy") {
+		t.Error("proxy.env.example must keep naming the secret mount the Containerfile reads")
+	}
+	if !strings.Contains(readRepoFile(t, "Containerfile"), "--mount=type=secret,id=proxy") {
+		t.Error("the Containerfile must read proxy credentials from the secret mount, not from build args")
 	}
 }
 

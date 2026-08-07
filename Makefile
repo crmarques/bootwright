@@ -14,6 +14,7 @@ CONTAINERFILE ?= Containerfile
 CONTAINER_CACHE_DIR ?= .cache/container-build
 CONTAINER_CACHE_NEXT_DIR ?= $(CONTAINER_CACHE_DIR).next
 CONTAINER_CACHE_FROM = $(if $(wildcard $(CONTAINER_CACHE_DIR)/index.json),--cache-from type=local$(COMMA)src=$(CONTAINER_CACHE_DIR))
+CONTAINER_PROXY_ENV ?= proxy.env
 TEST_HOME ?= $(abspath $(STATE_DIR)/home)
 E2E_DIR ?= test/e2e
 CASE ?=
@@ -127,14 +128,24 @@ container-build:
 	@case "$(CONTAINER_CACHE_NEXT_DIR)" in /|.|..|/*|../*|*/../*|*/..) printf 'refusing to remove unsafe CONTAINER_CACHE_NEXT_DIR: %s\n' "$(CONTAINER_CACHE_NEXT_DIR)"; exit 1;; esac
 	mkdir -p $(CONTAINER_CACHE_DIR)
 	rm -rf $(CONTAINER_CACHE_NEXT_DIR)
+	@set -e; \
+	generated=''; \
+	trap 'test -z "$$generated" || rm -f "$$generated"' EXIT INT TERM; \
+	proxy_file='$(CONTAINER_PROXY_ENV)'; \
+	if [ ! -f "$$proxy_file" ]; then \
+		proxy_file=''; \
+		if [ -n "$${HTTP_PROXY:-}$${HTTPS_PROXY:-}$${http_proxy:-}$${https_proxy:-}" ]; then \
+			generated="$$(mktemp)"; \
+			chmod 600 "$$generated"; \
+			$(PYTHON) -c 'import os, shlex, sys; sys.stdout.write("".join("export %s=%s\n" % (k, shlex.quote(os.environ[k])) for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy") if os.environ.get(k)))' >"$$generated"; \
+			proxy_file="$$generated"; \
+		fi; \
+	fi; \
 	DOCKER_BUILDKIT=1 $(DOCKER) buildx build --load \
 		$(CONTAINER_CACHE_FROM) \
 		--cache-to type=local,dest=$(CONTAINER_CACHE_NEXT_DIR),mode=max \
-		--build-arg "HTTP_PROXY=$${HTTP_PROXY:-}" \
-		--build-arg "HTTPS_PROXY=$${HTTPS_PROXY:-}" \
+		$${proxy_file:+--secret id=proxy,src=$$proxy_file} \
 		--build-arg "NO_PROXY=$${NO_PROXY:-}" \
-		--build-arg "http_proxy=$${http_proxy:-}" \
-		--build-arg "https_proxy=$${https_proxy:-}" \
 		--build-arg "no_proxy=$${no_proxy:-}" \
 		--build-arg "VERSION=$(VERSION)" \
 		--build-arg "GIT_COMMIT=$(GIT_COMMIT)" \

@@ -73,7 +73,10 @@ RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
     version="${VERSION}"; \
     git_commit="${GIT_COMMIT}"; \
-    if [ -z "${version}" ]; then version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"; fi; \
+    if [ -z "${version}" ]; then \
+        version="$(git describe --tags --always 2>/dev/null || echo dev)"; \
+        if [ -n "$(git status --porcelain --untracked-files=no -- Makefile go.mod go.sum api cmd internal add-ons ansible scripts 2>/dev/null)" ]; then version="${version}-dirty"; fi; \
+    fi; \
     if [ -z "${git_commit}" ]; then git_commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; fi; \
     make go-build VERSION="${version}" GIT_COMMIT="${git_commit}"
 
