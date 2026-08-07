@@ -41,7 +41,7 @@ type DestroySafetyScope struct {
 func protectedKindsPresent(state v1alpha1.State, storageWorkNames []string, scope DestroySafetyScope) []string {
 	protected := ProtectedKindSet(state)
 	var present []string
-	if scope.TearsClusters && protected[v1alpha1.KindContainerCluster] && len(state.ContainerClusters) > 0 {
+	if (scope.TearsClusters || scope.TearsMachines) && protected[v1alpha1.KindContainerCluster] && len(state.ContainerClusters) > 0 {
 		present = append(present, v1alpha1.KindContainerCluster)
 	}
 	if (scope.TearsClusters || scope.TearsMachines) && protected[v1alpha1.KindStorageCluster] && storageInTeardown(state, storageWorkNames) {

@@ -40,7 +40,7 @@ nothing else; the `accepted by` column is normative:
 | --- | --- | --- |
 | `all` | every other token the invoked command accepts, in one word — the `accepted by` column decides the set per verb. It never clears a refusal that has no token of its own, and never answers a confirmation prompt | `apply`, `destroy`, `storage-cluster replace-arbiter` |
 | `data-loss` | any disk wipe or Ceph OSD zap, on `apply` and on `destroy` | `apply`, `destroy` |
-| `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` | `destroy` |
+| `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` — and "covers" follows the consequence, so a machine-layer teardown trips a protected `ContainerCluster` or `StorageCluster` exactly as the clusters stage does | `destroy` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` | `destroy` |
 | `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker | `destroy` |
 | `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context | `destroy` |

@@ -48,4 +48,14 @@ func TestEvaluateDestroySafetyProtectedKinds(t *testing.T) {
 	if d := EvaluateDestroySafety(withStorage, false, nil, DestroySafetyScope{}); d.RequiresAuthorization {
 		t.Fatal("an artifact-server-only teardown must not trip protectedKinds")
 	}
+	protectContainers := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "nprd"},
+			Spec:     v1alpha1.EnvironmentSpec{Safety: v1alpha1.EnvironmentSafetySpec{ProtectedKinds: []string{v1alpha1.KindContainerCluster}}},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "ocp"}}},
+	}
+	if d := EvaluateDestroySafety(protectContainers, false, nil, DestroySafetyScope{TearsMachines: true}); !d.RequiresAuthorization {
+		t.Fatal("a machine-layer teardown deletes a container cluster's machines and its install state, so protectedKinds: [ContainerCluster] must gate it too; keying the gate on the clusters stage alone lets `destroy --stage infra` and `destroy --machines` destroy exactly what the operator protected")
+	}
 }
