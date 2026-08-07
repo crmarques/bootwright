@@ -138,6 +138,12 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		want:    []string{"--authorize " + authorizeInstalledClusterNode + ": " + authorizationRequired},
 		deny:    []string{"refusing to destroy machine(s)"},
 	}, {
+		name:    "destroy/preview: a machine-scoped teardown previews its machines, not the whole context",
+		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Will destroy", "dc1-metal-master-0 (Machine)", "left standing"},
+		deny:    []string{"(ContainerCluster)", "(StorageCluster)"},
+	}, {
 		name:    "destroy/preview: a dry run forecasts shared-infra as required instead of refusing",
 		args:    []string{"destroy", "--stage", "infra", "--clusters", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

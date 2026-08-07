@@ -144,11 +144,15 @@ func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraCompon
 	}
 }
 
-func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State, storageWorkNames []string) {
+func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State, storageWorkNames, selectedMachines []string) {
 	full := converge.DestroyIsFullScope(scope)
 	runtimeLayer := full || scope.Name == "clusters" || scope.Name == "container-cluster"
 	machineLayer := full || scope.Name == "infra"
 	if !runtimeLayer && !machineLayer {
+		return
+	}
+	if len(selectedMachines) > 0 {
+		printDestroyMachinePreview(w, state, selectedMachines)
 		return
 	}
 	storageNames := destroyStoragePreviewNames(state, storageWorkNames)
@@ -177,6 +181,32 @@ func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, 
 	if runtimeLayer && !machineLayer {
 		p.Status(output.StatusInfo, "retained", "machine substrate is kept; remove it with destroy --stage infra")
 	}
+}
+
+func printDestroyMachinePreview(w io.Writer, state v1alpha1.State, machines []string) {
+	names := append([]string(nil), machines...)
+	sort.Strings(names)
+	items := make([]output.Item, 0, len(names))
+	for _, name := range names {
+		items = append(items, output.Item{Label: name + " (Machine)", Detail: destroyMachineDetail(state, name)})
+	}
+	p := output.NewContinuation(w)
+	p.Section("Will destroy")
+	p.List(items)
+	p.Status(output.StatusInfo, "retained", "only the named machines' substrate is torn down; every cluster and every unnamed machine of this context is left standing")
+}
+
+func destroyMachineDetail(state v1alpha1.State, name string) string {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name != name {
+			continue
+		}
+		if !v1alpha1.MachineRequiresSubstrate(machine) {
+			return "bare-metal machine: its OS and disks are retained; Bootwright-local install state is released so the next apply may reinstall it"
+		}
+		return "provider-owned machine: the VM and its disks are deleted — irreversible for any data they hold"
+	}
+	return "machine substrate is torn down"
 }
 
 func destroyStorageClusterDetail(runtimeLayer, machineLayer, providerOwnedOSDs bool) string {

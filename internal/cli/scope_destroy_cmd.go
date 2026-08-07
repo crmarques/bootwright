@@ -286,7 +286,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.State)
 		} else {
-			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames)
+			printDestroyPreview(stdout, runScope, clustersDir, plan.State, plan.StorageWorkNames, sel.MachineScopeNames())
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
 		printInfraComponentDestroyBlocks(stdout, componentDecision, auth.has(authorizeSharedInfra))
