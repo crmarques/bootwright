@@ -56,6 +56,17 @@ task that would run is the one that is hung. Confirm from the other end with
 `ps` on the target (`pgrep -af cephadm`, `podman ps`) — the remote command is
 still running there.
 
+**Count the host lines before walking forward.** The same deferral means a
+task that has returned for SOME hosts prints its banner and only those hosts'
+lines, and is still running for the rest — so a banner is not evidence the
+task finished. Where the host lines are short of the play's host count, the
+frozen task IS the one named on screen, on whichever host is missing from the
+list, and walking forward sends the diagnosis to a task that has not started.
+Measured 2026-08-07 on ceph-prd-01: `Prove the storage node container runtime
+can start a Ceph container` showed six `ok:` lines in a seven-node play and
+node-04 was still inside its `podman run` 31 minutes later. Take the host
+count from the inventory, never from the longest task on screen.
+
 ## An unbounded remote command hangs a play the SSH keepalives cannot save
 
 The `ssh_common_args` above bound the *connection*, not the *command*. A
@@ -75,3 +86,26 @@ fast. Wrap such probes in `timeout <n>` (see
 `destroy_steps/cluster_gate.yml`) and, where the probe can only ever answer
 when local cluster state exists, gate it on that state as well so the common
 case does not pay for the container at all.
+
+A bare `podman run` is the same class and fires on the FIRST apply, not only
+on a second destroy: the container-runtime gate proves the pinned Ceph image
+with `podman run --entrypoint stat`, which pulls that image when the node does
+not already carry it. Measured 2026-08-07 on ceph-prd-01 node-04, a stalled
+pull of `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` held the play for 31 minutes with
+no output, no failure and a live SSH channel throughout; the pull only ended
+when the process was killed by hand.
+
+Coreutils `timeout` is the right wrapper for both because, absent
+`--foreground`, it puts the child in a NEW process group and signals the whole
+group. That matters more than the bound itself: the podman a wrapped `cephadm`
+forked dies with it instead of surviving to hold the command module's stdout
+pipe open, which would leave the task hung after the bound had already fired.
+Pair it with `--kill-after=<n>` so a child that ignores SIGTERM still takes
+SIGKILL. `TestAnsibleBoundsCommandsThatCanHangForever` in
+`internal/repo/checks` enforces both for every `podman run` and every
+`cephadm rm-cluster` argv in the collection.
+
+The bound turns an invisible stall into `rc=124`. Every one of these tasks
+tolerates its own failure and reports the rc in a diagnostic, so name 124
+there as a timeout rather than a refusal — the two have different remedies and
+identical exit paths.

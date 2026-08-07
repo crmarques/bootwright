@@ -87,6 +87,28 @@ node are not device-isolated by a cgroup BPF program. That is a real, if narrow,
 reduction — least bad on an arbiter, which carries mons only and no data. Clearing
 Secure Boot on the node is the cleaner fix wherever policy allows it.
 
+## The gate's own probes are bounded, and rc=124 is not a refusal
+
+Every `podman run` in `phases/container_runtime.yml` runs under
+`timeout --kill-after=10`: 900s for the two probes that can pull the image
+(the ordinary one and the cgroupfs retry) and 120s for the two that cannot,
+since both are gated on an earlier probe having already succeeded with the
+image local. Without a bound the first probe is the single longest-lived
+unbounded command in the whole apply — it is the first thing on each node to
+run the pinned image, so it is the pull, and a registry that black-holes
+stalls it with no output at all. Measured 2026-08-07 on ceph-prd-01 node-04:
+31 minutes inside `podman run --entrypoint stat
+cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-21278`, ended only by killing the
+process by hand.
+
+Read `rc=124` from any of these probes as "never returned", not "refused".
+The assert's diagnostic says so, because the two have identical exit paths and
+opposite remedies: 126 with the eBPF message is lockdown and the cgroupfs
+drop-in answers it; 124 with no stderr is the registry or a podman that cannot
+create its cgroup, and no cgroup manager helps. A 124 on the
+`--cgroup-manager=systemd` re-prove keeps the drop-in, which is the safe
+direction — it withdraws the remedy only on proof the systemd manager works.
+
 **Unrelated but co-located:** a host-installed `node_exporter` listening on 9100
 blocks `node-exporter.<host>` with
 `TCP Port(s) '0.0.0.0:9100' required for node-exporter already in use`, which keeps
