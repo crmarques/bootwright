@@ -4,6 +4,36 @@ The safety contract in `specs/state-model.md` and ADR 0007 says a state change
 happens only when the operator explicitly asked for it. These are the mechanisms
 that make *future* code fail a check rather than merely break the convention.
 
+## Adding to the destructive surface — what to do, and what fails if you don't
+
+Read this row before writing the code, not after the guard fails. Each row names
+the one place the addition has to be registered; the guard in the last column is
+what turns "forgot" into a red test.
+
+| You are adding | Register it in | Guard that fails otherwise |
+| --- | --- | --- |
+| an `--authorize` token | `authorizationTokens` (`internal/cli/authorize.go`), the `\| token \| authorizes \| accepted by \|` tables in `specs/state-model.md` and `docs/advanced/operations.md`, a `safetyMatrixCases()` row, and the verb's preview forecast | `authorize_contract_test.go`, `TestEveryTokenAVerbAcceptsIsNamedByItsPreviewForecast` |
+| a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` |
+| an apply task kind | `workflow.ApplyTaskKinds`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToADestroyKind` |
+| a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, and `substrateResetConsumers` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer` |
+| a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
+| a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
+| a refusal | the object, the consequence in the kind's own vocabulary, and the literal `bootwright …` invocation **carrying the run's own scope and stage flags** and any required token | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
+
+Three failure shapes recur often enough to name:
+
+- **Keying on a flag or stage name instead of on the consequence.** `--stage infra`
+  and `--machines` destroy the same data the clusters stage does; a gate that tests
+  `scope.Name == "..."` or "was `--clusters` given" leaves the other axes open. Key
+  on the resolved `clusteraccess.Selection` and the shared predicate.
+- **Proving state with one kind's evidence.** A `ContainerCluster` proves it is
+  installed with an install record; a managed `StorageCluster` proves it with its
+  Bootwright-owned ownership record. A predicate that knows only the first silently
+  drops every storage cluster.
+- **A guard built on a value no CLI path produces.** A table that hand-builds a
+  forecast struct or a partial `Selection` tests the function, not the contract.
+  Drive the guard through `runCLI` or through the same constructor production uses.
+
 **Registry (`workflow.ApplyTaskKinds`).** The single list of mutating apply task
 kinds. `TestApplyTaskKindsRegistryCoversEveryConstant` parses `apply_tasks.go`
 for `ApplyTaskKind*` constants and fails when one is missing from the registry,

@@ -83,7 +83,12 @@ depends on them.
   consume is never reported as inert. The normative contract is in
   `specs/state-model.md` and ADR 0007, refined by ADR 0030 and ADR 0031; the
   guard tests that enforce it are cataloged in
-  `.agents/knowledge/apply-destroy-authorization-guards.md`.
+  `.agents/knowledge/apply-destroy-authorization-guards.md`. **Before adding a
+  token, a flag on `apply`/`destroy`, an apply task kind, a substrate provider, a
+  shared-service slot, a gate, or a refusal, read that file's "Adding to the
+  destructive surface" table first** — it names the one registry each addition
+  belongs in and the guard that fails when it is missed. Registering it is part
+  of the change, not follow-up work.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
   teach workflows and link back. The per-kind field reference is the deliberate
   exception: every page under `docs/concepts/` is one by design (the
