@@ -73,9 +73,26 @@ Pinned by `TestFormatConditionsDemotesAConditionWhoseHeartbeatFroze`,
 `TestFormatConditionsKeepsAStaleConditionWhenNothingIsFresher`, and
 `TestDiagnoseObjectReadsTheObjectItsConditionBlames`.
 
+`conditionReady` annotates the **live** wait line too, so the operator learns at
+minute five rather than at the timeout:
+
+```
+storagecluster.ocs.openshift.io/ocs-external-storagecluster Progressing
+  (Available=False unchanged for 9h6m35s while this object's other conditions
+   keep updating)
+```
+
 The readiness **gate** is deliberately unchanged: it still requires the
-condition the add-on declares. Passing on a related object instead would have
-called Data Foundation ready while NooBaa had no object storage at all — the
-exact silent failure
-[data-foundation-external-attach.md](data-foundation-external-attach.md)
-exists to refuse.
+condition the add-on declares, and staleness never moves pass/fail. Two
+alternatives were considered and rejected on 2026-08-07:
+
+- *Pass when the gated condition is stale but `relatedObjects` are healthy.*
+  This would have unblocked prd instantly and been wrong: it declares Data
+  Foundation ready while NooBaa has no object storage at all — the exact silent
+  failure [data-foundation-external-attach.md](data-foundation-external-attach.md)
+  exists to refuse.
+- *Fail fast once the gated condition freezes past the threshold.* Saves the
+  remaining budget, but aborts a run whose operator was merely slow to
+  re-evaluate and would have flipped later. The budget exists to absorb that.
+
+Report staleness; never let it decide.

@@ -147,6 +147,37 @@ func TestFormatConditionsKeepsAStaleConditionWhenNothingIsFresher(t *testing.T) 
 	}
 }
 
+type stalledStorageClusterRunner struct{}
+
+func (stalledStorageClusterRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.Contains(joined, "subscription"):
+		return []byte(`{"status":{"installedCSV":"odf-operator.v4.21.9"}}`), nil
+	case strings.Contains(joined, "clusterserviceversion"):
+		return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+	case strings.Contains(joined, "storagecluster"):
+		return []byte(`{"status":{"phase":"Progressing","conditions":[
+			{"type":"ReconcileComplete","status":"True","reason":"ReconcileCompleted","message":"Reconcile completed successfully","lastHeartbeatTime":"2026-08-07T10:23:34Z"},
+			{"type":"Available","status":"False","reason":"CephClusterStatus","message":"CephCluster resource is not reporting status","lastHeartbeatTime":"2026-08-07T01:16:59Z"},
+			{"type":"Progressing","status":"True","reason":"NoobaaInitializing","message":"Waiting on Nooba instance to finish initialization","lastHeartbeatTime":"2026-08-07T10:23:34Z"}]}}`), nil
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+func TestWaitReadySaysWhileWaitingThatTheGatedConditionStoppedUpdating(t *testing.T) {
+	var progress bytes.Buffer
+	_, err := WaitReady(context.Background(), stalledStorageClusterRunner{}, "/tmp/kubeconfig", externalStorageAddon("40ms"), time.Millisecond, &progress)
+	if err == nil {
+		t.Fatal("expected a readiness timeout")
+	}
+	printed := progress.String()
+	if !strings.Contains(printed, "Available=False unchanged for 9h6m35s while this object's other conditions keep updating") {
+		t.Fatalf("the wait never told the operator the gated condition had frozen:\n%s", printed)
+	}
+}
+
 type relatedObjectRunner struct{}
 
 func (relatedObjectRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {

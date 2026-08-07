@@ -169,21 +169,27 @@ func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, che
 	}
 	phase := nestedString(obj, "status", "phase")
 	conditions, _ := nestedValue(obj, "status", "conditions").([]any)
+	newest := newestHeartbeat(conditions)
 	for _, item := range conditions {
 		condition, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		if stringValue(condition["type"]) == check.Condition.Type && stringValue(condition["status"]) == check.Condition.Status {
+		if stringValue(condition["type"]) != check.Condition.Type {
+			continue
+		}
+		if stringValue(condition["status"]) == check.Condition.Status {
 			return true, resource + " " + firstNonEmpty(phase, check.Condition.Type), nil
 		}
-		if stringValue(condition["type"]) == check.Condition.Type {
-			state := firstNonEmpty(phase, stringValue(condition["reason"]))
-			if state == "" {
-				state = check.Condition.Type + "=" + orUnknown(stringValue(condition["status"]))
-			}
-			return false, resource + " " + state, nil
+		state := firstNonEmpty(phase, stringValue(condition["reason"]))
+		if state == "" {
+			state = check.Condition.Type + "=" + orUnknown(stringValue(condition["status"]))
 		}
+		if lag, stale := conditionLag(condition, newest); stale {
+			state += fmt.Sprintf(" (%s=%s unchanged for %s while this object's other conditions keep updating)",
+				check.Condition.Type, orUnknown(stringValue(condition["status"])), lag)
+		}
+		return false, resource + " " + state, nil
 	}
 	return false, resource + " " + firstNonEmpty(phase, "Unknown"), nil
 }
