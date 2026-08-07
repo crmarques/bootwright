@@ -396,8 +396,31 @@ machines that declare `auth.operatorIdentity`:
 ```console
 $ bootwright apply --clusters ceph-prd-01 --ssh-user operator \
     --ssh-id-file ~/.ssh/id_ed25519 --ssh-ask-sudo-password --yes
-SSH sudo password:
+SSH sudo password for "operator":
 ```
+
+Most commands also need `root` on the controller to reach Bootwright's own state
+directory, so Bootwright prompts for **your** `sudo` password before the run
+starts. When `--ssh-user` names that same account, those two prompts are one
+prompt: the answer you already gave is reused, and Bootwright says so rather
+than asking for it a second time.
+
+```console
+$ bootwright destroy --clusters ceph-prd-01 --ssh-user carmj \
+    --ssh-id-file ~/.ssh/id_ed25519 --ssh-ask-sudo-password --authorize all --yes
+SUDO password:
+  [INFO] --ssh-ask-sudo-password: answering sudo as "carmj" with the password you just entered
+```
+
+Reuse requires the two accounts to be *provably* the same, because the password
+is about to be offered to `sudo` on machines Bootwright does not own — a wrong
+answer is a failed authentication on someone else's account, not a retry. So it
+happens only when `--ssh-user` is given and matches the account you invoked
+Bootwright as. Without `--ssh-user` the login comes from each machine's
+`access.ssh.user` and is not yet known when the prompt happens; with a different
+`--ssh-user` the local answer belongs to a different account. Both of those
+prompt separately, and the prompt above names the account it answers for so the
+two are never ambiguous.
 
 It takes no value, so the password never appears in your shell history or in
 `ps`. It is held in memory for the run, reaches `ansible-playbook` through an

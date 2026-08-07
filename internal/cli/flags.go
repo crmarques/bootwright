@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,7 +13,9 @@ import (
 
 var globalValueFlags = []string{"--context", "--ssh-user", "--ssh-id-file"}
 
-var globalBoolFlags = []string{"--ssh-ask-sudo-password", "--ssh-user-for-provisioned"}
+const flagSSHAskSudoPassword = "--ssh-ask-sudo-password"
+
+var globalBoolFlags = []string{flagSSHAskSudoPassword, "--ssh-user-for-provisioned"}
 
 func stripLeadingGlobalFlags(args []string) []string {
 	return args[leadingGlobalFlagCount(args):]
@@ -59,6 +62,25 @@ func leadingGlobalValueFlag(arg string) (string, bool) {
 	return "", false
 }
 
+func argsNeedCallerSudoPassword(args []string) bool {
+	return argsMayUseBecome(stripLeadingGlobalFlags(args)) || argsAskSSHSudoPassword(args)
+}
+
+func argsAskSSHSudoPassword(args []string) bool {
+	for _, arg := range argsBeforeCommandPayload(args) {
+		name, value, hasValue := strings.Cut(arg, "=")
+		if name != flagSSHAskSudoPassword {
+			continue
+		}
+		if !hasValue {
+			return true
+		}
+		enabled, err := strconv.ParseBool(value)
+		return err == nil && enabled
+	}
+	return false
+}
+
 const (
 	outputText = "text"
 	outputJSON = "json"
@@ -72,7 +94,7 @@ const (
 	flagContextUsage               = "context to operate in (default: current context)"
 	flagSSHIDFileUsage             = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
 	flagSSHUserUsage               = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected unless --ssh-user-for-provisioned widens it, and apply/plan/destroy refuse when no selected machine uses that arm; on rsh and exec it reaches any account, and one Bootwright already holds a credential for is opened with that credential rather than with the credential of the account it replaced"
-	flagSSHAskSudoPasswordUsage    = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
+	flagSSHAskSudoPasswordUsage    = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; when bootwright already prompted that same account for its local sudo password to reach its own state directory, that answer is reused and you are not asked twice; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
 	flagSSHUserForProvisionedUsage = "widen --ssh-user to every machine in the run, including the ones Bootwright installed and reaches as \"" + v1alpha1.BootwrightSSHUser + "\"; requires --ssh-user, and the named account must exist with sudo on those machines too, because the managed-OS ownership probe authenticates as whatever account is in force"
 	flagVerboseUsage               = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )

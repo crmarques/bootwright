@@ -73,7 +73,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		if err != nil {
 			return failErr(2, err)
 		}
-		password, err := resolveSSHSudoPassword(cmd.InOrStdin(), cmd.ErrOrStderr())
+		password, err := resolveSSHSudoPassword(cmd.InOrStdin(), cmd.ErrOrStderr(), user)
 		if err != nil {
 			return failErr(2, err)
 		}

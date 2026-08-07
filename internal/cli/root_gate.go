@@ -71,7 +71,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	}
 	stopKeepAlive := sudoSession.KeepAlive(ctx)
 	defer stopKeepAlive()
-	childEnv, cleanupChildEnv, err := sudoSession.ChildEnv(argsMayUseBecome(stripLeadingGlobalFlags(args)))
+	childEnv, cleanupChildEnv, err := sudoSession.ChildEnv(argsNeedCallerSudoPassword(args))
 	if err != nil {
 		return 1, err
 	}

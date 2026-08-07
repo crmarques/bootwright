@@ -77,9 +77,9 @@ func SudoArgs(args ...string) []string {
 	return append(out, args...)
 }
 
-func (s *Session) ChildEnv(includeBecomePassword bool) ([]string, func(), error) {
+func (s *Session) ChildEnv(includeCallerPassword bool) ([]string, func(), error) {
 	env := []string{SudoAuthEnv + "=" + s.authMethod}
-	if s.password == "" || !includeBecomePassword {
+	if s.password == "" || !includeCallerPassword {
 		return env, func() {}, nil
 	}
 	path, cleanup, err := WritePasswordFile(s.password)

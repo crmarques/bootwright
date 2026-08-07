@@ -77,6 +77,13 @@ func CallerPath() (string, bool) {
 	return path, true
 }
 
+func CallerUserName() string {
+	if !IsInternalLocalRootChild() {
+		return ""
+	}
+	return strings.TrimSpace(os.Getenv("SUDO_USER"))
+}
+
 func CallerUIDGID() (uint32, uint32, bool) {
 	if !IsInternalLocalRootChild() {
 		return 0, 0, false

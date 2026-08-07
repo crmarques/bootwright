@@ -50,10 +50,32 @@ root's. It also enforces: the source must exist, be a real directory
 parent authenticated sudo (`noninteractive` or `prompted`);
 `BOOTWRIGHT_INTERNAL_BECOME_PASSWORD_FILE` (`PasswordFileEnv`) hands the
 captured BECOME password file path to the child. `InheritedPasswordFile`
-honors the file only when auth is `prompted`. Interactive prompting stays
-with the caller via a `readPassword` callback; the sudo keepalive
-interval is 3/4 of sudo's `timestamp_timeout` parsed from `sudo -V`,
-falling back to 1 minute.
+honors the file only when auth is `prompted`. The file is written when
+`argsNeedCallerSudoPassword` says the child will use it — either the
+command may use Ansible `become` (`argsMayUseBecome`) or the command line
+carries `--ssh-ask-sudo-password` (`argsAskSSHSudoPassword`). Interactive
+prompting stays with the caller via a `readPassword` callback; the sudo
+keepalive interval is 3/4 of sudo's `timestamp_timeout` parsed from
+`sudo -V`, falling back to 1 minute.
+
+**Semantics: one sudo password is collected once, and only reused for the
+account that owns it.** The two prompts an operator can hit are separate
+processes: the unprivileged parent prompts `SUDO password:` to escalate
+itself, and the rootful child's `PersistentPreRunE` prompts
+`SSH sudo password:` for `--ssh-ask-sudo-password`. Both answers are the
+same secret exactly when the account is the same, so
+`reuseCallerSudoPassword` reuses the inherited file instead of prompting
+again — but only when `--ssh-user` is given AND equals
+`execution.CallerUserName()` (`SUDO_USER`, trusted only inside the
+local-root child). Without `--ssh-user` the operator login comes from each
+machine's `access.ssh.user` and is unknown at prompt time; with a
+different `--ssh-user` the caller's own password belongs to another
+account, and offering it would be a failed authentication against a login
+Bootwright does not own. Both of those still prompt, and the prompt names
+the account (`SSH sudo password for "operator":`) so two prompts are never
+ambiguous. The reuse is announced through `internal/cli/output`, never
+silently: `TestHumanOutputUsesOutputPackage` allowlists only the files that
+write raw prompts, and a notice is not a prompt.
 
 **Gotcha: Ctrl-C in the re-exec path is handled by the child, not the
 parent.** The terminal delivers the signal to the whole foreground

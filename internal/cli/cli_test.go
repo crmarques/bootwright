@@ -2872,6 +2872,48 @@ func TestEnsureLocalRootForBecomeCommandExportsPasswordFile(t *testing.T) {
 	}
 }
 
+func TestEnsureLocalRootForAskSudoPasswordExportsPasswordFileWithoutBecome(t *testing.T) {
+	home := setTestHomeAndRoot(t)
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+	previousTTY := openControllingTTY
+	openControllingTTY = func() (*os.File, error) { return nil, os.ErrNotExist }
+	defer func() { openControllingTTY = previousTTY }()
+
+	var calls [][]string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			calls = append(calls, append([]string(nil), args...))
+			helperArgs := append([]string{"-test.run=TestLocalRootGateSudoPromptHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_SUDO_PROMPT_HELPER=1")
+			return cmd
+		},
+	}
+
+	args := []string{"preflight", "all", "--ssh-user", "carmj", "--ssh-ask-sudo-password"}
+	code, handled, err := ensureLocalRootForArgs(context.Background(), args, strings.NewReader("secret\n"), &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("ensureLocalRootForArgs: %v", err)
+	}
+	if !handled || code != 0 {
+		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
+	}
+	if len(calls) != 4 {
+		t.Fatalf("sudo calls = %v, want validate, refresh, timeout lookup, command", calls)
+	}
+	commandIndex := localRootCommandIndex(t, calls[3], home, localSudoAuthPrompted)
+	if got := localRootEnvValue(calls[3], localRootBecomePasswordFileEnv); got == "" {
+		t.Fatalf("preflight uses no become password, but --ssh-ask-sudo-password must still carry the caller's answer down, or the child prompts a second time: %v", calls[3])
+	}
+	if !reflect.DeepEqual(calls[3][commandIndex:], append([]string{"/usr/local/bin/bootwright"}, args...)) {
+		t.Fatalf("fourth sudo call = %v", calls[3])
+	}
+}
+
 func TestEnsureLocalRootForArgsRetriesInvalidSudoPassword(t *testing.T) {
 	setTestHomeAndRoot(t)
 	previous := localRootGate
