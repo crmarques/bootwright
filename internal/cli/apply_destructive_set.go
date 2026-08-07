@@ -9,32 +9,34 @@ import (
 )
 
 type applyDestructiveSet struct {
-	mode            workflow.ApplyMode
-	objects         []workflow.ObjectClassification
-	state           v1alpha1.State
-	planState       v1alpha1.State
-	clustersDir     string
-	reinstalls      []string
-	releasedRecords []workflow.SubstrateReleaseRecord
-	rebuiltHosts    []string
-	reclaimDevices  string
-	ownedReclaim    []string
-	allowDestroy    bool
+	mode               workflow.ApplyMode
+	objects            []workflow.ObjectClassification
+	state              v1alpha1.State
+	planState          v1alpha1.State
+	clustersDir        string
+	reinstalls         []string
+	releasedRecords    []workflow.SubstrateReleaseRecord
+	rebuiltHosts       []string
+	reclaimDevices     string
+	ownedReclaim       []string
+	allowDestroy       bool
+	provisionedStorage map[string]bool
 }
 
-func applyRunDestructiveDescriptors(mode workflow.ApplyMode, objects []workflow.ObjectClassification, state, planState v1alpha1.State, clustersDir string, reinstalls []string, released []workflow.SubstrateReleaseRecord, rebuiltHosts []string, reclaimDevices string, ownedReclaim []string, allowDestroy bool) []string {
+func applyRunDestructiveDescriptors(mode workflow.ApplyMode, objects []workflow.ObjectClassification, state, planState v1alpha1.State, clustersDir string, reinstalls []string, released []workflow.SubstrateReleaseRecord, rebuiltHosts []string, reclaimDevices string, ownedReclaim []string, allowDestroy bool, provisionedStorage map[string]bool) []string {
 	return applyDestructiveDescriptors(applyDestructiveSet{
-		mode:            mode,
-		objects:         objects,
-		state:           state,
-		planState:       planState,
-		clustersDir:     clustersDir,
-		reinstalls:      reinstalls,
-		releasedRecords: released,
-		rebuiltHosts:    rebuiltHosts,
-		reclaimDevices:  reclaimDevices,
-		ownedReclaim:    ownedReclaim,
-		allowDestroy:    allowDestroy,
+		mode:               mode,
+		objects:            objects,
+		state:              state,
+		planState:          planState,
+		clustersDir:        clustersDir,
+		reinstalls:         reinstalls,
+		releasedRecords:    released,
+		rebuiltHosts:       rebuiltHosts,
+		reclaimDevices:     reclaimDevices,
+		ownedReclaim:       ownedReclaim,
+		allowDestroy:       allowDestroy,
+		provisionedStorage: provisionedStorage,
 	})
 }
 
@@ -45,7 +47,7 @@ func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 		out = append(out, in.reinstalls...)
 	}
 	out = append(out, releasedBareMetalReinstallDescriptors(in.planState, in.releasedRecords)...)
-	out = append(out, converge.KubeVirtTenantDestroyDescriptors(in.state, in.clustersDir, in.rebuiltHosts)...)
+	out = append(out, converge.KubeVirtTenantDestroyDescriptors(in.state, in.clustersDir, in.rebuiltHosts, in.provisionedStorage)...)
 	out = append(out, reclaimDestructiveDescriptors(in.reclaimDevices, in.ownedReclaim)...)
 	if in.mode == workflow.ApplyModeRebuild && in.allowDestroy {
 		out = append(out, filterReclaimDestructiveDescriptors(filterReclaimAuthorizedClusters(in.planState, in.objects))...)
@@ -53,7 +55,7 @@ func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 	return out
 }
 
-func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string) []requiredAuthorization {
+func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string, provisionedStorage map[string]bool) []requiredAuthorization {
 	forecast := newAuthorizationForecast(auth)
 	objects, classifyErr := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if classifyErr != nil {
@@ -74,17 +76,18 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 			resolvedReclaim = ""
 		}
 		descriptors := applyDestructiveDescriptors(applyDestructiveSet{
-			mode:            mode,
-			objects:         objects,
-			state:           state,
-			planState:       planState,
-			clustersDir:     clustersDir,
-			reinstalls:      forecastReinstallDescriptors(reinstallDrift),
-			releasedRecords: released,
-			rebuiltHosts:    workflow.UnionClusterNames(reinstallDrift, substrateReset),
-			reclaimDevices:  resolvedReclaim,
-			ownedReclaim:    ownedReclaim,
-			allowDestroy:    auth.has(authorizeDataLoss),
+			mode:               mode,
+			objects:            objects,
+			state:              state,
+			planState:          planState,
+			clustersDir:        clustersDir,
+			reinstalls:         forecastReinstallDescriptors(reinstallDrift),
+			releasedRecords:    released,
+			rebuiltHosts:       workflow.UnionClusterNames(reinstallDrift, substrateReset),
+			reclaimDevices:     resolvedReclaim,
+			ownedReclaim:       ownedReclaim,
+			allowDestroy:       auth.has(authorizeDataLoss),
+			provisionedStorage: provisionedStorage,
 		})
 		forecast.consult(authorizeDataLoss, len(descriptors) > 0, "a real run would "+strings.Join(descriptors, ", ")+" — target disks wiped and any Ceph OSD data zapped")
 		forecast.mayConsult(authorizeDataLoss, len(descriptors) == 0 && mode == workflow.ApplyModeRebuild && len(workflow.InstalledRecordedClusters(clustersDir, tasks)) > 0, "plan mode does not probe cluster availability; a real --mode rebuild additionally reinstalls (node disks wiped) any installed cluster that does not report Available=True")

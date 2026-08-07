@@ -14,11 +14,11 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, sel clusteraccess.Selection, rebuiltHosts []string) error {
+func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, sel clusteraccess.Selection, rebuiltHosts []string, provisionedStorage map[string]bool) error {
 	if !sel.Active || len(rebuiltHosts) == 0 {
 		return nil
 	}
-	conflicts := converge.KubeVirtTenantCollateral(state, clustersDir, rebuiltHosts, sel.ContainerRoots)
+	conflicts := converge.KubeVirtTenantCollateral(state, clustersDir, rebuiltHosts, sel.AllRoots, provisionedStorage)
 	if len(conflicts) == 0 {
 		return nil
 	}
@@ -89,7 +89,7 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 			refusals = append(refusals, err)
 		}
 	}
-	if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, rebuiltHosts); err != nil {
+	if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, rebuiltHosts, converge.ProvisionedStorageTenants(ownershipRecords)); err != nil {
 		refusals = append(refusals, err)
 	}
 	if reclaimDevices != "" {

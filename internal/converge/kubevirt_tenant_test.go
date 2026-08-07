@@ -55,17 +55,17 @@ func TestKubeVirtTenantDestroyConflicts(t *testing.T) {
 	state := kubeVirtTenantState()
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 
-	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"}); len(conflicts) != 0 {
+	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"}, nil); len(conflicts) != 0 {
 		t.Fatalf("no install record for the tenant must yield no conflict, got %v", conflicts)
 	}
 
 	seedInstalledTenant(t, clustersDir, "nested")
-	conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"})
+	conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"}, nil)
 	if len(conflicts) != 1 || conflicts[0].Host != "hub" || len(conflicts[0].Tenants) != 1 || conflicts[0].Tenants[0] != "nested" {
 		t.Fatalf("installed tenant of a destroyed host must conflict, got %v", conflicts)
 	}
 
-	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub", "nested"}); len(conflicts) != 0 {
+	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub", "nested"}, nil); len(conflicts) != 0 {
 		t.Fatalf("selecting the tenant too must clear the conflict, got %v", conflicts)
 	}
 
@@ -79,16 +79,53 @@ func TestKubeVirtTenantDestroyConflicts(t *testing.T) {
 	}
 }
 
+func kubeVirtStorageTenantState() v1alpha1.State {
+	state := kubeVirtTenantState()
+	state.ContainerClusters = state.ContainerClusters[:1]
+	state.StorageClusters = []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-vm"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "nested-m0"},
+			}}},
+		}},
+	}}
+	return state
+}
+
+func TestKubeVirtTenantConflictsSeeAProvisionedStorageTenant(t *testing.T) {
+	state := kubeVirtStorageTenantState()
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+
+	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"}, nil); len(conflicts) != 0 {
+		t.Fatalf("an unprovisioned storage tenant must not conflict, got %v", conflicts)
+	}
+
+	provisioned := map[string]bool{"ceph-vm": true}
+	conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub"}, provisioned)
+	if len(conflicts) != 1 || conflicts[0].Host != "hub" || len(conflicts[0].Tenants) != 1 || conflicts[0].Tenants[0] != "ceph-vm" {
+		t.Fatalf("a provisioned managed StorageCluster on a KubeVirt host must block that host's teardown, got %v; a StorageCluster has no install record, so ownership-record evidence is the only proof it is provisioned", conflicts)
+	}
+
+	if conflicts := KubeVirtTenantDestroyConflicts(state, clustersDir, []string{"hub", "ceph-vm"}, provisioned); len(conflicts) != 0 {
+		t.Fatalf("selecting the storage tenant too must clear the conflict, got %v", conflicts)
+	}
+
+	if got := KubeVirtTenantDestroyDescriptors(state, clustersDir, []string{"hub"}, provisioned); len(got) != 1 || !strings.Contains(got[0], "ceph-vm") {
+		t.Fatalf("the teardown preview must name the nested storage cluster it destroys, got %v", got)
+	}
+}
+
 func TestKubeVirtTenantDestroyDescriptors(t *testing.T) {
 	state := kubeVirtTenantState()
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 
-	if got := KubeVirtTenantDestroyDescriptors(state, clustersDir, []string{"hub"}); len(got) != 0 {
+	if got := KubeVirtTenantDestroyDescriptors(state, clustersDir, []string{"hub"}, nil); len(got) != 0 {
 		t.Fatalf("no installed tenant must yield no descriptor, got %v", got)
 	}
 
 	seedInstalledTenant(t, clustersDir, "nested")
-	got := KubeVirtTenantDestroyDescriptors(state, clustersDir, []string{"hub"})
+	got := KubeVirtTenantDestroyDescriptors(state, clustersDir, []string{"hub"}, nil)
 	if len(got) != 1 || !strings.Contains(got[0], "nested") || !strings.Contains(got[0], "hub") || !strings.Contains(got[0], "KubeVirt") {
 		t.Fatalf("descriptor must name the destroyed tenant and its host, got %v", got)
 	}

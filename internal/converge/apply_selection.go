@@ -11,6 +11,7 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 type KubeVirtTenantConflict struct {
@@ -28,9 +29,21 @@ func KubeVirtTenantsByHost(state v1alpha1.State) map[string][]string {
 	return out
 }
 
-func installedKubeVirtTenants(clustersDir string, tenants []string) []string {
+func ProvisionedStorageTenants(ownershipRecords []ownership.ResourceRecord) map[string]bool {
+	out := map[string]bool{}
+	for _, name := range OwnedStorageClusterRecordNames(ownershipRecords) {
+		out[name] = true
+	}
+	return out
+}
+
+func installedKubeVirtTenants(clustersDir string, tenants []string, provisionedStorage map[string]bool) []string {
 	var out []string
 	for _, tenant := range tenants {
+		if provisionedStorage[tenant] {
+			out = append(out, tenant)
+			continue
+		}
 		record, found, err := workflow.LoadClusterInstallRecord(clustersDir, tenant)
 		if err != nil || !found || record.Status == workflow.ClusterInstallStatusDestroyed {
 			continue
@@ -40,7 +53,7 @@ func installedKubeVirtTenants(clustersDir string, tenants []string) []string {
 	return out
 }
 
-func KubeVirtTenantDestroyDescriptors(state v1alpha1.State, clustersDir string, hosts []string) []string {
+func KubeVirtTenantDestroyDescriptors(state v1alpha1.State, clustersDir string, hosts []string, provisionedStorage map[string]bool) []string {
 	tenantsByHost := KubeVirtTenantsByHost(state)
 	var out []string
 	seen := map[string]bool{}
@@ -49,7 +62,7 @@ func KubeVirtTenantDestroyDescriptors(state v1alpha1.State, clustersDir string, 
 			continue
 		}
 		seen[host] = true
-		installed := installedKubeVirtTenants(clustersDir, tenantsByHost[host])
+		installed := installedKubeVirtTenants(clustersDir, tenantsByHost[host], provisionedStorage)
 		if len(installed) == 0 {
 			continue
 		}
@@ -59,7 +72,7 @@ func KubeVirtTenantDestroyDescriptors(state v1alpha1.State, clustersDir string, 
 	return out
 }
 
-func KubeVirtTenantCollateral(state v1alpha1.State, clustersDir string, destroyedHosts, selected []string) []KubeVirtTenantConflict {
+func KubeVirtTenantCollateral(state v1alpha1.State, clustersDir string, destroyedHosts, selected []string, provisionedStorage map[string]bool) []KubeVirtTenantConflict {
 	inScope := map[string]bool{}
 	for _, name := range selected {
 		inScope[name] = true
@@ -79,7 +92,7 @@ func KubeVirtTenantCollateral(state v1alpha1.State, clustersDir string, destroye
 			}
 			candidates = append(candidates, tenant)
 		}
-		blocked := installedKubeVirtTenants(clustersDir, candidates)
+		blocked := installedKubeVirtTenants(clustersDir, candidates, provisionedStorage)
 		if len(blocked) == 0 {
 			continue
 		}
@@ -90,8 +103,8 @@ func KubeVirtTenantCollateral(state v1alpha1.State, clustersDir string, destroye
 	return out
 }
 
-func KubeVirtTenantDestroyConflicts(state v1alpha1.State, clustersDir string, selectedContainer []string) []KubeVirtTenantConflict {
-	return KubeVirtTenantCollateral(state, clustersDir, selectedContainer, selectedContainer)
+func KubeVirtTenantDestroyConflicts(state v1alpha1.State, clustersDir string, selectedRoots []string, provisionedStorage map[string]bool) []KubeVirtTenantConflict {
+	return KubeVirtTenantCollateral(state, clustersDir, selectedRoots, selectedRoots, provisionedStorage)
 }
 
 func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {

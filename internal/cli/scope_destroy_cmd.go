@@ -167,8 +167,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
 			}
 		}
-		if sel.Active && len(sel.ContainerRoots) > 0 {
-			if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.ContainerRoots); len(conflicts) > 0 {
+		provisionedStorageTenants := converge.ProvisionedStorageTenants(ownershipRecords)
+		if sel.Active && len(sel.AllRoots) > 0 {
+			if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.AllRoots, provisionedStorageTenants); len(conflicts) > 0 {
 				return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
 			}
 		}

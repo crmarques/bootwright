@@ -189,14 +189,14 @@ func TestCheckKubeVirtTenantRebuildScopeGatesEverySelectionAxis(t *testing.T) {
 		sel        clusteraccess.Selection
 		wantRefuse bool
 	}{
-		{name: "cluster selection excluding the guest refuses", sel: clusteraccess.Selection{Active: true, ContainerRoots: []string{host}}, wantRefuse: true},
-		{name: "machine selection excluding the guest refuses", sel: clusteraccess.Selection{Active: true, MachineSelection: true, ContainerRoots: []string{host}}, wantRefuse: true},
-		{name: "selection including the guest proceeds", sel: clusteraccess.Selection{Active: true, ContainerRoots: []string{host, "child"}}},
+		{name: "cluster selection excluding the guest refuses", sel: clusteraccess.Selection{Active: true, ContainerRoots: []string{host}, AllRoots: []string{host}}, wantRefuse: true},
+		{name: "machine selection excluding the guest refuses", sel: clusteraccess.Selection{Active: true, MachineSelection: true, ContainerRoots: []string{host}, AllRoots: []string{host}}, wantRefuse: true},
+		{name: "selection including the guest proceeds", sel: clusteraccess.Selection{Active: true, ContainerRoots: []string{host, "child"}, AllRoots: []string{host, "child"}}},
 		{name: "unscoped run covers every cluster and proceeds", sel: clusteraccess.Selection{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkKubeVirtTenantRebuildScope(tenantState, clustersDir, tc.sel, rebuilt)
+			err := checkKubeVirtTenantRebuildScope(tenantState, clustersDir, tc.sel, rebuilt, nil)
 			if tc.wantRefuse {
 				if err == nil {
 					t.Fatal("a scoped rebuild of the host must refuse while the nested cluster is left out of the selection")

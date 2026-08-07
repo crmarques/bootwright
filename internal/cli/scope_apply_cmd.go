@@ -225,6 +225,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
+		provisionedStorageTenants := converge.ProvisionedStorageTenants(ownershipRecords)
 		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
 			cliout.NewContinuation(c.ErrOrStderr()).Warning("artifact-server retention", serr.Error())
 		} else {
@@ -235,7 +236,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
-			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices)
+			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants)
 			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped)
 			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
 		}
@@ -270,7 +271,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
 			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
-			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts); err != nil {
+			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts, provisionedStorageTenants); err != nil {
 				return failErr(1, err)
 			}
 			if reclaimDevices != "" {
@@ -281,7 +282,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			applyForeignCephadmDaemons(stdout, &plan, auth, tasks)
 			allowDestroy := auth.has(authorizeDataLoss)
-			destructiveOverride = applyRunDestructiveDescriptors(mode, objects, state, plan.State, clustersDir, ocpReinstallDescriptors, releasedRecords, rebuiltHosts, reclaimDevices, ownedReclaim, allowDestroy)
+			destructiveOverride = applyRunDestructiveDescriptors(mode, objects, state, plan.State, clustersDir, ocpReinstallDescriptors, releasedRecords, rebuiltHosts, reclaimDevices, ownedReclaim, allowDestroy, provisionedStorageTenants)
 			if len(destructiveOverride) > 0 {
 				auth.note(authorizeDataLoss)
 			}
@@ -358,7 +359,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
 			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
-			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices))
+			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices, provisionedStorageTenants))
 			warnUnusedAuthorizations(stdout, auth, true)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printPlaybookDryRun(stdout, dryRunTasks)
