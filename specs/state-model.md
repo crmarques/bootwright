@@ -2830,7 +2830,7 @@ verbs that reach machines.
   | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) | `destroy` |
   | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker | `destroy` |
   | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs | `destroy` |
-  | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`; on `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed | `apply`, `destroy` |
+  | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`, and the token lifts the ownership objection at both levels: the node's missing OSD marker entry, and a selected cluster the controller holds no ownership record for (the state every successful destroy leaves — without the token such a reclaim acts on no device). On `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed | `apply`, `destroy` |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it | `apply` |
   | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed | `destroy`, `storage-cluster replace-arbiter` |
   | `same-site-arbiter` | promoting a mon to tiebreaker while another mon already sits in its stretch failure domain, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter that shares a site with a voting mon cannot independently break a tie, so losing that site drops two votes at once and the survivor is left without quorum. The usual shape is an arbiter moved inside a data site, but the gate keys on the shared domain, not on the site's role | `storage-cluster replace-arbiter` |
@@ -2854,10 +2854,15 @@ verbs that reach machines.
   to `all`.
 
   Device data-safety splits in two, and only the ownership half is
-  authorizable (ADR 0034). `unowned-devices` relaxes exactly one refusal — that
-  a device carries signatures or LVM/dm-crypt holders this node has no
-  Bootwright OSD ownership record for — because that refusal has no
-  self-service remedy when the cluster that wrote them is gone. The physical
+  authorizable (ADR 0034). `unowned-devices` relaxes exactly one objection —
+  that a device carries signatures or LVM/dm-crypt holders no Bootwright
+  ownership record claims — because that refusal has no self-service remedy
+  when the cluster that wrote them is gone. The objection exists at two levels
+  and the token lifts both: the node's OSD marker not recording the device, and
+  the controller not recording the selected cluster as Bootwright-owned at all,
+  which is the state every successful destroy leaves and would otherwise turn
+  the reclaim into a silent no-op whose device-empty gate then names the very
+  command that no-oped. The physical
   half is not authorizable by any token: a mounted or in-use device, and a
   device whose probe failed for any reason other than "not present", still fail
   closed. A device that is simply absent is neither refused nor wiped — it is

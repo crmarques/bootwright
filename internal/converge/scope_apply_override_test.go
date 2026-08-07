@@ -59,6 +59,25 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 	}
 }
 
+func TestSelectedCephStorageClustersCoverUnrecordedSelections(t *testing.T) {
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{
+		{Metadata: v1alpha1.Metadata{Name: "ceph-prd-01"}, Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}}},
+		{Metadata: v1alpha1.Metadata{Name: "external"}},
+	}}
+	objects := []workflow.ObjectClassification{
+		{Kind: workflow.ObjectKindStorageCluster, Label: "StorageCluster/ceph-prd-01"},
+		{Kind: workflow.ObjectKindStorageCluster, Label: "StorageCluster/external"},
+		{Kind: workflow.ObjectKindContainerCluster, Label: "ContainerCluster/ocp"},
+	}
+	if owned := OwnedStorageClusters(objects); len(owned) != 0 {
+		t.Fatalf("objects without converge-safety records must classify as unowned (the post-destroy state), got %v", owned)
+	}
+	got := SelectedCephStorageClusters(state, objects)
+	if len(got) != 1 || got[0] != "ceph-prd-01" {
+		t.Fatalf("SelectedCephStorageClusters = %v, want only the selected Ceph cluster: a destroy releases ownership records, so this set is what --authorize unowned-devices lets the reclaim act on", got)
+	}
+}
+
 func TestSubObjectRebuildAuthorizationKeysTrackStructuralDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)

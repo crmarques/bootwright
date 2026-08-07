@@ -695,6 +695,16 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		want:    []string{"--authorize unowned-devices is not consumed by a dry-run"},
 		deny:    []string{"bootwright_ceph_authorize_unowned_devices=true"},
 	}, {
+		name:    "apply/unowned-devices: with no ownership record the token is what lets the reclaim act",
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeUnownedDevices + ": " + authorizationRequired, "the state a successful destroy leaves"},
+	}, {
+		name:    "apply/unowned-devices: the token pair forecasts the post-destroy reclaim wipe",
+		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--authorize", "data-loss,unowned-devices", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"reclaim-devices /dev/sdb on Ceph cluster(s) " + safetyAdvancedCephCluster},
+	}, {
 		name:    "apply/foreign-daemons: apply accepts the token and a dry-run consumes none of it",
 		args:    []string{"apply", "--stage", "base", "--clusters", safetyAdvancedCephCluster, "--authorize", "foreign-daemons", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

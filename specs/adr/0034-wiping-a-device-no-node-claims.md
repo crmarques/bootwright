@@ -95,6 +95,21 @@ path therefore takes the LVM stack down first (`vgchange --activate n`,
 `vgremove`, `pvremove`) for exactly the devices whose holders it was authorized
 to destroy, before the existing `wipefs`/`sgdisk` pair.
 
+## Amendment (2026-08-07): the ownership objection has a cluster level
+
+The original implementation left one ownership objection the token could not
+reach: the `apply` reclaim acted only on a cluster the controller recorded as
+Bootwright-owned. A successful destroy releases exactly that record, so after
+every destroy the reclaim silently no-oped ("no device will be reclaimed") and
+the device-empty gate then named the very `--reclaim-devices --authorize
+data-loss,unowned-devices` command that had just no-oped — recreating the
+out-of-options loop this ADR exists to close. The token now lifts the ownership
+objection at both levels: the node's missing OSD marker entry, and the missing
+controller ownership record for the selected cluster. Selection still bounds
+the blast radius — the reclaim acts only on clusters the run selected and only
+on their declared OSD devices — and the physical half stays closed to every
+token, unchanged.
+
 ## Consequences
 
 `unowned-devices` is the second token an `apply` gate can consume, so "every

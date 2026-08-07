@@ -95,6 +95,70 @@ func TestWarnForeignCephadmDaemonsStatesWhatSurvivesTheRemoval(t *testing.T) {
 	}
 }
 
+func reclaimPostDestroyFixture() (v1alpha1.State, []workflow.ObjectClassification) {
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-prd-01"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "node-01", Devices: []string{"/dev/nvme0n1"}}}},
+		}},
+	}}}
+	objects := []workflow.ObjectClassification{{Kind: workflow.ObjectKindStorageCluster, Label: "StorageCluster/ceph-prd-01"}}
+	return state, objects
+}
+
+func TestResolveApplyReclaimDevicesActsWithoutOwnershipUnderTheToken(t *testing.T) {
+	state, objects := reclaimPostDestroyFixture()
+
+	auth, err := parseAuthorizations([]string{authorizeDataLoss, authorizeUnownedDevices}, authorizeVerbApply)
+	if err != nil {
+		t.Fatalf("parseAuthorizations: %v", err)
+	}
+	plan := &converge.WorkflowPlan{State: state}
+	var out bytes.Buffer
+	resolved, clusters, rerr := resolveApplyReclaimDevices(&out, plan, auth, objects, "all")
+	if rerr != nil {
+		t.Fatalf("the token pair must let the reclaim act on a cluster a destroy released, got %v", rerr)
+	}
+	if resolved != "/dev/nvme0n1" {
+		t.Fatalf("resolved = %q, want the declared device expansion of the selected unowned cluster", resolved)
+	}
+	if len(clusters) != 1 || clusters[0] != "ceph-prd-01" {
+		t.Fatalf("clusters = %v, want the selected cluster so the role-side reclaim gate opens", clusters)
+	}
+	if vars := strings.Join(plan.ExtraVarPairs, "\n"); !strings.Contains(vars, converge.CephAuthorizeUnownedDevicesExtraVar+"=true") {
+		t.Fatalf("the unowned-device authorization must reach the roles, got %v", plan.ExtraVarPairs)
+	}
+
+	bare, err := parseAuthorizations([]string{authorizeDataLoss}, authorizeVerbApply)
+	if err != nil {
+		t.Fatalf("parseAuthorizations: %v", err)
+	}
+	resolved, clusters, rerr = resolveApplyReclaimDevices(&bytes.Buffer{}, &converge.WorkflowPlan{State: state}, bare, objects, "all")
+	if rerr != nil || resolved != "all" || len(clusters) != 0 {
+		t.Fatalf("without the token an unowned cluster must stay out of the reclaim (resolved=%q clusters=%v err=%v)", resolved, clusters, rerr)
+	}
+}
+
+func TestWarnApplyReclaimSelectionSteersThePostDestroyRecovery(t *testing.T) {
+	_, objects := reclaimPostDestroyFixture()
+
+	var out bytes.Buffer
+	warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", nil)
+	for _, want := range []string{"no device will be reclaimed", "--authorize " + authorizeDataLoss + "," + authorizeUnownedDevices, "bootwright destroy"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the no-op warning must name %q so the operator is not sent through the ownership re-recording dance, got %q", want, out.String())
+		}
+	}
+
+	out.Reset()
+	warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", []string{"ceph-prd-01"})
+	for _, want := range []string{"WIPE", "ceph-prd-01", "hold no Bootwright ownership record", authorizeUnownedDevices} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the reclaim warning must name %q when it acts on an unrecorded cluster, got %q", want, out.String())
+		}
+	}
+}
+
 func TestReclaimUnmatchedError(t *testing.T) {
 	err := reclaimUnmatchedError([]string{"/dev/disk/by-id/wwn-0x5000"}, []string{"ceph1"}, []string{"/dev/sdb"})
 	msg := err.Error()
@@ -232,7 +296,7 @@ func TestEmitApplyDataLossWarningsAuthorizeDriftedSubObjects(t *testing.T) {
 
 	var out bytes.Buffer
 	plan := &converge.WorkflowPlan{}
-	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, objects, nil, plan, "", nil, "", nil, false)
+	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, objects, nil, plan, "", nil, nil, "", nil, false)
 	vars := strings.Join(plan.ExtraVarPairs, "\n")
 	if !strings.Contains(vars, "bootwright_ceph_subobject_rebuild_authorized=ceph-a/rbd") {
 		t.Fatalf("record-classified drifted sub-object must be authorized for its acked rebuild, got %v", plan.ExtraVarPairs)
@@ -245,14 +309,14 @@ func TestEmitApplyDataLossWarningsAuthorizeDriftedSubObjects(t *testing.T) {
 	}
 
 	allowPlan := &converge.WorkflowPlan{}
-	_ = emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeRebuild, objects, nil, allowPlan, "", nil, "", nil, true)
+	_ = emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeRebuild, objects, nil, allowPlan, "", nil, nil, "", nil, true)
 	allowVars := strings.Join(allowPlan.ExtraVarPairs, "\n")
 	if !strings.Contains(allowVars, "ceph-a/rbd") || !strings.Contains(allowVars, "ceph-b/rbd") {
 		t.Fatalf("--authorize data-loss must authorize every selected cluster's sub-objects so live-only drift has the documented path forward, got %v", allowPlan.ExtraVarPairs)
 	}
 
 	continuePlan := &converge.WorkflowPlan{}
-	_ = emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeReconcile, objects, nil, continuePlan, "", nil, "", nil, true)
+	_ = emitApplyDataLossWarningsAndVars(&bytes.Buffer{}, workflow.ApplyModeReconcile, objects, nil, continuePlan, "", nil, nil, "", nil, true)
 	if strings.Contains(strings.Join(continuePlan.ExtraVarPairs, "\n"), "bootwright_ceph_subobject_rebuild_authorized") {
 		t.Fatalf("non-override apply must never authorize sub-object destroys, got %v", continuePlan.ExtraVarPairs)
 	}
@@ -263,13 +327,13 @@ func TestEmitApplyDataLossWarningsNamesOCPReinstalls(t *testing.T) {
 
 	var out bytes.Buffer
 	plan := &converge.WorkflowPlan{}
-	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, plan, "", nil, "", reinstalls, false)
+	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, plan, "", nil, nil, "", reinstalls, false)
 	if !strings.Contains(out.String(), "reinstall ContainerCluster/dc1-ocp") || !strings.Contains(out.String(), "node disks wiped") {
 		t.Fatalf("override reinstall warning must name the reinstalled cluster(s), got %q", out.String())
 	}
 
 	out.Reset()
-	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, &converge.WorkflowPlan{}, "", nil, "", nil, false)
+	_ = emitApplyDataLossWarningsAndVars(&out, workflow.ApplyModeRebuild, nil, nil, &converge.WorkflowPlan{}, "", nil, nil, "", nil, false)
 	if strings.Contains(out.String(), "reinstall ContainerCluster/") {
 		t.Fatalf("no reinstall descriptors must print no reinstall warning, got %q", out.String())
 	}

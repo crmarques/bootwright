@@ -3,6 +3,7 @@ package converge
 import (
 	"strings"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -123,6 +124,25 @@ func OwnedStorageClusters(objects []workflow.ObjectClassification) []string {
 	return out
 }
 
+func SelectedCephStorageClusters(state v1alpha1.State, objects []workflow.ObjectClassification) []string {
+	ceph := map[string]bool{}
+	for _, sc := range state.StorageClusters {
+		if sc.Spec.Ceph != nil {
+			ceph[sc.Metadata.Name] = true
+		}
+	}
+	var out []string
+	for _, o := range objects {
+		if o.Kind != workflow.ObjectKindStorageCluster {
+			continue
+		}
+		if name := strings.TrimPrefix(o.Label, "StorageCluster/"); ceph[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func ApplyFilterReclaimAuthorizedExtraVar(plan *WorkflowPlan, names []string) {
 	if len(names) == 0 {
 		return
@@ -144,11 +164,11 @@ func ApplyCephForeignDaemonAuthorizationExtraVar(plan *WorkflowPlan, authorized 
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, CephAuthorizeForeignDaemonsExtraVar+"=true")
 }
 
-func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, ownedClusters []string) {
+func ApplyReclaimDevicesExtraVars(plan *WorkflowPlan, devices string, reclaimClusters []string) {
 	if strings.TrimSpace(devices) == "" {
 		return
 	}
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs,
 		"bootwright_ceph_reclaim_devices="+devices,
-		"bootwright_ceph_owned_clusters="+strings.Join(ownedClusters, ","))
+		"bootwright_ceph_reclaim_clusters="+strings.Join(reclaimClusters, ","))
 }

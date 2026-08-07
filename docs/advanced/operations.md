@@ -576,17 +576,21 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     This re-provisions the disks from scratch — it does not preserve the old OSD
     data.
 
-    If the controller no longer records the cluster as Bootwright-owned — for
-    example the context's `runs/` records were lost and you are driving from a
-    fresh checkout — a reclaim run reports **"no device will be reclaimed"** and
-    the device-empty gate keeps refusing, referring you back to reclaim. Break the
-    loop by re-establishing ownership first, by either route:
+    If the controller no longer records the cluster as Bootwright-owned — the
+    normal state after every successful `bootwright destroy`, or because the
+    context's `runs/` records were lost — a bare reclaim reports **"no device
+    will be reclaimed"**: without a token it acts only on an owned cluster. Add
+    `--authorize data-loss,unowned-devices` and the reclaim acts on the selected
+    cluster without an ownership record — `unowned-devices` is the token that
+    lifts the ownership objection, at cluster level and at device level, and
+    every physical gate below (mounted, in-use, unprobeable) still fails closed:
 
-    - restore the context's `runs/` records (converge-safety records) from backup,
-      then re-run the `--reclaim-devices` apply; or
-    - apply once with the data-carrying device **removed** from the `StorageCluster`
-      declaration (this records ownership without touching the disk), then re-add
-      the device and re-run the `--reclaim-devices` apply.
+    ```
+    bootwright apply --clusters ceph-storage --reclaim-devices all --authorize data-loss,unowned-devices
+    ```
+
+    Restoring the context's `runs/` records from backup also works when they
+    were lost rather than released by a destroy.
 
 !!! warning "Wiping an orphan the marker never recorded"
     A reclaim refuses a device carrying LVM or dm-crypt holders, because that is

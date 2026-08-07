@@ -57,6 +57,7 @@ func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 
 func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string, provisionedStorage map[string]bool) []requiredAuthorization {
 	forecast := newAuthorizationForecast(auth)
+	reclaimUnownedRequired := false
 	objects, classifyErr := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if classifyErr != nil {
 		forecast.mayConsult(authorizeDataLoss, true, "this preview could not classify the run's objects against its run records ("+classifyErr.Error()+"), so it cannot settle what a real run destroys; the real run recomputes the same classification and fails closed on that error")
@@ -70,11 +71,13 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 			_, substrateReset = workflow.OverrideDestructiveMachineSubstrate(objects)
 		}
 		substrateReset = workflow.UnionClusterNames(substrateReset, workflow.SubstrateReleaseClusterNames(released))
-		ownedReclaim := converge.OwnedStorageClusters(objects)
+		ownedReclaim := reclaimEligibleClusters(planState, auth, objects)
 		resolvedReclaim, resolveErr := converge.ResolveReclaimDevices(planState, ownedReclaim, reclaimDevices)
 		if resolveErr != nil {
 			resolvedReclaim = ""
 		}
+		reclaimUnownedRequired = reclaimDevices != "" && len(converge.OwnedStorageClusters(objects)) == 0 && len(converge.SelectedCephStorageClusters(planState, objects)) > 0
+		forecast.consult(authorizeUnownedDevices, reclaimUnownedRequired, "no selected StorageCluster is recorded as Bootwright-owned — the state a successful destroy leaves — and without the token the reclaim acts on no device at all")
 		descriptors := applyDestructiveDescriptors(applyDestructiveSet{
 			mode:               mode,
 			objects:            objects,
@@ -92,7 +95,7 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 		forecast.consult(authorizeDataLoss, len(descriptors) > 0, "a real run would "+strings.Join(descriptors, ", ")+" — target disks wiped and any Ceph OSD data zapped")
 		forecast.mayConsult(authorizeDataLoss, len(descriptors) == 0 && mode == workflow.ApplyModeRebuild && len(workflow.InstalledRecordedClusters(clustersDir, tasks)) > 0, "plan mode does not probe cluster availability; a real --mode rebuild additionally reinstalls (node disks wiped) any installed cluster that does not report Available=True")
 	}
-	forecast.mayConsult(authorizeUnownedDevices, reclaimDevices != "", "whether a named --reclaim-devices path carries LVM or dm-crypt holders without a Bootwright OSD ownership record is decided on the node, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnownedDevices, reclaimDevices != "" && !reclaimUnownedRequired, "whether a named --reclaim-devices path carries LVM or dm-crypt holders without a Bootwright OSD ownership record is decided on the node, so a preview cannot settle it")
 	forecast.mayConsult(authorizeForeignDaemons, len(workflow.StorageConvergeClusterNames(tasks)) > 0, "whether an enrolled storage node still runs cephadm units of an fsid this apply does not own is decided on the node, so a preview cannot settle it")
 	return forecast.list()
 }

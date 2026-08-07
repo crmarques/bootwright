@@ -82,7 +82,7 @@ func reclaimAllNoneDeclaredError(state v1alpha1.State, owned []string) error {
 	if clusters := allDevicesSelectionClusters(state, owned); len(clusters) > 0 {
 		remedy = "host(s) of cluster(s) " + strings.Join(clusters, ", ") + " declare their OSDs with data_devices.all=true, whose dirty disks are reclaimed by `bootwright apply --mode rebuild --authorize data-loss` instead"
 	}
-	return fmt.Errorf("--reclaim-devices %s matched no device: owned Ceph cluster(s) %s declare no static OSD device path; %s", ReclaimDevicesAll, strings.Join(owned, ", "), remedy)
+	return fmt.Errorf("--reclaim-devices %s matched no device: selected Ceph cluster(s) %s declare no static OSD device path; %s", ReclaimDevicesAll, strings.Join(owned, ", "), remedy)
 }
 
 func allDevicesSelectionClusters(state v1alpha1.State, owned []string) []string {

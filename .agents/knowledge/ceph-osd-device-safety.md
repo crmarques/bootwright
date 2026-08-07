@@ -50,8 +50,20 @@ simply stops being recorded.
 on-node marker a managed-OS reinstall erased: the disks still carry this
 cluster's ceph LVM but the empty-device gate would refuse them. It wipes
 exactly the operator-named devices — gated on each being a declared OSD device
-of a controller-owned cluster and not mounted or in use — so the gate then sees
-them empty and cephadm re-creates the OSDs.
+of a selected cluster and not mounted or in use — so the gate then sees
+them empty and cephadm re-creates the OSDs. Without a token the reclaim acts
+only on a controller-owned cluster; `--authorize unowned-devices` extends it to
+a selected cluster the controller holds no ownership record for (ADR 0034
+amendment 2026-08-07). That matters because a successful destroy RELEASES the
+ownership record by design: before the amendment, every post-destroy reclaim
+silently no-oped ("no device will be reclaimed"), and the device-empty gate
+then named the exact `--reclaim-devices --authorize data-loss,unowned-devices`
+command that had just no-oped — an unbreakable loop first hit on prd
+(ceph-prd-01 seed srv4203, 2026-08-07). The CLI passes the eligible set as
+`bootwright_ceph_reclaim_clusters` (renamed from
+`bootwright_ceph_owned_clusters`), and `reclaimEligibleClusters` in
+`internal/cli/scope_apply_destructive.go` is the one predicate the resolve
+path, the destructive-set forecast, and the dry-run gate forecast all read.
 
 **Symptom (`Refusing to reclaim <dev>: it could not be probed or is mounted/in
 use ()` — empty parentheses):** the reclaim mount gate asserted `item.rc == 0`

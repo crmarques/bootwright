@@ -71,7 +71,7 @@ func forecastReinstallDescriptors(names []string) []string {
 	return out
 }
 
-func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) []string {
+func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) []string {
 	var refusals []error
 	if len(ownershipSkipped) > 0 {
 		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped))
@@ -93,15 +93,18 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 		refusals = append(refusals, err)
 	}
 	if reclaimDevices != "" {
-		owned := converge.OwnedStorageClusters(objects)
-		if err := converge.CheckReclaimDestroyProtection(planState, owned, allowDestroy); err != nil {
+		clusters := converge.OwnedStorageClusters(objects)
+		if unownedAuthorized {
+			clusters = converge.SelectedCephStorageClusters(planState, objects)
+		}
+		if err := converge.CheckReclaimDestroyProtection(planState, clusters, allowDestroy); err != nil {
 			refusals = append(refusals, err)
 		}
-		if resolved, resolveErr := converge.ResolveReclaimDevices(planState, owned, reclaimDevices); resolveErr != nil {
+		if resolved, resolveErr := converge.ResolveReclaimDevices(planState, clusters, reclaimDevices); resolveErr != nil {
 			refusals = append(refusals, resolveErr)
-		} else if len(owned) > 0 {
-			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, owned, resolved); len(unmatched) > 0 {
-				refusals = append(refusals, reclaimUnmatchedError(unmatched, owned, declared))
+		} else if len(clusters) > 0 {
+			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, clusters, resolved); len(unmatched) > 0 {
+				refusals = append(refusals, reclaimUnmatchedError(unmatched, clusters, declared))
 			}
 		}
 	}
@@ -129,8 +132,8 @@ func applyGateRefusalMessages(refusals []error) []string {
 	return out
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
-	printApplyGateRefusals(stdout, applyGateForecastRefusals(fullState, planState, tasks, runsDir, clustersDir, mode, allowDestroy, reclaimDevices, sel, reinstallDrift, ownershipDir, ownershipRecords, ownershipSkipped))
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
+	printApplyGateRefusals(stdout, applyGateForecastRefusals(fullState, planState, tasks, runsDir, clustersDir, mode, allowDestroy, unownedAuthorized, reclaimDevices, sel, reinstallDrift, ownershipDir, ownershipRecords, ownershipSkipped))
 }
 
 func printApplyGateRefusals(stdout io.Writer, refusals []string) {

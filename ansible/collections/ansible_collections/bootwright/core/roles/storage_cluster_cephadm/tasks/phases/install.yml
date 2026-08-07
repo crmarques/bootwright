@@ -111,7 +111,7 @@
     - bootwright_current_storage_host.devices | default([]) | length > 0
     - >-
       bootwright_selected_storage_cluster.name
-      in (bootwright_ceph_owned_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
+      in (bootwright_ceph_reclaim_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
 
 - name: Probe reclaim devices for active mounts
   ansible.builtin.command:
@@ -397,11 +397,11 @@
       wiping a device this node holds no ownership record for — without it the
       reclaim refuses again as soon as the signature turns out to be LVM or
       dm-crypt holders, which is what a live bluestore OSD looks like. The
-      reclaim needs a scope that includes the deps phase. Reclaim only acts when the controller records
-      this cluster as Bootwright-owned; if a reclaim run reported "no device will
-      be reclaimed", re-establish ownership first (restore the context's runs
-      records, or apply once with this device removed from the declaration, then
-      re-add it).{% endif %}
+      reclaim needs a scope that includes the deps phase. A cluster the
+      controller no longer records as Bootwright-owned — the state every
+      successful destroy leaves — is covered by the same pair:
+      `unowned-devices` also lets the reclaim act without an ownership record,
+      so the command above works as-is after a destroy.{% endif %}
     quiet: true
   loop: "{{ bootwright_ceph_device_check.results | default([]) }}"
   loop_control:

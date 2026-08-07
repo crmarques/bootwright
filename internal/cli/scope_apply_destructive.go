@@ -45,7 +45,7 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 	return []string{"auto-reclaim dirty filter-OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
 }
 
-func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) bool {
+func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, reclaimClusters []string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) bool {
 	releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 	consumedDataLoss := false
 	var substrateReset []string
@@ -104,13 +104,8 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		converge.ApplySubstrateResetMachinesExtraVar(plan, pairs)
 	}
 	if reclaimDevices != "" {
-		owned := converge.OwnedStorageClusters(objects)
-		if len(owned) == 0 {
-			cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned; no device will be reclaimed (reclaim only wipes disks of an owned cluster). Ownership is recorded by a successful apply from this context; if the context's runs/ records were lost, restore them, or first apply with the data-carrying device removed from the StorageCluster declaration (records ownership), then re-add it and re-run --reclaim-devices.")
-		} else {
-			cliout.NewContinuation(stdout).Warning("reclaim", "will WIPE device(s) "+reclaimDevices+" on the owned Ceph cluster(s) "+strings.Join(owned, ", ")+" before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device, is not mounted or a system disk, and is on a host whose OSD marker does not already record it is wiped; a marker-recorded device is left in place.")
-		}
-		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, owned)
+		warnApplyReclaimSelection(stdout, objects, reclaimDevices, reclaimClusters)
+		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, reclaimClusters)
 	}
 	bootProven := workflow.BootProvenContainerClusters(clustersDir, tasks)
 	if firstBoot := workflow.BareMetalFirstInstallClusters(bootProven, tasks, plan.State); len(firstBoot) > 0 {
@@ -120,6 +115,28 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		cliout.NewContinuation(stdout).Warning("managed-OS install", "first apply may boot the OS installer on bare-metal machine(s) of "+strings.Join(firstInstall, ", ")+" and the kickstart install DISK-WIPES their target disks. Each machine that needs installing must be powered off: the installer boot is refused while a machine is powered on or its power state is unreadable (power-off gate); a machine already running its bootwright-installed OS is left untouched.")
 	}
 	return consumedDataLoss
+}
+
+func warnApplyReclaimSelection(stdout io.Writer, objects []workflow.ObjectClassification, reclaimDevices string, reclaimClusters []string) {
+	if len(reclaimClusters) == 0 {
+		cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned, and without --authorize "+authorizeUnownedDevices+" the reclaim acts only on an owned cluster; no device will be reclaimed. A successful apply records ownership and a successful destroy releases it, so this is the normal state after `bootwright destroy`. Re-run with `--authorize "+authorizeDataLoss+","+authorizeUnownedDevices+"` to reclaim the declared device(s) of the selected cluster(s) without an ownership record — the mounted, in-use, and unprobeable refusals still stand — or restore the context's runs/ records if they were lost.")
+		return
+	}
+	owned := map[string]bool{}
+	for _, name := range converge.OwnedStorageClusters(objects) {
+		owned[name] = true
+	}
+	var unrecorded []string
+	for _, name := range reclaimClusters {
+		if !owned[name] {
+			unrecorded = append(unrecorded, name)
+		}
+	}
+	warning := "will WIPE device(s) " + reclaimDevices + " on the Ceph cluster(s) " + strings.Join(reclaimClusters, ", ") + " before apply — IRREVERSIBLE data loss. Only a named device that is a declared OSD device, is not mounted or a system disk, and is on a host whose OSD marker does not already record it is wiped; a marker-recorded device is left in place."
+	if len(unrecorded) > 0 {
+		warning += " Cluster(s) " + strings.Join(unrecorded, ", ") + " hold no Bootwright ownership record — the state a successful destroy leaves — and --authorize " + authorizeUnownedDevices + " is what authorizes the reclaim to act on them."
+	}
+	cliout.NewContinuation(stdout).Warning("reclaim", warning)
 }
 
 func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) string {
@@ -196,21 +213,28 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 }
 
 func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, objects []workflow.ObjectClassification, reclaimDevices string) (string, []string, error) {
-	owned := converge.OwnedStorageClusters(objects)
-	if err := converge.CheckReclaimDestroyProtection(plan.State, owned, auth.has(authorizeDataLoss)); err != nil {
+	clusters := reclaimEligibleClusters(plan.State, auth, objects)
+	if err := converge.CheckReclaimDestroyProtection(plan.State, clusters, auth.has(authorizeDataLoss)); err != nil {
 		return "", nil, failErr(1, err)
 	}
-	resolved, err := converge.ResolveReclaimDevices(plan.State, owned, reclaimDevices)
+	resolved, err := converge.ResolveReclaimDevices(plan.State, clusters, reclaimDevices)
 	if err != nil {
 		return "", nil, failErr(2, err)
 	}
-	if len(owned) > 0 {
-		if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, owned, resolved); len(unmatched) > 0 {
-			return "", nil, failErr(2, reclaimUnmatchedError(unmatched, owned, declared))
+	if len(clusters) > 0 {
+		if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, clusters, resolved); len(unmatched) > 0 {
+			return "", nil, failErr(2, reclaimUnmatchedError(unmatched, clusters, declared))
 		}
 	}
 	applyReclaimUnownedDevices(stdout, plan, auth, resolved)
-	return resolved, owned, nil
+	return resolved, clusters, nil
+}
+
+func reclaimEligibleClusters(state v1alpha1.State, auth *authorizations, objects []workflow.ObjectClassification) []string {
+	if auth.has(authorizeUnownedDevices) {
+		return converge.SelectedCephStorageClusters(state, objects)
+	}
+	return converge.OwnedStorageClusters(objects)
 }
 
 func describeReclaimSelection(reclaimDevices string) string {
@@ -245,7 +269,7 @@ func warnForeignCephadmDaemons(stdout io.Writer, clusters []string) {
 }
 
 func warnReclaimUnownedDevices(stdout io.Writer, reclaimDevices string) {
-	cliout.NewContinuation(stdout).Warning("authorize "+authorizeUnownedDevices, "additionally wipes named device(s) "+reclaimDevices+" that carry LVM or dm-crypt holders without a Bootwright OSD ownership record for their node. Without this token such a device fails closed as a possible live bluestore OSD. It is the right token for an orphan stack left by a Ceph cluster that was destroyed or was never Bootwright's; on a node whose Ceph daemons are still running it wipes a LIVE OSD and its data. A mounted, in-use, or unprobeable device still fails closed and no token relaxes that.")
+	cliout.NewContinuation(stdout).Warning("authorize "+authorizeUnownedDevices, "additionally wipes named device(s) "+reclaimDevices+" that carry LVM or dm-crypt holders without a Bootwright OSD ownership record for their node, and lets the reclaim act on a selected cluster the controller holds no ownership record for — the state a successful destroy leaves. Without this token such a device fails closed as a possible live bluestore OSD. It is the right token for an orphan stack left by a Ceph cluster that was destroyed or was never Bootwright's; on a node whose Ceph daemons are still running it wipes a LIVE OSD and its data. A mounted, in-use, or unprobeable device still fails closed and no token relaxes that.")
 }
 
 func reclaimUnmatchedError(unmatched, owned, declared []string) error {
@@ -257,7 +281,7 @@ func reclaimUnmatchedError(unmatched, owned, declared []string) error {
 	if len(declared) > 0 {
 		remedy = "declare it in the StorageCluster or pass one of: " + strings.Join(declared, ", ")
 	}
-	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of owned Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
+	return fmt.Errorf("--reclaim-devices %s %s %s not match any declared OSD device of Ceph cluster(s) %s — matching is by the exact declared path; %s", noun, strings.Join(unmatched, ", "), verb, strings.Join(owned, ", "), remedy)
 }
 
 func warnDestructiveApply(stdout io.Writer, destructive []string, selection runSelection) {

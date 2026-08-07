@@ -140,14 +140,14 @@ func TestPrintApplyGateForecastReinstallRefusal(t *testing.T) {
 	runsDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, t.TempDir(), nil, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, t.TempDir(), nil, nil)
 	got := out.String()
 	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "ContainerCluster/sno-libvirt") {
 		t.Fatalf("forecast must reproduce the protectedKinds reinstall refusal for a drifted cluster, got %q", got)
 	}
 
 	out.Reset()
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil)
 	if strings.Contains(out.String(), "a real run refuses before any prompt") {
 		t.Fatalf("with no reinstall drift the forecast must not raise the protection refusal, got %q", out.String())
 	}
@@ -159,7 +159,7 @@ func TestPrintApplyGateForecastNamesUnreadableOwnershipRecords(t *testing.T) {
 	ownershipDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyGateForecast(&out, state, state, tasks, t.TempDir(), t.TempDir(), workflow.ApplyModeReconcile, false, "", clusteraccess.Selection{}, nil, ownershipDir, nil, []error{errors.New("decode resources/corrupt.json: invalid character 'n'")})
+	printApplyGateForecast(&out, state, state, tasks, t.TempDir(), t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, ownershipDir, nil, []error{errors.New("decode resources/corrupt.json: invalid character 'n'")})
 	got := out.String()
 	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "could not be read") {
 		t.Fatalf("forecast must name the unreadable-record refusal its real run makes, got %q", got)
