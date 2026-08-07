@@ -15,6 +15,7 @@ type WorkflowPlan struct {
 	ExtraVarPairs    []string
 	TargetsClusters  bool
 	StorageWorkNames []string
+	SelectedMachines []string
 }
 
 func PrepareScopedWorkflowPlan(scopedState v1alpha1.State, scope Scope, phaseList []Phase, askBecomePass, dryRun bool, records []ownership.ResourceRecord) (WorkflowPlan, error) {

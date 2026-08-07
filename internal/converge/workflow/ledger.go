@@ -72,6 +72,7 @@ type RunLedger struct {
 	RunID     string            `json:"runId"`
 	Target    string            `json:"target"`
 	Scope     string            `json:"scope,omitempty"`
+	Machines  []string          `json:"machines,omitempty"`
 	Status    RunStatus         `json:"status"`
 	StartedAt time.Time         `json:"startedAt"`
 	EndedAt   *time.Time        `json:"endedAt,omitempty"`

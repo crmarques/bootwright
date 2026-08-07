@@ -25,6 +25,8 @@ func TestNextStepSpineHintsResolveToRegisteredCommands(t *testing.T) {
 		{"generated secrets missing", status.NextStepHints(true, v1alpha1.State{}, "", "", []string{"bootwright secret generate"}, false, false)},
 		{"failed apply ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "range-base-add-ons", Scope: "dc1", Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
 		{"failed destroy ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "clusters destroy", Scope: "dc1", Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"failed machine-scoped apply ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "infra", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"failed machine-scoped destroy ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "machines destroy", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
 		{"running ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "all", Status: workflow.RunStatusRunning}, workflow.RunActivity{}, nil)},
 	}
 	for _, tc := range cases {
@@ -34,6 +36,41 @@ func TestNextStepSpineHintsResolveToRegisteredCommands(t *testing.T) {
 			}
 			for _, hint := range tc.hints {
 				assertSpineHintIsAcceptedCommand(t, hint)
+			}
+		})
+	}
+}
+
+func TestFailedRunRetryHintReproducesTheRunSelection(t *testing.T) {
+	cases := []struct {
+		name   string
+		ledger workflow.RunLedger
+		want   string
+	}{{
+		name:   "cluster-scoped apply",
+		ledger: workflow.RunLedger{Target: "range-base-add-ons", Scope: "dc1-ocp", Status: workflow.RunStatusFailed},
+		want:   "bootwright apply --stage base --through add-ons --clusters dc1-ocp --yes",
+	}, {
+		name:   "cluster-scoped destroy",
+		ledger: workflow.RunLedger{Target: "clusters destroy", Scope: "dc1-ocp", Status: workflow.RunStatusFailed},
+		want:   "bootwright destroy --stage clusters --clusters dc1-ocp --yes",
+	}, {
+		name:   "machine-scoped apply",
+		ledger: workflow.RunLedger{Target: "infra", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed},
+		want:   "bootwright apply --machines dc1-worker-1 --yes",
+	}, {
+		name:   "machine-scoped destroy",
+		ledger: workflow.RunLedger{Target: "machines destroy", Machines: []string{"dc1-worker-2", "dc1-worker-1"}, Status: workflow.RunStatusFailed},
+		want:   "bootwright destroy --machines dc1-worker-1,dc1-worker-2 --yes",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hints := status.LedgerNextSteps(tc.ledger, workflow.RunActivity{}, nil)
+			if len(hints) == 0 {
+				t.Fatal("a failed run must emit a retry hint")
+			}
+			if hints[0] != tc.want {
+				t.Fatalf("retry hint is %q, want %q; the hint must reproduce the failed run's own selection — a hint that widens it points the operator at a mutation they never asked for", hints[0], tc.want)
 			}
 		})
 	}

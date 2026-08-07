@@ -214,6 +214,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 			plan.StorageWorkNames = sel.StorageWorkNames()
+			plan.SelectedMachines = sel.MachineScopeNames()
 		}
 		infraScope := !artifactServerOnly && (runScope.Name == "infra" || fullDestroy)
 		var resolvedClusterRoots []string

@@ -1,6 +1,7 @@
 package status
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -27,9 +28,13 @@ func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 }
 
 func ledgerRetryCommand(ledger workflow.RunLedger) string {
+	machines := ledgerMachineSelection(ledger)
 	command := "bootwright apply"
 	if stage, ok := ledgerDestroyStage(ledger.Target); ok {
 		command = "bootwright destroy"
+		if machines != "" {
+			stage = ""
+		}
 		if stage != "" {
 			command += " --stage " + stage
 		}
@@ -37,13 +42,27 @@ func ledgerRetryCommand(ledger workflow.RunLedger) string {
 		command += " --through " + through
 	} else if stage, through, ok := ledgerApplyRange(ledger.Target); ok {
 		command += " --stage " + stage + " --through " + through
-	} else if ledgerTargetIsApplyStage(ledger.Target) {
+	} else if ledgerTargetIsApplyStage(ledger.Target) && machines == "" {
 		command += " --stage " + ledger.Target
 	}
-	if ledger.Scope != "" {
+	switch {
+	case machines != "":
+		command += " --machines " + machines
+	case ledger.Scope != "":
 		command += " --clusters " + ledger.Scope
 	}
 	return command + " --yes"
+}
+
+func ledgerMachineSelection(ledger workflow.RunLedger) string {
+	names := make([]string, 0, len(ledger.Machines))
+	for _, name := range ledger.Machines {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			names = append(names, trimmed)
+		}
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
 }
 
 func ledgerDestroyStage(target string) (string, bool) {

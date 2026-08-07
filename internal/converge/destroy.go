@@ -94,6 +94,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	runOpts.AskBecomePass = plan.AskBecomePass && becomePasswordFile == ""
 	runOpts.BecomePasswordFile = becomePasswordFile
 	runOpts.StreamAnsible = streamAnsible
+	runOpts.SelectedMachines = plan.SelectedMachines
 	prepared, err := workflow.PrepareDestroyTaskGraph(ctx.RunsDir, runOpts, tasks, workflow.ConcurrencyLimits{})
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err

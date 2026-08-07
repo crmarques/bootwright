@@ -92,6 +92,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
+	ledger.Machines = append([]string(nil), opts.SelectedMachines...)
 	now := time.Now()
 	lease := NewRunLease(runID, now)
 	if err := AcquireRunLease(runsDir, lease, now); err != nil {
