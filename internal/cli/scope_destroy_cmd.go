@@ -300,6 +300,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if purgeHistory && !plan.NoRemoteWork && (dryRun || !yes) {
 			cliout.NewContinuation(stdout).Warning("purge history", destroyPurgeHistoryNotice(dryRun))
 		}
+		if purgeHistory && skipUnreachable && !plan.NoRemoteWork {
+			cliout.NewContinuation(stdout).Warning("purge history", "--authorize "+authorizeUnreachableNodes+" proves no per-node completion outside a managed storage cluster, so this run keeps the history and state tree of every container cluster and machine layer it touches — that history is what a retry and a diagnosis read. Only a storage cluster whose teardown report names no skipped node is purged. Re-run `bootwright destroy --purge-history` without --authorize "+authorizeUnreachableNodes+" once every node answers")
+		}
 		if dryRun {
 			printRequiredAuthorizations(stdout, requiredAuth)
 		}

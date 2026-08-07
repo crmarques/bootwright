@@ -111,6 +111,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		partial[name] = true
 	}
 	include := destroyKindIncluded(succeededDestroyKinds)
+	purgeProven := !skipUnreachable
 	resetScope := runScope
 	if runScope.Name == InfraScope.Name {
 		resetScope = AllScope
@@ -138,7 +139,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 			if !include(workflow.DestroyTaskKindContainerCluster, name) {
 				continue
 			}
-			if purgeHistory {
+			if purgeHistory && purgeProven {
 				purgedClusters = append(purgedClusters, name)
 				continue
 			}
@@ -160,7 +161,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 				if partial[name] {
 					continue
 				}
-				if purgeHistory {
+				if purgeHistory && purgeProven {
 					purgedClusters = append(purgedClusters, name)
 					continue
 				}
@@ -196,7 +197,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 				problems = append(problems, fmt.Errorf("purge history for cluster %s: %w", name, err))
 			}
 		}
-		if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
+		if purgeProven && DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
 			if err := purgeAllRunHistory(runsDir, destroyRunID); err != nil {
 				problems = append(problems, fmt.Errorf("purge run history: %w", err))
 			}
@@ -285,7 +286,7 @@ func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state 
 			}
 		}
 	}
-	if purgeHistory {
+	if purgeHistory && !skipUnreachable {
 		machineNames := make([]string, 0, len(machineProvision))
 		for name := range machineProvision {
 			machineNames = append(machineNames, name)

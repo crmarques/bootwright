@@ -475,6 +475,44 @@ func TestResetConvergeRecordsAfterDestroyFullScopePurgeSweepsAllRunHistory(t *te
 	}
 }
 
+func TestResetConvergeRecordsAfterDestroySkippedNodesDisableHistorySweep(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := destroyResetState(v1alpha1.StorageCephDistributionOSS)
+
+	mustArchiveLedger(t, runsDir, "run-fabric", []workflow.TaskLedgerEntry{
+		{ID: "provider.kvm-host", Kind: "provider", Host: "kvm-host"},
+	})
+	touchTaskDir(t, runsDir, "run-fabric", "provider.kvm-host")
+
+	if problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", AllScope, st, nil, nil, nil, nil, "destroy-current", true, true); len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+
+	if !runDirExists(runsDir, "run-fabric") {
+		t.Fatal("a teardown authorized with --authorize unreachable-nodes proves no per-node completion outside a managed storage cluster, so --purge-history must keep the context's run history: it is what a retry and a diagnosis read after nodes were skipped")
+	}
+}
+
+func TestResetMachineConvergeRecordsAfterDestroySkippedNodesKeepHistory(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := destroyResetState(v1alpha1.StorageCephDistributionOSS)
+
+	mustArchiveLedger(t, runsDir, "run-machines", []workflow.TaskLedgerEntry{
+		{ID: "machines.ceph-0.substrate", Kind: "machine-infra", Node: "ceph-0"},
+	})
+	touchTaskDir(t, runsDir, "run-machines", "machines.ceph-0.substrate")
+
+	problems := ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, st, map[string]bool{"ceph-0": true}, nil, "destroy-current", true, true)
+	if len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+	if !runDirExists(runsDir, "run-machines") {
+		t.Fatal("a machine teardown authorized with --authorize unreachable-nodes has no per-node completion proof, so --purge-history must keep its history")
+	}
+}
+
 func TestResetConvergeRecordsAfterDestroyFullScopePartialDisablesHistorySweep(t *testing.T) {
 	runsDir := t.TempDir()
 	clustersDir := t.TempDir()
