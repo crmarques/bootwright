@@ -956,6 +956,37 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 	}
 }
 
+func TestAgentInstallRefusesAnInstallerBinaryThatDoesNotMatchTheDeclaredRelease(t *testing.T) {
+	const roleTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/"
+	tasks := readAnsibleTasks(t, roleTasks+"stage/validate.yml")
+
+	pathIdx := findAnsibleTask(t, tasks, "Set openshift-install path")
+	probeIdx := findAnsibleTask(t, tasks, "Read installed openshift-install version")
+	assertIdx := findAnsibleTask(t, tasks, "Fail when the installer binary does not match the declared release")
+	configIdx := findAnsibleTask(t, tasks, "Verify rendered install-config exists")
+	if pathIdx > probeIdx || probeIdx > assertIdx || assertIdx > configIdx {
+		t.Fatalf("the release-skew refusal must read the resolved binary and fail before the run reaches install-config (path=%d probe=%d assert=%d config=%d)", pathIdx, probeIdx, assertIdx, configIdx)
+	}
+
+	assertion, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the release-skew refusal must be an assert, got %v", tasks[assertIdx])
+	}
+	if that := fmt.Sprint(assertion["that"]); !strings.Contains(that, "bootwright_openshift_install_version == bootwright_declared_release_version") {
+		t.Fatalf("the release-skew refusal must compare the installed binary against the cluster's declared release: the agent ISO embeds the payload compiled into the binary, and /usr/local/bin holds one installer for every context that only `bootwright bastion setup` refreshes, so a release bump alone leaves the previous version building the ISO, got that=%v", assertion["that"])
+	}
+	failMsg := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{"bootwright bastion setup", "bootwright_declared_release_version", "bootwright_openshift_install_path"} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("the release-skew refusal must name what was found and the exact command that repairs it (missing %q), got %q", want, failMsg)
+		}
+	}
+	guard := fmt.Sprint(tasks[assertIdx]["when"])
+	if !strings.Contains(guard, "bootwright_declared_release_version | length > 0") {
+		t.Fatalf("a cluster that declares no release version pins nothing to compare against and must skip the refusal, got when=%v", tasks[assertIdx]["when"])
+	}
+}
+
 func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
 	const roleTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/"
 	paths := readRepoFile(t, roleTasks+"destroy_paths.yml")

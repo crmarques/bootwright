@@ -35,6 +35,56 @@
   changed_when: false
   when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
 
+- name: Resolve declared release version
+  ansible.builtin.set_fact:
+    bootwright_declared_release_version: >-
+      {{ (bootwright_current_cluster.distribution | default({}, true)).get('release', {}).get('version', '') }}
+  changed_when: false
+
+- name: Read installed openshift-install version
+  ansible.builtin.command:
+    argv:
+      - "{{ bootwright_openshift_install_path }}"
+      - version
+  register: bootwright_install_version_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso']
+    - bootwright_declared_release_version | length > 0
+
+- name: Resolve installed openshift-install version
+  ansible.builtin.set_fact:
+    bootwright_openshift_install_version: >-
+      {{
+        (bootwright_install_version_probe.stdout | default(''))
+        | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default('', true)
+      }}
+  changed_when: false
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso']
+    - bootwright_declared_release_version | length > 0
+
+- name: Fail when the installer binary does not match the declared release
+  ansible.builtin.assert:
+    that:
+      - bootwright_openshift_install_version == bootwright_declared_release_version
+    fail_msg: >-
+      Installer binary '{{ bootwright_openshift_install_path }}' reports version
+      {{ bootwright_openshift_install_version | default('<unreadable>', true) }},
+      but cluster {{ bootwright_current_cluster.name }} declares release
+      {{ bootwright_declared_release_version }}. The agent ISO embeds the release
+      payload compiled into that binary, so the cluster would silently install
+      {{ bootwright_openshift_install_version | default('<unreadable>', true) }}
+      and no later stage would report the difference. One installer serves every
+      context on this controller and only `bootwright bastion setup` refreshes
+      it, so a release bump that was never followed by a bastion setup leaves the
+      previous version in place. Re-run `bootwright bastion setup` with this
+      cluster in scope, then retry.
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso']
+    - bootwright_declared_release_version | length > 0
+
 - name: Verify rendered install-config exists
   ansible.builtin.stat:
     path: "{{ bootwright_install_work_dir }}/install-config.yaml"

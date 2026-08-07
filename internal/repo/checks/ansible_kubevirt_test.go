@@ -318,6 +318,38 @@ func TestKubeVirtRootDiskInheritsVolumeModeFromTheStorageProfile(t *testing.T) {
 	}
 }
 
+func TestKubeVirtRefusesAReusedRootClaimWhoseVolumeModeDriftedFromItsStorageProfile(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtSubstrateTasks)
+
+	claimIdx := findAnsibleTask(t, tasks, "Read reused KubeVirt root claim volume mode")
+	profileIdx := findAnsibleTask(t, tasks, "Read KubeVirt storage profile volume mode")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse a reused KubeVirt root claim whose volume mode drifted from its storage profile")
+	vmIdx := findAnsibleTask(t, tasks, "Apply KubeVirt VirtualMachine")
+	if claimIdx > refuseIdx || profileIdx > refuseIdx || refuseIdx > vmIdx {
+		t.Fatalf("the volume-mode refusal must probe both modes and fail before the VirtualMachine is applied (claim=%d profile=%d refuse=%d vm=%d)", claimIdx, profileIdx, refuseIdx, vmIdx)
+	}
+
+	assertion, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the volume-mode refusal must be an assert, got %v", tasks[refuseIdx])
+	}
+	if that := fmt.Sprint(assertion["that"]); !strings.Contains(that, "bootwright_kubevirt_root_claim_mode == bootwright_kubevirt_storage_profile_mode") {
+		t.Fatalf("the volume-mode refusal must compare the bound claim against what the class provisions: volumeMode is immutable once bound and the apply is create-only, so a claim an older template shape created is reused forever and a Filesystem claim on a Block class trips the agent's 30-minute no-progress watchdog, got that=%v", assertion["that"])
+	}
+	failMsg := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{"--mode rebuild", "30m0s", "--machines"} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("the volume-mode refusal must name the symptom it prevents and the exact command that proceeds intentionally (missing %q), got %q", want, failMsg)
+		}
+	}
+	guard := fmt.Sprint(tasks[refuseIdx]["when"])
+	for _, want := range []string{"bootwright_kubevirt_root_dv_exists", "bootwright_kubevirt_rebuild_authorized"} {
+		if !strings.Contains(guard, want) {
+			t.Fatalf("the volume-mode refusal applies only to a claim this run reuses; an absent disk is about to be created correctly and an authorized rebuild deletes it first (missing %q), got when=%v", want, tasks[refuseIdx]["when"])
+		}
+	}
+}
+
 func TestKubeVirtBootKeepsAPerMachineAgentISOThatAlreadyHoldsThisRunsMedia(t *testing.T) {
 	tasks := readAnsibleTasks(t, kubeVirtBootTasks)
 	currentIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt agent ISO DataVolume currency")

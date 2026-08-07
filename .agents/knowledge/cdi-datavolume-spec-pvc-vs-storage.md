@@ -38,8 +38,24 @@ claims an older template shape created. Guard the apply so it runs only when the
 object is absent, or behind an authorized rebuild that deletes it first; a size
 or shape change reaches a live machine that way, not through a plain apply.
 
+**Corollary — a create-only apply reuses a wrong-shaped claim forever.** Fixing
+the template does not fix the disks the old template already created. Because
+the apply is skipped whenever the object exists, a claim bound as `Filesystem`
+before the fix keeps backing its machine, and the only symptom is the 30-minute
+no-progress failure again — on one node, late, long after the run looked
+healthy. That single failed master is enough to park etcd at two of the three
+members `DelayedHAScalingStrategy` requires and time out the whole bootstrap, so
+the cluster-level error names neither the disk nor the node that caused it.
+`machine_substrate_kubevirt` therefore reads the bound claim's `volumeMode` and
+the class's `StorageProfile` before the VirtualMachine is applied and refuses on
+a mismatch, naming `bootwright apply --mode rebuild` as the repair. The refusal
+skips when the disk is absent (it is about to be created correctly) or when a
+rebuild is authorized (it is deleted first), and it needs an explicit
+`storageClassRef` to have a profile to compare against.
+
 Applies to both the per-machine root disk (`machine_substrate_kubevirt`) and the
 agent ISO source and clones (`container_cluster_boot_kubevirt`). Pinned by
-`TestKubeVirtRootDiskInheritsVolumeModeFromTheStorageProfile` and
-`TestKubeVirtBootUploadsSharedAgentISOOncePerCluster` in
+`TestKubeVirtRootDiskInheritsVolumeModeFromTheStorageProfile`,
+`TestKubeVirtRefusesAReusedRootClaimWhoseVolumeModeDriftedFromItsStorageProfile`
+and `TestKubeVirtBootUploadsSharedAgentISOOncePerCluster` in
 `internal/repo/checks/ansible_kubevirt_test.go`.
