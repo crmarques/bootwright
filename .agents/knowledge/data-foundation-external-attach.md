@@ -82,6 +82,44 @@ endpoint: …` before returning `-1`, and `get_rgw_fsid` writes on a timeout and
 on a non-`info` response — the exit code is 0 in every case, so that stream is
 the only account of what happened.
 
+## NooBaa never leaves `Configuring`: the gateway certificate is not in the cluster's trust
+
+Symptom on prd 2026-08-07: the `StorageCluster` sat `Progressing` for nine hours
+and the readiness budget expired twice, once per OpenShift cluster. Everything
+Ceph-side was healthy — `CephCluster` `Connected`, `HEALTH_OK`, all five mons
+reachable including the dc3 arbiter across a second public CIDR. The blocker was
+NooBaa:
+
+```
+Will connect to RGW at "https://rgw.<cluster>.<domain>:443"
+creating bucket nb.<id>.apps.<cluster>.<domain>
+got error ...: tls: failed to verify certificate: x509: certificate signed by
+unknown authority
+```
+
+`--rgw-tls-cert-path` (above) put the certificate where the **exporter** and
+**rook** need it: the exporter dials with `verify=<cert>`, and the export's
+`ceph-rgw-tls-cert` entry makes ocs-operator set the CephObjectStore's
+`gateWay.SSLCertificateRef`. **NooBaa reads none of that.** Its S3 client trusts
+exactly `/etc/ocp-injected-ca-bundle/ca-bundle.crt` and the service CA — the two
+paths it logs on every reconcile — and the first of those is the ConfigMap the
+Cluster Network Operator fills from the **cluster-wide** trusted CA bundle. A
+`source.generated` gateway certificate is self-signed and reaches neither, so
+`ReconcileDefaultBackingStore` fails its bucket `PUT` forever, NooBaa holds
+`phase: Configuring`, and the StorageCluster can never leave `Progressing`.
+
+The step now closes that gap: it reads `Proxy/cluster.spec.trustedCA`, merges the
+staged gateway certificate into whatever ConfigMap that names (defaulting to
+`openshift-config/user-ca-bundle`, and pointing the Proxy at it when unset), and
+applies the result. It **merges** rather than replaces — the estate CA and the
+mirror CA already in that bundle must survive — and skips when the certificate is
+already present, so re-running is a no-op. `--force-conflicts` is deliberate:
+`user-ca-bundle` is normally owned by the installer's field manager, and taking
+ownership of a bundle we just read and preserved is the intended outcome.
+
+An estate-issued gateway certificate needs none of this, because the estate CA is
+already in the cluster's trust — that remains the better shape for production.
+
 ## `error setting modifier for [client.healthchecker] type=key ...: Malformed input [buffer:3]`
 
 Seen in the `StorageCluster` status as `ExternalClusterConnecting=False`, reason
@@ -179,6 +217,17 @@ Other traps:
 - Never flip the type byte on an existing 44-byte blob: `CryptoAES` validates
   only `length >= 16`, so a 32-byte secret relabelled type 1 loads silently and
   uses the first 16 bytes — a silently wrong credential.
+- **Two clusters exporting in the same apply race on the shared entities.** The
+  deletion above is destructive and the entities are shared, so if cluster A
+  remints its keys and cluster B's `ceph auth rm` then runs, A's Secret carries
+  credentials Ceph no longer holds — a silent authentication failure with no
+  `Malformed input` to explain it. The window is open only on the first apply
+  after `keyType` is declared: once the keys carry the declared type, the stale
+  list comes back empty and the second cluster adopts rather than deletes. The
+  step now re-reads `ceph auth ls` after the export and refuses when any exported
+  `userKey` is no longer one Ceph holds, naming the race and saying to rerun.
+  Prevention rather than detection would need the orchestrator to serialize
+  per-`StorageExport`, which is a larger change than the one-rerun repair earns.
 - Bootwright passes no `--restricted-auth-permission`, so every attached
   OpenShift cluster shares the five entities (`client.healthchecker`,
   `client.csi-rbd-node`, `client.csi-rbd-provisioner`,

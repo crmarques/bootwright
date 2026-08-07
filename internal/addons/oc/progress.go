@@ -81,7 +81,44 @@ func diagnoseObject(ctx context.Context, runner OCRunner, kubeconfig, apiVersion
 	if phase := nestedString(obj, "status", "phase"); phase != "" {
 		p.line(fmt.Sprintf("  %s phase=%s", resource, phase))
 	}
-	return formatConditions(obj, kind, namespace, name, p)
+	own := conditionFindings(obj, kind, namespace, name, p)
+	related := diagnoseRelatedObjects(ctx, runner, kubeconfig, obj, p)
+	return bestFinding(own, related)
+}
+
+const relatedObjectLimit = 6
+
+func diagnoseRelatedObjects(ctx context.Context, runner OCRunner, kubeconfig string, obj map[string]any, p *waitProgress) []conditionFinding {
+	items, _ := nestedValue(obj, "status", "relatedObjects").([]any)
+	var findings []conditionFinding
+	read := 0
+	for index, item := range items {
+		ref, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		apiVersion := stringValue(ref["apiVersion"])
+		kind := stringValue(ref["kind"])
+		name := stringValue(ref["name"])
+		namespace := stringValue(ref["namespace"])
+		if apiVersion == "" || kind == "" || name == "" {
+			continue
+		}
+		if read >= relatedObjectLimit {
+			p.line(fmt.Sprintf("  %d further related objects not read", len(items)-index))
+			break
+		}
+		read++
+		resource := resourceArg(apiVersion, kind) + "/" + name
+		related, err := getResource(ctx, runner, kubeconfig, apiVersion, kind, namespace, name)
+		if err != nil {
+			p.line(fmt.Sprintf("  related %s could not be read: %v", resource, err))
+			continue
+		}
+		p.line(fmt.Sprintf("  related %s phase=%s", resource, orNone(nestedString(related, "status", "phase"))))
+		findings = append(findings, conditionFindings(related, kind, namespace, name, p)...)
+	}
+	return findings
 }
 
 func diagnoseCSVGate(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string, p *waitProgress) string {
@@ -176,9 +213,22 @@ func diagnosePullFailures(ctx context.Context, runner OCRunner, kubeconfig, name
 	return cause
 }
 
+const staleConditionLag = 5 * time.Minute
+
+type conditionFinding struct {
+	summary string
+	problem bool
+	stale   bool
+}
+
 func formatConditions(obj map[string]any, kind, namespace, name string, p *waitProgress) string {
+	return bestFinding(conditionFindings(obj, kind, namespace, name, p))
+}
+
+func conditionFindings(obj map[string]any, kind, namespace, name string, p *waitProgress) []conditionFinding {
 	conditions, _ := nestedValue(obj, "status", "conditions").([]any)
-	var cause, fallback string
+	newest := newestHeartbeat(conditions)
+	var findings []conditionFinding
 	for _, item := range conditions {
 		cond, ok := item.(map[string]any)
 		if !ok {
@@ -192,35 +242,87 @@ func formatConditions(obj map[string]any, kind, namespace, name string, p *waitP
 		}
 		cmsg := firstLine(stringValue(cond["message"]))
 		line := fmt.Sprintf("  %s/%s/%s %s=%s reason=%s", kind, namespace, name, ctype, cstatus, orNone(creason))
+		lag, stale := conditionLag(cond, newest)
+		if stale {
+			line += fmt.Sprintf(" (stale: last heartbeat %s behind this object's newest condition)", lag)
+		}
 		p.line(line)
 		if cmsg != "" {
 			p.line("    " + cmsg)
 		}
-		observed := strings.TrimSpace(fmt.Sprintf("%s %s: %s", ctype, creason, cmsg))
-		if problemVocabulary(creason) || problemVocabulary(cmsg) {
-			if cause == "" {
-				cause = observed
+		findings = append(findings, conditionFinding{
+			summary: strings.TrimSpace(fmt.Sprintf("%s %s: %s", ctype, creason, cmsg)),
+			problem: problemVocabulary(creason) || problemVocabulary(cmsg),
+			stale:   stale,
+		})
+	}
+	return findings
+}
+
+func bestFinding(groups ...[]conditionFinding) string {
+	for _, want := range []conditionFinding{
+		{problem: true, stale: false},
+		{problem: false, stale: false},
+		{problem: true, stale: true},
+		{problem: false, stale: true},
+	} {
+		for _, group := range groups {
+			for _, finding := range group {
+				if finding.problem == want.problem && finding.stale == want.stale && finding.summary != "" {
+					return finding.summary
+				}
 			}
+		}
+	}
+	return ""
+}
+
+func newestHeartbeat(conditions []any) time.Time {
+	var newest time.Time
+	for _, item := range conditions {
+		cond, ok := item.(map[string]any)
+		if !ok {
 			continue
 		}
-		if fallback == "" {
-			fallback = observed
+		if at, ok := conditionHeartbeat(cond); ok && at.After(newest) {
+			newest = at
 		}
 	}
-	if cause != "" {
-		return cause
+	return newest
+}
+
+func conditionHeartbeat(cond map[string]any) (time.Time, bool) {
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(stringValue(cond["lastHeartbeatTime"])))
+	if err != nil {
+		return time.Time{}, false
 	}
-	return fallback
+	return at, true
+}
+
+func conditionLag(cond map[string]any, newest time.Time) (time.Duration, bool) {
+	at, ok := conditionHeartbeat(cond)
+	if !ok || newest.IsZero() {
+		return 0, false
+	}
+	lag := newest.Sub(at)
+	if lag < staleConditionLag {
+		return 0, false
+	}
+	return lag.Truncate(time.Second), true
 }
 
 func conditionNoteworthy(ctype, cstatus, creason string) bool {
 	if creason == "" {
 		return false
 	}
-	if problemVocabulary(ctype) {
+	if problemVocabulary(ctype) || transitionVocabulary(ctype) {
 		return cstatus != "False"
 	}
 	return cstatus != "True"
+}
+
+func transitionVocabulary(value string) bool {
+	return strings.Contains(strings.ToLower(value), "progress")
 }
 
 func problemVocabulary(value string) bool {

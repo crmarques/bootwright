@@ -117,3 +117,64 @@ func TestFormatConditionsIgnoresHealthyNegativeConditions(t *testing.T) {
 		t.Errorf("diagnostic omitted the unsatisfied condition:\n%s", printed)
 	}
 }
+
+func TestFormatConditionsDemotesAConditionWhoseHeartbeatFroze(t *testing.T) {
+	obj := map[string]any{"status": map[string]any{"phase": "Progressing", "conditions": []any{
+		map[string]any{"type": "ReconcileComplete", "status": "True", "reason": "ReconcileCompleted", "message": "Reconcile completed successfully", "lastHeartbeatTime": "2026-08-07T10:23:34Z"},
+		map[string]any{"type": "Available", "status": "False", "reason": "CephClusterStatus", "message": "CephCluster resource is not reporting status", "lastHeartbeatTime": "2026-08-07T01:16:59Z"},
+		map[string]any{"type": "Progressing", "status": "True", "reason": "NoobaaInitializing", "message": "Waiting on Nooba instance to finish initialization", "lastHeartbeatTime": "2026-08-07T10:23:34Z"},
+		map[string]any{"type": "Upgradeable", "status": "False", "reason": "CephClusterStatus", "message": "CephCluster resource is not reporting status", "lastHeartbeatTime": "2026-08-07T01:16:59Z"},
+	}}}
+	var progress bytes.Buffer
+	cause := formatConditions(obj, "StorageCluster", "openshift-storage", "ocs-external-storagecluster", startWaitProgress(&progress))
+	if !strings.HasPrefix(cause, "Progressing NoobaaInitializing") {
+		t.Fatalf("cause = %q, want the condition the operator is still heartbeating", cause)
+	}
+	printed := progress.String()
+	if !strings.Contains(printed, "Available=False reason=CephClusterStatus (stale: last heartbeat 9h6m35s behind") {
+		t.Errorf("diagnostic does not mark the frozen condition stale:\n%s", printed)
+	}
+}
+
+func TestFormatConditionsKeepsAStaleConditionWhenNothingIsFresher(t *testing.T) {
+	obj := map[string]any{"status": map[string]any{"conditions": []any{
+		map[string]any{"type": "ReconcileComplete", "status": "True", "reason": "ReconcileCompleted", "message": "Reconcile completed successfully", "lastHeartbeatTime": "2026-08-07T10:23:34Z"},
+		map[string]any{"type": "Available", "status": "False", "reason": "CephClusterStatus", "message": "CephCluster resource is not reporting status", "lastHeartbeatTime": "2026-08-07T01:16:59Z"},
+	}}}
+	cause := formatConditions(obj, "StorageCluster", "openshift-storage", "ocs-external-storagecluster", startWaitProgress(nil))
+	if !strings.HasPrefix(cause, "Available CephClusterStatus") {
+		t.Fatalf("cause = %q, want the stale condition rather than nothing at all", cause)
+	}
+}
+
+type relatedObjectRunner struct{}
+
+func (relatedObjectRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.Contains(joined, "cephcluster"):
+		return []byte(`{"status":{"phase":"Connected","conditions":[
+			{"type":"Connected","status":"True","reason":"ClusterConnected","message":"Cluster connected successfully"}]}}`), nil
+	case strings.Contains(joined, "storagecluster"):
+		return []byte(`{"status":{"phase":"Progressing","relatedObjects":[
+			{"apiVersion":"ceph.rook.io/v1","kind":"CephCluster","name":"ocs-external-storagecluster-cephcluster","namespace":"openshift-storage"}],
+			"conditions":[
+			{"type":"Available","status":"False","reason":"CephClusterStatus","message":"CephCluster resource is not reporting status","lastHeartbeatTime":"2026-08-07T01:16:59Z"},
+			{"type":"Progressing","status":"True","reason":"NoobaaInitializing","message":"Waiting on Nooba instance to finish initialization","lastHeartbeatTime":"2026-08-07T10:23:34Z"}]}}`), nil
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+func TestDiagnoseObjectReadsTheObjectItsConditionBlames(t *testing.T) {
+	var progress bytes.Buffer
+	cause := diagnoseObject(context.Background(), relatedObjectRunner{}, "/tmp/kubeconfig",
+		"ocs.openshift.io/v1", "StorageCluster", "openshift-storage", "ocs-external-storagecluster", startWaitProgress(&progress))
+	printed := progress.String()
+	if !strings.Contains(printed, "related cephcluster.ceph.rook.io/ocs-external-storagecluster-cephcluster phase=Connected") {
+		t.Fatalf("diagnostic never read the CephCluster the Available condition names:\n%s", printed)
+	}
+	if !strings.HasPrefix(cause, "Progressing NoobaaInitializing") {
+		t.Fatalf("cause = %q, want the live condition rather than the stale Available one", cause)
+	}
+}

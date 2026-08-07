@@ -213,10 +213,15 @@
         success_msg: >-
           The declared object gateway serves one certificate.
 
+    - name: Read the certificate the declared object gateway serves
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.set_fact:
+        bootwright_gateway_certificate: "{{ lookup('ansible.builtin.file', bootwright_gateway_cert_paths | first) | trim }}"
+
     - name: Stage the certificate the declared object gateway serves
       when: bootwright_gateway_cert_paths | length > 0
       ansible.builtin.copy:
-        content: "{{ lookup('ansible.builtin.file', bootwright_gateway_cert_paths | first) | trim }}\n"
+        content: "{{ bootwright_gateway_certificate }}\n"
         dest: "{{ bootwright_exporter_gateway_cert_path }}"
         mode: "0600"
 
@@ -333,6 +338,106 @@
           The export carries the declared object gateway, so Data Foundation
           gets its S3 endpoint.
 
+    - name: Read the trust bundle this cluster injects into its operands
+      when: bootwright_gateway_cert_paths | length > 0
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        argv:
+          - oc
+          - --kubeconfig
+          - "{{ bootwright_kubeconfig }}"
+          - get
+          - proxy.config.openshift.io/cluster
+          - --output
+          - jsonpath={.spec.trustedCA.name}
+      register: bootwright_cluster_trust_ref
+      changed_when: false
+
+    - name: Resolve the config map holding the cluster trust bundle
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.set_fact:
+        bootwright_trust_configmap: "{{ bootwright_cluster_trust_ref.stdout | default('') | trim | default('user-ca-bundle', true) }}"
+
+    - name: Read the certificates that trust bundle already carries
+      when: bootwright_gateway_cert_paths | length > 0
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        argv:
+          - oc
+          - --kubeconfig
+          - "{{ bootwright_kubeconfig }}"
+          - --namespace
+          - openshift-config
+          - get
+          - configmap
+          - "{{ bootwright_trust_configmap }}"
+          - --output
+          - jsonpath={.data.ca-bundle\.crt}
+      register: bootwright_trust_bundle_read
+      changed_when: false
+      failed_when: false
+
+    - name: Record the trust bundle the object gateway certificate must join
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.set_fact:
+        bootwright_trust_bundle_pem: "{{ bootwright_trust_bundle_read.stdout | default('') | trim }}"
+
+    - name: Merge the object gateway certificate into that trust bundle
+      when: bootwright_gateway_cert_paths | length > 0
+      ansible.builtin.set_fact:
+        bootwright_trust_bundle_merged: "{{ [bootwright_trust_bundle_pem, bootwright_gateway_certificate] | reject('equalto', '') | join('\n\n') }}"
+
+    - name: Publish the object gateway certificate into the cluster trust bundle
+      when:
+        - bootwright_gateway_cert_paths | length > 0
+        - bootwright_gateway_certificate | default('') not in bootwright_trust_bundle_pem | default('')
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        argv:
+          - oc
+          - --kubeconfig
+          - "{{ bootwright_kubeconfig }}"
+          - apply
+          - --server-side
+          - --field-manager
+          - bootwright
+          - --force-conflicts
+          - --filename
+          - "-"
+        stdin: "{{ bootwright_trust_manifest | to_nice_yaml(indent=2) }}"
+      vars:
+        bootwright_trust_manifest:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ bootwright_trust_configmap }}"
+            namespace: openshift-config
+          data:
+            ca-bundle.crt: "{{ bootwright_trust_bundle_merged }}"
+      changed_when: true
+
+    - name: Point the cluster trust at the bundle the object gateway certificate joined
+      when:
+        - bootwright_gateway_cert_paths | length > 0
+        - bootwright_cluster_trust_ref.stdout | default('') | trim | length == 0
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        argv:
+          - oc
+          - --kubeconfig
+          - "{{ bootwright_kubeconfig }}"
+          - patch
+          - proxy.config.openshift.io/cluster
+          - --type
+          - merge
+          - --patch
+          - '{"spec":{"trustedCA":{"name":"{{ bootwright_trust_configmap }}"}}}'
+      changed_when: true
+
     - name: Record the exported entries whose cephx key type this build cannot parse
       ansible.builtin.set_fact:
         bootwright_exporter_unreadable_keys: >-
@@ -373,6 +478,59 @@
         success_msg: >-
           The exported cephx keys use the AES key type this Data Foundation
           build can read.
+
+    - name: Re-read the cephx entities now that the exporter has minted them
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.command:
+        argv: >-
+          {{ (['cephadm', 'shell', '--'] if bootwright_exporter_use_cephadm_shell | bool else [])
+             + ['ceph', 'auth', 'ls', '--format', 'json'] }}
+      register: bootwright_exporter_auth_recheck
+      changed_when: false
+
+    - name: Record the cephx keys Ceph holds for this export's clients
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.set_fact:
+        bootwright_exporter_live_keys: >-
+          {{ (bootwright_exporter_auth_recheck.stdout | default('') | trim | default('{}', true) | from_json).auth_dump | default([])
+             | selectattr('entity', 'defined')
+             | selectattr('entity', 'match', '^client\.(' ~ bootwright_exporter_client_users ~ ')')
+             | selectattr('key', 'defined')
+             | map(attribute='key') | list }}
+
+    - name: Record the exported entries whose cephx key Ceph no longer holds
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.set_fact:
+        bootwright_exporter_superseded_keys: >-
+          {{ (bootwright_external_details.stdout | default('') | trim | default('[]', true) | from_json)
+             | selectattr('data.userID', 'defined')
+             | selectattr('data.userID', 'match', '^(' ~ bootwright_exporter_client_users ~ ')')
+             | selectattr('data.userKey', 'defined')
+             | rejectattr('data.userKey', 'in', bootwright_exporter_live_keys)
+             | map(attribute='name', default='<unnamed>') | list }}
+
+    - name: Refuse an export whose cephx keys another cluster re-minted mid-run
+      when: bootwright_exporter_key_type | length > 0
+      ansible.builtin.assert:
+        that:
+          - bootwright_exporter_superseded_keys | default([]) | length == 0
+        fail_msg: >-
+          Ceph no longer holds the cephx keys behind
+          {{ bootwright_exporter_superseded_keys | join(', ') }}, so attaching
+          this export would give
+          {{ bootwright_bound_cluster }} credentials that cannot authenticate.
+          Declaring spec.ceph.security.cephx.keyType makes this step delete the
+          mistyped client.healthchecker and client.csi-* entities so the
+          exporter remints them, and Bootwright passes no
+          --restricted-auth-permission, so every OpenShift cluster attached to
+          {{ bootwright_step_refs['external-storage'].spec.storageClusterRef }}
+          shares those five entities. Two clusters exporting in the same apply
+          therefore race: this run minted its keys, then another run deleted
+          and reminted them. Rerun the apply. The entities now carry the
+          declared key type, so neither run deletes them again and both adopt
+          the same keys.
+        success_msg: >-
+          Ceph still holds every cephx key this export carries.
 
     - name: Capture the declared externalDetails output
       ansible.builtin.copy:
