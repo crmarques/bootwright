@@ -402,6 +402,35 @@ func TestContainerfileStampsBuildMetadata(t *testing.T) {
 	}
 }
 
+func TestContainerfilePacksTheBundleOnlyWithTheFullAnsibleTree(t *testing.T) {
+	body := readRepoFile(t, "Containerfile")
+	copyAnsible := strings.Index(body, "COPY ansible ansible")
+	if copyAnsible < 0 {
+		t.Fatal("Containerfile must copy the ansible tree before packing the bundle")
+	}
+	if before := body[:copyAnsible]; strings.Contains(before, "make sync-bundle") {
+		t.Fatal("Containerfile must not run `make sync-bundle` before `COPY ansible ansible`: it writes internal/converge/bundle/ansible_bundle.zip from a tree holding only the collection requirements, and on a cold build that placeholder is NEWER than the ansible sources COPY brings in afterwards, so the second `make sync-bundle` is a no-op and the binary embeds a bundle with no ansible.cfg — `embedded ansible bundle is empty` on the first command")
+	}
+	if !strings.Contains(body[:copyAnsible], "make sync-collections") {
+		t.Fatal("the pre-ansible layer must resolve only the Galaxy collections (`make sync-collections`), which is the network step worth caching on its own")
+	}
+	if !strings.Contains(body[copyAnsible:], "make sync-bundle") {
+		t.Fatal("Containerfile must pack the bundle after the full ansible tree is in place")
+	}
+
+	makefile := readRepoFile(t, "Makefile")
+	if !strings.Contains(makefile, "sync-collections: $(COLLECTIONS_STAMP)") {
+		t.Fatal("Makefile must expose sync-collections so a build can resolve collections without packing an archive")
+	}
+
+	sync := readRepoFile(t, "scripts/sync-ansible-bundle.py")
+	for _, want := range []string{"require_runnable_bundle", "ansible.cfg", "bootwright/core/galaxy.yml"} {
+		if !strings.Contains(sync, want) {
+			t.Fatalf("the bundle writer must refuse an archive the binary would reject at startup, missing %q", want)
+		}
+	}
+}
+
 func TestGitHubActionsUseCommitSHARefs(t *testing.T) {
 	root := filepath.Join(repoRoot(t), ".github", "workflows")
 	usesRE := regexp.MustCompile(`\buses:\s*([^#\s]+)`)

@@ -28,6 +28,7 @@ def main() -> int:
     add_tree(files, args.source, Path())
     if args.collections.exists():
         add_tree(files, args.collections, Path("collections"))
+    require_runnable_bundle(files, args.source)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     tmp = args.output.with_name(args.output.name + ".tmp")
@@ -38,6 +39,26 @@ def main() -> int:
             write_file(archive, archive_name, files[archive_name])
     os.replace(tmp, args.output)
     return 0
+
+
+RUNTIME_REQUIRED_ENTRIES = (
+    "ansible.cfg",
+    "collections/ansible_collections/bootwright/core/galaxy.yml",
+)
+
+
+def require_runnable_bundle(files: dict[str, Path], source: Path) -> None:
+    missing = [entry for entry in RUNTIME_REQUIRED_ENTRIES if entry not in files]
+    if not missing:
+        return
+    raise BundleError(
+        "refusing to write a bundle the binary cannot run: "
+        + ", ".join(missing)
+        + f" absent from --source {source}. openAnsibleBundleArchive rejects exactly these "
+        "entries at startup, so writing the archive anyway ships a binary that fails on the "
+        "first command with 'embedded ansible bundle is empty'. This is what a build that "
+        "packs the bundle before the full ansible tree is in place produces."
+    )
 
 
 def add_tree(files: dict[str, Path], root: Path, prefix: Path) -> None:

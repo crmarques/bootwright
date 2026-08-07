@@ -93,7 +93,7 @@ SELECT_CHECKS = $(PYTHON) scripts/select-checks.py
 CHECK_BASE ?= main
 SELECT_TIER ?= scoped
 
-.PHONY: all build go-build container-build sync-bundle test validate plan check-full check-fast check-scoped check-feature run-selected-checks check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build go-build container-build sync-bundle sync-collections test validate plan check-full check-fast check-scoped check-feature run-selected-checks check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck go-mod-tidy-check python-test ansible-syntax-check ansible-lint-check shellcheck-check workflow-yaml-check docs-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
@@ -145,6 +145,8 @@ container-build:
 	mv $(CONTAINER_CACHE_NEXT_DIR) $(CONTAINER_CACHE_DIR)
 
 sync-bundle: $(EMBED_BUNDLE_ARCHIVE)
+
+sync-collections: $(COLLECTIONS_STAMP)
 
 $(EMBED_BUNDLE_ARCHIVE): $(COLLECTIONS_STAMP) scripts/sync-ansible-bundle.py $(ANSIBLE_BUNDLE_SOURCES)
 	@$(PYTHON) scripts/sync-ansible-bundle.py \
@@ -408,6 +410,7 @@ help:
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip (no-op when the ansible tree is unchanged)' \
+		'  sync-collections Resolve the Galaxy collections only, without packing the archive' \
 		'  check-scoped     Run only the stages and Go packages the change against CHECK_BASE can break (bug-fix gate)' \
 		'  check-feature    check-scoped plus the API/validator/render/CLI contract floor (new-feature gate)' \
 		'  check-fast       Run cheap local guardrails plus the whole Go suite (no race, staticcheck, lint, docs, or clean-checkout)' \

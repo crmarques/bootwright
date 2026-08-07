@@ -41,3 +41,25 @@ class AddTreeSymlinkTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunnableBundleGuardTest(unittest.TestCase):
+    def test_rejects_a_bundle_the_binary_cannot_run(self):
+        files = {"collections/requirements.yml": Path("requirements.yml")}
+
+        with self.assertRaisesRegex(sync_bundle.BundleError, "ansible.cfg"):
+            sync_bundle.require_runnable_bundle(files, Path("ansible"))
+
+    def test_rejects_a_bundle_without_the_bootwright_collection(self):
+        files = {"ansible.cfg": Path("ansible.cfg")}
+
+        with self.assertRaisesRegex(sync_bundle.BundleError, "bootwright/core/galaxy.yml"):
+            sync_bundle.require_runnable_bundle(files, Path("ansible"))
+
+    def test_accepts_a_complete_bundle(self):
+        files = {
+            "ansible.cfg": Path("ansible.cfg"),
+            "collections/ansible_collections/bootwright/core/galaxy.yml": Path("galaxy.yml"),
+        }
+
+        sync_bundle.require_runnable_bundle(files, Path("ansible"))

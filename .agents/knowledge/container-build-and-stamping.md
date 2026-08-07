@@ -10,17 +10,17 @@ as the base image. Keep `GOTOOLCHAIN=local`.
 
 **Layer strategy (ordered to maximize cache hits):**
 
-1. The Galaxy collection-download layer (first `make sync-bundle`) is keyed
-   only on `Makefile`, `ansible/collections/requirements.yml`,
-   `requirements.lock.yml`, `scripts/sync-ansible-bundle.py`,
-   `scripts/verify-ansible-collections.py`, and `internal/repo/bundlecheck` —
-   role/playbook edits stay cached.
+1. The Galaxy collection-download layer runs `make sync-collections` and is
+   keyed only on `Makefile`, `ansible/collections/requirements.yml`,
+   `requirements.lock.yml`, and `scripts/verify-ansible-collections.py` —
+   role/playbook edits stay cached. It resolves collections ONLY; it must never
+   pack the archive (see the cold-build constraint below).
 2. Only the inputs `make build` consumes are COPYed (`api`, `cmd`,
    `internal`, `add-ons`, `ansible`, `scripts`); docs, examples, specs,
    images, and tests are excluded via `.dockerignore` so edits to them never
    invalidate the bundle/compile layers.
-3. `make sync-bundle` runs a SECOND time after the full source COPY: the
-   bundle re-pack is keyed on the source COPYs (not VERSION), so version
+3. `make sync-bundle` runs AFTER the full source COPY, and only there: the
+   bundle pack is keyed on the source COPYs (not VERSION), so version
    churn does not re-run it and the packed bundle matches the real
    `ansible/` tree.
 4. The compile is its own layer via `make go-build`, so per-commit
@@ -30,6 +30,31 @@ as the base image. Keep `GOTOOLCHAIN=local`.
    via `git describe`. `.dockerignore` must NOT exclude `.git`;
    `TestContainerfileStampsBuildMetadata` enforces that and forbids silent
    `ARG VERSION=dev` / `ARG GIT_COMMIT=unknown` defaults.
+
+**Constraint (the pre-ansible layer must not pack the archive — cold builds
+otherwise ship an empty bundle):** the collection layer originally ran
+`make sync-bundle`, which builds the whole chain and therefore WROTE
+`internal/converge/bundle/ansible_bundle.zip` from a tree holding only
+`ansible/collections/requirements*.yml`. `COPY` preserves the build context's
+mtimes, so the ansible sources arriving in the next layer are almost always
+OLDER than that placeholder, and make then declares the archive up to date: the
+second `make sync-bundle` is a silent no-op and `make go-build` embeds an
+archive with no `ansible.cfg` and no `bootwright/core`. Every command then dies
+with `embedded ansible bundle is empty (rebuild bootwright via 'make build'):
+missing ansible.cfg`.
+Whether it bites depends on the BuildKit layer cache, which is why it looks
+intermittent: when the collection layer is a CACHE HIT its placeholder carries
+that layer's original (old) mtime, the COPYed sources are newer, and the re-pack
+runs correctly. On a COLD build — no layer cache, or the requirements changed —
+the placeholder is seconds old and always wins. Observed 2026-08-07 after a
+`docker build` following `docker image rm`.
+The layer now runs `make sync-collections` (`$(COLLECTIONS_STAMP)` only), and
+`scripts/sync-ansible-bundle.py` refuses via `require_runnable_bundle()` to
+write an archive missing `ansible.cfg` or
+`collections/ansible_collections/bootwright/core/galaxy.yml` — the exact two
+entries `openAnsibleBundleArchive` rejects at startup, so a build can no longer
+produce a binary that fails on its first command.
+`TestContainerfilePacksTheBundleOnlyWithTheFullAnsibleTree` pins the ordering.
 
 **Version stamping:** `VERSION` may be an explicit tag (set by CI/releases),
 falling back to `git describe --tags --always --dirty`, then the short SHA,
