@@ -534,7 +534,8 @@ Generated output boundaries are part of the safety contract:
 - Apply logs live under `/var/lib/bootwright/contexts/<context>/runs/` with
   restrictive file modes: the shared run log at `runs/history/<run-id>/
   bootwright.log` and each cluster's split-out flow log at
-  `runs/history/<run-id>/bootwright-<cluster>.log`.
+  `runs/history/<run-id>/clusters/<cluster>/cluster.log`, with each step and
+  add-on log nested under the same cluster directory.
 - Per-cluster install records live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/install-record.json`.
 - Per-resource convergence safety records live under

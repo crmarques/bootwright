@@ -1038,9 +1038,11 @@ there.
 | --- | --- |
 | `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger, and the short-lived local lease for the updating process. |
 | `runs/history/<run-id>/bootwright.log` | The shared apply flow log: shared-stage tool output plus one `<cluster> apply initiated … / finished successfully \| failed` marker per cluster that points at its split-out log. |
-| `runs/history/<run-id>/bootwright-<cluster>.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
+| `runs/history/<run-id>/clusters/<cluster>/cluster.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
+| `runs/history/<run-id>/clusters/<cluster>/steps/<task-id>/` | One step's Ansible output log for that cluster, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
+| `runs/history/<run-id>/clusters/<cluster>/addons/<addon>/` | One add-on's output log, under the cluster it was applied to. |
 | `runs/history/<run-id>/input/` | The forensic snapshot of the input YAML an `apply` loaded, written at the start of the mutating run. |
-| `runs/history/<run-id>/tasks/<task-id>/artifacts/` | One task's Ansible output log, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
+| `runs/history/<run-id>/tasks/<task-id>/artifacts/` | One non-cluster task's Ansible output log (fabric and infra work that owns no cluster), plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |

@@ -383,7 +383,8 @@ A `ClusterAddon` apply (an OLM operator install, its steps, or a manifest-only
 attachment) can fail at several distinct gates; `bootwright status` names which
 one and the exact detail last observed, and the full command/tool output for
 that task is in its log under
-`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/tasks/`.
+`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/clusters/<cluster>/`
+(add-on steps under `addons/<addon>/`, everything else under `steps/<task-id>/`).
 
 - **`CatalogSource/... did not reach connectionState READY`** — the add-on
   ships its own `spec.olm.catalogSource` (for example `fusion-data-foundation`)
