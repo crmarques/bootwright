@@ -2520,8 +2520,16 @@ func TestStorageCephadmDestroyRunsACephadmItProvedTheHostHas(t *testing.T) {
 		if !ok || len(argv) == 0 {
 			t.Fatalf("%q must invoke cephadm through argv, got %v", name, cmd)
 		}
-		if got := fmt.Sprint(argv[0]); !strings.Contains(got, "bootwright_ceph_destroy_cephadm") {
-			t.Errorf("%q must run the cephadm this teardown resolved for the host, not a bare `cephadm` off PATH: cephadm needs its package only on the host it bootstrapped, so a node enrolled over SSH holds a whole cluster and still answers the binary with ENOENT, which fails the module before the removal runs. Got argv[0]=%v", name, argv[0])
+		tokens := make([]string, 0, len(argv))
+		for _, arg := range argv {
+			tokens = append(tokens, fmt.Sprint(arg))
+		}
+		removal := ansibleBoundedCommand(tokens)
+		if len(removal) == 0 {
+			t.Fatalf("%q must bound a cephadm invocation, got %v", name, tokens)
+		}
+		if !strings.Contains(removal[0], "bootwright_ceph_destroy_cephadm") {
+			t.Errorf("%q must run the cephadm this teardown resolved for the host, not a bare `cephadm` off PATH: cephadm needs its package only on the host it bootstrapped, so a node enrolled over SSH holds a whole cluster and still answers the binary with ENOENT, which fails the module before the removal runs. Got the bounded command %v", name, removal[0])
 		}
 	}
 

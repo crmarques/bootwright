@@ -23,6 +23,9 @@
 - name: Prove the storage node container runtime can start a Ceph container
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "900"
       - podman
       - run
       - --rm
@@ -40,6 +43,9 @@
 - name: Prove the storage node container runtime starts under the cgroupfs cgroup manager
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "900"
       - podman
       - run
       - --rm
@@ -87,6 +93,9 @@
 - name: Prove the storage node still needs the cgroupfs cgroup manager Bootwright selected
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - podman
       - run
       - --rm
@@ -124,6 +133,9 @@
 - name: Re-prove the storage node container runtime after selecting the cgroup manager
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - podman
       - run
       - --rm
@@ -196,6 +208,10 @@
       {{ (bootwright_ceph_runtime_probe.stderr | default('') | trim) or '(no stderr)' }}
       cgroupfs cgroup manager probe rc={{ bootwright_ceph_runtime_cgroupfs_probe.rc | default('not attempted') }}:
       {{ (bootwright_ceph_runtime_cgroupfs_probe.stderr | default('') | trim) or '(no stderr)' }}
+      Every probe here runs under `timeout`, so rc=124 means it never returned and the
+      bound killed it: the runtime hung rather than refused. A registry this node cannot
+      reach stalls the image pull the first probe performs, and a podman that cannot
+      create its cgroup hangs in the same place; both read as 124 with no stderr.
       Installed runtime packages:
       {{ (bootwright_ceph_runtime_versions.stdout | default('') | trim) or '(rpm -q unavailable)' }}
     success_msg: >-

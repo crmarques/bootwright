@@ -31,6 +31,7 @@
   ansible.builtin.command:
     argv:
       - timeout
+      - --kill-after=15
       - "120"
       - cephadm
       - shell
@@ -76,6 +77,9 @@
 - name: Remove existing cephadm cluster for override rebuild on every topology host
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=30
+      - "1800"
       - cephadm
       - rm-cluster
       - --force

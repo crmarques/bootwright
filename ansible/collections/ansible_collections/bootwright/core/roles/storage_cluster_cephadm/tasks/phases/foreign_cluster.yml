@@ -65,6 +65,9 @@
 - name: Remove the cephadm clusters on the storage node this apply is authorized to reclaim
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=30
+      - "900"
       - cephadm
       - rm-cluster
       - --force

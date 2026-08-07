@@ -52,6 +52,7 @@
   ansible.builtin.command:
     argv:
       - timeout
+      - --kill-after=10
       - "20"
       - cephadm
       - shell

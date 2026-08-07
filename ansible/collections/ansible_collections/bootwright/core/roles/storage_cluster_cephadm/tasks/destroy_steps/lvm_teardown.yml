@@ -121,6 +121,9 @@
 - name: Release the Ceph clusters still running on the storage node
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=30
+      - "900"
       - cephadm
       - rm-cluster
       - --force

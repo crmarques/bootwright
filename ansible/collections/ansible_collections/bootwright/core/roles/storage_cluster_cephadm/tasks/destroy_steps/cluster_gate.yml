@@ -41,6 +41,7 @@
   ansible.builtin.command:
     argv:
       - timeout
+      - --kill-after=15
       - "60"
       - cephadm
       - shell
@@ -292,6 +293,7 @@
   ansible.builtin.command:
     argv:
       - timeout
+      - --kill-after=15
       - "120"
       - cephadm
       - shell
@@ -374,6 +376,9 @@
 - name: Remove cephadm cluster on seed host
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=30
+      - "1800"
       - "{{ bootwright_ceph_destroy_cephadm }}"
       - rm-cluster
       - --force
@@ -429,6 +434,9 @@
 - name: Remove cephadm cluster on non-seed hosts
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=30
+      - "1800"
       - "{{ bootwright_ceph_destroy_cephadm }}"
       - rm-cluster
       - --force
