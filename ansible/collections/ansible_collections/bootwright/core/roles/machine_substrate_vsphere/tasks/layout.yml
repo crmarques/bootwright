@@ -5,7 +5,12 @@
       {{ (bootwright_component.osManaged | default(false) | bool)
          and ((bootwright_apply_mode | default('reconcile')) == 'rebuild')
          and (bootwright_current_cluster.name
-              in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)) }}
+              in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list))
+         and ((bootwright_substrate_reset_machines | default('') | split(',') | map('trim') | reject('equalto', '') | list
+               | map('split', '/') | map('first')
+               | select('equalto', bootwright_current_cluster.name) | list | length == 0)
+              or ((bootwright_current_cluster.name ~ '/' ~ bootwright_component.name)
+                  in (bootwright_substrate_reset_machines | default('') | split(',') | map('trim') | reject('equalto', '') | list))) }}
     bootwright_vsphere_disks: >-
       {{
         [{'size_gb': bootwright_component.profile.diskGiB,

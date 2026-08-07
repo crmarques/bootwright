@@ -14,6 +14,34 @@
       }}
   changed_when: false
 
+- name: Resolve KubeVirt substrate release scope
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_machine_released: >-
+      {{
+        (
+          bootwright_current_cluster.name in (
+            bootwright_substrate_reset_clusters | default('')
+            | split(',') | map('trim') | reject('equalto', '') | list
+          )
+        )
+        and (
+          (
+            bootwright_substrate_reset_machines | default('')
+            | split(',') | map('trim') | reject('equalto', '') | list
+            | map('split', '/') | map('first')
+            | select('equalto', bootwright_current_cluster.name) | list | length == 0
+          )
+          or (
+            (bootwright_current_cluster.name ~ '/' ~ bootwright_component.name)
+            in (
+              bootwright_substrate_reset_machines | default('')
+              | split(',') | map('trim') | reject('equalto', '') | list
+            )
+          )
+        )
+      }}
+  changed_when: false
+
 - name: Resolve KubeVirt substrate inputs
   ansible.builtin.set_fact:
     bootwright_kubevirt_kubeconfig: "{{ bootwright_component.kubevirt.kubeconfig | default('') }}"
@@ -25,8 +53,7 @@
     bootwright_kubevirt_context_name: "{{ bootwright_clusters_dir | dirname | basename }}"
     bootwright_kubevirt_rebuild_authorized: >-
       {{
-        bootwright_current_cluster.name
-        in (bootwright_substrate_reset_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
+        (bootwright_kubevirt_machine_released | bool)
         or bootwright_current_cluster.name
         in (bootwright_ocp_rebuild_authorized_clusters | default('') | split(',') | map('trim') | reject('equalto', '') | list)
       }}
