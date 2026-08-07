@@ -2967,7 +2967,14 @@ verbs that reach machines.
 - Destroying a KubeVirt host cluster while an installed nested cluster is left
   outside the selected work set fails before mutation. No `--authorize` token
   widens `--clusters`; the nested cluster must be selected in the same
-  full-lifecycle destroy or destroyed first. The same gate binds a *scoped*
+  full-lifecycle destroy or destroyed first. "Nested cluster" covers both kinds,
+  and each proves it is provisioned by its own evidence — a `ContainerCluster` by
+  its install record, a managed `StorageCluster` by its Bootwright-owned
+  `storage-cluster` ownership record, exactly as `--machines` proves an installed
+  cluster node. Keying the gate on the container evidence alone would let a host
+  teardown annihilate a nested Ceph cluster's OSDs with no refusal, no data-loss
+  gate, and no preview line, because a container-only selection prices no storage
+  data loss. The same gate binds a *scoped*
   `apply` that would rebuild a host cluster's machine substrate — a
   `--mode rebuild` rebuild or
   a release-authorized reinstall — and it keys on the run's selected work set,
@@ -3352,10 +3359,15 @@ verbs that reach machines.
   deliberate manual edit rather than silently dropped.
   Once the context has a recorded apply, the `status` next-step spine surfaces
   `diff` ahead of `plan`/`apply`. When the last run failed, the spine's
-  next step is instead the exact scoped retry command (`apply` with the failed
-  run's `--stage`/`--clusters` selection) alongside the failed tasks' log paths
+  next step is instead the exact scoped retry command — the failed run's own verb
+  carrying its own selection (`--stage`/`--through`, and `--clusters` or
+  `--machines`) — alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an
-  operator reaching for `--mode rebuild` or `destroy`.
+  operator reaching for `--mode rebuild` or `destroy`. A retry hint never widens
+  what the failed run selected: dropping a selection axis the run used offers a
+  mutation the operator never asked for, and on `destroy` an unscoped retry is a
+  whole-context teardown with its confirmation already answered. The run ledger
+  therefore records the machine selection beside the cluster one.
   Every spine entry is either a command the CLI accepts verbatim — it resolves
   to a registered command path and carries only flags that command registers —
   or command-free prose. A spine that ends on a verb the CLI no longer has
