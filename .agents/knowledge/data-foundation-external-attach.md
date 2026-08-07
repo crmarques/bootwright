@@ -117,8 +117,19 @@ already present, so re-running is a no-op. `--force-conflicts` is deliberate:
 `user-ca-bundle` is normally owned by the installer's field manager, and taking
 ownership of a bundle we just read and preserved is the intended outcome.
 
+**This reboots the cluster's nodes, once.** The cluster-wide trusted CA bundle is
+machine configuration: the Machine Config Operator renders it into every node's
+trust store, so the first apply that adds a certificate rolls the machine config
+pools serially. On a compact three-node cluster that is three sequential reboots,
+and the KubeVirt guests hosted on it go with them. It is a one-time cost — the
+step skips when the certificate is already in the bundle, so later applies change
+nothing — but it is not free, and it lands during an add-on step rather than a
+machine-phase one. Plan the first apply after adopting a generated gateway
+certificate accordingly.
+
 An estate-issued gateway certificate needs none of this, because the estate CA is
-already in the cluster's trust — that remains the better shape for production.
+already in the cluster's trust — and it avoids the rollout entirely. That remains
+the better shape for production.
 
 ## `error setting modifier for [client.healthchecker] type=key ...: Malformed input [buffer:3]`
 
