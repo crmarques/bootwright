@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -157,22 +156,8 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
 		}
-		if (runScope.Name == "infra" || fullDestroy) && sel.Active && !sel.MachineSelection {
-			conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
-			if len(conflicts) > 0 {
-				if standingTasks, perr := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state); perr == nil {
-					conflicts = workflow.StandingDestroyScopeConflicts(ctx.RunsDir, clustersDir, state, ownershipRecords, standingTasks, conflicts)
-				}
-			}
-			if len(conflicts) > 0 {
-				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters"))
-			}
-		}
-		provisionedStorageTenants := converge.ProvisionedStorageTenants(ownershipRecords)
-		if sel.Active && len(sel.AllRoots) > 0 {
-			if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.AllRoots, provisionedStorageTenants); len(conflicts) > 0 {
-				return failErr(1, converge.FormatKubeVirtTenantConflicts(conflicts))
-			}
+		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords); err != nil {
+			return failErr(1, err)
 		}
 		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope, dryRun)
 		if consumerErr != nil {

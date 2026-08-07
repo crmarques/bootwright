@@ -46,6 +46,26 @@ func destroyGateForecastRefusals(safety workflow.DestroySafetyDecision, inputSki
 	return out
 }
 
+func destroyScopeConflictGates(state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, fullDestroy bool, runsDir, clustersDir string, ownershipRecords []ownership.ResourceRecord) error {
+	if (runScope.Name == "infra" || fullDestroy) && sel.Active && !sel.MachineSelection {
+		conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
+		if len(conflicts) > 0 {
+			if standingTasks, perr := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state); perr == nil {
+				conflicts = workflow.StandingDestroyScopeConflicts(runsDir, clustersDir, state, ownershipRecords, standingTasks, conflicts)
+			}
+		}
+		if len(conflicts) > 0 {
+			return clusteraccess.FormatDestroyScopeConflicts(conflicts, "--clusters")
+		}
+	}
+	if sel.Active && len(sel.AllRoots) > 0 {
+		if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.AllRoots, converge.ProvisionedStorageTenants(ownershipRecords)); len(conflicts) > 0 {
+			return converge.FormatKubeVirtTenantConflicts(conflicts)
+		}
+	}
+	return nil
+}
+
 func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, dryRun bool) (bool, string, error) {
 	if !sel.Active || len(sel.StorageRoots) == 0 {
 		return false, "", nil
