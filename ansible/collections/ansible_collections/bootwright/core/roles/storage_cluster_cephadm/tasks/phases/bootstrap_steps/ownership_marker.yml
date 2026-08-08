@@ -30,6 +30,45 @@
     mode: "0600"
   when: bootwright_ceph_ownership_fsid | default('') | trim | length > 0
 
+- name: Ensure the Ceph configuration directory exists on every other declared cluster host
+  ansible.builtin.file:
+    path: /etc/ceph
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ item.inventoryHost }}"
+  loop: >-
+    {{ bootwright_selected_storage_cluster.hosts | default([])
+       | rejectattr('inventoryHost', 'equalto', inventory_hostname)
+       | list }}
+  loop_control:
+    label: "{{ item.hostname | default(item.inventoryHost) }}"
+  when: bootwright_ceph_ownership_fsid | default('') | trim | length > 0
+
+- name: Stamp Bootwright Ceph ownership marker on every other declared cluster host
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_ownership_marker_path }}"
+    content: >-
+      {{
+        {
+          'manager': 'bootwright',
+          'cluster': bootwright_selected_storage_cluster.name,
+          'fsid': bootwright_ceph_ownership_fsid | default('') | trim
+        } | to_nice_json
+      }}
+    owner: root
+    group: root
+    mode: "0600"
+  delegate_to: "{{ item.inventoryHost }}"
+  loop: >-
+    {{ bootwright_selected_storage_cluster.hosts | default([])
+       | rejectattr('inventoryHost', 'equalto', inventory_hostname)
+       | list }}
+  loop_control:
+    label: "{{ item.hostname | default(item.inventoryHost) }}"
+  when: bootwright_ceph_ownership_fsid | default('') | trim | length > 0
+
 - name: Record storage cluster ownership early for recoverability
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -44,3 +83,4 @@
       cluster: "{{ bootwright_selected_storage_cluster.name }}"
       attributes:
         seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+        fsid: "{{ bootwright_ceph_ownership_fsid | default('') | trim }}"

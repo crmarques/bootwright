@@ -112,19 +112,31 @@
       changed_when: false
       failed_when: false
 
+    - name: Resolve whether the host cluster serves the VirtualMachine API at all
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_vm_api_absent: >-
+          {{ ("doesn't have a resource type" in (bootwright_kubevirt_vm_owner.stderr | default('')))
+             and ('unable to retrieve the complete list of server APIs'
+                  not in (bootwright_kubevirt_vm_owner.stderr | default(''))) }}
+      changed_when: false
+
     - name: Require a conclusive KubeVirt VirtualMachine probe
       ansible.builtin.assert:
         that:
           - >-
             (bootwright_kubevirt_vm_owner.rc | default(1)) == 0
             or 'NotFound' in (bootwright_kubevirt_vm_owner.stderr | default(''))
+            or (bootwright_kubevirt_vm_api_absent | default(false) | bool)
         fail_msg: >-
           Could not determine whether VirtualMachine {{ bootwright_kubevirt_vm_name }}
           in namespace {{ bootwright_kubevirt_namespace }} exists:
           {{ bootwright_kubevirt_vm_owner.stderr | default('kubectl get failed with no detail') }}.
           Refusing to treat it as absent — that would skip its teardown and drop
-          its ownership record while the VM may still run. Fix host-cluster
-          kubeconfig access and re-run destroy.
+          its ownership record while the VM may still run. A NotFound answer, or a host
+          cluster whose API discovery completed and serves no VirtualMachine resource type
+          at all, is conclusive absence; this error is neither — a probe that failed while
+          API discovery was incomplete may only be missing the API group that serves the
+          guest. Fix host-cluster kubeconfig access and re-run destroy.
 
     - name: Resolve KubeVirt VirtualMachine ownership for destroy
       ansible.builtin.set_fact:
@@ -140,6 +152,11 @@
           VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
           {{ bootwright_kubevirt_namespace }} is not present on the host cluster;
           nothing to tear down.
+          {{ 'The host cluster answered that it serves no VirtualMachine resource type at
+              all: KubeVirt is gone from that cluster, and a VirtualMachine object cannot
+              outlive the API that serves it, so the guest is proven absent rather than
+              unprobeable.'
+             if (bootwright_kubevirt_vm_api_absent | default(false) | bool) else '' }}
       when: not (bootwright_kubevirt_vm_present | bool)
 
     - name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
@@ -237,12 +254,17 @@
           - >-
             (item.rc | default(1)) == 0
             or 'NotFound' in (item.stderr | default(''))
+            or (("doesn't have a resource type" in (item.stderr | default('')))
+                and ('unable to retrieve the complete list of server APIs'
+                     not in (item.stderr | default(''))))
         fail_msg: >-
           Could not determine whether DataVolume {{ item.item }} in namespace
           {{ bootwright_kubevirt_namespace }} exists:
           {{ item.stderr | default('kubectl get failed with no detail') }}.
           Refusing to treat it as absent — its teardown would be silently
-          skipped. Fix host-cluster kubeconfig access and re-run destroy.
+          skipped. A NotFound answer, or a host cluster whose API discovery completed and
+          serves no DataVolume resource type at all, is conclusive absence; this error is
+          neither. Fix host-cluster kubeconfig access and re-run destroy.
         quiet: true
       loop: "{{ bootwright_kubevirt_dv_owner.results }}"
       loop_control:

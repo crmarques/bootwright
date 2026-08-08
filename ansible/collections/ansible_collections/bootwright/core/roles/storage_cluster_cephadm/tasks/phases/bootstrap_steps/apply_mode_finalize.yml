@@ -9,6 +9,21 @@
   changed_when: false
   failed_when: false
 
+- name: Read the existing Ceph configuration for the pre-record
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_prerecord_conf
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the existing Ceph fsid for the pre-record
+  ansible.builtin.set_fact:
+    bootwright_ceph_prerecord_fsid: >-
+      {{ (bootwright_ceph_prerecord_conf.content | b64decode
+          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+          | default([], true) | first | default('')) | trim }}
+  when: (bootwright_ceph_prerecord_conf | default({})).content is defined
+
 - name: Pre-record storage cluster ownership before bootstrap
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -23,3 +38,4 @@
       cluster: "{{ bootwright_selected_storage_cluster.name }}"
       attributes:
         seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+        fsid: "{{ bootwright_ceph_prerecord_fsid | default('') | trim }}"
