@@ -290,16 +290,37 @@
          else bootwright_ceph_destroy_conf_fsid | default('') }}
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
+- name: Probe whether the cluster still answers commands before the orchestrator stop
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - --kill-after=15
+      - "90"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - --connect-timeout=45
+      - status
+  register: bootwright_ceph_status_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_destroy_fsid | default('') | length > 0
+
 - name: Stop the Ceph orchestrator before any host removes the cluster
   ansible.builtin.command:
     argv:
       - timeout
       - --kill-after=15
-      - "120"
+      - "300"
       - cephadm
       - shell
       - --
       - ceph
+      - --connect-timeout=45
       - mgr
       - module
       - disable
@@ -329,16 +350,19 @@
       devices, runs ceph-volume over them again — the node ends this teardown carrying fresh
       volume groups on disks this run reported wiped, and the next apply refuses them as
       unowned data. Disabling the module is the first step of the cephadm purge procedure for
-      exactly that reason. Fix what the diagnostic names (a manager that is down, a mon
-      quorum that cannot be reached) and re-run destroy, or run
-      `cephadm shell -- ceph mgr module disable cephadm` on {{ inventory_hostname }} by hand
-      first. No --authorize token relaxes this: the alternative is a teardown that races the
-      orchestrator it is tearing down.
+      exactly that reason. This refusal fired because `ceph status` answered on this seed, so
+      the cluster is demonstrably serving commands, yet the disable did not commit. Fix what
+      the diagnostic names, run
+      `cephadm shell -- ceph mgr module disable cephadm` on {{ inventory_hostname }} by hand,
+      or stop every surviving manager daemon
+      (`systemctl stop ceph-{{ bootwright_ceph_destroy_fsid | default('<fsid>') }}@mgr.<name>`
+      on each host still running one) and re-run destroy. No --authorize token relaxes this:
+      the alternative is a teardown that races the orchestrator it is tearing down.
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
-    - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+    - (bootwright_ceph_status_probe.rc | default(1) | int) == 0
 
 - name: Report an orchestrator this teardown could not disable on an unanswering cluster
   ansible.builtin.debug:
@@ -349,19 +373,19 @@
       {{ inventory_hostname }}: the disable exited
       {{ bootwright_ceph_destroy_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_destroy_orch_disable.stderr | default('no diagnostic was recorded') | trim }}),
-      and `ceph fsid` did not answer on this seed either. Continuing: a cluster that answers
-      neither probe is very likely already down, and refusing here would strand every teardown
-      of a half-removed cluster. It is not proof that no manager is running — the seed's own
-      mons may be gone while a manager survives on another host, and `cephadm shell` also fails
-      when it cannot pull its image. The teardown therefore proves the outcome instead of the
-      precondition: the settle gate re-reads every wiped device and refuses any Ceph daemon
-      still running once every host has finished, before this run releases any ownership
-      evidence.
+      and `ceph status` did not answer on this seed either. Continuing: a cluster that cannot
+      answer a status read cannot commit the writes cephadm reconciliation runs on, and
+      refusing here would strand every teardown of a half-removed cluster. It is not proof
+      that no manager process survives — the seed's own mons may be gone while a manager
+      survives on another host, and `cephadm shell` also fails when it cannot pull its image.
+      The teardown therefore proves the outcome instead of the precondition: the settle gate
+      re-reads every wiped device and refuses any Ceph daemon still running once every host
+      has finished, before this run releases any ownership evidence.
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
-    - bootwright_ceph_fsid.stdout | default('') | trim | length == 0
+    - (bootwright_ceph_status_probe.rc | default(1) | int) != 0
     - (bootwright_ceph_destroy_orch_disable.rc | default(0) | int) != 0
 
 - name: Resolve the cephadm command for the seed host cluster removal
@@ -647,15 +671,16 @@
     argv:
       - timeout
       - --kill-after=15
-      - "60"
+      - "90"
       - cephadm
       - shell
       - --fsid
       - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
       - --
       - ceph
-      - fsid
-  register: bootwright_ceph_resumed_fsid
+      - --connect-timeout=45
+      - status
+  register: bootwright_ceph_resumed_probe
   changed_when: false
   failed_when: false
   when:
@@ -668,13 +693,14 @@
     argv:
       - timeout
       - --kill-after=15
-      - "120"
+      - "300"
       - cephadm
       - shell
       - --fsid
       - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
       - --
       - ceph
+      - --connect-timeout=45
       - mgr
       - module
       - disable
@@ -694,22 +720,25 @@
     fail_msg: >-
       Refusing to resume the teardown of {{ bootwright_selected_storage_cluster.name }}
       (fsid {{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('<unresolved>') }}):
-      the surviving cluster answered `ceph fsid` from {{ inventory_hostname }}, so a manager
-      is still running, and disabling its cephadm module exited
+      the surviving cluster answered `ceph status` from {{ inventory_hostname }}, so it is
+      demonstrably serving commands and a manager can still reconcile, yet disabling its
+      cephadm module exited
       {{ bootwright_ceph_resumed_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_resumed_orch_disable.stderr | default('no diagnostic was recorded') | trim }}).
       This teardown removes the cluster one host at a time, and a cephadm module that is
       still enabled reconciles every purged host straight back: it redeploys the daemons the
       purge removed and runs ceph-volume over the OSD devices the purge just freed. Fix what
-      the diagnostic names, or run
+      the diagnostic names, run
       `cephadm shell --fsid <fsid> -- ceph mgr module disable cephadm` on a surviving host by
-      hand, and re-run destroy. No --authorize token relaxes this: the alternative is a
-      teardown that races the orchestrator it is tearing down.
+      hand, or stop every surviving manager daemon
+      (`systemctl stop ceph-{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('<fsid>') }}@mgr.<name>`
+      on each host still running one), and re-run destroy. No --authorize token relaxes this:
+      the alternative is a teardown that races the orchestrator it is tearing down.
   when:
     - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
-    - bootwright_ceph_resumed_fsid.stdout | default('') | trim | length > 0
+    - (bootwright_ceph_resumed_probe.rc | default(1) | int) == 0
 
 - name: Report an orchestrator a resumed teardown could not disable on an unanswering cluster
   ansible.builtin.debug:
@@ -720,17 +749,18 @@
       from {{ inventory_hostname }}: the disable exited
       {{ bootwright_ceph_resumed_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_resumed_orch_disable.stderr | default('no diagnostic was recorded') | trim }}),
-      and `ceph fsid` did not answer from this surviving host either. Continuing: a cluster
-      that answers neither probe is very likely already down — an interrupted teardown
-      disables the module before the seed removes its own cluster, and the seed's mon is
-      already gone — and refusing here would strand every resumed teardown. The settle gate
-      re-reads every wiped device and refuses any Ceph daemon still running once every host
-      has finished, before this run releases any ownership evidence.
+      and `ceph status` did not answer from this surviving host either. Continuing: a cluster
+      that cannot answer a status read cannot commit the writes cephadm reconciliation runs
+      on — an interrupted teardown disables the module before the seed removes its own
+      cluster, and the seed's mon is already gone — and refusing here would strand every
+      resumed teardown. The settle gate re-reads every wiped device and refuses any Ceph
+      daemon still running once every host has finished, before this run releases any
+      ownership evidence.
   when:
     - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
     - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
-    - bootwright_ceph_resumed_fsid.stdout | default('') | trim | length == 0
+    - (bootwright_ceph_resumed_probe.rc | default(1) | int) != 0
     - (bootwright_ceph_resumed_orch_disable.rc | default(0) | int) != 0
 
 - name: Probe non-seed hosts for local Ceph cluster state

@@ -97,8 +97,14 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 	if got := fmt.Sprint(tasks[disableIdx]["failed_when"]); got != "false" {
 		t.Errorf("the resumed orchestrator stop must not fail the run itself; its result is what the refusal reads, got failed_when=%v", tasks[disableIdx]["failed_when"])
 	}
-	if got := fmt.Sprint(tasks[orchRefuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_resumed_fsid.stdout") {
-		t.Errorf("the resumed refusal must stay gated on a cluster that answered, so an already-dead cluster is never blocked by a manager that cannot reply, got when=%v", tasks[orchRefuseIdx]["when"])
+	probeCmd := fmt.Sprint(tasks[probeIdx]["ansible.builtin.command"])
+	for _, want := range []string{"status", "--connect-timeout"} {
+		if !strings.Contains(probeCmd, want) {
+			t.Errorf("the resumed liveness probe must be a bounded `ceph status`: `ceph fsid` answers from the surviving host's local config with no quorum at all, which reads a dead cluster as a live manager and dead-ends the resume, missing %q in %v", want, tasks[probeIdx]["ansible.builtin.command"])
+		}
+	}
+	if got := fmt.Sprint(tasks[orchRefuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_resumed_probe.rc") {
+		t.Errorf("the resumed refusal must stay gated on a cluster that answered a quorum-requiring status read, so an already-dead cluster is never blocked by a manager that cannot reply, got when=%v", tasks[orchRefuseIdx]["when"])
 	}
 	if got := fmt.Sprint(tasks[orchRefuseIdx]["when"]); strings.Contains(got, "authorize") {
 		t.Errorf("no --authorize token may relax the resumed orchestrator stop, got when=%v", tasks[orchRefuseIdx]["when"])

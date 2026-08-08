@@ -196,7 +196,7 @@ func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, pla
 	return out
 }
 
-func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, ordering func(cluster string) []string) ([]destroyStep, error) {
+func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, ordering func(cluster string) []string, hard func(cluster string) []string) ([]destroyStep, error) {
 	step := destroyStep{
 		id:       destroyMachineInfraTaskID,
 		kind:     DestroyTaskKindMachineInfra,
@@ -219,6 +219,9 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 		if ordering != nil {
 			step.orderingDependencies = ordering("")
 		}
+		if hard != nil {
+			step.dependencies = appendUniqueStrings(step.dependencies, hard("")...)
+		}
 		return []destroyStep{step}, nil
 	}
 	out := make([]destroyStep, 0, len(facts.machineInfraFan)+1)
@@ -236,6 +239,9 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 			if facts.machineInfraFanSet[guest] {
 				fanned.dependencies = appendUniqueString(fanned.dependencies, facts.machineInfraID(guest))
 			}
+		}
+		if hard != nil {
+			fanned.dependencies = appendUniqueStrings(fanned.dependencies, hard(cluster)...)
 		}
 		sort.Strings(fanned.dependencies)
 		if ordering != nil {

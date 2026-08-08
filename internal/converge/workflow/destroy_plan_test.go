@@ -229,6 +229,9 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		if task.Entry.ID == "destroy.container-clusters" {
 			wantDependencies = []string{"destroy.machine-infra"}
 		}
+		if task.Entry.ID == "destroy.machine-infra" {
+			wantDependencies = []string{"destroy.storage-clusters"}
+		}
 		if !reflect.DeepEqual(task.Entry.Dependencies, wantDependencies) {
 			t.Fatalf("task[%d] hard deps = %v, want %v", i, task.Entry.Dependencies, wantDependencies)
 		}
@@ -850,6 +853,39 @@ func TestDestroyChainSetsForksForEveryStep(t *testing.T) {
 		if got := destroyTaskByID(t, tasks, id).Forks; got >= inventory {
 			t.Fatalf("task %q forks = %d, want the %d storage hosts rather than the whole %d-host inventory", id, got, storageHosts, inventory)
 		}
+	}
+}
+
+func TestPlanDestroyTasksBlocksMachineTeardownOnFailedStorageTeardown(t *testing.T) {
+	provided := false
+	state := destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0", "a1"}, "ceph-b": {"b0"}})
+	for i := range state.Machines {
+		state.Machines[i].Spec.OS.Provided = &provided
+		state.Machines[i].Spec.OS.InstallProfileRef = v1alpha1.LocalObjectReference{Name: "profile"}
+	}
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cluster := range []string{"ceph-a", "ceph-b"} {
+		task := destroyTaskByID(t, tasks, "destroy.machine-infra."+cluster)
+		own := "destroy.storage-clusters." + cluster
+		if !slices.Contains(task.Entry.Dependencies, own) {
+			t.Errorf("%q releases the machines of storage cluster %q and must be hard-blocked by %q: an ordering-only edge lets a FAILED storage teardown release the machines anyway, deleting the arbiter VM and powering hosts off while the cluster still holds them, so the next destroy finds those nodes gone; got deps=%v", task.Entry.ID, cluster, own, task.Entry.Dependencies)
+		}
+		other := map[string]string{"ceph-a": "ceph-b", "ceph-b": "ceph-a"}[cluster]
+		if slices.Contains(task.Entry.Dependencies, "destroy.storage-clusters."+other) {
+			t.Errorf("%q must not be hard-serialised behind an unrelated cluster's storage teardown, got deps=%v", task.Entry.ID, task.Entry.Dependencies)
+		}
+	}
+
+	collapsed, err := PlanDestroyTasks("all", destroyStorageFanOutState(map[string][]string{"ceph-a": {"a0"}}), "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	machineInfra := destroyTaskByID(t, collapsed, "destroy.machine-infra")
+	if !slices.Contains(machineInfra.Entry.Dependencies, DestroyStorageClustersTaskID) {
+		t.Errorf("the collapsed machine teardown covers the storage cluster's machines and must be hard-blocked by the storage teardown, got deps=%v", machineInfra.Entry.Dependencies)
 	}
 }
 

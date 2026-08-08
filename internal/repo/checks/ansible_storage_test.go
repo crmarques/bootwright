@@ -2656,11 +2656,24 @@ func TestStorageCephadmDestroyStopsTheOrchestratorBeforeAnyRemoval(t *testing.T)
 			t.Errorf("task %q must run only once ownership is proven: this teardown never touches a cluster it has not claimed, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
 		}
 	}
-	if got := fmt.Sprint(tasks[disableIdx]["when"]); strings.Contains(got, "bootwright_ceph_fsid.stdout") {
-		t.Errorf("the orchestrator stop must NOT be gated on the live-fsid probe answering: `cephadm shell -- ceph fsid` also returns nothing when it times out pulling an image or retrying slow mons, and the removal then proceeds against a live cluster whose manager reconciles every purged host straight back, got when=%v", tasks[disableIdx]["when"])
+	if got := fmt.Sprint(tasks[disableIdx]["when"]); strings.Contains(got, "bootwright_ceph_fsid.stdout") || strings.Contains(got, "bootwright_ceph_status_probe") {
+		t.Errorf("the orchestrator stop must NOT be gated on any probe answering: a probe that misses a live cluster would let the removal race the manager that reconciles every purged host straight back, got when=%v", tasks[disableIdx]["when"])
 	}
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_fsid.stdout") {
-		t.Errorf("the refusal must stay gated on a cluster that answered, so a teardown of an already-dead cluster is never blocked by a manager that cannot reply, got when=%v", tasks[refuseIdx]["when"])
+	statusProbeIdx := findAnsibleTask(t, tasks, "Probe whether the cluster still answers commands before the orchestrator stop")
+	if statusProbeIdx > disableIdx {
+		t.Errorf("the liveness probe must run before the disable whose refusal reads it (probe=%d disable=%d)", statusProbeIdx, disableIdx)
+	}
+	probeCmd := fmt.Sprint(tasks[statusProbeIdx]["ansible.builtin.command"])
+	for _, want := range []string{"status", "--connect-timeout", "timeout"} {
+		if !strings.Contains(probeCmd, want) {
+			t.Errorf("the liveness probe must be a bounded `ceph status`: `ceph fsid` answers from the local config with no quorum at all, which reads a dead cluster as a live manager and dead-ends the teardown, missing %q in %v", want, tasks[statusProbeIdx]["ansible.builtin.command"])
+		}
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_status_probe.rc") {
+		t.Errorf("the refusal must stay gated on a cluster that answered a quorum-requiring status read, so a teardown of an already-dead cluster is never blocked by a manager that cannot reply, got when=%v", tasks[refuseIdx]["when"])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); strings.Contains(got, "bootwright_ceph_fsid.stdout") {
+		t.Errorf("the refusal must not read `ceph fsid` as liveness: it answers from the local config while the quorum the disable needs is gone, got when=%v", tasks[refuseIdx]["when"])
 	}
 	reportIdx := findAnsibleTask(t, tasks, "Report an orchestrator this teardown could not disable on an unanswering cluster")
 	if reportIdx < refuseIdx {

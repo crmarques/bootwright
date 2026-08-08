@@ -118,7 +118,7 @@ func infraDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destr
 			out = appendUniqueString(out, destroyInfraComponentsTaskID)
 		}
 		return out
-	})
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +183,14 @@ func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destro
 			out = appendUniqueString(out, destroyInfraComponentsTaskID)
 		}
 		return out
+	}, func(cluster string) []string {
+		if cluster == "" {
+			return work.allIDs(DestroyStorageClustersTaskID)
+		}
+		if work.nameSet[cluster] {
+			return []string{work.stepID(DestroyStorageClustersTaskID, cluster)}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
