@@ -266,8 +266,24 @@ authorizing the reclaim could make a fresh bootstrap strictly worse than not
 authorizing it, because cephadm scans host inventories asynchronously and six
 just-registered hosts routinely need longer than the old 12x10s budget. Both
 that poll and the coverage report's twin now carry the escape; the reclaim
-budget matches the readiness poll (30 attempts), and hosts whose inventory never
-arrived are named in a debug rather than silently contributing no candidates.
+budget stays at 30 attempts while the readiness poll scales to
+`max(90, expectedCount * 6)` under a wall-clock deadline, and hosts whose
+inventory never arrived are named in a debug rather than silently contributing no
+candidates. Two polls in this role were still missing the escape after the
+readiness rework, and the first one mattered most in exactly the failure the
+rework exists to diagnose: `osd_readiness.yml`'s DIAGNOSTIC
+`ceph orch device ls --wide --refresh` gates on `stdout | trim | length > 0`, a
+predicate a cluster cephadm never scanned can never satisfy, so its 6 attempts
+exhausted and aborted the play with "Ran out of attempts" BEFORE the
+uninventoried-host summary, the `remedy_orchestrator` text and the assert could
+render — the run lost the whole diagnosis at the one moment it was worth having.
+`result_and_ownership.yml`'s final health poll had the same hole, reporting "Ran
+out of attempts" instead of the crafted refusal on the very next line. A
+`timeout --kill-after` wrapper does NOT substitute for the escape: it bounds one
+attempt, not the budget. `TestStorageCephRetryPollsCarryAnAttemptEscape` now
+walks every task file in the role and requires one
+`.attempts | default(1) | int)` per `retries:`, so the invariant is enforced
+rather than remembered.
 
 **Constraint (the readiness failure names the remedy that matches the declared
 selection shape):** the only text that named `apply --mode rebuild --authorize

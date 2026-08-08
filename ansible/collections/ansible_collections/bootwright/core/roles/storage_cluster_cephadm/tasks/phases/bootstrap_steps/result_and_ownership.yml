@@ -15,9 +15,14 @@
   retries: "{{ bootwright_ceph_health_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_health_delay | default(10) | int }}"
   until: >-
-    bootwright_ceph_final_health.rc == 0
-    and ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
-         | default('UNKNOWN')) != 'HEALTH_ERR'
+    (
+      bootwright_ceph_final_health.rc == 0
+      and ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
+           | default('UNKNOWN')) != 'HEALTH_ERR'
+    )
+    or
+    ((bootwright_ceph_final_health.attempts | default(1) | int)
+     >= (bootwright_ceph_health_retries | default(30) | int))
 
 - name: Refuse to complete an unreachable or unhealthy Ceph cluster
   ansible.builtin.assert:
