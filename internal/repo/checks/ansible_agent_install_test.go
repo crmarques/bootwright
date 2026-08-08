@@ -786,14 +786,21 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 	if !strings.Contains(timedOut, "bootstrap process timed out") {
 		t.Fatalf("timed-out wait pattern must cover the installer's own give-up, got %v", defaults["bootwright_install_timed_out_wait_pattern"])
 	}
+	clusterInit, _ := defaults["bootwright_install_cluster_init_wait_pattern"].(string)
+	if !strings.Contains(clusterInit, "failed to initialize the cluster") {
+		t.Fatalf("the cluster-initialization give-up is a give-up bootwright can resume and must be matched, got %v", defaults["bootwright_install_cluster_init_wait_pattern"])
+	}
 	resumable, _ := defaults["bootwright_install_resumable_wait_pattern"].(string)
-	for _, want := range []string{"bootwright_install_stalled_wait_pattern", "bootwright_install_timed_out_wait_pattern"} {
+	for _, want := range []string{"bootwright_install_stalled_wait_pattern", "bootwright_install_timed_out_wait_pattern", "bootwright_install_cluster_init_wait_pattern"} {
 		if !strings.Contains(resumable, want) {
 			t.Fatalf("resumable wait pattern must union %s, got %v", want, defaults["bootwright_install_resumable_wait_pattern"])
 		}
 	}
 	if got, ok := defaults["bootwright_install_installer_wait_window_seconds"].(int); !ok || got != 3600 {
 		t.Fatalf("installer wait window got %v, want 3600", defaults["bootwright_install_installer_wait_window_seconds"])
+	}
+	if got, ok := defaults["bootwright_install_cluster_init_wait_window_seconds"].(int); !ok || got != 2400 {
+		t.Fatalf("the cluster-initialization wait is a separate installer cap and must not reuse the bootstrap window, got %v", defaults["bootwright_install_cluster_init_wait_window_seconds"])
 	}
 	budget, _ := defaults["bootwright_install_wait_budget_seconds"].(string)
 	for _, want := range []string{"bootwright_install_bootstrap_timeout_seconds", "bootwright_install_timeout_seconds", "bootwright_install_wait_target"} {
@@ -803,6 +810,22 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 	}
 	if hint, _ := defaults["bootwright_install_timed_out_wait_hint"].(string); !strings.Contains(hint, "bootwright_install_installer_wait_window_seconds") {
 		t.Fatalf("timed-out wait hint must name the installer window, got %q", hint)
+	}
+	clusterInitHint, _ := defaults["bootwright_install_cluster_init_wait_hint"].(string)
+	if !strings.Contains(clusterInitHint, "bootwright_install_cluster_init_wait_window_seconds") {
+		t.Fatalf("cluster-initialization hint must name its own window, not the bootstrap cap, got %q", clusterInitHint)
+	}
+	if strings.Contains(clusterInitHint, "not proof of a failed install") {
+		t.Fatalf("the cluster-initialization give-up follows hosts that already hold their ignition, so a host in error is a real failure and the hint must not repeat the bootstrap wording, got %q", clusterInitHint)
+	}
+	if hint, _ := defaults["bootwright_install_unclassified_wait_hint"].(string); strings.TrimSpace(hint) == "" {
+		t.Fatalf("an unclassified give-up must still carry a hint, got %v", defaults["bootwright_install_unclassified_wait_hint"])
+	}
+	if hint, _ := defaults["bootwright_install_missing_nodes_hint"].(string); !strings.Contains(hint, "bootwright_install_missing_declared_nodes") {
+		t.Fatalf("missing-node hint must name the resolved absent nodes, got %v", defaults["bootwright_install_missing_nodes_hint"])
+	}
+	if hint, _ := defaults["bootwright_install_log_diagnostic_hint"].(string); !strings.Contains(hint, "bootwright_install_log_diagnostics") {
+		t.Fatalf("installer-log hint must carry the selected log lines, got %v", defaults["bootwright_install_log_diagnostic_hint"])
 	}
 	if got, ok := defaults["bootwright_install_stalled_wait_retries"].(int); !ok || got < 2 {
 		t.Fatalf("stalled wait retries got %v, want at least 2", defaults["bootwright_install_stalled_wait_retries"])
@@ -860,11 +883,18 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			"bootwright_install_stalled_wait_pattern",
 			"bootwright_install_timed_out_wait_hint",
 			"bootwright_install_timed_out_wait_pattern",
+			"bootwright_install_cluster_init_wait_hint",
+			"bootwright_install_cluster_init_wait_pattern",
+			"bootwright_install_missing_nodes_hint",
+			"bootwright_install_log_diagnostic_hint",
 			"stderr_lines",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Fatalf("%s message must carry %q, got %q", tc.report, want, msg)
 			}
+		}
+		if !strings.Contains(msg, "else bootwright_install_unclassified_wait_hint") {
+			t.Fatalf("%s must fall back to a real hint instead of an empty string when it does not recognise the give-up, got %q", tc.report, msg)
 		}
 	}
 
@@ -962,10 +992,74 @@ func TestAgentInstallRefusesAnInstallerBinaryThatDoesNotMatchTheDeclaredRelease(
 
 	pathIdx := findAnsibleTask(t, tasks, "Set openshift-install path")
 	probeIdx := findAnsibleTask(t, tasks, "Read installed openshift-install version")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve installed openshift-install version")
+	declaredIdx := findAnsibleTask(t, tasks, "Fail when the declared release version cannot be determined")
+	installedIdx := findAnsibleTask(t, tasks, "Fail when the installed openshift-install version cannot be determined")
 	assertIdx := findAnsibleTask(t, tasks, "Fail when the installer binary does not match the declared release")
 	configIdx := findAnsibleTask(t, tasks, "Verify rendered install-config exists")
-	if pathIdx > probeIdx || probeIdx > assertIdx || assertIdx > configIdx {
-		t.Fatalf("the release-skew refusal must read the resolved binary and fail before the run reaches install-config (path=%d probe=%d assert=%d config=%d)", pathIdx, probeIdx, assertIdx, configIdx)
+	if pathIdx > probeIdx || probeIdx > resolveIdx || resolveIdx > declaredIdx || declaredIdx > installedIdx || installedIdx > assertIdx || assertIdx > configIdx {
+		t.Fatalf("the release-skew refusal must read the resolved binary and fail before the run reaches install-config (path=%d probe=%d resolve=%d declared=%d installed=%d assert=%d config=%d)", pathIdx, probeIdx, resolveIdx, declaredIdx, installedIdx, assertIdx, configIdx)
+	}
+
+	for _, idx := range []int{probeIdx, resolveIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "wait_install") {
+			t.Fatalf("%s must also read the binary on the wait path: every resumed apply skips the ISO task and would otherwise run a completely unchecked installer, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+
+	const imagePinExemption = "(bootwright_declared_release_image | default('', true) | length) == 0 or (bootwright_declared_release_version | default('', true) | length) > 0"
+
+	declaredFactIdx := findAnsibleTask(t, tasks, "Resolve declared release version")
+	declaredFact, ok := tasks[declaredFactIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must be a set_fact, got %v", tasks[declaredFactIdx]["name"], tasks[declaredFactIdx])
+	}
+	if got := fmt.Sprint(declaredFact["bootwright_declared_release_image"]); !strings.Contains(got, "'image'") {
+		t.Fatalf("the release-skew guard must also resolve the pinned release image: a cluster may pin its release by image instead of version, and the version fact is empty in that case, got %v", declaredFact["bootwright_declared_release_image"])
+	}
+
+	for _, tc := range []struct {
+		idx      int
+		guard    string
+		wants    []string
+		unwanted []string
+	}{
+		{
+			idx:      declaredIdx,
+			guard:    "(bootwright_declared_release_version | default('', true) | length) == 0",
+			wants:    []string{"distribution.release.version", "bootwright_current_cluster.name"},
+			unwanted: []string{"release.image"},
+		},
+		{
+			idx:   installedIdx,
+			guard: "(bootwright_openshift_install_version | default('', true) | length) == 0",
+			wants: []string{"bootwright bastion setup", "bootwright_install_version_probe.rc"},
+		},
+	} {
+		if !stringListContains(tasks[tc.idx]["when"], "bootwright_install_agent_action_effective in ['run', 'create_iso']") {
+			t.Fatalf("%s must run on the paths that build the ISO, got when=%v", tasks[tc.idx]["name"], tasks[tc.idx]["when"])
+		}
+		if !stringListContains(tasks[tc.idx]["when"], tc.guard) {
+			t.Fatalf("an unreadable version must fail the run rather than silently skip the comparison (%s missing %q), got when=%v", tasks[tc.idx]["name"], tc.guard, tasks[tc.idx]["when"])
+		}
+		if !stringListContains(tasks[tc.idx]["when"], imagePinExemption) {
+			t.Fatalf("a release pinned by image alone declares no version and the API accepts that, so %s must exempt it, but a cluster declaring both still pins a version and must still be checked: exempting on the image alone installs whatever the binary holds, got when=%v", tasks[tc.idx]["name"], tasks[tc.idx]["when"])
+		}
+		body, ok := tasks[tc.idx]["ansible.builtin.fail"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must be a fail, got %v", tasks[tc.idx]["name"], tasks[tc.idx])
+		}
+		msg := fmt.Sprint(body["msg"])
+		for _, want := range tc.wants {
+			if !strings.Contains(msg, want) {
+				t.Fatalf("%s must name what it could not determine (missing %q), got %q", tasks[tc.idx]["name"], want, msg)
+			}
+		}
+		for _, unwanted := range tc.unwanted {
+			if strings.Contains(msg, unwanted) {
+				t.Fatalf("no task reads the pinned release image on the install path, so %s must not offer %q as a remedy: an operator who takes it gets a green apply of the binary's own release with every skew guard exempted, got %q", tasks[tc.idx]["name"], unwanted, msg)
+			}
+		}
 	}
 
 	assertion, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
@@ -982,8 +1076,145 @@ func TestAgentInstallRefusesAnInstallerBinaryThatDoesNotMatchTheDeclaredRelease(
 		}
 	}
 	guard := fmt.Sprint(tasks[assertIdx]["when"])
-	if !strings.Contains(guard, "bootwright_declared_release_version | length > 0") {
-		t.Fatalf("a cluster that declares no release version pins nothing to compare against and must skip the refusal, got when=%v", tasks[assertIdx]["when"])
+	if strings.Contains(guard, "bootwright_declared_release_version | length > 0") {
+		t.Fatalf("gating the refusal on a non-empty declared version makes an unreadable declaration a silent skip, which is exactly how an unchecked installer built prd, got when=%v", tasks[assertIdx]["when"])
+	}
+	if !strings.Contains(guard, "bootwright_install_agent_action_effective in ['run', 'create_iso']") {
+		t.Fatalf("the refusal must cover every path that builds the ISO, got when=%v", tasks[assertIdx]["when"])
+	}
+	if !stringListContains(tasks[assertIdx]["when"], imagePinExemption) {
+		t.Fatalf("spec.distribution.release.image alone pins a release without a version and is a supported, documented configuration, so the refusal must skip it instead of making it un-appliable, while a cluster declaring an image and a version must still be refused on skew, got when=%v", tasks[assertIdx]["when"])
+	}
+
+	warnIdx := findAnsibleTask(t, tasks, "Warn when the waited install was built by a mismatched installer binary")
+	if warnIdx < assertIdx {
+		t.Fatalf("the wait-path warning must follow the refusal it softens (warn=%d assert=%d)", warnIdx, assertIdx)
+	}
+	warn, ok := tasks[warnIdx]["ansible.builtin.debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("the wait path must warn rather than fail: refusing there strands a cluster mid-install, got %v", tasks[warnIdx])
+	}
+	warnMsg := fmt.Sprint(warn["msg"])
+	for _, want := range []string{
+		"WARNING",
+		"bootwright_openshift_install_version",
+		"bootwright_declared_release_version",
+		"bootwright bastion setup",
+	} {
+		if !strings.Contains(warnMsg, want) {
+			t.Fatalf("the wait-path warning must name both versions and the command that repairs them (missing %q), got %q", want, warnMsg)
+		}
+	}
+	if !stringListContains(tasks[warnIdx]["when"], "bootwright_install_agent_action_effective == 'wait_install'") {
+		t.Fatalf("the wait-path warning when got %v", tasks[warnIdx]["when"])
+	}
+	if !stringListContains(tasks[warnIdx]["when"], imagePinExemption) {
+		t.Fatalf("the wait-path warning must carry the same exemption as the refusal, or a cluster declaring an image and a version loses the only report of the skew it is being built with, got when=%v", tasks[warnIdx]["when"])
+	}
+
+	pinIdx := findAnsibleTask(t, tasks, "Warn that a pinned release image is not honoured on the install path")
+	if pinIdx < warnIdx || pinIdx > configIdx {
+		t.Fatalf("the image-pin notice must follow the guards it explains and precede install-config (warn=%d pin=%d config=%d)", warnIdx, pinIdx, configIdx)
+	}
+	pin, ok := tasks[pinIdx]["ansible.builtin.debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("an image pin is a supported shape, so the notice must be a debug rather than a refusal, got %v", tasks[pinIdx])
+	}
+	pinMsg := fmt.Sprint(pin["msg"])
+	for _, want := range []string{
+		"WARNING",
+		"bootwright_declared_release_image",
+		"bootwright_openshift_install_version",
+		"spec.distribution.release.version",
+	} {
+		if !strings.Contains(pinMsg, want) {
+			t.Fatalf("no install task reads the pinned release image, so the exempted path must say plainly that the installer binary's own release is what gets installed (missing %q), got %q", want, pinMsg)
+		}
+	}
+	for _, want := range []string{
+		"(bootwright_declared_release_image | default('', true) | length) > 0",
+		"(bootwright_declared_release_version | default('', true) | length) == 0",
+	} {
+		if !stringListContains(tasks[pinIdx]["when"], want) {
+			t.Fatalf("the image-pin notice must cover exactly the shape every release guard exempts (missing %q), got when=%v", want, tasks[pinIdx]["when"])
+		}
+	}
+}
+
+func TestInstallAgentReportsTheInstallerLogAndMissingDeclaredNodes(t *testing.T) {
+	const roleTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/"
+	topTasks := readAnsibleTasks(t, roleTasks+"actions/wait_install.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+
+	outcomeIdx := findAnsibleTask(t, tasks, "Determine agent wait outcome")
+	logIdx := findAnsibleTask(t, tasks, "Read the tail of the agent install log after a failed wait")
+	logSelectIdx := findAnsibleTask(t, tasks, "Resolve agent install log diagnostics")
+	kubeconfigIdx := findAnsibleTask(t, tasks, "Stat installer kubeconfig after a failed wait")
+	probeIdx := findAnsibleTask(t, tasks, "Probe cluster nodes after a failed wait")
+	missingIdx := findAnsibleTask(t, tasks, "Resolve declared nodes absent from the cluster")
+	bootstrapReportIdx := findAnsibleTask(t, tasks, "Fail when the agent bootstrap wait did not complete")
+	installReportIdx := findAnsibleTask(t, tasks, "Fail when the agent install wait did not complete")
+	if !(outcomeIdx < logIdx && logIdx < logSelectIdx && logSelectIdx < kubeconfigIdx && kubeconfigIdx < probeIdx && probeIdx < missingIdx && missingIdx < bootstrapReportIdx && bootstrapReportIdx < installReportIdx) {
+		t.Fatalf("wait_install must collect the installer log and the missing declared nodes before it reports either wait as failed")
+	}
+
+	logTail, ok := tasks[logIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[logIdx]["name"])
+	}
+	for _, want := range []string{"tail", "-n", "{{ bootwright_install_log_tail_lines }}", "{{ bootwright_install_work_dir }}/.openshift_install.log"} {
+		if !stringListContains(logTail["argv"], want) {
+			t.Fatalf("installer log tail missing %q: %v", want, logTail["argv"])
+		}
+	}
+
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[probeIdx]["name"])
+	}
+	for _, want := range []string{"oc", "--kubeconfig", "{{ bootwright_install_work_dir }}/auth/kubeconfig", "get", "nodes"} {
+		if !stringListContains(probe["argv"], want) {
+			t.Fatalf("node probe missing %q: %v", want, probe["argv"])
+		}
+	}
+	if !stringListContains(tasks[probeIdx]["when"], "bootwright_install_diagnostic_kubeconfig_stat.stat.exists | default(false)") {
+		t.Fatalf("the node probe must only run once a kubeconfig exists, got when=%v", tasks[probeIdx]["when"])
+	}
+
+	for _, idx := range []int{logIdx, probeIdx} {
+		if got := tasks[idx]["failed_when"]; got != false {
+			t.Fatalf("%s must never turn a recoverable wait into a hard error, got failed_when=%v", tasks[idx]["name"], got)
+		}
+		if got := tasks[idx]["changed_when"]; got != false {
+			t.Fatalf("%s is read-only, got changed_when=%v", tasks[idx]["name"], got)
+		}
+	}
+	for _, idx := range []int{logIdx, logSelectIdx, kubeconfigIdx, probeIdx, missingIdx} {
+		if !stringListContains(tasks[idx]["when"], "not (bootwright_install_wait_succeeded | bool)") {
+			t.Fatalf("%s must only run after a failed wait, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		}
+	}
+
+	selection, ok := tasks[logSelectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[logSelectIdx]["name"])
+	}
+	if got := fmt.Sprint(selection["bootwright_install_log_diagnostics"]); !strings.Contains(got, "bootwright_install_log_diagnostic_pattern") {
+		t.Fatalf("installer log selection got %v", got)
+	}
+
+	missing, ok := tasks[missingIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[missingIdx]["name"])
+	}
+	got := fmt.Sprint(missing["bootwright_install_missing_declared_nodes"])
+	for _, want := range []string{"bootwright_current_cluster.nodes", "bootwright_install_node_probe.stdout"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the absent-node report must subtract the observed nodes from the declared ones (missing %q), got %v", want, got)
+		}
+	}
+	if !stringListContains(tasks[missingIdx]["when"], "(bootwright_install_node_probe.rc | default(1) | int) == 0") {
+		t.Fatalf("an unreachable API must leave the absent-node report unset rather than name every declared node, got when=%v", tasks[missingIdx]["when"])
 	}
 }
 

@@ -995,7 +995,7 @@ play.
 
 ## Tuning apply and destroy concurrency
 
-Independent tasks run in parallel under three caps. Each has a default and an
+Independent tasks run in parallel under four caps. Each has a default and an
 environment-variable escape hatch:
 
 | Environment variable | Caps | Default |
@@ -1003,9 +1003,46 @@ environment-variable escape hatch:
 | `BOOTWRIGHT_APPLY_PARALLELISM` | Tasks in flight across the whole run | `NumCPU × 2`, clamped to the range 8–32 |
 | `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST` | Tasks in flight against any single host (hypervisor, bastion, vCenter) | 4 |
 | `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | Concurrent Redfish/BMC operations | 8 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` | Clusters *installing* at once — the ISO, node boot, bootstrap wait and install wait of one cluster count as that one cluster, however many tasks they are | 1 |
 
 Despite the `APPLY` in the names, `destroy` plans its task graph under the same
-three caps.
+four caps — a teardown installs nothing, so the cluster cap simply never binds
+there.
+
+The cluster cap is the one to know about, because its default of 1 **serialises
+cluster installs**: a run declaring three `ContainerCluster`s boots and installs
+them one after another rather than all at once. That is deliberate: two clusters
+installing together pull their release payload down the same registry or mirror
+path, and one slow path is enough to time both of them out. Everything outside
+those four task kinds (fabric, infrastructure, machines, add-ons, storage) still
+runs at whatever the other three caps allow, and a cluster that has started
+installing is no longer held by this cap for the rest of its install — the cap
+only decides how many clusters are in that state at a time. Raise it when the
+estate has the registry bandwidth and BMC headroom to install several clusters
+side by side:
+
+```text
+BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=3 bootwright apply --yes
+```
+
+A cluster held back by it shows in `status --timings` as
+`blocked … on cluster install budget`, which is what a long queue wait on a
+multi-cluster run means before you go looking for a slow install.
+
+`apply` prints the caps it resolved in its run header, with the cluster cap as a
+fourth segment whenever the run installs at least one cluster:
+
+```text
+  Context: prd
+  ID: apply-20260807T101500.000000000Z
+  Target: clusters
+  Tasks: 24
+  Parallelism: tasks 16, per host 4, Redfish 8, cluster installs 1
+  Run log: /var/lib/bootwright/contexts/prd/runs/history/apply-20260807T101500.000000000Z/bootwright.log
+```
+
+A run that installs no cluster omits that segment, and `status --timings` reports
+the first three caps only.
 
 These are environment variables and not flags by design: the parallelism CLI
 flags were removed deliberately, because concurrency is a property of the

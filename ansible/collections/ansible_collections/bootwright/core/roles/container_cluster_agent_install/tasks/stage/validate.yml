@@ -38,7 +38,9 @@
 - name: Resolve declared release version
   ansible.builtin.set_fact:
     bootwright_declared_release_version: >-
-      {{ (bootwright_current_cluster.distribution | default({}, true)).get('release', {}).get('version', '') }}
+      {{ ((bootwright_current_cluster.distribution | default({}, true)).get('release', {}).get('version', '') | default('', true)) | trim }}
+    bootwright_declared_release_image: >-
+      {{ ((bootwright_current_cluster.distribution | default({}, true)).get('release', {}).get('image', '') | default('', true)) | trim }}
   changed_when: false
 
 - name: Read installed openshift-install version
@@ -49,9 +51,7 @@
   register: bootwright_install_version_probe
   changed_when: false
   failed_when: false
-  when:
-    - bootwright_install_agent_action_effective in ['run', 'create_iso']
-    - bootwright_declared_release_version | length > 0
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
 
 - name: Resolve installed openshift-install version
   ansible.builtin.set_fact:
@@ -61,9 +61,43 @@
         | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default('', true)
       }}
   changed_when: false
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
+
+- name: Fail when the declared release version cannot be determined
+  ansible.builtin.fail:
+    msg: >-
+      Cluster {{ bootwright_current_cluster.name }} exposes no readable
+      distribution.release.version, so bootwright cannot tell which OpenShift
+      release the agent ISO it is about to build would install. The ISO embeds
+      the release payload compiled into
+      '{{ bootwright_openshift_install_path | default(bootwright_openshift_install, true) }}'
+      and no later stage reports which release was used, so an undeclared
+      release installs whatever `bootwright bastion setup` last laid down.
+      Declare spec.distribution.release.version on this cluster and retry.
   when:
     - bootwright_install_agent_action_effective in ['run', 'create_iso']
-    - bootwright_declared_release_version | length > 0
+    - (bootwright_declared_release_version | default('', true) | length) == 0
+    - >-
+      (bootwright_declared_release_image | default('', true) | length) == 0
+      or (bootwright_declared_release_version | default('', true) | length) > 0
+
+- name: Fail when the installed openshift-install version cannot be determined
+  ansible.builtin.fail:
+    msg: >-
+      '{{ bootwright_openshift_install_path | default(bootwright_openshift_install, true) }} version'
+      returned no readable version for cluster
+      {{ bootwright_current_cluster.name }} (exit
+      {{ bootwright_install_version_probe.rc | default('<unrun>') }}), so the
+      release the agent ISO would embed cannot be compared against the declared
+      {{ bootwright_declared_release_version }}. Re-run
+      `bootwright bastion setup` with this cluster in scope to reinstall the
+      installer binary, then retry.
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso']
+    - >-
+      (bootwright_declared_release_image | default('', true) | length) == 0
+      or (bootwright_declared_release_version | default('', true) | length) > 0
+    - (bootwright_openshift_install_version | default('', true) | length) == 0
 
 - name: Fail when the installer binary does not match the declared release
   ansible.builtin.assert:
@@ -83,7 +117,52 @@
       cluster in scope, then retry.
   when:
     - bootwright_install_agent_action_effective in ['run', 'create_iso']
-    - bootwright_declared_release_version | length > 0
+    - >-
+      (bootwright_declared_release_image | default('', true) | length) == 0
+      or (bootwright_declared_release_version | default('', true) | length) > 0
+
+- name: Warn when the waited install was built by a mismatched installer binary
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: installer binary
+      '{{ bootwright_openshift_install_path }}' reports version
+      {{ bootwright_openshift_install_version | default('<unreadable>', true) }}
+      while cluster {{ bootwright_current_cluster.name }} declares release
+      {{ bootwright_declared_release_version | default('<undeclared>', true) }}.
+      This action only waits on an install that is already running, so bootwright
+      will not refuse it and strand the cluster mid-install, but the cluster is
+      being built from the binary's release and no later stage reports the
+      difference. Re-run `bootwright bastion setup` with this cluster in scope,
+      then reinstall the cluster if the declared release is the one you need.
+  when:
+    - bootwright_install_agent_action_effective == 'wait_install'
+    - >-
+      (bootwright_declared_release_image | default('', true) | length) == 0
+      or (bootwright_declared_release_version | default('', true) | length) > 0
+    - >-
+      (bootwright_openshift_install_version | default('', true))
+      != (bootwright_declared_release_version | default('', true))
+      or (bootwright_declared_release_version | default('', true) | length) == 0
+
+- name: Warn that a pinned release image is not honoured on the install path
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: cluster {{ bootwright_current_cluster.name }} pins
+      spec.distribution.release.image
+      {{ bootwright_declared_release_image }} and declares no
+      spec.distribution.release.version. No install task honours that pin: the
+      agent ISO embeds the release payload compiled into the installer binary
+      '{{ bootwright_openshift_install_path | default(bootwright_openshift_install, true) }}',
+      which reports version
+      {{ bootwright_openshift_install_version | default('<unreadable>', true) }},
+      so the binary's own release is the one this cluster installs. The pinned
+      image only reaches the install-config imageDigestSources of a
+      disconnected install. Declare spec.distribution.release.version as well
+      to have bootwright refuse an installer binary that does not match it.
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
+    - (bootwright_declared_release_image | default('', true) | length) > 0
+    - (bootwright_declared_release_version | default('', true) | length) == 0
 
 - name: Verify rendered install-config exists
   ansible.builtin.stat:

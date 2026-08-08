@@ -147,10 +147,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	parallelism := limits.Parallelism
 	redfishLimit := limits.ParallelismRedfish
 	perHostLimit := limits.ParallelismPerHost
+	clusterInstallLimit := limits.ParallelismClusters
 	events := make(chan applyTaskResult, len(tasks))
 	started := map[string]bool{}
 	runningResources := map[string]int{}
 	runningHostSlots := map[string]int{}
+	heldClusterInstalls := map[string]int{}
 	running := 0
 	runningRedfish := 0
 	completed := initiallyCompletedApplyTasks(tasks)
@@ -161,6 +163,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 
 	for completed < len(tasks) {
 		startedAny := false
+		releaseIdleClusterInstalls(ledger, tasks, started, heldClusterInstalls)
 		for _, task := range tasks {
 			if fatalErr != nil || ctx.Err() != nil {
 				break
@@ -173,7 +176,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 				ledger.RecordBlockedOn(task.Entry.ID, applyTaskBudgetBlocker)
 				continue
 			}
-			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit); blocker != "" {
+			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit, heldClusterInstalls, clusterInstallLimit); blocker != "" {
 				ledger.RecordBlockedOn(task.Entry.ID, blocker)
 				continue
 			}
@@ -190,6 +193,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 			acquireTaskResources(task, runningResources)
 			acquireTaskHostSlots(task, runningHostSlots)
+			holdClusterInstall(task, heldClusterInstalls)
 			logPath := TaskLogPath(runsDir, ledger.RunID, task.Entry)
 			ledger.MarkReady(task.Entry.ID)
 			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
@@ -374,9 +378,12 @@ func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
 	return blocked
 }
 
-const applyTaskBudgetBlocker = "task budget"
+const (
+	applyTaskBudgetBlocker     = "task budget"
+	applyClusterInstallBlocker = "cluster install budget"
+)
 
-func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int) string {
+func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int, heldClusterInstalls map[string]int, clusterInstallLimit int) string {
 	if !taskRedfishAvailable(task, runningRedfish, redfishLimit) {
 		return "redfish budget"
 	}
@@ -386,6 +393,9 @@ func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runni
 	if !taskHostSlotAvailable(task, runningHostSlots, perHostLimit) {
 		key, _ := taskHostSlot(task)
 		return "host slot " + key
+	}
+	if !taskClusterInstallAvailable(task, heldClusterInstalls, clusterInstallLimit) {
+		return applyClusterInstallBlocker
 	}
 	return ""
 }
@@ -435,6 +445,20 @@ func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bo
 		limit = 1
 	}
 	return running[key]+count <= limit
+}
+
+func taskClusterInstallAvailable(task ApplyTask, held map[string]int, limit int) bool {
+	cluster := clusterInstallKey(task.Entry)
+	if cluster == "" {
+		return true
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if held[cluster] > 0 {
+		return true
+	}
+	return len(held) < limit
 }
 
 func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {
@@ -490,6 +514,72 @@ func releaseTaskHostSlots(task ApplyTask, running map[string]int) {
 	if running[key] <= 0 {
 		delete(running, key)
 	}
+}
+
+func holdClusterInstall(task ApplyTask, held map[string]int) {
+	if cluster := clusterInstallKey(task.Entry); cluster != "" {
+		held[cluster] = 1
+	}
+}
+
+func releaseIdleClusterInstalls(ledger RunLedger, tasks []ApplyTask, started map[string]bool, held map[string]int) {
+	if len(held) == 0 {
+		return
+	}
+	inFlight := map[string]bool{}
+	for _, task := range tasks {
+		cluster := clusterInstallKey(task.Entry)
+		if cluster == "" || inFlight[cluster] {
+			continue
+		}
+		entry, ok := ledger.Task(task.Entry.ID)
+		if !ok || taskTerminal(entry.Status) {
+			continue
+		}
+		if started[entry.ID] || taskReady(ledger, entry) || clusterInstallChainAdvancing(ledger, entry) {
+			inFlight[cluster] = true
+		}
+	}
+	for cluster := range held {
+		if !inFlight[cluster] {
+			delete(held, cluster)
+		}
+	}
+}
+
+func clusterInstallChainAdvancing(ledger RunLedger, task TaskLedgerEntry) bool {
+	advancing := false
+	for _, dep := range task.Dependencies {
+		depTask, ok := ledger.Task(dep)
+		if !ok {
+			return false
+		}
+		if depTask.Status == TaskStatusOK || depTask.Status == TaskStatusSkipped {
+			continue
+		}
+		if !clusterInstallDependencyAdvancing(depTask, task.Cluster) {
+			return false
+		}
+		advancing = true
+	}
+	for _, dep := range task.OrderingDependencies {
+		depTask, ok := ledger.Task(dep)
+		if !ok {
+			return false
+		}
+		if taskTerminal(depTask.Status) {
+			continue
+		}
+		if !clusterInstallDependencyAdvancing(depTask, task.Cluster) {
+			return false
+		}
+		advancing = true
+	}
+	return advancing
+}
+
+func clusterInstallDependencyAdvancing(dep TaskLedgerEntry, cluster string) bool {
+	return !taskTerminal(dep.Status) && dep.Cluster == cluster
 }
 
 func applyTaskWriters(task ApplyTask, logs *applyLogSet, streamOut, streamErr io.Writer, stream bool) (io.Writer, io.Writer) {

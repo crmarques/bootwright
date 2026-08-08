@@ -97,6 +97,125 @@
          | selectattr('hostname', 'defined') | map(attribute='hostname') | list }}
   when: bootwright_ceph_orch_hosts.rc | default(1) | int == 0
 
+- name: Resolve the declared OSD hosts the device scan must reach
+  ansible.builtin.set_fact:
+    bootwright_ceph_declared_osd_hosts: >-
+      {{ ((bootwright_selected_storage_cluster.hosts | default([])
+           | selectattr('cephHostname', 'defined')
+           | rejectattr('cephHostname', 'equalto', '')
+           | selectattr('devices', 'defined')
+           | rejectattr('devices', 'equalto', none)
+           | rejectattr('devices', 'equalto', [])
+           | map(attribute='cephHostname') | list)
+          + (bootwright_selected_storage_cluster.hosts | default([])
+             | selectattr('osdReclaimAll', 'defined')
+             | selectattr('cephHostname', 'defined')
+             | rejectattr('cephHostname', 'equalto', '')
+             | map(attribute='cephHostname') | list))
+         | unique | list }}
+    bootwright_ceph_osd_scan_mode: >-
+      {{ (bootwright_selected_storage_cluster.osdReadiness | default({})).mode | default('atLeastOne') }}
+    bootwright_ceph_osd_scan_attempts: >-
+      {{ bootwright_ceph_osd_scan_retries
+         | default([90, (((bootwright_selected_storage_cluster.osdReadiness | default({})).expectedCount
+                          | default(0) | int) * 6)] | max)
+         | int }}
+
+- name: Set the device-scan wall-clock deadline
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_scan_budget_seconds: "{{ bootwright_ceph_osd_scan_wall_budget | int }}"
+    bootwright_ceph_osd_scan_deadline: >-
+      {{ (now(utc=true).timestamp() | int)
+         + (bootwright_ceph_osd_scan_wall_budget | int) }}
+  vars:
+    bootwright_ceph_osd_scan_wall_budget: >-
+      {{ bootwright_ceph_osd_scan_wall_seconds
+         | default((bootwright_ceph_osd_scan_attempts | int)
+                   * (bootwright_ceph_osd_scan_delay | default(10) | int))
+         | int }}
+
+- name: Wait for cephadm to inventory every declared OSD host before the OSD apply
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - --kill-after=10
+      - "300"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - device
+      - ls
+      - --format
+      - json
+      - --refresh
+  register: bootwright_ceph_osd_scan_device_ls
+  changed_when: false
+  failed_when: false
+  retries: "{{ bootwright_ceph_osd_scan_attempts | int }}"
+  delay: "{{ bootwright_ceph_osd_scan_delay | default(10) | int }}"
+  until: >-
+    (
+      bootwright_ceph_osd_scan_device_ls.rc == 0
+      and (bootwright_ceph_declared_osd_hosts
+           | difference(
+               (bootwright_ceph_osd_scan_device_ls.stdout | default('[]', true) | from_json)
+               | selectattr('devices', 'defined')
+               | rejectattr('devices', 'equalto', [])
+               | map(attribute='name') | list)) | length == 0
+    )
+    or
+    ((bootwright_ceph_osd_scan_device_ls.attempts | default(1) | int)
+     >= (bootwright_ceph_osd_scan_attempts | int))
+    or
+    ((now(utc=true).timestamp() | int)
+     >= (bootwright_ceph_osd_scan_deadline | int))
+  when:
+    - bootwright_ceph_declared_osd_hosts | length > 0
+    - bootwright_ceph_osd_scan_mode != 'skip'
+
+- name: Resolve the declared OSD hosts cephadm has not inventoried
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_scan_missing_hosts: >-
+      {{ bootwright_ceph_declared_osd_hosts
+         | reject('in',
+                  (bootwright_ceph_osd_scan_device_ls.stdout | default('[]', true) | from_json)
+                  | selectattr('devices', 'defined')
+                  | rejectattr('devices', 'equalto', [])
+                  | map(attribute='name') | list) | list }}
+  when:
+    - bootwright_ceph_declared_osd_hosts | length > 0
+    - bootwright_ceph_osd_scan_mode != 'skip'
+
+- name: Report declared OSD hosts whose device inventory never appeared
+  ansible.builtin.debug:
+    msg: >-
+      Ceph cluster {{ bootwright_selected_storage_cluster.name }}: cephadm holds no
+      device inventory for
+      {{ bootwright_ceph_osd_scan_missing_hosts | join(', ') }} —
+      {{ bootwright_ceph_osd_scan_missing_hosts | length }} of
+      {{ bootwright_ceph_declared_osd_hosts | length }} declared OSD host(s) — within
+      {{ bootwright_ceph_osd_scan_attempts }} attempts or
+      {{ bootwright_ceph_osd_scan_budget_seconds }}s, whichever came first. Being listed
+      by `ceph orch host ls` is bookkeeping cephadm records the moment it accepts the host
+      document; it says nothing about whether cephadm has ever connected to the host and
+      run ceph-volume inventory on it. Applying the OSD spec anyway: it is a declaration
+      cephadm keeps reconciling as inventory arrives, so it consumes no disk here and
+      lands the OSDs by itself if the scan completes during the readiness wait — waiting
+      longer at this step only delays that. The OSD readiness gate that follows is the
+      single fail-closed point for this cluster; it names a host cephadm never scanned as
+      unexamined rather than as dirty, dates the orchestrator cache, and refuses to
+      recommend a wipe on this evidence. The usual causes are a host cephadm cannot reach
+      over its cephadm SSH identity, a container-image pull failure on that host
+      (registry, mirror or proxy), or a cephadm mgr module that restarted and is no longer
+      refreshing — check `ceph orch host ls --detail`, `ceph log last 200 cephadm`, and
+      force a re-scan with `ceph mgr fail`.
+      Device inventory read back (ceph orch device ls --format json):
+      {{ (bootwright_ceph_osd_scan_device_ls.stdout | default('') | trim)
+      or ('(ceph orch device ls failed, rc=' ~ (bootwright_ceph_osd_scan_device_ls.rc | default('unknown')) ~ ')') }}
+  when: bootwright_ceph_osd_scan_missing_hosts | default([]) | length > 0
+
 - name: Auto-reclaim dirty filter-selected OSD devices
   ansible.builtin.include_tasks: osd_reclaim.yml
 

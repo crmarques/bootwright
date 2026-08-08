@@ -47,6 +47,7 @@ type ConcurrencyLimits struct {
 	Parallelism            int `json:"parallelism"`
 	ParallelismPerHost     int `json:"parallelismPerHost"`
 	ParallelismRedfish     int `json:"parallelismRedfish"`
+	ParallelismClusters    int `json:"parallelismClusters,omitempty"`
 	AutoParallelism        int `json:"autoParallelism,omitempty"`
 	AutoParallelismPerHost int `json:"autoParallelismPerHost,omitempty"`
 	AutoParallelismRedfish int `json:"autoParallelismRedfish,omitempty"`

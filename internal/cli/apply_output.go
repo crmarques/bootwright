@@ -84,11 +84,15 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 }
 
 func applyLimitsSummary(limits workflow.ConcurrencyLimits) string {
-	return fmt.Sprintf("tasks %s, per host %s, Redfish %s",
+	summary := fmt.Sprintf("tasks %s, per host %s, Redfish %s",
 		applyLimitValue(limits.Parallelism, limits.ParallelismUnbounded()),
 		applyLimitValue(limits.ParallelismPerHost, limits.ParallelismPerHostUnbounded()),
 		applyLimitValue(limits.ParallelismRedfish, limits.ParallelismRedfishUnbounded()),
 	)
+	if limits.ParallelismClusters > 0 {
+		summary += fmt.Sprintf(", cluster installs %d", limits.ParallelismClusters)
+	}
+	return summary
 }
 
 func applyLimitValue(value int, unbounded bool) string {
@@ -211,6 +215,8 @@ func applyTaskDisplayLabel(label string) string {
 		return "Create ISO " + strings.TrimPrefix(label, "iso ")
 	case strings.HasPrefix(label, "boot "):
 		return "Boot " + strings.TrimPrefix(label, "boot ")
+	case strings.HasPrefix(label, "wait bootstrap "):
+		return "Bootstrap " + strings.TrimPrefix(label, "wait bootstrap ")
 	case strings.HasPrefix(label, "wait install "):
 		return "Install " + strings.TrimPrefix(label, "wait install ")
 	case strings.HasPrefix(label, "addon "):

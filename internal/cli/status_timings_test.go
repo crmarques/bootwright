@@ -177,3 +177,15 @@ func TestApplyLimitsSummaryNamesUnreachableLimitsUnbounded(t *testing.T) {
 		t.Fatalf("banner for a ledger without recorded auto values = %q", got)
 	}
 }
+
+func TestApplyLimitsSummaryNamesThePersistedClusterInstallLimit(t *testing.T) {
+	t.Setenv(workflow.ParallelismClustersEnvVar, "4")
+	recorded := workflow.ConcurrencyLimits{Parallelism: 4, ParallelismPerHost: 2, ParallelismRedfish: 1, ParallelismClusters: 1}
+	if got := applyLimitsSummary(recorded); got != "tasks 4, per host 2, Redfish 1, cluster installs 1" {
+		t.Fatalf("banner = %q; the cluster install limit must come from the ledger, never from the environment the print happens in", got)
+	}
+	none := workflow.ConcurrencyLimits{Parallelism: 4, ParallelismPerHost: 2, ParallelismRedfish: 1}
+	if got := applyLimitsSummary(none); got != "tasks 4, per host 2, Redfish 1" {
+		t.Fatalf("banner for a run that installs no cluster = %q, want no cluster install limit", got)
+	}
+}

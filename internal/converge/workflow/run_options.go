@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	ParallelismEnvVar        = "BOOTWRIGHT_APPLY_PARALLELISM"
-	ParallelismPerHostEnvVar = "BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST"
-	ParallelismRedfishEnvVar = "BOOTWRIGHT_APPLY_PARALLELISM_REDFISH"
+	ParallelismEnvVar         = "BOOTWRIGHT_APPLY_PARALLELISM"
+	ParallelismPerHostEnvVar  = "BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST"
+	ParallelismRedfishEnvVar  = "BOOTWRIGHT_APPLY_PARALLELISM_REDFISH"
+	ParallelismClustersEnvVar = "BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS"
 )
 
 const (
-	DefaultParallelismPerHost = 4
-	DefaultParallelismRedfish = 8
+	DefaultParallelismPerHost  = 4
+	DefaultParallelismRedfish  = 8
+	DefaultParallelismClusters = 1
 
 	minDefaultParallelism = 8
 	maxDefaultParallelism = 32
@@ -42,10 +44,37 @@ func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) 
 	limits.Parallelism = boundedLimit(requestedLimit(limits.Parallelism, ParallelismEnvVar), DefaultParallelism(), autoGlobal, 1)
 	limits.ParallelismPerHost = boundedLimit(requestedLimit(limits.ParallelismPerHost, ParallelismPerHostEnvVar), DefaultParallelismPerHost, autoPerHost, hostSlotDispatchFloor(tasks))
 	limits.ParallelismRedfish = boundedLimit(requestedLimit(limits.ParallelismRedfish, ParallelismRedfishEnvVar), DefaultParallelismRedfish, autoRedfish, 1)
+	limits.ParallelismClusters = resolveClusterInstallLimit(requestedLimit(limits.ParallelismClusters, ParallelismClustersEnvVar), clusterInstallAutoParallelism(TaskLedgerEntries(tasks)))
 	limits.AutoParallelism = autoGlobal
 	limits.AutoParallelismPerHost = autoPerHost
 	limits.AutoParallelismRedfish = autoRedfish
 	return limits
+}
+
+func resolveClusterInstallLimit(requested, auto int) int {
+	if auto < 1 {
+		return 0
+	}
+	return boundedLimit(requested, DefaultParallelismClusters, auto, 1)
+}
+
+func clusterInstallAutoParallelism(entries []TaskLedgerEntry) int {
+	clusters := map[string]bool{}
+	for _, entry := range entries {
+		if cluster := clusterInstallKey(entry); cluster != "" {
+			clusters[cluster] = true
+		}
+	}
+	return len(clusters)
+}
+
+func clusterInstallKey(entry TaskLedgerEntry) string {
+	switch entry.Kind {
+	case ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindBootstrapWait, ApplyTaskKindInstallWait:
+		return entry.Cluster
+	default:
+		return ""
+	}
 }
 
 func requestedLimit(value int, envVar string) int {

@@ -14,6 +14,26 @@
       {{ bootwright_selected_storage_cluster.hosts | default([])
          | selectattr('osdReclaimAll', 'defined') | list }}
 
+- name: Resolve the OSD readiness attempt budget
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_readiness_attempts: >-
+      {{ bootwright_ceph_osd_readiness_retries
+         | default([90, ((bootwright_ceph_osd_expected_count | int) * 6)] | max)
+         | int }}
+
+- name: Set the OSD readiness wall-clock deadline
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_readiness_budget_seconds: "{{ bootwright_ceph_osd_readiness_wall_budget | int }}"
+    bootwright_ceph_osd_readiness_deadline: >-
+      {{ (now(utc=true).timestamp() | int)
+         + (bootwright_ceph_osd_readiness_wall_budget | int) }}
+  vars:
+    bootwright_ceph_osd_readiness_wall_budget: >-
+      {{ bootwright_ceph_osd_readiness_wall_seconds
+         | default((bootwright_ceph_osd_readiness_attempts | int)
+                   * (bootwright_ceph_osd_readiness_delay | default(10) | int) * 2)
+         | int }}
+
 - name: Report skipped OSD readiness check
   ansible.builtin.debug:
     msg: >-
@@ -25,6 +45,9 @@
 - name: Wait for declared Ceph OSDs to be created and in
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -36,24 +59,27 @@
   register: bootwright_ceph_osd_stat
   changed_when: false
   failed_when: false
-  retries: "{{ bootwright_ceph_osd_readiness_retries | default(30) | int }}"
+  retries: "{{ bootwright_ceph_osd_readiness_attempts | int }}"
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
     (
       bootwright_ceph_osd_stat.rc == 0
       and (
         (bootwright_ceph_osd_readiness_mode == 'exact'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+         and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
              >= (bootwright_ceph_osd_expected_count | int))
         or
         (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+         and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
              >= (bootwright_ceph_osd_expected_count | int))
       )
     )
     or
     ((bootwright_ceph_osd_stat.attempts | default(1) | int)
-     >= (bootwright_ceph_osd_readiness_retries | default(30) | int))
+     >= (bootwright_ceph_osd_readiness_attempts | int))
+    or
+    ((now(utc=true).timestamp() | int)
+     >= (bootwright_ceph_osd_readiness_deadline | int))
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
 - name: Evaluate whether declared Ceph OSDs became ready
@@ -63,11 +89,11 @@
         (bootwright_ceph_osd_stat.rc | default(1) | int) == 0
         and (
           (bootwright_ceph_osd_readiness_mode == 'exact'
-           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+           and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
                >= (bootwright_ceph_osd_expected_count | int))
           or
           (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-           and ((bootwright_ceph_osd_stat.stdout | default('{}') | from_json).num_in_osds | default(0) | int)
+           and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
                >= (bootwright_ceph_osd_expected_count | int))
         )
       }}
@@ -76,6 +102,9 @@
 - name: Wait for an in OSD on every dynamic-selection host
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -87,20 +116,20 @@
   register: bootwright_ceph_osd_host_tree
   changed_when: false
   failed_when: false
-  retries: "{{ bootwright_ceph_osd_readiness_retries | default(30) | int }}"
+  retries: "{{ bootwright_ceph_osd_readiness_attempts | int }}"
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
     (
       bootwright_ceph_osd_host_tree.rc == 0
       and (
         (
-          (bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+          (bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
           | default([])
           | selectattr('type', 'equalto', 'host')
           | selectattr('name', 'in', bootwright_ceph_osd_dynamic_crush_names)
           | map(attribute='children')
           | map('intersect',
-                ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+                ((bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
                  | default([])
                  | selectattr('type', 'equalto', 'osd')
                  | selectattr('reweight', 'gt', 0)
@@ -115,7 +144,10 @@
     )
     or
     ((bootwright_ceph_osd_host_tree.attempts | default(1) | int)
-     >= (bootwright_ceph_osd_readiness_retries | default(30) | int))
+     >= (bootwright_ceph_osd_readiness_attempts | int))
+    or
+    ((now(utc=true).timestamp() | int)
+     >= (bootwright_ceph_osd_readiness_deadline | int))
   when:
     - bootwright_ceph_osd_dynamic_hosts | length > 0
     - bootwright_ceph_osd_ready | default(false) | bool
@@ -126,13 +158,13 @@
       {{
         (bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
         and (
-          (bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+          (bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
           | default([])
           | selectattr('type', 'equalto', 'host')
           | selectattr('name', 'in', bootwright_ceph_osd_dynamic_crush_names)
           | map(attribute='children')
           | map('intersect',
-                ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+                ((bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
                  | default([])
                  | selectattr('type', 'equalto', 'osd')
                  | selectattr('reweight', 'gt', 0)
@@ -151,6 +183,9 @@
 - name: Collect Ceph device inventory when OSDs did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --
@@ -180,6 +215,9 @@
 - name: Collect machine-readable device availability when OSDs did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --
@@ -204,6 +242,9 @@
 - name: Collect declared OSD service status when OSDs did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --
@@ -229,6 +270,9 @@
 - name: Collect Ceph orchestrator host status when OSDs did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --
@@ -253,6 +297,9 @@
 - name: Collect Ceph daemon placement when OSDs did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --
@@ -273,43 +320,167 @@
         and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
       )
 
+- name: Resolve the age of the cephadm orchestrator cache when OSDs did not become ready
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_orch_refresh_newest: >-
+      {{ (bootwright_ceph_osd_refresh_stamps | sort | last)
+         if (bootwright_ceph_osd_refresh_stamps | length) > 0 else '' }}
+    bootwright_ceph_osd_orch_refresh_oldest: >-
+      {{ (bootwright_ceph_osd_refresh_stamps | sort | first)
+         if (bootwright_ceph_osd_refresh_stamps | length) > 0 else '' }}
+    bootwright_ceph_osd_orch_refresh_age: >-
+      {{ ((now(utc=true) - ((bootwright_ceph_osd_refresh_stamps | sort | last)
+                            | to_datetime('%Y-%m-%dT%H:%M:%S'))).total_seconds() | int)
+         if (bootwright_ceph_osd_refresh_stamps | length) > 0 else -1 }}
+  vars:
+    bootwright_ceph_osd_refresh_stamps: >-
+      {{ ((bootwright_ceph_osd_daemon_ps.stdout | default('')) ~ ' '
+          ~ (bootwright_ceph_osd_service_ls.stdout | default('')))
+         | regex_findall("last_refresh:\s*'?([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})") }}
+  when:
+    - bootwright_ceph_osd_readiness_mode != 'skip'
+    - >-
+      not (bootwright_ceph_osd_ready | default(false) | bool)
+      or (
+        bootwright_ceph_osd_dynamic_hosts | length > 0
+        and not (bootwright_ceph_osd_dynamic_ready | default(true) | bool)
+      )
+
 - name: Summarise declared OSD device availability for the readiness failure
   ansible.builtin.set_fact:
+    bootwright_ceph_osd_declared_osd_hosts: "{{ bootwright_ceph_osd_declared_host_names }}"
+    bootwright_ceph_osd_uninventoried_hosts: "{{ bootwright_ceph_osd_missing_inventory_hosts }}"
+    bootwright_ceph_osd_declared_device_total: "{{ bootwright_ceph_osd_declared_paths | length }}"
+    bootwright_ceph_osd_declared_inventoried_total: "{{ bootwright_ceph_osd_declared_devices | length }}"
+    bootwright_ceph_osd_declared_unavailable_total: "{{ bootwright_ceph_osd_unavailable_devices | length }}"
+    bootwright_ceph_osd_reclaim_all_unavailable_total: "{{ bootwright_ceph_osd_reclaim_all_unavailable | length }}"
+    bootwright_ceph_osd_device_evidence: >-
+      {{ (bootwright_ceph_osd_declared_paths | length) > 0
+         or (bootwright_ceph_osd_reclaim_all_host_names | length) > 0 }}
+    bootwright_ceph_osd_declared_available_total: >-
+      {{ (bootwright_ceph_osd_declared_devices | length)
+         - (bootwright_ceph_osd_unavailable_devices | length) }}
+    bootwright_ceph_osd_service_breakdown: >-
+      {{ (bootwright_ceph_osd_service_names | zip(bootwright_ceph_osd_service_running)
+          | map('join', ' running=') | list | join(', '))
+         or '(no OSD service reported a running count)' }}
+    bootwright_ceph_osd_orch_staleness: >-
+      {{ bootwright_ceph_osd_staleness_dated
+         if (bootwright_ceph_osd_orch_refresh_newest | default('') | length) > 0
+         else bootwright_ceph_osd_staleness_unknown }}
     bootwright_ceph_osd_availability_summary: >-
       {{ bootwright_ceph_osd_availability_counted
-         if (bootwright_ceph_osd_declared_devices | length) > 0
+         if (bootwright_ceph_osd_declared_host_names | length) > 0
          else bootwright_ceph_osd_availability_unknown }}
   vars:
-    bootwright_ceph_osd_declared_host_names: >-
+    bootwright_ceph_osd_declared_osd_host_entries: >-
       {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('cephHostname', 'defined')
+         | rejectattr('cephHostname', 'equalto', '')
+         | selectattr('devices', 'defined')
+         | rejectattr('devices', 'equalto', none)
+         | rejectattr('devices', 'equalto', []) | list }}
+    bootwright_ceph_osd_declared_host_names: >-
+      {{ bootwright_ceph_osd_declared_osd_host_entries
          | map(attribute='cephHostname') | reject('equalto', '') | list }}
+    bootwright_ceph_osd_declared_paths: >-
+      {{ bootwright_ceph_osd_declared_osd_host_entries
+         | map(attribute='devices') | flatten | list }}
+    bootwright_ceph_osd_inventoried_host_names: >-
+      {{ (bootwright_ceph_osd_device_json.stdout | default('[]', true) | from_json)
+         | selectattr('name', 'defined')
+         | selectattr('name', 'in', bootwright_ceph_osd_declared_host_names)
+         | selectattr('devices', 'defined')
+         | rejectattr('devices', 'equalto', [])
+         | map(attribute='name') | list }}
+    bootwright_ceph_osd_missing_inventory_hosts: >-
+      {{ bootwright_ceph_osd_declared_host_names
+         | reject('in', bootwright_ceph_osd_inventoried_host_names) | list }}
     bootwright_ceph_osd_declared_devices: >-
       {{ (bootwright_ceph_osd_device_json.stdout | default('[]', true) | from_json)
          | selectattr('name', 'defined')
          | selectattr('name', 'in', bootwright_ceph_osd_declared_host_names)
          | map(attribute='devices', default=[]) | flatten
-         | selectattr('path', 'defined') | list }}
+         | selectattr('path', 'defined')
+         | selectattr('path', 'in', bootwright_ceph_osd_declared_paths) | list }}
     bootwright_ceph_osd_unavailable_devices: >-
       {{ bootwright_ceph_osd_declared_devices
          | selectattr('available', 'defined')
          | selectattr('available', 'equalto', false) | list }}
+    bootwright_ceph_osd_reclaim_all_host_names: >-
+      {{ bootwright_ceph_osd_reclaim_all_hosts | default([])
+         | selectattr('cephHostname', 'defined')
+         | map(attribute='cephHostname') | reject('equalto', '') | list }}
+    bootwright_ceph_osd_reclaim_all_unavailable: >-
+      {{ (bootwright_ceph_osd_device_json.stdout | default('[]', true) | from_json)
+         | selectattr('name', 'defined')
+         | selectattr('name', 'in', bootwright_ceph_osd_reclaim_all_host_names)
+         | map(attribute='devices', default=[]) | flatten
+         | selectattr('available', 'defined')
+         | selectattr('available', 'equalto', false) | list }}
+    bootwright_ceph_osd_service_names: >-
+      {{ bootwright_ceph_osd_service_ls.stdout | default('')
+         | regex_findall('service_name:\s*(\S+)') }}
+    bootwright_ceph_osd_service_running: >-
+      {{ bootwright_ceph_osd_service_ls.stdout | default('')
+         | regex_findall('running:\s*(\d+)') }}
+    bootwright_ceph_osd_staleness_unknown: >-
+      Orchestrator cache age: cephadm reported no last_refresh stamp, so the host,
+      daemon and device lists below cannot be dated. They are served from the cephadm
+      mgr module's cache, not read live, so treat a short list as undated rather than
+      as proof the cluster is empty.
+    bootwright_ceph_osd_orch_refresh_window: >-
+      {{ (now(utc=true).timestamp() | int)
+         - ((bootwright_ceph_osd_readiness_deadline | int)
+            - (bootwright_ceph_osd_readiness_budget_seconds | int)) }}
+    bootwright_ceph_osd_staleness_dated: >-
+      Orchestrator cache age: cephadm last refreshed between
+      {{ bootwright_ceph_osd_orch_refresh_oldest | default('unknown') }} and
+      {{ bootwright_ceph_osd_orch_refresh_newest | default('unknown') }} UTC, which is
+      {{ bootwright_ceph_osd_orch_refresh_age | default(-1) }}s
+      ({{ ((bootwright_ceph_osd_orch_refresh_age | default(0) | int) / 60) | round(1) }} min)
+      before this verdict, against a {{ bootwright_ceph_osd_orch_refresh_window }}s wait.
+      `ceph orch ps`, `ceph orch ls` and `ceph orch device ls` are all served from the
+      cephadm mgr module's cache, never read live, so every host, daemon and device list
+      below is a snapshot of that moment.
+      {{ 'THAT CACHE IS STALE: it did not advance once across the entire wait, so the cephadm mgr module is not refreshing — it restarts on its own during bootstrap, and while it is down it keeps serving the seed-only view it held before the restart, which reads exactly like a dead cluster with one host and no devices. Force a refresh with `ceph mgr fail` and re-read before concluding anything about the hosts, the daemons or the disks.'
+         if (bootwright_ceph_osd_orch_refresh_age | default(0) | int)
+            > (bootwright_ceph_osd_orch_refresh_window | int)
+         else 'The cache did advance during the wait, so the orchestrator was refreshing and the lists below can be read as the recent cluster state.' }}
     bootwright_ceph_osd_availability_unknown: >-
-      Per-device availability could not be summarised (ceph orch device ls --format
-      json returned nothing usable for the declared hosts); read the inventory table
-      below directly.
+      Declared OSD device availability could not be summarised: this cluster declares
+      no statically named OSD device on any host, so there is no declared denominator
+      to count against; read the inventory table below directly.
     bootwright_ceph_osd_availability_fleetwide: >-
-      Every declared device on every declared host was refused, so this is not one
+      Every declared device cephadm did inventory was refused, so this is not one
       stray disk. Treat it as a fleet-wide condition — the disks carry a previous
       installation signature, or the OS install consumed them — and read one host
       directly (lsblk, pvs, vgs, findmnt /) before wiping anything.
     bootwright_ceph_osd_availability_counted: >-
-      Device availability on the declared OSD hosts:
-      {{ bootwright_ceph_osd_unavailable_devices | length }} of
-      {{ bootwright_ceph_osd_declared_devices | length }} device(s) are UNAVAILABLE
-      to ceph-volume.
+      Declared OSD device availability:
+      {{ ('cephadm returned no device inventory for '
+          ~ (bootwright_ceph_osd_missing_inventory_hosts | length) ~ ' of '
+          ~ (bootwright_ceph_osd_declared_host_names | length) ~ ' declared OSD hosts ('
+          ~ (bootwright_ceph_osd_missing_inventory_hosts | join(', ')) ~ ')')
+         if (bootwright_ceph_osd_missing_inventory_hosts | length) > 0
+         else ('cephadm inventoried all '
+               ~ (bootwright_ceph_osd_declared_host_names | length)
+               ~ ' declared OSD host(s)') }};
+      of the {{ bootwright_ceph_osd_declared_devices | length }} declared device(s) it
+      did inventory, {{ bootwright_ceph_osd_unavailable_devices | length }} are
+      unavailable to ceph-volume and
+      {{ (bootwright_ceph_osd_declared_devices | length)
+         - (bootwright_ceph_osd_unavailable_devices | length) }} are available.
+      The declaration names {{ bootwright_ceph_osd_declared_paths | length }} device(s)
+      in total, so
+      {{ (bootwright_ceph_osd_declared_paths | length)
+         - (bootwright_ceph_osd_declared_devices | length) }} declared device(s) were
+      never inventoried at all — an uninventoried device is NOT a rejected device, and
+      nothing below says anything about its contents.
       {{ bootwright_ceph_osd_availability_fleetwide
-         if (bootwright_ceph_osd_unavailable_devices | length)
-            == (bootwright_ceph_osd_declared_devices | length)
+         if (bootwright_ceph_osd_declared_devices | length) > 0
+            and (bootwright_ceph_osd_unavailable_devices | length)
+                == (bootwright_ceph_osd_declared_devices | length)
          else '' }}
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
@@ -323,10 +494,27 @@
 - name: Compose the OSD readiness remedy for the declared device selection
   ansible.builtin.set_fact:
     bootwright_ceph_osd_readiness_remedy: >-
-      {{ bootwright_ceph_osd_remedy_reclaim_all
-         if bootwright_ceph_osd_reclaim_all_hosts | length > 0
-         else bootwright_ceph_osd_remedy_manual }}
+      {{ bootwright_ceph_osd_remedy_orchestrator
+         if (bootwright_ceph_osd_device_evidence | default(false) | bool
+             and (bootwright_ceph_osd_declared_unavailable_total | default(0) | int) == 0
+             and (bootwright_ceph_osd_reclaim_all_unavailable_total | default(0) | int) == 0)
+         else (bootwright_ceph_osd_remedy_reclaim_all
+               if bootwright_ceph_osd_reclaim_all_hosts | length > 0
+               else bootwright_ceph_osd_remedy_manual) }}
   vars:
+    bootwright_ceph_osd_remedy_orchestrator: >-
+      Remedy: NOT a device remedy — cephadm refused none of the declared devices it
+      inventoried, so no disk is known to be dirty and no reclaim can help. The
+      automatic all-devices reclaim and `--reclaim-devices` both select only devices
+      cephadm reports as available=false, so on this cluster their candidate set is
+      empty and running either one would wipe nothing and change nothing. Treat this as
+      an orchestrator condition: on the seed run `ceph health detail`,
+      `ceph log last 200 cephadm`, and `ceph orch host ls --detail` to see which hosts
+      cephadm has reached; if the hosts are online and the inventory or daemon lists are
+      simply not advancing, restart the orchestrator with `ceph mgr fail` (the cephadm
+      mgr module restarting mid-bootstrap is enough to freeze both), wait for
+      `ceph orch device ls` to list every declared OSD host, and re-apply. Do NOT wipe
+      disks on this evidence.
     bootwright_ceph_osd_remedy_reclaim_all: >-
       Remedy: {{ bootwright_ceph_osd_reclaim_all_hosts | length }} host(s) declare
       their OSD devices with data_devices.all=true, so Bootwright can reclaim those
@@ -377,9 +565,40 @@
       observed
       {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default('unknown') }}
       (up {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_up_osds | default('unknown') }})
-      after {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts. cephadm
-      accepted the OSD spec but ceph-volume did not consume the declared devices.
+      after {{ bootwright_ceph_osd_stat.attempts | default('unknown') }} of
+      {{ bootwright_ceph_osd_readiness_attempts | default('unknown') }} attempts. The poll
+      also ends at a {{ bootwright_ceph_osd_readiness_budget_seconds | default('unknown') }}s
+      wall-clock deadline: an attempt count short of that budget means the deadline is what
+      stopped it, so cephadm was answering slowly rather than not at all. Each attempt is
+      capped at 120s by `timeout`, and the deadline is what keeps a degraded mon or a
+      flapping mgr from stretching the attempt budget into hours.
+      {% if ((bootwright_ceph_osd_declared_unavailable_total | default(0) | int)
+             + (bootwright_ceph_osd_reclaim_all_unavailable_total | default(0) | int)) > 0
+            or not (bootwright_ceph_osd_device_evidence | default(false) | bool) %}
+      cephadm accepted the OSD spec but ceph-volume did not consume the declared
+      devices.
+      {% elif (bootwright_ceph_osd_uninventoried_hosts | default([]) | length) > 0 %}
+      cephadm accepted the OSD spec, and it refused none of the declared devices it
+      inventoried — so this is NOT a device condition. cephadm never scanned
+      {{ bootwright_ceph_osd_uninventoried_hosts | length }} of
+      {{ bootwright_ceph_osd_declared_osd_hosts | default([]) | length }} declared OSD
+      host(s) ({{ bootwright_ceph_osd_uninventoried_hosts | join(', ') }}), so
+      ceph-volume was never invoked on their disks at all; those disks are unexamined,
+      not rejected. Read this as an orchestrator condition — cephadm has not reached or
+      has not finished scanning those hosts — rather than a disk condition.
+      {% else %}
+      cephadm accepted the OSD spec, inventoried every declared OSD host, and refused
+      none of their declared devices — so this is NOT a device condition either.
+      ceph-volume either never ran or ran and failed for a reason the device inventory
+      does not carry; read the OSD service events and `ceph log last cephadm` on the
+      seed rather than the device table.
+      {% endif %}
+      Declared OSD services (running counts):
+      {{ bootwright_ceph_osd_service_breakdown | default('(unavailable)') }} — a service
+      sitting at running=0 was accepted but never deployed, which is the same
+      orchestrator symptom seen from the service side.
       {{ bootwright_ceph_osd_availability_summary | default('') }}
+      {{ bootwright_ceph_osd_orch_staleness | default('') }}
       The device inventory below reports, per device, whether it is AVAILABLE and, if not,
       the REJECT REASONS (for example: locked, already carries a filesystem/LVM/bluestore
       signature, or is too small); the OSD service status shows the RUNNING count and any
@@ -387,6 +606,16 @@
       are not covered by the install-time emptiness guard, so a dirty or previously-used
       disk reaches ceph-volume unchecked.
       {{ bootwright_ceph_osd_readiness_remedy | default('') }}
+      {% if (bootwright_ceph_osd_uninventoried_hosts | default([]) | length) > 0 %}
+      cephadm holds NO device inventory for
+      {{ bootwright_ceph_osd_uninventoried_hosts | join(', ') }}, so the orchestrator has
+      not scanned those hosts. Cross-check the host and daemon lists below: if they are
+      online but carry few or no daemons, cephadm cannot run on them — commonly a
+      container-image pull or registry/mirror/proxy failure; inspect
+      `ceph log last cephadm` for `cephadm pull`/deploy errors. If they are fully online
+      with clean disks and only the inventory is stalled, force a re-scan with
+      `ceph mgr fail`, then re-apply.
+      {% endif %}
       This apply is failing closed rather than reporting
       success against a short or zero-OSD cluster.
       Ceph orchestrator hosts (ceph orch host ls):
@@ -426,14 +655,14 @@
         (bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
         and (
           (
-            ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+            ((bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
              | default([])
              | selectattr('type', 'equalto', 'osd')
              | selectattr('reweight', 'gt', 0)
              | map(attribute='id')
              | list)
             | intersect(
-                ((bootwright_ceph_osd_host_tree.stdout | default('{}') | from_json).nodes
+                ((bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
                  | default([])
                  | selectattr('type', 'equalto', 'host')
                  | selectattr('name', 'in', bootwright_ceph_osd_dynamic_host.crushNames)
@@ -449,7 +678,10 @@
       in OSD placed under dynamic-selection host
       {{ bootwright_ceph_osd_dynamic_host.name }} (CRUSH bucket
       {{ bootwright_ceph_osd_dynamic_host.crushNames | join(' or ') }}) in the CRUSH map after
-      {{ bootwright_ceph_osd_readiness_retries | default(30) }} attempts.
+      {{ bootwright_ceph_osd_host_tree.attempts | default('unknown') }} of
+      {{ bootwright_ceph_osd_readiness_attempts | default('unknown') }} attempts, or its
+      {{ bootwright_ceph_osd_readiness_budget_seconds | default('unknown') }}s wall-clock
+      deadline, whichever came first.
       Cluster-wide, {{ bootwright_ceph_osd_total_count }} OSD daemon(s) exist
       ({{ bootwright_ceph_osd_stray_count }} stray / not yet in the CRUSH map,
       {{ bootwright_ceph_osd_down_count }} down). When OSDs exist but are stray or
@@ -488,6 +720,9 @@
 - name: Capture observed Ceph health for the storage result
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "300"
       - cephadm
       - shell
       - --

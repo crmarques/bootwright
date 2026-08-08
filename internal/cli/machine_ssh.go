@@ -20,11 +20,13 @@ func newMachineRshCmd() *cobra.Command {
 		Short: "Open an interactive SSH shell on a declared Machine",
 		Long: `Open an interactive remote shell on a declared Machine over SSH as the Machine's
 own login: the spec.access.ssh address, user, port, credential, and the context
-host-key trust store recorded by 'bootwright machine trust'. A Machine that a
-cluster also lists is still reached as itself here — visit the cluster's
-orchestration account with 'cluster rsh' or by naming it with --ssh-user, which
-carries that account's own credential. Run a single command instead with
-'machine exec'.
+host-key trust store recorded by 'bootwright machine trust'. A Machine that
+declares no spec.access.ssh at all — a canonical OpenShift node — is reached as
+the node login of the ContainerCluster that lists it, with that cluster's
+spec.install.nodeSSH private key. A Machine that a cluster also lists is still
+reached as itself here — visit the cluster's orchestration account with
+'cluster rsh' or by naming it with --ssh-user, which carries that account's own
+credential. Run a single command instead with 'machine exec'.
 
     bootwright machine rsh --name ceph-dc1-0`,
 		Args: cobra.ArbitraryArgs,
@@ -53,10 +55,13 @@ func newMachineExecCmd() *cobra.Command {
 		Use:   "exec --name <machine> -- <command>...",
 		Short: "Run a command on a declared Machine over SSH",
 		Long: `Run a single command on a declared Machine over SSH and return its output, as the
-Machine's own spec.access.ssh login. A Machine that a cluster also lists is still
-reached as itself here — visit the cluster's orchestration account with
-'cluster exec' or by naming it with --ssh-user, which carries that account's own
-credential. Drop into an interactive shell instead with 'machine rsh'.
+Machine's own spec.access.ssh login. A Machine that declares no spec.access.ssh
+at all — a canonical OpenShift node — is reached as the node login of the
+ContainerCluster that lists it, with that cluster's spec.install.nodeSSH private
+key. A Machine that a cluster also lists is still reached as itself here — visit
+the cluster's orchestration account with 'cluster exec' or by naming it with
+--ssh-user, which carries that account's own credential. Drop into an
+interactive shell instead with 'machine rsh'.
 
     bootwright machine exec --name ceph-dc1-0 -- systemctl status ceph.target`,
 		Args: cobra.ArbitraryArgs,
@@ -109,7 +114,7 @@ func machineSSHTarget(state v1alpha1.State, name string) (sshTarget, error) {
 		return sshTarget{}, fmt.Errorf("unknown Machine %q", name)
 	}
 	if machine.Spec.Access.SSH == nil {
-		return sshTarget{}, fmt.Errorf("machine %q declares no SSH access (spec.access.ssh)", name)
+		return machineNodeSSHTarget(state, machine)
 	}
 	address := stateview.MachineConnectionAddress(state, machine)
 	if address == "" {

@@ -575,6 +575,137 @@ func TestKubeVirtDestroyReleasesSharedAgentISOSourceAtClusterScope(t *testing.T)
 	}
 }
 
+func TestKubeVirtDestroyClearsTheClaimsItsDataVolumesLeaveBehind(t *testing.T) {
+	topTasks := readAnsibleTasks(t, kubeVirtSubstrateDestroyTasks)
+	blockIdx := findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")
+	recordIdx := findAnsibleTask(t, topTasks, "Remove KubeVirt machine ownership record")
+	if blockIdx > recordIdx {
+		t.Fatalf("the guest teardown must finish before the ownership record is dropped, or destroy forgets a machine whose storage it never proved released (block=%d record=%d)", blockIdx, recordIdx)
+	}
+
+	tasks := nestedAnsibleTasks(t, topTasks[blockIdx], "block")
+	claimProbeIdx := findAnsibleTask(t, tasks, "Read KubeVirt PersistentVolumeClaim ownership labels")
+	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
+	if claimProbeIdx > dvDeleteIdx {
+		t.Fatalf("the claims must be probed before their DataVolumes are deleted, or the probe reads a state the run itself produced (probe=%d dvDelete=%d)", claimProbeIdx, dvDeleteIdx)
+	}
+	claimProbe, ok := tasks[claimProbeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the claim probe must be a command task, got %v", tasks[claimProbeIdx])
+	}
+	if got := fmt.Sprint(claimProbe["argv"]); !strings.Contains(got, "persistentvolumeclaim") {
+		t.Fatalf("the claim probe must read the claim itself, not its DataVolume, got argv=%v", claimProbe["argv"])
+	}
+	if got := fmt.Sprint(claimProbe["argv"]); !strings.Contains(got, `bootwright\.io/managed-by`) {
+		t.Fatalf("the claim probe must read the ownership label in the same call presence is derived from, or the purges below delete a claim nothing ever proved was Bootwright's, got argv=%v", claimProbe["argv"])
+	}
+	if tasks[claimProbeIdx]["failed_when"] != false {
+		t.Fatalf("the claim probe must record an absent claim instead of failing destroy, got failed_when=%v", tasks[claimProbeIdx]["failed_when"])
+	}
+	probeLoop := fmt.Sprint(tasks[claimProbeIdx]["loop"])
+	if !strings.Contains(probeLoop, "bootwright_kubevirt_cluster_scope_teardown") {
+		t.Fatalf("the claim probe must cover the shared media exactly when the destroy is cluster-scoped, got loop=%v", tasks[claimProbeIdx]["loop"])
+	}
+
+	claimRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt PersistentVolumeClaim")
+	if !(claimProbeIdx < claimRefuseIdx && claimRefuseIdx < dvDeleteIdx) {
+		t.Fatalf("each claim must be ownership-checked between its probe and the first deletion of this block, or the gate runs over state the run already changed (probe=%d refuse=%d dvDelete=%d)", claimProbeIdx, claimRefuseIdx, dvDeleteIdx)
+	}
+	claimRefuse, ok := tasks[claimRefuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the claim ownership gate must be an assert, got %v", tasks[claimRefuseIdx])
+	}
+	if got := fmt.Sprint(tasks[claimRefuseIdx]["loop"]); !strings.Contains(got, "bootwright_kubevirt_pvc_probe") {
+		t.Fatalf("the claim ownership gate must judge each claim by its own probe result, got loop=%v", tasks[claimRefuseIdx]["loop"])
+	}
+	claimRefuseThat := fmt.Sprint(claimRefuse["that"])
+	if !strings.Contains(claimRefuseThat, "stdout") || !strings.Contains(claimRefuseThat, "'bootwright'") {
+		t.Fatalf("the claim ownership gate must compare the live managed-by label against bootwright, got that=%v", claimRefuse["that"])
+	}
+	if !strings.Contains(claimRefuseThat, "length == 0") {
+		t.Fatalf("an unlabelled claim is the orphan these purges exist to clear — CDI leaves it behind carrying no label of its own — so the gate must pass an empty managed-by value and refuse only a label naming someone else, got that=%v", claimRefuse["that"])
+	}
+	if !strings.Contains(fmt.Sprint(claimRefuse["fail_msg"]), "managed-by") {
+		t.Fatalf("the claim ownership gate message must name the managed-by label, got %v", claimRefuse["fail_msg"])
+	}
+	claimRefuseWhen := fmt.Sprint(tasks[claimRefuseIdx]["when"])
+	if !strings.Contains(claimRefuseWhen, "not (bootwright_destroy_authorize_unowned_networks") {
+		t.Fatalf("a claim another context owns must be deletable only under --authorize unowned-networks, the token that already covers the DataVolume it belongs to, got when=%v", claimRefuseWhen)
+	}
+	if strings.Contains(claimRefuseWhen, "bootwright_destroy_authorize_unowned_vms") {
+		t.Fatalf("the claim ownership gate must not be lifted by the VM authorization, got when=%v", claimRefuseWhen)
+	}
+
+	for _, site := range []struct {
+		remove string
+		purge  string
+		claim  string
+	}{
+		{
+			remove: "Delete KubeVirt DataVolumes",
+			purge:  "Purge the KubeVirt root disk PersistentVolumeClaim",
+			claim:  "bootwright_kubevirt_root_dv_name",
+		},
+		{
+			remove: "Delete KubeVirt DataVolumes",
+			purge:  "Purge the KubeVirt agent ISO PersistentVolumeClaim",
+			claim:  "bootwright_kubevirt_iso_dv_name",
+		},
+		{
+			remove: "Delete the shared KubeVirt agent ISO source DataVolume",
+			purge:  "Purge the shared KubeVirt agent ISO source PersistentVolumeClaim",
+			claim:  "bootwright_kubevirt_iso_source_dv_name",
+		},
+	} {
+		removeIdx := findAnsibleTask(t, tasks, site.remove)
+		purgeIdx := findAnsibleTask(t, tasks, site.purge)
+		if removeIdx > purgeIdx {
+			t.Fatalf("%q must prove the claim released after its DataVolume is deleted, or destroy reports success over storage that outlives it (remove=%d purge=%d)", site.purge, removeIdx, purgeIdx)
+		}
+		if claimRefuseIdx > purgeIdx {
+			t.Fatalf("%q must run after the claim ownership gate, or a claim another context owns is deleted before anything judged it (refuse=%d purge=%d)", site.purge, claimRefuseIdx, purgeIdx)
+		}
+		if !strings.Contains(probeLoop, site.claim) {
+			t.Fatalf("the claim probe must cover %s, or its purge can never fire, got loop=%v", site.claim, tasks[claimProbeIdx]["loop"])
+		}
+		include, ok := tasks[purgeIdx]["ansible.builtin.include_role"].(map[string]any)
+		if !ok {
+			t.Fatalf("%q must reuse the shared claim purge through include_role, got %v", site.purge, tasks[purgeIdx])
+		}
+		if got := fmt.Sprint(include["name"]); got != "bootwright.core.container_cluster_boot_kubevirt" {
+			t.Fatalf("%q must reuse the boot role's claim purge so the settle budget stays one default, got name=%v", site.purge, include["name"])
+		}
+		if got := fmt.Sprint(include["tasks_from"]); got != "purge_media_pvc.yml" {
+			t.Fatalf("%q must reuse the shared claim purge task file, got tasks_from=%v", site.purge, include["tasks_from"])
+		}
+		vars, ok := tasks[purgeIdx]["vars"].(map[string]any)
+		if !ok || !strings.Contains(fmt.Sprint(vars["bootwright_kubevirt_media_pvc_name"]), site.claim) {
+			t.Fatalf("%q must purge the claim named after the DataVolume it just deleted (%s), got vars=%v", site.purge, site.claim, tasks[purgeIdx]["vars"])
+		}
+		purgeWhen := fmt.Sprint(tasks[purgeIdx]["when"])
+		if strings.Contains(purgeWhen, "bootwright_kubevirt_dv_owner") {
+			t.Fatalf("%q must not be gated on the DataVolume probe: the deletion above removes that DataVolume, so a re-run after a stuck claim would skip the purge and leak the claim for good, got when=%v", site.purge, tasks[purgeIdx]["when"])
+		}
+		if !strings.Contains(purgeWhen, "bootwright_kubevirt_pvc_probe") || !strings.Contains(purgeWhen, site.claim) {
+			t.Fatalf("%q must fire on that claim's own presence, so a re-run still clears a claim an earlier run orphaned, got when=%v", site.purge, tasks[purgeIdx]["when"])
+		}
+		if !strings.Contains(purgeWhen, "'rc', 'equalto', 0") {
+			t.Fatalf("%q must fire only on a claim the probe actually observed, or a destroy with no claim left pays the settle budget to prove it, got when=%v", site.purge, tasks[purgeIdx]["when"])
+		}
+	}
+
+	sharedPurgeWhen := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Purge the shared KubeVirt agent ISO source PersistentVolumeClaim")]["when"])
+	if !strings.Contains(sharedPurgeWhen, "bootwright_kubevirt_cluster_scope_teardown") {
+		t.Fatalf("the shared media claim purge must stay gated on cluster scope, or a --machines destroy pulls a claim its peers still boot from, got when=%v", sharedPurgeWhen)
+	}
+
+	purge := readAnsibleTasks(t, kubeVirtPurgeMediaPVCTasks)
+	deleteIdx := findAnsibleTask(t, purge, "Remove the KubeVirt agent ISO PersistentVolumeClaim")
+	if purge[deleteIdx]["failed_when"] != false {
+		t.Fatalf("a transient claim deletion error must not abort destroy before the ownership record is dropped: the probe and verdict below are the single decision point, got failed_when=%v", purge[deleteIdx]["failed_when"])
+	}
+}
+
 func TestHostVirtctlUsesMaterializedHostKubeconfig(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_host_virtctl_provision.yml")
 	if !strings.Contains(body, "bootwright_kubevirt_host_kubeconfigs[bootwright_task_host_cluster_name]") {

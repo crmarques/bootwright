@@ -468,17 +468,83 @@ to match. Deleting the record file alone would strand the live resource.
 The apply bootstraps the cluster, brings up every monitor, manager and
 monitoring daemon, and then fails closed at the OSD readiness check:
 
-```
+```text
 Ceph cluster ceph-01 did not create the declared OSDs: expected at least 6
-OSD(s) 'in', observed 0 (up 0) after 30 attempts.
-Device availability on the declared OSD hosts: 30 of 30 device(s) are
-UNAVAILABLE to ceph-volume.
+OSD(s) 'in', observed 0 (up 0) after 90 of 90 attempts. The poll also ends at a
+1800s wall-clock deadline: an attempt count short of that budget means the
+deadline is what stopped it, so cephadm was answering slowly rather than not at
+all. ...
+cephadm accepted the OSD spec, inventoried every declared OSD host, and refused
+none of their declared devices — so this is NOT a device condition either. ...
+Declared OSD services (running counts): osd.ceph-01 running=0 — a service
+sitting at running=0 was accepted but never deployed, ...
+Declared OSD device availability: cephadm inventoried all 3 declared OSD
+host(s); of the 6 declared device(s) it did inventory, 0 are unavailable to
+ceph-volume and 6 are available. ...
+Orchestrator cache age: cephadm last refreshed between 2026-08-07T09:12:04 and
+2026-08-07T09:14:41 UTC, which is 63s (1.1 min) before this verdict, against a
+900s wait. ...
 ```
 
-`ceph orch apply` registers the OSD drivegroups and returns immediately;
-cephadm creates the OSDs asynchronously through ceph-volume, which refuses any
-device that is not empty. So a healthy-looking cluster with zero OSDs almost
-always means the declared disks still carry a signature. Read the
+`ceph orch apply` registers the OSD drivegroups and returns immediately; cephadm
+creates the OSDs asynchronously through ceph-volume, which refuses any device
+that is not empty. Two unrelated failures end at this same check, and the failure
+text already tells them apart. **Read the `Declared OSD device availability:`
+line before touching a disk** — it counts how many of the declared devices
+cephadm actually refused, and that count picks the branch below. The
+`after N of M attempts` count says which limit ended the poll: `90 of 90` is the
+attempt budget running out, while a first number short of the second means the
+wall-clock deadline stopped it — cephadm was answering, only slowly.
+
+### Zero unavailable devices — the disks are not the problem
+
+The sample above is that case: cephadm inventoried every declared OSD host and
+refused none of their declared devices. **Zero OSDs with zero unavailable devices
+is not a disk-hygiene problem**, and no reclaim can do anything about it — both
+`--reclaim-devices` and the automatic `dataDevices.all: true` reclaim select only
+devices cephadm reports as `available=false`, so on this cluster their candidate
+set is empty and running either one would wipe nothing and change nothing. The
+failure says as much itself: *"NOT a device remedy … Do NOT wipe disks on this
+evidence."*
+
+**Date the evidence before reading it.** `ceph orch ps`, `ceph orch ls` and
+`ceph orch device ls` are all served from the cephadm mgr module's cache, never
+read live, so every host, daemon and device list the failure prints is a snapshot
+of one moment. The `Orchestrator cache age:` line says which moment. When it
+reports that the cache did not advance across the whole wait, those lists prove
+nothing: a cephadm mgr module that restarts mid-bootstrap keeps serving the
+seed-only view it held before the restart, which reads exactly like a dead
+cluster with one host and no devices.
+
+**Then work the orchestrator, not the disks.** On the seed, see which hosts
+cephadm has reached and what it has been doing:
+
+```bash
+cephadm shell -- ceph orch host ls --detail
+cephadm shell -- ceph log last 200 cephadm
+```
+
+Hosts that are online but carry few or no daemons mean cephadm cannot run on
+them — usually a container-image pull or registry/mirror/proxy failure, which
+`ceph log last 200 cephadm` names as a `cephadm pull` or deploy error. Hosts that
+are online with only the inventory or the daemon list stalled mean the
+orchestrator itself is stuck; restart it, wait for `ceph orch device ls` to list
+every declared OSD host, then re-apply:
+
+```bash
+cephadm shell -- ceph mgr fail
+```
+
+An OSD service sitting at `running=0` in the failure's *Declared OSD services
+(running counts)* breakdown is the same condition seen from the service side: the
+spec was accepted and never deployed. So is a host the failure reports as never
+inventoried — an uninventoried device is not a rejected device, and nothing in
+the inventory says anything about its contents.
+
+### Some declared device is unavailable — read the reject reasons
+
+When the availability line does count devices as unavailable to ceph-volume, the
+declared disks still carry a signature. Read the
 **REJECT REASONS** column of the device inventory the failure prints:
 
 | Reject reasons | What is on the disk |
@@ -571,11 +637,9 @@ the previous cluster's LVM.
     `lsblk -dno NAME,SIZE,TYPE` and `findmnt -no SOURCE /` on one node before
     editing `spec.ceph.topology.nodes[].devices`.
 
-If instead the inventory reports **zero devices** on hosts that are online but
-carry few or no daemons, the problem is not the disks: cephadm cannot run on
-those hosts, usually a container-image pull or registry/mirror/proxy failure.
-Check `cephadm shell -- ceph log last cephadm` for `cephadm pull` and deploy
-errors.
+If the inventory instead reports **zero devices**, nothing was refused and none
+of this applies: that is the orchestrator condition of the previous section, and
+the disks are not the problem.
 
 !!! note "The half-built cluster is already owned"
     Ownership is recorded before bootstrap, so a plain re-`apply` reconciles the

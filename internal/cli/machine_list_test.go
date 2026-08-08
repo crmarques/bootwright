@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func machineListTestState() v1alpha1.State {
@@ -130,6 +131,37 @@ func TestBuildMachineListDerivesStateOSAndCluster(t *testing.T) {
 	}
 	if bastion.SSHUser != "core" {
 		t.Fatalf("bastion ssh user = %q, want core", bastion.SSHUser)
+	}
+}
+
+func TestBuildMachineListReportsTheLoginMachineRshUses(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	if machine, ok := stateview.Machine(state, "master-0"); !ok || machine.Spec.Access.SSH != nil {
+		t.Fatal("fixture Machine master-0 must declare no spec.access.ssh for this test to mean anything")
+	}
+	target, err := machineSSHTarget(state, "master-0")
+	if err != nil {
+		t.Fatalf("machineSSHTarget: %v", err)
+	}
+
+	var entry machineListEntry
+	found := false
+	for _, candidate := range buildMachineList(state, nil, nil) {
+		if candidate.Name == "master-0" {
+			entry, found = candidate, true
+		}
+	}
+	if !found {
+		t.Fatal("machine list omits fixture Machine master-0")
+	}
+	if entry.SSHUser != target.User || entry.SSHAddress != target.Address {
+		t.Fatalf("machine list prints %q@%q but machine rsh connects to %q@%q; one login must be reported everywhere", entry.SSHUser, entry.SSHAddress, target.User, target.Address)
+	}
+	if entry.SSHUser != "core" || entry.SSHAddress != "192.168.132.20" {
+		t.Fatalf("node login = %q@%q, want core@192.168.132.20", entry.SSHUser, entry.SSHAddress)
+	}
+	if entry.State != machineStateNotProvisioned || entry.Provisioned {
+		t.Fatalf("master-0 state = %q provisioned=%v, want not-provisioned: Bootwright did not install that OS", entry.State, entry.Provisioned)
 	}
 }
 

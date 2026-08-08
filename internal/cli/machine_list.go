@@ -136,13 +136,12 @@ func buildMachineList(state v1alpha1.State, records []ownership.ResourceRecord, 
 			continue
 		}
 		entry := machineListEntry{
-			Name:       machine.Metadata.Name,
-			OS:         machineOSDescriptor(state, machine),
-			Substrate:  machineSubstrateType(state, machine),
-			SSHAddress: v1alpha1.MachineSSHAddress(machine),
+			Name:      machine.Metadata.Name,
+			OS:        machineOSDescriptor(state, machine),
+			Substrate: machineSubstrateType(state, machine),
 		}
-		if machine.Spec.Access.SSH != nil {
-			entry.SSHUser = machineAccessIdentity(state, machine).User
+		if target, err := machineSSHTarget(state, machine.Metadata.Name); err == nil {
+			entry.SSHUser, entry.SSHAddress = target.User, target.Address
 		}
 		if bound {
 			entry.Cluster = binding.Cluster

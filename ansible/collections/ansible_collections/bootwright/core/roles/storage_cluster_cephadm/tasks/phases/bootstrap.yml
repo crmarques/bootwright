@@ -32,14 +32,14 @@
     - name: Reconcile the cephadm SSH user
       ansible.builtin.include_tasks: bootstrap_steps/ssh_user.yml
 
+    - name: Wait for declared Ceph mons to join the monmap
+      ansible.builtin.include_tasks: bootstrap_steps/mon_readiness.yml
+
     - name: Wait for declared Ceph OSDs to be created
       ansible.builtin.include_tasks: bootstrap_steps/osd_readiness.yml
 
     - name: Report all-devices OSD disks left unclaimed
       ansible.builtin.include_tasks: bootstrap_steps/osd_coverage_report.yml
-
-    - name: Wait for declared Ceph mons to join the monmap
-      ansible.builtin.include_tasks: bootstrap_steps/mon_readiness.yml
 
     - name: Decide how the rendered Ceph operations execute
       ansible.builtin.include_tasks: bootstrap_steps/batch_support.yml

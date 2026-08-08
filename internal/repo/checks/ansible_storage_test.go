@@ -279,17 +279,21 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/step.yml",
 	}
+	var scanned int
 	for _, path := range paths {
-		lines := strings.Split(readRepoFile(t, path), "\n")
-		for i, line := range lines {
-			if strings.TrimSpace(line) != "argv:" || i+1 >= len(lines) {
+		for _, block := range ansibleArgvBlocks(path, readRepoFile(t, path)) {
+			argv := ansibleBoundedCommand(block.argv)
+			if len(argv) == 0 {
 				continue
 			}
-			next := strings.TrimSpace(lines[i+1])
-			if next == "- ceph" || next == "- radosgw-admin" {
-				t.Fatalf("%s:%d invokes host-installed %s instead of cephadm shell", path, i+2, strings.TrimPrefix(next, "- "))
+			scanned++
+			if argv[0] == "ceph" || argv[0] == "radosgw-admin" {
+				t.Fatalf("%s:%d invokes host-installed %s instead of cephadm shell; a `timeout --kill-after=<n> <secs>` wrapper in front of it does not make it a cephadm shell invocation", path, block.line+1, argv[0])
 			}
 		}
+	}
+	if scanned == 0 {
+		t.Fatalf("no argv block was inspected across %d managed Ceph task files: the scanner no longer matches the tasks it guards", len(paths))
 	}
 	execute := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/execute.yml")
 	if !strings.Contains(execute, "['cephadm', 'shell', '--'] + bootwright_ceph_op_command") {
@@ -590,7 +594,7 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	}
 
 	globalUntil := fmt.Sprint(tasks[globalWaitIdx]["until"])
-	for _, want := range []string{"num_in_osds", "bootwright_ceph_osd_readiness_mode == 'exact'", "bootwright_ceph_osd_expected_count", "bootwright_ceph_osd_stat.attempts", "bootwright_ceph_osd_readiness_retries"} {
+	for _, want := range []string{"num_in_osds", "bootwright_ceph_osd_readiness_mode == 'exact'", "bootwright_ceph_osd_expected_count", "bootwright_ceph_osd_stat.attempts", "bootwright_ceph_osd_readiness_attempts", "bootwright_ceph_osd_readiness_deadline"} {
 		if !strings.Contains(globalUntil, want) {
 			t.Fatalf("global OSD readiness must preserve exact static-path behavior %q, got %v", want, globalUntil)
 		}
@@ -631,7 +635,7 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 		t.Fatalf("dynamic-host OSD readiness must poll the cluster-wide CRUSH tree once, not loop per host, got loop=%v", perHost["loop"])
 	}
 	until := fmt.Sprint(perHost["until"])
-	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'in', bootwright_ceph_osd_dynamic_crush_names", "map('intersect'", "map('length')", "select('gt', 0)", "bootwright_ceph_osd_dynamic_hosts | length", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_retries"} {
+	for _, want := range []string{"type', 'equalto', 'osd", "reweight', 'gt', 0", "type', 'equalto', 'host", "name', 'in', bootwright_ceph_osd_dynamic_crush_names", "map('intersect'", "map('length')", "select('gt', 0)", "bootwright_ceph_osd_dynamic_hosts | length", "bootwright_ceph_osd_host_tree.attempts", "bootwright_ceph_osd_readiness_attempts", "bootwright_ceph_osd_readiness_deadline"} {
 		if !strings.Contains(until, want) {
 			t.Fatalf("collapsed dynamic-host OSD readiness condition missing %q: %v", want, until)
 		}
@@ -3646,6 +3650,10 @@ func TestStorageCephadmAllDevicesCoverageReportIsNonDestructive(t *testing.T) {
 	if readinessIdx < 0 || coverageIdx < 0 || readinessIdx > coverageIdx {
 		t.Error("bootstrap.yml must include osd_coverage_report.yml after osd_readiness.yml")
 	}
+	monIdx := strings.Index(boot, "bootstrap_steps/mon_readiness.yml")
+	if monIdx < 0 || monIdx > readinessIdx {
+		t.Errorf("bootstrap.yml must run the monmap gate before the OSD gate: mon_readiness.yml is the only step that collects `ceph log last 100 cephadm` and carries the `Failed to extract uid/gid` and `Filtered out host` detectors, and an OSD gate firing first aborts the play before that evidence is ever gathered (mon=%d osd=%d)", monIdx, readinessIdx)
+	}
 }
 
 func TestStorageOSDReadinessFailureNamesTheReclaimRemedy(t *testing.T) {
@@ -3698,6 +3706,251 @@ func TestStorageOSDReadinessFailureNamesTheReclaimRemedy(t *testing.T) {
 		if !strings.Contains(failMsg, want) {
 			t.Errorf("the OSD readiness failure must render %q, got fail_msg=%v", want, failMsg)
 		}
+	}
+
+	orchestrator := fmt.Sprint(remedyVars["bootwright_ceph_osd_remedy_orchestrator"])
+	for _, want := range []string{"ceph health detail", "ceph log last 200 cephadm", "ceph orch host ls --detail", "ceph mgr fail"} {
+		if !strings.Contains(orchestrator, want) {
+			t.Errorf("the zero-unavailable readiness remedy must name %q: osd_reclaim.yml selects only devices cephadm reports as available=false, so with none unavailable every reclaim path has an empty candidate set and only the orchestrator can be at fault; got %v", want, orchestrator)
+		}
+	}
+	for _, forbidden := range []string{"--authorize data-loss", "wipefs --all", "sgdisk --zap-all"} {
+		if strings.Contains(orchestrator, forbidden) {
+			t.Errorf("the zero-unavailable readiness remedy must not offer %q; it is what told the operator to wipe clean disks, got %v", forbidden, orchestrator)
+		}
+	}
+	if !strings.Contains(orchestrator, "Do NOT wipe") {
+		t.Errorf("the zero-unavailable readiness remedy must say plainly that no disk is to be wiped on this evidence, got %v", orchestrator)
+	}
+	selection := fmt.Sprint(tasks[remedyIdx]["ansible.builtin.set_fact"].(map[string]any)["bootwright_ceph_osd_readiness_remedy"])
+	if !strings.Contains(selection, "bootwright_ceph_osd_remedy_orchestrator") ||
+		!strings.Contains(selection, "bootwright_ceph_osd_declared_unavailable_total") ||
+		!strings.Contains(selection, "bootwright_ceph_osd_reclaim_all_unavailable_total") {
+		t.Errorf("the readiness remedy must be chosen from the observed availability counts, not from osdReclaimAll alone, got %v", selection)
+	}
+	if strings.Index(selection, "bootwright_ceph_osd_remedy_orchestrator") > strings.Index(selection, "bootwright_ceph_osd_remedy_reclaim_all") {
+		t.Errorf("the orchestrator remedy must be selected first, so a clean-disk cluster never reaches a reclaim text, got %v", selection)
+	}
+}
+
+func TestStorageOSDReadinessBudgetScalesWithTheDeclaredOSDCount(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve OSD readiness expectation")
+	budgetIdx := findAnsibleTask(t, tasks, "Resolve the OSD readiness attempt budget")
+	deadlineIdx := findAnsibleTask(t, tasks, "Set the OSD readiness wall-clock deadline")
+	waitIdx := findAnsibleTask(t, tasks, "Wait for declared Ceph OSDs to be created and in")
+	if !(resolveIdx < budgetIdx && budgetIdx < deadlineIdx && deadlineIdx < waitIdx) {
+		t.Fatalf("the attempt budget and its wall-clock deadline must be resolved from the expectation before the poll uses them (resolve=%d budget=%d deadline=%d wait=%d)", resolveIdx, budgetIdx, deadlineIdx, waitIdx)
+	}
+	deadline, ok := tasks[deadlineIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the OSD readiness deadline must be a set_fact, got %v", tasks[deadlineIdx])
+	}
+	if got := fmt.Sprint(deadline["bootwright_ceph_osd_readiness_deadline"]); !strings.Contains(got, "now(utc=true).timestamp()") {
+		t.Errorf("the OSD readiness deadline must be an absolute wall-clock stamp taken once, so the `until` clauses compare against a fixed instant, got %v", got)
+	}
+	deadlineVars, ok := tasks[deadlineIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("the OSD readiness deadline must derive its budget from a vars block, got %v", tasks[deadlineIdx])
+	}
+	wallBudget := fmt.Sprint(deadlineVars["bootwright_ceph_osd_readiness_wall_budget"])
+	for _, want := range []string{"bootwright_ceph_osd_readiness_wall_seconds", "bootwright_ceph_osd_readiness_attempts", "bootwright_ceph_osd_readiness_delay"} {
+		if !strings.Contains(wallBudget, want) {
+			t.Errorf("the OSD readiness wall-clock budget must scale with the attempt budget and stay overridable, missing %q: each attempt is capped at 120s by `timeout`, so 180 attempts against a cephadm that answers slowly rather than hanging costs hours where the attempt count alone promises minutes. got %v", want, wallBudget)
+		}
+	}
+	budget := fmt.Sprint(tasks[budgetIdx]["ansible.builtin.set_fact"].(map[string]any)["bootwright_ceph_osd_readiness_attempts"])
+	if !strings.Contains(budget, "bootwright_ceph_osd_readiness_retries") {
+		t.Errorf("the attempt budget must stay overridable through bootwright_ceph_osd_readiness_retries, got %v", budget)
+	}
+	if !strings.Contains(budget, "bootwright_ceph_osd_expected_count") {
+		t.Errorf("the attempt budget must scale with the declared OSD count: the OSD gate waits on a device scan across every OSD host and then one ceph-volume run per OSD, so a 30-OSD cluster needs longer than a 3-OSD one, got %v", budget)
+	}
+	if !strings.Contains(budget, "90") || !strings.Contains(budget, "max") {
+		t.Errorf("the attempt budget must keep a floor of at least 90 attempts: at 30 attempts x 10s the gate gave up ~3.5 minutes before cephadm deployed the OSDs, and it must also outlast a cephadm mgr restart, got %v", budget)
+	}
+	if got := fmt.Sprint(tasks[waitIdx]["retries"]); !strings.Contains(got, "bootwright_ceph_osd_readiness_attempts") {
+		t.Errorf("the OSD poll must take its retry count from the resolved budget, got retries=%v", got)
+	}
+
+	for _, name := range []string{
+		"Wait for declared Ceph OSDs to be created and in",
+		"Wait for an in OSD on every dynamic-selection host",
+		"Collect Ceph device inventory when OSDs did not become ready",
+		"Collect machine-readable device availability when OSDs did not become ready",
+		"Collect declared OSD service status when OSDs did not become ready",
+		"Collect Ceph orchestrator host status when OSDs did not become ready",
+		"Collect Ceph daemon placement when OSDs did not become ready",
+	} {
+		command, ok := tasks[findAnsibleTask(t, tasks, name)]["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			t.Fatalf("%q must be a command probe", name)
+		}
+		argv := fmt.Sprint(command["argv"])
+		if !strings.HasPrefix(argv, "[timeout ") || !strings.Contains(argv, "--kill-after") {
+			t.Errorf("%q must bound each attempt with `timeout --kill-after=<n>`: ansible.cfg's `timeout` is the SSH connection timeout, not a task timeout, so a wedged `cephadm shell` blocks the attempt forever and the retry budget never advances. got argv=%v", name, argv)
+		}
+	}
+
+	body := readRepoFile(t, path)
+	if strings.Contains(body, "default('{}')") || strings.Contains(body, "default('[]')") {
+		t.Error("every from_json guard in the OSD gate must be default('<json>', true): the one-argument default does not substitute for an empty string, so an rc==0-with-empty-stdout attempt raises inside the `until` conditional instead of retrying")
+	}
+}
+
+func TestStorageOSDReadinessCountsDeclaredDevicesNotReturnedRows(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	summaryIdx := findAnsibleTask(t, tasks, "Summarise declared OSD device availability for the readiness failure")
+	summaryVars, ok := tasks[summaryIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("the availability summary must be composed from vars, got %v", tasks[summaryIdx])
+	}
+	declaredHosts := fmt.Sprint(summaryVars["bootwright_ceph_osd_declared_osd_host_entries"])
+	if !strings.Contains(declaredHosts, "bootwright_selected_storage_cluster.hosts") {
+		t.Errorf("the declared-device denominator must come from the rendered declaration, not from the rows `ceph orch device ls` happened to return — counting the returned rows is what printed \"0 of 5 device(s) are UNAVAILABLE\" for a 30-device declaration; got %v", declaredHosts)
+	}
+	for _, want := range []string{"rejectattr('devices', 'equalto', none)", "rejectattr('devices', 'equalto', [])"} {
+		if !strings.Contains(declaredHosts, want) {
+			t.Errorf("the declared OSD host set must keep only hosts carrying a non-empty devices list, which is also what excludes the mon-only arbiter node, missing %q: %v", want, declaredHosts)
+		}
+	}
+	summary := fmt.Sprint(tasks[summaryIdx]["ansible.builtin.set_fact"].(map[string]any))
+	for _, want := range []string{
+		"bootwright_ceph_osd_uninventoried_hosts",
+		"bootwright_ceph_osd_declared_device_total",
+		"bootwright_ceph_osd_declared_inventoried_total",
+		"bootwright_ceph_osd_declared_unavailable_total",
+		"bootwright_ceph_osd_declared_available_total",
+	} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("the availability summary must publish %q: an uninventoried declared device is not a rejected declared device and the message must never conflate them, got %v", want, summary)
+		}
+	}
+	counted := fmt.Sprint(summaryVars["bootwright_ceph_osd_availability_counted"])
+	for _, want := range []string{"no device inventory for", "did inventory", "never inventoried at all"} {
+		if !strings.Contains(counted, want) {
+			t.Errorf("the availability line must separate the never-inventoried, unavailable and available counts, missing %q: %v", want, counted)
+		}
+	}
+
+	staleIdx := findAnsibleTask(t, tasks, "Resolve the age of the cephadm orchestrator cache when OSDs did not become ready")
+	if staleIdx > summaryIdx {
+		t.Fatalf("the orchestrator cache age must be resolved before the summary renders it (stale=%d summary=%d)", staleIdx, summaryIdx)
+	}
+	stale := fmt.Sprint(tasks[staleIdx]["vars"].(map[string]any)["bootwright_ceph_osd_refresh_stamps"])
+	if !strings.Contains(stale, "last_refresh") {
+		t.Errorf("`ceph orch ps` and `ceph orch device ls` are served from the cephadm mgr cache, so the verdict must read the last_refresh stamps it carries and report their age, got %v", stale)
+	}
+	dated := fmt.Sprint(summaryVars["bootwright_ceph_osd_staleness_dated"])
+	if !strings.Contains(dated, "STALE") || !strings.Contains(dated, "ceph mgr fail") {
+		t.Errorf("a cache that did not advance across the whole wait must be called out plainly, so a restarting cephadm mgr is never again read as a dead cluster, got %v", dated)
+	}
+
+	failMsg := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Assert declared Ceph OSDs were created")]["ansible.builtin.assert"].(map[string]any)["fail_msg"])
+	if !strings.Contains(failMsg, "bootwright_ceph_osd_orch_staleness") {
+		t.Errorf("the readiness failure must render the orchestrator cache age, got fail_msg=%v", failMsg)
+	}
+	if !strings.Contains(failMsg, "bootwright_ceph_osd_service_breakdown") {
+		t.Errorf("the readiness failure must render the per-service running counts already collected by `ceph orch ls --service_type osd`, got fail_msg=%v", failMsg)
+	}
+	if !strings.Contains(failMsg, "{% if bootwright_ceph_osd_uninventoried_hosts") && !strings.Contains(failMsg, "{% if (bootwright_ceph_osd_uninventoried_hosts") {
+		t.Errorf("the `the orchestrator has not scanned the hosts ... ceph mgr fail` hint must be gated on the declared OSD hosts cephadm holds no inventory for, not on the whole device table being empty — one seed row suppressed it. got fail_msg=%v", failMsg)
+	}
+	if !strings.Contains(failMsg, "ceph-volume was never invoked") {
+		t.Errorf("the readiness failure must stop asserting that ceph-volume rejected the devices when no declared device is unavailable, got fail_msg=%v", failMsg)
+	}
+}
+
+func TestStorageCephGatesTheDeviceScanBeforeTheOSDSpecApply(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	hostApplyIdx := findAnsibleTask(t, tasks, "Apply Ceph host, mon, and mgr specs")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve the declared OSD hosts the device scan must reach")
+	deadlineIdx := findAnsibleTask(t, tasks, "Set the device-scan wall-clock deadline")
+	waitIdx := findAnsibleTask(t, tasks, "Wait for cephadm to inventory every declared OSD host before the OSD apply")
+	missingIdx := findAnsibleTask(t, tasks, "Resolve the declared OSD hosts cephadm has not inventoried")
+	reportIdx := findAnsibleTask(t, tasks, "Report declared OSD hosts whose device inventory never appeared")
+	osdApplyIdx := findAnsibleTask(t, tasks, "Apply Ceph OSD service spec")
+	if !(hostApplyIdx < resolveIdx && resolveIdx < deadlineIdx && deadlineIdx < waitIdx &&
+		waitIdx < missingIdx && missingIdx < reportIdx && reportIdx < osdApplyIdx) {
+		t.Fatalf("the device-scan gate must sit between the host document apply and the OSD spec apply (host=%d resolve=%d deadline=%d wait=%d missing=%d report=%d osd=%d)", hostApplyIdx, resolveIdx, deadlineIdx, waitIdx, missingIdx, reportIdx, osdApplyIdx)
+	}
+
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the device-scan gate must resolve its inputs with set_fact, got %v", tasks[resolveIdx])
+	}
+	scanAttempts := fmt.Sprint(resolve["bootwright_ceph_osd_scan_attempts"])
+	for _, want := range []string{"bootwright_ceph_osd_scan_retries", "expectedCount", "90", "max"} {
+		if !strings.Contains(scanAttempts, want) {
+			t.Errorf("the device-scan budget must be derived the same way as the OSD readiness budget, missing %q: a fixed budget shorter than the readiness gate's aborts a rebuild whose device scan is merely slow, before the gate that would have waited it out. got %v", want, scanAttempts)
+		}
+	}
+	if got := fmt.Sprint(resolve["bootwright_ceph_osd_scan_mode"]); !strings.Contains(got, "osdReadiness") || !strings.Contains(got, "mode") {
+		t.Errorf("the device-scan gate must resolve the OSD readiness mode from the declaration so it can stand down on a cluster that opted out of every OSD gate, got %v", got)
+	}
+
+	deadline, ok := tasks[deadlineIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the device-scan wall-clock deadline must be a set_fact, got %v", tasks[deadlineIdx])
+	}
+	if got := fmt.Sprint(deadline["bootwright_ceph_osd_scan_deadline"]); !strings.Contains(got, "now(utc=true).timestamp()") {
+		t.Errorf("the device-scan deadline must be an absolute wall-clock stamp, got %v", got)
+	}
+
+	wait := tasks[waitIdx]
+	command, ok := wait["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the device-scan gate must poll with a command probe, got %v", wait)
+	}
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"timeout", "--kill-after", "device", "ls", "--format", "json", "--refresh"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("the device-scan gate argv missing %q: %v", want, argv)
+		}
+	}
+	if wait["changed_when"] != false || wait["failed_when"] != false {
+		t.Fatalf("the device-scan gate must be a read-only retry probe, got changed_when=%v failed_when=%v", wait["changed_when"], wait["failed_when"])
+	}
+	if got := fmt.Sprint(wait["retries"]); !strings.Contains(got, "bootwright_ceph_osd_scan_attempts") {
+		t.Errorf("the device-scan poll must take its retry count from the derived budget, got retries=%v", got)
+	}
+	for _, task := range []map[string]any{wait, tasks[missingIdx]} {
+		if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_ceph_osd_scan_mode != 'skip'") {
+			t.Errorf("the device-scan gate must stand down on a cluster whose OSD readiness mode is skip: an unmanaged OSD node still renders a devices list, so the declared-host set is non-empty and the scan would otherwise poll for an inventory nobody waits on. got when=%v", got)
+		}
+	}
+	until := fmt.Sprint(wait["until"])
+	for _, want := range []string{"bootwright_ceph_declared_osd_hosts", "rejectattr('devices', 'equalto', [])", "bootwright_ceph_osd_scan_device_ls.attempts", "bootwright_ceph_osd_scan_attempts", "bootwright_ceph_osd_scan_deadline"} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("the device-scan gate must wait for a non-empty inventory on every declared OSD host and escape at its own attempt budget (ansible marks an exhausted `until` failed regardless of failed_when: false) and at a wall-clock deadline, missing %q: %v", want, until)
+		}
+	}
+	if !strings.Contains(until, "now(utc=true).timestamp()") {
+		t.Fatalf("the device-scan `until` must escape on wall-clock time: every attempt is capped at 300s by `timeout`, so an attempt budget alone bounds a slow cephadm at hours. got %v", until)
+	}
+
+	if _, asserted := tasks[reportIdx]["ansible.builtin.assert"]; asserted {
+		t.Fatalf("the device-scan verdict must fail open: the OSD readiness gate is the single fail-closed point for a cluster's OSDs, it waits on a budget of its own, and it already reports an unscanned host as unexamined rather than dirty. A second fail-closed gate here aborts the run before that evidence is ever collected. got %v", tasks[reportIdx])
+	}
+	report, ok := tasks[reportIdx]["ansible.builtin.debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("the device-scan verdict must be a debug that lets the run proceed, got %v", tasks[reportIdx])
+	}
+	msg := fmt.Sprint(report["msg"])
+	if !strings.Contains(msg, "bootwright_ceph_osd_scan_missing_hosts") {
+		t.Fatalf("the device-scan verdict must name the hosts cephadm has not inventoried; `ceph orch host ls` lists a host the instant cephadm accepts the document, before it has ever connected to it, so the host read-back alone proves nothing. got msg=%v", msg)
+	}
+	if !strings.Contains(msg, "readiness gate") {
+		t.Errorf("the device-scan verdict must say which gate does fail closed, so failing open here is not read as the condition being ignored, got msg=%v", msg)
+	}
+	if got := fmt.Sprint(tasks[reportIdx]["when"]); !strings.Contains(got, "bootwright_ceph_osd_scan_missing_hosts") {
+		t.Errorf("the device-scan verdict must render only when a declared OSD host was never inventoried, got when=%v", got)
 	}
 }
 

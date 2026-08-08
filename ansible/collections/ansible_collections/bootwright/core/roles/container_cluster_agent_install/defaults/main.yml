@@ -11,8 +11,10 @@ bootwright_install_stalled_wait_retries: 20
 bootwright_install_stalled_wait_delay_seconds: 30
 bootwright_install_stalled_wait_pattern: "failed to progress after all hosts available|failed to prepare cluster installation"
 bootwright_install_timed_out_wait_pattern: "bootstrap process timed out"
+bootwright_install_cluster_init_wait_pattern: "failed to initialize the cluster|timed out waiting for the condition"
 bootwright_install_installer_wait_window_seconds: 3600
-bootwright_install_resumable_wait_pattern: "{{ bootwright_install_stalled_wait_pattern }}|{{ bootwright_install_timed_out_wait_pattern }}"
+bootwright_install_cluster_init_wait_window_seconds: 2400
+bootwright_install_resumable_wait_pattern: "{{ bootwright_install_stalled_wait_pattern }}|{{ bootwright_install_timed_out_wait_pattern }}|{{ bootwright_install_cluster_init_wait_pattern }}"
 bootwright_install_wait_budget_seconds: >-
   {{ bootwright_install_bootstrap_timeout_seconds
      if bootwright_install_wait_target == 'bootstrap'
@@ -41,6 +43,40 @@ bootwright_install_stalled_wait_hint: >-
   not match the one it registers with, or whose install disk was rejected never
   reaches "known", and holds the cluster in "ready" for as long as the install
   is allowed to run.
+bootwright_install_cluster_init_wait_hint: >-
+  openshift-install stopped watching in its cluster-initialization phase, which
+  it caps at {{ bootwright_install_cluster_init_wait_window_seconds }} seconds
+  separately from the bootstrap cap and exposes no flag to raise, so bootwright
+  re-ran the wait until its own
+  {{ bootwright_install_wait_budget_seconds | trim }}-second budget was spent.
+  Every declared host has been handed its ignition by this phase, so a host the
+  installer moved to status "error", or a declared node that never appeared as a
+  Node, is a real failure that will not resolve on its own. Read the installer
+  log lines and the missing declared nodes below before re-running: a declared
+  node that never became a Node points at its boot media, its declared NIC MAC
+  address or its install disk, while a cluster holding every declared node points
+  at a cluster operator instead.
+bootwright_install_unclassified_wait_hint: >-
+  bootwright does not recognise this give-up as one it can resume, so it ran the
+  wait once and stopped. Read the installer log lines and the missing declared
+  nodes below: a declared node that never became a Node never finished the agent
+  install, while a cluster holding every declared node points at a cluster
+  operator instead. Re-run the apply once the cause is repaired; the wait resumes
+  from where this run stopped.
+bootwright_install_missing_nodes_hint: >-
+  Declared nodes with no Node object in the cluster:
+  {{ bootwright_install_missing_declared_nodes | default([]) | join(', ') }}.
+  A declared node that never registers as a Node never finished the agent
+  install: check that it booted the agent ISO, that the NIC MAC address it
+  registers with is the one declared for it, that its install disk was accepted,
+  and that the rendezvous node rebooted out of bootstrap into its own role
+  instead of holding the cluster short of its declared control plane.
+bootwright_install_log_diagnostic_hint: >-
+  Installer log ({{ bootwright_install_work_dir }}/.openshift_install.log):
+  {{ bootwright_install_log_diagnostics | default([]) | join(' | ') }}
+bootwright_install_log_tail_lines: 200
+bootwright_install_log_diagnostic_pattern: "status from|error|Degraded|failed"
+bootwright_install_node_probe_request_timeout: "10s"
 bootwright_install_bootstrap_marker_path: "{{ bootwright_install_work_dir }}/bootstrap-complete"
 bootwright_install_publish_probe_timeout: 60
 bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"

@@ -632,12 +632,29 @@ picks between them**, and the credential always travels with the account:
 | Command | Login | Credential |
 | --- | --- | --- |
 | `machine rsh` / `machine exec`, and every `apply` / `plan` / `destroy` task that acts on a machine | The `Machine`'s own `spec.access.ssh` login | The `auth` arm that opens it |
+| `machine rsh` / `machine exec` on a `Machine` that declares **no** `spec.access.ssh` — a canonical OpenShift node | The node login of the `ContainerCluster` that lists it: `core`, at the node's primary install IP (its declared node name as fallback) | That cluster's `install.nodeSSH` private key |
 | `cluster rsh` / `cluster exec`, and cluster-scoped work | The cluster's orchestration account — `core` on a `ContainerCluster`, [`clusterSSH.user`](storage.md#the-ceph-node-login) on a managed Ceph `StorageCluster` | `install.nodeSSH` / `clusterSSH.keyRef` |
 
 ```console
 $ bootwright machine rsh --name ceph-dc1-0                       # bootwright@…, fleet key
+$ bootwright machine rsh --name ocp-dc1-master-0                 # core@…, cluster node key
 $ bootwright cluster rsh --name ceph-dc1 --node ceph-dc1-0       # cephadm@…, cluster key
 ```
+
+The fallback is what makes `machine rsh` usable on an OpenShift node at all: such
+a `Machine` deliberately declares no login of its own, so without it the command
+could only refuse. It applies only when the `Machine` carries no
+`spec.access.ssh` whatsoever — a `Machine` that declares one is still reached as
+itself, cluster membership or not. When no `ContainerCluster` lists the machine,
+or the one that does holds no `install.nodeSSH` private key, the command refuses
+and names which of the two is missing.
+
+!!! note "The first such connection prompts for the host key"
+    `machine trust` does not project cluster-owned node endpoints, so no
+    pre-recorded key covers a node reached this way. The first connection asks
+    for explicit acceptance — verify the key out of band before accepting — and
+    fails closed when there is no terminal to ask on. A changed key stays a hard
+    failure.
 
 Cluster-scoped *apply* is the one place both appear at once, and in that order:
 Bootwright reaches a topology node as the machine's own login in order to

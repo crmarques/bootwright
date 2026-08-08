@@ -205,6 +205,32 @@
       changed_when: false
       failed_when: false
 
+    - name: Read KubeVirt PersistentVolumeClaim ownership labels
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - get
+          - persistentvolumeclaim
+          - "{{ item }}"
+          - -o
+          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
+      loop: >-
+        {{
+          [bootwright_kubevirt_root_dv_name, bootwright_kubevirt_iso_dv_name]
+          + (
+            [bootwright_kubevirt_iso_source_dv_name]
+            if (bootwright_kubevirt_cluster_scope_teardown | bool)
+            else []
+          )
+        }}
+      register: bootwright_kubevirt_pvc_probe
+      changed_when: false
+      failed_when: false
+
     - name: Require conclusive KubeVirt DataVolume probes
       ansible.builtin.assert:
         that:
@@ -251,6 +277,42 @@
         - (item.rc | default(1)) == 0
         - (item.stdout | default('') | trim) != 'bootwright'
 
+    - name: Refuse to delete a non-Bootwright KubeVirt PersistentVolumeClaim
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item.rc | default(1)) != 0
+            or (item.stdout | default('') | trim) | length == 0
+            or (item.stdout | default('') | trim) == 'bootwright'
+        fail_msg: >-
+          Refusing to delete PersistentVolumeClaim {{ item.item }} in namespace
+          {{ bootwright_kubevirt_namespace }}: it exists and is labelled
+          bootwright.io/managed-by={{ item.stdout | default('') | trim }}, so it belongs to
+          another owner. A claim orphaned by a Bootwright DataVolume carries no ownership
+          label of its own and is purged without a token; this one names someone else.
+          Pass --authorize unowned-networks to delete it anyway.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
+
+    - name: Warn before force-deleting an unowned KubeVirt PersistentVolumeClaim
+      ansible.builtin.debug:
+        msg: >-
+          --authorize unowned-networks: deleting PersistentVolumeClaim {{ item.item }} in
+          namespace {{ bootwright_kubevirt_namespace }} despite a
+          bootwright.io/managed-by={{ item.stdout | default('') | trim }} ownership label
+          naming another owner.
+      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
+        - (item.rc | default(1)) == 0
+        - (item.stdout | default('') | trim) | length > 0
+        - (item.stdout | default('') | trim) != 'bootwright'
+
     - name: Delete KubeVirt DataVolumes
       ansible.builtin.command:
         argv:
@@ -268,6 +330,32 @@
       changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
       when: >-
         bootwright_kubevirt_dv_owner.results
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | list | length > 0
+
+    - name: Purge the KubeVirt root disk PersistentVolumeClaim
+      ansible.builtin.include_role:
+        name: bootwright.core.container_cluster_boot_kubevirt
+        tasks_from: purge_media_pvc.yml
+      vars:
+        bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_root_dv_name }}"
+      when: >-
+        bootwright_kubevirt_pvc_probe.results
+        | selectattr('item', 'equalto', bootwright_kubevirt_root_dv_name)
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | list | length > 0
+
+    - name: Purge the KubeVirt agent ISO PersistentVolumeClaim
+      ansible.builtin.include_role:
+        name: bootwright.core.container_cluster_boot_kubevirt
+        tasks_from: purge_media_pvc.yml
+      vars:
+        bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_dv_name }}"
+      when: >-
+        bootwright_kubevirt_pvc_probe.results
+        | selectattr('item', 'equalto', bootwright_kubevirt_iso_dv_name)
         | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | list | length > 0
@@ -290,6 +378,21 @@
         - bootwright_kubevirt_cluster_scope_teardown | bool
         - >-
           bootwright_kubevirt_dv_owner.results
+          | selectattr('item', 'equalto', bootwright_kubevirt_iso_source_dv_name)
+          | selectattr('rc', 'defined')
+          | selectattr('rc', 'equalto', 0)
+          | list | length > 0
+
+    - name: Purge the shared KubeVirt agent ISO source PersistentVolumeClaim
+      ansible.builtin.include_role:
+        name: bootwright.core.container_cluster_boot_kubevirt
+        tasks_from: purge_media_pvc.yml
+      vars:
+        bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_source_dv_name }}"
+      when:
+        - bootwright_kubevirt_cluster_scope_teardown | bool
+        - >-
+          bootwright_kubevirt_pvc_probe.results
           | selectattr('item', 'equalto', bootwright_kubevirt_iso_source_dv_name)
           | selectattr('rc', 'defined')
           | selectattr('rc', 'equalto', 0)

@@ -133,6 +133,79 @@ func TestResolveApplyConcurrencyLimitsKeepsEveryTaskDispatchable(t *testing.T) {
 	}
 }
 
+func clusterInstallEntries(clusters ...string) []TaskLedgerEntry {
+	entries := []TaskLedgerEntry{{ID: "provider.service-host", Kind: ApplyTaskKindProvider}}
+	for _, cluster := range clusters {
+		entries = append(entries,
+			TaskLedgerEntry{ID: "iso." + cluster, Kind: ApplyTaskKindClusterISO, Cluster: cluster},
+			TaskLedgerEntry{ID: "boot." + cluster + ".node-0", Kind: ApplyTaskKindNodeBoot, Cluster: cluster},
+			TaskLedgerEntry{ID: "bootstrap." + cluster, Kind: ApplyTaskKindBootstrapWait, Cluster: cluster},
+			TaskLedgerEntry{ID: "wait." + cluster, Kind: ApplyTaskKindInstallWait, Cluster: cluster},
+			TaskLedgerEntry{ID: "addon." + cluster + ".logging", Kind: ApplyTaskKindClusterAddon, Cluster: cluster},
+		)
+	}
+	return entries
+}
+
+func clusterInstallTasks(clusters ...string) []ApplyTask {
+	tasks := []ApplyTask{}
+	for _, entry := range clusterInstallEntries(clusters...) {
+		tasks = append(tasks, ApplyTask{Entry: entry})
+	}
+	return tasks
+}
+
+func TestResolveApplyConcurrencyLimitsPersistsTheClusterInstallLimit(t *testing.T) {
+	tasks := clusterInstallTasks("ocp-a", "ocp-b")
+	t.Setenv(ParallelismClustersEnvVar, "2")
+	limits := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks)
+	if limits.ParallelismClusters != 2 {
+		t.Fatalf("resolved cluster install limit = %d, want the environment override 2 recorded on the ledger", limits.ParallelismClusters)
+	}
+	t.Setenv(ParallelismClustersEnvVar, "1")
+	if got := ResolveApplyConcurrencyLimits(limits, tasks); got != limits {
+		t.Fatalf("a resumed run resolved %+v, want the limits the run recorded: %+v; a shell asking for another limit must not silently change a run in flight", got, limits)
+	}
+	if got := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, clusterInstallTasks()); got.ParallelismClusters != 0 {
+		t.Fatalf("a run that installs no cluster recorded a cluster install limit of %d, want none", got.ParallelismClusters)
+	}
+}
+
+func resolvedClusterInstallLimit(tasks []ApplyTask) int {
+	return ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks).ParallelismClusters
+}
+
+func TestResolveApplyClusterInstallLimitInstallsOneClusterAtATime(t *testing.T) {
+	t.Setenv(ParallelismClustersEnvVar, "")
+	if got := resolvedClusterInstallLimit(clusterInstallTasks("ocp-a", "ocp-b")); got != DefaultParallelismClusters {
+		t.Fatalf("cluster install limit = %d, want the %d default that keeps two clusters off one registry path at once", got, DefaultParallelismClusters)
+	}
+	if got := resolvedClusterInstallLimit(clusterInstallTasks()); got != 0 {
+		t.Fatalf("a run that installs no cluster reported a limit of %d, want none", got)
+	}
+	if got := resolvedClusterInstallLimit([]ApplyTask{{Entry: TaskLedgerEntry{ID: "wait.orphan", Kind: ApplyTaskKindInstallWait}}}); got != 0 {
+		t.Fatalf("an install task naming no cluster reported a limit of %d, want none", got)
+	}
+}
+
+func TestResolveApplyClusterInstallLimitReadsItsEnvironmentOverride(t *testing.T) {
+	tasks := clusterInstallTasks("ocp-a", "ocp-b", "ocp-c")
+	t.Setenv(ParallelismClustersEnvVar, "2")
+	if got := resolvedClusterInstallLimit(tasks); got != 2 {
+		t.Fatalf("cluster install limit = %d, want the environment override 2", got)
+	}
+	t.Setenv(ParallelismClustersEnvVar, "9")
+	if got := resolvedClusterInstallLimit(tasks); got != 3 {
+		t.Fatalf("cluster install limit = %d, want it clamped to the 3 clusters the run installs", got)
+	}
+	for _, raw := range []string{"", "  ", "0", "-2", "many"} {
+		t.Setenv(ParallelismClustersEnvVar, raw)
+		if got := resolvedClusterInstallLimit(tasks); got != DefaultParallelismClusters {
+			t.Fatalf("%s=%q resolved the cluster install limit to %d, want the %d default", ParallelismClustersEnvVar, raw, got, DefaultParallelismClusters)
+		}
+	}
+}
+
 func TestDefaultParallelismStaysWithinItsClamp(t *testing.T) {
 	got := DefaultParallelism()
 	if got < minDefaultParallelism || got > maxDefaultParallelism {

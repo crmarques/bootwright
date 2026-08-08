@@ -14,6 +14,7 @@
       - --wait=false
   register: bootwright_kubevirt_media_pvc_delete
   changed_when: "'deleted' in (bootwright_kubevirt_media_pvc_delete.stdout | default(''))"
+  failed_when: false
 
 - name: Wait for the KubeVirt agent ISO PersistentVolumeClaim to disappear
   ansible.builtin.command:
