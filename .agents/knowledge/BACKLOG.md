@@ -54,17 +54,6 @@ learned; this file records what it still owes.
 - Related: [ceph-override-structural-rebuild.md](ceph-override-structural-rebuild.md),
   [ceph-osd-device-safety.md](ceph-osd-device-safety.md)
 
-## B-004 — Standalone managed-OS machine teardown is fail-closed only
-- Status: open
-- Area: cli / machine-scope
-- Origin: `--machines` apply/destroy selection landing
-- Problem: `destroy --machines` fails closed for a standalone managed-OS machine
-  (one not owned by a cluster substrate); real per-machine teardown of that class
-  was deferred rather than implemented.
-- Exit: implement (or consciously decline) teardown of standalone managed-OS
-  machines and lift the fail-closed refusal.
-- Related: [substrate-ownership-markers.md](substrate-ownership-markers.md)
-
 ## B-005 — Kickstart merges bond and VLAN into one stanza, capping bond MTU
 - Status: open
 - Area: managed-os / networking / render

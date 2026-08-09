@@ -3,6 +3,8 @@ package clusteraccess
 import (
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestResolveMachinesSelectsClusterNode(t *testing.T) {
@@ -35,6 +37,22 @@ func TestResolveMachinesUnknownMachine(t *testing.T) {
 	state := loadFixtureState(t, "003-3nodes-libvirt")
 	if _, err := ResolveMachines(state, "ghost"); err == nil || !strings.Contains(err.Error(), "unknown machine(s): ghost") {
 		t.Fatalf("ResolveMachines(ghost) err = %v, want unknown-machine error", err)
+	}
+}
+
+func TestResolveMachinesRefusesStandaloneMachineWithExternalRemedy(t *testing.T) {
+	state := v1alpha1.State{Machines: []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "standalone"}}}}
+	_, err := ResolveMachines(state, "standalone")
+	if err == nil {
+		t.Fatal("standalone machine must fail closed because Bootwright planned no provisioning work for it")
+	}
+	for _, want := range []string{"no provisioning work", "no bootwright retry command", "restore the intended cluster, shared-service, or provider reference", "decommission the machine out of band"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("standalone refusal missing %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "`bootwright ") {
+		t.Fatalf("standalone refusal must not invent an executable remedy: %v", err)
 	}
 }
 

@@ -68,6 +68,11 @@ dispatches each machine's `bootwright_managed_os_component.substrateDestroyRole`
 (`tasks_from: destroy.yml`) per machine, honoring
 `bootwright_destroy_cluster_scope`. Role destroys are idempotent, so substrates
 also covered by recorded resources (libvirt) tolerate the double pass.
+Bootwright creates that work only for cluster-member managed-OS machines. A
+standalone `Machine` that hosts no shared service or provider has no safe
+apply/destroy task to dispatch, so machine selection refuses without inventing
+a retry command; restore its intended declared relationship or decommission it
+out of band.
 
 **A cluster-scoped gate inside a per-machine role never fires:** the libvirt
 network `bw-<cluster>` is one object shared by every machine of the cluster, but

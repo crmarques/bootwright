@@ -1349,6 +1349,22 @@ func safetyStartingStateCases() []safetyCase {
 		remedy:   remedyAlternative,
 		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "`bootwright destroy --yes --clusters " + safetyLibvirtKubeVirtTenantCluster + " --ask-become-pass=false --context matrix`"},
 	}, {
+		name:     "apply/a standalone managed-OS machine has no invented provisioning path",
+		baseline: safetyBaselineBareMetalManagedOS,
+		seed:     seedStandaloneManagedOSMachine,
+		args:     []string{"apply", "--machines", safetyStandaloneMachine, "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		remedy:   remedyExternal,
+		want:     []string{safetyStandaloneMachine, "no provisioning work", "restore the intended cluster, shared-service, or provider reference", "decommission the machine out of band"},
+	}, {
+		name:     "destroy/a standalone managed-OS machine has no invented teardown path",
+		baseline: safetyBaselineBareMetalManagedOS,
+		seed:     seedStandaloneManagedOSMachine,
+		args:     []string{"destroy", "--machines", safetyStandaloneMachine, "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		remedy:   remedyExternal,
+		want:     []string{safetyStandaloneMachine, "no provisioning work", "restore the intended cluster, shared-service, or provider reference", "decommission the machine out of band"},
+	}, {
 		name: "apply/renamed ContainerCluster orphaning a provisioned one",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp-old")
@@ -1383,7 +1399,71 @@ const (
 	safetyAdvancedCephCluster          = "ceph-storage"
 	safetyAdvancedCephOSDNode          = "ceph-dc1-0"
 	safetyAdvancedContainerOCP         = "dc1-metal-ocp"
+	safetyStandaloneMachine            = "safety-standalone"
 )
+
+func seedStandaloneManagedOSMachine(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	file := filepath.Join(ctx.InputDir, "safety-standalone.yaml")
+	if err := os.WriteFile(file, []byte(standaloneManagedOSMachineDocument), 0o600); err != nil {
+		t.Fatalf("write standalone Machine fixture: %v", err)
+	}
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load standalone Machine fixture: %v", err)
+	}
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == safetyStandaloneMachine {
+			return
+		}
+	}
+	t.Fatalf("standalone Machine fixture was not loaded from %s", file)
+}
+
+const standaloneManagedOSMachineDocument = `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: safety-standalone
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: dc1
+  substrate:
+    providerRef: baremetal
+  os:
+    provided: false
+    installProfileRef: rhel-9-ceph-node
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    config:
+      networkConfigRef: ceph-net
+      attachmentRef: ceph-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ssh
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: primary
+        interfaceName: primary
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:ca:fe:99
+    boot:
+      nicRef: primary
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://safety-standalone-bmc.example.com/redfish/v1/Systems/1
+        credentialsRef: bmc-credentials
+        tls:
+          verify: false
+  addresses:
+    - name: ssh
+      address: 10.20.30.99
+`
 
 func seedReleasedKubeVirtHostWithInstalledTenant(t *testing.T, ctx workspace.Context) {
 	t.Helper()

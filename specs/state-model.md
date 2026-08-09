@@ -2738,7 +2738,10 @@ command. The rest are registered per command, on the verbs that reach machines.
   provisioning work — be a cluster node or host a shared service or provider —
   so teardown (or provisioning) of a standalone managed-OS machine that belongs
   to no cluster is fail-closed (Bootwright installs a managed OS only on
-  cluster-member machines). Destroying a machine that is a node of an installed
+  cluster-member machines). The refusal names the missing provisioning
+  relationship and states that no Bootwright retry command can invent it; the
+  operator restores the intended cluster/shared-service/provider reference or
+  decommissions the machine out of band. Destroying a machine that is a node of an installed
   cluster fails closed unless `--authorize installed-cluster-node`, for both
   cluster kinds: an installed `ContainerCluster` (proved by its install record)
   and a provisioned managed `StorageCluster` (proved by its Bootwright-owned
