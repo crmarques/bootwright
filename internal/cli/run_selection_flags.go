@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 )
@@ -146,6 +147,40 @@ func (i resolvedInvocation) applyClustersRetry(clusters []string, requiredAuthor
 	next.flags.clusterName = ""
 	next.flags.newArbiterMachine = ""
 	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationApply)
+	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
+}
+
+func (i resolvedInvocation) regenerateClusterISORetry(cluster string) (retryCommand, error) {
+	return i.clusterLifecycleRetry(invocationApply, cluster, converge.PhaseDeps, workflow.ApplyModeRebuild)
+}
+
+func (i resolvedInvocation) destroyIncompleteClusterRetry(cluster string) (retryCommand, error) {
+	return i.clusterLifecycleRetry(invocationDestroy, cluster, converge.ClustersScope.Name, "", authorizeProtected, authorizeDataLoss)
+}
+
+func (i resolvedInvocation) reapplyDestroyedClusterRetry(cluster string) (retryCommand, error) {
+	return i.clusterLifecycleRetry(invocationApply, cluster, converge.ClustersScope.Name, workflow.ApplyModeReconcile, authorizeDataLoss)
+}
+
+func (i resolvedInvocation) rebuildInstalledClusterRetry(cluster string) (retryCommand, error) {
+	return i.clusterLifecycleRetry(invocationApply, cluster, converge.ClustersScope.Name, workflow.ApplyModeRebuild, authorizeDataLoss)
+}
+
+func (i resolvedInvocation) clusterLifecycleRetry(verb invocationVerb, cluster, stage string, mode workflow.ApplyMode, requiredAuthorizations ...string) (retryCommand, error) {
+	cluster = strings.TrimSpace(cluster)
+	if cluster == "" {
+		return retryCommand{}, fmt.Errorf("cannot construct a cluster lifecycle retry without a cluster")
+	}
+	next := i
+	next.verb = verb
+	next.flags.mode = mode
+	next.flags.selection = runSelection{stage: stage, clusters: cluster}
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, verb)
 	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
 }
 

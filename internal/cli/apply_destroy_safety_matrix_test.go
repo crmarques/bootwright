@@ -1216,6 +1216,34 @@ func safetyStartingStateCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"dc1-metal-ocp"},
 	}, {
+		name: "apply/preboot installer skew names ISO regeneration and exact resume",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhaseISOCreated, "4.20.0", time.Now().Add(-time.Hour))
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"regenerate only this cluster's agent ISO", "--mode rebuild", "--stage deps", "--clusters " + safetyAdvancedContainerOCP, "then resume the original selected work", "--context matrix"},
+	}, {
+		name: "apply/expired postboot resume names scoped destroy and reapply sequence",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusFailed, workflow.ClusterInstallPhaseNodesBooted, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-workflow.ClusterInstallResumeCeiling-time.Minute))
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize protected,data-loss", "bootwright apply --mode reconcile --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+	}, {
+		name: "apply/completed installer skew names scoped data-loss rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalled, workflow.ClusterInstallPhaseComplete, "4.20.0", time.Now().Add(-time.Hour))
+			seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, safetyAdvancedContainerOCP)
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"rebuild only this installed cluster", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+	}, {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
@@ -1491,6 +1519,36 @@ func seedMatchingInstalledCluster(t *testing.T, ctx workspace.Context, cluster s
 		t.Fatalf("save matching install record for %s: %v", cluster, err)
 	}
 	seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, cluster)
+}
+
+func seedClusterInstallLifecycle(t *testing.T, ctx workspace.Context, cluster string, status workflow.ClusterInstallStatus, phase workflow.ClusterInstallPhase, installerVersion string, startedAt time.Time) {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state for install lifecycle: %v", err)
+	}
+	desiredHash, structuralHash, err := workflow.ComputeClusterInstallHashes(ctx.Name, state, cluster, ctx.SecretsDir)
+	if err != nil {
+		t.Fatalf("compute install lifecycle hashes for %s: %v", cluster, err)
+	}
+	now := time.Now().UTC()
+	record := workflow.ClusterInstallRecord{
+		Cluster:          cluster,
+		DesiredHash:      desiredHash,
+		StructuralHash:   structuralHash,
+		HashSchema:       workflow.ConvergeHashSchema,
+		Status:           status,
+		Phase:            phase,
+		InstallerVersion: installerVersion,
+		StartedAt:        startedAt.UTC(),
+		UpdatedAt:        now,
+	}
+	if status == workflow.ClusterInstallStatusInstalled {
+		record.InstalledAt = &now
+	}
+	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, record); err != nil {
+		t.Fatalf("save install lifecycle record for %s: %v", cluster, err)
+	}
 }
 
 func safetyDeclaredInstallerVersion(t *testing.T, ctx workspace.Context, cluster string) string {
