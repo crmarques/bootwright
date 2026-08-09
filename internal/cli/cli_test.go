@@ -2006,6 +2006,39 @@ func TestContextUpdateProceedsWithInteractiveYes(t *testing.T) {
 	}
 }
 
+func TestContextUpdateRefusesWhileAnotherMutatorHoldsTheContext(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	ctx := initTestContext(t, "001-sno-libvirt")
+	const marker = "# blocked-context-update\n"
+	path := filepath.Join(source, "environment.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, marker...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guard, err := workflow.AcquireCommandRunLease(context.Background(), ctx.RunsDir, "apply")
+	if err != nil {
+		t.Fatalf("AcquireCommandRunLease: %v", err)
+	}
+	defer guard.Close()
+	_, stderr, code := runCLI(t, "context", "update", "--name", "test", "-f", source, "--yes")
+	if code == 0 || !strings.Contains(stderr, "mutating run") || !strings.Contains(stderr, guard.RunID) {
+		t.Fatalf("context update exit=%d stderr=%q, want active-mutator refusal", code, stderr)
+	}
+	current, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(current), marker) {
+		t.Fatal("context update changed desired input despite the active mutation lease")
+	}
+	if entries, err := os.ReadDir(workspace.InputHistoryDir(ctx)); err == nil && len(entries) > 0 {
+		t.Fatalf("context update snapshotted input despite the active mutation lease: %v", entries)
+	}
+}
+
 func TestContextCurrentAndListReadSharedContextStorage(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 

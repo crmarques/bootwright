@@ -34,6 +34,8 @@ func AcquireCommandRunLease(parent context.Context, runsDir, command string) (*C
 		runID = applyRunID(now)
 	case "destroy":
 		runID = destroyRunID(now)
+	case "context-update", "diff-adopt", "replace-arbiter":
+		runID = command + "-" + now.Format("20060102T150405.000000000Z")
 	default:
 		return nil, fmt.Errorf("unsupported mutating command %q", command)
 	}

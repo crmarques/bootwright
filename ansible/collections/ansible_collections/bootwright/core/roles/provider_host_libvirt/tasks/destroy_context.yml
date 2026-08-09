@@ -65,7 +65,7 @@
       {{ item.stderr | default('') }}. The domain may still use storage below
       {{ bootwright_libvirt_context_storage_root }}, so Bootwright will not stop
       domains, delete disks, or release ownership. Restore libvirt access and
-      re-run the same `bootwright destroy` command.
+      re-run `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
   loop: "{{ bootwright_libvirt_domain_blocklists.results | default([]) }}"
   loop_control:
     label: "{{ item.bootwright_libvirt_domain_name | default('<unknown>') }}"
@@ -84,8 +84,8 @@
       could not be read conclusively. rc {{ item.rc | default('<unknown>') }},
       stderr {{ item.stderr | default('') }}. Bootwright cannot prove whether
       this domain belongs to the current context, so it will not stop domains,
-      delete disks, or release ownership. Restore libvirt access and re-run the
-      same `bootwright destroy` command.
+      delete disks, or release ownership. Restore libvirt access and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
   loop: "{{ bootwright_libvirt_domain_metadata.results | default([]) }}"
   loop_control:
     label: "{{ item.bootwright_libvirt_domain_name | default('<unknown>') }}"
@@ -108,8 +108,9 @@
       {{ item.bootwright_libvirt_domain_name | default('<unknown>') }} changed
       while Bootwright inspected its block devices and ownership metadata.
       Bootwright will not infer ownership from inconsistent observations or
-      delete storage. Re-run the same `bootwright destroy` command after the
-      domain state is stable.
+      delete storage. Re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`
+      after the domain state is stable.
   loop: "{{ bootwright_libvirt_domain_metadata.results | default([]) }}"
   loop_control:
     label: "{{ item.bootwright_libvirt_domain_name | default('<unknown>') }}"
@@ -247,7 +248,8 @@
       domain {{ item.item | default('<unknown>') }} was not proven absent after
       teardown. rc {{ item.rc | default('<unknown>') }}, stderr
       {{ item.stderr | default('') }}. Inspect the domain, restore libvirt
-      access, and re-run the same `bootwright destroy` command.
+      access, and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
   loop: "{{ bootwright_libvirt_context_domain_absence.results | default([]) }}"
   loop_control:
     label: "{{ item.item | default('<unknown>') }}"

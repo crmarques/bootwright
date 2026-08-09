@@ -74,7 +74,7 @@ func forecastReinstallDescriptors(names []string) []string {
 func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) []string {
 	var refusals []error
 	if len(ownershipSkipped) > 0 {
-		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped))
+		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped, nil))
 	}
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {

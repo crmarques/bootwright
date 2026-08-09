@@ -30,9 +30,9 @@ bootwright_install_host_error_hint: >-
   {{ bootwright_install_installer_wait_window_seconds }}-second window would
   watch the same state. A cluster that has diverted into recovery is never
   pivoted out of bootstrap, so an install left short of a declared node does
-  not finish on its own — rebuild it with bootwright apply --stage clusters
-  --clusters {{ bootwright_current_cluster.name }} --mode rebuild --authorize
-  data-loss --yes. Bootstrap can still complete from the remaining
+  not finish on its own — rebuild it with
+  {{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}.
+  Bootstrap can still complete from the remaining
   control-plane hosts, so when every declared node is present re-run the apply
   to resume watching instead.
 bootwright_install_timed_out_wait_hint: >-

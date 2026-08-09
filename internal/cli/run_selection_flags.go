@@ -26,8 +26,9 @@ func (s runSelection) narrowFlag() string {
 type invocationVerb string
 
 const (
-	invocationApply   invocationVerb = authorizeVerbApply
-	invocationDestroy invocationVerb = authorizeVerbDestroy
+	invocationApply          invocationVerb = authorizeVerbApply
+	invocationDestroy        invocationVerb = authorizeVerbDestroy
+	invocationReplaceArbiter invocationVerb = authorizeVerbReplaceArbiter
 )
 
 type invocationFlags struct {
@@ -43,6 +44,8 @@ type invocationFlags struct {
 	askBecomePass        bool
 	trustOnFirstUse      bool
 	verbose              bool
+	clusterName          string
+	newArbiterMachine    string
 }
 
 type resolvedInvocation struct {
@@ -65,7 +68,7 @@ type retryCommand struct {
 }
 
 func newResolvedInvocation(verb invocationVerb, contextName string, flags invocationFlags) (resolvedInvocation, error) {
-	if verb != invocationApply && verb != invocationDestroy {
+	if verb != invocationApply && verb != invocationDestroy && verb != invocationReplaceArbiter {
 		return resolvedInvocation{}, fmt.Errorf("unsupported mutating invocation verb %q", verb)
 	}
 	identityFile, err := resolveSSHIDFile()
@@ -90,7 +93,7 @@ func newResolvedInvocation(verb invocationVerb, contextName string, flags invoca
 
 func (i resolvedInvocation) retry(intent retryIntent) (retryCommand, error) {
 	next := i
-	if next.verb != invocationApply && next.verb != invocationDestroy {
+	if next.verb != invocationApply && next.verb != invocationDestroy && next.verb != invocationReplaceArbiter {
 		return retryCommand{}, fmt.Errorf("unsupported mutating invocation verb %q", next.verb)
 	}
 	if intent.mode != "" {
@@ -111,8 +114,65 @@ func (i resolvedInvocation) retry(intent retryIntent) (retryCommand, error) {
 	return retryCommand{args: next.args()}, nil
 }
 
+func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryCommand, error) {
+	if len(clusters) == 0 {
+		return retryCommand{}, fmt.Errorf("cannot construct a destroy retry without clusters")
+	}
+	next := i
+	next.verb = invocationDestroy
+	next.flags.mode = ""
+	next.flags.selection = runSelection{clusters: strings.Join(clusters, ",")}
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.trustOnFirstUse = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationDestroy)
+	return retryCommand{args: next.args()}, nil
+}
+
+func (i resolvedInvocation) replaceArbiterRetry(cluster string) (retryCommand, error) {
+	cluster = strings.TrimSpace(cluster)
+	if cluster == "" {
+		return retryCommand{}, fmt.Errorf("cannot construct a replace-arbiter retry without a cluster")
+	}
+	next := i
+	next.verb = invocationReplaceArbiter
+	next.flags.mode = ""
+	next.flags.selection = runSelection{}
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.trustOnFirstUse = false
+	next.flags.clusterName = cluster
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationReplaceArbiter)
+	return retryCommand{args: next.args()}, nil
+}
+
+func authorizationsAcceptedByVerb(names []string, verb invocationVerb) []string {
+	accepted := authorizationTokenNamesForVerb(string(verb))
+	var out []string
+	for _, name := range names {
+		if name == authorizeAll || slices.Contains(accepted, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func (i resolvedInvocation) args() []string {
 	args := []string{"bootwright", string(i.verb)}
+	if i.verb == invocationReplaceArbiter {
+		args = []string{"bootwright", "storage-cluster", "replace-arbiter"}
+		if value := strings.TrimSpace(i.flags.clusterName); value != "" {
+			args = append(args, "--name", value)
+		}
+		if value := strings.TrimSpace(i.flags.newArbiterMachine); value != "" {
+			args = append(args, "--new-arbiter-machine", value)
+		}
+	}
 	if i.verb == invocationApply {
 		args = append(args, "--mode", string(i.flags.mode))
 	}

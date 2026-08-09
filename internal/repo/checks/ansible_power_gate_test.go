@@ -129,7 +129,7 @@ func assertPowerGateRefusal(t *testing.T, rel string, task map[string]any, condi
 		"--authorize token stands in for it",
 		"fails",
 		"closed",
-		"`bootwright apply`",
+		"bootwright_mutating_invocation",
 		"interrupted while",
 		"loses nothing",
 	} {

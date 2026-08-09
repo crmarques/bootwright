@@ -24,8 +24,9 @@
       - bootwright_ceph_rhsm_identity.rc == 0
     fail_msg: >-
       Storage node {{ bootwright_current_storage_host.hostname }} is not registered with RHSM.
-      Registration runs in the machines-phase registration task; run a full apply or
-      `bootwright apply --stage infra --clusters {{ bootwright_selected_storage_cluster.name }}`
+      Registration runs in the machines-phase registration task; run the exact
+      full-scope invocation
+      `{{ bootwright_apply_full_invocation | default('the same bootwright apply invocation without stage narrowing') }}`
       before retrying the cluster stage.
   when: bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
 

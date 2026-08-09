@@ -62,7 +62,6 @@
         - {{ f.hostname }}: {{ f.expected }} -> {{ f.got }}
       {% endfor %}
 
-      Configure controller-visible DNS for these endpoint names, then
-      re-run `bootwright apply --stage clusters --clusters
-      {{ bootwright_current_cluster.name }}`.
+      Configure controller-visible DNS for these endpoint names, then re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
   when: bootwright_controller_dns_failures | length > 0

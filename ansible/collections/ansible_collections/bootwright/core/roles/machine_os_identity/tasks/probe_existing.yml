@@ -121,9 +121,9 @@
       key-based access for the machine's access.ssh identity; if the host key changed
       after an authorized out-of-band rebuild, re-record it with `bootwright machine
       trust --replace {{ bootwright_component.osInstall.marker.machine }}`; if this
-      machine must be rebuilt from scratch, run `bootwright destroy --stage infra
-      --machines {{ bootwright_component.osInstall.marker.machine }}` (or
-      --clusters {{ bootwright_current_cluster.name }}) and re-apply; if the host is
+      machine must be rebuilt from scratch, run
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`;
+      if the host is
       truly unused, power it off so it is not seen as occupied.
   when:
     - bootwright_os_pre_ssh_reachable | bool
@@ -238,8 +238,7 @@
       desired hash, while the controller's records show no drift for cluster
       {{ bootwright_current_cluster.name }} — the host may have been reinstalled
       out-of-band. Investigate before rebuilding; to force it, run
-      `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }}`
-      and re-apply.
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
   when:
     - bootwright_managed_os_already_ready | bool
     - bootwright_os_pre_marker_owned | default(false) | bool

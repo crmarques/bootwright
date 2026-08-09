@@ -235,9 +235,8 @@
           stderr: {{ bootwright_ceph_filter_zap_result.stderr | default('') }}.
           Bootwright has not applied the OSD service spec and will not pretend
           this disk was reclaimed. Fix the cephadm/device error, confirm the
-          disk is disposable, then retry with `bootwright apply --clusters
-          {{ bootwright_selected_storage_cluster.name }} --mode rebuild
-          --authorize data-loss`.
+          disk is disposable, then retry with
+          `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
       loop: >-
         {{ bootwright_ceph_filter_zap.results | default([])
            | rejectattr('rc', 'equalto', 0) | list }}

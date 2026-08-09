@@ -388,9 +388,11 @@
       {{ item.stderr | default('') | trim }}); verify the device path exists and
       is readable, then re-run apply.{% else %}already carries data
       ({{ item.stdout | trim }}) and is not recorded as a Bootwright-owned OSD
-      device. Refusing to use it: wipe it explicitly with
-      `bootwright apply --reclaim-devices {{ item.item }}
-      --authorize data-loss,unowned-devices ...` (irreversible) after
+      device. Refusing to use it: after verifying the data is disposable, start
+      from the exact invocation
+      `{{ bootwright_apply_through_base_invocation | default('the same bootwright apply invocation through the base stage') }}`
+      and add `--reclaim-devices {{ item.item }} --authorize
+      data-loss,unowned-devices` (irreversible), retaining every existing flag; or
       verifying the data is disposable, or remove the device from the
       StorageCluster declaration. Both tokens are needed and neither implies the
       other: `data-loss` authorizes the wipe, `unowned-devices` authorizes
@@ -401,7 +403,7 @@
       controller no longer records as Bootwright-owned — the state every
       successful destroy leaves — is covered by the same pair:
       `unowned-devices` also lets the reclaim act without an ownership record,
-      so the command above works as-is after a destroy.{% endif %}
+      so that intentional retry works after a destroy.{% endif %}
     quiet: true
   loop: "{{ bootwright_ceph_device_check.results | default([]) }}"
   loop_control:

@@ -50,6 +50,35 @@ const (
 	ClusterInstallPhaseComplete    ClusterInstallPhase = "complete"
 )
 
+type ClusterInstallRemedyAction string
+
+const (
+	ClusterInstallRemedyReconcile ClusterInstallRemedyAction = "reconcile"
+)
+
+type ClusterInstallRemedy struct {
+	Action  ClusterInstallRemedyAction
+	Cluster string
+}
+
+type ClusterInstallRemedialError interface {
+	error
+	ClusterInstallRemedy() ClusterInstallRemedy
+}
+
+type ClusterInstallStateError struct {
+	Message string
+	Remedy  ClusterInstallRemedy
+}
+
+func (e *ClusterInstallStateError) Error() string {
+	return e.Message
+}
+
+func (e *ClusterInstallStateError) ClusterInstallRemedy() ClusterInstallRemedy {
+	return e.Remedy
+}
+
 type ClusterInstallRecord struct {
 	Cluster        string               `json:"cluster"`
 	DesiredHash    string               `json:"desiredHash"`
@@ -263,7 +292,10 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			return out, installedMatching, err
 		}
 		if mode == ApplyModeCreate && found && record.Status != ClusterInstallStatusDestroyed {
-			return out, installedMatching, fmt.Errorf("apply --mode create requires a greenfield environment and ContainerCluster/%s already has an install record (status %s); use --mode reconcile to reconcile it, or run bootwright destroy --stage clusters --clusters %s --yes first", name, record.Status, name)
+			return out, installedMatching, &ClusterInstallStateError{
+				Message: fmt.Sprintf("apply --mode create requires a greenfield environment and ContainerCluster/%s already has an install record (status %s); reconcile the same selected work set instead, or deliberately destroy that cluster before retrying create", name, record.Status),
+				Remedy:  ClusterInstallRemedy{Action: ClusterInstallRemedyReconcile, Cluster: name},
+			}
 		}
 		if mode == ApplyModeRebuild {
 			if !found || record.Status != ClusterInstallStatusInstalled {
@@ -839,6 +871,10 @@ func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName,
 		return "", "", err
 	}
 	return hash, structuralHash, nil
+}
+
+func ComputeClusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, string, error) {
+	return clusterInstallHashes(contextName, state, clusterName, secretsDir)
 }
 
 func clusterKubeconfigPath(clustersDir, clusterName string) string {

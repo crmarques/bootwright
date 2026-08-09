@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -37,13 +38,16 @@ func TestCheckApplyRenameOrphan(t *testing.T) {
 		}
 		msg := err.Error()
 		for _, want := range []string{
-			"temporarily restore the old cluster YAML (metadata.name prod-a)",
-			"bootwright destroy --clusters prod-a",
-			"destroy resolves --clusters against the declared state",
+			"ContainerCluster(s) prod-east",
+			"signature of a rename",
 		} {
 			if !strings.Contains(msg, want) {
-				t.Fatalf("replace remedy must quote an executable sequence, missing %q: %s", want, msg)
+				t.Fatalf("rename evidence missing %q: %s", want, msg)
 			}
+		}
+		var refusal *ApplyRenameOrphanError
+		if !errors.As(err, &refusal) || !strings.Contains(strings.Join(refusal.Undeclared, ","), "prod-a") {
+			t.Fatalf("rename refusal must carry the undeclared cluster as typed remediation metadata: %#v", err)
 		}
 	})
 	t.Run("scoped apply refuses against the full declared state", func(t *testing.T) {
@@ -97,11 +101,14 @@ func TestCheckApplyRenameOrphanCoversStorageClusters(t *testing.T) {
 		for _, want := range []string{
 			"StorageCluster(s) ceph-east",
 			"orphan the old Ceph cluster with its OSD data",
-			"bootwright destroy --clusters ceph-storage",
 		} {
 			if !strings.Contains(err.Error(), want) {
 				t.Fatalf("storage rename refusal missing %q: %s", want, err)
 			}
+		}
+		var refusal *ApplyRenameOrphanError
+		if !errors.As(err, &refusal) || !strings.Contains(strings.Join(refusal.Undeclared, ","), "ceph-storage") {
+			t.Fatalf("storage rename refusal must carry the undeclared cluster as typed remediation metadata: %#v", err)
 		}
 	})
 	t.Run("declared storage cluster is safe", func(t *testing.T) {

@@ -19,6 +19,7 @@ what turns "forgot" into a red test.
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
 | a refusal | the object, the consequence in the kind's own vocabulary, and the literal `bootwright …` invocation **carrying the run's own scope and stage flags** and any required token | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
+| an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
 
 Three failure shapes recur often enough to name:
 
@@ -93,11 +94,20 @@ the machine — its disks wiped". It now calls `applyOwnershipRecords` and
 the tiebreaker drift this run just authored is the one legitimate difference,
 and everything else refuses with apply's own words. It also refuses when a
 substrate-release record intersects the scope (that reinstall is data loss the
-verb has no token for), takes `checkCurrentApplyBeforeMutation` *before* the
-input rewrite rather than after it, and sets `AcquireRunLease` so the mon swap
-is not the one mutating run without a lease. The rule generalizes: **a verb that
+verb has no token for), takes `checkCurrentApplyBeforeMutation` before the input
+rewrite, and holds one command lease from the desired input read through
+promotion, machine preparation, mon swap, and record refresh. The rule
+generalizes: **a verb that
 embeds a scoped apply must run that apply's gate set, minus exactly the drift it
 is authorized to converge.**
+
+**Adding a desired-input mutator:** register its command kind in
+`AcquireCommandRunLease`, acquire before reading any desired input whose
+classification controls the write, hold through snapshot/write/cleanup, and pass
+the held lease into every embedded workflow. Add the source-order case to
+`TestDesiredStateMutatorsLeaseBeforeReadingOrWriting` and an active-competing-run
+behavior test that proves neither input nor history changed. Read-only modes must
+take no lease.
 
 **A shape change is not a drift the same refusal can route.** Whether a stretch
 cluster carries an arbiter is fixed at bootstrap. Enabling or disabling one was
@@ -356,6 +366,18 @@ recorded manager. `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` closes
 this over future flags, while the exact-parse and gate-clear tests prove the
 printed command is accepted, keeps the original scope and effects, and clears
 the refusal it names.
+
+**Ansible consumes resolved commands; it never rebuilds them.** Runtime roles
+see only part of a run and cannot recover its context, persistent SSH flags,
+selection axes, effect flags, or prior authorizations from a task-local cluster
+or machine. Real apply and destroy runs therefore receive the shell-quoted
+`bootwright_mutating_invocation` plus typed apply variants for reconcile,
+rebuild, full scope, and `--through base`. The role vars contract publishes the
+set and `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` rejects a role
+that prints a literal apply/destroy command or consumes an unregistered variant.
+When a role discovers an operand only at runtime, it names that one additive
+change against the resolved base; it does not widen or independently assemble
+the rest of the command.
 
 **Every flag on a mutating verb is exercised by the matrix.**
 `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` walks the registered

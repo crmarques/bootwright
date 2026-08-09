@@ -54,6 +54,19 @@ func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClass
 	return checkStorageRenameOrphan(state, objects, ownershipRecords)
 }
 
+type ApplyRenameOrphanError struct {
+	Kind       string
+	Created    []string
+	Undeclared []string
+}
+
+func (e *ApplyRenameOrphanError) Error() string {
+	if e.Kind == v1alpha1.KindStorageCluster {
+		return fmt.Sprintf("apply would provision new StorageCluster(s) %s while %s remain provisioned (Bootwright ownership records prove a live cephadm cluster) but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would bootstrap the new name from scratch, reimaging its machines on bare metal, and orphan the old Ceph cluster with its OSD data", strings.Join(e.Created, ", "), strings.Join(e.Undeclared, ", "))
+	}
+	return fmt.Sprintf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal)", strings.Join(e.Created, ", "), strings.Join(e.Undeclared, ", "))
+}
+
 func checkStorageRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, ownershipRecords []ownership.ResourceRecord) error {
 	declared := map[string]bool{}
 	for _, cluster := range state.StorageClusters {
@@ -88,7 +101,7 @@ func checkStorageRenameOrphan(state v1alpha1.State, objects []workflow.ObjectCla
 	}
 	sort.Strings(undeclared)
 	sort.Strings(created)
-	return fmt.Errorf("apply would provision new StorageCluster(s) %s while %s remain provisioned (Bootwright ownership records prove a live cephadm cluster) but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would bootstrap the new name from scratch, reimaging its machines on bare metal, and orphan the old Ceph cluster with its OSD data. To rename, restore the old metadata.name; to replace, temporarily restore the old StorageCluster YAML (metadata.name %s), run `bootwright destroy --clusters %s`, then remove that YAML and re-apply — destroy resolves --clusters against the declared state, so the old cluster can only be torn down while its YAML is present; to keep both, leave the old cluster declared", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+	return &ApplyRenameOrphanError{Kind: v1alpha1.KindStorageCluster, Created: created, Undeclared: undeclared}
 }
 
 func checkContainerRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string) error {
@@ -121,7 +134,7 @@ func checkContainerRenameOrphan(state v1alpha1.State, objects []workflow.ObjectC
 	if len(created) == 0 {
 		return nil
 	}
-	return fmt.Errorf("apply would provision new ContainerCluster(s) %s while %s remain provisioned but are no longer declared — the signature of a rename, which bootwright cannot do in place: it would re-provision the new name from scratch and orphan the old cluster (re-imaging its hosts on bare-metal). To rename, restore the old metadata.name; to replace, temporarily restore the old cluster YAML (metadata.name %s), run `bootwright destroy --clusters %s`, then remove that YAML and re-apply — destroy resolves --clusters against the declared state, so the old cluster can only be torn down while its YAML is present; to keep both, leave the old cluster declared and destroy it the same way when you no longer need it", strings.Join(created, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ", "), strings.Join(undeclared, ","))
+	return &ApplyRenameOrphanError{Kind: v1alpha1.KindContainerCluster, Created: created, Undeclared: undeclared}
 }
 
 func managedRegistrationClustersInScope(state v1alpha1.State, machineClusters []string) []string {

@@ -4,16 +4,19 @@ One short-lived lease admits one mutating run per context. These are the
 invariants behind "a mutating run (…) is still running" and the self-heal
 paths after crashes.
 
-**Single acquisition point:** `AcquireRunLease` is claimed atomically BEFORE the
-run writes its ledger, so a concurrent mutator that raced past the advisory
-pre-mutation check loses at acquisition instead of silently overwriting the
-in-flight run's lease. A stale lease is claimed by renaming it aside — the
+**Single transaction boundary:** `AcquireRunLease` is claimed atomically before
+a real apply or destroy reads the desired input it will classify, and the
+command holds it through remote mutation and all post-run record/reset work. A
+concurrent mutator therefore cannot change input after classification, overwrite
+an in-flight ledger, or enter while teardown cleanup is still deleting evidence.
+A stale lease is claimed by renaming it aside — the
 rename succeeds for at most one racer — followed by an `O_EXCL` exclusive
-create. Destroy mutates outside the apply scheduler, so `ExecuteDestroy` sets
-`RunOptions.AcquireRunLease=true` and holds the lease for the whole teardown;
-the destroy lease is labeled `destroy-…` so the still-running message does not
-mislabel a destroy as an apply. Any new mutating path that bypasses the
-scheduler must acquire the lease itself.
+create. `context update`, `diff --adopt`, and `storage-cluster
+replace-arbiter` acquire the same context lease before any desired-input write;
+the arbiter's embedded apply and replacement run consume the outer lease rather
+than reacquiring it. Command kinds are an explicit allowlist, so a new mutator
+cannot silently invent an unlocked lease identity. Pinned by
+`mutating_command_lease_test.go` and the active-lease CLI regressions.
 
 **Liveness decision tree:** `leaseLiveness` is shared by `leaseFresh` (advisory
 pre-mutation check) and `AssessRunActivity` (acquisition/status gate) so the two

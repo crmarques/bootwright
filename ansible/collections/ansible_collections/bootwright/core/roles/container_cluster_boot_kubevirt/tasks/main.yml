@@ -196,7 +196,8 @@
       the machine is still needed, no --authorize token stands in for it, and an
       unprovable power state fails closed the same way. Stop the VM
       (`virtctl stop {{ bootwright_kubevirt_vm_name }} --namespace {{ bootwright_kubevirt_namespace }}`)
-      and re-run `bootwright apply`. If a previous bootwright run was
+      and re-run `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+      If a previous bootwright run was
       interrupted while installing this machine, stopping it is safe — the
       install restarts from media and loses nothing.
     quiet: true
@@ -947,7 +948,8 @@
       }}.
       The machine is stopped and its previous agent ISO DataVolume is already gone, so
       it has no boot media until this succeeds: fix the reported cause and re-run
-      `bootwright apply`. Nothing needs cleaning up by hand — the boot sequence
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+      Nothing needs cleaning up by hand — the boot sequence
       recreates the media from scratch.
     quiet: true
   when:

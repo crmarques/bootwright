@@ -91,7 +91,7 @@ func TestVSphereSubstrateGateRefusesInPlaceDiskChanges(t *testing.T) {
 	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/gate.yml")
 	for _, remedy := range []string{
 		"resize a provisioned root disk in place",
-		"bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes",
+		"bootwright_apply_rebuild_invocation",
 	} {
 		if !strings.Contains(body, remedy) {
 			t.Fatalf("vsphere gate missing remedy text %q", remedy)

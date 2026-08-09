@@ -97,9 +97,8 @@
       `virsh destroy` failed: rc
       {{ bootwright_libvirt_destroy_domain_stop.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_destroy_domain_stop.stderr | default('') }}.
-      Restore libvirt access or stop the domain safely, then retry with
-      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }}`.
+      Restore libvirt access or stop the domain safely, then retry the exact
+      invocation `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
   when: bootwright_libvirt_domain_present | bool
 
 - name: Undefine libvirt domain
@@ -129,9 +128,8 @@
       `virsh undefine --keep-nvram` failed: rc
       {{ bootwright_libvirt_destroy_domain_undefine.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_destroy_domain_undefine.stderr | default('') }}.
-      Restore libvirt access or remove the domain safely, then retry with
-      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }}`.
+      Restore libvirt access or remove the domain safely, then retry the exact
+      invocation `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
   when: bootwright_libvirt_domain_present | bool
 
 - name: Verify the libvirt domain is absent before disk deletion
@@ -159,9 +157,8 @@
       its absence was not proven after teardown. rc
       {{ bootwright_libvirt_destroy_domain_absence.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_destroy_domain_absence.stderr | default('') }}.
-      Inspect the domain, restore libvirt access, and retry with
-      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }}`.
+      Inspect the domain, restore libvirt access, and retry the exact invocation
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
 
 - name: Remove machine state directory
   ansible.builtin.file:

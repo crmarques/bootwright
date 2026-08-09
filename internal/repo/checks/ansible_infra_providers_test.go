@@ -526,7 +526,7 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 		if !ok || !strings.Contains(fmt.Sprint(assertion["that"]), tc.result+".rc") {
 			t.Fatalf("%s must hard-fail on the remover result before disk deletion, got %v", tasks[tc.refuse]["name"], tasks[tc.refuse])
 		}
-		for _, want := range []string{"bootwright apply --clusters", "--machines", "--mode rebuild", "--authorize data-loss"} {
+		for _, want := range []string{"bootwright_apply_rebuild_invocation", "same bootwright apply invocation", "data-loss authorization"} {
 			if !strings.Contains(fmt.Sprint(assertion["fail_msg"]), want) {
 				t.Fatalf("%s diagnostic missing intentional retry fragment %q: %v", tasks[tc.refuse]["name"], want, assertion["fail_msg"])
 			}
@@ -1004,7 +1004,7 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 		if !ok || !strings.Contains(fmt.Sprint(gate["that"]), tc.result+".rc") {
 			t.Fatalf("%s must consume the remover result before disk deletion, got %v", tasks[tc.refuse]["name"], tasks[tc.refuse])
 		}
-		for _, want := range []string{"bootwright destroy --clusters", "--machines"} {
+		for _, want := range []string{"bootwright_mutating_invocation", "same bootwright destroy invocation"} {
 			if !strings.Contains(fmt.Sprint(gate["fail_msg"]), want) {
 				t.Fatalf("%s diagnostic missing scoped retry fragment %q: %v", tasks[tc.refuse]["name"], want, gate["fail_msg"])
 			}
@@ -1378,6 +1378,7 @@ func TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure(t *testing.
 		"Undefine recorded libvirt network",
 		"Stop recorded systemd units",
 		"Remove recorded podman container",
+		"Close recorded firewalld ports",
 		"List active mounts before removing owned paths",
 		"Unmount active mounts under recorded owned paths",
 	} {

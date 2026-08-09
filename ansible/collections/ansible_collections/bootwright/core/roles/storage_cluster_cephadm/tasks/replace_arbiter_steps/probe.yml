@@ -61,9 +61,9 @@
     fail_msg: >-
       Storage cluster {{ bootwright_arbiter_cluster_name }} reports `stretch_mode: false`
       in its live monmap, so it carries no tiebreaker to replace. An arbiter exists only
-      once `ceph mon enable_stretch_mode` has run, which `bootwright apply` does when the
-      topology authors both data sites and a tiebreaker. Converge the cluster with
-      `bootwright apply --clusters {{ bootwright_arbiter_cluster_name }}` first.
+      once `ceph mon enable_stretch_mode` has run, which apply does when the
+      topology authors both data sites and a tiebreaker. Converge the cluster first
+      with `{{ bootwright_apply_full_invocation | default('a full bootwright apply invocation narrowed to this storage cluster') }}`.
       Live monmap: {{ bootwright_arbiter_mon_dump_raw }}
     quiet: true
 

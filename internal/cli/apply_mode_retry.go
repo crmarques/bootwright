@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -11,6 +12,17 @@ func applyModePreflightRefusal(err error, invocation resolvedInvocation) error {
 	var refusal *workflow.ApplyModePreflightRefusal
 	if !errors.As(err, &refusal) {
 		return err
+	}
+	if clusters := refusal.ReplacementArbiterClusters(); len(clusters) > 0 {
+		commands := make([]string, 0, len(clusters))
+		for _, cluster := range clusters {
+			command, commandErr := invocation.replaceArbiterRetry(cluster)
+			if commandErr != nil {
+				return fmt.Errorf("%w; cannot construct the sanctioned replace-arbiter command: %v", err, commandErr)
+			}
+			commands = append(commands, "`"+command.String()+"`")
+		}
+		return fmt.Errorf("%w; move the authored tiebreaker with %s", err, strings.Join(commands, ", "))
 	}
 	mode, retryable := refusal.RetryMode()
 	if !retryable {

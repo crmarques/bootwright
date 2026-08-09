@@ -28,6 +28,8 @@ type ArbiterRunOptions struct {
 	OldHostOffline     bool
 	BecomePasswordFile string
 	Verbose            bool
+	ExtraVarPairs      []string
+	RunLease           *workflow.CommandRunLease
 }
 
 type ArbiterRetirement struct {
@@ -82,7 +84,9 @@ func RunArbiterReplacement(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	runOpts.ArtifactsRoot = ArbiterArtifactsRoot(ctx.RunsDir)
 	runOpts.OutputLogPath = workflow.PreflightLogPath(ctx.RunsDir, "storage-replace-arbiter")
 	runOpts.Label = "replace arbiter " + opts.Plan.Cluster
-	runOpts.AcquireRunLease = true
+	runOpts.AcquireRunLease = opts.RunLease == nil
+	runOpts.RecordRunLedger = true
+	runOpts.RunLease = opts.RunLease
 	runOpts.BecomePasswordFile = opts.BecomePasswordFile
 	runOpts.ExtraVarPairs = append([]string{
 		"bootwright_arbiter_cluster_name=" + opts.Plan.Cluster,
@@ -101,7 +105,8 @@ func RunArbiterReplacement(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 		"bootwright_arbiter_allow_same_site=" + strconv.FormatBool(opts.AllowSameSite),
 		"bootwright_arbiter_allow_degraded=" + strconv.FormatBool(opts.AllowDegraded),
 		"bootwright_arbiter_old_host_offline=" + strconv.FormatBool(opts.OldHostOffline),
-	}, VerboseNoLogExtraVarPairs(opts.Verbose)...)
+	}, opts.ExtraVarPairs...)
+	runOpts.ExtraVarPairs = append(runOpts.ExtraVarPairs, VerboseNoLogExtraVarPairs(opts.Verbose)...)
 	runner := preflightRunner(stdout, stderr, false)
 	if _, err := workflow.Run(cmdCtx, runOpts, runner, reporter); err != nil {
 		return err

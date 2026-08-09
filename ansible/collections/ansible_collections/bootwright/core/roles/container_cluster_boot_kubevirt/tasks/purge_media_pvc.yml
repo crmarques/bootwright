@@ -62,6 +62,7 @@
       with the existing PVC". Inspect it with
       `kubectl -n {{ bootwright_kubevirt_namespace }} get pvc {{ bootwright_kubevirt_media_pvc_name }} -o yaml`
       — a claim stuck Terminating is held by a finalizer, usually a CDI populator pod or
-      prime claim that is still running, and releasing it lets the next
-      `bootwright apply` recreate the media from scratch.
+      prime claim that is still running, and releasing it lets
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`
+      recreate the media from scratch.
     quiet: true

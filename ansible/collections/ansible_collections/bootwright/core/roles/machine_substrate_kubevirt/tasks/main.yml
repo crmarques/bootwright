@@ -292,7 +292,7 @@
       which slows the agent installer enough that it fails the node with "Writing image to
       disk did not sufficiently progress in the last 30m0s" and the cluster then times out
       waiting for bootstrap. Re-run
-      `bootwright apply --mode rebuild --clusters {{ bootwright_current_cluster.name }}` to
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}` to
       destroy and recreate this disk — its contents are wiped — narrowing with `--machines`
       to leave the cluster's other disks alone.
   when:

@@ -32,6 +32,8 @@ type scopeApplyOptions struct {
 	action        string
 }
 
+var applyClusterAvailabilityChecker workflow.ClusterAvailabilityChecker
+
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
@@ -202,6 +204,16 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return e
 		}
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
+		if !dryRun {
+			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
+			}
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "apply")
+			if err != nil {
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
+			}
+			runContext = runLease.Context()
+		}
 		var state v1alpha1.State
 		state, err = loadDesiredState(cf)
 		if err != nil {
@@ -235,14 +247,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(cmd.Context(), runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runContext, runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, err)
 		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactServerTargets := installOnlyArtifactServerTargets(state)
 		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
-		ownershipRecords, ownershipSkipped, err := applyOwnershipRecords(ctx, dryRun)
+		ownershipRecords, ownershipSkipped, err := applyOwnershipRecords(ctx, dryRun, &invocation)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -272,7 +284,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, applyModePreflightRefusal(err, invocation))
 			}
 			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir, ownershipRecords); err != nil {
-				return failErr(1, err)
+				return failErr(1, applyRenameOrphanRefusal(err, invocation))
 			}
 			releasedRecords, releaseErr := workflow.ConsumableSubstrateReleases(ctx.RunsDir, tasks)
 			if releaseErr != nil {
@@ -282,7 +294,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			var ownedReclaim []string
 			if override {
 				var rerr error
-				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(c.Context(), clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
+				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
 					return failErr(1, rerr)
 				}
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
@@ -315,14 +327,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				auth.note(authorizeDataLoss)
 			}
 			warnUnusedAuthorizations(stdout, auth, false)
-			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
-				return failErr(1, err)
-			}
-			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "apply")
-			if err != nil {
-				return failErr(1, err)
-			}
-			runContext = runLease.Context()
 			hostTrustScope := workflow.ApplyTaskConnectedMachines(tasks)
 			if trustOnFirstUse && !yes && flags.output == outputText {
 				if err := offerTrustOnFirstUse(runContext, stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps, hostTrustScope); err != nil {
@@ -367,10 +371,16 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
+		if !dryRun && usesAnsible {
+			if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+				return failErr(1, err)
+			}
+		}
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
 		runOpts.RunLease = runLease
 		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
 		runOpts.SelectedMachines = sel.MachineScopeNames()
+		runOpts.ClusterAvailabilityChecker = applyClusterAvailabilityChecker
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
@@ -405,7 +415,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 				return silentExit(1)
 			}
-			return failErr(1, err)
+			return failErr(1, applyInstallRemedialError(err, invocation))
 		}
 		printRenderResult(stdout, renderResult)
 		if usesAnsible {

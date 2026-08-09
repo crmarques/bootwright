@@ -50,7 +50,7 @@ func destroyGateForecastRefusals(safety workflow.DestroySafetyDecision, inputSki
 	return out
 }
 
-func destroyScopeConflictGates(state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, fullDestroy bool, runsDir, clustersDir string, ownershipRecords []ownership.ResourceRecord) error {
+func destroyScopeConflictGates(state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, fullDestroy bool, runsDir, clustersDir string, ownershipRecords []ownership.ResourceRecord, invocation resolvedInvocation) error {
 	if (runScope.Name == "infra" || fullDestroy) && sel.Active && !sel.MachineSelection {
 		conflicts := stategraph.SharedDestroyConflicts(state, sel.AllRoots)
 		if len(conflicts) > 0 {
@@ -64,7 +64,11 @@ func destroyScopeConflictGates(state v1alpha1.State, sel clusteraccess.Selection
 	}
 	if sel.Active && len(sel.AllRoots) > 0 {
 		if conflicts := converge.KubeVirtTenantDestroyConflicts(state, clustersDir, sel.AllRoots, converge.ProvisionedStorageTenants(ownershipRecords)); len(conflicts) > 0 {
-			return converge.FormatKubeVirtTenantConflicts(conflicts)
+			command, err := invocation.destroyClustersRetry(converge.KubeVirtConflictTenants(conflicts))
+			if err != nil {
+				return err
+			}
+			return converge.FormatKubeVirtTenantConflicts(conflicts, command.String())
 		}
 	}
 	return nil
@@ -79,7 +83,11 @@ func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel 
 		return false, "", nil
 	}
 	if converge.ScopeTearsClusterLayer(runScope) {
-		return false, "", clusteraccess.FormatStorageConsumerConflicts(conflicts)
+		command, err := invocation.destroyClustersRetry(clusteraccess.StorageConflictConsumers(conflicts))
+		if err != nil {
+			return false, "", err
+		}
+		return false, "", clusteraccess.FormatStorageConsumerConflicts(conflicts, command.String())
 	}
 	if !converge.ScopeTearsMachineLayer(runScope) {
 		return false, "", nil
@@ -92,9 +100,9 @@ func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel 
 		if retryErr != nil {
 			return true, "", retryErr
 		}
-		return true, "", fmt.Errorf("%w; this machine-layer teardown destroys the storage cluster's machine substrate, losing its OSD data; re-run `%s` to proceed with the same selected work set anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), command.String())
+		return true, "", fmt.Errorf("%w; this machine-layer teardown destroys the storage cluster's machine substrate, losing its OSD data; re-run `%s` to proceed with the same selected work set anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts, ""), command.String())
 	}
-	return true, clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied", nil
+	return true, clusteraccess.FormatStorageConsumerConflicts(conflicts, "").Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied", nil
 }
 
 func destroyInfraComponentGate(auth *authorizations, contextName string, refs []converge.InfraComponentServiceRef, records []ownership.ResourceRecord, artifactServerOnly, dryRun bool, invocation resolvedInvocation) (converge.InfraComponentDestroyDecision, bool, error) {

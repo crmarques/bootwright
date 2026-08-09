@@ -143,6 +143,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
+		if !dryRun {
+			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
+			}
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "destroy")
+			if err != nil {
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
+			}
+			runContext = runLease.Context()
+		}
 		var state v1alpha1.State
 		state, stateSkipped, err := loadDesiredStateTolerant(cf)
 		if err != nil {
@@ -175,7 +185,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
 		}
-		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords); err != nil {
+		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords, invocation); err != nil {
 			return failErr(1, err)
 		}
 		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope, dryRun, invocation)
@@ -277,11 +287,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			return failErr(1, fmt.Errorf("%s; this requires --authorize %s; re-run `%s` to destroy it anyway", destroySafety.Summary(), authorizeProtected, command.String()))
 		}
-		if !dryRun {
-			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
-				return failErr(1, err)
-			}
-		}
 		printDestroySafety(stdout, destroySafety, authorizedProtected, dryRun)
 		if storageConsumerOverrideNotice != "" {
 			cliout.NewContinuation(stdout).Warning("storage consumers", storageConsumerOverrideNotice)
@@ -326,11 +331,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if !dryRun {
-			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "destroy")
-			if err != nil {
-				return failErr(1, err)
-			}
-			runContext = runLease.Context()
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -354,6 +354,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleReady(bundle)
+		}
+		if !dryRun && !plan.NoRemoteWork {
+			if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+				return failErr(1, err)
+			}
 		}
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
 		var renderResult render.Result

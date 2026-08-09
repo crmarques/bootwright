@@ -1,8 +1,14 @@
 package cli
 
 import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -10,21 +16,34 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/preflight"
+	secret "github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/sshtrust"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 type safetyVerdict string
+type remedyExpectation string
 
 const (
-	verdictUsageError safetyVerdict = "usage-error"
-	verdictRefusal    safetyVerdict = "fail-closed refusal"
-	verdictAccepted   safetyVerdict = "accepted (no gate refusal)"
-	verdictOutOfSync  safetyVerdict = "read-only out-of-sync report"
-	verdictAuthorized safetyVerdict = "authorized mutation (no gate refusal)"
-	verdictPrompted   safetyVerdict = "held at the interactive confirmation"
+	verdictUsageError  safetyVerdict = "usage-error"
+	verdictRefusal     safetyVerdict = "fail-closed refusal"
+	verdictAccepted    safetyVerdict = "accepted (no gate refusal)"
+	verdictOutOfSync   safetyVerdict = "read-only out-of-sync report"
+	verdictGateCleared safetyVerdict = "target safety gate cleared before downstream validation"
+	verdictAuthorized  safetyVerdict = "authorized mutation (no gate refusal)"
+	verdictNoChange    safetyVerdict = "successful idempotent no-op"
+	verdictPrompted    safetyVerdict = "held at the interactive confirmation"
+)
+
+const (
+	remedySameSelection remedyExpectation = "same-selection"
+	remedyAlternative   remedyExpectation = "intentional-alternative"
+	remedyExternal      remedyExpectation = "external-recovery"
 )
 
 var gateRefusalMarkers = []string{"refusing to", "refuses to", "fails closed", "does not authorize data loss"}
@@ -35,8 +54,15 @@ type safetyCase struct {
 	seed     func(t *testing.T, ctx workspace.Context)
 	args     []string
 	verdict  safetyVerdict
+	remedy   remedyExpectation
 	want     []string
 	deny     []string
+}
+
+type safetyClusterAvailabilityChecker struct{}
+
+func (safetyClusterAvailabilityChecker) Available(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func TestApplyDestroySafetyMatrix(t *testing.T) {
@@ -46,6 +72,7 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 			if tc.seed != nil {
 				tc.seed(t, ctx)
 			}
+			before := safetyDurableStateSnapshot(t, ctx)
 			stdout, stderr, code := runCLI(t, tc.args...)
 			out := stdout + stderr
 			switch tc.verdict {
@@ -57,12 +84,19 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 				if code == 0 {
 					t.Fatalf("want a fail-closed refusal, got exit 0\n%s", out)
 				}
-				if !strings.Contains(out, "bootwright ") {
-					t.Errorf("a refusal must name the exact command to proceed intentionally; got:\n%s", out)
-				}
+				assertRefusalRemedy(t, tc.args, out, tc.remedy)
 			case verdictAccepted:
 				if code != 0 {
 					t.Fatalf("want the run accepted past the safety gates (exit 0), got exit %d\n%s", code, out)
+				}
+			case verdictGateCleared:
+				if code == 2 {
+					t.Fatalf("want the target safety gate cleared before downstream validation, got usage exit 2\n%s", out)
+				}
+				for _, marker := range gateRefusalMarkers {
+					if strings.Contains(out, marker) {
+						t.Fatalf("the target safety gate was not cleared (%q):\n%s", marker, out)
+					}
 				}
 			case verdictOutOfSync:
 				if code != 3 {
@@ -74,10 +108,39 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 					t.Fatalf("want the run held at an interactive confirmation, got exit 0\n%s", out)
 				}
 			case verdictAuthorized:
+				if code != 0 {
+					t.Fatalf("want an authorized successful mutation (exit 0), got exit %d\n%s", code, out)
+				}
 				for _, marker := range gateRefusalMarkers {
 					if strings.Contains(out, marker) {
 						t.Fatalf("run is authorized by its records and flags, but a safety gate refused it (%q):\n%s", marker, out)
 					}
+				}
+			case verdictNoChange:
+				if code != 0 {
+					t.Fatalf("want a successful idempotent no-op (exit 0), got exit %d\n%s", code, out)
+				}
+				for _, marker := range gateRefusalMarkers {
+					if strings.Contains(out, marker) {
+						t.Fatalf("idempotent reapply was refused (%q):\n%s", marker, out)
+					}
+				}
+			}
+			after := safetyDurableStateSnapshot(t, ctx)
+			switch tc.verdict {
+			case verdictAuthorized:
+				if maps.Equal(before, after) {
+					t.Fatal("authorized mutation returned success without changing any context state or evidence")
+				}
+			case verdictNoChange:
+				for _, path := range safetySnapshotDelta(before, after) {
+					if !strings.HasPrefix(path, "runs/safety/") {
+						t.Fatalf("idempotent apply changed durable target or lifecycle state at %s; only convergence evidence may be refreshed", path)
+					}
+				}
+			case verdictUsageError, verdictRefusal, verdictAccepted, verdictGateCleared, verdictOutOfSync, verdictPrompted:
+				if !maps.Equal(before, after) {
+					t.Fatalf("%s changed desired, ownership, install, provider, convergence, or release state at %s; usage errors, refusals, prompts, diff, plan, and dry-runs may retain audit artifacts but must not change durable state", tc.verdict, strings.Join(safetySnapshotDelta(before, after), ", "))
 				}
 			}
 			for _, want := range tc.want {
@@ -92,6 +155,176 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 			}
 		})
 	}
+}
+
+func safetyDurableStateSnapshot(t *testing.T, ctx workspace.Context) map[string]string {
+	t.Helper()
+	snapshot := map[string]string{}
+	roots := []string{
+		ctx.InputDir,
+		ctx.SecretsDir,
+		ctx.ManagedServicesDir,
+		ctx.ProviderStateDir,
+		ctx.OwnershipDir,
+		filepath.Join(ctx.RunsDir, "safety"),
+		filepath.Join(ctx.RunsDir, "substrate-release"),
+	}
+	clusters, err := os.ReadDir(ctx.ClustersDir)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("list cluster durable state: %v", err)
+	}
+	for _, cluster := range clusters {
+		if !cluster.IsDir() {
+			continue
+		}
+		base := filepath.Join(ctx.ClustersDir, cluster.Name())
+		roots = append(roots,
+			filepath.Join(base, "secrets"),
+			filepath.Join(base, "runtime", workflow.ClusterInstallRecordFileName),
+			filepath.Join(base, "runtime", workflow.ClusterConnectionFileName),
+			filepath.Join(base, "runtime", "provider-state"),
+			filepath.Join(base, "runtime", extensionrecords.RecordRelativeDir),
+		)
+	}
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, err := filepath.Rel(ctx.BaseDir, path)
+			if err != nil {
+				return err
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			key := filepath.ToSlash(rel)
+			switch {
+			case info.Mode()&os.ModeSymlink != 0:
+				target, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				snapshot[key] = info.Mode().String() + "\x00" + target
+			case info.Mode().IsRegular():
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				digest := sha256.Sum256(data)
+				snapshot[key] = fmt.Sprintf("%s\x00%x", info.Mode().String(), digest)
+			}
+			return nil
+		})
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatalf("snapshot durable context state: %v", err)
+		}
+	}
+	return snapshot
+}
+
+func safetySnapshotDelta(before, after map[string]string) []string {
+	var paths []string
+	for path, value := range before {
+		if after[path] != value {
+			paths = append(paths, path)
+		}
+	}
+	for path := range after {
+		if _, found := before[path]; !found {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	return paths
+}
+
+func assertRefusalRemedy(t *testing.T, args []string, output string, expectation remedyExpectation) {
+	t.Helper()
+	commands := backtickedBootwrightCommands(output)
+	if expectation == remedyExternal {
+		if len(commands) > 0 {
+			t.Fatalf("a command-free external recovery must not format a non-remedy Bootwright reference as an executable retry: %v\n%s", commands, output)
+		}
+		if !strings.Contains(output, "no bootwright retry command") {
+			t.Fatalf("a command-free external recovery must state that no Bootwright retry performs the unsafe change:\n%s", output)
+		}
+		return
+	}
+	if len(commands) == 0 {
+		t.Fatalf("a refusal must name a backticked exact Bootwright command, got:\n%s", output)
+	}
+	required := map[string]string{"--context": "matrix"}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--context", "--clusters", "--machines":
+			if i+1 < len(args) {
+				required[args[i]] = args[i+1]
+				i++
+			}
+		default:
+			for _, name := range []string{"--context", "--clusters", "--machines"} {
+				if value, found := strings.CutPrefix(args[i], name+"="); found {
+					required[name] = value
+				}
+			}
+		}
+	}
+	if expectation == remedyAlternative {
+		delete(required, "--clusters")
+		delete(required, "--machines")
+	}
+	for _, command := range commands {
+		if !isTargetMutatingCommand(command) {
+			continue
+		}
+		if !commandHasFlagValue(command, "--context", required["--context"]) {
+			t.Fatalf("every executable remedy must preserve the resolved context; command=%q\n%s", command, output)
+		}
+		if slices.Contains(args, "--dry-run") && !strings.Contains(command, "--dry-run") {
+			t.Fatalf("an alternative suggested by a dry-run must remain read-only; command=%q\n%s", command, output)
+		}
+	}
+	if expectation == remedyAlternative {
+		return
+	}
+	for _, command := range commands {
+		matches := true
+		for flag, value := range required {
+			if !commandHasFlagValue(command, flag, value) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return
+		}
+	}
+	t.Fatalf("refusal retry widens or changes the resolved selection: no one exact command preserves %v; commands=%v\n%s", required, commands, output)
+}
+
+func isTargetMutatingCommand(command string) bool {
+	return strings.HasPrefix(command, "bootwright apply ") || strings.HasPrefix(command, "bootwright destroy ") || strings.HasPrefix(command, "bootwright storage-cluster replace-arbiter ")
+}
+
+func commandHasFlagValue(command, flag, value string) bool {
+	return strings.Contains(command, flag+" "+value) || strings.Contains(command, flag+"='"+value+"'") || strings.Contains(command, flag+" '"+value+"'")
+}
+
+func backtickedBootwrightCommands(output string) []string {
+	parts := strings.Split(output, "`")
+	var commands []string
+	for i := 1; i < len(parts); i += 2 {
+		command := strings.TrimSpace(parts[i])
+		if strings.HasPrefix(command, "bootwright ") {
+			commands = append(commands, command)
+		}
+	}
+	return commands
 }
 
 func safetyMatrixCases() []safetyCase {
@@ -242,6 +475,7 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 		},
 		args:    []string{"destroy", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"dc1-child-ocp", "no --authorize token widens"},
 	}, {
 		name:    "apply/all: a dry-run consumes none of it and names it",
@@ -255,6 +489,7 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"dc1-metal-ocp-old", "the signature of a rename"},
 	}, {
 		name:    "apply/all: the blanket token does not clear the tokenless unreadable-ownership refusal",
@@ -398,6 +633,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster, "spec.ceph.topology.stretch.tiebreaker"},
 		deny:    []string{"re-run with `bootwright apply --mode rebuild`"},
 	}, {
@@ -416,6 +652,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedSuccessfulApply(t, ctx)
 			seedArbiterConvergeRecordRefresh(t, ctx, seedRetargetedTiebreaker)
+			seedRunnableSafetyMutation(t, ctx)
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictAuthorized,
@@ -435,6 +672,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		seed:    seedEnabledStretchArbiter,
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyExternal,
 		want:    []string{"fixed when the cluster is bootstrapped", "Bootwright has no path that moves a running cluster between the two shapes"},
 		deny:    []string{"bootwright storage-cluster replace-arbiter --name", "re-run with `bootwright apply --mode rebuild`"},
 	}, {
@@ -442,6 +680,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		seed:    seedDisabledStretchArbiter,
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyExternal,
 		want:    []string{"fixed when the cluster is bootstrapped", "destroys all OSD data"},
 		deny:    []string{"bootwright storage-cluster replace-arbiter --name", "re-run with `bootwright apply --mode rebuild`"},
 	}, {
@@ -472,7 +711,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		seed:    seedLiveStretchClusterOffItsArbiter,
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeSameSiteArbiter, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"refusing to move the stretch tiebreaker", "--authorize " + authorizeDegradedQuorum},
+		want:    []string{"refusing to move the stretch tiebreaker", "--authorize " + authorizeSameSiteArbiter + "," + authorizeDegradedQuorum},
 	}, {
 		name:    "replace-arbiter/preview: a supplied token reads satisfied and still previews the gate it clears",
 		seed:    seedLiveStretchClusterOffItsArbiter,
@@ -619,7 +858,7 @@ func safetyAuthorizationTokenCases() []safetyCase {
 	}, {
 		name:    "apply/data-loss: an unused token is a warning, never an authorization",
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--authorize", "data-loss", "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
+		verdict: verdictGateCleared,
 		want:    []string{"--authorize data-loss had no effect"},
 		deny:    []string{"will DESTROY data"},
 	}, {
@@ -649,10 +888,13 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"could not be read", "--authorize unreadable-records"},
 	}, {
-		name:    "destroy/unreadable-records: the token clears the refusal and still discloses the skipped record",
-		seed:    seedUnreadableOwnershipRecord,
+		name: "destroy/unreadable-records: the token clears the refusal and still discloses the skipped record",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedUnreadableOwnershipRecord(t, ctx)
+			seedSafetyWorkflowBundle(t)
+		},
 		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "unreadable-records", "--yes", "--ask-become-pass=false"},
-		verdict: verdictAuthorized,
+		verdict: verdictGateCleared,
 		want:    []string{"Skipped ownership records"},
 	}, {
 		name:    "apply/unreadable-records: a corrupt ownership record refuses before the rename-orphan gate reads it",
@@ -743,8 +985,11 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"unsupported kind", "--authorize stale-input"},
 	}, {
-		name:    "destroy/stale-input: the token clears the refusal and discloses the skipped document",
-		seed:    seedRetiredKindInStoredInput,
+		name: "destroy/stale-input: the token clears the refusal and discloses the skipped document",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRetiredKindInStoredInput(t, ctx)
+			seedSafetyWorkflowBundle(t)
+		},
 		args:    []string{"destroy", "--authorize", "stale-input,data-loss", "--yes", "--ask-become-pass=false"},
 		verdict: verdictAuthorized,
 		want:    []string{"Skipped input documents", "is NOT in the teardown work set"},
@@ -866,10 +1111,14 @@ func safetyStorageDataLossCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{safetyAdvancedCephCluster, "--authorize installed-cluster-node"},
 	}, {
-		name:    "apply/enabling destroy protection after a successful apply is not drift",
-		seed:    seedProtectionAfterApply,
-		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
-		verdict: verdictAuthorized,
+		name: "apply/enabling destroy protection after a successful apply is not drift",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedProtectionAfterApply(t, ctx)
+			seedRunnableSafetyMutation(t, ctx)
+			seedMatchingInstalledCluster(t, ctx, safetyAdvancedContainerOCP)
+		},
+		args:    []string{"apply", "--stage", "deps", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictNoChange,
 		deny:    []string{"not a safe in-place reconcile", "would reinstall the cluster"},
 	}, {
 		name:    "apply/re-applying the identical desired state reports no drift at all",
@@ -917,6 +1166,7 @@ func safetyScopeClosureCases() []safetyCase {
 		name:    "destroy/stretched Ceph alone while both DCs still consume it",
 		args:    []string{"destroy", "--stage", "clusters", "--clusters", "ceph-storage", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"ceph-storage", "dc1-metal-ocp", "dc2-metal-ocp"},
 	}, {
 		name: "destroy/host cluster while its nested guest is installed",
@@ -925,6 +1175,7 @@ func safetyScopeClosureCases() []safetyCase {
 		},
 		args:    []string{"destroy", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"dc1-child-ocp", "no --authorize token widens"},
 	}, {
 		name: "destroy/machines of a host cluster while its nested guest is installed",
@@ -933,6 +1184,7 @@ func safetyScopeClosureCases() []safetyCase {
 		},
 		args:    []string{"destroy", "--machines", "dc1-metal-master-0", "--authorize", "installed-cluster-node", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"dc1-child-ocp"},
 	}}
 }
@@ -942,6 +1194,7 @@ func safetyStartingStateCases() []safetyCase {
 		name: "apply/mode create over an existing install record",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp")
+			seedRunnableSafetyMutation(t, ctx)
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--mode", "create", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
@@ -950,6 +1203,7 @@ func safetyStartingStateCases() []safetyCase {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
+			seedRunnableSafetyMutation(t, ctx)
 			if err := workflow.MarkSubstrateReleased(ctx.RunsDir, "dc1-child-ocp", time.Now()); err != nil {
 				t.Fatalf("MarkSubstrateReleased: %v", err)
 			}
@@ -961,6 +1215,7 @@ func safetyStartingStateCases() []safetyCase {
 		name: "apply/machine-granular substrate release names only the released machine",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
+			seedRunnableSafetyMutation(t, ctx)
 			if err := workflow.MarkSubstrateMachinesReleased(ctx.RunsDir, "dc1-child-ocp", []string{"dc1-child-ocp-infra-master-0"}, time.Now()); err != nil {
 				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
 			}
@@ -973,6 +1228,7 @@ func safetyStartingStateCases() []safetyCase {
 		name: "apply/no release leaves an unreleased machine unauthorized for rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
+			seedRunnableSafetyMutation(t, ctx)
 		},
 		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--yes", "--ask-become-pass=false"},
 		verdict: verdictAuthorized,
@@ -984,6 +1240,7 @@ func safetyStartingStateCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"dc1-metal-ocp-old", "the signature of a rename"},
 	}, {
 		name: "apply/renamed StorageCluster orphaning an owned Ceph cluster",
@@ -992,6 +1249,7 @@ func safetyStartingStateCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
 		want:    []string{"ceph-storage-old", "orphan the old Ceph cluster"},
 	}}
 }
@@ -1021,6 +1279,94 @@ func initSafetyBaselineContext(t *testing.T, example string) workspace.Context {
 		t.Fatal(err)
 	}
 	return ctx
+}
+
+func seedSafetyWorkflowBundle(t *testing.T) {
+	t.Helper()
+	dir, err := resolveBundleDir()
+	if err != nil {
+		t.Fatalf("resolve workflow bundle: %v", err)
+	}
+	restore := converge.SetWorkflowBundlePreparerForTest(func(_ string, _ string, _ bool) (bundle.AnsibleBundleResult, error) {
+		return bundle.AnsibleBundleResult{Dir: dir, Reused: true}, nil
+	})
+	t.Cleanup(restore)
+}
+
+func seedRunnableSafetyMutation(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSafetyWorkflowBundle(t)
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load runnable safety state: %v", err)
+	}
+	idx := secret.NewIndex(state)
+	store := secret.NewContextStore(ctx.Name, ctx.SecretsDir)
+	for _, declaration := range state.Secrets {
+		for _, entry := range secretPathEntriesForSecret(declaration, idx, ctx.SecretsDir) {
+			body := safetySecretBody(declaration.Spec.Type, entry.role)
+			if entry.externalSource {
+				if err := os.MkdirAll(filepath.Dir(entry.path), 0o700); err != nil {
+					t.Fatalf("create external secret fixture directory: %v", err)
+				}
+				if err := os.WriteFile(entry.path, body, 0o600); err != nil {
+					t.Fatalf("write external secret fixture %s: %v", entry.path, err)
+				}
+				continue
+			}
+			if err := store.Write(secret.MaterialKey{Name: entry.name, Role: entry.role}, body); err != nil {
+				t.Fatalf("write context secret fixture %s/%s: %v", entry.name, entry.role, err)
+			}
+		}
+	}
+	fingerprint, err := sshtrust.FingerprintSHA256("QUJDRA==")
+	if err != nil {
+		t.Fatalf("build safety host-key fingerprint: %v", err)
+	}
+	trust := sshtrust.Store{}
+	for _, machine := range sshtrust.ManagedTrustMachines(state, controllerLocalityPolicy) {
+		address := v1alpha1.MachineSSHAddress(machine)
+		trust.Hosts = append(trust.Hosts, sshtrust.HostRecord{
+			Name:              machine.Metadata.Name,
+			Address:           address,
+			KeyType:           "ssh-ed25519",
+			PublicKey:         "QUJDRA==",
+			FingerprintSHA256: fingerprint,
+			KnownHostsLine:    sshtrust.KnownHostsLine(address, "ssh-ed25519", "QUJDRA=="),
+		})
+	}
+	if err := sshtrust.Save(sshtrust.DirForContext(ctx.BaseDir), trust); err != nil {
+		t.Fatalf("write safety host trust fixture: %v", err)
+	}
+	previous := preflight.DefaultDeps
+	deps := previous
+	deps.CommandOutputLocalRoot = func(_ string, args ...string) ([]byte, error) {
+		return []byte(`{"gitVersion":"v1","request":"` + strings.Join(args, " ") + `"}`), nil
+	}
+	preflight.DefaultDeps = deps
+	t.Cleanup(func() { preflight.DefaultDeps = previous })
+	previousChecker := applyClusterAvailabilityChecker
+	applyClusterAvailabilityChecker = safetyClusterAvailabilityChecker{}
+	t.Cleanup(func() { applyClusterAvailabilityChecker = previousChecker })
+}
+
+func safetySecretBody(secretType string, role secret.MaterialRole) []byte {
+	switch role {
+	case secret.MaterialSSHPrivate, secret.MaterialTLSKey:
+		return []byte("test-private-key\n")
+	case secret.MaterialSSHPublic:
+		return []byte("ssh-ed25519 QUJDRA== bootwright-safety-test\n")
+	}
+	switch secretType {
+	case v1alpha1.SecretTypeDockerConfigJSON:
+		return []byte(`{"auths":{"registry.example":{"auth":"dGVzdDp0ZXN0"}}}`)
+	case v1alpha1.SecretTypeUsernamePassword:
+		return []byte("test:password\n")
+	case v1alpha1.SecretTypeCABundle, v1alpha1.SecretTypeTLSCertificate:
+		return []byte("test-certificate\n")
+	default:
+		return []byte("test-secret\n")
+	}
 }
 
 func seedSuccessfulApply(t *testing.T, ctx workspace.Context) {
@@ -1078,13 +1424,33 @@ func seedInstalledCluster(t *testing.T, ctx workspace.Context, cluster string) {
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord(%s): %v", cluster, err)
 	}
-	kubeconfig := filepath.Join(ctx.ClustersDir, cluster, "secrets", "kubeconfig")
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
-		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, cluster)
+}
+
+func seedMatchingInstalledCluster(t *testing.T, ctx workspace.Context, cluster string) {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state for installed cluster: %v", err)
 	}
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
+	desiredHash, structuralHash, err := workflow.ComputeClusterInstallHashes(ctx.Name, state, cluster, ctx.SecretsDir)
+	if err != nil {
+		t.Fatalf("compute install hashes for %s: %v", cluster, err)
 	}
+	now := time.Now().UTC()
+	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
+		Cluster:        cluster,
+		DesiredHash:    desiredHash,
+		StructuralHash: structuralHash,
+		HashSchema:     workflow.ConvergeHashSchema,
+		Status:         workflow.ClusterInstallStatusInstalled,
+		Phase:          workflow.ClusterInstallPhaseComplete,
+		UpdatedAt:      now,
+		InstalledAt:    &now,
+	}); err != nil {
+		t.Fatalf("save matching install record for %s: %v", cluster, err)
+	}
+	seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, cluster)
 }
 
 func seedKubeVirtReadyHost(t *testing.T, ctx workspace.Context, cluster string) {

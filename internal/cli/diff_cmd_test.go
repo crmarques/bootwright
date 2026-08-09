@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"os"
 	"strings"
 	"testing"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func TestDiffOrphanRemedyScopedToSweepCoverage(t *testing.T) {
@@ -65,6 +68,22 @@ func TestDiffAdoptRejectsRecorded(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "--adopt requires live discovery") {
 		t.Fatalf("stderr missing the adopt/recorded conflict: %q", stderr)
+	}
+}
+
+func TestDiffAdoptRefusesWhileAnotherMutatorHoldsTheContext(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	guard, err := workflow.AcquireCommandRunLease(context.Background(), ctx.RunsDir, "destroy")
+	if err != nil {
+		t.Fatalf("AcquireCommandRunLease: %v", err)
+	}
+	defer guard.Close()
+	_, stderr, code := runCLI(t, "diff", "--adopt")
+	if code == 0 || !strings.Contains(stderr, "mutating run") || !strings.Contains(stderr, guard.RunID) {
+		t.Fatalf("diff --adopt exit=%d stderr=%q, want active-mutator refusal", code, stderr)
+	}
+	if entries, err := os.ReadDir(workspace.InputHistoryDir(ctx)); err == nil && len(entries) > 0 {
+		t.Fatalf("diff --adopt snapshotted input despite the active mutation lease: %v", entries)
 	}
 }
 

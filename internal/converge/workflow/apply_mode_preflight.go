@@ -9,9 +9,10 @@ import (
 )
 
 type ApplyModePreflightRefusal struct {
-	message                   string
-	retryMode                 ApplyMode
-	requiresDataLossAuthorize bool
+	message                    string
+	retryMode                  ApplyMode
+	requiresDataLossAuthorize  bool
+	replacementArbiterClusters []string
 }
 
 func (r *ApplyModePreflightRefusal) Error() string {
@@ -24,6 +25,10 @@ func (r *ApplyModePreflightRefusal) RetryMode() (ApplyMode, bool) {
 
 func (r *ApplyModePreflightRefusal) RequiresDataLossAuthorization() bool {
 	return r.requiresDataLossAuthorize
+}
+
+func (r *ApplyModePreflightRefusal) ReplacementArbiterClusters() []string {
+	return append([]string(nil), r.replacementArbiterClusters...)
 }
 
 func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) error {
@@ -86,11 +91,13 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) *ApplyModePre
 	var parts []string
 	retryMode := ApplyMode("")
 	requiresDataLossAuthorize := false
+	var replacementArbiterClusters []string
 	switch {
 	case len(drifted) > 0 && stretchArbiterShapeDriftSet(drifted):
 		parts = append(parts, stretchArbiterShapeRefusal(drifted))
 	case len(drifted) > 0 && tiebreakerOnlyDriftSet(drifted):
 		parts = append(parts, tiebreakerDriftRefusal(drifted))
+		replacementArbiterClusters = tiebreakerDriftClusters(drifted)
 	case len(drifted) > 0:
 		items := make([]string, 0, len(drifted))
 		for _, o := range drifted {
@@ -105,9 +112,10 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) *ApplyModePre
 		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; use the recorded manager to reconcile or remove them, then retry after its ownership evidence no longer conflicts. No bootwright apply mode or authorization token adopts a foreign object", summarizeApplyObjects(foreign)))
 	}
 	return &ApplyModePreflightRefusal{
-		message:                   strings.Join(parts, ". "),
-		retryMode:                 retryMode,
-		requiresDataLossAuthorize: requiresDataLossAuthorize,
+		message:                    strings.Join(parts, ". "),
+		retryMode:                  retryMode,
+		requiresDataLossAuthorize:  requiresDataLossAuthorize,
+		replacementArbiterClusters: replacementArbiterClusters,
 	}
 }
 
@@ -168,26 +176,32 @@ func stretchArbiterShapeRefusal(drifted []ObjectClassification) string {
 		change = "adds a stretch tiebreaker to"
 		shape = "a stretch cluster arbitrated by a tiebreaker mon"
 	}
-	return fmt.Sprintf("apply refuses this change to %s: it %s a cluster that is already built, and whether a stretch cluster carries an arbiter is fixed when the cluster is bootstrapped. Bootwright has no path that moves a running cluster between the two shapes — not this apply, and not `bootwright storage-cluster replace-arbiter`, which moves an existing tiebreaker between nodes and cannot create or retire one. Revert the change to match the recorded desired state and keep running the shape you have. If replacement with %s is intentional, first export or back up the data and perform a separately reviewed full teardown and fresh apply; no bootwright retry command can make that shape change in place, and the replacement destroys all OSD data. `--mode rebuild` is not the remedy here either — it reaches the same data loss (cephadm rm-cluster --zap-osds) without saying so",
+	return fmt.Sprintf("apply refuses this change to %s: it %s a cluster that is already built, and whether a stretch cluster carries an arbiter is fixed when the cluster is bootstrapped. Bootwright has no path that moves a running cluster between the two shapes — not this apply, and not bootwright storage-cluster replace-arbiter, which moves an existing tiebreaker between nodes and cannot create or retire one. Revert the change to match the recorded desired state and keep running the shape you have. If replacement with %s is intentional, first export or back up the data and perform a separately reviewed full teardown and fresh apply; no bootwright retry command can make that shape change in place, and the replacement destroys all OSD data. --mode rebuild is not the remedy here either — it reaches the same data loss (cephadm rm-cluster --zap-osds) without saying so",
 		strings.Join(labels, ", "), change, shape)
 }
 
 func tiebreakerDriftRefusal(drifted []ObjectClassification) string {
 	labels := make([]string, 0, len(drifted))
-	seen := map[string]bool{}
-	var commands []string
 	for _, o := range drifted {
 		labels = append(labels, o.Label)
-		name := storageClusterObjectName(o)
-		if seen[name] {
+	}
+	sort.Strings(labels)
+	return fmt.Sprintf("apply refuses this change to %s: its only structural change is spec.ceph.topology.stretch.tiebreaker, and the stretch arbiter is a property of the live monmap that apply cannot reach — ceph mon enable_stretch_mode is idempotency-guarded, so a re-apply would leave the old arbiter holding the tiebreaker while the input says otherwise. Move it with storage-cluster replace-arbiter, which reconciles the live tiebreaker onto the authored one, or revert the change to match the recorded desired state. Rebuilding is not the remedy here: it would wipe and re-bootstrap the whole cluster (cephadm rm-cluster --zap-osds) to move one vote", strings.Join(labels, ", "))
+}
+
+func tiebreakerDriftClusters(drifted []ObjectClassification) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, object := range drifted {
+		name := storageClusterObjectName(object)
+		if name == "" || seen[name] {
 			continue
 		}
 		seen[name] = true
-		commands = append(commands, "`"+TiebreakerReplacementCommand(name)+"`")
+		names = append(names, name)
 	}
-	sort.Strings(labels)
-	sort.Strings(commands)
-	return fmt.Sprintf("apply refuses this change to %s: its only structural change is spec.ceph.topology.stretch.tiebreaker, and the stretch arbiter is a property of the live monmap that apply cannot reach — `ceph mon enable_stretch_mode` is idempotency-guarded, so a re-apply would leave the old arbiter holding the tiebreaker while the input says otherwise. Move it with %s, which reconciles the live tiebreaker onto the authored one, or revert the change to match the recorded desired state. Rebuilding is not the remedy here: it would wipe and re-bootstrap the whole cluster (cephadm rm-cluster --zap-osds) to move one vote", strings.Join(labels, ", "), strings.Join(commands, ", "))
+	sort.Strings(names)
+	return names
 }
 
 func storageClusterObjectName(o ObjectClassification) string {

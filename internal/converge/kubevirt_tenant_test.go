@@ -69,9 +69,9 @@ func TestKubeVirtTenantDestroyConflicts(t *testing.T) {
 		t.Fatalf("selecting the tenant too must clear the conflict, got %v", conflicts)
 	}
 
-	err := FormatKubeVirtTenantConflicts(conflicts)
+	err := FormatKubeVirtTenantConflicts(conflicts, "bootwright destroy --clusters nested --context test")
 	_ = err
-	msg := FormatKubeVirtTenantConflicts([]KubeVirtTenantConflict{{Host: "hub", Tenants: []string{"nested"}}}).Error()
+	msg := FormatKubeVirtTenantConflicts([]KubeVirtTenantConflict{{Host: "hub", Tenants: []string{"nested"}}}, "bootwright destroy --clusters nested --context test").Error()
 	for _, want := range []string{"hub", "nested", "--clusters", "no --authorize token widens"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("conflict message must mention %q, got %q", want, msg)

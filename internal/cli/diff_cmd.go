@@ -67,7 +67,11 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&adopt, "adopt", false, "fold the discovered live state back into desired-state YAML (snapshots the prior input to history first); implies live mode")
 	addVerboseFlag(cmd, &verbose)
 	addOutputFlag(cmd, &output)
-	cmd.RunE = func(c *cobra.Command, _ []string) error {
+	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
+		var runLease *workflow.CommandRunLease
+		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, runLease)
+		}()
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
 		}
@@ -83,6 +87,17 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		}
 		if err != nil {
 			return failErr(2, err)
+		}
+		if adopt {
+			ctx, err := cf.resolve()
+			if err != nil {
+				return failErr(1, err)
+			}
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "diff-adopt")
+			if err != nil {
+				return failErr(1, err)
+			}
+			c.SetContext(runLease.Context())
 		}
 		state, err := loadDesiredState(cf)
 		if err != nil {
@@ -107,6 +122,9 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		}
 		live := buildLiveDiff(c.Context(), cf, executable, state, report, verbose, false, stderr)
 		if adopt {
+			if err := runLease.RequireOwned(); err != nil {
+				return failErr(1, err)
+			}
 			var probed []cephadopt.ProbedStorage
 			for _, storage := range live.Storage {
 				if storage.Probed {

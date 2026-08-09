@@ -340,7 +340,7 @@ func TestKubeVirtRefusesAReusedRootClaimWhoseVolumeModeDriftedFromItsStorageProf
 		t.Fatalf("the volume-mode refusal must compare the bound claim against what the class provisions: volumeMode is immutable once bound and the apply is create-only, so a claim an older template shape created is reused forever and a Filesystem claim on a Block class trips the agent's 30-minute no-progress watchdog, got that=%v", assertion["that"])
 	}
 	failMsg := fmt.Sprint(assertion["fail_msg"])
-	for _, want := range []string{"--mode rebuild", "30m0s", "--machines"} {
+	for _, want := range []string{"bootwright_apply_rebuild_invocation", "30m0s", "--machines"} {
 		if !strings.Contains(failMsg, want) {
 			t.Fatalf("the volume-mode refusal must name the symptom it prevents and the exact command that proceeds intentionally (missing %q), got %q", want, failMsg)
 		}

@@ -865,7 +865,7 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 		}
 	}
 	hostErrorHint, _ := defaults["bootwright_install_host_error_hint"].(string)
-	if !strings.Contains(hostErrorHint, "--mode rebuild") {
+	if !strings.Contains(hostErrorHint, "bootwright_apply_rebuild_invocation") {
 		t.Fatalf("a cluster that diverted into recovery is not pivoted out of bootstrap, so its hint must name the rebuild, got %q", hostErrorHint)
 	}
 	if strings.Contains(hostErrorHint, "not proof of a failed install") {

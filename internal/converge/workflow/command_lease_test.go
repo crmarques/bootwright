@@ -80,3 +80,23 @@ func TestCommandRunLeaseFailsWhenOwnershipChanges(t *testing.T) {
 		t.Fatalf("replacement lease after stale close: found=%v lease=%+v err=%v", found, got, err)
 	}
 }
+
+func TestCommandRunLeaseRegistersEveryDesiredStateMutator(t *testing.T) {
+	for _, command := range []string{"apply", "destroy", "context-update", "diff-adopt", "replace-arbiter"} {
+		t.Run(command, func(t *testing.T) {
+			guard, err := AcquireCommandRunLease(context.Background(), t.TempDir(), command)
+			if err != nil {
+				t.Fatalf("AcquireCommandRunLease(%q): %v", command, err)
+			}
+			if !strings.HasPrefix(guard.RunID, command+"-") {
+				t.Fatalf("run ID = %q, want %q prefix", guard.RunID, command+"-")
+			}
+			if err := guard.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+		})
+	}
+	if _, err := AcquireCommandRunLease(context.Background(), t.TempDir(), "future-unclassified-mutator"); err == nil || !strings.Contains(err.Error(), "unsupported mutating command") {
+		t.Fatalf("unregistered mutator = %v, want fail-closed classification error", err)
+	}
+}

@@ -767,6 +767,20 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_apply_mode` | Apply intent from the CLI `--mode` flag: `create`, `reconcile` (default), or `rebuild`. `rebuild` authorizes Bootwright-owned reconfigure/rebuild; roles gate destructive resets on it |
 | `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 
+Real mutating runs also receive CLI-rendered remediation commands. They are
+shell-quoted from the resolved invocation after context, selection, credentials,
+effect flags, and authorizations are known. Runtime roles must use these facts in
+operator-facing retry guidance instead of assembling a `bootwright apply` or
+`bootwright destroy` command from task-local names.
+
+| Fact | Shape |
+| --- | --- |
+| `bootwright_mutating_invocation` | Exact current apply or destroy invocation; use after the operator fixes a transient external failure |
+| `bootwright_apply_reconcile_invocation` | Exact selected apply invocation with `--mode reconcile` |
+| `bootwright_apply_rebuild_invocation` | Exact selected apply invocation with `--mode rebuild` and additive `--authorize data-loss` |
+| `bootwright_apply_full_invocation` | Exact apply invocation with stage/range narrowing removed while retaining context and object selection |
+| `bootwright_apply_through_base_invocation` | Exact apply invocation changed to `--through base` while retaining context and object selection |
+
 The OpenShift agent role uses those vars to create and publish one cluster ISO,
 boot all selected node pseudo-hosts through Ansible host fanout, and run the
 final installer wait after the boot-stage task has completed. Machine

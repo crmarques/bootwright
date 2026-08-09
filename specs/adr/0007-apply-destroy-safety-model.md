@@ -184,9 +184,13 @@ held to the identical rule and neither can strand a nested cluster.
 ### One mutating run at a time
 
 An `O_EXCL` run lease with process-identity and heartbeat liveness admits one
-mutating run per context; destroy acquires it explicitly because it mutates
-outside the apply scheduler. Losing the lease (takeover after a stall, or a
-failed heartbeat save) stops the run rather than risking a double mutator.
+mutating run per context. Apply and destroy acquire it before reading the input
+they will classify and hold it through every local and remote mutation and
+post-run evidence update. `context update`, `diff --adopt`, and
+`storage-cluster replace-arbiter` acquire the same lease before changing desired
+input; the arbiter verb passes the already-held lease into both embedded
+workflows. Losing the lease (takeover after a stall, or a failed heartbeat save)
+stops the run rather than risking a double mutator.
 
 ### Teardown makes maximal progress behind dependency-aware gates
 

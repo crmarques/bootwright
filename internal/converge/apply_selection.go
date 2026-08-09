@@ -107,18 +107,21 @@ func KubeVirtTenantDestroyConflicts(state v1alpha1.State, clustersDir string, se
 	return KubeVirtTenantCollateral(state, clustersDir, selectedRoots, selectedRoots, provisionedStorage)
 }
 
-func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict) error {
+func FormatKubeVirtTenantConflicts(conflicts []KubeVirtTenantConflict, retryCommand string) error {
 	var b strings.Builder
 	b.WriteString("refusing to destroy KubeVirt host cluster(s) still hosting nested cluster(s) left running:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
-	tenants := strings.Join(kubeVirtConflictTenants(conflicts), ",")
-	b.WriteString("include the nested cluster(s) in the same selection, or destroy them first with `bootwright destroy --clusters " + tenants + " --yes`; no --authorize token widens the selected work set")
+	b.WriteString("include the nested cluster(s) in the same selection, or destroy them first")
+	if retryCommand != "" {
+		b.WriteString(" with `" + retryCommand + "`")
+	}
+	b.WriteString("; no --authorize token widens the selected work set")
 	return fmt.Errorf("%s", b.String())
 }
 
-func kubeVirtConflictTenants(conflicts []KubeVirtTenantConflict) []string {
+func KubeVirtConflictTenants(conflicts []KubeVirtTenantConflict) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, c := range conflicts {

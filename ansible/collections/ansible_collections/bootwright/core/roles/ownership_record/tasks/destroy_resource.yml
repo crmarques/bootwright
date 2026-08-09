@@ -122,7 +122,6 @@
     state: disabled
     permanent: true
     immediate: true
-  failed_when: false
   loop:
     - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
     - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"

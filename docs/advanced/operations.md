@@ -1105,8 +1105,12 @@ there.
 
 A run records a durable ledger entry plus a short-lived lease that marks the
 updating process; cluster install tasks additionally record per-cluster install
-state. The forensic input snapshots capture what was applied — nothing reads
-them back, and `plan` / `--dry-run` never write them.
+state. The lease is per context and spans input read, safety gates, remote work,
+and final evidence cleanup. Input-mutating `context update`, `diff --adopt`, and
+arbiter replacement share it, so they cannot race an apply or destroy that
+already classified the previous input. The forensic input snapshots capture
+what was applied — nothing reads them back, and `plan` / `--dry-run` never write
+them.
 
 !!! note "Commands re-exec through `sudo` for context state"
     The context tree under `/var/lib/bootwright/` is root-managed. Commands that

@@ -2496,6 +2496,16 @@ the exact token that unblocks it), and ADR 0010 (failure summaries preserve
 the exact remedy command through shortening) each record; the per-case bullets
 below add only case-specific content.
 
+An Ansible role does not reconstruct that invocation from a cluster, machine,
+stage, or token visible locally. Before a real mutating run, the CLI resolves
+and shell-quotes the current invocation and its sanctioned reconcile, rebuild,
+full-scope, and through-base variants, retaining context, object selection,
+credentials, effect flags, and already-granted authorizations. Roles consume
+only those facts in retry guidance. A runtime-discovered operand that cannot be
+known by the CLI, such as a dirty device path, may be named as the one additive
+flag change to the exact resolved base invocation; it never justifies printing
+an independently assembled or wider command.
+
 ### Machine-readable output
 
 `--output json` payloads split into contract and non-contract. Contract —
@@ -2617,6 +2627,14 @@ verbs that reach machines.
   pre-change input stays recoverable. Recovery from a snapshot is manual — no
   verb reads one back; the procedure is documented with the context model in
   `docs/concepts/`.
+- One command-wide lease serializes the input read, safety classification,
+  confirmation, target mutation, controller-state update, and cleanup of every
+  real apply or destroy. The same per-context lease covers the snapshot-and-write
+  portion of `context update`, `diff --adopt`, and arbiter input promotion, and
+  is passed into any workflow they embed rather than reacquired. Thus desired
+  input cannot change after a mutating run classified it, a second mutator
+  cannot enter during post-run cleanup, and a nested workflow cannot create an
+  unlocked gap. Acquiring an unregistered mutating-command kind fails closed.
 - Read-only verbs (`status`, `diff`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run

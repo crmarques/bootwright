@@ -26,7 +26,8 @@
       operator's own confirmation that nothing on it is still needed, no
       --authorize token stands in for it, and an unreadable power state fails
       closed the same way. Power the machine off through its BMC or console and
-      re-run `bootwright apply`. If a previous bootwright run was interrupted
+      re-run `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+      If a previous bootwright run was interrupted
       while installing this machine, powering it off is safe — the install
       restarts from media and loses nothing.
     quiet: true

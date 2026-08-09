@@ -897,7 +897,7 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_pool_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
 		t.Fatalf("pool destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "bootwright_apply_rebuild_invocation") {
 		t.Fatalf("pool destroy refusal must name the --authorize data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
@@ -942,7 +942,7 @@ func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.
 	if got := fmt.Sprint(fsRefuse["that"]); !strings.Contains(got, "bootwright_ceph_op_fs_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_fs_recreate") {
 		t.Fatalf("CephFS destroy refusal must fail closed on recreate-without-acknowledgement, got %v", fsRefuse["that"])
 	}
-	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+	if got := fmt.Sprint(fsRefuse["fail_msg"]); !strings.Contains(got, "bootwright_apply_rebuild_invocation") {
 		t.Fatalf("CephFS destroy refusal must name the --authorize data-loss remedy, got %v", fsRefuse["fail_msg"])
 	}
 	fsRebuildIdx := findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")
@@ -1022,7 +1022,7 @@ func TestStorageCephadmOverrideRebuildsDriftedECProfile(t *testing.T) {
 	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_op_ec_rebuild_acked") || !strings.Contains(got, "bootwright_ceph_op_ec_recreate") {
 		t.Fatalf("ec-profile destroy refusal must fail closed on recreate-without-acknowledgement, got %v", refuse["that"])
 	}
-	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "--authorize data-loss") {
+	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "bootwright_apply_rebuild_invocation") {
 		t.Fatalf("ec-profile destroy refusal must name the --authorize data-loss remedy, got %v", refuse["fail_msg"])
 	}
 
@@ -3714,7 +3714,7 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 			t.Fatalf("%s zap-result gate loop missing %q: %v", reclaimPath, want, reclaimTasks[refuseZapIdx]["loop"])
 		}
 	}
-	for _, want := range []string{"host", "path", "stderr", "bootwright apply --clusters", "--mode rebuild", "--authorize data-loss"} {
+	for _, want := range []string{"host", "path", "stderr", "bootwright_apply_rebuild_invocation", "data-loss authorization"} {
 		if got := fmt.Sprint(refuseZap["msg"]); !strings.Contains(got, want) {
 			t.Fatalf("%s zap failure must name the device, failure, and exact intentional retry; missing %q in %v", reclaimPath, want, refuseZap["msg"])
 		}
@@ -3783,7 +3783,7 @@ func TestStorageOSDReadinessFailureNamesTheReclaimRemedy(t *testing.T) {
 		t.Fatalf("the readiness remedy must be composed from vars, got %v", tasks[remedyIdx])
 	}
 	allDevices := fmt.Sprint(remedyVars["bootwright_ceph_osd_remedy_reclaim_all"])
-	for _, want := range []string{"data_devices.all=true", "--mode rebuild", "--authorize data-loss", "IRREVERSIBLE", "protectedKinds"} {
+	for _, want := range []string{"data_devices.all=true", "bootwright_apply_rebuild_invocation", "data-loss authorization", "IRREVERSIBLE", "protectedKinds"} {
 		if !strings.Contains(allDevices, want) {
 			t.Errorf("the all:true readiness remedy must name %q — it is the only automated reclaim Bootwright implements for a filter-authored host, and the coverage report that also names it never runs when the readiness assert aborts the play; got %v", want, allDevices)
 		}

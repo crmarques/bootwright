@@ -176,7 +176,7 @@
       Missing install-config.yaml at {{ bootwright_install_work_dir }}/install-config.yaml.
       The bootwright CLI is expected to inline secrets via ResolveInstaller before
       handing off to Ansible; re-run
-      `bootwright apply --clusters {{ bootwright_current_cluster.name }}` (or
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}` (or
       `bootwright render installer --sensitive`) to regenerate it.
   when: bootwright_install_agent_action_effective in ['run', 'create_iso'] and not bootwright_install_config_stat.stat.exists
 
@@ -217,8 +217,7 @@
       {{ bootwright_install_work_dir }}/.openshift_install_state.json for
       cluster {{ bootwright_current_cluster.name }}. The agent ISO build runs
       in the deps phase and must complete before waiting for install. Re-run
-      with the deps phase in scope, e.g. `bootwright apply --through base
-      --clusters {{ bootwright_current_cluster.name }}`.
+      `{{ bootwright_apply_through_base_invocation | default('the same bootwright apply invocation through the base stage') }}`.
   when:
     - bootwright_install_agent_action_effective == 'wait_install'
     - not bootwright_install_already_complete

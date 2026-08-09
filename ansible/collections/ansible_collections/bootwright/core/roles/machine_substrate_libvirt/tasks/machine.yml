@@ -146,9 +146,7 @@
       {{ bootwright_libvirt_managed_os_reset_stop.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_stop.stderr | default('') }}.
       Restore libvirt access or stop the domain safely, then retry with
-      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }} --mode rebuild
-      --authorize data-loss`.
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Undefine managed OS libvirt domain for override reinstall
@@ -179,9 +177,7 @@
       {{ bootwright_libvirt_managed_os_reset_undefine.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_undefine.stderr | default('') }}.
       Restore libvirt access or remove the domain safely, then retry with
-      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }} --mode rebuild
-      --authorize data-loss`.
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Verify the reset libvirt domain is absent before disk deletion
@@ -211,9 +207,7 @@
       {{ bootwright_libvirt_managed_os_reset_absence.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_absence.stderr | default('') }}.
       Inspect the domain, restore libvirt access, and retry with
-      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
-      --machines {{ bootwright_component.name }} --mode rebuild
-      --authorize data-loss`.
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Remove managed OS libvirt machine state for override reinstall
@@ -319,7 +313,8 @@
     msg: >-
       Libvirt storage for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       contains undeclared data disk(s) {{ bootwright_libvirt_undeclared_data_disks | join(', ') }}.
-      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      Rebuild exactly this selected work set with
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
       before changing or removing machine data disks, or remove the Bootwright-owned
       stale files after verifying ownership.
   when: bootwright_libvirt_undeclared_data_disks | length > 0
@@ -375,8 +370,9 @@
       ({{ (bootwright_component.profile.diskGiB | int) * 1073741824 }} bytes) but its provisioned root disk is
       {{ (bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] }} bytes. Bootwright does not
       resize a provisioned root disk in place — the guest partitions would not follow.
-      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
-      and re-apply to change its root disk size.
+      Rebuild exactly this selected work set with
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      to change its root disk size.
   when:
     - bootwright_libvirt_root_disk_info.rc | default(1) == 0
     - not (bootwright_libvirt_managed_os_reset | bool)

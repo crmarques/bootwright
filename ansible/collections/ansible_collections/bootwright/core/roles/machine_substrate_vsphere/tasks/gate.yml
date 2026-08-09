@@ -82,8 +82,9 @@
       Machine {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
       but its provisioned vSphere root disk is {{ bootwright_vsphere_probed_root_gib }} GiB. Bootwright does not
       resize a provisioned root disk in place — the guest partitions would not follow.
-      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
-      and re-apply to change its root disk size.
+      Rebuild exactly this selected work set with
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      to change its root disk size.
   when:
     - bootwright_vsphere_probe.instance is defined
     - not (bootwright_vsphere_managed_os_reset | bool)
@@ -96,7 +97,8 @@
       vSphere VM {{ bootwright_vsphere_vm_name }} for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       has {{ bootwright_vsphere_probed_disk_count }} disk(s) but its profile declares {{ bootwright_vsphere_disks | length }}.
       Bootwright does not add or remove machine data disks in place.
-      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      Rebuild exactly this selected work set with
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
       before changing or removing machine data disks.
   when:
     - bootwright_vsphere_probe.instance is defined

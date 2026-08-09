@@ -69,8 +69,8 @@
       cluster but its destructive rebuild was not acknowledged — --yes and --mode rebuild alone
       never authorize data loss (the live pool no longer matches the recorded state,
       e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --mode rebuild --authorize data-loss --clusters
-      {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      to authorize destroying and
       recreating the pool, or align the desired spec with the live pool.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
@@ -268,8 +268,8 @@
       cluster but its destructive rebuild was not acknowledged — --yes and --mode rebuild alone
       never authorize data loss (the live filesystem no longer matches the recorded
       state, e.g. it changed out-of-band or the converge records were lost). Re-run
-      `bootwright apply --mode rebuild --authorize data-loss --clusters
-      {{ bootwright_selected_storage_cluster.name }}` to authorize destroying and
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      to authorize destroying and
       recreating the filesystem, or align the desired spec with the live filesystem.
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
@@ -378,8 +378,9 @@
       cluster but destroying its dependent pool {{ bootwright_ceph_op.structural.pool }}
       was not acknowledged — --yes and --mode rebuild alone never authorize data loss (the live
       profile no longer matches the recorded state, e.g. it changed out-of-band or the
-      converge records were lost). Re-run `bootwright apply --mode rebuild --authorize data-loss
-      --clusters {{ bootwright_selected_storage_cluster.name }}` to authorize destroying
+      converge records were lost). Re-run
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      to authorize destroying
       and recreating the pool, or align the desired spec with the live profile.
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'

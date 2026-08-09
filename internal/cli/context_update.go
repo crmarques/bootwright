@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/addons/nativecatalog"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -35,7 +36,11 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 	registerContextNameCompletion(cmd, "name")
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the context input (required)")
 	addYesFlag(cmd, &yes, "replace")
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) (returnErr error) {
+		var runLease *workflow.CommandRunLease
+		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, runLease)
+		}()
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
@@ -73,7 +78,14 @@ confirmation before proceeding. Pass --yes to skip the prompt in scripts.`,
 		if !yes && !confirm(stdin, stdout, contextUpdateConfirmPrompt(ctx.Name, source)) {
 			return failErr(1, errors.New("context update aborted"))
 		}
+		runLease, err = workflow.AcquireCommandRunLease(cmd.Context(), ctx.RunsDir, "context-update")
+		if err != nil {
+			return failErr(1, err)
+		}
 		if err := workspace.EnsureDirs(ctx); err != nil {
+			return failErr(1, err)
+		}
+		if err := runLease.RequireOwned(); err != nil {
 			return failErr(1, err)
 		}
 		snapshot, err := workspace.ReplaceInput(ctx, source, "context update", nativecatalog.ReferencedStoreAddons(state))

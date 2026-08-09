@@ -537,9 +537,9 @@
     bootwright_ceph_osd_remedy_reclaim_all: >-
       Remedy: {{ bootwright_ceph_osd_reclaim_all_hosts | length }} host(s) declare
       their OSD devices with data_devices.all=true, so Bootwright can reclaim those
-      disks for you — re-run `bootwright apply --clusters
-      {{ bootwright_selected_storage_cluster.name }} --mode rebuild --authorize
-      data-loss`. That zaps every disk on those hosts which is unavailable to
+      disks for you — re-run
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
+      That zaps every disk on those hosts which is unavailable to
       ceph-volume, carries no mounted filesystem, and does not already back an OSD of
       this cluster, BEFORE the OSD apply; it never touches a mounted or system disk or
       a live OSD, and it skips any device it cannot probe. It is IRREVERSIBLE and is
@@ -557,8 +557,11 @@
     bootwright_ceph_osd_remedy_manual: >-
       Remedy: this cluster declares no data_devices.all=true host, so the automatic
       all-devices reclaim does not apply to it. For a statically named selection
-      (paths/pathSpecs) re-run `bootwright apply --reclaim-devices <paths>`, or
-      `bootwright apply --reclaim-devices all` to name every declared path; for a
+      (paths/pathSpecs), start from
+      `{{ bootwright_apply_through_base_invocation | default('the same bootwright apply invocation through the base stage') }}`
+      and add `--reclaim-devices <paths> --authorize data-loss` (or use
+      `--reclaim-devices all` to name every declared path), retaining every
+      existing flag; for a
       narrowing filter (model/size/rotational/vendor/limit) there is no automatic
       reclaim — confirm each disk is disposable, clean it on its host (`wipefs --all`
       / `sgdisk --zap-all`) or exclude it from the OSD device selection, then
