@@ -917,18 +917,18 @@ auto-provisions the backing `.nfs` pool, so no pool/namespace is modeled.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `spec.storageClusterRef` | Yes | — | Managed `StorageCluster`. |
-| `spec.ceph.serviceID` | Yes | — | NFS service ID (`--cluster-id`). |
+| `spec.ceph.serviceID` | Yes | — | NFS service ID; passed to the apply command and repeated as JSON `cluster_id`. |
 | `spec.ceph.port` | No | `2049` with no ingress; `12049` with one | Port the NFS-Ganesha daemons listen on. Ganesha binds every address, so a fronted service cannot also hold `2049` — haproxy needs that port free on the VIP. Declaring `2049` alongside an ingress is rejected. |
 | `spec.ceph.placement` | Yes | — | Must set `hosts` or `sites` (there is no `nfs` topology role); see [Shared placement](#shared-placement). |
 | `spec.ceph.ingresses[]` | No | — | Ingress VIPs fronting `nfs.<serviceID>` on `2049` (same shape as the RGW gateway ingress). Clients always mount the VIP on the standard port; only the backend moves. |
-| `spec.exports[]` | No | — | NFS exports; each renders an idempotent `ceph nfs export create`. |
-| `spec.exports[].pseudo` | Yes (per entry) | — | NFSv4 pseudo path (`--pseudo-path`); unique within the service. |
-| `spec.exports[].filesystemRef` | No | — | CephFS export (`--fsname`); a `StorageFilesystem` in the same cluster. |
-| `spec.exports[].path` | No | `/` | Directory within the filesystem (`--path`). |
-| `spec.exports[].bucket` | No | — | RGW export (`--bucket`). |
-| `spec.exports[].accessType` | No | — | `RW`, `RO` (renders `--readonly`), or `NONE`. |
-| `spec.exports[].squash` | No | — | NFS squash mode (`--squash`, e.g. `no_root_squash`). |
-| `spec.exports[].clients[]` | No | — | Restrict access by address/CIDR (`--client-addr`). |
+| `spec.exports[]` | No | — | NFS exports; each renders an idempotent `ceph nfs export apply <serviceID> -i -` JSON upsert after the NFS service is ready. |
+| `spec.exports[].pseudo` | Yes (per entry) | — | NFSv4 pseudo path (`pseudo` in the apply JSON); unique within the service. |
+| `spec.exports[].filesystemRef` | No | — | CephFS export (`fsal.name: CEPH`, `fsal.fs_name`); a `StorageFilesystem` in the same cluster. |
+| `spec.exports[].path` | No | `/` | Directory within the filesystem (`path` in the apply JSON). |
+| `spec.exports[].bucket` | No | — | RGW export (`fsal.name: RGW`, `fsal.bucket`). |
+| `spec.exports[].accessType` | No | `RW` | `RW`, `RO`, or `NONE`; rendered as JSON `access_type`. |
+| `spec.exports[].squash` | No | — | NFS squash mode (`squash`, e.g. `no_root_squash`). |
+| `spec.exports[].clients[]` | No | — | Restrict access by address/CIDR (`clients[].addresses`). |
 
 !!! note "Cross-field rule"
     Each export sets **exactly one** of `filesystemRef` (CephFS, FSAL CEPH) or

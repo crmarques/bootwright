@@ -43,15 +43,11 @@ re-declare the service with a different port.
 
 **Constraint:** Each declared export renders as an idempotent
 `ceph nfs export apply <serviceID> -i -` with the export JSON on stdin, in the
-object-gateway phase (after the nfs service registers); `apply` is a pure upsert
-and needs no probe. Exports are additive-only: a removed export, a renamed
+object-gateway phase; `apply` is a pure upsert and needs no probe. The Ansible
+path applies the NFS service spec and proves its daemon count before this phase;
+the generated native-CLI bundle likewise applies the late service spec before
+the export documents. Exports are additive-only: a removed export, a renamed
 pseudo, and a deleted `StorageNFSExport` all keep running until removed by hand.
-
-**When it bites:** The `<serviceID>|<pseudo>` idempotency key contains `|`. In
-the generated `apply.sh` it must be single-quoted or the shell parses it as a
-pipe, which under `set -euo pipefail` aborts the whole script. Script
-generation therefore quotes with an allowlist (`QuoteWords`), not a display
-denylist (`Quote`) that misses shell-active characters.
 
 **Constraint:** In the operations loop, the per-kind idempotency probe
 register (`bootwright_ceph_rgw_user_info`) is registered only for `rgw-user`

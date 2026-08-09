@@ -3,6 +3,7 @@ package workflow
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -65,5 +66,51 @@ func TestEveryApplyTaskHashIsInvariantUnderClusterScoping(t *testing.T) {
 				t.Errorf("task hash(es) %v depend on the --clusters render scope, so a scoped run after a whole-fleet apply reports false drift and diff --recorded exits 3 on a clean fleet; hash a projection of the unscoped hashState (DesiredHashVars or DesiredHashState) instead of the scoped State", divergent)
 			}
 		})
+	}
+}
+
+func TestFabricTaskHashesTrackEffectiveRuntimeProxy(t *testing.T) {
+	load := func(t *testing.T, proxyURL string) v1alpha1.State {
+		t.Helper()
+		state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "state", "desired", "testdata", "good", "001-sno-libvirt")})
+		if err != nil {
+			t.Fatalf("load libvirt fixture: %v", err)
+		}
+		state.Environments[0].Spec.InfraComponents.Proxies = append(state.Environments[0].Spec.InfraComponents.Proxies, v1alpha1.EnvironmentProxyComponent{
+			Name:       "runtime",
+			Management: v1alpha1.EnvironmentComponentExternal,
+			Connection: &v1alpha1.EnvironmentProxyConnection{
+				HTTPProxy: proxyURL,
+				NoProxy:   []string{"storage.example.test"},
+			},
+		})
+		state.Environments[0].Spec.ProxyFor.Bootwright = "runtime"
+		return state
+	}
+	base := load(t, "http://proxy-a.example.test:3128")
+	edited := load(t, "http://proxy-b.example.test:3128")
+	target := ApplyTarget{PhaseNames: []string{ApplyPhaseFabric}}
+	baseHashes := planTaskHashesByID(t, target, base, base)
+	editedHashes := planTaskHashesByID(t, target, edited, edited)
+
+	for _, kind := range []string{ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices} {
+		seen := 0
+		for key, baseHash := range baseHashes {
+			if !strings.HasPrefix(key, kind+"/") {
+				continue
+			}
+			seen++
+			editedHash, ok := editedHashes[key]
+			if !ok {
+				t.Errorf("%s task %s disappeared after a runtime proxy edit", kind, key)
+				continue
+			}
+			if editedHash == baseHash {
+				t.Errorf("%s hash %s did not move with the effective runtime proxy", kind, key)
+			}
+		}
+		if seen == 0 {
+			t.Errorf("libvirt fixture planned no %s task", kind)
+		}
 	}
 }

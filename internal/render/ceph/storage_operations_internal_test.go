@@ -980,6 +980,9 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 	if _, ok := cephfs["idempotency"]; ok {
 		t.Fatalf("declarative export apply must not carry a create-skip idempotency guard, got %v", cephfs)
 	}
+	if cephfs["phase"] != "object-gateway" {
+		t.Fatalf("NFS export phase = %v, want object-gateway after the service spec", cephfs["phase"])
+	}
 	var cephfsSpec map[string]any
 	if err := json.Unmarshal([]byte(cephfs["stdin"].(string)), &cephfsSpec); err != nil {
 		t.Fatalf("cephfs export stdin is not valid JSON: %v (%q)", err, cephfs["stdin"])
@@ -1005,9 +1008,14 @@ func TestNFSExportServiceAndExportsRender(t *testing.T) {
 		t.Fatalf("rgw export fsal = %v", fsal)
 	}
 
-	script := mustApplyScript(t, state, cluster, CephScriptOptions{LibFile: "lib.sh"})
+	script := mustApplyScript(t, state, cluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "cephadm/late-services.yaml"})
 	if !strings.Contains(script, "ceph nfs export apply nfs1 -i -") || !strings.Contains(script, "<<'BW_STDIN'") {
 		t.Fatalf("reproduction script must feed the export spec to a declarative apply via heredoc")
+	}
+	serviceIdx := strings.Index(script, `ceph orch apply -i "$HERE/cephadm/late-services.yaml"`)
+	exportIdx := strings.Index(script, "ceph nfs export apply nfs1 -i -")
+	if serviceIdx < 0 || exportIdx < 0 || serviceIdx > exportIdx {
+		t.Fatalf("reproduction script must apply the NFS service spec before its exports:\n%s", script)
 	}
 }
 
@@ -1188,23 +1196,6 @@ func TestWriteOperationRefusesToRenderAnOperationItCannotExpress(t *testing.T) {
 	}
 }
 
-func TestWriteOperationKeepsTheGuardOnAStdinCarryingOperation(t *testing.T) {
-	op := operationWithIdempotency("object-gateway", "create-nfs-export-share", "nfs-export", "nfs|/share",
-		"ceph", "nfs", "export", "apply", "nfs", "-i", "-")
-	op["stdin"] = `{"pseudo":"/share"}`
-	var b strings.Builder
-	if err := writeOperation(&b, op); err != nil {
-		t.Fatalf("writeOperation: %v", err)
-	}
-	line := b.String()
-	if !strings.Contains(line, "bw_guarded nfs-export") {
-		t.Fatalf("a guarded operation must keep its guard when it also carries stdin:\n%s", line)
-	}
-	if !strings.Contains(line, "<<'BW_STDIN'\n{\"pseudo\":\"/share\"}\nBW_STDIN\n") {
-		t.Fatalf("a guarded operation must still receive its stdin document:\n%s", line)
-	}
-}
-
 func mustApplyScript(t *testing.T, state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) string {
 	t.Helper()
 	script, err := CephApplyScript(state, cluster, opts)
@@ -1212,22 +1203,6 @@ func mustApplyScript(t *testing.T, state v1alpha1.State, cluster v1alpha1.Storag
 		t.Fatalf("CephApplyScript: %v", err)
 	}
 	return script
-}
-
-func TestWriteOperationQuotesNFSExportPipe(t *testing.T) {
-	op := operationWithIdempotency("object-gateway", "create-nfs-export-lab-nfs-shared", "nfs-export", "lab-nfs|/shared",
-		"ceph", "nfs", "export", "create", "cephfs", "--cluster-id", "lab-nfs", "--pseudo-path", "/shared", "--fsname", "cephfs", "--path", "/")
-	var b strings.Builder
-	if err := writeOperation(&b, op); err != nil {
-		t.Fatalf("writeOperation: %v", err)
-	}
-	line := b.String()
-	if strings.Contains(line, "bw_guarded nfs-export lab-nfs|/shared") {
-		t.Fatalf("nfs-export guard key '|' is unquoted and parses as a shell pipe:\n%s", line)
-	}
-	if !strings.Contains(line, "'lab-nfs|/shared'") {
-		t.Fatalf("nfs-export guard key must be single-quoted:\n%s", line)
-	}
 }
 
 func TestApplyScriptWarnsOnSecretBearingMgmtGateway(t *testing.T) {

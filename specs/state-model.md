@@ -1874,10 +1874,12 @@ Rules:
   an ingress is therefore rejected rather than silently broken.
 - Each `spec.exports[]` sets a unique `pseudo` path and exactly one FSAL —
   `filesystemRef` (CephFS, same cluster) or `bucket` (RGW). Optional `path`,
-  `accessType` (`RW`/`RO`/`NONE`), `squash`, and `clients[]` spell the
-  `ceph nfs export create` flags. cephadm auto-provisions the backing `.nfs`
-  pool, so no pool/namespace is modeled. Additive-only: a removed export keeps
-  running.
+  `accessType` (`RW` by default, `RO`, or `NONE`), `squash`, and `clients[]`
+  lower into the JSON document passed to
+  `ceph nfs export apply <serviceID> -i -`. The declarative apply is an
+  idempotent upsert and runs only after the NFS service is ready. cephadm
+  auto-provisions the backing `.nfs` pool, so no pool/namespace is modeled.
+  Additive-only: a removed export keeps running.
 
 ## StorageExport
 

@@ -89,10 +89,17 @@ rendering from the scoped `State`.
 deterministic per-host rendered fabric vars) is hashed instead of the whole
 state so an unrelated fleet edit does not flip the infrastructure root to
 drift; the projection must be non-empty or every fabric host hashes identically
-and real drift hides. Hash-stability constraint: every other task keeps hashing
-the full State with a payload byte-identical to the prior definition (a non-nil
-State pointer marshals the same as the value) — changing the marshal shape
-false-drifts every recorded object on upgrade.
+and real drift hides. Both fabric playbooks also persist the effective external
+Bootwright runtime proxy on their host, so that rendered proxy belongs in the
+projection even when its service runs elsewhere; omitting it left proxy URL,
+no-proxy, trust, and auth-reference edits invisible to recorded drift. The
+hash-only proxy entry exists only when the host already has fabric work and an
+effective runtime proxy, preserving every no-proxy payload byte. Pinned by
+TestFabricHostDesiredVarsTracksEffectiveRuntimeProxy and
+TestFabricTaskHashesTrackEffectiveRuntimeProxy. Hash-stability constraint:
+every other task keeps hashing the full State with a payload byte-identical to
+the prior definition (a non-nil State pointer marshals the same as the value) —
+changing the marshal shape false-drifts every recorded object on upgrade.
 
 **Shared fabric is cleared from the install structural hash:** InfraProviders
 and InfraComponents are excised from the ContainerCluster install structural

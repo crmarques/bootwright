@@ -61,21 +61,6 @@ learned; this file records what it still owes.
   wins deterministically.
 - Related: [external-dns-bootstrap.md](external-dns-bootstrap.md)
 
-## B-011 — Storage NFS export and fabric-hash findings left unresolved
-- Status: open
-- Area: converge / storage
-- Origin: scoped audit 2026-07-12
-- Problem: two storage findings were deferred at merge time and their content
-  now exists nowhere but this entry: the NFS export path (service ordering and
-  export idempotency keyed `<serviceID>|<pseudo>`) and the host-scoped fabric
-  projection folded into the converge hash. Neither was reduced to a defect
-  statement, so the exact defect is no longer recoverable — treat this as
-  "re-audit those two surfaces", not as a known bug.
-- Exit: re-audit the NFS export and fabric-hash surfaces against current code;
-  either file a concrete defect entry or close this one as clean.
-- Related: [converge-hash-drift-model.md](converge-hash-drift-model.md),
-  [ceph-rgw-nfs-service-ordering.md](ceph-rgw-nfs-service-ordering.md)
-
 ## B-015 — Two architecture recommendations left unlanded: cephadopt package, plan-builder split
 - Status: open
 - Area: architecture

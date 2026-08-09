@@ -35,6 +35,12 @@ func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
 			}
 		}
 	}
+	if proxyVars := bootwrightProxyVars(state, stateview.Environment(state)); len(out) > 0 && len(proxyVars) > 0 {
+		out = append(out, map[string]any{
+			"machineRef":   host,
+			"runtimeProxy": proxyVars,
+		})
+	}
 	return out
 }
 

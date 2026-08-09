@@ -58,6 +58,61 @@ func TestFabricHostDesiredVarsFiltersByHost(t *testing.T) {
 	}
 }
 
+func TestFabricHostDesiredVarsTracksEffectiveRuntimeProxy(t *testing.T) {
+	state := dnsRecordsState()
+	services := infraComponentServicesVars(state)
+	if len(services) == 0 {
+		t.Fatal("infra component services empty; fixture changed")
+	}
+	host, _ := services[0].(map[string]any)["machineRef"].(string)
+	withoutProxy := FabricHostDesiredVars(state, host)
+	legacy := []any{}
+	for _, group := range [][]any{
+		providerServicesVars(state),
+		infraComponentServicesVars(state),
+		providerMachineSetupsVars(state),
+	} {
+		for _, entry := range group {
+			if m, ok := entry.(map[string]any); ok && stringMapValue(m, "machineRef") == host {
+				legacy = append(legacy, entry)
+			}
+		}
+	}
+	if !reflect.DeepEqual(withoutProxy, legacy) {
+		t.Fatalf("no-proxy fabric projection changed shape:\n got: %#v\nwant: %#v", withoutProxy, legacy)
+	}
+
+	state.Environments[0].Spec.InfraComponents.Proxies = append(state.Environments[0].Spec.InfraComponents.Proxies, v1alpha1.EnvironmentProxyComponent{
+		Name:       "runtime",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Connection: &v1alpha1.EnvironmentProxyConnection{
+			HTTPProxy: "http://proxy-a.example.test:3128",
+			NoProxy:   []string{"storage.example.test"},
+		},
+	})
+	state.Environments[0].Spec.ProxyFor.Bootwright = "runtime"
+	withProxy := FabricHostDesiredVars(state, host)
+	if len(withProxy) != len(withoutProxy)+1 {
+		t.Fatalf("runtime proxy projection entries = %d, want %d: %#v", len(withProxy), len(withoutProxy)+1, withProxy)
+	}
+	proxyEntry := withProxy[len(withProxy)-1].(map[string]any)
+	if proxyEntry["machineRef"] != host {
+		t.Fatalf("runtime proxy machineRef = %v, want %q", proxyEntry["machineRef"], host)
+	}
+	proxyVars, ok := proxyEntry["runtimeProxy"].(map[string]any)
+	if !ok || proxyVars["http"] != "http://proxy-a.example.test:3128" {
+		t.Fatalf("runtime proxy projection = %#v", proxyEntry["runtimeProxy"])
+	}
+	if other := FabricHostDesiredVars(state, host+"-does-not-exist"); len(other) != 0 {
+		t.Fatalf("runtime proxy created fabric projection for unknown host: %#v", other)
+	}
+
+	state.Environments[0].Spec.InfraComponents.Proxies[len(state.Environments[0].Spec.InfraComponents.Proxies)-1].Connection.HTTPProxy = "http://proxy-b.example.test:3128"
+	if edited := FabricHostDesiredVars(state, host); reflect.DeepEqual(edited, withProxy) {
+		t.Fatal("effective runtime proxy edit did not change the fabric host projection")
+	}
+}
+
 func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
