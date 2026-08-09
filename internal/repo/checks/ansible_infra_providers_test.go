@@ -606,6 +606,77 @@ func TestLibvirtApplyRequiresConclusiveDomainProbe(t *testing.T) {
 	}
 }
 
+func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) {
+	cases := []struct {
+		name       string
+		path       string
+		probe      string
+		resolve    string
+		foreign    string
+		gate       string
+		mutation   string
+		existsFact string
+		ownedFact  string
+	}{
+		{
+			name:       "libvirt",
+			path:       "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml",
+			probe:      "Read libvirt domain ownership metadata for apply",
+			resolve:    "Resolve libvirt domain ownership for apply",
+			foreign:    "Refuse to mutate a non-Bootwright libvirt domain on apply",
+			gate:       "Enforce libvirt domain apply mode against live state",
+			mutation:   "Stop managed OS libvirt domain for override reinstall",
+			existsFact: "bootwright_libvirt_apply_domain_xml.rc",
+			ownedFact:  "bootwright_libvirt_apply_owned",
+		},
+		{
+			name:       "vsphere",
+			path:       "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/probe.yml",
+			probe:      "Probe vSphere virtual machine",
+			resolve:    "Resolve vSphere VM ownership for apply",
+			foreign:    "Refuse to mutate a non-Bootwright vSphere VM",
+			gate:       "Enforce vSphere VM apply mode against live state",
+			mutation:   "Stop managed OS vSphere VM for override reinstall",
+			existsFact: "bootwright_vsphere_probe.instance is defined",
+			ownedFact:  "bootwright_vsphere_apply_owned",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := readAnsibleTasks(t, tc.path)
+			probeIdx := findAnsibleTask(t, tasks, tc.probe)
+			resolveIdx := findAnsibleTask(t, tasks, tc.resolve)
+			foreignIdx := findAnsibleTask(t, tasks, tc.foreign)
+			gateIdx := findAnsibleTask(t, tasks, tc.gate)
+			mutationIdx := findAnsibleTask(t, tasks, tc.mutation)
+			if !(probeIdx < resolveIdx && resolveIdx < foreignIdx && foreignIdx < gateIdx && gateIdx < mutationIdx) {
+				t.Fatalf("live probe and create gate must precede provider mutation: probe=%d resolve=%d foreign=%d gate=%d mutation=%d", probeIdx, resolveIdx, foreignIdx, gateIdx, mutationIdx)
+			}
+			foreignWhen := fmt.Sprint(tasks[foreignIdx]["when"])
+			if !strings.Contains(foreignWhen, "bootwright_apply_mode") || !strings.Contains(foreignWhen, "!= 'create'") {
+				t.Fatalf("provider-specific foreign refusal must yield create mode to the live greenfield gate, got when=%v", tasks[foreignIdx]["when"])
+			}
+			include, ok := tasks[gateIdx]["ansible.builtin.include_role"].(map[string]any)
+			if !ok || include["name"] != "bootwright.core.ownership_record" || include["tasks_from"] != "apply_mode_gate.yml" {
+				t.Fatalf("live create gate must use the shared apply-mode gate, got %v", tasks[gateIdx])
+			}
+			vars, ok := tasks[gateIdx]["vars"].(map[string]any)
+			if !ok || !strings.Contains(fmt.Sprint(vars["bootwright_gate_exists"]), tc.existsFact) || !strings.Contains(fmt.Sprint(vars["bootwright_gate_owned"]), tc.ownedFact) {
+				t.Fatalf("live create gate must consume provider presence and ownership facts, got vars=%v", tasks[gateIdx]["vars"])
+			}
+		})
+	}
+}
+
+func TestSharedApplyModeGateDoesNotRecommendRebuildForForeignCreateState(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/apply_mode_gate.yml")
+	for _, want := range []string{"bootwright_gate_owned", "not recognized as Bootwright-managed", "remove the existing object manually", "same --mode create command"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("shared live-state gate missing foreign-create guidance %q", want)
+		}
+	}
+}
+
 func TestVsphereManagedOSResetGatedOnDriftAuthorization(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/layout.yml")
 	idx := findAnsibleTaskByPrefix(t, tasks, "Resolve")

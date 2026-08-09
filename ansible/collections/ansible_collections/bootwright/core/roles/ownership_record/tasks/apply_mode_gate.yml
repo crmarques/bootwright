@@ -3,8 +3,15 @@
   ansible.builtin.fail:
     msg: >-
       {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
-      apply --mode create requires a greenfield environment. Re-run with
-      --mode reconcile to reconcile it, or --mode rebuild to rebuild it.
+      apply --mode create requires a greenfield environment.
+      {% if bootwright_gate_owned | default(false) | bool %}
+      Re-run the same selected apply with --mode reconcile to reconcile it, or
+      --mode rebuild with the required authorization to rebuild it deliberately.
+      {% else %}
+      The existing object is not recognized as Bootwright-managed. Rename the
+      selected machine or remove the existing object manually after verifying
+      that is safe, then re-run the same --mode create command.
+      {% endif %}
   when:
     - (bootwright_apply_mode | default('reconcile')) == 'create'
     - bootwright_gate_exists | default(false) | bool

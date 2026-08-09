@@ -106,7 +106,19 @@
       marker for this context/cluster/machine, so it may belong to another
       Bootwright context or a foreign owner. Rename this cluster/machine or remove
       the existing domain manually, then retry.
-  when: bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+  when:
+    - bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+    - (bootwright_apply_mode | default('reconcile')) != 'create'
+
+- name: Enforce libvirt domain apply mode against live state
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: >-
+      libvirt domain {{ bootwright_libvirt_domain_name }}
+    bootwright_gate_exists: "{{ bootwright_libvirt_apply_domain_xml.rc | default(1) == 0 }}"
+    bootwright_gate_owned: "{{ bootwright_libvirt_apply_owned | default(false) }}"
 
 - name: Stop managed OS libvirt domain for override reinstall
   ansible.builtin.command:

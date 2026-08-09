@@ -52,7 +52,19 @@
       ownership marker for this context/cluster/machine, so it may belong to another
       Bootwright context or a foreign owner. Rename this cluster/machine or remove
       the existing VM manually, then retry.
-  when: bootwright_vsphere_probe.instance is defined
+  when:
+    - bootwright_vsphere_probe.instance is defined
+    - (bootwright_apply_mode | default('reconcile')) != 'create'
+
+- name: Enforce vSphere VM apply mode against live state
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: >-
+      vSphere VM {{ bootwright_vsphere_vm_name }} on {{ bootwright_vsphere.server }}
+    bootwright_gate_exists: "{{ bootwright_vsphere_probe.instance is defined }}"
+    bootwright_gate_owned: "{{ bootwright_vsphere_apply_owned | default(false) }}"
 
 - name: Stop managed OS vSphere VM for override reinstall
   community.vmware.vmware_guest_powerstate:
