@@ -243,7 +243,10 @@ survivor is then mount-probed with `lsblk` DELEGATED to its owning host
 is skipped rather than aborting the `any_errors_fatal` play); a non-empty
 mountpoint/swap OR any probe failure excludes it (protects the OS/root disk,
 in-use data disks, and unreachable/failed probes — never a false zap). Survivors
-are wiped with `ceph orch device zap <host> <path> --force`. Static-path hosts,
+are wiped with `ceph orch device zap <host> <path> --force`. The role collects
+every zap result, then fails before applying the OSD service spec if any zap
+failed; the diagnostic names the host, device, action, external output, and
+the exact authorized rebuild command. Static-path hosts,
 non-`all:true` clusters, and unauthorized runs are never touched. KNOWN
 LIMITATION: a co-resident FOREIGN live Ceph cluster's OSDs are absent from THIS
 cluster's `osd_ids`/`ceph osd metadata` and, being raw bluestore, unmounted — so

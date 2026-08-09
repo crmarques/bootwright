@@ -50,6 +50,12 @@ prefixes plus the context state roots, so non-default roots like
 `/srv/bootwright` still clean up), rejects `..`, and guards each root clause on
 a non-empty value so an undefined var can never match every path.
 
+**Teardown keeps evidence until removers succeed:** recorded domain, network,
+service, container, and mount removers run before owned-path and ownership-record
+deletion. Exact absent/not-running outcomes remain idempotent successes; any
+other remover or mount-discovery failure aborts the record task, preserving the
+paths and record needed to diagnose and retry the same destroy.
+
 **Sensitive-data scan is deliberately asymmetric:** key-name markers are broad
 (password, token, private_key, bearer, authorization, client-secret,
 kubeconfig, secret); value markers are narrow (`-----begin ` PEM,

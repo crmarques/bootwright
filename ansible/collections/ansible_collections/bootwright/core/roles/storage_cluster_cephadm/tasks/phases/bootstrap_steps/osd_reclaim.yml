@@ -223,6 +223,30 @@
         loop_var: bootwright_ceph_filter_candidate
         label: "{{ bootwright_ceph_filter_candidate.host }} {{ bootwright_ceph_filter_candidate.path }}"
 
+    - name: Refuse an automatic OSD reclaim whose zap failed
+      ansible.builtin.fail:
+        msg: >-
+          Ceph cluster {{ bootwright_selected_storage_cluster.name }} could not
+          auto-reclaim {{ bootwright_ceph_filter_zap_result.bootwright_ceph_filter_candidate.host }}
+          {{ bootwright_ceph_filter_zap_result.bootwright_ceph_filter_candidate.path }}:
+          `ceph orch device zap --force` failed with rc
+          {{ bootwright_ceph_filter_zap_result.rc | default('<unknown>') }}.
+          stdout: {{ bootwright_ceph_filter_zap_result.stdout | default('') }}
+          stderr: {{ bootwright_ceph_filter_zap_result.stderr | default('') }}.
+          Bootwright has not applied the OSD service spec and will not pretend
+          this disk was reclaimed. Fix the cephadm/device error, confirm the
+          disk is disposable, then retry with `bootwright apply --clusters
+          {{ bootwright_selected_storage_cluster.name }} --mode rebuild
+          --authorize data-loss`.
+      loop: >-
+        {{ bootwright_ceph_filter_zap.results | default([])
+           | rejectattr('rc', 'equalto', 0) | list }}
+      loop_control:
+        loop_var: bootwright_ceph_filter_zap_result
+        label: >-
+          {{ bootwright_ceph_filter_zap_result.bootwright_ceph_filter_candidate.host }}
+          {{ bootwright_ceph_filter_zap_result.bootwright_ceph_filter_candidate.path }}
+
     - name: Report filter-OSD candidates skipped by the reclaim safety gate
       ansible.builtin.debug:
         msg: >-

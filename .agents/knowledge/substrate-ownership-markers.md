@@ -43,7 +43,14 @@ under the context root, the blanket root removal is skipped
 (`bootwright_libvirt_context_foreign_storage` non-empty) and only the
 Bootwright-owned per-machine subtrees (`virsh domblklist --details`-derived)
 are removed, leaving orphan subtrees for a warned manual sweep. The no-foreign
-case removes the whole root, which also reclaims orphaned disks.
+case removes the whole root, which also reclaims orphaned disks. Every listed
+domain's block-device and XML probes must succeed or prove the exact domain
+absent, and the two observations must agree. Any unreadable or inconsistent
+probe preserves all domains, disks, and ownership. Stop/undefine failures abort
+before evidence deletion, and each selected domain must then be proven absent.
+The per-machine destroy and managed-OS rebuild paths impose the same ordering:
+domain removal must succeed or prove absence before disk, state, or record
+deletion.
 
 **Shared DVD cache must not join per-machine records:** the multi-GB source DVD
 staged once per cluster (throttle: 1) must never appear in a per-machine

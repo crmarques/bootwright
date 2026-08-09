@@ -72,20 +72,96 @@
     - not (bootwright_libvirt_destroy_owned | default(false) | bool)
 
 - name: Stop libvirt domain
-  community.libvirt.virt:
-    name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-    state: destroyed
-    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - destroy
+      - "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+  register: bootwright_libvirt_destroy_domain_stop
+  changed_when: bootwright_libvirt_destroy_domain_stop.rc == 0
   failed_when: false
+  when: bootwright_libvirt_domain_present | bool
+
+- name: Refuse disk deletion when the libvirt domain could not be stopped
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_destroy_domain_stop.rc | default(1) == 0
+        or (bootwright_libvirt_destroy_domain_stop.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)')
+    fail_msg: >-
+      Refusing to delete disks, state, or ownership for libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
+      `virsh destroy` failed: rc
+      {{ bootwright_libvirt_destroy_domain_stop.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_destroy_domain_stop.stderr | default('') }}.
+      Restore libvirt access or stop the domain safely, then retry with
+      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }}`.
+  when: bootwright_libvirt_domain_present | bool
 
 - name: Undefine libvirt domain
-  community.libvirt.virt:
-    command: undefine
-    name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
-    flags:
-      - keep_nvram
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - undefine
+      - "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+      - --keep-nvram
+  register: bootwright_libvirt_destroy_domain_undefine
+  changed_when: bootwright_libvirt_destroy_domain_undefine.rc == 0
   failed_when: false
+  when: bootwright_libvirt_domain_present | bool
+
+- name: Refuse disk deletion when the libvirt domain could not be undefined
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_destroy_domain_undefine.rc | default(1) == 0
+        or (bootwright_libvirt_destroy_domain_undefine.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+    fail_msg: >-
+      Refusing to delete disks, state, or ownership for libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
+      `virsh undefine --keep-nvram` failed: rc
+      {{ bootwright_libvirt_destroy_domain_undefine.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_destroy_domain_undefine.stderr | default('') }}.
+      Restore libvirt access or remove the domain safely, then retry with
+      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }}`.
+  when: bootwright_libvirt_domain_present | bool
+
+- name: Verify the libvirt domain is absent before disk deletion
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - dumpxml
+      - "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+  register: bootwright_libvirt_destroy_domain_absence
+  changed_when: false
+  failed_when: false
+
+- name: Require proven libvirt domain absence before disk deletion
+  ansible.builtin.assert:
+    that:
+      - bootwright_libvirt_destroy_domain_absence.rc | default(0) != 0
+      - >-
+        (bootwright_libvirt_destroy_domain_absence.stderr | default(''))
+        is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+    fail_msg: >-
+      Refusing to delete disks, state, or ownership for libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
+      its absence was not proven after teardown. rc
+      {{ bootwright_libvirt_destroy_domain_absence.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_destroy_domain_absence.stderr | default('') }}.
+      Inspect the domain, restore libvirt access, and retry with
+      `bootwright destroy --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }}`.
 
 - name: Remove machine state directory
   ansible.builtin.file:

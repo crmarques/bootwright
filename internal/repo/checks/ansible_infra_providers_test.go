@@ -449,7 +449,11 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	probeIdx := findAnsibleTask(t, tasks, "Probe libvirt runtime users")
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve libvirt runtime storage access")
 	stopResetIdx := findAnsibleTask(t, tasks, "Stop managed OS libvirt domain for override reinstall")
+	stopResetRefuseIdx := findAnsibleTask(t, tasks, "Refuse managed OS disk reset when the libvirt domain could not be stopped")
 	undefineResetIdx := findAnsibleTask(t, tasks, "Undefine managed OS libvirt domain for override reinstall")
+	undefineResetRefuseIdx := findAnsibleTask(t, tasks, "Refuse managed OS disk reset when the libvirt domain could not be undefined")
+	verifyResetIdx := findAnsibleTask(t, tasks, "Verify the reset libvirt domain is absent before disk deletion")
+	requireAbsentIdx := findAnsibleTask(t, tasks, "Require proven reset libvirt domain absence before disk deletion")
 	removeResetIdx := findAnsibleTask(t, tasks, "Remove managed OS libvirt machine state for override reinstall")
 	recreateResetIdx := findAnsibleTask(t, tasks, "Recreate managed OS libvirt machine directories after override reset")
 	selectIdx := findAnsibleTask(t, tasks, "Select libvirt runtime user")
@@ -461,7 +465,7 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	ownDiskIdx := findAnsibleTask(t, tasks, "Align libvirt disk image ownership")
 	renderDomainIdx := findAnsibleTask(t, tasks, "Render libvirt domain XML")
 
-	if !(probeIdx < resolveIdx && resolveIdx < stopResetIdx && stopResetIdx < undefineResetIdx && undefineResetIdx < removeResetIdx && removeResetIdx < recreateResetIdx && recreateResetIdx < selectIdx && selectIdx < assertIdx && assertIdx < migrateDiskIdx && migrateDiskIdx < createDiskIdx && createDataDiskIdx < ownDiskIdx && ownDiskIdx < renderDomainIdx) {
+	if !(probeIdx < resolveIdx && resolveIdx < stopResetIdx && stopResetIdx < stopResetRefuseIdx && stopResetRefuseIdx < undefineResetIdx && undefineResetIdx < undefineResetRefuseIdx && undefineResetRefuseIdx < verifyResetIdx && verifyResetIdx < requireAbsentIdx && requireAbsentIdx < removeResetIdx && removeResetIdx < recreateResetIdx && recreateResetIdx < selectIdx && selectIdx < assertIdx && assertIdx < migrateDiskIdx && migrateDiskIdx < createDiskIdx && createDataDiskIdx < ownDiskIdx && ownDiskIdx < renderDomainIdx) {
 		t.Fatalf("libvirt storage tasks must migrate/create/own disks before domain definition")
 	}
 	if migrateDataIdx > createDataDiskIdx {
@@ -506,6 +510,31 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 		if got := tasks[idx]["when"]; got != "bootwright_libvirt_managed_os_reset | bool" {
 			t.Fatalf("%s when got %v", tasks[idx]["name"], got)
 		}
+	}
+	for _, tc := range []struct {
+		mutate int
+		refuse int
+		result string
+	}{
+		{stopResetIdx, stopResetRefuseIdx, "bootwright_libvirt_managed_os_reset_stop"},
+		{undefineResetIdx, undefineResetRefuseIdx, "bootwright_libvirt_managed_os_reset_undefine"},
+	} {
+		if tasks[tc.mutate]["failed_when"] != false {
+			t.Fatalf("%s must defer the actionable error to its following assertion, got failed_when=%v", tasks[tc.mutate]["name"], tasks[tc.mutate]["failed_when"])
+		}
+		assertion, ok := tasks[tc.refuse]["ansible.builtin.assert"].(map[string]any)
+		if !ok || !strings.Contains(fmt.Sprint(assertion["that"]), tc.result+".rc") {
+			t.Fatalf("%s must hard-fail on the remover result before disk deletion, got %v", tasks[tc.refuse]["name"], tasks[tc.refuse])
+		}
+		for _, want := range []string{"bootwright apply --clusters", "--machines", "--mode rebuild", "--authorize data-loss"} {
+			if !strings.Contains(fmt.Sprint(assertion["fail_msg"]), want) {
+				t.Fatalf("%s diagnostic missing intentional retry fragment %q: %v", tasks[tc.refuse]["name"], want, assertion["fail_msg"])
+			}
+		}
+	}
+	absent, ok := tasks[requireAbsentIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(absent["that"]), "bootwright_libvirt_managed_os_reset_absence.rc") {
+		t.Fatalf("libvirt rebuild must positively prove domain absence before removing disks, got %v", tasks[requireAbsentIdx])
 	}
 	removeReset, ok := tasks[removeResetIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok {
@@ -688,8 +717,48 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 
 func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_host_libvirt/tasks/destroy_context.yml")
+	blockProbeIdx := findAnsibleTask(t, tasks, "Inspect libvirt domain block devices")
+	metadataProbeIdx := findAnsibleTask(t, tasks, "Inspect libvirt domain ownership metadata")
+	blockGateIdx := findAnsibleTask(t, tasks, "Require conclusive libvirt block-device probes before context sweep")
+	metadataGateIdx := findAnsibleTask(t, tasks, "Require conclusive libvirt ownership probes before context sweep")
+	consistencyGateIdx := findAnsibleTask(t, tasks, "Require consistent libvirt probe results before context sweep")
+	stopIdx := findAnsibleTask(t, tasks, "Stop current-context libvirt domains")
+	undefineIdx := findAnsibleTask(t, tasks, "Undefine current-context libvirt domains")
+	verifyIdx := findAnsibleTask(t, tasks, "Verify swept current-context libvirt domains are absent")
+	absentGateIdx := findAnsibleTask(t, tasks, "Require swept libvirt domain absence before context storage deletion")
 
 	blanket := tasks[findAnsibleTask(t, tasks, "Remove current-context libvirt storage directory")]
+	blanketIdx := findAnsibleTask(t, tasks, "Remove current-context libvirt storage directory")
+	if !(blockProbeIdx < metadataProbeIdx && metadataProbeIdx < blockGateIdx && blockGateIdx < metadataGateIdx && metadataGateIdx < consistencyGateIdx && consistencyGateIdx < stopIdx && stopIdx < undefineIdx && undefineIdx < verifyIdx && verifyIdx < absentGateIdx && absentGateIdx < blanketIdx) {
+		t.Fatalf("libvirt context sweep must prove every probe conclusive and every owned domain absent before broad storage deletion")
+	}
+	for _, idx := range []int{blockGateIdx, metadataGateIdx} {
+		gate, ok := tasks[idx]["ansible.builtin.assert"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must be a hard assertion, got %v", tasks[idx]["name"], tasks[idx])
+		}
+		for _, want := range []string{"rc", "Domain not found", "failed to get domain", "no domain with matching name"} {
+			if !strings.Contains(fmt.Sprint(gate["that"]), want) {
+				t.Fatalf("%s must accept only success or a proven-absent domain; missing %q in %v", tasks[idx]["name"], want, gate["that"])
+			}
+		}
+	}
+	consistencyGate, ok := tasks[consistencyGateIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("context sweep probe consistency gate must be a hard assertion, got %v", tasks[consistencyGateIdx])
+	}
+	for _, want := range []string{"bootwright_libvirt_domain_blocklists.results", "bootwright_libvirt_domain_name", "item.rc"} {
+		if !strings.Contains(fmt.Sprint(consistencyGate["that"]), want) {
+			t.Fatalf("context sweep consistency gate must compare both observations by domain; missing %q in %v", want, consistencyGate["that"])
+		}
+	}
+	if tasks[stopIdx]["failed_when"] == false {
+		t.Fatalf("context sweep must not ignore a domain-stop failure before undefine and disk deletion: %v", tasks[stopIdx])
+	}
+	absentGate, ok := tasks[absentGateIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(absentGate["that"]), "item.rc") || !strings.Contains(fmt.Sprint(absentGate["that"]), "Domain not found") {
+		t.Fatalf("context sweep must positively prove each removed domain absent, got %v", tasks[absentGateIdx])
+	}
 	if got := fmt.Sprint(blanket["when"]); !strings.Contains(got, "bootwright_libvirt_context_foreign_storage") || !strings.Contains(got, "length == 0") {
 		t.Fatalf("blanket context-root removal must be gated on no foreign domain using the root, got when=%v", blanket["when"])
 	}
@@ -811,8 +880,15 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	decideIdx := findAnsibleTask(t, tasks, "Resolve libvirt domain ownership for destroy")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright libvirt domain")
 	stopIdx := findAnsibleTask(t, tasks, "Stop libvirt domain")
+	stopRefuseIdx := findAnsibleTask(t, tasks, "Refuse disk deletion when the libvirt domain could not be stopped")
 	undefineIdx := findAnsibleTask(t, tasks, "Undefine libvirt domain")
-	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < stopIdx && stopIdx < undefineIdx) {
+	undefineRefuseIdx := findAnsibleTask(t, tasks, "Refuse disk deletion when the libvirt domain could not be undefined")
+	verifyIdx := findAnsibleTask(t, tasks, "Verify the libvirt domain is absent before disk deletion")
+	absentIdx := findAnsibleTask(t, tasks, "Require proven libvirt domain absence before disk deletion")
+	removeStateIdx := findAnsibleTask(t, tasks, "Remove machine state directory")
+	removeStorageIdx := findAnsibleTask(t, tasks, "Remove machine storage directory")
+	removeRecordIdx := findAnsibleTask(t, tasks, "Remove libvirt domain ownership record")
+	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < stopIdx && stopIdx < stopRefuseIdx && stopRefuseIdx < undefineIdx && undefineIdx < undefineRefuseIdx && undefineRefuseIdx < verifyIdx && verifyIdx < absentIdx && absentIdx < removeStateIdx && removeStateIdx < removeStorageIdx && removeStorageIdx < removeRecordIdx) {
 		t.Fatalf("libvirt destroy must read, decide, and verify domain ownership before stop/undefine (read=%d decide=%d refuse=%d stop=%d undefine=%d)", readIdx, decideIdx, refuseIdx, stopIdx, undefineIdx)
 	}
 	read, ok := tasks[readIdx]["ansible.builtin.command"].(map[string]any)
@@ -841,6 +917,31 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	}
 	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_authorize_unowned_vms") {
 		t.Fatalf("libvirt destroy guard must be skipped under --authorize unowned-vms, got when=%v", tasks[refuseIdx]["when"])
+	}
+	for _, tc := range []struct {
+		mutate int
+		refuse int
+		result string
+	}{
+		{stopIdx, stopRefuseIdx, "bootwright_libvirt_destroy_domain_stop"},
+		{undefineIdx, undefineRefuseIdx, "bootwright_libvirt_destroy_domain_undefine"},
+	} {
+		if tasks[tc.mutate]["failed_when"] != false {
+			t.Fatalf("%s must defer the actionable failure to its assertion, got failed_when=%v", tasks[tc.mutate]["name"], tasks[tc.mutate]["failed_when"])
+		}
+		gate, ok := tasks[tc.refuse]["ansible.builtin.assert"].(map[string]any)
+		if !ok || !strings.Contains(fmt.Sprint(gate["that"]), tc.result+".rc") {
+			t.Fatalf("%s must consume the remover result before disk deletion, got %v", tasks[tc.refuse]["name"], tasks[tc.refuse])
+		}
+		for _, want := range []string{"bootwright destroy --clusters", "--machines"} {
+			if !strings.Contains(fmt.Sprint(gate["fail_msg"]), want) {
+				t.Fatalf("%s diagnostic missing scoped retry fragment %q: %v", tasks[tc.refuse]["name"], want, gate["fail_msg"])
+			}
+		}
+	}
+	absent, ok := tasks[absentIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(absent["that"]), "bootwright_libvirt_destroy_domain_absence.rc") {
+		t.Fatalf("libvirt destroy must positively prove domain absence before removing storage or ownership, got %v", tasks[absentIdx])
 	}
 }
 
@@ -1189,6 +1290,45 @@ func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
 	closeIdx := findAnsibleTask(t, tasks, "Close recorded firewalld ports")
 	if !stringListItemContains(tasks[closeIdx]["loop"], "bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort)") {
 		t.Fatalf("%s must read both vMediaPort and the pre-rename vmediaPort, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	}
+}
+
+func TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
+	removePathsIdx := findAnsibleTask(t, tasks, "Remove recorded owned paths")
+	removeRecordIdx := findAnsibleTask(t, tasks, "Remove destroyed ownership resource record")
+	if removePathsIdx >= removeRecordIdx {
+		t.Fatalf("owned paths must be removed before the record only after every remover succeeds (paths=%d record=%d)", removePathsIdx, removeRecordIdx)
+	}
+	for _, name := range []string{
+		"Stop recorded libvirt domain",
+		"Undefine recorded libvirt domain",
+		"Stop recorded libvirt network",
+		"Undefine recorded libvirt network",
+		"Stop recorded systemd units",
+		"Remove recorded podman container",
+		"List active mounts before removing owned paths",
+		"Unmount active mounts under recorded owned paths",
+	} {
+		idx := findAnsibleTask(t, tasks, name)
+		if idx >= removePathsIdx {
+			t.Fatalf("%s must finish before any owned path or record is removed (task=%d paths=%d)", name, idx, removePathsIdx)
+		}
+		if tasks[idx]["failed_when"] == false {
+			t.Fatalf("%s must not suppress a genuine remover/probe failure before evidence deletion", name)
+		}
+	}
+	for _, name := range []string{
+		"Stop recorded libvirt domain",
+		"Undefine recorded libvirt domain",
+		"Stop recorded libvirt network",
+		"Undefine recorded libvirt network",
+	} {
+		idx := findAnsibleTask(t, tasks, name)
+		failedWhen := fmt.Sprint(tasks[idx]["failed_when"])
+		if !strings.Contains(failedWhen, "not found") && !strings.Contains(failedWhen, "not in") {
+			t.Fatalf("%s must remain idempotent for an exactly absent resource, got failed_when=%v", name, tasks[idx]["failed_when"])
+		}
 	}
 }
 

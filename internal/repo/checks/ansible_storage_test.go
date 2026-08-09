@@ -1604,6 +1604,12 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"]), "bootwright_ceph_incomplete_bootstrap") {
 		t.Fatalf("override rebuild decision must honor the incomplete-bootstrap decision, got %v", tasks[rebuildIdx])
 	}
+	rebuildExpr := fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"])
+	incompleteIdx := strings.LastIndex(rebuildExpr, "bootwright_ceph_incomplete_bootstrap")
+	authorizedIdx := strings.LastIndex(rebuildExpr, "bootwright_ceph_rebuild_authorized")
+	if incompleteIdx < 0 || authorizedIdx < incompleteIdx || !strings.Contains(rebuildExpr[incompleteIdx:authorizedIdx], "and") {
+		t.Fatalf("incomplete-bootstrap cleanup must still require this exact cluster in the controller rebuild-authorized list, got %v", rebuild["bootwright_ceph_rebuild_cleanup_required"])
+	}
 	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") {
 		t.Fatalf("override rebuild zap must consume the authorized rebuild decision, got %v", tasks[zapIdx]["when"])
 	}
@@ -3690,6 +3696,28 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	}
 	if findAnsibleTaskIndex(reclaimTasks, "Report filter-OSD hosts whose device inventory never appeared") < 0 {
 		t.Errorf("%s must report the hosts whose inventory never arrived, so a partial reclaim is not silent", reclaimPath)
+	}
+	zapIdx := findAnsibleTask(t, reclaimTasks, "Zap dirty filter-selected OSD devices")
+	refuseZapIdx := findAnsibleTask(t, reclaimTasks, "Refuse an automatic OSD reclaim whose zap failed")
+	if zapIdx >= refuseZapIdx {
+		t.Fatalf("%s must inspect every zap result before the reclaim block can return to the OSD spec apply (zap=%d refusal=%d)", reclaimPath, zapIdx, refuseZapIdx)
+	}
+	if reclaimTasks[zapIdx]["failed_when"] != false {
+		t.Fatalf("%s must collect every per-device zap result for the actionable failure summary, got failed_when=%v", reclaimPath, reclaimTasks[zapIdx]["failed_when"])
+	}
+	refuseZap, ok := reclaimTasks[refuseZapIdx]["ansible.builtin.fail"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s zap-result gate must be a hard fail, got %v", reclaimPath, reclaimTasks[refuseZapIdx])
+	}
+	for _, want := range []string{"bootwright_ceph_filter_zap.results", "rejectattr('rc', 'equalto', 0)"} {
+		if got := fmt.Sprint(reclaimTasks[refuseZapIdx]["loop"]); !strings.Contains(got, want) {
+			t.Fatalf("%s zap-result gate loop missing %q: %v", reclaimPath, want, reclaimTasks[refuseZapIdx]["loop"])
+		}
+	}
+	for _, want := range []string{"host", "path", "stderr", "bootwright apply --clusters", "--mode rebuild", "--authorize data-loss"} {
+		if got := fmt.Sprint(refuseZap["msg"]); !strings.Contains(got, want) {
+			t.Fatalf("%s zap failure must name the device, failure, and exact intentional retry; missing %q in %v", reclaimPath, want, refuseZap["msg"])
+		}
 	}
 	svc := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml")
 	reclaimIdx := strings.Index(svc, "osd_reclaim.yml")

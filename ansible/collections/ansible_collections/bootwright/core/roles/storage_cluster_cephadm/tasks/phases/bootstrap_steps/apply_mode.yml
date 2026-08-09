@@ -140,6 +140,10 @@
             and (bootwright_ceph_rebuild_authorized | default(false) | bool)
             and not (bootwright_ceph_reconcilable_only | default(false) | bool)
           )
-          or (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
+          or
+          (
+            (bootwright_ceph_incomplete_bootstrap | default(false) | bool)
+            and (bootwright_ceph_rebuild_authorized | default(false) | bool)
+          )
         )
       }}

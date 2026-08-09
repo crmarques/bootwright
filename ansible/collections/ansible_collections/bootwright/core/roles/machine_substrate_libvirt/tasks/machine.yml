@@ -121,14 +121,87 @@
   failed_when: false
   when: bootwright_libvirt_managed_os_reset | bool
 
+- name: Refuse managed OS disk reset when the libvirt domain could not be stopped
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_managed_os_reset_stop.rc | default(1) == 0
+        or (bootwright_libvirt_managed_os_reset_stop.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)')
+    fail_msg: >-
+      Refusing to delete and recreate the disks of libvirt domain
+      {{ bootwright_libvirt_domain_name }} because `virsh destroy` failed: rc
+      {{ bootwright_libvirt_managed_os_reset_stop.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_managed_os_reset_stop.stderr | default('') }}.
+      Restore libvirt access or stop the domain safely, then retry with
+      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }} --mode rebuild
+      --authorize data-loss`.
+  when: bootwright_libvirt_managed_os_reset | bool
+
 - name: Undefine managed OS libvirt domain for override reinstall
-  community.libvirt.virt:
-    command: undefine
-    name: "{{ bootwright_libvirt_domain_name }}"
-    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
-    flags:
-      - keep_nvram
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - undefine
+      - "{{ bootwright_libvirt_domain_name }}"
+      - --keep-nvram
+  register: bootwright_libvirt_managed_os_reset_undefine
+  changed_when: bootwright_libvirt_managed_os_reset_undefine.rc == 0
   failed_when: false
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Refuse managed OS disk reset when the libvirt domain could not be undefined
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_managed_os_reset_undefine.rc | default(1) == 0
+        or (bootwright_libvirt_managed_os_reset_undefine.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+    fail_msg: >-
+      Refusing to delete and recreate the disks of libvirt domain
+      {{ bootwright_libvirt_domain_name }} because `virsh undefine --keep-nvram`
+      failed: rc
+      {{ bootwright_libvirt_managed_os_reset_undefine.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_managed_os_reset_undefine.stderr | default('') }}.
+      Restore libvirt access or remove the domain safely, then retry with
+      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }} --mode rebuild
+      --authorize data-loss`.
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Verify the reset libvirt domain is absent before disk deletion
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - dumpxml
+      - "{{ bootwright_libvirt_domain_name }}"
+  register: bootwright_libvirt_managed_os_reset_absence
+  changed_when: false
+  failed_when: false
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Require proven reset libvirt domain absence before disk deletion
+  ansible.builtin.assert:
+    that:
+      - bootwright_libvirt_managed_os_reset_absence.rc | default(0) != 0
+      - >-
+        (bootwright_libvirt_managed_os_reset_absence.stderr | default(''))
+        is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+    fail_msg: >-
+      Refusing to delete and recreate the disks of libvirt domain
+      {{ bootwright_libvirt_domain_name }} because its absence was not proven
+      after teardown. rc
+      {{ bootwright_libvirt_managed_os_reset_absence.rc | default('<unknown>') }},
+      stderr {{ bootwright_libvirt_managed_os_reset_absence.stderr | default('') }}.
+      Inspect the domain, restore libvirt access, and retry with
+      `bootwright apply --clusters {{ bootwright_current_cluster.name }}
+      --machines {{ bootwright_component.name }} --mode rebuild
+      --authorize data-loss`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Remove managed OS libvirt machine state for override reinstall

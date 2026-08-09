@@ -24,7 +24,11 @@
       - "{{ bootwright_ownership_destroy_attrs.domain }}"
   register: bootwright_ownership_libvirt_domain_stop
   changed_when: bootwright_ownership_libvirt_domain_stop.rc == 0
-  failed_when: false
+  failed_when:
+    - bootwright_ownership_libvirt_domain_stop.rc != 0
+    - >-
+      not ((bootwright_ownership_libvirt_domain_stop.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-domain'
     - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
@@ -39,7 +43,11 @@
       - "{{ bootwright_ownership_destroy_attrs.domain }}"
   register: bootwright_ownership_libvirt_domain_undefine
   changed_when: bootwright_ownership_libvirt_domain_undefine.rc == 0
-  failed_when: false
+  failed_when:
+    - bootwright_ownership_libvirt_domain_undefine.rc != 0
+    - >-
+      not ((bootwright_ownership_libvirt_domain_undefine.stderr | default(''))
+           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-domain'
     - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
@@ -54,7 +62,11 @@
       - "{{ bootwright_ownership_destroy_attrs.network }}"
   register: bootwright_ownership_libvirt_network_stop
   changed_when: bootwright_ownership_libvirt_network_stop.rc == 0
-  failed_when: false
+  failed_when:
+    - bootwright_ownership_libvirt_network_stop.rc != 0
+    - >-
+      not ((bootwright_ownership_libvirt_network_stop.stderr | default(''))
+           is search('(?i)(Network not found|failed to get network|no network with matching name|network is not active)'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-network'
     - bootwright_ownership_destroy_attrs.network | default('') | length > 0
@@ -69,7 +81,11 @@
       - "{{ bootwright_ownership_destroy_attrs.network }}"
   register: bootwright_ownership_libvirt_network_undefine
   changed_when: bootwright_ownership_libvirt_network_undefine.rc == 0
-  failed_when: false
+  failed_when:
+    - bootwright_ownership_libvirt_network_undefine.rc != 0
+    - >-
+      not ((bootwright_ownership_libvirt_network_undefine.stderr | default(''))
+           is search('(?i)(Network not found|failed to get network|no network with matching name)'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-network'
     - bootwright_ownership_destroy_attrs.network | default('') | length > 0
@@ -80,7 +96,12 @@
     state: stopped
     enabled: false
     daemon_reload: true
-  failed_when: false
+  register: bootwright_ownership_systemd_stop
+  failed_when:
+    - bootwright_ownership_systemd_stop.failed | default(false) | bool
+    - >-
+      'Could not find the requested service'
+      not in (bootwright_ownership_systemd_stop.msg | default(''))
   loop:
     - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
     - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
@@ -92,7 +113,6 @@
   containers.podman.podman_container:
     name: "{{ bootwright_ownership_destroy_attrs.container }}"
     state: absent
-  failed_when: false
   when:
     - bootwright_ownership_destroy_attrs.container | default('') | length > 0
 
@@ -140,7 +160,6 @@
       - TARGET
   register: bootwright_ownership_destroy_mounts
   changed_when: false
-  failed_when: false
   when:
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 
@@ -159,7 +178,6 @@
     }}
   loop_control:
     label: "{{ item }}"
-  failed_when: false
   when:
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
 

@@ -130,9 +130,11 @@ zap-and-rebuild, continue to the idempotent bootstrap skip and re-stamp.
 before the post-bootstrap marker still leaves the controller-side record.
 Reachable markerless clusters fail closed on normal apply; destroy recovery
 requires the operator-confirmed fsid path above. An unreachable incomplete
-bootstrap remains eligible for the separately authorized
-`apply --mode rebuild` rebuild. Successful apply refreshes the fsid marker
-and enriched ownership record.
+bootstrap remains eligible for cleanup only when its exact cluster is present
+in the controller-issued rebuild-authorized membership. Thus even this recovery
+path cannot run `cephadm rm-cluster --zap-osds` from mode alone; it requires
+`apply --mode rebuild --authorize data-loss`. Successful apply refreshes the
+fsid marker and enriched ownership record.
 
 **Semantics:** `--mode rebuild` does not always wipe. The controller classifies a
 cluster whose only drift is an OSD-device add as reconcilable in place and
