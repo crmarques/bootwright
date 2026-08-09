@@ -95,6 +95,15 @@ for the same reason: without it any day-2 edit flipped them to structural drift
 and continue refused with a false "would reinstall the machine — its disks
 wiped".
 
+**Recorded network and Ceph FIPS drift stays fail-closed:** an edit inside a
+referenced NetworkConfig moves both the desired and structural hashes of a
+ContainerCluster install task, so `diff --recorded` reports rebuild rather than
+an inert reconcile. The managed `StorageCluster` Ceph FIPS posture likewise
+remains in both storage-cluster hashes and reports rebuild. State-check
+regressions first prove an unchanged record matches, then prove a NIC-template
+edit and `spec.ceph.security.fips.enabled` toggle are detected as structural
+drift.
+
 **Schema rebaseline needs immutable successful-run proof:** a schema bump never
 compares an old desired hash directly with a new one. Each successful task
 writes its exact, non-secret hash input under

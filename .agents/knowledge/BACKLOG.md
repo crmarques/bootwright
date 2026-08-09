@@ -72,16 +72,6 @@ learned; this file records what it still owes.
   the reference-aware destroy release.
 - Related: [ownership-records-store.md](ownership-records-store.md)
 
-## B-009 — Remaining drift-detection gaps: NIC defaults and Ceph FIPS
-- Status: open
-- Area: converge / drift engine
-- Origin: recorded-drift (diff --recorded) coverage thrust, remaining items
-- Problem: the recorded-state drift classifier does not yet cover NIC default
-  drift or Ceph FIPS drift, so those changes are invisible to `diff --recorded`.
-- Exit: extend the recorded-state comparison to include NIC defaults and the Ceph
-  FIPS gate; add classifier tests.
-- Related: [scoped-runs-render-vs-work-set.md](scoped-runs-render-vs-work-set.md)
-
 ## B-011 — Storage NFS export and fabric-hash findings left unresolved
 - Status: open
 - Area: converge / storage
