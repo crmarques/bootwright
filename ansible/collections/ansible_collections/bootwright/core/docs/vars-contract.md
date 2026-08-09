@@ -848,7 +848,11 @@ the controller.
 
 - `firstReachable` (default) runs the play against each target host in order,
   `--limit`ed to one host at a time, and stops at the first host whose run
-  succeeds (the exporter admin-node pattern); it fails only when every host fails.
+  succeeds (the exporter admin-node pattern). It advances only when the
+  machine-readable Ansible result reports `unreachable` before any `ok` or
+  `failed` task result. A task failure, timeout, malformed or missing result,
+  or connection loss after any task result fails closed on that host because
+  the run may already have changed state.
 - `all` runs one play against every resolved host with no `--limit`.
 
 Each run is bounded by the step's `timeout` (a Go duration, default `10m`); a run

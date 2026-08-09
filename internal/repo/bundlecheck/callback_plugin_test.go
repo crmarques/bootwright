@@ -21,6 +21,24 @@ func TestProfilingCallbackStaysOptIn(t *testing.T) {
 	}
 }
 
+func TestRunResultCallbackStaysExplicitAndMachineReadable(t *testing.T) {
+	source := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/plugins/callback/bw_run_result.py")
+	for _, want := range []string{
+		"CALLBACK_NEEDS_ENABLED = True",
+		`CALLBACK_TYPE = "aggregate"`,
+		`CALLBACK_NAME = "bootwright.core.bw_run_result"`,
+		`RESULT_NAME = "run-result.jsonl"`,
+		`"status": status`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("bw_run_result.py must declare %s", want)
+		}
+	}
+	if strings.Contains(source, `CALLBACK_TYPE = "stdout"`) {
+		t.Fatal("bw_run_result.py must never become a stdout callback")
+	}
+}
+
 func TestNoStdoutCallbackIsConfigured(t *testing.T) {
 	config := readRepoFile(t, "ansible/ansible.cfg")
 	for _, line := range strings.Split(config, "\n") {

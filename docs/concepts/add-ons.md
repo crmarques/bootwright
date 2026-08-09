@@ -380,8 +380,12 @@ binding input's `resourceRef` value to its object, then to that object's nodes â
 a `StorageExport` resolves through its `storageClusterRef` to the Ceph nodes), or
 `static` â€” a literal `{clusters: [...], machines: [...]}` list keyed the same way
 as `boundCluster`/`fromInput`, with **at least one** of the two lists non-empty.
-`target.limit` is `firstReachable` (default) or `all`. A step can never target
-the controller/localhost.
+`target.limit` is `firstReachable` (default) or `all`. `firstReachable` tries
+machines in order, but advances only when Ansible reports that no task executed
+because the current machine was unreachable. A task failure, timeout, uncertain
+result, or connection loss after execution starts fails closed without trying
+another machine, since the first run may have changed state. A step can never
+target the controller/localhost.
 
 ```yaml
 target:

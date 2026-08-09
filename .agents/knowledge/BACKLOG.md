@@ -205,26 +205,6 @@ learned; this file records what it still owes.
 - Related: internal/addons/oc/execute.go, internal/addons/records/records.go,
   internal/converge/workflow/apply_plan.go
 
-## B-020 — Step firstReachable retry cannot distinguish "unreachable" from "task failed"
-- Status: open
-- Area: addons / steps
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: a `ClusterAddonStep` target with the default `limit: firstReachable`
-  retries the next candidate machine on ANY error from the playbook run, not
-  only a connection failure — `internal/converge/ansible` only surfaces a bare
-  process-exit error, with no parsing of Ansible's per-host unreachable/failed
-  stats. A step whose task fails for a real reason (bad input, a genuine
-  Ceph/API error) gets silently retried against a second (and third) machine
-  before finally failing, risking partial side effects and an N-times
-  timeout. The shipped Data Foundation exporter step (multi-node Ceph
-  clusters) is exposed to this.
-- Exit: thread Ansible's per-host stats/callback result (or at least a
-  distinct "unreachable" signal) through `internal/converge/ansible.Runner` so
-  the step-retry loop stops after the first REACHABLE machine's task fails,
-  retrying only on genuine unreachability.
-- Related: internal/converge/workflow/apply_addon_steps_run.go,
-  internal/converge/ansible/runner.go
-
 ## B-021 — Environment.spec.resources can permanently deadlock once add-ons/_store is populated
 - Status: open
 - Area: state / validation

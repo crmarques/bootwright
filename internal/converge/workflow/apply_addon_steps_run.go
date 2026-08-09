@@ -109,36 +109,41 @@ func (e *addonStepExecutor) runStepAnsible(ctx context.Context, step v1alpha1.Cl
 	if step.RolesPath != "" {
 		rolesPath = filepath.Join(contentRoot, step.RolesPath)
 	}
+	firstReachable := v1alpha1.ClusterAddonStepTargetLimit(step) != v1alpha1.ClusterAddonStepTargetLimitAll
 	newSpec := func(limit string, index int) ansible.RunSpec {
 		return ansible.RunSpec{
-			Executable:         e.opts.Executable,
-			AnsibleCfg:         filepath.Join(e.opts.BundleDir, bundle.AnsibleCfgRelPath),
-			CollectionsPath:    collectionsPath,
-			RolesPath:          rolesPath,
-			Inventory:          inventoryPath,
-			Playbook:           playbookPath,
-			Limit:              limit,
-			ExtraVars:          varsPath,
-			ExtraVarPairs:      extraVars,
-			ArtifactsDir:       filepath.Join(stepRoot, "artifacts", strconv.Itoa(index)),
-			OutputLogPath:      e.logPath,
-			AskBecomePass:      e.opts.AskBecomePass,
-			BecomePasswordFile: e.opts.BecomePasswordFile,
-			UseControllingTTY:  e.opts.UseControllingTTY,
+			Executable:          e.opts.Executable,
+			AnsibleCfg:          filepath.Join(e.opts.BundleDir, bundle.AnsibleCfgRelPath),
+			CollectionsPath:     collectionsPath,
+			RolesPath:           rolesPath,
+			Inventory:           inventoryPath,
+			Playbook:            playbookPath,
+			Limit:               limit,
+			ExtraVars:           varsPath,
+			ExtraVarPairs:       extraVars,
+			ArtifactsDir:        filepath.Join(stepRoot, "artifacts", strconv.Itoa(index)),
+			OutputLogPath:       e.logPath,
+			AskBecomePass:       e.opts.AskBecomePass,
+			BecomePasswordFile:  e.opts.BecomePasswordFile,
+			UseControllingTTY:   e.opts.UseControllingTTY,
+			ClassifyUnreachable: firstReachable,
 		}
 	}
-	if v1alpha1.ClusterAddonStepTargetLimit(step) == v1alpha1.ClusterAddonStepTargetLimitAll {
+	if !firstReachable {
 		return e.runOneStepAnsible(ctx, runner, newSpec("", 0), timeout)
 	}
-	var failures []string
+	var unreachableFailures []string
 	for i, target := range targets {
 		if err := e.runOneStepAnsible(ctx, runner, newSpec(target.inventoryName, i), timeout); err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", target.label, err))
-			continue
+			if ansible.IsUnreachable(err) {
+				unreachableFailures = append(unreachableFailures, fmt.Sprintf("%s: %v", target.label, err))
+				continue
+			}
+			return fmt.Errorf("step %s failed on target %s without a definitive pre-mutation unreachable result; refusing to retry another target because this run may have changed state: %w", step.Name, target.label, err)
 		}
 		return nil
 	}
-	return fmt.Errorf("step %s failed on all targets: %v", step.Name, failures)
+	return fmt.Errorf("step %s could not reach any target: %v", step.Name, unreachableFailures)
 }
 
 func (e *addonStepExecutor) runOneStepAnsible(ctx context.Context, runner ansible.Runner, spec ansible.RunSpec, timeout time.Duration) error {

@@ -28,11 +28,15 @@ const OutputLogName = "ansible-output.log"
 
 const TaskProfileName = "task-profile.jsonl"
 
+const RunResultName = "run-result.jsonl"
+
 const ProfileEnvVar = "BOOTWRIGHT_ANSIBLE_PROFILE"
 
 const ArtifactsEnvVar = "BOOTWRIGHT_ANSIBLE_ARTIFACTS"
 
 const profileCallbackName = "bw_profile"
+
+const runResultCallbackName = "bw_run_result"
 
 const profileCallbackRelPath = "ansible_collections/bootwright/core/plugins/callback"
 
@@ -90,26 +94,27 @@ func SystemTempEnv() map[string]string {
 }
 
 type RunSpec struct {
-	Executable         string
-	AnsibleCfg         string
-	RolesPath          string
-	CollectionsPath    string
-	FilterPluginsPath  string
-	Inventory          string
-	Playbook           string
-	Limit              string
-	Forks              int
-	ExtraVars          string
-	ExtraVarPairs      []string
-	Tags               []string
-	SkipTags           []string
-	ArtifactsDir       string
-	OutputLogPath      string
-	Check              bool
-	AskBecomePass      bool
-	BecomePasswordFile string
-	UseControllingTTY  bool
-	ExtraEnv           map[string]string
+	Executable          string
+	AnsibleCfg          string
+	RolesPath           string
+	CollectionsPath     string
+	FilterPluginsPath   string
+	Inventory           string
+	Playbook            string
+	Limit               string
+	Forks               int
+	ExtraVars           string
+	ExtraVarPairs       []string
+	Tags                []string
+	SkipTags            []string
+	ArtifactsDir        string
+	OutputLogPath       string
+	Check               bool
+	AskBecomePass       bool
+	BecomePasswordFile  string
+	UseControllingTTY   bool
+	ClassifyUnreachable bool
+	ExtraEnv            map[string]string
 }
 
 type Runner interface {
@@ -120,6 +125,23 @@ type Runner interface {
 type CommandRunner struct {
 	Stdout io.Writer
 	Stderr io.Writer
+}
+
+type UnreachableError struct {
+	Err error
+}
+
+func (e *UnreachableError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *UnreachableError) Unwrap() error {
+	return e.Err
+}
+
+func IsUnreachable(err error) bool {
+	var unreachable *UnreachableError
+	return errors.As(err, &unreachable)
 }
 
 func (r CommandRunner) Command(spec RunSpec) []string {
@@ -188,7 +210,12 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	}
 	if spec.ArtifactsDir != "" {
 		env = append(env, ArtifactsEnvVar+"="+filepath.Clean(spec.ArtifactsDir))
-		env = appendProfileEnv(env, spec.CollectionsPath)
+		if spec.ClassifyUnreachable {
+			if err := os.Remove(filepath.Join(spec.ArtifactsDir, RunResultName)); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("reset Ansible run result: %w", err)
+			}
+		}
+		env = appendCallbackEnv(env, spec.CollectionsPath, spec.ClassifyUnreachable)
 	}
 	if dir := sshControlPathForRun(); dir != "" {
 		env = append(env, "ANSIBLE_SSH_CONTROL_PATH_DIR="+dir)
@@ -198,7 +225,11 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 		env = appendPythonPath(env, extra)
 	}
 	env = appendExtraEnv(env, spec.ExtraEnv)
-	return RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
+	err := RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
+	if err != nil && spec.ClassifyUnreachable && runResultIsUnreachable(filepath.Join(spec.ArtifactsDir, RunResultName)) {
+		return &UnreachableError{Err: err}
+	}
+	return err
 }
 
 func RunLoggedCommand(ctx context.Context, command []string, env []string, outputLogPath string, stdout, stderr io.Writer, useControllingTTY bool) error {
@@ -270,18 +301,55 @@ func stableWorkingDir() string {
 	return ""
 }
 
-func appendProfileEnv(env []string, collectionsPath string) []string {
-	if strings.TrimSpace(os.Getenv(ProfileEnvVar)) == "" {
+func appendCallbackEnv(env []string, collectionsPath string, classifyUnreachable bool) []string {
+	profile := strings.TrimSpace(os.Getenv(ProfileEnvVar)) != ""
+	if !profile && !classifyUnreachable {
 		return env
 	}
 	dir := profileCallbackDir(collectionsPath)
 	if dir == "" {
 		return env
 	}
+	callbacks := make([]string, 0, 2)
+	if profile {
+		callbacks = append(callbacks, profileCallbackName)
+	}
+	if classifyUnreachable {
+		callbacks = append(callbacks, runResultCallbackName)
+	}
 	return append(env,
 		"ANSIBLE_CALLBACK_PLUGINS="+dir,
-		"ANSIBLE_CALLBACKS_ENABLED="+profileCallbackName,
+		"ANSIBLE_CALLBACKS_ENABLED="+strings.Join(callbacks, ","),
 	)
+}
+
+type runResultRecord struct {
+	Status string `json:"status"`
+}
+
+func runResultIsUnreachable(path string) bool {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	sawUnreachable := false
+	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var record runResultRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			return false
+		}
+		switch record.Status {
+		case "unreachable":
+			sawUnreachable = true
+		case "skipped":
+		default:
+			return false
+		}
+	}
+	return sawUnreachable
 }
 
 func profileCallbackDir(collectionsPath string) string {

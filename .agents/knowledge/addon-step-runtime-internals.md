@@ -15,9 +15,14 @@ post-storage work and therefore use the owning cluster's
 as the declared fallback when the cluster key is absent. Using the Machine
 install identity here breaks exporter steps after root SSH is revoked. Direct
 Machine and ContainerCluster targets retain the Machine `access.ssh` identity.
-`target.limit: firstReachable` (the default) tries each resolved host in order
-until one RUN SUCCEEDS — the exporter admin-node pattern — while `all` runs
-once against every resolved host.
+`target.limit: firstReachable` (the default) tries resolved hosts in order only
+while the machine-readable Ansible callback proves each failed candidate was
+unreachable before any task executed. The runner exposes that proof as a typed
+error. Any `ok` or `failed` callback event, timeout, missing/malformed callback
+file, or later connection loss is an ordinary failure, and the step refuses to
+try another host because the first run may have partially mutated state. The
+callback result is cleared before every candidate run so stale evidence cannot
+authorize a retry. `all` runs once against every resolved host.
 
 **Output persistence paths:** Captured step outputs persist at fixed paths:
 secret outputs under

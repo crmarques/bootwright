@@ -1988,8 +1988,14 @@ Rules:
     `target.static` with `clusters[]` and/or `machines[]`. A step carries no
     `hostGroups` and can never resolve to the controller/localhost.
     `target.limit` is `firstReachable`
-    (default: run against the first machine that answers) or `all` (run against
-    every resolved machine). Storage-cluster targets connect through the
+    (default: try machines in order until one answers) or `all` (run against
+    every resolved machine). `firstReachable` advances only when Ansible proves
+    the current machine was unreachable before any task executed. A reachable
+    task failure, a timeout, an unreachable result after an earlier `ok` or
+    `failed` task result, or missing/malformed reachability evidence stops the
+    step without trying another machine because the run may already have
+    changed state.
+    Storage-cluster targets connect through the
     cluster's post-install `cephadm.clusterSSH` user and key; container-cluster
     and direct Machine targets use the Machine's `access.ssh` identity.
   - `steps[].secretRefs[]` name `Secret`s materialized into the step's scoped
