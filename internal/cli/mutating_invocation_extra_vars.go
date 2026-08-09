@@ -61,6 +61,23 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		values[converge.ApplyFullInvocationExtraVar] = full.String()
 		values[converge.ApplyThroughBaseInvocationExtraVar] = throughBase.String()
 	}
+	if invocation.verb == invocationReplaceArbiter {
+		degraded, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeDegradedQuorum}})
+		if err != nil {
+			return nil, err
+		}
+		sameSite, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeSameSiteArbiter}})
+		if err != nil {
+			return nil, err
+		}
+		unreachable, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeUnreachableNodes}})
+		if err != nil {
+			return nil, err
+		}
+		values[converge.ArbiterDegradedInvocationExtraVar] = degraded.String()
+		values[converge.ArbiterSameSiteInvocationExtraVar] = sameSite.String()
+		values[converge.ArbiterUnreachableInvocationExtraVar] = unreachable.String()
+	}
 	data, err := json.Marshal(values)
 	if err != nil {
 		return nil, err

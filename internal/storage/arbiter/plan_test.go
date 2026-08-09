@@ -2,6 +2,7 @@ package arbiter
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,6 +146,10 @@ func TestComputeRefusesAMonmapCarryingSeveralUndeclaredMons(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "arb-old") || !strings.Contains(err.Error(), "arb-older") {
 		t.Fatalf("Compute with two undeclared mons = %v, want a refusal naming both rather than a guess", err)
 	}
+	var liveErr *LivePlanError
+	if !errors.As(err, &liveErr) || liveErr.Failure != LivePlanResidueAmbiguous || strings.Join(liveErr.StrayMons, ",") != "arb-old,arb-older" {
+		t.Fatalf("ambiguous residue error = %#v, want typed evidence naming both strays", liveErr)
+	}
 }
 
 func TestComputeReportsMonsOutsideQuorumAsDegraded(t *testing.T) {
@@ -162,6 +167,10 @@ func TestComputeRefusesAClusterThatIsNotInStretchModeLive(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not in stretch mode") {
 		t.Fatalf("Compute on a non-stretch cluster = %v, want a stretch-mode refusal", err)
 	}
+	var liveErr *LivePlanError
+	if !errors.As(err, &liveErr) || liveErr.Failure != LivePlanStretchModeDisabled || liveErr.DesiredMon != "arb-new" {
+		t.Fatalf("non-stretch error = %#v, want typed desired-mon evidence", liveErr)
+	}
 }
 
 func TestComputeRefusesAStretchMonmapWithNoTiebreaker(t *testing.T) {
@@ -170,6 +179,44 @@ func TestComputeRefusesAStretchMonmapWithNoTiebreaker(t *testing.T) {
 	_, err := Compute(stretchCluster(), discoveryWithMonDump(t, dump))
 	if err == nil || !strings.Contains(err.Error(), "no tiebreaker_mon") {
 		t.Fatalf("Compute on a stretch monmap without a tiebreaker = %v, want a refusal before the input is rewritten", err)
+	}
+	var liveErr *LivePlanError
+	if !errors.As(err, &liveErr) || liveErr.Failure != LivePlanTiebreakerMissing || liveErr.DesiredMon != "arb-new" {
+		t.Fatalf("missing-tiebreaker error = %#v, want typed authored target evidence", liveErr)
+	}
+}
+
+func TestComputeUnreadableMonmapCarriesTypedEvidenceWithoutCommands(t *testing.T) {
+	_, err := Compute(stretchCluster(), cephstate.Discovery{Cluster: "ceph-prd-01", Probed: true})
+	var liveErr *LivePlanError
+	if !errors.As(err, &liveErr) || liveErr.Failure != LivePlanStateUnreadable || liveErr.Cause == nil {
+		t.Fatalf("unreadable monmap error = %#v, want typed cause evidence", liveErr)
+	}
+	for _, forbidden := range []string{"bootwright apply", "bootwright destroy", "bootwright storage-cluster replace-arbiter"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("storage planning embedded CLI argv %q: %v", forbidden, err)
+		}
+	}
+}
+
+func TestArbiterProductionCodeNeverEmbedsMutatingBootwrightArgv(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, forbidden := range []string{"bootwright apply", "bootwright destroy", "bootwright storage-cluster replace-arbiter"} {
+			if strings.Contains(string(data), forbidden) {
+				t.Errorf("%s embeds mutating CLI argv %q; return typed evidence and let internal/cli render the resolved invocation", entry.Name(), forbidden)
+			}
+		}
 	}
 }
 

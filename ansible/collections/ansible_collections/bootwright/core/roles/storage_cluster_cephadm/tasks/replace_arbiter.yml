@@ -1,4 +1,18 @@
 ---
+- name: Refuse replacement without controller-rendered continuation commands
+  ansible.builtin.assert:
+    that:
+      - (bootwright_mutating_invocation | default('') | trim | length) > 0
+      - (bootwright_arbiter_degraded_invocation | default('') | trim | length) > 0
+      - (bootwright_arbiter_same_site_invocation | default('') | trim | length) > 0
+      - (bootwright_arbiter_unreachable_invocation | default('') | trim | length) > 0
+    fail_msg: >-
+      The controller did not provide every resolved replacement continuation.
+      This role cannot reconstruct operator context, identity, selection,
+      authorization, confirmation, or output intent, so it refuses before reading
+      or changing cluster state. Invoke it through the owning Bootwright CLI.
+    quiet: true
+
 - name: Read the live monmap before touching the stretch tiebreaker
   ansible.builtin.include_tasks: replace_arbiter_steps/probe.yml
 
@@ -24,8 +38,8 @@
       already degraded. `ceph mon set_new_tiebreaker` needs a quorum to commit, and
       swapping the arbiter while a data site is down removes the very vote that is
       holding the remaining quorum together — if the swap stalls part-way the cluster
-      can lose quorum outright and stop serving I/O. Bring those mons back, or re-run
-      with --authorize degraded-quorum to proceed anyway. Live monmap:
+      can lose quorum outright and stop serving I/O. Bring those mons back, or proceed
+      deliberately with `{{ bootwright_arbiter_degraded_invocation }}`. Live monmap:
       {{ bootwright_arbiter_mon_dump_raw | default('(unavailable)') }}
     quiet: true
 

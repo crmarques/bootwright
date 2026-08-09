@@ -15,8 +15,9 @@
       that site and you lose two votes at once, so the surviving site is left without
       quorum and I/O stops. A third, independent site is the supported topology. If this
       IS the deliberate emergency fallback — the third site is gone and an in-quorum mon
-      is being promoted to keep the cluster writable until it returns — re-run with
-      --authorize same-site-arbiter, which passes Ceph's --yes-i-really-mean-it.
+      is being promoted to keep the cluster writable until it returns — proceed with
+      `{{ bootwright_arbiter_same_site_invocation }}`, which carries the exact selection
+      and passes Ceph's --yes-i-really-mean-it.
     quiet: true
 
 - name: Switch the stretch tiebreaker to the replacement arbiter mon
@@ -56,8 +57,8 @@
       BOTH arbiter mons in the monmap and the original tiebreaker
       mon.{{ bootwright_arbiter_live_mon }} still holding the role, which is a safe,
       quorum-preserving state — nothing has been removed. Read the command output, fix
-      what it names, and re-run; the replacement mon is already deployed, so the re-run
-      resumes at this step.
+      what it names, then retry with `{{ bootwright_mutating_invocation }}`; the
+      replacement mon is already deployed, so that invocation resumes at this step.
       rc: {{ bootwright_arbiter_set_new.rc | default('<none>') }}
       stdout: {{ bootwright_arbiter_set_new.stdout | default('') | trim }}
       stderr: {{ bootwright_arbiter_set_new.stderr | default('') | trim }}

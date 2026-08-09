@@ -496,6 +496,19 @@ machine-readable report containing `plan`, `inputRewrite`, the four-step
 `order`, and an always-present `requiredAuthorizations` array. JSON is
 preview-only; omitting `--dry-run` is a usage error and changes nothing.
 
+If live evidence prevents a plan, copy only the continuation Bootwright prints.
+It preserves the selected context, SSH identity, authorizations, and output
+intent; a JSON dry-run remedy keeps both `--dry-run` and `--output json`, and a
+remedy never adds `--yes`. `stretch_mode: false` offers an apply prerequisite
+only for a storage task positively classified to create. On a recorded cluster,
+diagnose the live/recorded shape mismatch instead: a plain apply may skip, and no
+Bootwright retry safely turns a built non-stretch cluster into a stretch one. A
+preview shows only the read-only form of that prerequisite; choosing the real
+apply remains a separate explicit decision. A
+missing live tiebreaker instead names the authored mon in the exact external
+`ceph mon set_new_tiebreaker` repair; ambiguous leftover mons must be identified
+from Ceph evidence before any one is retired.
+
 Three situations fail closed and name the token that proceeds:
 
 | Situation | Why it stops | Token |
@@ -505,7 +518,13 @@ Three situations fail closed and name the token that proceeds:
 | The arbiter being replaced cannot be contacted | Retiring it needs `ceph orch host rm --offline --force` and skips host-local cleanup — only ever for a host the probes *prove* absent, never one that answered and refused an identity | `--authorize unreachable-nodes` |
 
 The machine that was replaced keeps running with its OS intact; only its Ceph
-membership is removed. Tear it down separately when you no longer want it.
+membership is removed. Tear it down separately when you no longer want it. If
+you authored the new tiebreaker by hand and the old machine remains a declared
+node, completion prints the exact scoped destroy. When
+`--new-arbiter-machine` performed the promotion, the old machine has already
+left the topology and Bootwright's machine selector refuses it as an orphan, so
+completion tells you to decommission it out of band and prints no unusable
+destroy command.
 
 !!! warning "The same-site fallback is a shape you have to leave"
     `--authorize same-site-arbiter` puts the tiebreaker inside a data site while

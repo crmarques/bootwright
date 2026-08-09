@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -43,8 +44,12 @@ func ArbiterArtifactsRoot(runsDir string) string {
 	return filepath.Join(runsDir, "preflight", "storage-replace-arbiter", "artifacts")
 }
 
-func ReadArbiterRetirement(runsDir string) (ArbiterRetirement, bool, error) {
-	path := filepath.Join(ArbiterArtifactsRoot(runsDir), "storage-replace-arbiter", "arbiter-retire-result.json")
+func arbiterRetirementPath(runsDir string) string {
+	return filepath.Join(ArbiterArtifactsRoot(runsDir), "storage-replace-arbiter", "arbiter-retire-result.json")
+}
+
+func readArbiterRetirement(runsDir string) (ArbiterRetirement, bool, error) {
+	path := arbiterRetirementPath(runsDir)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return ArbiterRetirement{}, false, nil
@@ -56,7 +61,55 @@ func ReadArbiterRetirement(runsDir string) (ArbiterRetirement, bool, error) {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return ArbiterRetirement{}, false, fmt.Errorf("decode the arbiter retirement result at %s: %w", path, err)
 	}
+	if strings.TrimSpace(out.Host) == "" {
+		return ArbiterRetirement{}, false, fmt.Errorf("validate the arbiter retirement result at %s: host is empty", path)
+	}
+	if out.Offline != (out.Authorized && out.Corroborate) {
+		return ArbiterRetirement{}, false, fmt.Errorf("validate the arbiter retirement result at %s: offline=%t contradicts authorized=%t and corroborated=%t", path, out.Offline, out.Authorized, out.Corroborate)
+	}
 	return out, true, nil
+}
+
+func ClearArbiterRetirement(runsDir string, runLease *workflow.CommandRunLease) error {
+	if err := requireArbiterRetirementLease(runLease); err != nil {
+		return fmt.Errorf("clear arbiter retirement evidence: %w", err)
+	}
+	return clearArbiterRetirementFile(runsDir)
+}
+
+func clearArbiterRetirementFile(runsDir string) error {
+	path := arbiterRetirementPath(runsDir)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove the previous arbiter retirement result at %s: %w", path, err)
+	}
+	return nil
+}
+
+func ConsumeArbiterRetirement(runsDir string, runLease *workflow.CommandRunLease) (ArbiterRetirement, bool, error) {
+	if err := requireArbiterRetirementLease(runLease); err != nil {
+		return ArbiterRetirement{}, false, fmt.Errorf("consume arbiter retirement evidence: %w", err)
+	}
+	result, found, err := readArbiterRetirement(runsDir)
+	if err != nil || !found {
+		return result, found, err
+	}
+	if err := clearArbiterRetirementFile(runsDir); err != nil {
+		return result, true, fmt.Errorf("consume the current arbiter retirement result: %w", err)
+	}
+	return result, true, nil
+}
+
+func requireArbiterRetirementLease(runLease *workflow.CommandRunLease) error {
+	if runLease == nil {
+		return fmt.Errorf("no command mutation lease was provided")
+	}
+	if err := runLease.RequireOwned(); err != nil {
+		return fmt.Errorf("the command mutation lease is not held: %w", err)
+	}
+	if !strings.HasPrefix(runLease.RunID, "replace-arbiter-") {
+		return fmt.Errorf("the held mutation lease belongs to %s, not replace-arbiter", runLease.RunID)
+	}
+	return nil
 }
 
 func RunArbiterReplacement(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir string, state v1alpha1.State, opts ArbiterRunOptions, reporter workflow.Reporter) error {

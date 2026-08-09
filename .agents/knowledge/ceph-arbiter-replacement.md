@@ -98,7 +98,33 @@ every `storageCluster` record with the current desired hash also marks any
 unrelated edit in the same commit as reconciled, destroying the drift refusal
 that would have caught it. Refresh a record only when it still matches the
 desired state as it stood *before* the rewrite; otherwise leave it drifted and
-name the `bootwright apply` that converges the rest.
+return typed cluster evidence so the CLI can render the resolved apply that
+converges the rest.
+
+**Live planning owns evidence, not command construction.** `Compute` can say
+that the monmap was unreadable, stretch mode was false, the live tiebreaker was
+empty, or several undeclared mons made retirement ambiguous. It cannot know the
+operator's resolved context, SSH globals, authorizations, confirmation choice,
+or preview/output mode, so it must never embed a Bootwright invocation. The CLI
+formats the original retry from `resolvedInvocation`. It formats an apply
+prerequisite for `stretch_mode: false` only when the exact storage-cluster task
+classifies `create`; a matching record would make apply skip, and structural or
+foreign evidence would make it refuse. Missing `tiebreaker_mon` names the
+authored desired mon in `ceph mon set_new_tiebreaker`; multiple strays name the
+evidence but never recommend removing all of it, because ambiguity is precisely
+the absence of authority to choose.
+
+**The retirement artifact is consumable run evidence.**
+`arbiter-retire-result.json` records whether the current run's
+`unreachable-nodes` permission met live orchestrator evidence. A real
+replacement clears the predecessor only after it holds the context mutation
+lease, and the successful reporter validates and consumes the current result
+under the replacement lease. `offline` is evidence only when both the explicit
+authorization and the orchestrator's corroboration are true; contradictory or
+hostless artifacts fail closed and remain available for diagnosis.
+A dry run touches neither artifact; a failed run may leave its current file for
+diagnosis, but the next real run clears it before reading desired or live state,
+so it can never credit a prior offline retirement.
 
 **When it bites — the disaster variants:**
 

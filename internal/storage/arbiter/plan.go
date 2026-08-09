@@ -71,14 +71,14 @@ func Compute(cluster v1alpha1.StorageCluster, live cephstate.Discovery) (Plan, e
 
 	dump, err := live.MonDump()
 	if err != nil {
-		return Plan{}, fmt.Errorf("read the live monmap of storage cluster %s: %w; `bootwright storage-cluster replace-arbiter` reconciles the live tiebreaker, so it cannot plan without one", cluster.Metadata.Name, err)
+		return Plan{}, &LivePlanError{Failure: LivePlanStateUnreadable, Cluster: cluster.Metadata.Name, Cause: err}
 	}
 	if !dump.StretchMode {
-		return Plan{}, fmt.Errorf("storage cluster %s is not in stretch mode on the cluster itself (`ceph mon dump` reports stretch_mode false), so it carries no tiebreaker to replace; if this cluster was authored as a stretch cluster before it was bootstrapped, converge it with `bootwright apply --clusters %s`, but if the stretch topology was added to an already-built cluster, apply refuses it as a shape change Bootwright cannot make in place", cluster.Metadata.Name, cluster.Metadata.Name)
+		return Plan{}, &LivePlanError{Failure: LivePlanStretchModeDisabled, Cluster: cluster.Metadata.Name, DesiredMon: plan.DesiredMon}
 	}
 	plan.TiebreakerMon = dump.TiebreakerMon
 	if plan.TiebreakerMon == "" {
-		return Plan{}, fmt.Errorf("storage cluster %s reports stretch mode but names no tiebreaker_mon in its live monmap, so Bootwright will not guess which mon to retire; repair the monmap with `ceph mon set_new_tiebreaker <mon>` on the cluster, or converge the authored stretch topology with `bootwright apply --clusters %s`", cluster.Metadata.Name, cluster.Metadata.Name)
+		return Plan{}, &LivePlanError{Failure: LivePlanTiebreakerMissing, Cluster: cluster.Metadata.Name, DesiredMon: plan.DesiredMon}
 	}
 	strays := undeclaredMons(cluster, dump, plan.DesiredMon)
 	switch {
@@ -87,7 +87,7 @@ func Compute(cluster v1alpha1.StorageCluster, live cephstate.Discovery) (Plan, e
 	case len(strays) == 1:
 		plan.LiveMon = strays[0]
 	case len(strays) > 1:
-		return Plan{}, fmt.Errorf("storage cluster %s already answers with mon.%s as its stretch tiebreaker, but its monmap still carries mon(s) %s that no node of the authored topology declares, so Bootwright cannot tell which one an interrupted replacement left behind; remove the leftover mon(s) with `ceph mon rm <mon>` and `ceph orch host rm <host>` on the cluster, then re-run", cluster.Metadata.Name, plan.DesiredMon, strings.Join(strays, ", "))
+		return Plan{}, &LivePlanError{Failure: LivePlanResidueAmbiguous, Cluster: cluster.Metadata.Name, DesiredMon: plan.DesiredMon, StrayMons: append([]string(nil), strays...)}
 	}
 	if plan.LiveMon != "" {
 		plan.LiveSite = dump.SiteOf(plan.LiveMon, domain)

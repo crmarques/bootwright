@@ -2507,8 +2507,21 @@ Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
     arbiter already answers as `tiebreaker_mon` is a reported no-op.
   - **Refusals.** A cluster that is not managed, declares no `spec.ceph`, or
     authors no stretch tiebreaker fails closed before the cluster is contacted.
-    A cluster whose live monmap reports `stretch_mode: false`, or that answers no
-    live read at all, fails closed rather than guess which mon to retire.
+    Live-plan failures carry typed evidence to the CLI and no backend-built
+    Bootwright command. An unreadable monmap names the external evidence to
+    restore and the exact original retry. `stretch_mode: false` names an exact
+    `apply` prerequisite only when the storage-cluster task is positively
+    classified `create`, so that apply will run and can establish the authored
+    stretch mode; a matched, drifted, foreign, or unreadable record names no
+    Bootwright retry because apply may skip or refuse and cannot safely change a
+    built cluster's bootstrap shape. When the original invocation is a preview,
+    that apply continuation remains a preview and the refusal explicitly leaves
+    the real apply as a separate operator decision. A stretch monmap with no
+    `tiebreaker_mon` names the exact external
+    `ceph mon set_new_tiebreaker <authored-mon>` repair
+    and the original retry. Several undeclared mons name the ambiguous evidence,
+    require out-of-band identification of proven residue, and then name the
+    original retry; Bootwright never guesses which mon to remove.
     A replacement arbiter sharing a failure domain with the data-site mons needs
     `--authorize same-site-arbiter`; declared mons outside quorum need
     `--authorize degraded-quorum`; a replaced arbiter host the run proves it
@@ -2516,7 +2529,14 @@ Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
     `ceph orch host rm --offline --force` and no host-local cleanup.
   - **The replaced machine keeps running.** Only its Ceph membership is removed;
     its OS and substrate are untouched, and tearing the machine down stays a
-    separate `destroy` decision.
+    separate `destroy` decision. When it is still a declared node, the completion
+    output renders the exact least-privilege `destroy --machines` invocation from
+    the resolved context, identity, authorization, confirmation, preview, and
+    output flags. When `--new-arbiter-machine` re-authored it out of the topology,
+    Bootwright's machine teardown refuses it as an orphan, so completion gives
+    command-free external decommission guidance instead of a command that cannot
+    run. A continuation never invents `--yes`; preview continuations retain
+    `--dry-run` and JSON output.
   - **Preview and output.** `--dry-run` performs the live reads needed to identify
     the current tiebreaker but changes neither input nor cluster. Text prints the
     ordered plan and Required authorizations; `--output json` is accepted only
@@ -2526,7 +2546,15 @@ Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
     recorded desired and structural state exactly as a successful `apply` writes
     it. Otherwise the next plain `apply` would refuse on drift this verb itself
     authored, and the operator's only exits from a supported day-2 operation
-    would be a destructive rebuild or a hand-edit of recorded state.
+    would be a destructive rebuild or a hand-edit of recorded state. The
+    retirement-path artifact is single-run evidence: a real replacement clears
+    any predecessor only after acquiring the context mutation lease, and a
+    successful run validates and consumes its current result while still holding
+    its replacement lease. An offline result is valid only when it also records
+    the explicit authorization and live orchestrator corroboration; contradictory
+    or hostless evidence fails closed.
+    A no-retirement path, a failed run, or the next run cannot credit stale
+    `unreachable-nodes` evidence.
 
 ### Diagnostics and refusals
 

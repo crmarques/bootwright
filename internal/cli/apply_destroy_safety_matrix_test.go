@@ -834,6 +834,72 @@ func safetyReplaceArbiterCases() []safetyCase {
 		verdict: verdictUsageError,
 		want:    []string{"--output json is supported only with --dry-run"},
 	}, {
+		name: "replace-arbiter/an unrecorded non-stretch live shape offers exact read-only apply and replacement continuations",
+		seed: func(t *testing.T, _ workspace.Context) {
+			seedArbiterMonDump(t, `{"stretch_mode":false,"tiebreaker_mon":"","quorum":[],"mons":[]}`)
+		},
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--output", "json", "--verbose", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		remedy:  remedyAlternative,
+		want: []string{
+			"positively classified to create",
+			"continuation remains read-only",
+			"separate explicit real apply decision",
+			"bootwright apply --mode reconcile --clusters " + safetyAdvancedCephCluster + " --dry-run --output json --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+			"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster + " --dry-run --output json --ask-become-pass=false --verbose --context matrix",
+		},
+		deny: []string{"--yes"},
+	}, {
+		name: "replace-arbiter/a recorded non-stretch live shape stays command-free",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSuccessfulApply(t, ctx)
+			seedArbiterMonDump(t, `{"stretch_mode":false,"tiebreaker_mon":"","quorum":[],"mons":[]}`)
+		},
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		remedy:  remedyExternal,
+		want:    []string{"rather than create", "no bootwright retry command safely performs that transition"},
+		deny:    []string{"bootwright apply", "bootwright storage-cluster replace-arbiter"},
+	}, {
+		name: "replace-arbiter/a live stretch monmap without a tiebreaker names the exact external repair and preview retry",
+		seed: func(t *testing.T, _ workspace.Context) {
+			seedArbiterMonDump(t, strings.Replace(arbiterLiveMonDumpJSON, `"tiebreaker_mon": "node-04"`, `"tiebreaker_mon": ""`, 1))
+		},
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want: []string{
+			"ceph mon set_new_tiebreaker node-07",
+			"in the monmap",
+			"in quorum",
+			"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster + " --dry-run --output json --ask-become-pass=false --context matrix",
+		},
+		deny: []string{"--yes"},
+	}, {
+		name: "replace-arbiter/ambiguous live residue names every stray and only the exact preview retry",
+		seed: func(t *testing.T, _ workspace.Context) {
+			dump := strings.Replace(arbiterLiveMonDumpJSON, `"tiebreaker_mon": "node-04"`, `"tiebreaker_mon": "node-07"`, 1)
+			dump = strings.Replace(dump, `{"rank": 5, "name": "node-08", "public_addr": "192.168.143.12:6789/0", "crush_location": {"datacenter": "dc3"}}`, `{"rank": 5, "name": "node-08", "public_addr": "192.168.143.12:6789/0", "crush_location": {"datacenter": "dc3"}}, {"rank": 6, "name": "arb-old", "crush_location": {"datacenter": "dc3"}}, {"rank": 7, "name": "arb-older", "crush_location": {"datacenter": "dc3"}}`, 1)
+			seedArbiterMonDump(t, dump)
+		},
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want: []string{
+			"arb-old, arb-older, node-08",
+			"only that proven residue",
+			"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster + " --dry-run --ask-become-pass=false --context matrix",
+		},
+	}, {
+		name: "replace-arbiter/an unreadable live monmap preserves the exact text retry",
+		seed: func(t *testing.T, _ workspace.Context) {
+			seedArbiterMonDump(t, `{not-json`)
+		},
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want: []string{
+			"readable `ceph mon dump`",
+			"bootwright storage-cluster replace-arbiter --name " + safetyAdvancedCephCluster + " --dry-run --ask-become-pass=false --context matrix",
+		},
+	}, {
 		name:    "replace-arbiter/JSON preview carries every required authorization without mutation",
 		seed:    seedLiveStretchClusterOffItsArbiter,
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--output", "json", "--ask-become-pass=false"},

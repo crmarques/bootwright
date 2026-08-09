@@ -231,6 +231,8 @@ func TestCrossVerbRetryExpandsAllUnderTheSourceAndCarriesOnlyTargetIntersection(
 	}
 	destroy := apply
 	destroy.verb = invocationDestroy
+	replace := apply
+	replace.verb = invocationReplaceArbiter
 	applyMachine := apply
 	applyMachine.flags.selection = runSelection{machines: hostileCluster}
 	applyCluster := apply
@@ -294,6 +296,16 @@ func TestCrossVerbRetryExpandsAllUnderTheSourceAndCarriesOnlyTargetIntersection(
 			wantScope: hostileCluster,
 		},
 		{
+			name: "replace arbiter to destroy selected machine",
+			build: func() (retryCommand, error) {
+				return replace.destroyMachinesRetry([]string{hostileCluster}, authorizeInstalledClusterNode)
+			},
+			wantVerb:  invocationDestroy,
+			wantAuth:  []string{authorizeUnreachableNodes, authorizeInstalledClusterNode},
+			scopeFlag: "machines",
+			wantScope: hostileCluster,
+		},
+		{
 			name: "destroy to apply selected clusters",
 			build: func() (retryCommand, error) {
 				return destroy.applyClustersRetry([]string{hostileCluster}, authorizeForeignDaemons)
@@ -309,6 +321,13 @@ func TestCrossVerbRetryExpandsAllUnderTheSourceAndCarriesOnlyTargetIntersection(
 			command, err := tc.build()
 			if err != nil {
 				t.Fatal(err)
+			}
+			wantPrefix := []string{"bootwright", string(tc.wantVerb)}
+			if tc.wantVerb == invocationReplaceArbiter {
+				wantPrefix = []string{"bootwright", "storage-cluster", "replace-arbiter"}
+			}
+			if args := command.Args(); len(args) < len(wantPrefix) || !slices.Equal(args[:len(wantPrefix)], wantPrefix) {
+				t.Fatalf("cross-verb retry prefix = %v, want %v", args, wantPrefix)
 			}
 			if got := shellParseWords(t, command.String()); !reflect.DeepEqual(got, command.Args()) {
 				t.Fatalf("shell round trip = %#v\nwant %#v", got, command.Args())

@@ -510,6 +510,9 @@ in the monmap, in quorum, and located **before** removing the old arbiter, so a
 failure part-way leaves the original still holding the tiebreaker. The full
 procedure, its preconditions, and its `--authorize` tokens are in
 [Replacing the arbiter](ceph-topologies.md#replacing-the-arbiter).
+Its refusals preserve the resolved context and execution flags in every exact
+retry; a dry-run/JSON continuation stays read-only, and a live shape that no
+Bootwright command can safely change remains command-free.
 
 ## Removing declared objects
 

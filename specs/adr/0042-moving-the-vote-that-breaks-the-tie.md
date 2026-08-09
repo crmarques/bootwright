@@ -90,6 +90,17 @@ widens to this verb with the same evidentiary rule: absence must be *proved* by
 the probe, and a node that answered and refused an identity is never treated as
 gone.
 
+**Live-plan evidence does not reconstruct CLI intent.** Storage planning returns
+typed live evidence only. The CLI renders every sanctioned continuation from the
+resolved invocation, preserving context, SSH identity, applicable
+authorizations, confirmation, and preview/output intent. A live
+`stretch_mode: false` gets an apply prerequisite only when the storage-cluster
+task is positively classified to create; otherwise no Bootwright retry is
+claimed to change the bootstrap shape. A missing live tiebreaker names the exact
+authored mon in the external Ceph repair, and unreadable or ambiguous state names
+the external evidence to restore before the exact original retry. A preview's
+continuation remains a preview and no continuation invents `--yes`.
+
 **A third authorization verb.** `--authorize` was keyed to `apply` and `destroy`;
 it is now keyed to a set, `all` covers this verb's tokens as it does theirs, and
 every token that does not reach all three verbs carries the guidance printed when
@@ -99,7 +110,17 @@ a verb that cannot consume it is given it.
 running with its OS intact; only its Ceph membership is removed. Embedding a
 substrate teardown here would duplicate the destroy safety model — ownership
 records, protection, data-loss authorization, record resets — in a second place
-where the two could disagree.
+where the two could disagree. Completion may render the resolved least-privilege
+machine destroy only while the machine remains a declared node. A promotion has
+already orphaned the old machine from provisioning work, so that path gives
+command-free external decommission guidance rather than advertising a destroy
+that the desired-state selector refuses.
+
+**Retirement authorization evidence belongs to one run.** A real replacement
+clears any prior retirement artifact after acquiring and proving ownership of the
+context mutation lease. A successful retirement consumes its current artifact
+under the same lease. No-op and failed paths cannot make a later run report the
+old `unreachable-nodes` decision as current.
 
 ## Consequences
 
@@ -117,3 +138,6 @@ where the two could disagree.
 - The verb reaches the cluster before it can plan, so it fails closed where
   `apply --dry-run` would have planned offline. That is intended: there is no
   honest plan for "replace the arbiter" without knowing which mon holds it.
+- Exact continuations can be longer than the minimal examples because they carry
+  the operator's resolved context and execution intent; that verbosity prevents
+  a copied remedy from widening scope or turning a preview into a mutation.

@@ -133,10 +133,6 @@ func tiebreakerOnlyDriftSet(drifted []ObjectClassification) bool {
 	return named == len(drifted) && named > 0
 }
 
-func TiebreakerReplacementCommand(cluster string) string {
-	return "bootwright storage-cluster replace-arbiter --name " + cluster
-}
-
 func WithoutTiebreakerDrift(objects []ObjectClassification, cluster string) []ObjectClassification {
 	kept := make([]ObjectClassification, 0, len(objects))
 	for _, o := range objects {

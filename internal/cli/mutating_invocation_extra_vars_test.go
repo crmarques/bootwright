@@ -99,6 +99,36 @@ func TestMutatingInvocationExtraVarsExposeOnlyExactDestroyRetry(t *testing.T) {
 	}
 }
 
+func TestMutatingInvocationExtraVarsExposeExactArbiterAuthorizationRetries(t *testing.T) {
+	invocation := hostileArbiterInvocation()
+	plan := converge.WorkflowPlan{}
+	if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
+		t.Fatal(err)
+	}
+	values := invocationExtraVarValues(t, plan)
+	intents := map[string]retryIntent{
+		converge.MutatingInvocationExtraVar:           {},
+		converge.ArbiterDegradedInvocationExtraVar:    {requiredAuthorizations: []string{authorizeDegradedQuorum}},
+		converge.ArbiterSameSiteInvocationExtraVar:    {requiredAuthorizations: []string{authorizeSameSiteArbiter}},
+		converge.ArbiterUnreachableInvocationExtraVar: {requiredAuthorizations: []string{authorizeUnreachableNodes}},
+	}
+	if len(values) != len(intents) {
+		t.Fatalf("replace-arbiter extra vars = %v", values)
+	}
+	for name, intent := range intents {
+		command, err := invocation.retry(intent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := values[name]; got != command.String() {
+			t.Fatalf("%s = %#v, want exact resolved retry %q", name, got, command.String())
+		}
+		if strings.Contains(command.String(), "--yes") {
+			t.Fatalf("%s invented --yes: %s", name, command.String())
+		}
+	}
+}
+
 func TestMutatingInvocationExtraVarsEncodeNoPreservedReclaimPathsAsAList(t *testing.T) {
 	invocation := resolvedInvocation{
 		verb:  invocationApply,

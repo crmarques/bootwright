@@ -14,6 +14,8 @@ import (
 func TestReplaceArbiterJSONPreviewIsMachineReadableAndComplete(t *testing.T) {
 	ctx := initSafetyBaselineContext(t, "")
 	seedLiveStretchClusterOffItsArbiter(t, ctx)
+	staleRetirement := `{"host":"stale","authorized":true,"corroborated":true,"offline":true}`
+	stalePath := writeArbiterRetirementFixture(t, ctx.RunsDir, staleRetirement)
 	before := safetyDurableStateSnapshot(t, ctx)
 	stdout, stderr, code := runCLI(t,
 		"storage-cluster", "replace-arbiter",
@@ -46,6 +48,9 @@ func TestReplaceArbiterJSONPreviewIsMachineReadableAndComplete(t *testing.T) {
 	}
 	if after := safetyDurableStateSnapshot(t, ctx); !maps.Equal(before, after) {
 		t.Fatalf("JSON preview changed durable state at %v", safetySnapshotDelta(before, after))
+	}
+	if data, err := os.ReadFile(stalePath); err != nil || string(data) != staleRetirement {
+		t.Fatalf("JSON preview changed prior retirement evidence: data=%q err=%v", data, err)
 	}
 }
 
@@ -81,13 +86,17 @@ exit 0
 `
 
 func seedLiveStretchClusterOffItsArbiter(t *testing.T, _ workspace.Context) {
+	seedArbiterMonDump(t, arbiterLiveMonDumpJSON)
+}
+
+func seedArbiterMonDump(t *testing.T, monDump string) {
 	t.Helper()
 	fixture := t.TempDir()
 	marker := fmt.Sprintf(`{"cluster": %q, "probed": true, "reads": ["mon_dump"]}`, safetyAdvancedCephCluster)
 	if err := os.WriteFile(filepath.Join(fixture, "discovery.json"), []byte(marker), 0o600); err != nil {
 		t.Fatalf("write discovery marker: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(fixture, "mon_dump.json"), []byte(arbiterLiveMonDumpJSON), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(fixture, "mon_dump.json"), []byte(monDump), 0o600); err != nil {
 		t.Fatalf("write live mon dump: %v", err)
 	}
 	stubDir := t.TempDir()

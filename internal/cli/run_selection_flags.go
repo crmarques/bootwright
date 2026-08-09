@@ -133,6 +133,24 @@ func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryComman
 	return retryCommand{args: next.args()}, nil
 }
 
+func (i resolvedInvocation) destroyMachinesRetry(machines []string, requiredAuthorizations ...string) (retryCommand, error) {
+	if len(machines) == 0 {
+		return retryCommand{}, fmt.Errorf("cannot construct a destroy retry without machines")
+	}
+	next := i
+	next.verb = invocationDestroy
+	next.flags.mode = ""
+	next.flags.selection = runSelection{machines: strings.Join(machines, ",")}
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.trustOnFirstUse = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationDestroy)
+	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
+}
+
 func (i resolvedInvocation) applyClustersRetry(clusters []string, requiredAuthorizations ...string) (retryCommand, error) {
 	if len(clusters) == 0 {
 		return retryCommand{}, fmt.Errorf("cannot construct an apply retry without clusters")

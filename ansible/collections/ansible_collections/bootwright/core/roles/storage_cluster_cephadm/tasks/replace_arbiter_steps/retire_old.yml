@@ -38,8 +38,8 @@
     fail_msg: >-
       cephadm rejected the mon spec that retires mon.{{ bootwright_arbiter_live_mon }}.
       The tiebreaker has ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}, so the
-      cluster is correct but still carries the extra mon; re-run the command to finish
-      the retirement.
+      cluster is correct but still carries the extra mon; retry with
+      `{{ bootwright_mutating_invocation }}` to finish the retirement.
       rc: {{ bootwright_arbiter_mon_spec_after.rc | default('<none>') }}
       stdout: {{ bootwright_arbiter_mon_spec_after.stdout | default('') }}
       stderr: {{ bootwright_arbiter_mon_spec_after.stderr | default('') }}
@@ -199,10 +199,11 @@
       cephadm still manages it and can still place daemons on it. The tiebreaker has
       ALREADY moved to mon.{{ bootwright_arbiter_desired_mon }}, so the cluster is correct
       but still carries the retired host. Drain it by hand with
-      `ceph orch host drain {{ bootwright_arbiter_live_node }}` and re-run the command to
-      finish the retirement; if the host is gone for good, power it down and re-run with
-      --authorize unreachable-nodes, which takes the offline path once `ceph orch host ls`
-      reports it offline.
+      `ceph orch host drain {{ bootwright_arbiter_live_node }}` and retry with
+      `{{ bootwright_mutating_invocation }}` to finish the retirement; if the host is gone
+      for good, power it down and retry with
+      `{{ bootwright_arbiter_unreachable_invocation }}`, which takes the offline path once
+      `ceph orch host ls` reports it offline.
       rc: {{ bootwright_arbiter_host_rm.rc | default('<none>') }}
       stdout: {{ bootwright_arbiter_host_rm.stdout | default('') }}
       stderr: {{ bootwright_arbiter_host_rm.stderr | default('') }}

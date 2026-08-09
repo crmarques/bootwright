@@ -617,22 +617,6 @@ learned; this file records what it still owes.
   build-on-promotion behaviour where candidates are declared.
 - Related: [ceph-arbiter-replacement.md](ceph-arbiter-replacement.md)
 
-## B-075 — A stale `arbiter-retire-result.json` outlives every destroy
-- Status: open
-- Area: storage/arbiter · run records
-- Origin: destroy `--purge-history` leftover audit (2026-08-04)
-- Problem: the replace-arbiter retirement report is written to
-  `runs/preflight/storage-replace-arbiter/artifacts/.../arbiter-retire-result.json`
-  (`retire_old.yml`) and read back by `ReadArbiterRetirement`
-  (`internal/converge/storage_replace_arbiter.go`). Nothing removes it: it sits
-  under `runs/preflight/`, which `destroy --purge-history` deliberately never
-  reaches, so after a full destroy and rebuild the context still carries the
-  previous environment's retirement outcome, and reporting paths re-read it as
-  if it belonged to the new cluster.
-- Exit: remove the artifact once consumed (or key it by cluster + run and
-  ignore records older than the current install), and clear it on a full-scope
-  destroy alongside the other per-component records.
-
 ## B-077 — The IBM subscription preflight queries every enabled repository, once per package
 - Status: open
 - Area: ceph / packaging

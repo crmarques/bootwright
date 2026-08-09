@@ -19,6 +19,9 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		converge.ApplyReclaimInvocationExtraVar,
 		converge.ApplyFullInvocationExtraVar,
 		converge.ApplyThroughBaseInvocationExtraVar,
+		converge.ArbiterDegradedInvocationExtraVar,
+		converge.ArbiterSameSiteInvocationExtraVar,
+		converge.ArbiterUnreachableInvocationExtraVar,
 	}
 	docs := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md")
 	producer := readRepoFile(t, "internal/cli/mutating_invocation_extra_vars.go")
@@ -57,7 +60,7 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 			return err
 		}
 		for lineNo, line := range strings.Split(string(body), "\n") {
-			if (strings.Contains(line, "bootwright apply") || strings.Contains(line, "bootwright destroy")) && !strings.Contains(line, "_invocation") {
+			if (strings.Contains(line, "bootwright apply") || strings.Contains(line, "bootwright destroy") || strings.Contains(line, "bootwright storage-cluster replace-arbiter")) && !strings.Contains(line, "_invocation") {
 				t.Errorf("%s:%d assembles a mutating remedy instead of using a resolved invocation fact: %s", path, lineNo+1, strings.TrimSpace(line))
 			}
 			for _, name := range factPattern.FindAllString(line, -1) {
@@ -87,7 +90,47 @@ func mutatingInvocationConstantName(name string) string {
 		return "ApplyFullInvocationExtraVar"
 	case converge.ApplyThroughBaseInvocationExtraVar:
 		return "ApplyThroughBaseInvocationExtraVar"
+	case converge.ArbiterDegradedInvocationExtraVar:
+		return "ArbiterDegradedInvocationExtraVar"
+	case converge.ArbiterSameSiteInvocationExtraVar:
+		return "ArbiterSameSiteInvocationExtraVar"
+	case converge.ArbiterUnreachableInvocationExtraVar:
+		return "ArbiterUnreachableInvocationExtraVar"
 	default:
 		return ""
+	}
+}
+
+func TestArbiterBackendsCarryEvidenceInsteadOfMutatingArgv(t *testing.T) {
+	root := repoRoot(t)
+	paths := []string{
+		filepath.Join(root, "internal/converge/storage_replace_arbiter.go"),
+		filepath.Join(root, "internal/converge/workflow/apply_mode_preflight.go"),
+	}
+	storageRoot := filepath.Join(root, "internal/storage/arbiter")
+	err := filepath.WalkDir(storageRoot, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && filepath.Ext(path) == ".go" && !strings.HasSuffix(path, "_test.go") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnable := regexp.MustCompile(`(?i)bootwright\s+(apply|destroy)\s+--|bootwright\s+storage-cluster\s+replace-arbiter\s+--|\[\]string\s*\{\s*"bootwright"`)
+	for _, path := range paths {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match := runnable.Find(body); match != nil {
+			t.Errorf("%s assembles mutating Bootwright argv %q; return typed evidence to internal/cli", path, match)
+		}
+		if strings.Contains(string(body), "TiebreakerReplacementCommand") {
+			t.Errorf("%s restored the removed context-free replacement command helper", path)
+		}
 	}
 }

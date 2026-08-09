@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -64,6 +66,12 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		if err != nil {
 			return failErr(1, mutatingRunLeaseRefusal(err, invocation))
 		}
+		if err := runLease.RequireOwned(); err != nil {
+			return failErr(1, err)
+		}
+		if err := converge.ClearArbiterRetirement(ctx.RunsDir, runLease); err != nil {
+			return failErr(1, arbiterRetirementResetRefusal(err, invocation))
+		}
 		runContext = runLease.Context()
 	}
 	state, err := loadDesiredState(cf)
@@ -97,11 +105,11 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}
 	live, err := discoverArbiterClusterState(runContext, discoveryStdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name)
 	if err != nil {
-		return failErr(1, err)
+		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
 	}
 	plan, err := arbiter.Compute(arbiterDesiredCluster(cluster, promotion), live)
 	if err != nil {
-		return failErr(1, err)
+		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
 	}
 	if plan.Settled && promotion.Empty() {
 		if flags.output == outputJSON {
@@ -112,7 +120,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 			printRequiredAuthorizations(stdout, nil)
 		} else {
 			carried, refreshErr := refreshArbiterConvergeRecords(ctx, state, state, plan.Cluster)
-			reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr)
+			reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr, invocation)
 		}
 		warnUnusedAuthorizations(stdout, auth, flags.dryRun)
 		return nil
@@ -151,7 +159,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 			return failErr(1, err)
 		}
 		if plan, err = arbiter.Compute(cluster, live); err != nil {
-			return failErr(1, err)
+			return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
 		}
 		if err := replaceArbiterGateRefusals(auth, plan, invocation); err != nil {
 			return failErr(1, err)
@@ -163,20 +171,28 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}
 	defer becomeCleanup()
 	applyInvocation, err := newResolvedInvocation(invocationApply, ctx.Name, invocationFlags{
-		mode:          workflow.ApplyModeReconcile,
-		selection:     runSelection{through: converge.PhaseDeps, clusters: cluster.Metadata.Name},
-		askBecomePass: flags.askBecomePas,
-		verbose:       flags.verbose,
+		mode:           workflow.ApplyModeReconcile,
+		selection:      runSelection{through: converge.PhaseDeps, clusters: cluster.Metadata.Name},
+		authorizations: authorizationsAcceptedByVerb(flags.authorize, invocationReplaceArbiter, invocationApply),
+		dryRun:         flags.dryRun,
+		output:         flags.output,
+		yes:            flags.yes,
+		askBecomePass:  flags.askBecomePas,
+		verbose:        flags.verbose,
 	})
 	if err != nil {
 		return failErr(1, err)
 	}
-	remediationExtraVars, err := mutatingInvocationExtraVars(applyInvocation, "")
+	applyRemediationExtraVars, err := mutatingInvocationExtraVars(applyInvocation, "")
 	if err != nil {
 		return failErr(1, err)
 	}
-	if err := prepareArbiterMachine(runContext, stdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name, become.PasswordFile, bundleResult, reporter, remediationExtraVars, runLease, invocation); err != nil {
+	if err := prepareArbiterMachine(runContext, stdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name, become.PasswordFile, bundleResult, reporter, applyRemediationExtraVars, runLease, invocation, applyInvocation); err != nil {
 		return err
+	}
+	replacementRemediationExtraVars, err := mutatingInvocationExtraVars(invocation, "")
+	if err != nil {
+		return failErr(1, err)
 	}
 	monHosts := plan.MonHostsDuring
 	runErr := converge.RunArbiterReplacement(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, converge.ArbiterRunOptions{
@@ -189,7 +205,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		OldHostOffline:     auth.has(authorizeUnreachableNodes),
 		BecomePasswordFile: become.PasswordFile,
 		Verbose:            flags.verbose,
-		ExtraVarPairs:      remediationExtraVars,
+		ExtraVarPairs:      replacementRemediationExtraVars,
 		RunLease:           runLease,
 	}, reporter)
 	if runErr != nil {
@@ -198,16 +214,16 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err := runLease.RequireOwned(); err != nil {
 		return failErr(1, err)
 	}
-	reportArbiterRetirement(stdout, auth, ctx.RunsDir)
+	reportArbiterRetirement(stdout, auth, ctx.RunsDir, runLease, invocation)
 	carried, refreshErr := refreshArbiterConvergeRecords(ctx, preRewriteState, state, plan.Cluster)
-	reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr)
+	reportArbiterConvergeRecords(stdout, plan.Cluster, carried, refreshErr, invocation)
 	cliout.New(stdout).Summary(cliout.StatusOK, plan.Cluster, "stretch tiebreaker is now mon."+plan.DesiredMon+" on Machine/"+plan.DesiredMachine)
-	printRetiredArbiterDisposal(stdout, plan, promotion)
+	printRetiredArbiterDisposal(stdout, state, plan, promotion, invocation)
 	warnUnusedAuthorizations(stdout, auth, false)
 	return nil
 }
 
-func printRetiredArbiterDisposal(stdout io.Writer, plan arbiter.Plan, promotion arbiter.Promotion) {
+func printRetiredArbiterDisposal(stdout io.Writer, state v1alpha1.State, plan arbiter.Plan, promotion arbiter.Promotion, invocation resolvedInvocation) {
 	p := cliout.NewContinuation(stdout)
 	if plan.LiveMachine == "" {
 		if plan.LiveNode == "" {
@@ -217,10 +233,28 @@ func printRetiredArbiterDisposal(stdout io.Writer, plan arbiter.Plan, promotion 
 		return
 	}
 	if !promotion.Empty() {
-		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; this run re-authored the tiebreaker, so the Machine stays declared but has no provisioning work and `bootwright destroy --machines "+plan.LiveMachine+"` refuses it as an orphan — decommission it out of band, or remove the Machine document once it is gone")
+		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; this run re-authored the tiebreaker, so the Machine stays declared but has no provisioning work and Bootwright's machine teardown refuses it as an orphan — decommission it out of band, or remove the Machine document once it is gone")
 		return
 	}
-	p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; tear it down with `bootwright destroy --machines "+plan.LiveMachine+"` while it is still a declared node, or decommission it out of band")
+	selection, err := clusteraccess.ResolveMachines(state, plan.LiveMachine)
+	if err != nil || !slices.Contains(selection.StorageRoots, plan.Cluster) {
+		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; the current desired state does not prove that Bootwright can tear down exactly this declared storage node, so decommission it out of band")
+		return
+	}
+	required := []string{authorizeInstalledClusterNode}
+	safetyScope := workflow.DestroySafetyScope{TearsMachines: true}
+	if workflow.EvaluateDestroySafety(state, false, []string{plan.Cluster}, safetyScope).RequiresAuthorization {
+		required = append(required, authorizeProtected)
+	}
+	if workflow.EvaluateDestroyDataLoss(state, []string{plan.Cluster}, safetyScope).Planned() {
+		required = append(required, authorizeDataLoss)
+	}
+	command, err := invocation.destroyMachinesRetry([]string{plan.LiveMachine}, required...)
+	if err != nil {
+		p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; Bootwright could not safely construct the declared-node teardown command, so decommission it out of band")
+		return
+	}
+	p.Status(cliout.StatusSkip, "Machine/"+plan.LiveMachine, "left the storage cluster but keeps running; while it is still a declared node, tear down exactly that machine with `"+command.String()+"`, or decommission it out of band")
 }
 
 func replaceArbiterGateRefusals(auth *authorizations, plan arbiter.Plan, invocation resolvedInvocation) error {
@@ -257,16 +291,16 @@ func discoverArbiterClusterState(cmdCtx context.Context, stdout, stderr io.Write
 	}
 	discovered, err := converge.RunCephStateDiscovery(cmdCtx, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, flags.verbose, false, newWorkflowReporter(stdout, "Read"))
 	if err != nil {
-		return cephstate.Discovery{}, fmt.Errorf("read the live state of storage cluster %s: %w; replace-arbiter reconciles the live tiebreaker, so it cannot plan without reaching the cluster", clusterName, err)
+		return cephstate.Discovery{}, &arbiter.LivePlanError{Failure: arbiter.LivePlanStateUnreadable, Cluster: clusterName, Cause: err}
 	}
 	live, ok := discovered[clusterName]
 	if !ok || !live.Probed {
-		return cephstate.Discovery{}, fmt.Errorf("storage cluster %s answered no live Ceph reads, so this run cannot tell which mon is the tiebreaker today; confirm the cluster is up and its seed node reachable", clusterName)
+		return cephstate.Discovery{}, &arbiter.LivePlanError{Failure: arbiter.LivePlanStateUnreadable, Cluster: clusterName}
 	}
 	return live, nil
 }
 
-func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, flags replaceArbiterFlags, state v1alpha1.State, clusterName, becomePasswordFile string, bundleResult bundle.AnsibleBundleResult, reporter *workflowReporter, remediationExtraVars []string, runLease *workflow.CommandRunLease, invocation resolvedInvocation) error {
+func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, flags replaceArbiterFlags, state v1alpha1.State, clusterName, becomePasswordFile string, bundleResult bundle.AnsibleBundleResult, reporter *workflowReporter, remediationExtraVars []string, runLease *workflow.CommandRunLease, invocation, applyInvocation resolvedInvocation) error {
 	runScope, err := converge.ApplyThroughScope("deps")
 	if err != nil {
 		return failErr(1, err)
@@ -290,9 +324,9 @@ func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 		return failErr(1, err)
 	}
 	if err := converge.ArbiterPreparePreflight(tasks, ctx.RunsDir, clusterName); err != nil {
-		return failErr(1, arbiterPrepareDriftRefusal(clusterName, err))
+		return failErr(1, arbiterPrepareDriftRefusal(err, applyInvocation, invocation))
 	}
-	if err := arbiterPrepareReleasedSubstrateRefusal(ctx.RunsDir, clusterName, tasks); err != nil {
+	if err := arbiterPrepareReleasedSubstrateRefusal(ctx.RunsDir, tasks, invocation); err != nil {
 		return failErr(1, err)
 	}
 	converge.ApplyVerboseExtraVar(&plan, flags.verbose)
@@ -303,10 +337,13 @@ func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 		return failErr(1, err)
 	}
-	runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, becomePasswordFile, false, "replace-arbiter prepare "+clusterName, workflow.ApplyModeReconcile, false, nil)
+	runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, becomePasswordFile, false, "replace-arbiter prepare "+clusterName, workflow.ApplyModeReconcile, false, applyInvocation.args())
 	runOpts.RunLease = runLease
 	_, _, ledger, err := converge.ExecuteApply(cmdCtx, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, clusterName, plan, tasks, limits, true, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 	if err != nil {
+		if hasApplyInstallRemedy(err) {
+			return failErr(1, arbiterPrepareRunError(err, applyInvocation, invocation))
+		}
 		if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 			return silentExit(1)
 		}
