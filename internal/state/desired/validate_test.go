@@ -3315,6 +3315,14 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 		}
 		return cluster
 	}
+	storageClusterWithIdentity := func(name, user, keyRef string, machineRefs ...string) v1alpha1.StorageCluster {
+		cluster := storageCluster(name, machineRefs...)
+		cluster.Spec.Ceph.Cephadm.ClusterSSH = v1alpha1.StorageCephadmSSHSpec{
+			User:   user,
+			KeyRef: v1alpha1.LocalObjectReference{Name: keyRef},
+		}
+		return cluster
+	}
 	cases := []struct {
 		name  string
 		state v1alpha1.State
@@ -3347,6 +3355,22 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "shared-0")},
 			},
 			want: []string{`StorageCluster/ceph spec.ceph.topology.nodes[1].machineRef "shared-0" is already node-bound by ContainerCluster/dc1 spec.nodes[0]; a Machine may be node-bound by at most one cluster`},
+		},
+		{
+			name: "storage-clusters-sharing-a-machine-with-different-identities",
+			state: v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{
+				storageClusterWithIdentity("ceph-a", "cephadm", "key-a", "shared-0"),
+				storageClusterWithIdentity("ceph-b", "cephsvc", "key-b", "shared-0"),
+			}},
+			want: []string{`StorageCluster/ceph-b spec.ceph.topology.nodes[0].machineRef "shared-0" is already node-bound by StorageCluster/ceph-a spec.ceph.topology.nodes[0], and their cephadm clusterSSH identities differ: StorageCluster/ceph-a resolves user "cephadm" with keyRef "key-a" while StorageCluster/ceph-b resolves user "cephsvc" with keyRef "key-b". The inventory can carry only one connection identity for Machine/shared-0, so one cluster would contact it as an account or key the other cluster did not reconcile. Bind distinct Machines to the clusters`},
+		},
+		{
+			name: "storage-clusters-sharing-a-machine-with-the-same-identity",
+			state: v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{
+				storageClusterWithIdentity("ceph-a", "cephadm", "shared-key", "shared-0"),
+				storageClusterWithIdentity("ceph-b", "cephadm", "shared-key", "shared-0"),
+			}},
+			want: []string{`StorageCluster/ceph-b spec.ceph.topology.nodes[0].machineRef "shared-0" is already node-bound by StorageCluster/ceph-a spec.ceph.topology.nodes[0]; a Machine may be node-bound by at most one cluster`},
 		},
 		{
 			name: "one-cluster-binding-a-machine-twice",

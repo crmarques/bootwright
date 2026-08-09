@@ -167,7 +167,9 @@ bridge under `networkAttachments`:
 
 - `ceph-full`: 2 vCPU, 4096 MiB RAM, a 20 GiB root, and three 8 GiB OSD data disks
   (`/dev/vdb`–`/dev/vdd`).
-- `ceph-mon`: 1 vCPU, 2048 MiB RAM, a 16 GiB root, no OSD disks.
+- `ceph-mon`: 1 vCPU, 2048 MiB RAM, a 40 GiB root, no OSD disks. Its `mon`
+  role computes a 35 GiB service budget; the extra room lets the installed OS
+  coexist with the 20 GiB free-space floor enforced by live preflight.
 
 ### Machine (`infra/machines/bastion.yaml`, `clusters/storage/ceph-ibm/nodes/*.yaml`)
 

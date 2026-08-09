@@ -18,6 +18,7 @@ const (
 
 const (
 	cephBestPracticeGroup  = "Ceph best practice"
+	rootFilesystemGroup    = "Ceph root filesystem"
 	stretchPoolGroup       = "Stretch pools"
 	stretchTiebreakerGroup = "Stretch tiebreaker"
 	estateSiteGroup        = "Estate sites"
@@ -45,9 +46,40 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageGrafanaCredentialAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
 		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
+		out = append(out, storageRootFilesystemAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)
 		out = append(out, storageStretchDataSiteTiebreakerAdvisories(object, cluster)...)
+	}
+	return out
+}
+
+func storageRootFilesystemAdvisories(object string, state v1alpha1.State, cluster v1alpha1.StorageCluster) []StorageAdvisory {
+	var out []StorageAdvisory
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		binding, ok := topology.ResolveNodeMachineProfile(state, node)
+		if !ok {
+			continue
+		}
+		diskGiB := binding.EffectiveDiskGiB
+		budgetGiB := topology.NodeRootFilesystemGiB(cluster, node)
+		if budgetGiB <= topology.RootFilesystemFloorGiB || diskGiB < topology.RootFilesystemFloorGiB || diskGiB >= budgetGiB {
+			continue
+		}
+		out = append(out, StorageAdvisory{
+			Severity: SeverityWarn,
+			Group:    rootFilesystemGroup,
+			Object:   object,
+			Finding: fmt.Sprintf(
+				"ceph node %q (Machine/%s) resolves InfraProvider/%s profile %q diskGiB to %d GiB, below its computed %d GiB root-filesystem service budget",
+				node.Name, binding.Machine.Metadata.Name, binding.Provider.Metadata.Name, binding.Profile.Name, diskGiB, budgetGiB,
+			),
+			Impact: "the raw disk clears the absolute desired-state floor, but the live preflight measures free space after the OS is installed and will warn below this node's role and monitoring budget; Ceph data, images, and service state can exhaust the root filesystem",
+			Remediation: fmt.Sprintf(
+				"before the first apply, raise InfraProvider/%s spec.%s.machineProfiles profile %q diskGiB to at least %d; raw disk size cannot guarantee the same amount of free space, so leave additional room for the OS",
+				binding.Provider.Metadata.Name, binding.Provider.Spec.Type, binding.Profile.Name, budgetGiB,
+			),
+		})
 	}
 	return out
 }

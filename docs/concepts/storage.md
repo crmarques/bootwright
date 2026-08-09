@@ -495,10 +495,15 @@ install lays down — see
 [What the install lays down](../advanced/managed-os.md#what-the-install-lays-down)
 for that layout.
 
-Preflight **fails** below an absolute floor of 20 GiB free and **warns** below
-the computed budget. A node that installs under budget still comes up, but its
-root filesystem is expected to run short and Ceph's `CephNodeDiskspaceWarning`
-alert will fire on the trailing fill rate — see
+Before any provider contact, desired-state validation rejects a virtual Ceph
+node whose resolved `machineProfiles[].diskGiB` is below 20 GiB: a raw disk
+smaller than the absolute free-space floor cannot pass. At or above that floor,
+`validate` emits a non-blocking `WARN` when the raw disk is below the computed
+service budget. Live preflight remains authoritative: it **fails** below 20 GiB
+free and **warns** below the computed budget after the OS and services consume
+space. A node that installs under budget still comes up, but its root filesystem
+is expected to run short and Ceph's `CephNodeDiskspaceWarning` alert will fire on
+the trailing fill rate — see
 [Ceph disk-space alerts flap after install](../troubleshooting.md#ceph-disk-space-alerts-flap-after-install).
 
 !!! warning "Size the root disk from this budget before the first apply"

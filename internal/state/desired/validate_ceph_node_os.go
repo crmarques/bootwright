@@ -65,3 +65,30 @@ func validateManagedOSCephNodeRootDisk(state v1alpha1.State) []string {
 	}
 	return errs
 }
+
+func validateStorageCephRootFilesystemProfiles(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		binding, ok := topology.ResolveNodeMachineProfile(state, node)
+		if !ok || binding.EffectiveDiskGiB >= topology.RootFilesystemFloorGiB {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf(
+			"StorageCluster/%s ceph node %q (Machine/%s) resolves to InfraProvider/%s type %q machine profile %q with diskGiB %d, below the absolute Ceph root-filesystem floor of %d GiB; the live preflight requires %d GiB free, so a raw disk smaller than that can never pass. Raise InfraProvider/%s spec.%s.machineProfiles profile %q diskGiB to at least %d before apply",
+			cluster.Metadata.Name,
+			node.Name,
+			binding.Machine.Metadata.Name,
+			binding.Provider.Metadata.Name,
+			binding.Provider.Spec.Type,
+			binding.Profile.Name,
+			binding.EffectiveDiskGiB,
+			topology.RootFilesystemFloorGiB,
+			topology.RootFilesystemFloorGiB,
+			binding.Provider.Metadata.Name,
+			binding.Provider.Spec.Type,
+			binding.Profile.Name,
+			topology.RootFilesystemFloorGiB,
+		))
+	}
+	return errs
+}

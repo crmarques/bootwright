@@ -5,13 +5,8 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-func MonitoringEnabled(cluster v1alpha1.StorageCluster) bool {
-	monitoring := cluster.Spec.Ceph.Monitoring
-	return monitoring == nil || monitoring.Enabled == nil || *monitoring.Enabled
-}
-
 func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
-	if !MonitoringEnabled(cluster) {
+	if !topology.MonitoringEnabled(cluster) {
 		return nil
 	}
 	var prometheus, grafana, alertmanager, nodeExporter, loki, promtail *v1alpha1.StorageCephMonitoringService
@@ -63,7 +58,7 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 			}
 		}
 		if service.serviceType == "prometheus" {
-			spec["retention_size"] = PrometheusRetentionSize(cluster)
+			spec["retention_size"] = topology.PrometheusRetentionSize(cluster)
 		}
 		doc := cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec)
 		if service.config != nil {

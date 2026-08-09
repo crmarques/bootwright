@@ -92,6 +92,16 @@ non-fatal by design — a node with no reachable NTP source (disconnected site)
 still proceeds and cephadm surfaces residual skew as a health warning. Gated on
 chronyd actually being a managed service.
 
+**Constraint:** The Ceph root-filesystem budget belongs to
+`internal/storage/topology`, not the renderer: inventory, desired-state
+validation, and advisories must consume the same calculation. A virtual
+provider profile below the absolute 20 GiB floor fails validation before VM or
+OS mutation; a raw disk between the floor and the node's computed role/service
+budget produces a non-blocking warning. This does not replace live preflight —
+`diskGiB` is raw capacity while the host gate measures free space after the OS
+lands. The IBM libvirt lab's mon-only profile is 40 GiB for a 35 GiB computed
+budget, leaving room above the 20 GiB live free-space floor.
+
 **Constraint:** `ceph orch apply` reconciles to the spec and exposes no stable
 changed/ok signal, so the declarative service-spec steps set
 `changed_when: true` by design. Convergence drift is computed in Go from the

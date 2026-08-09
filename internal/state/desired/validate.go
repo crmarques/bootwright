@@ -328,23 +328,32 @@ func validateReservedClusterRootNames(state v1alpha1.State) []string {
 }
 
 func validateMachineNodeBindings(state v1alpha1.State) []string {
+	type storageIdentity struct {
+		user   string
+		keyRef string
+	}
 	type binding struct {
-		cluster string
-		field   string
+		cluster         string
+		field           string
+		storageIdentity *storageIdentity
 	}
 	bindings := map[string]binding{}
 	var errs []string
-	bind := func(machine, cluster, field string) {
+	bind := func(machine, cluster, field string, identity *storageIdentity) {
 		if machine == "" {
 			return
 		}
 		existing, ok := bindings[machine]
 		if !ok {
-			bindings[machine] = binding{cluster: cluster, field: field}
+			bindings[machine] = binding{cluster: cluster, field: field, storageIdentity: identity}
 			return
 		}
 		if existing.cluster == cluster {
 			errs = append(errs, fmt.Sprintf("%s %s.machineRef %q is already node-bound by %s in the same cluster", cluster, field, machine, existing.field))
+			return
+		}
+		if existing.storageIdentity != nil && identity != nil && *existing.storageIdentity != *identity {
+			errs = append(errs, fmt.Sprintf("%s %s.machineRef %q is already node-bound by %s %s, and their cephadm clusterSSH identities differ: %s resolves user %q with keyRef %q while %s resolves user %q with keyRef %q. The inventory can carry only one connection identity for Machine/%s, so one cluster would contact it as an account or key the other cluster did not reconcile. Bind distinct Machines to the clusters", cluster, field, machine, existing.cluster, existing.field, existing.cluster, existing.storageIdentity.user, existing.storageIdentity.keyRef, cluster, identity.user, identity.keyRef, machine))
 			return
 		}
 		errs = append(errs, fmt.Sprintf("%s %s.machineRef %q is already node-bound by %s %s; a Machine may be node-bound by at most one cluster", cluster, field, machine, existing.cluster, existing.field))
@@ -352,7 +361,7 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 	for _, ocp := range state.ContainerClusters {
 		cluster := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
 		for i, node := range ocp.Spec.Nodes {
-			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.nodes[%d]", i))
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.nodes[%d]", i), nil)
 		}
 	}
 	for _, sc := range state.StorageClusters {
@@ -360,8 +369,15 @@ func validateMachineNodeBindings(state v1alpha1.State) []string {
 			continue
 		}
 		cluster := fmt.Sprintf("StorageCluster/%s", sc.Metadata.Name)
+		var identity *storageIdentity
+		if v1alpha1.StorageClusterManaged(sc) {
+			identity = &storageIdentity{
+				user:   v1alpha1.StorageClusterCephadmSSHUser(sc),
+				keyRef: sc.Spec.Ceph.Cephadm.ClusterSSH.KeyRef.Name,
+			}
+		}
 		for i, node := range sc.Spec.Ceph.Topology.Nodes {
-			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.ceph.topology.nodes[%d]", i))
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.ceph.topology.nodes[%d]", i), identity)
 		}
 	}
 	return errs

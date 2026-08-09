@@ -233,10 +233,12 @@ is "node access revoke is last FOR ITS OWN CLUSTER", not last globally: the
 edges are `storage-clusters.<S>` then `machine-registration.<S>` then
 `storage-node-access.<S>`, and they must never cross clusters, or one cluster's
 failure serialises an unrelated one. The shared-identity hazard is per node, and
-the inventory still renders one `ansible_user` per node per run, so two storage
-clusters sharing a node with different `clusterSSH` identities remains broken
-exactly as before — that needs a validation rule, not a chain-order workaround
-(filed as B-042 in [BACKLOG.md](BACKLOG.md)).
+the inventory still renders one `ansible_user` per node per run. Desired-state
+validation forbids a Machine from being node-bound by two clusters before any
+host contact; when two managed storage clusters violate that rule with different
+effective `clusterSSH` user/key pairs, the specialized refusal names both
+identities and the one-inventory-identity hazard rather than trying to repair it
+with chain ordering.
 Guarded by TestPlanDestroyTasksClustersChain,
 TestPlanDestroyTasksAllChain, TestPlanDestroyTasksStorageWorkSetGate,
 TestPlanDestroyTasksFansOutIndependentStorageClusters,

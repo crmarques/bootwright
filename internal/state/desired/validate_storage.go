@@ -82,6 +82,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
 	errs = append(errs, validateStorageCephDistributionFamily(prefix, cluster, state)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
+	errs = append(errs, validateStorageCephRootFilesystemProfiles(state, cluster)...)
 	errs = append(errs, validateStorageCephFIPS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephOSDTPM2Stack(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines, state)...)

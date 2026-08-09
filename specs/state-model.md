@@ -817,6 +817,15 @@ Rules:
   **greater than zero on a `vsphere` provider**, whose adapter derives no
   defaults and has no shape to create the VM with otherwise. That holds in both
   install modes; it is a property of the adapter, not of `template`.
+- When a managed `StorageCluster` topology node resolves through a virtual
+  provider profile, its effective `diskGiB` (including the KubeVirt adapter's
+  120 GiB default when omitted) below the absolute 20 GiB Ceph root-filesystem
+  floor is rejected before provider contact or OS installation: a raw disk
+  smaller than the live preflight's 20 GiB **free-space** requirement cannot
+  pass. A value at or above 20 GiB but below the node's computed role and
+  monitoring-service budget produces a non-blocking `WARN` advisory. Raw disk
+  capacity cannot prove free capacity after the OS is installed, so the live
+  preflight remains authoritative for both the floor and budget.
 - vSphere `machineProfiles[].template` names the vCenter inventory path of a
   golden image and is consumed by the **template-clone** install mode alone. It
   is required when the machine's `MachineInstallProfile` selects
@@ -1595,6 +1604,11 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
+  When two managed storage clusters violate that rule and their effective
+  `clusterSSH` user/key pairs differ, the refusal names both resolved identities:
+  the inventory can carry only one connection identity for the shared machine,
+  so allowing either cluster to run could contact it with an account or key the
+  other cluster did not reconcile.
   After cephadm applies the OSD specs, convergence waits for the full declared
   static OSD count and at least one in-OSD on every dynamically selected host
   before creating pools or reporting success.

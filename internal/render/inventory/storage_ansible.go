@@ -221,7 +221,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"osdReadiness": storageOSDReadinessVars(cluster),
 			"monReadiness": storageMonReadinessVars(cluster),
 		}
-		if !cephrender.MonitoringEnabled(cluster) {
+		if !topology.MonitoringEnabled(cluster) {
 			entry["skipMonitoringStack"] = true
 		}
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
@@ -377,7 +377,7 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
 			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
 			"devices":       cephrender.OSDGateDevicePaths(cluster, node),
-			"rootFSGiB":     cephrender.NodeRootFilesystemGiB(cluster, node),
+			"rootFSGiB":     topology.NodeRootFilesystemGiB(cluster, node),
 		}
 		if node.Site != "" {
 			host["site"] = node.Site

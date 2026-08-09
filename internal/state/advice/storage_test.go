@@ -297,3 +297,58 @@ func TestStorageAdvisoriesQuorumGuidanceIsDistributionNeutral(t *testing.T) {
 		}
 	}
 }
+
+func storageRootFilesystemAdviceState(diskGiB int) v1alpha1.State {
+	cluster := adviceCephCluster("ceph", v1alpha1.StorageCephDistributionOSS, "", []string{"mon", "mgr", "osd"})
+	cluster.Spec.Ceph.Topology.Nodes[0].MachineRef = v1alpha1.LocalObjectReference{Name: "node-0"}
+	return v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "node-0"},
+			Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "virt"},
+				ProfileRef:  v1alpha1.LocalObjectReference{Name: "ceph"},
+			}},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "virt"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerLibvirt,
+				Libvirt: &v1alpha1.InfraProviderLibvirt{MachineProfiles: []v1alpha1.MachineProfile{{
+					Name: "ceph", DiskGiB: diskGiB,
+				}}},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{cluster},
+	}
+}
+
+func TestStorageAdvisoriesWarnBelowComputedRootFilesystemBudget(t *testing.T) {
+	state := storageRootFilesystemAdviceState(30)
+	got := findingsWith(StorageAdvisories(state), "root-filesystem service budget")
+	if len(got) != 1 {
+		t.Fatalf("a root disk between the hard floor and computed budget must raise one advisory, got %+v", StorageAdvisories(state))
+	}
+	advisory := got[0]
+	if advisory.Severity != SeverityWarn || advisory.Group != rootFilesystemGroup {
+		t.Fatalf("root-filesystem advisory severity/group = %q/%q", advisory.Severity, advisory.Group)
+	}
+	for _, want := range []string{"node-0", "InfraProvider/virt", "profile \"ceph\"", "30 GiB", "40 GiB"} {
+		if !strings.Contains(advisory.Finding, want) {
+			t.Errorf("root-filesystem advisory finding missing %q: %s", want, advisory.Finding)
+		}
+	}
+	for _, want := range []string{"spec.libvirt.machineProfiles", "diskGiB", "at least 40", "before the first apply"} {
+		if !strings.Contains(advisory.Remediation, want) {
+			t.Errorf("root-filesystem advisory remediation missing %q: %s", want, advisory.Remediation)
+		}
+	}
+}
+
+func TestStorageAdvisoriesLeaveHardFloorAndSatisfiedBudgetToTheirOwners(t *testing.T) {
+	for _, diskGiB := range []int{topology.RootFilesystemFloorGiB - 1, 40} {
+		state := storageRootFilesystemAdviceState(diskGiB)
+		if got := findingsWith(StorageAdvisories(state), "root-filesystem service budget"); len(got) != 0 {
+			t.Fatalf("diskGiB %d must not raise the computed-budget advisory, got %+v", diskGiB, got)
+		}
+	}
+}

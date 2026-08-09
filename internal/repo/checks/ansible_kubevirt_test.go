@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/storage/topology"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -298,7 +299,7 @@ func TestKubeVirtRootDiskInheritsVolumeModeFromTheStorageProfile(t *testing.T) {
 		"cdi.kubevirt.io/storage.bind.immediate.requested",
 		"bootwright.io/role: root",
 		"bootwright.io/managed-by: bootwright",
-		"storage: {{ bootwright_component.profile.diskGiB | default(120, true) }}Gi",
+		fmt.Sprintf("storage: {{ bootwright_component.profile.diskGiB | default(%d, true) }}Gi", topology.KubeVirtDefaultDiskGiB),
 		"storageClassName: {{ bootwright_kubevirt_storage_class }}",
 	} {
 		if !strings.Contains(template, want) {

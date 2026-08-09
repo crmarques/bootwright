@@ -115,7 +115,7 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	if cidrs := ceph.Networks.ClusterCIDRs; len(cidrs) > 0 {
 		args = append(args, "--cluster-network", strings.Join(cidrs, ","))
 	}
-	if !MonitoringEnabled(cluster) {
+	if !topology.MonitoringEnabled(cluster) {
 		args = append(args, "--skip-monitoring-stack")
 	}
 

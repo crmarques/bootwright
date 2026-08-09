@@ -1,4 +1,4 @@
-package ceph
+package topology
 
 import (
 	"math"
@@ -6,11 +6,12 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/storage/topology"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 const (
 	RootFilesystemFloorGiB = 20
+	KubeVirtDefaultDiskGiB = 120
 
 	rootFilesystemBaseGiB           = 20
 	rootFilesystemMONGiB            = 15
@@ -24,12 +25,39 @@ const (
 	prometheusRetentionSizeFallback = rootFilesystemPrometheusGiB
 )
 
+type NodeMachineProfile struct {
+	Machine          v1alpha1.Machine
+	Provider         v1alpha1.InfraProvider
+	Profile          v1alpha1.MachineProfile
+	EffectiveDiskGiB int
+}
+
+func ResolveNodeMachineProfile(state v1alpha1.State, node v1alpha1.StorageCephNode) (NodeMachineProfile, bool) {
+	machine, ok := stateview.Machine(state, node.MachineRef.Name)
+	if !ok {
+		return NodeMachineProfile{}, false
+	}
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	if !ok || provider.Spec.Type == v1alpha1.ProvisionerBareMetal {
+		return NodeMachineProfile{}, false
+	}
+	profile, ok := stateview.MachineProfile(provider, v1alpha1.MachineProfileRef(machine).Name)
+	if !ok {
+		return NodeMachineProfile{}, false
+	}
+	diskGiB := profile.DiskGiB
+	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && diskGiB == 0 {
+		diskGiB = KubeVirtDefaultDiskGiB
+	}
+	return NodeMachineProfile{Machine: machine, Provider: provider, Profile: profile, EffectiveDiskGiB: diskGiB}, true
+}
+
 func NodeRootFilesystemGiB(cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode) int {
 	total := rootFilesystemBaseGiB
-	if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
+	if NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 		total += rootFilesystemMONGiB
 	}
-	if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMGR) {
+	if NodeHasRole(node, v1alpha1.StorageCephRoleMGR) {
 		total += rootFilesystemMGRGiB
 	}
 	if !MonitoringEnabled(cluster) {
@@ -51,6 +79,20 @@ func NodeRootFilesystemGiB(cluster v1alpha1.StorageCluster, node v1alpha1.Storag
 	return total
 }
 
+func MonitoringEnabled(cluster v1alpha1.StorageCluster) bool {
+	monitoring := cluster.Spec.Ceph.Monitoring
+	return monitoring == nil || monitoring.Enabled == nil || *monitoring.Enabled
+}
+
+func PrometheusRetentionSize(cluster v1alpha1.StorageCluster) string {
+	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil && monitoring.Prometheus != nil {
+		if monitoring.Prometheus.RetentionSize != "" {
+			return monitoring.Prometheus.RetentionSize
+		}
+	}
+	return PrometheusDefaultRetentionSize
+}
+
 func monitoringHostServices(cluster v1alpha1.StorageCluster, host string) map[string]bool {
 	out := map[string]bool{}
 	for _, service := range monitoringDataServices(cluster) {
@@ -61,7 +103,7 @@ func monitoringHostServices(cluster v1alpha1.StorageCluster, host string) map[st
 		if service.config != nil {
 			placement = service.config.Placement
 		}
-		for _, candidate := range topology.ResolvePlacement(cluster, placement, service.role) {
+		for _, candidate := range ResolvePlacement(cluster, placement, service.role) {
 			if candidate == host {
 				out[service.serviceType] = true
 				break
@@ -100,15 +142,6 @@ func prometheusBudgetGiB(cluster v1alpha1.StorageCluster) int {
 		return prometheusRetentionSizeFallback
 	}
 	return gib + rootFilesystemPrometheusPadGiB
-}
-
-func PrometheusRetentionSize(cluster v1alpha1.StorageCluster) string {
-	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil && monitoring.Prometheus != nil {
-		if monitoring.Prometheus.RetentionSize != "" {
-			return monitoring.Prometheus.RetentionSize
-		}
-	}
-	return PrometheusDefaultRetentionSize
 }
 
 func parseRetentionSizeGiB(value string) (int, bool) {

@@ -1,4 +1,4 @@
-package ceph
+package topology
 
 import (
 	"testing"
@@ -104,22 +104,36 @@ func TestParseRetentionSizeGiB(t *testing.T) {
 	}
 }
 
-func TestPrometheusSpecAlwaysBoundsRetentionSize(t *testing.T) {
-	node := v1alpha1.StorageCephNode{
-		Name:       "ceph-0",
-		MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
-		Roles:      []string{"mon", "prometheus"},
+func TestResolveNodeMachineProfile(t *testing.T) {
+	node := v1alpha1.StorageCephNode{MachineRef: v1alpha1.LocalObjectReference{Name: "node-0"}}
+	state := v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "node-0"},
+			Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "virt"},
+				ProfileRef:  v1alpha1.LocalObjectReference{Name: "ceph"},
+			}},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "virt"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerLibvirt,
+				Libvirt: &v1alpha1.InfraProviderLibvirt{MachineProfiles: []v1alpha1.MachineProfile{{
+					Name: "ceph", DiskGiB: 40,
+				}}},
+			},
+		}},
 	}
-	cluster := rootFSCluster([]v1alpha1.StorageCephNode{node}, nil)
-	for _, doc := range cephadmMonitoringSpecs(cluster) {
-		spec := doc.(map[string]any)
-		if spec["service_type"] != "prometheus" {
-			continue
-		}
-		if got := spec["spec"].(map[string]any)["retention_size"]; got != PrometheusDefaultRetentionSize {
-			t.Fatalf("prometheus retention_size = %v, want %q", got, PrometheusDefaultRetentionSize)
-		}
-		return
+	got, ok := ResolveNodeMachineProfile(state, node)
+	if !ok || got.Machine.Metadata.Name != "node-0" || got.Provider.Metadata.Name != "virt" || got.Profile.Name != "ceph" || got.EffectiveDiskGiB != 40 {
+		t.Fatalf("ResolveNodeMachineProfile = %+v,%v", got, ok)
 	}
-	t.Fatal("no prometheus spec rendered")
+
+	state.InfraProviders[0].Spec.Type = v1alpha1.ProvisionerKubeVirt
+	state.InfraProviders[0].Spec.Libvirt = nil
+	state.InfraProviders[0].Spec.KubeVirt = &v1alpha1.InfraProviderKubeVirt{MachineProfiles: []v1alpha1.MachineProfile{{Name: "ceph"}}}
+	got, ok = ResolveNodeMachineProfile(state, node)
+	if !ok || got.Profile.DiskGiB != 0 || got.EffectiveDiskGiB != KubeVirtDefaultDiskGiB {
+		t.Fatalf("ResolveNodeMachineProfile KubeVirt default = %+v,%v", got, ok)
+	}
 }
