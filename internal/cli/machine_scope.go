@@ -80,9 +80,9 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, sto
 	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster and destroy whatever data those nodes hold; this requires --authorize %s; re-run `%s` to tear down exactly the selected machine(s) anyway", strings.Join(installed, ", "), authorizeInstalledClusterNode, command.String())
 }
 
-func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, destroyRunID string, purgeHistory, skipUnreachable bool) error {
+func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, destroyRunID string, purgeHistory, skipUnreachable bool, retry retryCommand) error {
 	if sel.MachineSelection {
-		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, plan.State, sel.MachineProvision, succeeded, destroyRunID, purgeHistory, skipUnreachable))
+		return printConvergeRecordResetProblems(stdout, converge.ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir, plan.State, sel.MachineProvision, succeeded, destroyRunID, purgeHistory, skipUnreachable), retry)
 	}
-	return printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, destroyRunID, purgeHistory, skipUnreachable))
+	return printConvergeRecordResetProblems(stdout, converge.ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName, runScope, plan.State, plan.StorageWorkNames, resetPartial, sel.WorkMachines, succeeded, destroyRunID, purgeHistory, skipUnreachable), retry)
 }

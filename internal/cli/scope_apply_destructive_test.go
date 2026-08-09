@@ -242,7 +242,16 @@ func TestResolveApplyReclaimDevicesActsWithoutOwnershipUnderTheToken(t *testing.
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
 	plan := &converge.WorkflowPlan{State: state}
-	invocation := resolvedInvocation{verb: invocationApply, flags: invocationFlags{mode: workflow.ApplyModeReconcile, reclaimDevices: "all"}}
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "matrix",
+		flags: invocationFlags{
+			mode:           workflow.ApplyModeReconcile,
+			selection:      runSelection{stage: "deps", clusters: "ceph-prd-01"},
+			reclaimDevices: "all",
+			yes:            true,
+		},
+	}
 	var out bytes.Buffer
 	resolved, clusters, rerr := resolveApplyReclaimDevices(&out, plan, auth, objects, "all", invocation)
 	if rerr != nil {
@@ -262,25 +271,44 @@ func TestResolveApplyReclaimDevicesActsWithoutOwnershipUnderTheToken(t *testing.
 	if err != nil {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
-	resolved, clusters, rerr = resolveApplyReclaimDevices(&bytes.Buffer{}, &converge.WorkflowPlan{State: state}, bare, objects, "all", invocation)
+	var bareOut bytes.Buffer
+	resolved, clusters, rerr = resolveApplyReclaimDevices(&bareOut, &converge.WorkflowPlan{State: state}, bare, objects, "all", invocation)
 	if rerr != nil || resolved != "all" || len(clusters) != 0 {
 		t.Fatalf("without the token an unowned cluster must stay out of the reclaim (resolved=%q clusters=%v err=%v)", resolved, clusters, rerr)
+	}
+	wantRetry := "bootwright apply --mode reconcile --authorize data-loss,unowned-devices --yes --stage deps --clusters ceph-prd-01 --reclaim-devices all --ask-become-pass=false --trust-on-first-use=false --context matrix"
+	if !strings.Contains(bareOut.String(), "`"+wantRetry+"`") {
+		t.Fatalf("the post-destroy no-op warning must preserve the exact apply intent and add only the missing authorization: %s", bareOut.String())
 	}
 }
 
 func TestWarnApplyReclaimSelectionSteersThePostDestroyRecovery(t *testing.T) {
 	_, objects := reclaimPostDestroyFixture()
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "matrix",
+		flags: invocationFlags{
+			mode:           workflow.ApplyModeReconcile,
+			selection:      runSelection{stage: "deps", clusters: "ceph-prd-01"},
+			reclaimDevices: "all",
+			yes:            true,
+		},
+	}
 
 	var out bytes.Buffer
-	warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", nil)
-	for _, want := range []string{"no device will be reclaimed", "--authorize " + authorizeDataLoss + "," + authorizeUnownedDevices, "bootwright destroy"} {
+	if err := warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", nil, invocation); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"no device will be reclaimed", "bootwright apply --mode reconcile --authorize " + authorizeDataLoss + "," + authorizeUnownedDevices + " --yes --stage deps --clusters ceph-prd-01 --reclaim-devices all --ask-become-pass=false --trust-on-first-use=false --context matrix"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("the no-op warning must name %q so the operator is not sent through the ownership re-recording dance, got %q", want, out.String())
 		}
 	}
 
 	out.Reset()
-	warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", []string{"ceph-prd-01"})
+	if err := warnApplyReclaimSelection(&out, objects, "/dev/nvme0n1", []string{"ceph-prd-01"}, invocation); err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{"WIPE", "ceph-prd-01", "hold no Bootwright ownership record", authorizeUnownedDevices} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("the reclaim warning must name %q when it acts on an unrecorded cluster, got %q", want, out.String())

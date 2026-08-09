@@ -78,6 +78,60 @@ func TestOnlyCLIConstructsMutatingBootwrightInvocations(t *testing.T) {
 	}
 }
 
+func TestCLIMutatingBootwrightTextStaysInTheResolvedBuilderOrHelp(t *testing.T) {
+	root := filepath.Join(repoRoot(t), "internal/cli")
+	fset := token.NewFileSet()
+	helpFiles := map[string]bool{
+		"root.go":                true,
+		"storage_cluster_cmd.go": true,
+		"workflow_cmd.go":        true,
+	}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "run_selection_flags.go" {
+			return nil
+		}
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		file, err := parser.ParseFile(fset, path, source, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			switch candidate := node.(type) {
+			case *ast.BasicLit:
+				if candidate.Kind == token.STRING && containsRunnableMutatingCommand(decodedGoString(candidate.Value)) && !helpFiles[filepath.Base(path)] {
+					t.Errorf("%s hard-codes a mutating Bootwright command in CLI runtime text; render it through resolvedInvocation or keep the recovery command-free", fset.Position(candidate.Pos()))
+				}
+			case *ast.CallExpr:
+				if containsMutatingArgvAtoms(candidate) {
+					t.Errorf("%s assembles mutating Bootwright argv outside the resolved invocation builder", fset.Position(candidate.Pos()))
+					return false
+				}
+			case *ast.CompositeLit:
+				if containsMutatingArgvAtoms(candidate) {
+					t.Errorf("%s assembles mutating Bootwright argv outside the resolved invocation builder", fset.Position(candidate.Pos()))
+					return false
+				}
+			case *ast.BinaryExpr:
+				if candidate.Op == token.ADD && containsMutatingArgvAtoms(candidate) {
+					t.Errorf("%s assembles mutating Bootwright argv outside the resolved invocation builder", fset.Position(candidate.Pos()))
+					return false
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMutatingBootwrightInvocationDetectorCoversTextAndArgvAssembly(t *testing.T) {
 	textCases := []struct {
 		value string

@@ -19,7 +19,7 @@ what turns "forgot" into a red test.
 | a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed; every live cross-context mutator must also use the controller-global shared-service lease and durable host context claim | `internal/repo/checks/shared_service_classification_test.go`, `TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution`, `TestInfraComponentContainersCarryAndEnforceContextIdentity` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
-| a refusal or next-step action | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; every production Go package outside `internal/cli` returns typed or command-free evidence only | `TestOnlyCLIConstructsMutatingBootwrightInvocations`, the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
+| a refusal or next-step action | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; every production Go package outside `internal/cli` returns typed or command-free evidence only, and CLI runtime code cannot hand-write one outside the central builder | `TestOnlyCLIConstructsMutatingBootwrightInvocations`, `TestCLIMutatingBootwrightTextStaysInTheResolvedBuilderOrHelp`, the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
 | an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
 | a provider or ownership remover followed by path, state, or record deletion | let a genuine remover failure enter an immediate `block`/`rescue` refusal using the resolved mutating invocation; accept only a positively identified already-absent outcome | `TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure`, `TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown`, `TestBMCProviderDestroyRetainsEvidenceOnRuntimeFailure`, `TestVSphereVMediaDestroyRetainsEvidenceOnDatastoreFailure` |
 
@@ -403,14 +403,26 @@ context, apply mode, `--reclaim-devices`, `--recover-ceph-ownership`,
 made the probe meaningful. Most dangerously, a refused `destroy --dry-run`
 could be rendered as a real destroy. `resolvedInvocation` captures every local
 and persistent flag that can affect or describe the run; `retryIntent` may only
-change the apply mode and union in a token the same verb accepts; and the final
-command is shell-quoted from its argument vector. Mode-preflight refusals are
+change the apply mode, union in a token the same verb accepts, or remove one
+named token that the current invocation actually carries. Removing a token from
+`all` first expands the blanket into the verb's explicit remaining tokens, so a
+retry cannot appear to drop a permission while silently retaining it through
+`all`. The final command is shell-quoted from its argument vector. Mode-preflight refusals are
 typed so the CLI, which owns the resolved flags, supplies the exact command;
 foreign ownership supplies no fake bypass and directs the operator back to the
 recorded manager. `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` closes
 this over future flags, while the exact-parse and gate-clear tests prove the
 printed command is accepted, keeps the original scope and effects, and clears
 the refusal it names.
+
+**CLI runtime text cannot bypass the exact builder.** Backend argv was already
+closed, but the owning CLI still carried post-teardown strings such as an
+unscoped `destroy --purge-history` and a bare "re-run destroy". Those appear
+after remote state has changed, when widening the retry can erase the evidence
+needed to recover. `TestCLIMutatingBootwrightTextStaysInTheResolvedBuilderOrHelp`
+parses every production CLI file: only the central resolved builder may assemble
+mutating argv, and only the three Cobra help files may contain runnable literal
+examples. Runtime diagnostics otherwise call the builder or remain command-free.
 
 **Backend mutation remedies are structurally impossible, not review-only.**
 `TestOnlyCLIConstructsMutatingBootwrightInvocations` parses every production Go

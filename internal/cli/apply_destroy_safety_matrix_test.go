@@ -509,6 +509,38 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		verdict: verdictAccepted,
 		want:    []string{"purge history", "a real run of this destroy would also delete"},
 	}, {
+		name:    "destroy/preview: purge retry drops only unreachable-nodes and preserves every other intent",
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--purge-history", "--authorize", "all", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"Once every node answers", "re-run the same teardown without that authorization", "--purge-history", "--dry-run", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			wantAuthorizations := []string{authorizeDataLoss, authorizeProtected, authorizeInstalledClusterNode, authorizeUnownedVMs, authorizeUnownedNetworks, authorizeUnownedDevices, authorizeUnreadableRecords, authorizeSharedInfra, authorizeStaleInput}
+			for _, rendered := range backtickedBootwrightCommands(output) {
+				args := shellParseWords(t, rendered)
+				if len(args) < 2 || args[0] != "bootwright" || args[1] != "destroy" {
+					continue
+				}
+				if got := retryAuthorizations(args); !slices.Equal(got, wantAuthorizations) {
+					t.Fatalf("purge retry authorizations = %v, want %v; command=%q", got, wantAuthorizations, rendered)
+				}
+				for flag, value := range map[string]string{"--stage": "infra", "--clusters": "dc1-metal-ocp", "--context": "matrix"} {
+					if !commandHasFlagValue(rendered, flag, value) {
+						t.Fatalf("purge retry lost %s %s: %q", flag, value, rendered)
+					}
+				}
+				for _, flag := range []string{"--purge-history", "--dry-run"} {
+					if !slices.Contains(args, flag) {
+						t.Fatalf("purge retry lost %s: %q", flag, rendered)
+					}
+				}
+				if got := retryAuthorizations(args); slices.Contains(got, authorizeAll) || slices.Contains(got, authorizeUnreachableNodes) {
+					t.Fatalf("purge retry retained blanket or unreachable authorization: %q", rendered)
+				}
+				return
+			}
+			t.Fatalf("purge warning emitted no exact destroy retry:\n%s", output)
+		},
+	}, {
 		name:    "apply/preview: a dry run names the data-loss token its real counterpart refuses on",
 		seed:    seedSuccessfulApply,
 		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "/dev/sdb", "--dry-run", "--ask-become-pass=false"},
@@ -675,7 +707,8 @@ func safetyFlagCoherenceCases() []safetyCase {
 		name:    "apply/a destroy-only --authorize token is a usage error naming the verb that owns it",
 		args:    []string{"apply", "--authorize", "protected", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"is not a risk apply can authorize", "bootwright destroy --authorize protected"},
+		want:    []string{"is not a risk apply can authorize", "use the destroy verb for the exact affected scope with --authorize protected"},
+		deny:    []string{"`bootwright destroy"},
 	}, {
 		name:    "plan/a destroy-only --authorize token is a usage error",
 		args:    []string{"plan", "--authorize", "unreachable-nodes"},

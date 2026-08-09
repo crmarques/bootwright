@@ -20,13 +20,13 @@ func TestDiffOrphanRemedyScopedToSweepCoverage(t *testing.T) {
 		{Kind: "kubevirt-machine", Name: "vm-b", Cluster: "hub1"},
 	})
 	out := buf.String()
-	if !strings.Contains(out, "libvirt-domain/vm-a") || !strings.Contains(out, "a full `bootwright destroy` reclaims it") {
+	if !strings.Contains(out, "libvirt-domain/vm-a") || !strings.Contains(out, "a full-context destroy reclaims it") {
 		t.Fatalf("sweep-reclaimable orphan should promise reclaim:\n%s", out)
 	}
 	if !strings.Contains(out, "kubevirt-machine/vm-b") || !strings.Contains(out, "does not reclaim this record") {
 		t.Fatalf("non-sweep orphan must not be pointed at a full destroy that leaves it standing:\n%s", out)
 	}
-	if strings.Contains(out, "run `bootwright destroy` to reclaim them") {
+	if strings.Contains(out, "`bootwright destroy`") {
 		t.Fatalf("the blanket destroy remedy overpromises for non-sweep kinds and must be gone:\n%s", out)
 	}
 }

@@ -15,6 +15,13 @@ func destroyAuthorizesUnownedDevices(auth *authorizations, runScope converge.Sco
 	return converge.ScopeTearsClusterLayer(runScope) && auth.allows(authorizeUnownedDevices)
 }
 
+func resolvedPostDestroyRetry(invocation resolvedInvocation, skipUnreachable bool) (retryCommand, error) {
+	if skipUnreachable {
+		return invocation.retry(retryIntent{excludedAuthorization: authorizeUnreachableNodes})
+	}
+	return invocation.retry(retryIntent{})
+}
+
 func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
 	return selectedInfraComponentServiceRefs(state, artifactServerOnly, false, nil)
 }
@@ -53,11 +60,11 @@ func partialStorageDestroyNodes(partial converge.PartialStorageDestroy) string {
 	return " Skipped node(s): " + strings.ReplaceAll(partial.Skipped, ",", ", ") + "."
 }
 
-func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error) {
+func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.PartialStorageDestroy, err error, retry retryCommand) {
 	if len(partial.Recorded) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
-			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped, their Ceph daemons are still running and local Ceph state remains.%s Re-run destroy once the nodes are back up, or wipe them manually, before reusing the hardware; bootwright status flags them. A skipped node keeps serving the cluster this run reported destroyed.",
-			strings.Join(partial.Recorded, ", "), partialStorageDestroyNodes(partial)))
+			"storage cluster(s) %s left partially destroyed: unreachable node(s) were skipped, so their OSD devices were not wiped, their Ceph daemons are still running and local Ceph state remains.%s Once every selected node answers, re-run `%s` before reusing the hardware; bootwright status flags the retained evidence. A skipped node keeps serving the cluster this run reported destroyed.",
+			strings.Join(partial.Recorded, ", "), partialStorageDestroyNodes(partial), retry.String()))
 	}
 	if len(partial.Unrecorded) > 0 {
 		cliout.NewContinuation(stdout).Warning("partial destroy", fmt.Sprintf(
@@ -65,18 +72,18 @@ func printPartialStorageDestroyWarning(stdout io.Writer, partial converge.Partia
 			strings.Join(partial.Unrecorded, ", "), partialStorageDestroyNodes(partial)))
 	}
 	if err != nil {
-		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error()+"; their converge records are kept so the next apply/destroy fails closed")
+		cliout.NewContinuation(stdout).Warning("partial destroy", "could not fully record partial-destroy state: "+err.Error()+"; their converge records are kept so the next apply/destroy fails closed. Repair the reported context state and re-run `"+retry.String()+"`")
 	}
 }
 
-func printConvergeRecordResetProblems(stdout io.Writer, problems []error) error {
+func printConvergeRecordResetProblems(stdout io.Writer, problems []error, retry retryCommand) error {
 	if len(problems) == 0 {
 		return nil
 	}
 	details := make([]string, 0, len(problems))
 	for _, problem := range problems {
-		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run destroy before the next apply")
+		cliout.NewContinuation(stdout).Warning("stale records", problem.Error()+"; run records may still claim this resource is converged — remove the reported record or re-run `"+retry.String()+"` before the next apply")
 		details = append(details, problem.Error())
 	}
-	return fmt.Errorf("teardown finished but %d post-destroy record cleanup(s) failed: %s; a surviving converge record makes the next apply classify the destroyed resource as already converged and skip re-provisioning it, and a missing substrate-release record leaves its reinstall unauthorized — remove the reported file(s) under the context's runs/ tree, or re-run bootwright destroy for the same scope, before the next apply", len(problems), strings.Join(details, "; "))
+	return fmt.Errorf("teardown finished but %d post-destroy record cleanup(s) failed: %s; a surviving converge record makes the next apply classify the destroyed resource as already converged and skip re-provisioning it, and a missing substrate-release record leaves its reinstall unauthorized — remove the reported file(s) under the context's runs/ tree, or re-run `%s`, before the next apply", len(problems), strings.Join(details, "; "), retry.String())
 }

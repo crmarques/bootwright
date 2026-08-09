@@ -299,7 +299,9 @@ record — or cannot write the substrate-release record that authorizes the
 rebuild — it reports each problem and **exits non-zero**. A record that outlives
 its resource makes the next `apply` read it as already converged and skip
 re-provisioning. Remove the reported files, or re-run the same `destroy`, before
-applying again.
+applying again. The failure prints that exact retry with its context, stage,
+selection, purge/recovery choices, authorizations, and connection identity;
+copy it instead of reconstructing a broader destroy by hand.
 
 By default `destroy` clears the runtime records it needs to for correctness —
 converge-safety records, install/connection records, kubeconfig — but leaves
@@ -333,7 +335,11 @@ only the cluster's own history. A cluster left partially destroyed by
 `--authorize unreachable-nodes` keeps its history and its state tree so you can
 still diagnose and retry; a run that also covers a still-live component keeps
 its shared ledger and run log, pruning only the purged component's own task
-directories and log. A component's history includes its earlier destroy
+directories and log. Once every node answers, the warning prints the exact same
+retry with only `unreachable-nodes` removed. If the original used
+`--authorize all`, Bootwright spells out every other destroy authorization in
+the retry rather than silently retaining the skipped-node permission. A
+component's history includes its earlier destroy
 attempts, which are matched and purged the same way as its apply runs. A fully
 successful **unscoped** destroy goes further: with no component left alive,
 it sweeps everything under `runs/history/` — old apply runs (including their

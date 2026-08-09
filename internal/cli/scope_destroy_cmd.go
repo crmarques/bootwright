@@ -192,6 +192,10 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if skipUnreachable && !plan.NoRemoteWork {
 			auth.note(authorizeUnreachableNodes)
 		}
+		postDestroyRetry, err := resolvedPostDestroyRetry(invocation, skipUnreachable)
+		if err != nil {
+			return failErr(1, err)
+		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, forceUnownedNetworks, skipUnreachable, destroyAuthorizesUnownedDevices(auth, runScope))
 		if err := converge.ApplyDestroyCephOwnershipRecoveryExtraVar(&plan, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
@@ -262,7 +266,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			cliout.NewContinuation(stdout).Warning("purge history", destroyPurgeHistoryNotice(dryRun))
 		}
 		if purgeHistory && skipUnreachable && !plan.NoRemoteWork {
-			cliout.NewContinuation(stdout).Warning("purge history", "--authorize "+authorizeUnreachableNodes+" proves no per-node completion outside a managed storage cluster, so this run keeps the history and state tree of every container cluster and machine layer it touches — that history is what a retry and a diagnosis read. Only a storage cluster whose teardown report names no skipped node is purged. Re-run `bootwright destroy --purge-history` without --authorize "+authorizeUnreachableNodes+" once every node answers")
+			cliout.NewContinuation(stdout).Warning("purge history", "--authorize "+authorizeUnreachableNodes+" proves no per-node completion outside a managed storage cluster, so this run keeps the history and state tree of every container cluster and machine layer it touches — that history is what a retry and a diagnosis read. Only a storage cluster whose teardown report names no skipped node is purged. Once every node answers, re-run the same teardown without that authorization: `"+postDestroyRetry.String()+"`")
 		}
 		if dryRun {
 			printRequiredAuthorizations(stdout, requiredAuth)
@@ -333,7 +337,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, invocation)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
-				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
+				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s so an apply cannot treat unproven teardown as complete — re-run `%s` once completion can be proved", strings.Join(storageScopeNames, ", "), postDestroyRetry.String())
 			}
 			resetPartial := partial.Clusters
 			if partialErr != nil {
@@ -346,15 +350,15 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 			if gerr != nil {
-				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable)
+				printPartialStorageDestroyWarning(stdout, partial, partialErr, postDestroyRetry)
+				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable, postDestroyRetry)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable)
-			printPartialStorageDestroyWarning(stdout, partial, partialErr)
+			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable, postDestroyRetry)
+			printPartialStorageDestroyWarning(stdout, partial, partialErr, postDestroyRetry)
 			if resetErr != nil {
 				return failErr(1, resetErr)
 			}

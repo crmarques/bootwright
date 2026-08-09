@@ -62,6 +62,7 @@ type resolvedInvocation struct {
 type retryIntent struct {
 	mode                   workflow.ApplyMode
 	requiredAuthorizations []string
+	excludedAuthorization  string
 }
 
 type retryCommand struct {
@@ -103,6 +104,19 @@ func (i resolvedInvocation) retry(intent retryIntent) (retryCommand, error) {
 		}
 		next.flags.mode = intent.mode
 	}
+	accepted := authorizationTokenNamesForVerb(string(next.verb))
+	if name := intent.excludedAuthorization; name != "" {
+		if name == authorizeAll || !slices.Contains(accepted, name) {
+			return retryCommand{}, fmt.Errorf("authorization token %q cannot be excluded from a %s retry", name, next.verb)
+		}
+		if slices.Contains(intent.requiredAuthorizations, name) {
+			return retryCommand{}, fmt.Errorf("authorization token %q cannot be both required and excluded", name)
+		}
+		if !slices.Contains(next.flags.authorizations, name) && !slices.Contains(next.flags.authorizations, authorizeAll) {
+			return retryCommand{}, fmt.Errorf("authorization token %q is not present in the %s invocation", name, next.verb)
+		}
+		next.flags.authorizations = authorizationsWithout(next.flags.authorizations, accepted, name)
+	}
 	for _, name := range intent.requiredAuthorizations {
 		if slices.Contains(next.flags.authorizations, authorizeAll) || slices.Contains(next.flags.authorizations, name) {
 			continue
@@ -113,6 +127,32 @@ func (i resolvedInvocation) retry(intent retryIntent) (retryCommand, error) {
 		next.flags.authorizations = append(next.flags.authorizations, name)
 	}
 	return retryCommand{args: next.args()}, nil
+}
+
+func authorizationsWithout(names, accepted []string, excluded string) []string {
+	var out []string
+	for _, name := range names {
+		if name == authorizeAll {
+			for _, expanded := range accepted {
+				if expanded != authorizeAll && expanded != excluded && !slices.Contains(out, expanded) {
+					out = append(out, expanded)
+				}
+			}
+			continue
+		}
+		if name != excluded && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func destroyContextRetry(contextName string) (retryCommand, error) {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return retryCommand{}, fmt.Errorf("cannot construct a destroy retry without a context")
+	}
+	return retryCommand{args: []string{"bootwright", "destroy", "--context", contextName}}, nil
 }
 
 func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryCommand, error) {

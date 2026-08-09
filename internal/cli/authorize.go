@@ -62,7 +62,7 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "acting on state whose Environment sets spec.safety.destroyProtection or spec.safety.protectedKinds",
 	inert:      "no selected object is protected by an Environment spec.safety rule",
 	verbs:      []string{authorizeVerbDestroy},
-	elsewhere:  "destroying protected state must cross the destroy boundary, so run `bootwright destroy --authorize protected` for the affected scope and then re-apply; the one apply-side exception is `apply --reclaim-devices`, whose protected-state wipe is authorized by --authorize data-loss",
+	elsewhere:  "destroying protected state must cross the destroy boundary, so use the destroy verb for the exact affected scope with --authorize protected and then re-apply; the one apply-side exception is apply --reclaim-devices, whose protected-state wipe is authorized by --authorize data-loss",
 }, {
 	name:       authorizeInstalledClusterNode,
 	gloss:      "a --machines teardown naming a node of an installed cluster",
@@ -76,7 +76,7 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "tearing down libvirt/KubeVirt/vSphere VMs that match the Bootwright naming but carry no ownership marker",
 	inert:      "this run tears down no machine VMs (their ownership refusals live in the infra stage)",
 	verbs:      []string{authorizeVerbDestroy},
-	elsewhere:  "apply never adopts an unowned VM in any mode, so remove it with `bootwright destroy --authorize unowned-vms` first",
+	elsewhere:  "apply never adopts an unowned VM in any mode, so use destroy for the exact affected scope with --authorize unowned-vms first",
 }, {
 	name:       authorizeUnownedNetworks,
 	gloss:      "an unowned libvirt network or KubeVirt DataVolume another context may still use",
@@ -111,14 +111,14 @@ var authorizationTokens = []authorizationToken{{
 	authorizes: "promoting a mon that shares a failure domain with the data-site mons to stretch tiebreaker — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter inside a data site cannot break a tie between the two, so losing that site drops two votes at once and the survivor is left without quorum",
 	inert:      "the replacement arbiter shares its site with no non-tiebreaker mon",
 	verbs:      []string{authorizeVerbReplaceArbiter},
-	elsewhere:  "apply and destroy never move a stretch tiebreaker; only `bootwright storage-cluster replace-arbiter` does",
+	elsewhere:  "apply and destroy never move a stretch tiebreaker; only the storage-cluster replace-arbiter verb does",
 }, {
 	name:       authorizeDegradedQuorum,
 	gloss:      "moving the tiebreaker while declared mons are outside quorum",
 	authorizes: "moving the stretch tiebreaker while declared mons are outside quorum. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together",
 	inert:      "every declared mon of the selected cluster is in quorum",
 	verbs:      []string{authorizeVerbReplaceArbiter},
-	elsewhere:  "apply and destroy never move a stretch tiebreaker; only `bootwright storage-cluster replace-arbiter` does",
+	elsewhere:  "apply and destroy never move a stretch tiebreaker; only the storage-cluster replace-arbiter verb does",
 }, {
 	name:       authorizeUnreadableRecords,
 	gloss:      "ownership records that cannot be read, leaving their resources standing",

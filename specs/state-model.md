@@ -3218,7 +3218,10 @@ command. The rest are registered per command, on the verbs that reach machines.
   reports each problem and exits non-zero: a surviving convergence record makes
   the next `apply` classify the destroyed resource as already converged and skip
   re-provisioning it, and a missing release record leaves its reinstall
-  unauthorized. The refusal names the files to remove or the destroy to re-run.
+	unauthorized. The refusal names the files to remove or the destroy to re-run.
+	A retry is the exact resolved invocation that performed the teardown: context,
+	selection, stage, history/recovery flags, accepted authorizations, confirmation,
+	output posture, and SSH identity are retained.
 - A destroy that tears down machine substrate writes a substrate-release
   record (`runs/substrate-release/`) — the positive authorization the next
   `apply` needs before it may reinstall the released substrate. The record is
@@ -3277,9 +3280,13 @@ command. The rest are registered per command, on the verbs that reach machines.
   teardown that leaves the machine layer standing (`--stage clusters`) keeps
   that layer's provider state under
   `clusters/<name>/runtime/provider-state/` and purges only the cluster's own
-  history. A cluster left partially destroyed by `--authorize unreachable-nodes`
-  keeps both its history and its state tree so the operator can still diagnose
-  and retry. A run whose tasks span both a purged and a still-live component
+	history. A cluster left partially destroyed by `--authorize unreachable-nodes`
+	keeps both its history and its state tree so the operator can still diagnose
+	and retry. Guidance to retry after the nodes return removes only
+	`unreachable-nodes` from the exact invocation; when the original command used
+	`--authorize all`, the retry expands it into the other destroy tokens instead
+	of carrying a blanket token that would silently retain `unreachable-nodes`.
+	A run whose tasks span both a purged and a still-live component
   keeps its ledger and shared run log — only the purged component's task
   directories and per-cluster log are removed — so history for the surviving
   component is never lost. A machine selection removes a task directory only

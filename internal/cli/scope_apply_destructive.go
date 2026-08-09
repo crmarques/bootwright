@@ -141,7 +141,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		}
 	}
 	if len(releasedRecords) > 0 {
-		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of "+describeReleasedSubstrates(releasedRecords)+" was destroyed by a previous `bootwright destroy`: this apply re-creates the released machines and reinstalls any managed OS, wiping the target disks. A released machine still running its OS is refused at that installer boot: power it off first.")
+		cliout.NewContinuation(stdout).Warning("destroyed substrate", "the machine substrate of "+describeReleasedSubstrates(releasedRecords)+" was destroyed by a previous destroy: this apply re-creates the released machines and reinstalls any managed OS, wiping the target disks. A released machine still running its OS is refused at that installer boot: power it off first.")
 		substrateReset = workflow.UnionClusterNames(substrateReset, releasedClusters)
 	}
 	if len(substrateReset) > 0 {
@@ -151,7 +151,6 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		converge.ApplySubstrateResetMachinesExtraVar(plan, pairs)
 	}
 	if reclaimDevices != "" {
-		warnApplyReclaimSelection(stdout, objects, reclaimDevices, reclaimClusters)
 		converge.ApplyReclaimDevicesExtraVars(plan, reclaimDevices, reclaimClusters)
 	}
 	bootProven := workflow.BootProvenContainerClusters(clustersDir, tasks)
@@ -164,10 +163,14 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 	return consumedDataLoss
 }
 
-func warnApplyReclaimSelection(stdout io.Writer, objects []workflow.ObjectClassification, reclaimDevices string, reclaimClusters []string) {
+func warnApplyReclaimSelection(stdout io.Writer, objects []workflow.ObjectClassification, reclaimDevices string, reclaimClusters []string, invocation resolvedInvocation) error {
 	if len(reclaimClusters) == 0 {
-		cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned, and without --authorize "+authorizeUnownedDevices+" the reclaim acts only on an owned cluster; no device will be reclaimed. A successful apply records ownership and a successful destroy releases it, so this is the normal state after `bootwright destroy`. Re-run with `--authorize "+authorizeDataLoss+","+authorizeUnownedDevices+"` to reclaim the declared device(s) of the selected cluster(s) without an ownership record — the mounted, in-use, and unprobeable refusals still stand — or restore the context's runs/ records if they were lost.")
-		return
+		command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeDataLoss, authorizeUnownedDevices}})
+		if err != nil {
+			return err
+		}
+		cliout.NewContinuation(stdout).Warning("reclaim", "--reclaim-devices was given but no selected StorageCluster is recorded as Bootwright-owned, and without --authorize "+authorizeUnownedDevices+" the reclaim acts only on an owned cluster; no device will be reclaimed. A successful apply records ownership and a successful destroy releases it, so this is the normal post-destroy state. To explicitly reclaim the declared device(s) of the selected cluster(s) without an ownership record, re-run `"+command.String()+"`; mounted, in-use, and unprobeable devices still fail closed. If the ownership evidence was lost rather than deliberately released, restore the context's runs/ records instead.")
+		return nil
 	}
 	owned := map[string]bool{}
 	for _, name := range converge.OwnedStorageClusters(objects) {
@@ -184,6 +187,7 @@ func warnApplyReclaimSelection(stdout io.Writer, objects []workflow.ObjectClassi
 		warning += " Cluster(s) " + strings.Join(unrecorded, ", ") + " hold no Bootwright ownership record — the state a successful destroy leaves — and --authorize " + authorizeUnownedDevices + " is what authorizes the reclaim to act on them."
 	}
 	cliout.NewContinuation(stdout).Warning("reclaim", warning)
+	return nil
 }
 
 func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) string {
@@ -217,7 +221,7 @@ func forecastReleasedReinstallDataLoss(stdout io.Writer, dryRun bool, runsDir st
 	if len(forecast) == 0 {
 		return
 	}
-	cliout.NewContinuation(stdout).Warning("data loss", "a real run of this apply would "+strings.Join(forecast, "; ")+". A previous `bootwright destroy` released that substrate without wiping it, so the reinstall is where the still-running OS is lost, and each released machine must be powered off before its installer boot — a powered-on machine is refused there. Under --yes it needs --authorize "+authorizeDataLoss+"; interactively it stops at the destructive prompt")
+	cliout.NewContinuation(stdout).Warning("data loss", "a real run of this apply would "+strings.Join(forecast, "; ")+". A previous destroy released that substrate without wiping it, so the reinstall is where the still-running OS is lost, and each released machine must be powered off before its installer boot — a powered-on machine is refused there. Under --yes it needs --authorize "+authorizeDataLoss+"; interactively it stops at the destructive prompt")
 }
 
 func releasedBareMetalReinstallDescriptors(state v1alpha1.State, records []workflow.SubstrateReleaseRecord) []string {
@@ -278,6 +282,9 @@ func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, a
 		}
 	}
 	applyReclaimUnownedDevices(stdout, plan, auth, resolved)
+	if err := warnApplyReclaimSelection(stdout, objects, resolved, clusters, invocation); err != nil {
+		return "", nil, failErr(1, err)
+	}
 	return resolved, clusters, nil
 }
 

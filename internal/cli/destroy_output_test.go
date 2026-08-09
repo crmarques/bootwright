@@ -74,7 +74,7 @@ func TestDestroyOrphanHintScopedToSweepCoverage(t *testing.T) {
 			t.Fatalf("missing orphan %q:\n%s", line, out)
 		}
 	}
-	if strings.Count(out, "a full `bootwright destroy` reclaims it") != 3 {
+	if strings.Count(out, "a full-context destroy reclaims it") != 3 {
 		t.Fatalf("libvirt-domain, bmc-emulator and infra-component are swept from their ownership records, so each must promise reclaim:\n%s", out)
 	}
 	for _, line := range []string{"kubevirt-machine/vm-b", "storage-cluster/ceph-old"} {

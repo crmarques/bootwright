@@ -118,11 +118,15 @@ func contextPurgeGuard(ctx workspace.Context, abandonResources bool) (string, er
 	if abandonResources {
 		return detail, nil
 	}
+	destroyRetry, err := destroyContextRetry(ctx.Name)
+	if err != nil {
+		return detail, err
+	}
 	if len(skipped) > 0 {
-		return detail, fmt.Errorf("%d ownership record(s) under %s could not be read, so bootwright cannot tell whether context %q still owns running resources; fix or remove the corrupted record file(s), run `bootwright destroy --context %s` first, or pass --abandon-resources to purge regardless (abandoning whatever they own)", len(skipped), ctx.OwnershipDir, ctx.Name, ctx.Name)
+		return detail, fmt.Errorf("%d ownership record(s) under %s could not be read, so bootwright cannot tell whether context %q still owns running resources; fix or remove the corrupted record file(s), run `%s` first, or pass --abandon-resources to purge regardless (abandoning whatever they own)", len(skipped), ctx.OwnershipDir, ctx.Name, destroyRetry.String())
 	}
 	if len(records) > 0 || len(installed) > 0 {
-		return detail, fmt.Errorf("context %q still owns %d resource(s) and %d installed cluster(s) — their infrastructure keeps running and their records and install-captured credentials (kubeconfigs, kubeadmin password) would be permanently lost; run `bootwright destroy --context %s` first, or pass --abandon-resources to delete the context and abandon them", ctx.Name, len(records), len(installed), ctx.Name)
+		return detail, fmt.Errorf("context %q still owns %d resource(s) and %d installed cluster(s) — their infrastructure keeps running and their records and install-captured credentials (kubeconfigs, kubeadmin password) would be permanently lost; run `%s` first, or pass --abandon-resources to delete the context and abandon them", ctx.Name, len(records), len(installed), destroyRetry.String())
 	}
 	return detail, nil
 }

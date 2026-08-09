@@ -102,6 +102,123 @@ func TestRetryCommandPreservesResolvedInvocationAndAddsOnlyTheRequiredIntent(t *
 	})
 }
 
+func TestRetryCommandExcludesOnlyTheNamedAuthorization(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:                  invocationDestroy,
+		contextName:           "prod context",
+		sshIdentityFile:       "/tmp/operator key",
+		sshUser:               "operator",
+		sshAskSudoPassword:    true,
+		sshUserForProvisioned: true,
+		flags: invocationFlags{
+			selection:            runSelection{stage: "infra", machines: "worker-0,worker-1"},
+			recoverCephOwnership: "ceph=2088ddee-875b-11f1-9b98-303ea72d7724",
+			purgeHistory:         true,
+			authorizations:       []string{authorizeProtected, authorizeUnreachableNodes, authorizeDataLoss},
+			yes:                  true,
+			askBecomePass:        false,
+			verbose:              true,
+		},
+	}
+	command := mustRetry(t, invocation, retryIntent{excludedAuthorization: authorizeUnreachableNodes})
+	joined := strings.Join(command.Args(), " ")
+	for _, want := range []string{
+		"--authorize protected,data-loss",
+		"--yes",
+		"--stage infra",
+		"--machines worker-0,worker-1",
+		"--recover-ceph-ownership ceph=2088ddee-875b-11f1-9b98-303ea72d7724",
+		"--purge-history",
+		"--context prod context",
+		"--ssh-id-file /tmp/operator key",
+		"--ssh-user operator",
+		"--ssh-ask-sudo-password",
+		"--ssh-user-for-provisioned",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("authorization-removal retry missing %q: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, authorizeUnreachableNodes) || strings.Contains(joined, authorizeAll) {
+		t.Fatalf("authorization-removal retry retained the excluded or blanket token: %s", joined)
+	}
+	assertRetryParses(t, command, func(cmd *cobra.Command) {
+		authorize, err := cmd.Flags().GetStringSlice("authorize")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(authorize, []string{authorizeProtected, authorizeDataLoss}) {
+			t.Fatalf("parsed --authorize = %v", authorize)
+		}
+	})
+}
+
+func TestRetryCommandExpandsAllBeforeExcludingOneAuthorization(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationDestroy,
+		contextName: "matrix",
+		flags: invocationFlags{
+			selection:      runSelection{clusters: "ceph-storage"},
+			purgeHistory:   true,
+			authorizations: []string{authorizeAll},
+			yes:            true,
+		},
+	}
+	command := mustRetry(t, invocation, retryIntent{excludedAuthorization: authorizeUnreachableNodes})
+	want := []string{
+		authorizeDataLoss,
+		authorizeProtected,
+		authorizeInstalledClusterNode,
+		authorizeUnownedVMs,
+		authorizeUnownedNetworks,
+		authorizeUnownedDevices,
+		authorizeUnreadableRecords,
+		authorizeSharedInfra,
+		authorizeStaleInput,
+	}
+	if got := retryAuthorizations(command.Args()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("all-minus-unreachable authorizations = %v, want %v; command=%s", got, want, command.String())
+	}
+	if got := retryAuthorizations(command.Args()); slices.Contains(got, authorizeAll) || slices.Contains(got, authorizeUnreachableNodes) {
+		t.Fatalf("all-minus-unreachable retry must carry neither blanket nor excluded authorization: %s", command.String())
+	}
+	for _, preserved := range []string{"--clusters ceph-storage", "--purge-history", "--yes", "--context matrix"} {
+		if !strings.Contains(command.String(), preserved) {
+			t.Fatalf("all-minus-unreachable retry missing %q: %s", preserved, command.String())
+		}
+	}
+}
+
+func TestRetryCommandRefusesInvalidAuthorizationExclusions(t *testing.T) {
+	invocation := resolvedInvocation{verb: invocationDestroy, flags: invocationFlags{authorizations: []string{authorizeProtected}}}
+	for _, intent := range []retryIntent{
+		{excludedAuthorization: authorizeAll},
+		{excludedAuthorization: authorizeForeignDaemons},
+		{excludedAuthorization: authorizeUnreachableNodes},
+		{requiredAuthorizations: []string{authorizeProtected}, excludedAuthorization: authorizeProtected},
+	} {
+		if _, err := invocation.retry(intent); err == nil {
+			t.Fatalf("invalid exclusion %+v unexpectedly produced a retry", intent)
+		}
+	}
+}
+
+func TestDestroyContextRetryQuotesTheExactContext(t *testing.T) {
+	command, err := destroyContextRetry("prod context;east")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := command.Args(), []string{"bootwright", "destroy", "--context", "prod context;east"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("context destroy args = %v, want %v", got, want)
+	}
+	if got := command.String(); got != "bootwright destroy --context 'prod context;east'" {
+		t.Fatalf("context destroy command = %q", got)
+	}
+	if _, err := destroyContextRetry(" "); err == nil {
+		t.Fatal("blank context unexpectedly produced a destroy retry")
+	}
+}
+
 func TestProtectedLayerDestroyRetriesRetainExactSelectionAndClearApplyEffects(t *testing.T) {
 	base := resolvedInvocation{
 		verb:                  invocationApply,

@@ -37,8 +37,8 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 }
 
 const (
-	destroyReclaimsOrphanHint = "a full `bootwright destroy` reclaims it"
-	destroyLeavesOrphanHint   = "a full `bootwright destroy` does not reclaim this record — destroy it while it is still declared, or clean it up manually"
+	destroyReclaimsOrphanHint = "a full-context destroy reclaims it"
+	destroyLeavesOrphanHint   = "a full-context destroy does not reclaim this record — destroy it while it is still declared, or clean it up manually"
 )
 
 func destroyConfirmPrompt(dataLossUnauthorized bool) string {
