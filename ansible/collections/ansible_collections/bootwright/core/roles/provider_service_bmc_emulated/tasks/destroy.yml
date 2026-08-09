@@ -8,48 +8,71 @@
     bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
   changed_when: false
 
-- name: Stop sushy-emulator service
-  ansible.builtin.systemd_service:
-    name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
-    state: stopped
-    enabled: false
-  failed_when: false
+- name: Tear down BMC runtime before deleting state and ownership
+  block:
+    - name: Stop sushy-emulator service
+      ansible.builtin.systemd_service:
+        name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+        state: stopped
+        enabled: false
+      register: bootwright_bmc_sushy_stop
+      failed_when:
+        - bootwright_bmc_sushy_stop.failed | default(false) | bool
+        - >-
+          'Could not find the requested service'
+          not in (bootwright_bmc_sushy_stop.msg | default(''))
 
-- name: Close Redfish port on host firewall
-  ansible.posix.firewalld:
-    port: "{{ bootwright_bmc_port | int }}/tcp"
-    state: disabled
-    permanent: true
-    immediate: true
-  failed_when: false
+    - name: Close Redfish port on host firewall
+      ansible.posix.firewalld:
+        port: "{{ bootwright_bmc_port | int }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      failed_when: false
 
-- name: Stop vmedia HTTP service
-  ansible.builtin.systemd_service:
-    name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
-    state: stopped
-    enabled: false
-  failed_when: false
+    - name: Stop vmedia HTTP service
+      ansible.builtin.systemd_service:
+        name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+        state: stopped
+        enabled: false
+      register: bootwright_bmc_vmedia_stop
+      failed_when:
+        - bootwright_bmc_vmedia_stop.failed | default(false) | bool
+        - >-
+          'Could not find the requested service'
+          not in (bootwright_bmc_vmedia_stop.msg | default(''))
 
-- name: Remove sushy + vmedia systemd units
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "/etc/systemd/system/bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
-    - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
-  register: bootwright_bmc_units_removed
+    - name: Remove sushy + vmedia systemd units
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/etc/systemd/system/bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+        - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+      register: bootwright_bmc_units_removed
 
-- name: Reload systemd after removing BMC units
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: bootwright_bmc_units_removed.changed
+    - name: Reload systemd after removing BMC units
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: bootwright_bmc_units_removed.changed
 
-- name: Destroy libvirt vmedia pool
-  community.libvirt.virt_pool:
-    name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
-    uri: "{{ bootwright_bmc_libvirt_uri }}"
-    state: absent
-  failed_when: false
+    - name: Destroy libvirt vmedia pool
+      community.libvirt.virt_pool:
+        name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+        uri: "{{ bootwright_bmc_libvirt_uri }}"
+        state: absent
+
+  rescue:
+    - name: Refuse BMC state and ownership deletion after runtime teardown failure
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to delete BMC state or ownership for provider
+          {{ bootwright_bmc_provider_name }} because
+          {{ ansible_failed_task.name | default('runtime teardown') }} failed:
+          {{ ansible_failed_result.msg | default('provider teardown failed with no detail') }}.
+          Restore service/libvirt access or remove that runtime safely, then
+          retry the exact invocation
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
 
 - name: Remove BMC state directory
   ansible.builtin.file:

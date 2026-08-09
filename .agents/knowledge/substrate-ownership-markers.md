@@ -37,9 +37,11 @@ disk with media still attached — no mid-install eject).
 
 **Libvirt context sweep never trusts disk paths:** a foreign VM can park a disk
 under `/var/lib/libvirt/images/bootwright/<context>/`. The sweep
-(`provider_host_libvirt/tasks/destroy_context.yml`) undefines only domains
-whose XML carries the marker for this context; when a foreign domain co-resides
-under the context root, the blanket root removal is skipped
+(`provider_host_libvirt/tasks/destroy_context.yml`) undefines every domain
+whose XML carries the marker for this context, including a domain whose disk was
+moved outside the conventional storage root. Block-device paths decide only
+which storage trees are safe to remove. When a foreign domain co-resides under
+the context root, the blanket root removal is skipped
 (`bootwright_libvirt_context_foreign_storage` non-empty) and only the
 Bootwright-owned per-machine subtrees (`virsh domblklist --details`-derived)
 are removed, leaving orphan subtrees for a warned manual sweep. The no-foreign
@@ -51,6 +53,14 @@ before evidence deletion, and each selected domain must then be proven absent.
 The per-machine destroy and managed-OS rebuild paths impose the same ordering:
 domain removal must succeed or prove absence before disk, state, or record
 deletion.
+
+**Provider teardown retains its retry evidence:** the cluster-scoped libvirt
+network remover, emulated-BMC runtime and vmedia-pool teardown, and vSphere
+datastore-media remover all fail before deleting local state or ownership. Their
+rescues name the failed external operation and the controller-rendered exact
+mutating invocation. Only firewall-port closure remains best effort: with the
+listener already removed, a stale allow rule exposes no process and does not
+authorize deleting a live provider resource.
 
 **Shared DVD cache must not join per-machine records:** the multi-GB source DVD
 staged once per cluster (throttle: 1) must never appear in a per-machine

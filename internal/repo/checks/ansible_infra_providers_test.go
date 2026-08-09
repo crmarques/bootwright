@@ -793,6 +793,7 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 	blockGateIdx := findAnsibleTask(t, tasks, "Require conclusive libvirt block-device probes before context sweep")
 	metadataGateIdx := findAnsibleTask(t, tasks, "Require conclusive libvirt ownership probes before context sweep")
 	consistencyGateIdx := findAnsibleTask(t, tasks, "Require consistent libvirt probe results before context sweep")
+	selectOwnedIdx := findAnsibleTask(t, tasks, "Select all Bootwright-owned current-context libvirt domains")
 	stopIdx := findAnsibleTask(t, tasks, "Stop current-context libvirt domains")
 	undefineIdx := findAnsibleTask(t, tasks, "Undefine current-context libvirt domains")
 	verifyIdx := findAnsibleTask(t, tasks, "Verify swept current-context libvirt domains are absent")
@@ -800,7 +801,7 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 
 	blanket := tasks[findAnsibleTask(t, tasks, "Remove current-context libvirt storage directory")]
 	blanketIdx := findAnsibleTask(t, tasks, "Remove current-context libvirt storage directory")
-	if !(blockProbeIdx < metadataProbeIdx && metadataProbeIdx < blockGateIdx && blockGateIdx < metadataGateIdx && metadataGateIdx < consistencyGateIdx && consistencyGateIdx < stopIdx && stopIdx < undefineIdx && undefineIdx < verifyIdx && verifyIdx < absentGateIdx && absentGateIdx < blanketIdx) {
+	if !(blockProbeIdx < metadataProbeIdx && metadataProbeIdx < blockGateIdx && blockGateIdx < metadataGateIdx && metadataGateIdx < consistencyGateIdx && consistencyGateIdx < selectOwnedIdx && selectOwnedIdx < stopIdx && stopIdx < undefineIdx && undefineIdx < verifyIdx && verifyIdx < absentGateIdx && absentGateIdx < blanketIdx) {
 		t.Fatalf("libvirt context sweep must prove every probe conclusive and every owned domain absent before broad storage deletion")
 	}
 	for _, idx := range []int{blockGateIdx, metadataGateIdx} {
@@ -826,6 +827,13 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 	if tasks[stopIdx]["failed_when"] == false {
 		t.Fatalf("context sweep must not ignore a domain-stop failure before undefine and disk deletion: %v", tasks[stopIdx])
 	}
+	selected, ok := tasks[selectOwnedIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || fmt.Sprint(selected["bootwright_libvirt_context_domains"]) != "{{ bootwright_libvirt_context_owned_domains }}" {
+		t.Fatalf("context sweep must remove every marker-owned domain, including one whose disk moved outside the standard root, got %v", tasks[selectOwnedIdx])
+	}
+	if got := fmt.Sprint(tasks[stopIdx]["loop"]); !strings.Contains(got, "bootwright_libvirt_context_domains") {
+		t.Fatalf("context sweep must stop the complete marker-owned domain set, got loop=%v", tasks[stopIdx]["loop"])
+	}
 	absentGate, ok := tasks[absentGateIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(absentGate["that"]), "item.rc") || !strings.Contains(fmt.Sprint(absentGate["that"]), "Domain not found") {
 		t.Fatalf("context sweep must positively prove each removed domain absent, got %v", tasks[absentGateIdx])
@@ -844,6 +852,73 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 	}
 	if got := fmt.Sprint(owned["when"]); !strings.Contains(got, "bootwright_libvirt_context_foreign_storage") || !strings.Contains(got, "length > 0") {
 		t.Fatalf("owned machine-dir removal must run only when a foreign domain co-resides, got when=%v", owned["when"])
+	}
+}
+
+func TestBMCProviderDestroyRetainsEvidenceOnRuntimeFailure(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy.yml")
+	runtimeIdx := findAnsibleTask(t, tasks, "Tear down BMC runtime before deleting state and ownership")
+	stateIdx := findAnsibleTask(t, tasks, "Remove BMC state directory")
+	recordIdx := findAnsibleTask(t, tasks, "Remove BMC emulator ownership record")
+	if !(runtimeIdx < stateIdx && stateIdx < recordIdx) {
+		t.Fatalf("BMC runtime must finish before state and ownership deletion (runtime=%d state=%d record=%d)", runtimeIdx, stateIdx, recordIdx)
+	}
+
+	runtime := nestedAnsibleTasks(t, tasks[runtimeIdx], "block")
+	for _, name := range []string{
+		"Stop sushy-emulator service",
+		"Stop vmedia HTTP service",
+		"Remove sushy + vmedia systemd units",
+		"Reload systemd after removing BMC units",
+		"Destroy libvirt vmedia pool",
+	} {
+		idx := findAnsibleTask(t, runtime, name)
+		if runtime[idx]["failed_when"] == false {
+			t.Fatalf("%s must raise a genuine failure into the rescue before BMC evidence deletion", name)
+		}
+	}
+
+	rescue := nestedAnsibleTasks(t, tasks[runtimeIdx], "rescue")
+	refuse := rescue[findAnsibleTask(t, rescue, "Refuse BMC state and ownership deletion after runtime teardown failure")]
+	fail, ok := refuse["ansible.builtin.fail"].(map[string]any)
+	if !ok {
+		t.Fatalf("BMC teardown rescue must hard-fail, got %v", refuse)
+	}
+	for _, want := range []string{"ansible_failed_task.name", "ansible_failed_result.msg", "bootwright_mutating_invocation", "same bootwright destroy invocation"} {
+		if !strings.Contains(fmt.Sprint(fail["msg"]), want) {
+			t.Fatalf("BMC teardown rescue missing actionable fragment %q: %v", want, fail["msg"])
+		}
+	}
+}
+
+func TestVSphereVMediaDestroyRetainsEvidenceOnDatastoreFailure(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/destroy.yml")
+	deleteIdx := findAnsibleTask(t, tasks, "Delete recorded vSphere virtual media from the datastore")
+	evidenceIdx := findAnsibleTask(t, tasks, "Remove recorded vSphere virtual media staging paths and records")
+	if deleteIdx >= evidenceIdx {
+		t.Fatalf("vSphere datastore media deletion must finish before local staging and ownership deletion (delete=%d evidence=%d)", deleteIdx, evidenceIdx)
+	}
+	if got := fmt.Sprint(tasks[deleteIdx]["ansible.builtin.include_tasks"]); got != "destroy_vmedia.yml" {
+		t.Fatalf("vSphere media deletion must dispatch its fail-closed remover, got %v", tasks[deleteIdx])
+	}
+
+	removerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/destroy_vmedia.yml")
+	guardIdx := findAnsibleTask(t, removerTasks, "Delete recorded vSphere virtual media before releasing ownership")
+	removeBlock := nestedAnsibleTasks(t, removerTasks[guardIdx], "block")
+	remove := removeBlock[findAnsibleTask(t, removeBlock, "Delete recorded vSphere virtual media file")]
+	if remove["failed_when"] == false {
+		t.Fatalf("vSphere media deletion must raise a genuine failure into its rescue, got %v", remove)
+	}
+	rescue := nestedAnsibleTasks(t, removerTasks[guardIdx], "rescue")
+	refuse := rescue[findAnsibleTask(t, rescue, "Refuse vSphere virtual media evidence deletion after datastore failure")]
+	fail, ok := refuse["ansible.builtin.fail"].(map[string]any)
+	if !ok {
+		t.Fatalf("vSphere media teardown rescue must hard-fail, got %v", refuse)
+	}
+	for _, want := range []string{"bootwright_mutating_invocation", "same bootwright destroy invocation", "Refusing to delete local staging state or ownership"} {
+		if !strings.Contains(fmt.Sprint(fail["msg"]), want) {
+			t.Fatalf("vSphere media teardown rescue missing actionable fragment %q: %v", want, fail["msg"])
+		}
 	}
 }
 

@@ -131,21 +131,9 @@
     - (item.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
   changed_when: false
 
-- name: Initialize current-context libvirt domains
+- name: Select all Bootwright-owned current-context libvirt domains
   ansible.builtin.set_fact:
-    bootwright_libvirt_context_domains: []
-  changed_when: false
-
-- name: Select libvirt domains using current-context storage
-  ansible.builtin.set_fact:
-    bootwright_libvirt_context_domains: "{{ bootwright_libvirt_context_domains + [item.bootwright_libvirt_domain_name] }}"
-  loop: "{{ bootwright_libvirt_domain_blocklists.results | default([]) }}"
-  loop_control:
-    label: "{{ item.bootwright_libvirt_domain_name | default('') }}"
-  when:
-    - item.rc | default(1) == 0
-    - (bootwright_libvirt_context_storage_root ~ '/') in (item.stdout | default(''))
-    - item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains
+    bootwright_libvirt_context_domains: "{{ bootwright_libvirt_context_owned_domains }}"
   changed_when: false
 
 - name: Detect foreign libvirt domains using current-context storage

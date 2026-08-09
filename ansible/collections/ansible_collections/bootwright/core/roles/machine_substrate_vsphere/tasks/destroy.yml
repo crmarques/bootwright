@@ -125,25 +125,14 @@
   changed_when: false
 
 - name: Delete recorded vSphere virtual media from the datastore
-  community.vmware.vsphere_file:
-    hostname: "{{ bootwright_vsphere.server }}"
-    username: "{{ bootwright_vsphere_credentials.username }}"
-    password: "{{ bootwright_vsphere_credentials.password }}"
-    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
-    datacenter: "{{ item.attributes.datacenter | default(bootwright_vsphere.topology.datacenter) }}"
-    datastore: "{{ item.attributes.datastore | default('') }}"
-    path: "{{ item.attributes.path | default('') }}"
-    state: absent
-  vars:
-    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  ansible.builtin.include_tasks: destroy_vmedia.yml
   loop: "{{ bootwright_vsphere_vmedia_records }}"
   loop_control:
-    label: "{{ item.attributes.path | default('') }}"
-  failed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+    loop_var: bootwright_vsphere_vmedia_destroy_record
+    label: "{{ bootwright_vsphere_vmedia_destroy_record.attributes.path | default('') }}"
   when:
-    - item.attributes.datastore | default('') | length > 0
-    - item.attributes.path | default('') | length > 0
+    - bootwright_vsphere_vmedia_destroy_record.attributes.datastore | default('') | length > 0
+    - bootwright_vsphere_vmedia_destroy_record.attributes.path | default('') | length > 0
 
 - name: Remove recorded vSphere virtual media staging paths and records
   ansible.builtin.include_role:

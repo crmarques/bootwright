@@ -9,6 +9,7 @@ import (
 const (
 	machineInfraDestroyPlaybook = "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml"
 	machineInfraPrepareDestroy  = "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra/prepare_destroy_cluster.yml"
+	machineInfraRemoveNetwork   = "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra/remove_libvirt_network.yml"
 	libvirtSubstrateDestroy     = bootwrightCollectionRoleRoot + "/machine_substrate_libvirt/tasks/destroy.yml"
 )
 
@@ -114,10 +115,13 @@ func TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown(t *testing.T) {
 
 	tasks := nestedAnsibleTasks(t, plays[2], "tasks")
 	removeIdx := findAnsibleTask(t, tasks, "Remove authorized cluster libvirt networks")
-	remove, ok := tasks[removeIdx]["community.libvirt.virt_net"].(map[string]any)
-	if !ok {
-		t.Fatalf("authorized network removal must use community.libvirt.virt_net, got %v", tasks[removeIdx])
+	if got := fmt.Sprint(tasks[removeIdx]["ansible.builtin.include_tasks"]); got != "tasks/machine_infra/remove_libvirt_network.yml" {
+		t.Fatalf("authorized network removal must dispatch the fail-closed remover, got %v", tasks[removeIdx])
 	}
+	removerTasks := readAnsibleTasks(t, machineInfraRemoveNetwork)
+	guardIdx := findAnsibleTask(t, removerTasks, "Remove authorized libvirt network before releasing ownership")
+	removeBlock := nestedAnsibleTasks(t, removerTasks[guardIdx], "block")
+	remove := removeBlock[findAnsibleTask(t, removeBlock, "Remove authorized libvirt network")]["community.libvirt.virt_net"].(map[string]any)
 	if got := remove["state"]; got != "absent" {
 		t.Fatalf("authorized network removal state = %v, want absent", got)
 	}
@@ -128,6 +132,20 @@ func TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown(t *testing.T) {
 	}
 	if got := fmt.Sprint(tasks[removeIdx]["loop"]); !strings.Contains(got, "bootwright_libvirt_network_removals") {
 		t.Fatalf("authorized network removal must loop only what the cluster-scoped gate authorized, got loop=%v", tasks[removeIdx]["loop"])
+	}
+	if _, ok := removeBlock[0]["failed_when"]; ok {
+		t.Fatalf("authorized network removal must raise a real failure into its rescue before ownership deletion, got %v", removeBlock[0])
+	}
+	rescue := nestedAnsibleTasks(t, removerTasks[guardIdx], "rescue")
+	refuse := rescue[findAnsibleTask(t, rescue, "Refuse libvirt network ownership release after removal failure")]
+	fail, ok := refuse["ansible.builtin.fail"].(map[string]any)
+	if !ok {
+		t.Fatalf("network removal rescue must hard-fail, got %v", refuse)
+	}
+	for _, want := range []string{"bootwright_mutating_invocation", "same bootwright destroy invocation", "Refusing to release ownership"} {
+		if !strings.Contains(fmt.Sprint(fail["msg"]), want) {
+			t.Fatalf("network removal rescue missing actionable fragment %q: %v", want, fail["msg"])
+		}
 	}
 
 	recordIdx := findAnsibleTask(t, tasks, "Remove authorized cluster libvirt network ownership records")

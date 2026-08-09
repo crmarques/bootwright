@@ -54,7 +54,12 @@ a non-empty value so an undefined var can never match every path.
 service, container, and mount removers run before owned-path and ownership-record
 deletion. Exact absent/not-running outcomes remain idempotent successes; any
 other remover or mount-discovery failure aborts the record task, preserving the
-paths and record needed to diagnose and retry the same destroy.
+paths and record needed to diagnose and retry the exact resolved mutating
+invocation. Provider-specific teardown follows the same order: a libvirt
+network, BMC runtime/pool, or vSphere datastore ISO must be removed before its
+local state or ownership record. A suppressed remover result without an
+immediate hard refusal is not idempotency; it discards the evidence the retry
+needs.
 
 **Sensitive-data scan is deliberately asymmetric:** key-name markers are broad
 (password, token, private_key, bearer, authorization, client-secret,

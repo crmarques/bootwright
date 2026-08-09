@@ -1,0 +1,27 @@
+---
+- name: Delete recorded vSphere virtual media before releasing ownership
+  block:
+    - name: Delete recorded vSphere virtual media file
+      community.vmware.vsphere_file:
+        hostname: "{{ bootwright_vsphere.server }}"
+        username: "{{ bootwright_vsphere_credentials.username }}"
+        password: "{{ bootwright_vsphere_credentials.password }}"
+        validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+        datacenter: "{{ bootwright_vsphere_vmedia_destroy_record.attributes.datacenter | default(bootwright_vsphere.topology.datacenter) }}"
+        datastore: "{{ bootwright_vsphere_vmedia_destroy_record.attributes.datastore }}"
+        path: "{{ bootwright_vsphere_vmedia_destroy_record.attributes.path }}"
+        state: absent
+      vars:
+        ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
+
+  rescue:
+    - name: Refuse vSphere virtual media evidence deletion after datastore failure
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to delete local staging state or ownership for vSphere
+          virtual media {{ bootwright_vsphere_vmedia_destroy_record.attributes.path }}
+          on datastore {{ bootwright_vsphere_vmedia_destroy_record.attributes.datastore }}
+          because vCenter did not remove that file. Restore vCenter access and
+          permissions or remove the file safely, then retry the exact invocation
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.

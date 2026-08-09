@@ -1,0 +1,19 @@
+---
+- name: Remove authorized libvirt network before releasing ownership
+  block:
+    - name: Remove authorized libvirt network
+      community.libvirt.virt_net:
+        name: "{{ bootwright_libvirt_network_removal.network }}"
+        state: absent
+        uri: "{{ bootwright_libvirt_network_removal.uri }}"
+
+  rescue:
+    - name: Refuse libvirt network ownership release after removal failure
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to release ownership for libvirt network
+          {{ bootwright_libvirt_network_removal.network }} because its removal
+          failed: {{ ansible_failed_result.msg | default('libvirt network removal failed with no detail') }}.
+          Restore libvirt access or remove the network safely, then retry the
+          exact invocation
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.

@@ -159,11 +159,7 @@
           or bootwright_ownership_record.machine | default('') in bootwright_destroy_machine_scope.split(',')
 
     - name: Remove authorized cluster libvirt networks
-      community.libvirt.virt_net:
-        name: "{{ bootwright_libvirt_network_removal.network }}"
-        state: absent
-        uri: "{{ bootwright_libvirt_network_removal.uri }}"
-      failed_when: false
+      ansible.builtin.include_tasks: tasks/machine_infra/remove_libvirt_network.yml
       loop: "{{ bootwright_libvirt_network_removals | default([]) }}"
       loop_control:
         loop_var: bootwright_libvirt_network_removal

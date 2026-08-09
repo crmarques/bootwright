@@ -21,6 +21,7 @@ what turns "forgot" into a red test.
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
 | a refusal or next-step action | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; every production Go package outside `internal/cli` returns typed or command-free evidence only | `TestOnlyCLIConstructsMutatingBootwrightInvocations`, the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
 | an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
+| a provider or ownership remover followed by path, state, or record deletion | let a genuine remover failure enter an immediate `block`/`rescue` refusal using the resolved mutating invocation; accept only a positively identified already-absent outcome | `TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure`, `TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown`, `TestBMCProviderDestroyRetainsEvidenceOnRuntimeFailure`, `TestVSphereVMediaDestroyRetainsEvidenceOnDatastoreFailure` |
 
 Three failure shapes recur often enough to name:
 
