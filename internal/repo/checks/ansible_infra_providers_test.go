@@ -625,7 +625,7 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 			resolve:    "Resolve libvirt domain ownership for apply",
 			foreign:    "Refuse to mutate a non-Bootwright libvirt domain on apply",
 			gate:       "Enforce libvirt domain apply mode against live state",
-			mutation:   "Stop managed OS libvirt domain for override reinstall",
+			mutation:   "Create per-machine libvirt state directories",
 			existsFact: "bootwright_libvirt_apply_domain_xml.rc",
 			ownedFact:  "bootwright_libvirt_apply_owned",
 		},

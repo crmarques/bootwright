@@ -7,17 +7,6 @@
     bootwright_libvirt_domain_uuid: "{{ (bootwright_current_cluster.name ~ '-' ~ bootwright_component.name) | to_uuid }}"
   changed_when: false
 
-- name: Create per-machine libvirt state directories
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "{{ item.mode }}"
-  loop:
-    - { path: "{{ bootwright_libvirt_machine_root }}", mode: "0755" }
-    - { path: "{{ bootwright_libvirt_storage_root }}", mode: "0755" }
-
 - name: Probe libvirt runtime users
   ansible.builtin.command:
     argv:
@@ -119,6 +108,17 @@
       libvirt domain {{ bootwright_libvirt_domain_name }}
     bootwright_gate_exists: "{{ bootwright_libvirt_apply_domain_xml.rc | default(1) == 0 }}"
     bootwright_gate_owned: "{{ bootwright_libvirt_apply_owned | default(false) }}"
+
+- name: Create per-machine libvirt state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ bootwright_libvirt_machine_root }}", mode: "0755" }
+    - { path: "{{ bootwright_libvirt_storage_root }}", mode: "0755" }
 
 - name: Stop managed OS libvirt domain for override reinstall
   ansible.builtin.command:
