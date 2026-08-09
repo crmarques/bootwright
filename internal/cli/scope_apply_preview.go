@@ -76,6 +76,11 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 	if len(ownershipSkipped) > 0 {
 		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped, nil))
 	}
+	if releases, err := workflow.ConsumableSubstrateReleases(runsDir, tasks); err == nil {
+		if refusal := installedContainerClusterMachineReleaseRefusal(clustersDir, releases); refusal != nil {
+			refusals = append(refusals, refusal)
+		}
+	}
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
 		return applyGateRefusalMessages(refusals)

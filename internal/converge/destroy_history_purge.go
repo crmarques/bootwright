@@ -165,7 +165,7 @@ func purgeRunHistoryEntry(runsDir, historyDir, runID string, clusters, machines 
 		return nil
 	}
 	runDir := filepath.Join(historyDir, runID)
-	if matched == len(ledger.Tasks) {
+	if len(machines) == 0 && matched == len(ledger.Tasks) {
 		if err := os.RemoveAll(runDir); err != nil {
 			return fmt.Errorf("remove run directory: %w", err)
 		}
@@ -180,7 +180,7 @@ func purgeRunHistoryEntry(runsDir, historyDir, runID string, clusters, machines 
 		if err := os.RemoveAll(workflow.TaskLogDir(runsDir, runID, task)); err != nil && !os.IsNotExist(err) {
 			problems = append(problems, err)
 		}
-		if task.Cluster == "" || purgedClusterLogs[task.Cluster] {
+		if task.Cluster == "" || !clusters[task.Cluster] || purgedClusterLogs[task.Cluster] {
 			continue
 		}
 		purgedClusterLogs[task.Cluster] = true
@@ -195,13 +195,8 @@ func taskInPurgeScope(task workflow.TaskLedgerEntry, clusters, machines map[stri
 	if task.Cluster != "" && clusters[task.Cluster] {
 		return true
 	}
-	if task.Node != "" && machines[task.Node] {
+	if taskMachinesWhollyCovered(task, machines) {
 		return true
-	}
-	for _, node := range task.Nodes {
-		if machines[node] {
-			return true
-		}
 	}
 	if !workflow.IsDestroyTaskKind(task.Kind) {
 		return false
@@ -217,6 +212,21 @@ func taskInPurgeScope(task workflow.TaskLedgerEntry, clusters, machines map[stri
 	}
 	for _, machine := range machineKeys {
 		if !machines[machine] {
+			return false
+		}
+	}
+	return true
+}
+
+func taskMachinesWhollyCovered(task workflow.TaskLedgerEntry, machines map[string]bool) bool {
+	if len(machines) == 0 || (task.Node == "" && len(task.Nodes) == 0) {
+		return false
+	}
+	if task.Node != "" && !machines[task.Node] {
+		return false
+	}
+	for _, node := range task.Nodes {
+		if !machines[node] {
 			return false
 		}
 	}

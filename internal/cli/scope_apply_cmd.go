@@ -290,6 +290,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if releaseErr != nil {
 				cliout.NewContinuation(stdout).Warning("substrate release", releaseErr.Error()+"; a destroyed cluster's rebuild authorization could not be read, so its reinstall may be refused — fix or remove the reported record and re-apply")
 			}
+			if err := installedContainerClusterMachineReleaseRefusal(clustersDir, releasedRecords); err != nil {
+				return failErr(1, err)
+			}
 			releasedClusters := workflow.SubstrateReleaseClusterNames(releasedRecords)
 			var ownedReclaim []string
 			if override {

@@ -140,6 +140,55 @@ func TestPurgeRunHistoryForComponentsMatchesMachinesByNode(t *testing.T) {
 	}
 }
 
+func TestPurgeRunHistoryForComponentsRequiresEveryTaskMachine(t *testing.T) {
+	runsDir := t.TempDir()
+	entry := workflow.TaskLedgerEntry{ID: "storage.ceph.prepare", Kind: "storage-prepare", Nodes: []string{"ceph-0", "ceph-1"}}
+	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{entry})
+	touchTaskDir(t, runsDir, "run-1", entry.ID)
+
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0"}, ""); err != nil {
+		t.Fatalf("purge one machine: %v", err)
+	}
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", entry)); err != nil {
+		t.Fatalf("task spanning an unselected machine must keep its log: %v", err)
+	}
+
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0", "ceph-1"}, ""); err != nil {
+		t.Fatalf("purge every machine: %v", err)
+	}
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", entry)); !os.IsNotExist(err) {
+		t.Fatalf("task wholly covered by selected machines must lose its task log, stat err = %v", err)
+	}
+}
+
+func TestPurgeRunHistoryForMachinesKeepsSharedRunAndClusterEvidence(t *testing.T) {
+	runsDir := t.TempDir()
+	entry := workflow.TaskLedgerEntry{ID: "infra.ceph.ceph-0", Kind: "machine-infra", Cluster: "ceph", Node: "ceph-0"}
+	mustArchiveLedger(t, runsDir, "run-1", []workflow.TaskLedgerEntry{entry})
+	touchTaskDir(t, runsDir, "run-1", entry.ID, entry.Cluster)
+	touchClusterLog(t, runsDir, "run-1", entry.Cluster)
+	sharedLog := filepath.Join(runsDir, "history", "run-1", "bootwright.log")
+	if err := os.WriteFile(sharedLog, []byte("shared\n"), 0o600); err != nil {
+		t.Fatalf("write shared run log: %v", err)
+	}
+
+	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0"}, ""); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(runsDir, "history", "run-1", "ledger.json"),
+		sharedLog,
+		workflow.ApplyClusterLogPath(runsDir, "run-1", entry.Cluster),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("machine-scoped purge must keep shared evidence %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "run-1", entry)); !os.IsNotExist(err) {
+		t.Fatalf("selected machine's task log must be removed, stat err = %v", err)
+	}
+}
+
 func TestPurgeClusterRuntimeDirRemovesWholeTree(t *testing.T) {
 	clustersDir := t.TempDir()
 	installerFile := filepath.Join(clustersDir, "ocp", "runtime", "installer", "install-config.yaml")
@@ -429,8 +478,11 @@ func TestPurgeRunHistoryForComponentsKeepsDestroyTaskSpanningUnselectedMachines(
 	if err := purgeRunHistoryForComponents(runsDir, nil, []string{"ceph-0", "ceph-1"}, ""); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
-	if runDirExists(runsDir, "destroy-old") {
-		t.Fatal("a destroy task whose machines were all selected must be purged")
+	if !runDirExists(runsDir, "destroy-old") {
+		t.Fatal("machine-scoped purge must retain the shared run ledger even when its only task is wholly selected")
+	}
+	if _, err := os.Stat(workflow.TaskLogPath(runsDir, "destroy-old", workflow.TaskLedgerEntry{ID: "destroy.machine-infra"})); !os.IsNotExist(err) {
+		t.Fatalf("a destroy task whose machines were all selected must lose its task log, stat err = %v", err)
 	}
 }
 

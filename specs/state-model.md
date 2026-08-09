@@ -3035,17 +3035,22 @@ verbs that reach machines.
   honors the release only for covered machines. A release is consumed only for
   the machines an apply actually covered: a `--machines`-scoped apply shrinks
   the record to the still-released remainder and clears it when none remain.
-  Consumption happens at the step that completes the rebuild, not merely at the
-  step that re-creates the substrate: the managed-OS install (`managedMachineOS`,
-  a machines-phase task) for a storage machine, and `wait-for install-complete`
-  (`installWait`, a base-phase task) for a `ContainerCluster`. A `ContainerCluster`
-  plans no `managedMachineOS` task, so `apply --stage infra` and
-  `apply --through machines` re-create its machines without consuming its
-  release — by design, because the cluster is not yet reinstalled — and it keeps
-  re-arming the destroyed-substrate warning until an apply reaches the base
-  phase. With `destroy --authorize unreachable-nodes`, a managed
-  storage cluster receives the release only when its teardown completion report
-  proves that no topology node was skipped. A partially destroyed storage
+  Consumption happens only through work that actually completes the rebuild,
+  never through an install task skipped at plan time: the managed-OS install
+  (`managedMachineOS`, a machines-phase task) for a storage machine, and the
+  cluster boot/install sequence for a `ContainerCluster`. Because Bootwright's
+  `ContainerCluster` workflow installs a cluster only as a whole, a
+  machine-granular release for a cluster whose install record is already
+  complete cannot authorize an individual-node recovery. The next apply that
+  selects that machine fails closed before mutation, keeps the release record,
+  and names the supported whole-cluster sequence exactly:
+  `bootwright destroy --clusters <cluster> --authorize data-loss --yes`, then
+  `bootwright apply --clusters <cluster> --yes`. The other sanctioned path is
+  the platform's external node-recovery procedure; Bootwright does not claim
+  that recovery as an apply. A cluster-wide release remains consumable by a
+  fresh whole-cluster install. With `destroy --authorize unreachable-nodes`, a
+  managed storage cluster receives the release only when its teardown completion
+  report proves that no topology node was skipped. A partially destroyed storage
   cluster withholds it, as do infra-only, machine-scoped, and non-storage
   teardowns under this flag because they have no equivalent per-node completion
   proof. Those machines keep failing closed on apply until a destroy without
@@ -3082,8 +3087,11 @@ verbs that reach machines.
   and retry. A run whose tasks span both a purged and a still-live component
   keeps its ledger and shared run log — only the purged component's task
   directories and per-cluster log are removed — so history for the surviving
-  component is never lost. A component's history includes its prior destroy
-  runs: destroy-run ledgers record their components as task resource keys, and
+  component is never lost. A machine selection removes a task directory only
+  when every machine named by that task is selected; it always keeps the run
+  ledger, shared run log, and parent cluster's flow log because those records
+  also describe the still-live cluster. A component's history includes its prior
+  destroy runs: destroy-run ledgers record their components as task resource keys, and
   the purge matches those keys the same way it matches an apply task's cluster
   or node. A fully successful unscoped destroy has no surviving component, so
   instead of per-component matching it sweeps every entry under `runs/history/`

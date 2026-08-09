@@ -218,13 +218,17 @@ func destroyOrdersInfraComponentsFirst(facts destroyGraphFacts, placementFirst b
 func destroyInfraComponentsOrdering(facts destroyGraphFacts, work destroyStorageWork, placementFirst bool) []string {
 	var out []string
 	if facts.machineInfraFanned() {
+		placementFanned := false
 		for _, cluster := range facts.machineInfraFan {
 			if facts.placement[cluster] {
+				placementFanned = true
 				continue
 			}
 			out = appendUniqueString(out, facts.machineInfraID(cluster))
 		}
-		out = appendUniqueString(out, destroyMachineInfraRecordsTaskID)
+		if !placementFanned {
+			out = appendUniqueString(out, destroyMachineInfraRecordsTaskID)
+		}
 	} else if !placementFirst {
 		out = appendUniqueString(out, destroyMachineInfraTaskID)
 	}

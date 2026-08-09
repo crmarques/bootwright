@@ -52,6 +52,7 @@ type safetyCase struct {
 	name     string
 	baseline string
 	seed     func(t *testing.T, ctx workspace.Context)
+	check    func(t *testing.T, ctx workspace.Context)
 	args     []string
 	verdict  safetyVerdict
 	remedy   remedyExpectation
@@ -152,6 +153,9 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 				if strings.Contains(out, deny) {
 					t.Errorf("output must not contain %q; got:\n%s", deny, out)
 				}
+			}
+			if tc.check != nil {
+				tc.check(t, ctx)
 			}
 		})
 	}
@@ -356,6 +360,18 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
 		want:    []string{"\"refusals\"", "could not be read", "no authorization skips this on apply"},
+	}, {
+		name: "apply/preview: machine release on installed cluster forecasts whole-cluster refusal",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
+			seedInstalledCluster(t, ctx, "dc1-child-ocp")
+			if err := workflow.MarkSubstrateMachinesReleased(ctx.RunsDir, "dc1-child-ocp", []string{"dc1-child-ocp-infra-master-0"}, time.Now()); err != nil {
+				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
+			}
+		},
+		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"a real run refuses", "dc1-child-ocp-infra-master-0", "bootwright destroy --clusters dc1-child-ocp --authorize data-loss --yes", "bootwright apply --clusters dc1-child-ocp --yes"},
 	}, {
 		name:    "destroy/preview: the json dialect discloses the history purge the text dialect warns about",
 		args:    []string{"destroy", "--purge-history", "--dry-run", "--output", "json", "--ask-become-pass=false"},
@@ -1224,6 +1240,27 @@ func safetyStartingStateCases() []safetyCase {
 		verdict: verdictAuthorized,
 		want:    []string{"destroyed substrate", "machine(s) dc1-child-ocp-infra-master-0"},
 		deny:    []string{"dc1-child-ocp-infra-master-1"},
+	}, {
+		name: "apply/machine-granular release on installed ContainerCluster fails closed",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
+			seedInstalledCluster(t, ctx, "dc1-child-ocp")
+			if err := workflow.MarkSubstrateMachinesReleased(ctx.RunsDir, "dc1-child-ocp", []string{"dc1-child-ocp-infra-master-0"}, time.Now()); err != nil {
+				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
+			}
+		},
+		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"initial-install workflow cannot recover individual cluster nodes", "dc1-child-ocp-infra-master-0", "release remains recorded", "bootwright destroy --clusters dc1-child-ocp --authorize data-loss --yes", "bootwright apply --clusters dc1-child-ocp --yes"},
+		check: func(t *testing.T, ctx workspace.Context) {
+			released, err := workflow.ReleasedSubstrateClusters(ctx.RunsDir)
+			if err != nil || strings.Join(released, ",") != "dc1-child-ocp" {
+				t.Fatalf("refused apply must preserve the machine-scoped release: released=%v err=%v", released, err)
+			}
+			if _, found, err := workflow.LoadRunLedger(ctx.RunsDir); err != nil || found {
+				t.Fatalf("refusal must happen before a mutating run ledger is created: found=%v err=%v", found, err)
+			}
+		},
 	}, {
 		name: "apply/no release leaves an unreleased machine unauthorized for rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {

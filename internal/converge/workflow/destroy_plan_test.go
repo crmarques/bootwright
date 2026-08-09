@@ -440,6 +440,70 @@ func destroyKubeVirtDependencyState(child, host string) v1alpha1.State {
 	}
 }
 
+func TestPlanDestroyTasksAvoidsPlacementCycleAcrossFannedMachineTeardown(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{Proxies: []v1alpha1.EnvironmentProxyComponent{{
+				Name: "proxy", Management: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
+			}}}},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{
+			{Metadata: v1alpha1.Metadata{Name: "child-a"}, Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "child-a-m0"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "child-b"}, Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "child-b-m0"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "host"}, Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{MachineRef: v1alpha1.LocalObjectReference{Name: "host-m0"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "base"}},
+		},
+		Machines: []v1alpha1.Machine{
+			{Metadata: v1alpha1.Metadata{Name: "child-a-m0"}, Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "child-a-kubevirt"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "node"}}}},
+			{Metadata: v1alpha1.Metadata{Name: "child-b-m0"}, Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "child-b-kubevirt"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "node"}}}},
+			{Metadata: v1alpha1.Metadata{Name: "host-m0"}, Spec: v1alpha1.MachineSpec{Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "host-kubevirt"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "node"}}}},
+		},
+		InfraProviders: []v1alpha1.InfraProvider{
+			{Metadata: v1alpha1.Metadata{Name: "child-a-kubevirt"}, Spec: v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerKubeVirt, KubeVirt: &v1alpha1.InfraProviderKubeVirt{HostClusterRef: &v1alpha1.LocalObjectReference{Name: "host"}, MachineProfiles: []v1alpha1.MachineProfile{{Name: "node"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "child-b-kubevirt"}, Spec: v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerKubeVirt, KubeVirt: &v1alpha1.InfraProviderKubeVirt{HostClusterRef: &v1alpha1.LocalObjectReference{Name: "host"}, MachineProfiles: []v1alpha1.MachineProfile{{Name: "node"}}}}},
+			{Metadata: v1alpha1.Metadata{Name: "host-kubevirt"}, Spec: v1alpha1.InfraProviderSpec{Type: v1alpha1.ProvisionerKubeVirt, KubeVirt: &v1alpha1.InfraProviderKubeVirt{HostClusterRef: &v1alpha1.LocalObjectReference{Name: "base"}, MachineProfiles: []v1alpha1.MachineProfile{{Name: "node"}}}}},
+		},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotProxy,
+				Proxy: &v1alpha1.ProxyComponent{
+					Implementation: v1alpha1.InfraComponentTypeSquid,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "child-a-m0"},
+				},
+			},
+		}},
+	}
+
+	for _, scope := range []string{"infra", "all"} {
+		t.Run(scope, func(t *testing.T) {
+			tasks, err := PlanDestroyTasks(scope, state, "", nil, nil)
+			if err != nil {
+				t.Fatalf("plan valid placement graph: %v", err)
+			}
+			infra := destroyTaskByID(t, tasks, destroyInfraComponentsTaskID)
+			if slices.Contains(infra.Entry.OrderingDependencies, destroyMachineInfraRecordsTaskID) {
+				t.Fatalf("infra components depend on the aggregate records task and recreate a cycle: %v", infra.Entry.OrderingDependencies)
+			}
+			if !slices.Contains(infra.Entry.OrderingDependencies, "destroy.machine-infra.child-b") {
+				t.Fatalf("infra components must still follow independent machine teardown: %v", infra.Entry.OrderingDependencies)
+			}
+			for _, id := range []string{"destroy.machine-infra.child-a", "destroy.machine-infra.host"} {
+				if !slices.Contains(destroyTaskByID(t, tasks, id).Entry.OrderingDependencies, destroyInfraComponentsTaskID) {
+					t.Fatalf("placement machine task %s must follow infra-component teardown", id)
+				}
+			}
+			host := destroyTaskByID(t, tasks, "destroy.machine-infra.host")
+			for _, child := range []string{"destroy.machine-infra.child-a", "destroy.machine-infra.child-b"} {
+				if !slices.Contains(host.Entry.Dependencies, child) {
+					t.Fatalf("host teardown hard dependencies = %v, want child-before-host dependency %s", host.Entry.Dependencies, child)
+				}
+			}
+		})
+	}
+}
+
 func TestPlanDestroyTasksStorageWorkSetGate(t *testing.T) {
 	state := v1alpha1.State{
 		StorageClusters: []v1alpha1.StorageCluster{
