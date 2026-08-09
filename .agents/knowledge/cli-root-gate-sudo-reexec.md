@@ -119,3 +119,10 @@ bootwright re-executes itself under sudo to reach `/var/lib/bootwright`,
 and it names the ways to satisfy it (run interactively for the prompt,
 run as root, or configure passwordless sudo) instead of a bare
 `read password: EOF`.
+
+**Test constraint: supplied password input must disable the controlling
+TTY fallback.** `readPromptedPassword` deliberately prefers `/dev/tty`
+when one exists, even when the caller also supplied an input reader. A test
+that expects its synthetic input to answer `--ssh-ask-sudo-password` must
+call `withoutControllingTTY`; otherwise `go test` passes in a pipe but blocks
+waiting on the operator's terminal when the suite runs interactively.

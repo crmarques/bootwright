@@ -29,6 +29,7 @@ func TestSSHUserForProvisionedWithAnAccountIsAccepted(t *testing.T) {
 
 func TestAskSudoPasswordRefusesAnEmptyAnswer(t *testing.T) {
 	setTestHomeAndRoot(t)
+	withoutControllingTTY(t)
 	stdout, stderr, code := runCLIWithInput(t, "\n", "--ssh-ask-sudo-password", "version")
 	if code == 0 {
 		t.Fatalf("an empty sudo password unexpectedly succeeded:\n%s", stdout)
@@ -40,6 +41,7 @@ func TestAskSudoPasswordRefusesAnEmptyAnswer(t *testing.T) {
 
 func TestAskSudoPasswordPromptsOnStderrBeforeTheCommandRuns(t *testing.T) {
 	setTestHomeAndRoot(t)
+	withoutControllingTTY(t)
 	stdout, stderr, code := runCLIWithInput(t, "hunter2\n", "--ssh-ask-sudo-password", "version")
 	if code != 0 {
 		t.Fatalf("version with a prompted password failed: code=%d stdout=%q stderr=%q", code, stdout, stderr)
