@@ -371,7 +371,7 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		},
 		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
-		want:    []string{"a real run refuses", "dc1-child-ocp-infra-master-0", "bootwright destroy --clusters dc1-child-ocp --yes", "bootwright apply --clusters dc1-child-ocp --authorize data-loss --yes"},
+		want:    []string{"a real run refuses", "dc1-child-ocp-infra-master-0", "bootwright destroy --clusters dc1-child-ocp --dry-run", "bootwright apply --mode reconcile --authorize data-loss --clusters dc1-child-ocp --dry-run"},
 	}, {
 		name:    "destroy/preview: the json dialect discloses the history purge the text dialect warns about",
 		args:    []string{"destroy", "--purge-history", "--dry-run", "--output", "json", "--ask-become-pass=false"},
@@ -1251,7 +1251,8 @@ func safetyStartingStateCases() []safetyCase {
 		},
 		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"initial-install workflow cannot recover individual cluster nodes", "dc1-child-ocp-infra-master-0", "release remains recorded", "bootwright destroy --clusters dc1-child-ocp --yes", "bootwright apply --clusters dc1-child-ocp --authorize data-loss --yes"},
+		remedy:  remedyAlternative,
+		want:    []string{"initial-install workflow cannot recover individual cluster nodes", "dc1-child-ocp-infra-master-0", "release remains recorded", "bootwright destroy --yes --clusters dc1-child-ocp", "bootwright apply --mode reconcile --authorize data-loss --yes --clusters dc1-child-ocp"},
 		check: func(t *testing.T, ctx workspace.Context) {
 			released, err := workflow.ReleasedSubstrateClusters(ctx.RunsDir)
 			if err != nil || strings.Join(released, ",") != "dc1-child-ocp" {

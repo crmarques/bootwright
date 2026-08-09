@@ -26,14 +26,15 @@ func TestInstalledContainerClusterMachineReleaseRequiresWholeClusterSequence(t *
 	if err != nil {
 		t.Fatalf("load consumable releases: %v", err)
 	}
-	refusal := installedContainerClusterMachineReleaseRefusal(clustersDir, releases)
+	invocation := resolvedInvocation{verb: invocationApply, contextName: "test", flags: invocationFlags{mode: workflow.ApplyModeReconcile, selection: runSelection{machines: "m0"}, yes: true}}
+	refusal := installedContainerClusterMachineReleaseRefusal(clustersDir, releases, &invocation)
 	if refusal == nil {
 		t.Fatal("installed ContainerCluster machine release must fail closed")
 	}
 	message := refusal.Error()
 	for _, want := range []string{
-		"bootwright destroy --clusters ocp --yes",
-		"bootwright apply --clusters ocp --authorize data-loss --yes",
+		"bootwright destroy --yes --clusters ocp --ask-become-pass=false --context test",
+		"bootwright apply --mode reconcile --authorize data-loss --yes --clusters ocp --ask-become-pass=false --trust-on-first-use=false --context test",
 	} {
 		if !strings.Contains(message, want) {
 			t.Fatalf("refusal %q missing executable remedy %q", message, want)
@@ -54,7 +55,7 @@ func TestInstalledContainerClusterMachineReleaseRequiresWholeClusterSequence(t *
 	if err := workflow.RemoveClusterInstallState(clustersDir, "test", "ocp"); err != nil {
 		t.Fatalf("remove install state after whole-cluster destroy: %v", err)
 	}
-	if err := installedContainerClusterMachineReleaseRefusal(clustersDir, releases); err != nil {
+	if err := installedContainerClusterMachineReleaseRefusal(clustersDir, releases, &invocation); err != nil {
 		t.Fatalf("whole-cluster destroy must make the release consumable by a fresh apply: %v", err)
 	}
 	if err := workflow.ConsumeSubstrateRelease(runsDir, "ocp", []string{"m0"}, []string{"m0"}); err != nil {

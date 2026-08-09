@@ -71,13 +71,13 @@ func forecastReinstallDescriptors(names []string) []string {
 	return out
 }
 
-func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) []string {
+func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error, invocation *resolvedInvocation) []string {
 	var refusals []error
 	if len(ownershipSkipped) > 0 {
 		refusals = append(refusals, applyUnreadableOwnershipRefusal(ownershipDir, ownershipSkipped, nil))
 	}
 	if releases, err := workflow.ConsumableSubstrateReleases(runsDir, tasks); err == nil {
-		if refusal := installedContainerClusterMachineReleaseRefusal(clustersDir, releases); refusal != nil {
+		if refusal := installedContainerClusterMachineReleaseRefusal(clustersDir, releases, invocation); refusal != nil {
 			refusals = append(refusals, refusal)
 		}
 	}
@@ -137,8 +137,8 @@ func applyGateRefusalMessages(refusals []error) []string {
 	return out
 }
 
-func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error) {
-	printApplyGateRefusals(stdout, applyGateForecastRefusals(fullState, planState, tasks, runsDir, clustersDir, mode, allowDestroy, unownedAuthorized, reclaimDevices, sel, reinstallDrift, ownershipDir, ownershipRecords, ownershipSkipped))
+func printApplyGateForecast(stdout io.Writer, fullState, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, mode workflow.ApplyMode, allowDestroy, unownedAuthorized bool, reclaimDevices string, sel clusteraccess.Selection, reinstallDrift []string, ownershipDir string, ownershipRecords []ownership.ResourceRecord, ownershipSkipped []error, invocation *resolvedInvocation) {
+	printApplyGateRefusals(stdout, applyGateForecastRefusals(fullState, planState, tasks, runsDir, clustersDir, mode, allowDestroy, unownedAuthorized, reclaimDevices, sel, reinstallDrift, ownershipDir, ownershipRecords, ownershipSkipped, invocation))
 }
 
 func printApplyGateRefusals(stdout io.Writer, refusals []string) {

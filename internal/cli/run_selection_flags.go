@@ -132,6 +132,23 @@ func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryComman
 	return retryCommand{args: next.args()}, nil
 }
 
+func (i resolvedInvocation) applyClustersRetry(clusters []string, requiredAuthorizations ...string) (retryCommand, error) {
+	if len(clusters) == 0 {
+		return retryCommand{}, fmt.Errorf("cannot construct an apply retry without clusters")
+	}
+	next := i
+	next.verb = invocationApply
+	next.flags.mode = workflow.ApplyModeReconcile
+	next.flags.selection = runSelection{clusters: strings.Join(clusters, ",")}
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationApply)
+	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
+}
+
 func (i resolvedInvocation) replaceArbiterRetry(cluster string) (retryCommand, error) {
 	cluster = strings.TrimSpace(cluster)
 	if cluster == "" {
