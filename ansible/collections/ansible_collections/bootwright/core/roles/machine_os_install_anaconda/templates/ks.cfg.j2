@@ -219,13 +219,18 @@ if [ "${bootwright_luks_seen}" -eq 0 ]; then
 fi
 
 dracut -fv --regenerate-all
-
-# Anaconda copies the kickstart onto the installed root, and it carries the
-# recovery passphrase in cleartext. The bound volumes no longer need it.
-shred -u /root/anaconda-ks.cfg /root/original-ks.cfg 2>/dev/null || true
 %end
 
 {% endif %}
+%post --erroronfail --interpreter=/bin/bash --log=/root/bootwright-ks-secret-cleanup.log
+set -euo pipefail
+for bootwright_kickstart_copy in /root/anaconda-ks.cfg /root/original-ks.cfg; do
+    if [[ -e "${bootwright_kickstart_copy}" ]]; then
+        shred -u -- "${bootwright_kickstart_copy}"
+    fi
+done
+%end
+
 %post --log=/root/bootwright-ks-post.log
 {% if localization.formats | default('') | length > 0 %}
 # Keep system messages in {{ localization.language | default('en_US.UTF-8', true) }} while regional

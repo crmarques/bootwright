@@ -35,6 +35,14 @@ either. The binding therefore lives in `%post`, which brings three constraints:
   transaction-order-dependent. Regenerate rather than gamble. `--nochroot` does
   not work here: dracut cannot find what it needs from the installer environment.
 
+The encryption `%post` is not the owner of retained Kickstart cleanup. A
+separate unconditional, fail-closed `%post` shreds `/root/anaconda-ks.cfg` and
+`/root/original-ks.cfg` after any TPM binding and before the marker-writing
+section. Keeping cleanup inside the encryption condition leaves RHSM activation
+keys and `initialPassword` values behind on every unencrypted install; writing
+the marker first would let a cleanup failure look like a successful owned
+install.
+
 Device discovery uses `lsblk … FSTYPE == crypto_LUKS`, not `blkid`: the chroot can
 inherit a stale `/run/blkid` cache from the installer. `/etc/crypttab` and
 `rd.luks.uuid=` are written by Anaconda and need no edits; `_netdev` belongs to

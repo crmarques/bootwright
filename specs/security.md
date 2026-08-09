@@ -523,10 +523,11 @@ Generated output boundaries are part of the safety contract:
   The exposure is bounded rather than removed: the rendered Kickstart is `0600`
   root-owned on the provider host, the remastered ISO is published `0600`
   whenever the Kickstart carries any secret, it is served to the BMC over a
-  per-machine tokenized URL, and the Kickstart copies Anaconda leaves at
-  `/root/anaconda-ks.cfg` and `/root/original-ks.cfg` are shredded in `%post`
-  once the volumes are bound. They are runtime artifacts only and must never be
-  versioned.
+  per-machine tokenized URL, and an unconditional fail-closed `%post` shreds the
+  Kickstart copies Anaconda leaves at `/root/anaconda-ks.cfg` and
+  `/root/original-ks.cfg` before the install marker is written. This cleanup
+  applies whether or not disk encryption is enabled. They are runtime artifacts
+  only and must never be versioned.
 - Rendered storage tool inputs live under
   `/var/lib/bootwright/contexts/<context>/rendered/storage/<storageCluster>/`.
 - Kubeconfigs produced for installed clusters live at

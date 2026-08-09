@@ -749,7 +749,10 @@ Rules:
 - `customizations.ssh.initialPassword.secretRef` names a `usernamePassword`
   `Secret` whose password becomes the created account's console password.
   Omitted, the account is created with a locked password — Bootwright ships no
-  default password of any kind.
+  default password of any kind. The Secret reference identity is part of the
+  install marker's desired hash, while the controller's transient materialized
+  path is not; changing the reference is reinstall-only drift, but moving one
+  apply run's secret directory is not drift.
 - The install always writes `/etc/sudoers.d/60-bootwright` granting the
   `bootwright` principal `NOPASSWD: ALL` and `!requiretty`. It is not
   configurable: Bootwright escalates with `become` throughout, so a machine

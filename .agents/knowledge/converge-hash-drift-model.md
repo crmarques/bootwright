@@ -21,6 +21,17 @@ cluster identity + mirror override); `map[string]string` marshals with sorted
 keys so the input is order-stable. Pinned by
 TestVirtctlTaskDesiredHashIsScopeIndependent.
 
+**Managed-OS marker secret paths carry identity, not runtime location:**
+`stableMarkerInput` reduces every materialized secret path that reaches
+`osInstall` to its basename before hashing. The basename preserves which Secret
+the install consumes; the discarded prefix is the per-run runtime directory and
+must never make a healthy installed machine look structurally drifted. Keep
+`kickstart.initialPasswordPath` in that allowlist beside the public key,
+entitlement, proxy, trust, and disk-encryption paths. Builds before that entry
+was added wrote a path-dependent marker for profiles with `initialPassword`;
+the first corrected apply reports reinstall-only drift, and one deliberate
+rebuild establishes the stable shape.
+
 **Storage/managed-OS tasks hash the FULL desired state, not their carried
 State:** the managed-OS install/prepare and storage infra/cluster/registration
 tasks keep the full-State marshal shape (a projected `DesiredHashVars` would

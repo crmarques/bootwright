@@ -215,7 +215,8 @@
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} is Bootwright-owned
       but {{ bootwright_os_marker_path }} does not match desired hash
-      {{ bootwright_os_marker_desired_hash }}; rerun with --mode rebuild to rebuild it.
+      {{ bootwright_os_marker_desired_hash }}. Rebuild exactly the selected machine with
+      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
   when:
     - bootwright_managed_os_already_ready | bool
     - bootwright_os_pre_marker_owned | default(false) | bool

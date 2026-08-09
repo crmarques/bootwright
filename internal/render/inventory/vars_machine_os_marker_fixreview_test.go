@@ -20,3 +20,20 @@ func TestMarkerHashStableAcrossProxyCredentialsDir(t *testing.T) {
 		t.Fatal("marker hash did not change when the proxy credentials basename changed")
 	}
 }
+
+func TestMarkerHashStableAcrossInitialPasswordDir(t *testing.T) {
+	hash := func(initialPasswordPath string) string {
+		osInstall := map[string]any{
+			"kickstart": map[string]any{"initialPasswordPath": initialPasswordPath},
+		}
+		return machineOSInstallMarkerVars(osInstall, "cluster", "machine", "profile")["desiredHash"].(string)
+	}
+	a := hash("/runs/history/run-a/tasks/t1/artifacts/runtime/secrets/console-password")
+	b := hash("/runs/history/run-b/tasks/t2/artifacts/runtime/secrets/console-password")
+	if a != b {
+		t.Fatalf("marker hash changed across per-run initial-password dirs: %s vs %s", a, b)
+	}
+	if c := hash("/runs/history/run-a/tasks/t1/artifacts/runtime/secrets/other-password"); c == a {
+		t.Fatal("marker hash did not change when the initial-password basename changed")
+	}
+}

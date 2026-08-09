@@ -404,6 +404,22 @@ The customization arms, by area:
     - `customizations.security.fips.enabled: true` is RHEL-only (`os.family` must
       be `rhel`).
 
+!!! warning "One-time marker drift for older password-enabled installs"
+    A node installed by a build that hashed the transient materialization path
+    of `customizations.ssh.initialPassword` reports reinstall-only drift once
+    after upgrading to the stable marker shape. Review the selected machine and
+    use the exact `apply --mode rebuild` command printed by the refusal. After
+    that deliberate reinstall, changing only the apply run's secret directory
+    no longer moves the marker hash.
+
+!!! note "The installed node keeps no Kickstart copy"
+    Every Anaconda install shreds `/root/anaconda-ks.cfg` and
+    `/root/original-ks.cfg` before Bootwright stamps the install marker, whether
+    or not disk encryption is enabled. Those files can contain an RHSM
+    activation key, the console password, proxy credentials, or a LUKS recovery
+    passphrase, so the installed node deliberately does not retain them for
+    diagnosis.
+
 ## Root device hints
 
 Which disk Anaconda installs to is owned by the `Machine`, under
@@ -565,8 +581,8 @@ time is:
 The install ISO carries the passphrase — Anaconda takes it on the partitioning
 line, so there is no way around that. Bootwright publishes the ISO `0600`
 whenever the kickstart holds a secret, serves it to the BMC over the same
-per-machine tokenized URL as any other managed-OS boot, and the `%post` shreds
-the kickstart copies Anaconda leaves in `/root` once the volumes are bound.
+per-machine tokenized URL as any other managed-OS boot. The encryption binder
+finishes before the unconditional Kickstart-copy cleanup and marker stamp.
 
 Afterwards, `clevis luks list -d <device>` on the node shows the binding, and
 `lsblk` shows the root and swap volumes under `crypto_LUKS`.

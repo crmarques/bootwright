@@ -48,6 +48,10 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 	if !strings.Contains(driftedWhen, "bootwright_os_pre_marker_owned") {
 		t.Fatalf("drifted refusal must apply only to a Bootwright-owned host, got when=%v", drifted["when"])
 	}
+	driftedMessage := fmt.Sprint(drifted["ansible.builtin.fail"])
+	if !strings.Contains(driftedMessage, "bootwright_apply_rebuild_invocation") {
+		t.Fatalf("drifted managed-OS refusal must name the exact selected rebuild invocation, got %s", driftedMessage)
+	}
 
 	for _, role := range []string{"machine_os_install_anaconda", "machine_os_install_clone"} {
 		main := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/"+role+"/tasks/main.yml")
@@ -610,7 +614,6 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set luks_flags = ' --encrypted --luks-version=' ~ (disk_encryption.luksVersion | default('luks2', true)) ~ pbkdf_flag ~ ' --passphrase=' ~ luks_passphrase %}",
 		"clevis luks bind -y -d \"${bootwright_luks_device}\" -k \"${bootwright_luks_key}\" {{ clevis.pin }} '{{ clevis.config }}'",
 		"dracut -fv --regenerate-all",
-		"shred -u /root/anaconda-ks.cfg /root/original-ks.cfg 2>/dev/null || true",
 		"%post --erroronfail --interpreter=/bin/bash --log=/root/bootwright-ks-luks.log",
 		"selinux --{{ selinux.mode }}",
 		"firewall --{{ 'enabled' if firewall.enabled else 'disabled' }}",
@@ -672,6 +675,37 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Kickstart template must rely on boot control, not %q", forbidden)
 		}
+	}
+}
+
+func TestManagedOSKickstartShredsRetainedCopiesBeforeMarker(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2")
+	cleanupHeader := "%post --erroronfail --interpreter=/bin/bash --log=/root/bootwright-ks-secret-cleanup.log"
+	cleanupStart := strings.Index(body, "{% endif %}\n"+cleanupHeader)
+	markerStart := strings.Index(body, "%post --log=/root/bootwright-ks-post.log")
+	if cleanupStart < 0 || markerStart < 0 || cleanupStart >= markerStart {
+		t.Fatalf("Kickstart secret cleanup must begin outside the encryption condition and complete before the marker-writing post: cleanup=%d marker=%d", cleanupStart, markerStart)
+	}
+	cleanupEndOffset := strings.Index(body[cleanupStart:], "%end")
+	if cleanupEndOffset < 0 {
+		t.Fatal("Kickstart secret cleanup post has no terminator")
+	}
+	cleanup := body[cleanupStart : cleanupStart+cleanupEndOffset]
+	for _, want := range []string{
+		cleanupHeader,
+		"set -euo pipefail",
+		"for bootwright_kickstart_copy in /root/anaconda-ks.cfg /root/original-ks.cfg; do",
+		"shred -u -- \"${bootwright_kickstart_copy}\"",
+	} {
+		if !strings.Contains(cleanup, want) {
+			t.Fatalf("Kickstart secret cleanup missing %q", want)
+		}
+	}
+	if strings.Contains(cleanup, "|| true") {
+		t.Fatal("Kickstart secret cleanup must fail closed when a retained credential copy cannot be shredded")
+	}
+	if got := strings.Count(body, "shred -u -- \"${bootwright_kickstart_copy}\""); got != 1 {
+		t.Fatalf("Kickstart secret cleanup command count = %d, want exactly one unconditional cleanup", got)
 	}
 }
 

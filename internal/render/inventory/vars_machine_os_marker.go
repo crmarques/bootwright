@@ -32,6 +32,7 @@ func stableMarkerInput(osInstall map[string]any) map[string]any {
 	}
 	if kickstart, ok := out["kickstart"].(map[string]any); ok {
 		markerBasename(kickstart, "sshPublicKeyPath")
+		markerBasename(kickstart, "initialPasswordPath")
 		if security, ok := kickstart["security"].(map[string]any); ok {
 			if encryption, ok := security["diskEncryption"].(map[string]any); ok {
 				markerBasename(encryption, "passphrasePath")
