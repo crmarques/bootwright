@@ -2,6 +2,9 @@
 - name: Resolve Ceph destroy context
   ansible.builtin.import_tasks: destroy_steps/context.yml
 
+- name: Resolve Ceph destroy ownership authority
+  ansible.builtin.import_tasks: destroy_steps/ownership_authority.yml
+
 - name: Guard declared Ceph devices
   ansible.builtin.import_tasks: destroy_steps/device_gates.yml
 

@@ -114,6 +114,124 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 	}
 }
 
+func TestStorageCephadmDestroyRecoversAuthorityFromExactMonsWhenTheSeedIsAbsent(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	recordIdx := findAnsibleTask(t, tasks, "Stat the controller ownership record for dead-seed recovery")
+	confIdx := findAnsibleTask(t, tasks, "Stat Ceph configuration on a dead-seed recovery mon")
+	markerIdx := findAnsibleTask(t, tasks, "Stat the Bootwright marker on a dead-seed recovery mon")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify dead-seed recovery evidence on each reachable mon")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve exact dead-seed recovery matches across reachable mons")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse dead-seed recovery without one exact ownership identity")
+	electIdx := findAnsibleTask(t, tasks, "Elect the first exact mon as dead-seed ownership authority")
+	projectIdx := findAnsibleTask(t, tasks, "Project dead-seed ownership proof onto the elected mon")
+	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(recordIdx < confIdx && confIdx < markerIdx && markerIdx < classifyIdx && classifyIdx < resolveIdx && resolveIdx < refuseIdx && refuseIdx < electIdx && electIdx < projectIdx && projectIdx < removeIdx && removeIdx < wipeIdx) {
+		t.Fatalf("dead-seed evidence must be read, classified and refused before authority projection or teardown (record=%d conf=%d marker=%d classify=%d resolve=%d refuse=%d elect=%d project=%d remove=%d wipe=%d)", recordIdx, confIdx, markerIdx, classifyIdx, resolveIdx, refuseIdx, electIdx, projectIdx, removeIdx, wipeIdx)
+	}
+
+	record := tasks[recordIdx]
+	if record["delegate_to"] != "localhost" || record["become"] != false || record["changed_when"] != false || record["failed_when"] != false {
+		t.Fatalf("dead-seed controller evidence must be a tolerated read-only localhost probe, got %v", record)
+	}
+	classify := fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{
+		"bootwright.io/ownership/v1alpha1",
+		"storage-cluster",
+		"bootwright_ceph_fallback_record.context",
+		"bootwright_ceph_fallback_record.cluster",
+		"bootwright_ceph_fallback_record.host",
+		"attributes",
+		"seedHost",
+		"bootwright_ceph_fallback_conf_fsid",
+		"bootwright_ceph_fallback_marker.manager",
+		"bootwright_ceph_fallback_marker.cluster",
+		"bootwright_ceph_fallback_marker_fsid",
+	} {
+		if !strings.Contains(classify, want) {
+			t.Errorf("dead-seed ownership classification must bind controller, config and marker evidence exactly; missing %q in set_fact", want)
+		}
+	}
+
+	resolve := fmt.Sprint(tasks[resolveIdx])
+	for _, want := range []string{
+		"bootwright_ceph_destroy_reachable_mon_hosts",
+		"map('extract', hostvars)",
+		"bootwright_ceph_fallback_evidence_blockers",
+		"equalto",
+		"flatten",
+		"unique",
+	} {
+		if !strings.Contains(resolve, want) {
+			t.Errorf("dead-seed authority selection must aggregate every reachable declared mon and reject ambiguous evidence; missing %q in set_fact", want)
+		}
+	}
+
+	guard, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("dead-seed ownership decision must be a hard assert, got %v", tasks[refuseIdx])
+	}
+	that := fmt.Sprint(guard["that"])
+	for _, want := range []string{"fallback_matching_hosts", "length > 0", "fallback_blockers", "length == 0"} {
+		if !strings.Contains(that, want) {
+			t.Errorf("dead-seed refusal must require a complete unambiguous match, missing %q in that=%v", want, guard["that"])
+		}
+	}
+	fail := fmt.Sprint(guard["fail_msg"])
+	for _, want := range []string{
+		"No teardown mutation has started",
+		"Missing, unreadable, contradictory or ambiguous evidence fails closed",
+		"re-run the same destroy invocation",
+		"peer evidence never reconstructs a controller record",
+		"No --authorize token",
+		"no record-only path",
+	} {
+		if !strings.Contains(fail, want) {
+			t.Errorf("dead-seed refusal must state the evidence failure and scoped recovery, missing %q in %v", want, guard["fail_msg"])
+		}
+	}
+
+	for _, idx := range []int{electIdx, projectIdx} {
+		when := fmt.Sprint(tasks[idx]["when"])
+		for _, want := range []string{"seed_reachable", "fallback_matching_hosts", "fallback_blockers"} {
+			if !strings.Contains(when, want) {
+				t.Errorf("task %q must repeat the fail-closed fallback predicates, missing %q in when=%v", tasks[idx]["name"], want, tasks[idx]["when"])
+			}
+		}
+		if strings.Contains(when, "authorize") {
+			t.Errorf("no authorization token may substitute for dead-seed evidence, got when=%v", tasks[idx]["when"])
+		}
+	}
+	removeWhen := fmt.Sprint(tasks[removeIdx]["when"])
+	if !strings.Contains(removeWhen, "bootwright_ceph_destroy_authority_host") || !strings.Contains(removeWhen, "bootwright_ceph_destroy_owned") || !strings.Contains(removeWhen, "bootwright_ceph_destroy_fsid") {
+		t.Errorf("the first removal must run only on the host whose exact proof projected owned fsid state, got when=%v", tasks[removeIdx]["when"])
+	}
+}
+
+func TestStorageCephDestroyPlayKeepsTheSeedFirstAndUsesOnlyDeclaredMonsAsFallback(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	endIdx := findAnsibleTask(t, tasks, "Stop tearing down unreachable storage hosts")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve reachable Ceph ownership evidence hosts")
+	requireIdx := findAnsibleTask(t, tasks, "Require a reachable declared mon when the Ceph seed is absent")
+	destroyIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
+	if !(endIdx < resolveIdx && resolveIdx < requireIdx && requireIdx < destroyIdx) {
+		t.Fatalf("the play must end proven-absent hosts, elect a reachable declared ownership source, and refuse before entering the destructive role (end=%d resolve=%d require=%d destroy=%d)", endIdx, resolveIdx, requireIdx, destroyIdx)
+	}
+	resolve := fmt.Sprint(tasks[resolveIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_storage_seed_host_name in ansible_play_hosts", "monInventoryHosts", "select('in', ansible_play_hosts)", "if bootwright_storage_seed_host_name in ansible_play_hosts else ''"} {
+		if !strings.Contains(resolve, want) {
+			t.Errorf("destroy must retain the declared seed as first authority and restrict fallback to reachable declared mons, missing %q in %v", want, tasks[resolveIdx]["ansible.builtin.set_fact"])
+		}
+	}
+	guard := fmt.Sprint(tasks[requireIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"controller record alone never authorizes", "same destroy invocation", "no record-only destructive escape"} {
+		if !strings.Contains(guard, want) {
+			t.Errorf("no-mon refusal must explain the safe scoped exit and reject record-only teardown, missing %q in %v", want, tasks[requireIdx]["ansible.builtin.assert"])
+		}
+	}
+}
+
 func TestStorageCephadmOwnershipRecordCarriesTheClusterFsid(t *testing.T) {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/"
 	for _, spec := range []struct {

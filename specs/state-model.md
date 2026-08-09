@@ -2993,9 +2993,18 @@ verbs that reach machines.
   refusal is not proof that a node is gone. The skipped-node warning and the
   controller-side partial-destroy result carry each skipped node's diagnostic,
   so a skip always says on what evidence, and the message states that a skipped
-  node keeps serving the cluster the run reported destroyed. Storage teardown still fails closed
-  when a cluster's Ceph seed host is unreachable, so ownership stays proven
-  before any device wipe. A KubeVirt host-cluster API holding a recorded guest
+  node keeps serving the cluster the run reported destroyed. The declared Ceph
+  seed remains the first ownership authority whenever it is reachable. When
+  that seed is one of the nodes the token proves absent, teardown may elect
+  another reachable **declared mon** only before any device gate or removal and
+  only when the controller's readable owner record identifies the current
+  context, cluster, declared seed and one fsid, while `/etc/ceph/ceph.conf` and
+  `/etc/ceph/.bootwright-owned` on every reachable declared mon are readable
+  and agree exactly on that cluster/fsid. A missing record, missing host
+  evidence, unreadable JSON/file, invalid identity, or disagreement across mons
+  fails closed before teardown. Peer evidence never reconstructs a controller
+  record, and no token authorizes record-only removal. The skipped seed retains
+  its local state and makes the result partial. A KubeVirt host-cluster API holding a recorded guest
   is not a skippable node: when it is unreachable Bootwright cannot prove the
   guest VM and DataVolumes absent, so destroy fails closed and retains their
   ownership and cluster runtime records even with the token.

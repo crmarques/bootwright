@@ -54,8 +54,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_settle_owned_fsid: >-
       {{ bootwright_ceph_destroy_fsid | default('') | trim
-         if inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
-         else hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid
+         if inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
+         else hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid
               | default('') | trim }}
   changed_when: false
 

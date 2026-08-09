@@ -306,7 +306,7 @@
   changed_when: false
   failed_when: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
@@ -329,7 +329,7 @@
   changed_when: bootwright_ceph_destroy_orch_disable.rc == 0
   failed_when: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
@@ -343,14 +343,16 @@
       cephadm manager module exited
       {{ bootwright_ceph_destroy_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_destroy_orch_disable.stderr | default('no diagnostic was recorded') | trim }}).
-      This teardown removes the cluster one host at a time, starting with this seed, so every
+      This teardown removes the cluster one host at a time, starting with this ownership
+      authority host, so every
       host it purges stays registered with managers still running on the hosts it has not
       reached yet. A cephadm module that is still enabled reconciles those hosts straight
       back: it redeploys the daemons the purge removed and, because the purge freed their OSD
       devices, runs ceph-volume over them again — the node ends this teardown carrying fresh
       volume groups on disks this run reported wiped, and the next apply refuses them as
       unowned data. Disabling the module is the first step of the cephadm purge procedure for
-      exactly that reason. This refusal fired because `ceph status` answered on this seed, so
+      exactly that reason. This refusal fired because `ceph status` answered on this ownership
+      authority host, so
       the cluster is demonstrably serving commands, yet the disable did not commit. Fix what
       the diagnostic names, run
       `cephadm shell -- ceph mgr module disable cephadm` on {{ inventory_hostname }} by hand,
@@ -359,7 +361,7 @@
       on each host still running one) and re-run destroy. No --authorize token relaxes this:
       the alternative is a teardown that races the orchestrator it is tearing down.
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
     - (bootwright_ceph_status_probe.rc | default(1) | int) == 0
@@ -373,32 +375,32 @@
       {{ inventory_hostname }}: the disable exited
       {{ bootwright_ceph_destroy_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_destroy_orch_disable.stderr | default('no diagnostic was recorded') | trim }}),
-      and `ceph status` did not answer on this seed either. Continuing: a cluster that cannot
+      and `ceph status` did not answer on this ownership authority host either. Continuing: a cluster that cannot
       answer a status read cannot commit the writes cephadm reconciliation runs on, and
       refusing here would strand every teardown of a half-removed cluster. It is not proof
-      that no manager process survives — the seed's own mons may be gone while a manager
+      that no manager process survives — this host's own mons may be gone while a manager
       survives on another host, and `cephadm shell` also fails when it cannot pull its image.
       The teardown therefore proves the outcome instead of the precondition: the settle gate
       re-reads every wiped device and refuses any Ceph daemon still running once every host
       has finished, before this run releases any ownership evidence.
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
     - (bootwright_ceph_status_probe.rc | default(1) | int) != 0
     - (bootwright_ceph_destroy_orch_disable.rc | default(0) | int) != 0
 
-- name: Resolve the cephadm command for the seed host cluster removal
+- name: Resolve the cephadm command for the ownership authority host cluster removal
   ansible.builtin.include_tasks: cephadm_command.yml
   vars:
     bootwright_ceph_destroy_host_fsid: "{{ bootwright_ceph_destroy_fsid | default('') }}"
     bootwright_ceph_destroy_host_state: true
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
-- name: Remove cephadm cluster on seed host
+- name: Remove cephadm cluster on the ownership authority host
   ansible.builtin.command:
     argv:
       - timeout
@@ -414,7 +416,7 @@
   changed_when: bootwright_cephadm_rm_cluster.rc == 0
   failed_when: bootwright_cephadm_rm_cluster.rc != 0
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length > 0
 
@@ -425,9 +427,9 @@
   register: bootwright_ceph_nonseed_unnamed_state
   changed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length == 0
 
 - name: Resolve the Ceph clusters a non-seed storage host carries under no resolved fsid
   ansible.builtin.set_fact:
@@ -438,9 +440,9 @@
          | list }}
   changed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length == 0
 
 - name: Read the Ceph configuration a surviving storage host still carries
   ansible.builtin.slurp:
@@ -449,9 +451,9 @@
   changed_when: false
   failed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length == 0
     - (bootwright_ceph_nonseed_unnamed_fsids | default([])) | length > 0
 
 - name: Resolve the configuration fsid a surviving storage host still carries
@@ -462,7 +464,7 @@
           | default([], true) | first | default('')) | trim }}
   changed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
     - (bootwright_ceph_nonseed_unnamed_fsids | default([])) | length > 0
     - (bootwright_ceph_nonseed_conf | default({})).content is defined
 
@@ -473,9 +475,9 @@
   changed_when: false
   failed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length == 0
     - (bootwright_ceph_nonseed_unnamed_fsids | default([])) | length > 0
 
 - name: Resolve the ownership marker evidence a surviving storage host still carries
@@ -488,7 +490,7 @@
           | default('', true)) | trim }}
   changed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
     - (bootwright_ceph_nonseed_unnamed_fsids | default([])) | length > 0
     - (bootwright_ceph_nonseed_marker | default({})).content is defined
 
@@ -501,7 +503,7 @@
   delegate_to: localhost
   become: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length == 0
 
@@ -512,7 +514,7 @@
            | default({})).fsid | default('', true)) | trim }}
   changed_when: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length == 0
     - (bootwright_ceph_destroy_record_slurp | default({})).content is defined
@@ -549,7 +551,7 @@
          | map(attribute='inventory_hostname') | list }}
   changed_when: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length == 0
 
@@ -597,7 +599,7 @@
       }}
   changed_when: false
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length == 0
     - bootwright_ceph_destroy_surviving_fsids | default([]) | length > 0
@@ -608,7 +610,7 @@
     bootwright_ceph_destroy_fsid_adopted: true
     bootwright_ceph_destroy_resume_probe_host: "{{ bootwright_ceph_destroy_surviving_hostnames | first }}"
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
     - bootwright_ceph_destroy_fsid | default('') | length == 0
     - bootwright_ceph_destroy_surviving_fsids | default([]) | length == 1
@@ -626,7 +628,7 @@
       controller still holds this cluster's ownership record, so the removal continues
       fsid-scoped on the surviving hosts instead of refusing.
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_fsid_adopted | default(false) | bool
 
 - name: Refuse a non-seed storage host still carrying a cluster the seed resolved no fsid for
@@ -651,7 +653,7 @@
       A seed that carries nothing is evidence about the seed, not about its peers, so this
       teardown tried to resume from the surviving hosts' own evidence and could not prove a
       single owned cluster:
-      {{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_adoption_blockers
+      {{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_adoption_blockers
          | default(['the surviving hosts answered no evidence probe at all'], true)
          | join('; and ') }}. It stops here instead.
       Read the fsid this node holds and re-run destroy with
@@ -662,9 +664,9 @@
       (fsid-scoped: it stops and removes only that cluster's daemons, units and /var/lib/ceph
       state, and zaps no disk) and re-run. No --authorize token relaxes this.
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length == 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length == 0
 
 - name: Probe the resumed cluster for a live manager from a surviving host
   ansible.builtin.command:
@@ -675,7 +677,7 @@
       - cephadm
       - shell
       - --fsid
-      - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
+      - "{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}"
       - --
       - ceph
       - --connect-timeout=45
@@ -684,9 +686,9 @@
   changed_when: false
   failed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
 
 - name: Stop the Ceph orchestrator of a resumed teardown before any host removes the cluster
   ansible.builtin.command:
@@ -697,7 +699,7 @@
       - cephadm
       - shell
       - --fsid
-      - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
+      - "{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}"
       - --
       - ceph
       - --connect-timeout=45
@@ -709,9 +711,9 @@
   changed_when: bootwright_ceph_resumed_orch_disable.rc == 0
   failed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
 
 - name: Refuse a resumed removal whose orchestrator can still redeploy the cluster
   ansible.builtin.assert:
@@ -719,7 +721,7 @@
       - (bootwright_ceph_resumed_orch_disable.rc | default(1) | int) == 0
     fail_msg: >-
       Refusing to resume the teardown of {{ bootwright_selected_storage_cluster.name }}
-      (fsid {{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('<unresolved>') }}):
+      (fsid {{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('<unresolved>') }}):
       the surviving cluster answered `ceph status` from {{ inventory_hostname }}, so it is
       demonstrably serving commands and a manager can still reconcile, yet disabling its
       cephadm module exited
@@ -731,13 +733,13 @@
       the diagnostic names, run
       `cephadm shell --fsid <fsid> -- ceph mgr module disable cephadm` on a surviving host by
       hand, or stop every surviving manager daemon
-      (`systemctl stop ceph-{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('<fsid>') }}@mgr.<name>`
+      (`systemctl stop ceph-{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('<fsid>') }}@mgr.<name>`
       on each host still running one), and re-run destroy. No --authorize token relaxes this:
       the alternative is a teardown that races the orchestrator it is tearing down.
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
     - (bootwright_ceph_resumed_probe.rc | default(1) | int) == 0
 
 - name: Report an orchestrator a resumed teardown could not disable on an unanswering cluster
@@ -745,7 +747,7 @@
     msg: >-
       Could not disable the cephadm manager module of
       {{ bootwright_selected_storage_cluster.name }}
-      (fsid {{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('<unresolved>') }})
+      (fsid {{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('<unresolved>') }})
       from {{ inventory_hostname }}: the disable exited
       {{ bootwright_ceph_resumed_orch_disable.rc | default('without running') }}
       ({{ bootwright_ceph_resumed_orch_disable.stderr | default('no diagnostic was recorded') | trim }}),
@@ -757,48 +759,48 @@
       daemon still running once every host has finished, before this run releases any
       ownership evidence.
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_resume_probe_host | default('') == inventory_hostname
     - (bootwright_ceph_resumed_probe.rc | default(1) | int) != 0
     - (bootwright_ceph_resumed_orch_disable.rc | default(0) | int) != 0
 
 - name: Probe non-seed hosts for local Ceph cluster state
   ansible.builtin.stat:
-    path: "/var/lib/ceph/{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
+    path: "/var/lib/ceph/{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}"
   register: bootwright_ceph_nonseed_state_probe
   changed_when: false
   failed_when: false
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length > 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length > 0
 
 - name: Resolve the cephadm command for the non-seed host cluster removal
   ansible.builtin.include_tasks: cephadm_command.yml
   vars:
     bootwright_ceph_destroy_host_fsid: >-
-      {{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}
+      {{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}
     bootwright_ceph_destroy_host_state: >-
       {{ (bootwright_ceph_nonseed_state_probe.stat | default({})).exists | default(true) }}
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length > 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length > 0
 
 - name: Report non-seed hosts that hold no Ceph cluster state to remove
   ansible.builtin.debug:
     msg: >-
       {{ inventory_hostname }} carries neither
-      /var/lib/ceph/{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}
+      /var/lib/ceph/{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}
       nor any cephadm that could remove a cluster from it,
       so it never joined storage cluster {{ bootwright_selected_storage_cluster.name }} or was already
       removed from it: treating its cluster removal as already done. Its declared OSD devices are still
       wiped by the device steps, which fail closed on their own gates.
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length > 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length > 0
     - bootwright_ceph_destroy_cephadm | default('') | length == 0
 
 - name: Remove cephadm cluster on non-seed hosts
@@ -812,12 +814,12 @@
       - --force
       - --zap-osds
       - --fsid
-      - "{{ hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') }}"
+      - "{{ hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') }}"
   register: bootwright_cephadm_rm_cluster_nonseed
   changed_when: bootwright_cephadm_rm_cluster_nonseed.rc == 0
   failed_when: bootwright_cephadm_rm_cluster_nonseed.rc != 0
   when:
-    - inventory_hostname != bootwright_selected_storage_cluster.seedHost | default('')
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_owned | default(false) | bool
-    - hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid | default('') | length > 0
+    - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_owned | default(false) | bool
+    - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid | default('') | length > 0
     - bootwright_ceph_destroy_cephadm | default('') | length > 0

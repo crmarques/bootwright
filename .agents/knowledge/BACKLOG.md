@@ -537,35 +537,6 @@ learned; this file records what it still owes.
 - Related: [ceph-nonroot-node-access.md](ceph-nonroot-node-access.md),
   [ssh-trust-store-invariants.md](ssh-trust-store-invariants.md)
 
-## B-048 — A dead declared seed makes a storage cluster undestroyable
-- Status: open
-- Area: ceph / destroy-gates
-- Origin: ceph-prd-01 full-context destroy 2026-07-29, seed host powered off
-- Severity: high
-- Problem: storage teardown pins its ownership proof to the *declared* bootstrap
-  node, not to any surviving mon. `StorageSeedHostName`
-  (`internal/render/inventory/storage_ansible.go:16-25`) resolves the seed from
-  `spec.ceph.cephadm.bootstrap.node` with no fallback, and
-  `task_storage_cluster_destroy.yml:133-142` then hard-asserts that one host is
-  reachable before any node wipes OSD devices. `--authorize unreachable-nodes`
-  deliberately cannot skip it, and dropping the token only moves the refusal to
-  the blanket per-node assert at line 59. So when the declared seed is powered
-  off or permanently gone, the StorageCluster cannot be torn down in-product at
-  all: `--mode` is apply-only, `--recover-ceph-ownership` explicitly does not
-  bypass device safety, and no skip-node flag exists. The only exits are
-  out-of-band power-on, retargeting `bootstrap.node` (which risks the
-  `seedHost` ownership-conflict refusal in
-  `internal/converge/ceph_ownership_recovery.go:93-97`), or
-  `context delete --purge --abandon-resources`, which abandons every resource
-  and loses install-captured credentials.
-- Exit: let teardown prove cluster ownership from any reachable mon that carries
-  a matching controller ownership record, falling back to the declared seed;
-  failing that, add an explicitly authorized record-only storage teardown so a
-  decommissioned cluster can leave state without a live seed. Pin either with a
-  test.
-- Related: [ceph-ownership-apply-destroy-gates.md](ceph-ownership-apply-destroy-gates.md),
-  [ceph-cephadm-bootstrap-contract.md](ceph-cephadm-bootstrap-contract.md)
-
 ## B-050 — Daemons left on a pre-pin image are invisible and unreported
 - Status: open
 - Area: storage / ceph

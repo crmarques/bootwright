@@ -1646,7 +1646,7 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker on seed host")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
-	rmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	rmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
 	if !(confIdx < resolveRecoveryIdx && resolveRecoveryIdx < validateRecoveryIdx && validateRecoveryIdx < recoverRecordIdx && recoverRecordIdx < recoverIdx && recoverIdx < recordIdx && recordIdx < readIdx && readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
 		t.Fatalf("ceph destroy must validate recovery, reconstruct and re-read ownership, and verify it before removing the cluster and wiping (conf=%d resolveRecovery=%d validateRecovery=%d recoverRecord=%d recoverMarker=%d record=%d read=%d decide=%d refuse=%d rm=%d wipe=%d)", confIdx, resolveRecoveryIdx, validateRecoveryIdx, recoverRecordIdx, recoverIdx, recordIdx, readIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
@@ -1744,8 +1744,8 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 		t.Fatalf("storage ownership removal must be controller-local without become, got %v", removeRole["apply"])
 	}
 	removeWhen := fmt.Sprint(tasks[removeRecordIdx]["when"])
-	if !strings.Contains(removeWhen, "bootwright_selected_storage_cluster.seedHost") || !strings.Contains(removeWhen, "bootwright_storage_cluster_partial") {
-		t.Fatalf("storage ownership removal must run once on the seed and preserve partial state, got %v", tasks[removeRecordIdx]["when"])
+	if !strings.Contains(removeWhen, "bootwright_ceph_destroy_authority_host") || !strings.Contains(removeWhen, "bootwright_storage_cluster_partial") {
+		t.Fatalf("storage ownership removal must run once on the proven ownership authority host and preserve partial state, got %v", tasks[removeRecordIdx]["when"])
 	}
 
 	zap := tasks[findAnsibleTask(t, tasks, "Zap declared Ceph device partition tables")]
@@ -1857,9 +1857,9 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	probeIdx := findAnsibleTask(t, tasks, "Probe storage host reachability before teardown")
 	recordIdx := findAnsibleTask(t, tasks, "Record storage host unreachable when no node identity answers")
 	reachableIdx := findAnsibleTask(t, tasks, "Require storage hosts reachable unless --authorize unreachable-nodes")
-	seedIdx := findAnsibleTask(t, tasks, "Require the Ceph seed host to be reachable before any device wipe")
+	authorityIdx := findAnsibleTask(t, tasks, "Require a reachable declared mon when the Ceph seed is absent")
 	wipeIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
-	if !(selectIdx < probeIdx && probeIdx < recordIdx && recordIdx < reachableIdx && reachableIdx < seedIdx) {
+	if !(selectIdx < probeIdx && probeIdx < recordIdx && recordIdx < reachableIdx && reachableIdx < authorityIdx) {
 		t.Fatalf("storage destroy must select a recoverable identity and classify its failure before the fail-closed reachability gate")
 	}
 	if got := fmt.Sprint(tasks[selectIdx]["when"]); !strings.Contains(got, "bootwright_node_access is defined") {
@@ -1871,11 +1871,11 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 	if got := fmt.Sprint(tasks[recordIdx]["when"]); !strings.Contains(got, "bootwright_node_access_connection_available") {
 		t.Fatalf("storage destroy must classify an unavailable managed identity as unreachable, got when=%v", tasks[recordIdx]["when"])
 	}
-	if seedIdx >= wipeIdx {
-		t.Fatalf("seed-reachability assert (idx %d) must run before the destroy include_role wipe (idx %d)", seedIdx, wipeIdx)
+	if authorityIdx >= wipeIdx {
+		t.Fatalf("ownership-authority reachability assert (idx %d) must run before the destroy include_role wipe (idx %d)", authorityIdx, wipeIdx)
 	}
-	if _, ok := tasks[seedIdx]["ansible.builtin.assert"]; !ok {
-		t.Fatalf("seed-reachability guard must be a hard assert so any_errors_fatal aborts all hosts, got %v", tasks[seedIdx])
+	if _, ok := tasks[authorityIdx]["ansible.builtin.assert"]; !ok {
+		t.Fatalf("ownership-authority reachability guard must be a hard assert so any_errors_fatal aborts all hosts, got %v", tasks[authorityIdx])
 	}
 
 	destroyTasks := storageCephDestroyTasks(t)
@@ -2487,7 +2487,7 @@ func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(
 	stateIdx := findAnsibleTask(t, tasks, "Resolve whether the seed host still carries Ceph cluster state")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	unprovenIdx := findAnsibleTask(t, tasks, "Resolve the unproven Ceph destroy ownership evidence on seed host")
-	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
 	if !(stateIdx < decideIdx && decideIdx < unprovenIdx && unprovenIdx < removeIdx) {
 		t.Fatalf("the seed must resolve its local Ceph state before it decides ownership, and name its evidence before the removal that gate protects (state=%d decide=%d unproven=%d remove=%d)", stateIdx, decideIdx, unprovenIdx, removeIdx)
 	}
@@ -2529,7 +2529,7 @@ func TestStorageCephadmDestroyRunsACephadmItProvedTheHostHas(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
 	for _, name := range []string{
-		"Remove cephadm cluster on seed host",
+		"Remove cephadm cluster on the ownership authority host",
 		"Remove cephadm cluster on non-seed hosts",
 	} {
 		cmd, ok := tasks[findAnsibleTask(t, tasks, name)]["ansible.builtin.command"].(map[string]any)
@@ -2616,7 +2616,7 @@ func TestStorageCephadmDestroyRefusesPeersWhenTheSeedResolvesNoFsid(t *testing.T
 	}
 	when := fmt.Sprint(tasks[refuseIdx]["when"])
 	for _, want := range []string{
-		"inventory_hostname != bootwright_selected_storage_cluster.seedHost",
+		"inventory_hostname != bootwright_ceph_destroy_authority_host",
 		"bootwright_ceph_destroy_fsid | default('') | length == 0",
 	} {
 		if !strings.Contains(when, want) {
@@ -2648,7 +2648,7 @@ func TestStorageCephadmDestroyStopsTheOrchestratorBeforeAnyRemoval(t *testing.T)
 	tasks := storageCephDestroyTasks(t)
 	disableIdx := findAnsibleTask(t, tasks, "Stop the Ceph orchestrator before any host removes the cluster")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to remove a cluster whose orchestrator can still redeploy it")
-	seedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	seedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
 	nonSeedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on non-seed hosts")
 	if !(disableIdx < refuseIdx && refuseIdx < seedRmIdx && seedRmIdx < nonSeedRmIdx) {
 		t.Fatalf("destroy must disable the cephadm manager module and refuse on failure before the first host removes the cluster: every host purged while the module is enabled is reconciled back by a manager still running on a host the teardown has not reached, which redeploys its daemons and runs ceph-volume over the OSD devices the purge just freed (disable=%d refuse=%d seed=%d non-seed=%d)", disableIdx, refuseIdx, seedRmIdx, nonSeedRmIdx)
@@ -2800,8 +2800,8 @@ func TestStorageCephadmDestroySettlesBeforeReleasingTheNode(t *testing.T) {
 	if !(ownedIdx < preservedIdx && preservedIdx < strayIdx && strayIdx < daemonIdx) {
 		t.Fatalf("the tolerated set must be resolved before the refusal reads it (owned=%d preserved=%d stray=%d refuse=%d)", ownedIdx, preservedIdx, strayIdx, daemonIdx)
 	}
-	if got := fmt.Sprint(settle[ownedIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_destroy_fsid") || !strings.Contains(got, "seedHost") {
-		t.Errorf("a non-seed host learns the fsid this teardown owns only from the seed, got %v", settle[ownedIdx]["ansible.builtin.set_fact"])
+	if got := fmt.Sprint(settle[ownedIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_destroy_fsid") || !strings.Contains(got, "bootwright_ceph_destroy_authority_host") {
+		t.Errorf("a non-authority host must learn the fsid only from the host whose live evidence proved this teardown's ownership, got %v", settle[ownedIdx]["ansible.builtin.set_fact"])
 	}
 	stateIdx := findAnsibleTask(t, settle, "Scan the storage node for the Ceph clusters this teardown preserves")
 	if got := fmt.Sprint(settle[stateIdx]["ansible.builtin.find"]); !strings.Contains(got, "/var/lib/ceph") {
@@ -3568,6 +3568,7 @@ func storageCephDestroyTasks(t *testing.T) []map[string]any {
 	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
 	return readAnsibleTasksFromFiles(t,
 		base+"context.yml",
+		base+"ownership_authority.yml",
 		base+"device_gates.yml",
 		base+"cluster_gate.yml",
 		base+"wipe_and_cleanup.yml",

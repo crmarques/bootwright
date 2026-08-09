@@ -194,19 +194,43 @@
           - min
       ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
 
-    - name: Require the Ceph seed host to be reachable before any device wipe
+    - name: Validate selected storage cluster context
       ansible.builtin.assert:
         that:
-          - not (hostvars[bootwright_storage_seed_host_name].bootwright_storage_reachable_probe.unreachable | default(false) | bool)
+          - bootwright_selected_storage_cluster.name | default('') == bootwright_storage_cluster_name | default('')
         fail_msg: >-
-          Ceph seed host {{ bootwright_storage_seed_host_name }} for storage cluster
-          {{ bootwright_storage_cluster_name }} did not answer:
-          {{ hostvars[bootwright_storage_seed_host_name].bootwright_storage_node_refusal
-             | default('no connection diagnostic was recorded') }}.
-          Power it on, confirm the route and that sshd is running, and retry.
-          --authorize unreachable-nodes cannot skip the seed — it proves cluster ownership before
-          any node wipes its OSD devices.
-      when: bootwright_destroy_skip_unreachable | default(false) | bool
+          Storage destroy did not receive a rendered context for
+          {{ bootwright_storage_cluster_name | default('<unset>') }}.
+
+    - name: Resolve reachable Ceph ownership evidence hosts
+      ansible.builtin.set_fact:
+        bootwright_ceph_destroy_seed_reachable: >-
+          {{ bootwright_storage_seed_host_name in ansible_play_hosts }}
+        bootwright_ceph_destroy_reachable_mon_hosts: >-
+          {{ bootwright_selected_storage_cluster.monInventoryHosts | default([])
+             | select('in', ansible_play_hosts) | list }}
+        bootwright_ceph_destroy_authority_host: >-
+          {{ bootwright_storage_seed_host_name
+             if bootwright_storage_seed_host_name in ansible_play_hosts else '' }}
+      changed_when: false
+
+    - name: Require a reachable declared mon when the Ceph seed is absent
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_destroy_seed_reachable | bool
+            or (bootwright_ceph_destroy_reachable_mon_hosts | length > 0)
+        fail_msg: >-
+          Refusing to tear down storage cluster {{ bootwright_storage_cluster_name }} before any
+          device wipe: declared seed {{ bootwright_storage_seed_host_name }} did not answer, and
+          no other declared mon is reachable to supply the host-side ownership evidence. A
+          controller record alone never authorizes Ceph teardown. Power on the declared seed or
+          one declared mon with its intact /etc/ceph/ceph.conf and
+          /etc/ceph/.bootwright-owned marker, fix the route or SSH identity if the diagnostic
+          named one, then re-run the same destroy invocation:
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
+          Keep --authorize unreachable-nodes
+          only for hosts the run proves absent; it skips those hosts but cannot replace ownership
+          proof. There is no record-only destructive escape.
 
     - name: Flag storage clusters left partial by unreachable nodes
       ansible.builtin.set_fact:
@@ -223,14 +247,6 @@
           }}
       changed_when: false
       when: bootwright_destroy_skip_unreachable | default(false) | bool
-
-    - name: Validate selected storage cluster context
-      ansible.builtin.assert:
-        that:
-          - bootwright_selected_storage_cluster.name | default('') == bootwright_storage_cluster_name | default('')
-        fail_msg: >-
-          Storage destroy did not receive a rendered context for
-          {{ bootwright_storage_cluster_name | default('<unset>') }}.
 
     - name: Destroy Ceph storage cluster
       ansible.builtin.include_role:

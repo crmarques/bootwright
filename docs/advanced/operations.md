@@ -815,38 +815,26 @@ skipped node withholds that authorization; infra-only, machine-scoped, and
 non-storage teardown with `--authorize unreachable-nodes` also withhold it because they do
 not produce the same per-node completion proof.
 
-!!! danger "Storage teardown fails closed when the Ceph **seed** host is down"
-    Cluster ownership is proven on the seed host before any node wipes its OSD
-    devices. If the seed host itself is unreachable, `--authorize
-    unreachable-nodes` does **not** proceed — the storage teardown fails closed
-    with a clear message, so no node wipes a cluster whose ownership could not
-    be verified. Power the seed on (or remove the cluster manually after
-    verifying it is safe) and retry. The token does not relax any device
-    data-safety check, and like the unowned tokens it authorizes nothing else.
+!!! danger "A dead Ceph seed needs exact live evidence from its mons"
+    The declared seed remains the first ownership authority whenever it answers.
+    With `--authorize unreachable-nodes`, a seed the run positively proves
+    absent may be skipped only when at least one other declared mon is reachable.
+    Before any removal or device gate, Bootwright then requires the controller
+    owner record to name this context, storage cluster, declared seed and fsid,
+    and requires every reachable declared mon's `/etc/ceph/ceph.conf` and
+    `/etc/ceph/.bootwright-owned` marker to be readable and agree exactly on the
+    same cluster/fsid. The first matching mon in topology order supplies the
+    fsid-scoped removal; the declared seed stays skipped with its local state,
+    so the result remains partial.
 
-    When the seed cannot come back, the recovery is ordered:
-
-    1. **Powering the seed on is always the first path.** A reachable seed lets
-       the same `destroy` complete under its normal gates.
-    2. **If it cannot come back, capture what the context holds before anything
-       else**: `bootwright container-cluster kubeconfig` for any consumer
-       clusters you still need to administer, and `bootwright secret show` for
-       captured credentials such as a Ceph `dashboard-password`. The terminal
-       step below permanently deletes the captured kubeconfigs and passwords
-       under the context.
-    3. **After removing the cluster out of band, `destroy` still refuses** — the
-       ownership record still claims the cluster, and nothing out of band clears
-       it — so do not loop on retries.
-    4. **The terminal exit is
-       `bootwright context delete --name <ctx> --purge --abandon-resources`.**
-       Its cost is exactly what the flag says: the infrastructure keeps running,
-       and the context's ownership records and captured credentials are
-       permanently lost. See
-       [what `--abandon-resources` is not](../troubleshooting.md#strict-decode-also-gates-destroy)
-       in Troubleshooting.
-
-    An in-product record-only teardown for a decommissioned cluster with no
-    live seed is deliberately deferred (tracked as B-048 in the backlog).
+    Missing, unreadable, contradictory or ambiguous evidence refuses before
+    teardown and names the record or host file that failed. Power the seed back
+    on, or repair that evidence from a trusted copy, then re-run the same destroy
+    invocation. When the controller record is missing, restore the seed and add
+    `--recover-ceph-ownership <StorageCluster>=<verified-fsid>` to that same
+    invocation; peer evidence never reconstructs the record. No `--authorize`
+    token enables a record-only Ceph teardown, and the normal device ownership,
+    data-loss and in-use gates remain unchanged.
 
 ### Never-provisioned clusters tear down automatically
 

@@ -3,8 +3,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_cleanup_owned_fsid: >-
       {{ bootwright_ceph_destroy_fsid | default('') | trim
-         if inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
-         else hostvars[bootwright_selected_storage_cluster.seedHost].bootwright_ceph_destroy_fsid
+         if inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
+         else hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid
               | default('') | trim }}
   changed_when: false
 
@@ -134,7 +134,7 @@
          | rejectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
          | list }}
   changed_when: false
-  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+  when: inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
 
 - name: Remove storage cluster ownership record
   ansible.builtin.include_role:
@@ -147,7 +147,7 @@
     bootwright_ownership_kind: storage-cluster
     bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - not (bootwright_storage_cluster_partial | default(false) | bool)
     - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length == 0
 
@@ -162,7 +162,7 @@
       partial-destroy marker; re-run destroy once the node(s) answer again, or wipe them
       manually, before reusing the hardware.
   when:
-    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length > 0
 
 - name: Remove Ceph package ownership records

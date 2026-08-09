@@ -96,6 +96,16 @@ func storageMonReadinessVars(cluster v1alpha1.StorageCluster) map[string]any {
 	return map[string]any{"mons": mons}
 }
 
+func storageMonInventoryHosts(cluster v1alpha1.StorageCluster) []string {
+	var hosts []string
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
+			hosts = append(hosts, storageInventoryHostName(cluster, node.MachineRef.Name))
+		}
+	}
+	return hosts
+}
+
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
@@ -199,6 +209,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
 			"seedHost":            StorageSeedHostName(cluster),
+			"monInventoryHosts":   storageMonInventoryHosts(cluster),
 			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
 			"provider":            cephprovider.Vars(provider),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,

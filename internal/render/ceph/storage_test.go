@@ -298,6 +298,13 @@ func TestManagedOSSStorageProjectsCommunityRepoAndSeedHost(t *testing.T) {
 	if got := cluster["seedHost"]; got != "storage__ceph-libvirt__ceph-0" {
 		t.Fatalf("seedHost = %v, want consistent per-node seed name storage__ceph-libvirt__ceph-0", got)
 	}
+	if got := cluster["monInventoryHosts"]; !reflect.DeepEqual(got, []string{
+		"storage__ceph-libvirt__ceph-0",
+		"storage__ceph-libvirt__ceph-1",
+		"storage__ceph-libvirt__ceph-2",
+	}) {
+		t.Fatalf("monInventoryHosts = %#v, want every declared mon in topology order", got)
+	}
 	hosts := inventoryrender.Inventory(state, "/context/secrets")["all"].(map[string]any)["hosts"].(map[string]any)
 	if _, ok := hosts["storage__ceph-libvirt__ceph-0"]; !ok {
 		t.Fatalf("inventory missing consistent seed host storage__ceph-libvirt__ceph-0: %#v", hosts)

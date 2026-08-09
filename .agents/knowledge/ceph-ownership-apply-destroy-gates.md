@@ -8,6 +8,24 @@ agree with the conf fsid. The record and marker are independent consistency
 checks. A seed with no ceph.conf at all has nothing to protect and is treated
 as owned only when the live fsid probe also finds no cluster.
 
+**Semantics (a dead seed may delegate proof, never authorization):** the
+declared seed remains the ownership authority whenever it answers. Under
+`--authorize unreachable-nodes`, once that seed is positively classified
+absent, the destroy play considers only reachable hosts rendered from the
+declared `mon` topology. Before the device gates, it reads the controller owner
+record plus the config and Bootwright marker on every reachable declared mon.
+The controller JSON must be readable and identify Bootwright owner role, the
+current context, `storage-cluster` kind/name, declared cluster and seed, and one
+valid fsid. Each reachable mon's `/etc/ceph/ceph.conf` and
+`/etc/ceph/.bootwright-owned` must be readable and identify that same
+cluster/fsid. Only then does the first matching mon in authored topology order
+become the ownership authority for the fsid-scoped orchestrator stop, per-host
+removal, settle gate and record release. Missing, unreadable, contradictory or
+ambiguous evidence aborts before teardown; a peer never reconstructs a missing
+controller record and no token supplies a record-only escape. The absent seed
+remains skipped, so its local state is retained and the cluster result remains
+partial.
+
 **Constraint (a seed that carries nothing is evidence about the seed, not about
 its peers):** that "nothing to protect" branch resolves ownership WITHOUT
 resolving an fsid, and every per-host cluster removal downstream is scoped to
