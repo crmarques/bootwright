@@ -1021,8 +1021,10 @@ only decides how many clusters are in that state at a time. A cluster whose
 chain parks on another cluster — a KubeVirt-hosted cluster that has built its
 ISO but cannot provision machines until its host cluster finishes installing —
 gives the slot back while it waits, so the host or any third cluster can
-install in the meantime. Raise the cap when the estate has the registry
-bandwidth and BMC headroom to install several clusters side by side:
+install in the meantime, and it does not take the slot in the first place while
+a cluster whose chain can run to completion still wants one. Raise the cap when
+the estate has the registry bandwidth and BMC headroom to install several
+clusters side by side:
 
 ```text
 BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=3 bootwright apply --yes
@@ -1031,7 +1033,19 @@ BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=3 bootwright apply --yes
 A cluster held back by it shows in `status --timings` as
 `blocked … on cluster install budget`, and the live run tree marks its phase
 row with `waiting for a cluster install slot` — which is what a long queue wait
-on a multi-cluster run means before you go looking for a slow install.
+on a multi-cluster run means before you go looking for a slow install. The run
+tree names the other budgets the same way (`waiting for Redfish slots`,
+`waiting for a task slot`, `waiting for a slot on <host>`), always the one the
+task is waiting on right now, so a row that sits still for an hour says why.
+
+The Redfish cap is granted in parts rather than all at once. A task declares how
+many BMCs it drives — a six-node storage OS install declares six, a three-master
+node boot declares three — and takes `min(declared, free)` whenever at least one
+slot is free, running that many hosts at a time. Without that, a fleet whose
+declared demand exceeds the cap serialises: the storage OS install holds six of
+eight slots for its whole runtime and the three-slot node boot of an unrelated
+bare-metal cluster never fits, parking that cluster (and everything behind it)
+on work it shares nothing with.
 
 `apply` prints the caps it resolved in its run header, with the cluster cap as a
 fourth segment whenever the run installs at least one cluster:

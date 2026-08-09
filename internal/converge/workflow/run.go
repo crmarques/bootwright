@@ -29,6 +29,8 @@ const (
 	taskStepsDirName              = "steps"
 	stepSecretsDirName            = "secrets"
 	stepConnectionSecretsDirName  = "connection-secrets"
+	stepOutputsDirName            = "outputs"
+	stepManifestsDirName          = "manifests"
 )
 
 type RunOptions struct {
@@ -455,13 +457,15 @@ func taskStepSecretDirs(taskRoot string) []string {
 	if err != nil {
 		return nil
 	}
-	targets := make([]string, 0, 2*len(entries))
+	targets := make([]string, 0, 4*len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		stepRoot := filepath.Join(stepsRoot, entry.Name())
-		targets = append(targets, filepath.Join(stepRoot, stepSecretsDirName), filepath.Join(stepRoot, stepConnectionSecretsDirName))
+		for _, name := range []string{stepSecretsDirName, stepConnectionSecretsDirName, stepOutputsDirName, stepManifestsDirName} {
+			targets = append(targets, filepath.Join(stepRoot, name))
+		}
 	}
 	return targets
 }
