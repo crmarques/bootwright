@@ -15,6 +15,19 @@ func TestAnsibleVenvDirIsHostManaged(t *testing.T) {
 	}
 }
 
+func TestSharedServiceMutationRunsDirIsControllerGlobal(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	got := SharedServiceMutationRunsDir()
+	want := filepath.Join(root, "shared-service-mutation", RunsDirName)
+	if got != want {
+		t.Fatalf("SharedServiceMutationRunsDir = %q, want %q", got, want)
+	}
+	if filepath.Dir(filepath.Dir(got)) != root {
+		t.Fatalf("shared-service lease must live outside every per-context tree: %q", got)
+	}
+}
+
 func TestBundleDirUsesFirstVersionMarkerLine(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))

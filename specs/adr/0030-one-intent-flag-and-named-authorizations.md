@@ -128,7 +128,7 @@ else:
 | `same-site-arbiter` | promoting a mon that shares a site with the data-site mons to stretch tiebreaker (`storage-cluster replace-arbiter` only) |
 | `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum (`storage-cluster replace-arbiter` only) |
 | `unreadable-records` | proceeding when ownership records cannot be read, leaving their resources standing |
-| `shared-infra` | storage-consumer conflicts and shared infra components owned or referenced by another context |
+| `shared-infra` | storage-consumer conflicts and exact shared infra-component identities owned/referenced by another context or hidden by unreadable evidence; never apply adoption |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents (destroy only, per ADR 0032) |
 
 An unknown token is a usage error (exit 2) listing the valid set. A token the

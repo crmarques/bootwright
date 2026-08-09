@@ -16,15 +16,29 @@ func destroyAuthorizesUnownedDevices(auth *authorizations, runScope converge.Sco
 }
 
 func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
+	return selectedInfraComponentServiceRefs(state, artifactServerOnly, false, nil)
+}
+
+func selectedInfraComponentServiceRefs(state v1alpha1.State, artifactServerOnly, degradingOnly bool, hosts map[string]bool) []converge.InfraComponentServiceRef {
 	var out []converge.InfraComponentServiceRef
 	for _, service := range stategraph.ResolveMachineServices(state).Services {
-		if !service.IsInfraComponentService() {
+		if !service.IsInfraComponentService() || strings.TrimSpace(service.MachineRef) == "" {
 			continue
 		}
 		if artifactServerOnly && service.Identity.Kind != v1alpha1.ComponentSlotArtifactServer {
 			continue
 		}
-		out = append(out, converge.InfraComponentServiceRef{Name: service.Identity.Name, Kind: service.Identity.Kind})
+		if degradingOnly && !stategraph.SharedServiceDegradesUnderScope(service.Identity.Kind) {
+			continue
+		}
+		if hosts != nil && !hosts[service.MachineRef] {
+			continue
+		}
+		out = append(out, converge.InfraComponentServiceRef{
+			Name: strings.TrimSpace(service.Identity.ProviderName) + "-" + strings.TrimSpace(service.Identity.Name),
+			Kind: service.Identity.Kind,
+			Host: service.MachineRef,
+		})
 	}
 	return out
 }

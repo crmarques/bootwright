@@ -2,6 +2,97 @@
 - name: Load chrony package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
+- name: Probe NTP service claim directory
+  ansible.builtin.stat:
+    path: "{{ bootwright_chrony_root }}"
+  register: bootwright_chrony_claim_root
+  changed_when: false
+  failed_when: false
+
+- name: Probe NTP service context marker
+  ansible.builtin.stat:
+    path: "{{ bootwright_chrony_root }}/.bootwright-context"
+  register: bootwright_chrony_context_marker
+  changed_when: false
+  failed_when: false
+
+- name: Read NTP service context marker
+  ansible.builtin.slurp:
+    src: "{{ bootwright_chrony_root }}/.bootwright-context"
+  register: bootwright_chrony_context_marker_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_chrony_context_marker.stat.exists | default(false) | bool
+
+- name: Resolve NTP service context
+  ansible.builtin.set_fact:
+    bootwright_chrony_existing_context: >-
+      {{ bootwright_chrony_context_marker_content.content | default('') | b64decode | trim }}
+    bootwright_chrony_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+  changed_when: false
+
+- name: Refuse unreadable NTP service claim
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns NTP service
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }} because its claim on
+      {{ inventory_hostname }} is unreadable. Repair access to {{ bootwright_chrony_root }},
+      then re-run `{{ bootwright_mutating_invocation }}`.
+  when:
+    - (bootwright_chrony_claim_root.failed | default(false) | bool)
+      or (bootwright_chrony_context_marker.failed | default(false) | bool)
+      or (bootwright_chrony_context_marker_content.failed | default(false) | bool)
+
+- name: Refuse unclaimed existing NTP service state
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns the existing NTP service
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }} state on
+      {{ inventory_hostname }}. Inspect and move or remove {{ bootwright_chrony_root }} only after
+      proving it is safe, then re-run `{{ bootwright_mutating_invocation }}`;
+      no apply authorization adopts unknown service state.
+  when:
+    - bootwright_chrony_claim_root.stat.exists | default(false) | bool
+    - (bootwright_chrony_existing_context | trim) | length == 0
+
+- name: Refuse cross-context NTP overwrite
+  ansible.builtin.fail:
+    msg: >-
+      NTP service {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      on {{ inventory_hostname }} is claimed by context {{ bootwright_chrony_existing_context }},
+      not {{ bootwright_chrony_current_context }}. Inspect and reconcile or destroy it
+      from its owning context, then re-run `{{ bootwright_mutating_invocation }}`;
+      no apply authorization adopts another context's service.
+  when:
+    - (bootwright_chrony_existing_context | trim) | length > 0
+    - bootwright_chrony_existing_context != bootwright_chrony_current_context
+
+- name: Enforce apply mode for this NTP service
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: "NTP service {{ bootwright_component.providerName }}/{{ bootwright_component.name }}"
+    bootwright_gate_exists: "{{ bootwright_chrony_claim_root.stat.exists | default(false) | bool }}"
+    bootwright_gate_owned: >-
+      {{ (bootwright_chrony_existing_context | trim) == bootwright_chrony_current_context }}
+
+- name: Create NTP ownership-claim directory
+  ansible.builtin.file:
+    path: "{{ bootwright_chrony_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Claim NTP service for this context before mutation
+  ansible.builtin.copy:
+    dest: "{{ bootwright_chrony_root }}/.bootwright-context"
+    content: "{{ bootwright_clusters_dir | dirname | basename }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
 - name: Install chrony packages
   ansible.builtin.package:
     name: "{{ bootwright_chrony_packages }}"
@@ -15,7 +106,6 @@
     group: root
     mode: "0755"
   loop:
-    - "{{ bootwright_chrony_root }}"
     - "{{ bootwright_chrony_include_dir }}"
 
 - name: Enable chrony include directory

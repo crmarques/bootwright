@@ -61,17 +61,6 @@ learned; this file records what it still owes.
   wins deterministically.
 - Related: [external-dns-bootstrap.md](external-dns-bootstrap.md)
 
-## B-008 — Multi-context shared-service degrading clobber
-- Status: open
-- Area: converge / shared-services / ownership
-- Origin: multi-context shared bastion services landing (open item)
-- Problem: a reference-aware destroy releases shared services correctly, but a
-  *degrading* apply (one context reducing a shared service another context still
-  references) can still clobber the shared component.
-- Exit: gate degrading edits to shared services on the reference set, mirroring
-  the reference-aware destroy release.
-- Related: [ownership-records-store.md](ownership-records-store.md)
-
 ## B-011 — Storage NFS export and fabric-hash findings left unresolved
 - Status: open
 - Area: converge / storage

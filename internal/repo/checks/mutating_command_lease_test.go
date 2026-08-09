@@ -68,3 +68,47 @@ func TestArbiterSubrunsConsumeTheCommandLease(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution(t *testing.T) {
+	shared := readRepoFile(t, "internal/cli/shared_service_mutation.go")
+	applyLease := strings.Index(shared, "acquireSharedServiceMutationLease(parent, contextName, \"apply\"")
+	applyScan := strings.LastIndex(shared, "PlanInfraComponentApplyBlocks")
+	destroyLease := strings.Index(shared, "acquireSharedServiceMutationLease(parent, contextName, \"destroy\"")
+	destroyScan := strings.Index(shared, "destroyInfraComponentGate")
+	if applyLease < 0 || applyScan < applyLease || destroyLease < 0 || destroyScan < destroyLease {
+		t.Fatalf("shared-service preparation must acquire the global lease before each decisive scan: apply lease=%d scan=%d destroy lease=%d scan=%d", applyLease, applyScan, destroyLease, destroyScan)
+	}
+	apply := readRepoFile(t, "internal/cli/scope_apply_cmd.go")
+	applyPrepare := strings.Index(apply, "prepareApplySharedServiceMutation(runContext")
+	applyOwned := strings.Index(apply, "requireSharedServiceMutationLease(sharedServiceLease, \"before apply execution\"")
+	applyExecute := strings.Index(apply, "converge.ExecuteApply(runContext")
+	if applyPrepare < 0 || applyOwned < applyPrepare || applyExecute < applyOwned {
+		t.Fatalf("real apply must prepare and prove the global lease before execution: prepare=%d owned=%d execute=%d", applyPrepare, applyOwned, applyExecute)
+	}
+	destroy := readRepoFile(t, "internal/cli/scope_destroy_cmd.go")
+	destroyPrepare := strings.Index(destroy, "prepareDestroySharedServiceMutation(runContext")
+	destroyOwned := strings.Index(destroy, "requireSharedServiceMutationLease(sharedServiceLease, \"before destroy execution\"")
+	destroyExecute := strings.Index(destroy, "converge.ExecuteDestroyGraph(runContext")
+	if destroyPrepare < 0 || destroyOwned < destroyPrepare || destroyExecute < destroyOwned {
+		t.Fatalf("real destroy must prepare and prove the global lease before execution: prepare=%d owned=%d execute=%d", destroyPrepare, destroyOwned, destroyExecute)
+	}
+}
+
+func TestNestedMutatingRunnersPreserveCallerCancellation(t *testing.T) {
+	for _, file := range []string{"internal/converge/apply.go", "internal/converge/destroy.go", "internal/converge/workflow/run.go"} {
+		source := readRepoFile(t, file)
+		if strings.Contains(source, "= runOpts.RunLease.Context()") || strings.Contains(source, "= opts.RunLease.Context()") || strings.Contains(source, "= runLease.Context()") {
+			t.Fatalf("%s replaces the caller context with one lease context, which can discard an outer transaction cancellation", file)
+		}
+		if !strings.Contains(source, ".BindContext(") {
+			t.Fatalf("%s must bind caller and command-lease cancellation together", file)
+		}
+	}
+}
+
+func TestSharedServiceDestroyGateDoesNotKeyOnStageName(t *testing.T) {
+	source := readRepoFile(t, "internal/cli/shared_service_mutation.go")
+	if strings.Contains(source, "runScope.Name") {
+		t.Fatal("shared-service teardown consequence must use the shared machine-layer predicate and resolved selection, never a stage name")
+	}
+}

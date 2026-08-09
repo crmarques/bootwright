@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,16 +40,37 @@ func AcquireCommandRunLease(parent context.Context, runsDir, command string) (*C
 	default:
 		return nil, fmt.Errorf("unsupported mutating command %q", command)
 	}
+	return acquireCommandRunLease(parent, runsDir, runID, now, true)
+}
+
+func AcquireSharedServiceMutationLease(parent context.Context, runsDir, contextName, command string) (*CommandRunLease, error) {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return nil, errors.New("shared-service mutation lease requires a context name")
+	}
+	switch command {
+	case "apply", "destroy":
+	default:
+		return nil, fmt.Errorf("unsupported shared-service mutating command %q", command)
+	}
+	now := time.Now().UTC()
+	runID := "shared-services-" + contextName + "-" + command + "-" + now.Format("20060102T150405.000000000Z")
+	return acquireCommandRunLease(parent, runsDir, runID, now, false)
+}
+
+func acquireCommandRunLease(parent context.Context, runsDir, runID string, now time.Time, sweepGitCredentials bool) (*CommandRunLease, error) {
 	lease := NewRunLease(runID, now)
 	if err := AcquireRunLease(runsDir, lease, now); err != nil {
 		return nil, err
 	}
-	if err := SweepGitCredentialResidue(runsDir); err != nil {
-		releaseErr := RemoveRunLeaseIfOwner(runsDir, runID)
-		if releaseErr != nil {
-			return nil, fmt.Errorf("%w; additionally failed to release the mutating run lease: %v", err, releaseErr)
+	if sweepGitCredentials {
+		if err := SweepGitCredentialResidue(runsDir); err != nil {
+			releaseErr := RemoveRunLeaseIfOwner(runsDir, runID)
+			if releaseErr != nil {
+				return nil, fmt.Errorf("%w; additionally failed to release the mutating run lease: %v", err, releaseErr)
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 	ctx, cancel := context.WithCancel(parent)
 	stop, heartbeatErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
@@ -85,6 +107,18 @@ func (g *CommandRunLease) Context() context.Context {
 		return context.Background()
 	}
 	return g.ctx
+}
+
+func (g *CommandRunLease) BindContext(parent context.Context) (context.Context, func(), error) {
+	if err := g.RequireOwned(); err != nil {
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithCancel(parent)
+	stop := context.AfterFunc(g.Context(), cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}, nil
 }
 
 func (g *CommandRunLease) Errors() <-chan error {

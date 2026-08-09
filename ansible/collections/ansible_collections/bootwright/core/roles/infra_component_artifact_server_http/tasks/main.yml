@@ -1,11 +1,4 @@
 ---
-- name: Enforce apply mode for this infra-component
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: infra_component_container_gate.yml
-  vars:
-    bootwright_gate_container_name: "{{ bootwright_artifacts_container_name }}"
-
 - name: Validate boot artifact server settings
   ansible.builtin.assert:
     that:
@@ -14,6 +7,13 @@
       - (bootwright_component.listeners | default([])) | length > 0
       - (bootwright_component.endpoints | default([])) | length > 0
     fail_msg: "artifacts_http requires component.{image,bindAddress,listeners,endpoints}"
+
+- name: Enforce apply mode for this infra-component
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_container_gate.yml
+  vars:
+    bootwright_gate_container_name: "{{ bootwright_artifacts_container_name }}"
 
 - name: Resolve boot artifact HTTPS mode
   ansible.builtin.set_fact:
@@ -163,6 +163,7 @@
       bootwright.kind: artifacts
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
+      bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
     volumes: "{{ bootwright_artifacts_volumes }}"
 
 - name: Open boot artifact ports on host firewall

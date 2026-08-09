@@ -100,3 +100,79 @@ func TestCommandRunLeaseRegistersEveryDesiredStateMutator(t *testing.T) {
 		t.Fatalf("unregistered mutator = %v, want fail-closed classification error", err)
 	}
 }
+
+func TestSharedServiceMutationLeaseSerializesContextsAndVerbs(t *testing.T) {
+	runsDir := t.TempDir()
+	first, err := AcquireSharedServiceMutationLease(context.Background(), runsDir, "hub", "apply")
+	if err != nil {
+		t.Fatalf("AcquireSharedServiceMutationLease first: %v", err)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = first.Close()
+		}
+	}()
+	if _, err := AcquireSharedServiceMutationLease(context.Background(), runsDir, "spoke", "destroy"); err == nil || !strings.Contains(err.Error(), "still running") {
+		t.Fatalf("competing cross-context destroy = %v, want active shared-service lease refusal", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first shared-service lease: %v", err)
+	}
+	closed = true
+	second, err := AcquireSharedServiceMutationLease(context.Background(), runsDir, "spoke", "destroy")
+	if err != nil {
+		t.Fatalf("acquire after release: %v", err)
+	}
+	if !strings.HasPrefix(second.RunID, "shared-services-spoke-destroy-") {
+		t.Fatalf("run ID = %q", second.RunID)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatalf("close second shared-service lease: %v", err)
+	}
+}
+
+func TestSharedServiceMutationLeaseFailsClosedOnUnknownIntent(t *testing.T) {
+	if _, err := AcquireSharedServiceMutationLease(context.Background(), t.TempDir(), "", "apply"); err == nil || !strings.Contains(err.Error(), "context name") {
+		t.Fatalf("empty context = %v, want classification refusal", err)
+	}
+	if _, err := AcquireSharedServiceMutationLease(context.Background(), t.TempDir(), "hub", "future-mutator"); err == nil || !strings.Contains(err.Error(), "unsupported shared-service mutating command") {
+		t.Fatalf("unknown intent = %v, want fail-closed classification refusal", err)
+	}
+}
+
+func TestCommandRunLeaseBindContextPreservesParentAndLeaseCancellation(t *testing.T) {
+	guard, err := AcquireCommandRunLease(context.Background(), t.TempDir(), "apply")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	parent, cancelParent := context.WithCancel(context.Background())
+	bound, release, err := guard.BindContext(parent)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	cancelParent()
+	select {
+	case <-bound.Done():
+	case <-time.After(time.Second):
+		t.Fatal("bound context ignored caller cancellation")
+	}
+	release()
+	if err := guard.RequireOwned(); err != nil {
+		t.Fatalf("caller cancellation must not release the lease: %v", err)
+	}
+
+	bound, release, err = guard.BindContext(context.Background())
+	if err != nil {
+		t.Fatalf("bind second: %v", err)
+	}
+	if err := guard.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	defer release()
+	select {
+	case <-bound.Done():
+	case <-time.After(time.Second):
+		t.Fatal("bound context ignored lease cancellation")
+	}
+}

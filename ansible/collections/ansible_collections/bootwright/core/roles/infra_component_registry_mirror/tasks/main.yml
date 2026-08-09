@@ -92,6 +92,7 @@
       bootwright.kind: registry
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
+      bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
     volumes:
       - "{{ bootwright_registry_mirror_data_dir }}:/var/lib/registry:Z"
       - "{{ bootwright_registry_mirror_auth_dir }}:/auth:ro,Z"

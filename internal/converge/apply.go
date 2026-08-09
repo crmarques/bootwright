@@ -295,10 +295,12 @@ func reportBundleReady(r ApplyRunReporter, result bundle.AnsibleBundleResult) {
 
 func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, runOpts workflow.RunOptions, applyTarget workflow.ApplyTarget, clusterScope string, plan WorkflowPlan, tasks []workflow.ApplyTask, limits workflow.ConcurrencyLimits, usesAnsible bool, bundleResult bundle.AnsibleBundleResult, bundleVersionMarker string, reporter ApplyRunReporter, applyReporter workflow.ApplyReporter) (render.Result, bundle.AnsibleBundleResult, workflow.RunLedger, error) {
 	if runOpts.RunLease != nil {
-		if err := runOpts.RunLease.RequireOwned(); err != nil {
+		bound, release, err := runOpts.RunLease.BindContext(cmdCtx)
+		if err != nil {
 			return render.Result{}, bundleResult, workflow.RunLedger{}, err
 		}
-		cmdCtx = runOpts.RunLease.Context()
+		defer release()
+		cmdCtx = bound
 	}
 	reportRenderStart(reporter)
 	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)

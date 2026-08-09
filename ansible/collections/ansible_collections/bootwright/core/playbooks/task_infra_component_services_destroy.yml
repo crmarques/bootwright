@@ -46,6 +46,14 @@
         | map('join', '-')
         | list
       }}
+    bootwright_host_infra_component_reference_names: >-
+      {{
+        bootwright_host_infra_component_ownership_records
+        | selectattr('role', 'defined')
+        | selectattr('role', 'equalto', 'reference')
+        | map(attribute='name')
+        | list
+      }}
 
   tasks:
     - name: Validate infra component service destroy scope
@@ -69,6 +77,9 @@
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"
       when:
         - >-
+          (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+          not in bootwright_host_infra_component_reference_names
+        - >-
           bootwright_infra_component_reclaim_records is not defined
           or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
              in bootwright_infra_component_reclaim_records.split(',')
@@ -76,6 +87,26 @@
           bootwright_infra_component_destroy_scope_records is not defined
           or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
              in bootwright_infra_component_destroy_scope_names
+
+    - name: Release recorded infra component references
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: remove_resource.yml
+      vars:
+        bootwright_ownership_kind: "{{ bootwright_ownership_record.kind }}"
+        bootwright_ownership_name: "{{ bootwright_ownership_record.name }}"
+        bootwright_ownership_role: reference
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }} reference"
+      when:
+        - bootwright_ownership_record.kind == 'infra-component'
+        - bootwright_ownership_record.role | default('owner', true) == 'reference'
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+        - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
+        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names
 
     - name: Destroy recorded infra component resources
       ansible.builtin.include_role:
@@ -87,6 +118,7 @@
         label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
         - bootwright_ownership_record.kind == 'infra-component'
+        - bootwright_ownership_record.role | default('owner', true) != 'reference'
         - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
         - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
         - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names

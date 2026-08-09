@@ -98,12 +98,21 @@ packages such as chrony or podman.
 substantive changed so unchanged records stay byte-identical and the copy task
 reports no change; a new timestamp is stamped only on a real difference.
 
-**Shared-component identity:** a bastion-shared infra-component's
-context-independent identity is the (Kind, Name, Host) triple — Name encodes
-`<provider>-<component>`. A same-Kind+Name record on a different Host is a
-different bastion's service (TestOtherContextsWithRoleDiffersByHost). The
-cross-context scan (`OtherContextsWithRole`) loads sibling stores with
-`LoadResources`, NOT `LoadContext` — sibling records are stamped with the
-sibling's context and `LoadContext` would drop them all, making every sibling
-look like a non-referrer. An unreadable sibling store is a warning and the scan
-continues: over-counting referrers fails safe toward keeping the shared service.
+**Shared-component identity and serialization:** a bastion-shared
+infra-component's context-independent identity is the exact (Kind, Name, Host)
+triple — Name encodes `<provider>-<component>`. A same-Kind+Name record on a
+different Host is a different bastion's service. Cross-context scans batch the
+selected identities, load every sibling store once with
+`LoadResourcesWithWarnings` (never `LoadContext`, which would discard the
+sibling's stamped records), and surface an unreadable/invalid record or a
+same-Kind+Name record missing Host as unsafe evidence. Apply has no bypass for
+that uncertainty; destroy requires the explicit `shared-infra` authorization.
+The controller-global shared-service lease surrounds the decisive sibling scan,
+remote mutation, and evidence update, so simultaneous first applies from two
+contexts cannot both observe an empty store. Container services stamp the
+context in a durable pre-mutation claim and live container label; NTP stamps the
+same claim before package or service changes. A partial first apply therefore
+leaves host evidence that a later context must reconcile or destroy from the
+owner; no apply authorization adopts it. A local reference-only destroy runs
+`remove_resource.yml` with role `reference` and removes
+`<name>@<context>.json`; it never runs the base service destroy role.

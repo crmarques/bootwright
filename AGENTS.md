@@ -74,7 +74,9 @@ depends on them.
   a gate keys on **what the run destroys and what it selected** — the resolved
   `clusteraccess.Selection` and the shared consequence predicate — never on a
   stage or flag name, and the gate, the refusal, the prompt choice and the
-  preview all read that one predicate so they cannot disagree; a recorded desired
+  preview all read that one predicate so they cannot disagree; a live mutation
+  of a shared machine service is serialized across contexts and leaves a durable
+  host context claim before its first side effect; a recorded desired
   hash covers **only desired state that reaches a host**, so controller-side
   policy is excluded (folding it in turns a policy edit into fleet-wide drift) and
   a task hash never depends on the run's `--clusters`/`--machines` selection;

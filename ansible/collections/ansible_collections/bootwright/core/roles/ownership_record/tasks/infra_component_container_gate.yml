@@ -28,6 +28,82 @@
   failed_when: false
   when: (bootwright_gate_container_name | default('') | trim) | length > 0
 
+- name: "Probe service claim directory for {{ bootwright_component.name }}"
+  ansible.builtin.stat:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+  register: bootwright_infra_component_claim_root
+  changed_when: false
+  failed_when: false
+
+- name: "Probe service context marker for {{ bootwright_component.name }}"
+  ansible.builtin.stat:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
+  register: bootwright_infra_component_claim_marker
+  changed_when: false
+  failed_when: false
+
+- name: "Read service context marker for {{ bootwright_component.name }}"
+  ansible.builtin.slurp:
+    src: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
+  register: bootwright_infra_component_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_component_claim_marker.stat.exists | default(false) | bool
+
+- name: "Refuse unreadable container ownership probes for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove whether {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      already exists because its Podman ownership probes failed on {{ inventory_hostname }}.
+      Repair Podman access, then re-run `{{ bootwright_mutating_invocation }}`.
+  vars:
+    bootwright_gate_owned_probe_missing_binary: >-
+      {{ (bootwright_infra_component_owned_probe.msg | default('')) is search('(?i)(No such file or directory|not found)') }}
+    bootwright_gate_name_probe_missing_binary: >-
+      {{ (bootwright_infra_component_name_probe.msg | default('')) is search('(?i)(No such file or directory|not found)') }}
+  when:
+    - >-
+      (bootwright_infra_component_owned_probe.rc | default(1) | int != 0
+       and not (bootwright_gate_owned_probe_missing_binary | bool))
+      or (bootwright_infra_component_name_probe.rc | default(1) | int != 0
+          and not (bootwright_gate_name_probe_missing_binary | bool))
+
+- name: "Refuse unreadable service context claim for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      because its service claim on {{ inventory_hostname }} is unreadable.
+      Repair access to {{ bootwright_managed_services_dir }}/{{ bootwright_component.name }},
+      then re-run `{{ bootwright_mutating_invocation }}`.
+  when:
+    - (bootwright_infra_component_claim_root.failed | default(false) | bool)
+      or (bootwright_infra_component_claim_marker.failed | default(false) | bool)
+      or (bootwright_infra_component_claim_content.failed | default(false) | bool)
+
+- name: "Read owning context from existing {{ bootwright_component.name }} container"
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - --format
+      - json
+      - "{{ bootwright_gate_container_name }}"
+  register: bootwright_infra_component_context_probe
+  changed_when: false
+  failed_when: false
+  when: (bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0
+
+- name: "Refuse unreadable owning context for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns the existing {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      container on {{ inventory_hostname }} because Podman inspect failed.
+      Repair Podman access, then re-run `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_infra_component_context_probe is not skipped
+    - bootwright_infra_component_context_probe.rc | default(1) | int != 0
+
 - name: "Resolve apply-mode gate facts for {{ bootwright_component.name }}"
   ansible.builtin.set_fact:
     bootwright_gate_object: "infra-component {{ bootwright_component.providerName }}/{{ bootwright_component.name }}"
@@ -35,7 +111,79 @@
     bootwright_gate_exists: >-
       {{ ((bootwright_infra_component_owned_probe.stdout | default('') | trim) | length > 0)
          or ((bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0) }}
+    bootwright_gate_existing_context: >-
+      {{
+        (((bootwright_infra_component_context_probe.stdout | default('[]') | from_json | first).Config.Labels | default({}, true)).get('bootwright.context', ''))
+        if (bootwright_infra_component_context_probe.stdout | default('') | trim) | length > 0
+        else ''
+      }}
+    bootwright_gate_claim_context: >-
+      {{ bootwright_infra_component_claim_content.content | default('') | b64decode | trim }}
+    bootwright_gate_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
   changed_when: false
+
+- name: "Refuse unclaimed existing service state for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns the existing
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }} service state on
+      {{ inventory_hostname }}. Inspect and move or remove
+      {{ bootwright_managed_services_dir }}/{{ bootwright_component.name }} only after proving it is safe,
+      then re-run `{{ bootwright_mutating_invocation }}`; no apply authorization adopts unknown service state.
+  when:
+    - bootwright_infra_component_claim_root.stat.exists | default(false) | bool
+    - (bootwright_gate_claim_context | trim) | length == 0
+    - bootwright_gate_existing_context != bootwright_gate_current_context
+
+- name: "Refuse unclaimed existing container for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      Cannot prove which context owns the existing
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }} container on
+      {{ inventory_hostname }} because it has no Bootwright context label. Inspect and remove or rename
+      {{ bootwright_gate_container_name }} only after proving it is safe, then re-run
+      `{{ bootwright_mutating_invocation }}`; no apply authorization adopts an unknown container.
+  when:
+    - (bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0
+    - (bootwright_gate_existing_context | trim) | length == 0
+
+- name: "Refuse cross-context overwrite of {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      {{ bootwright_gate_object }} on {{ inventory_hostname }} is owned by context
+      {{ bootwright_gate_existing_context }}, not {{ bootwright_gate_current_context }}.
+      Inspect and reconcile or destroy it from its owning context, then re-run
+      `{{ bootwright_mutating_invocation }}`; no apply authorization adopts another context's service.
+  when:
+    - (bootwright_gate_existing_context | default('') | trim) | length > 0
+    - bootwright_gate_existing_context != bootwright_gate_current_context
+
+- name: "Refuse cross-context service claim for {{ bootwright_component.name }}"
+  ansible.builtin.fail:
+    msg: >-
+      {{ bootwright_gate_object }} service state on {{ inventory_hostname }} is claimed by context
+      {{ bootwright_gate_claim_context }}, not {{ bootwright_gate_current_context }}.
+      Inspect and reconcile or destroy it from its owning context, then re-run
+      `{{ bootwright_mutating_invocation }}`; no apply authorization adopts another context's service.
+  when:
+    - (bootwright_gate_claim_context | default('') | trim) | length > 0
+    - bootwright_gate_claim_context != bootwright_gate_current_context
 
 - name: "Enforce apply mode for {{ bootwright_component.name }}"
   ansible.builtin.include_tasks: apply_mode_gate.yml
+
+- name: "Create service claim directory for {{ bootwright_component.name }}"
+  ansible.builtin.file:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Claim service for this context before mutation for {{ bootwright_component.name }}"
+  ansible.builtin.copy:
+    dest: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
+    content: "{{ bootwright_gate_current_context }}\n"
+    owner: root
+    group: root
+    mode: "0600"

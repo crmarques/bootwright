@@ -73,6 +73,7 @@
       bootwright.kind: proxy
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
+      bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
     volumes:
       - "{{ bootwright_squid_config_dir }}/squid.conf:/etc/squid/squid.conf:ro,Z"
       - "{{ bootwright_squid_auth_dir }}:/etc/squid/auth:ro,Z"

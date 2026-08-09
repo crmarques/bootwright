@@ -140,14 +140,14 @@ func TestPrintApplyGateForecastReinstallRefusal(t *testing.T) {
 	runsDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, t.TempDir(), nil, nil, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, []string{"sno-libvirt"}, t.TempDir(), nil, nil, nil, nil)
 	got := out.String()
 	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "ContainerCluster/sno-libvirt") {
 		t.Fatalf("forecast must reproduce the protectedKinds reinstall refusal for a drifted cluster, got %q", got)
 	}
 
 	out.Reset()
-	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil, nil)
+	printApplyGateForecast(&out, state, state, tasks, runsDir, t.TempDir(), workflow.ApplyModeRebuild, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil, nil, nil)
 	if strings.Contains(out.String(), "a real run refuses before any prompt") {
 		t.Fatalf("with no reinstall drift the forecast must not raise the protection refusal, got %q", out.String())
 	}
@@ -186,7 +186,7 @@ func TestApplyGateForecastSurfacesLegacyClassificationErrorWithExactRemedy(t *te
 			trustOnFirstUse: false,
 		},
 	}
-	refusals := applyGateForecastRefusals(v1alpha1.State{}, v1alpha1.State{}, []workflow.ApplyTask{task}, runsDir, t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil, &invocation)
+	refusals := applyGateForecastRefusals(v1alpha1.State{}, v1alpha1.State{}, []workflow.ApplyTask{task}, runsDir, t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil, nil, &invocation)
 	if len(refusals) != 1 {
 		t.Fatalf("classification refusal was swallowed or duplicated: %v", refusals)
 	}
@@ -203,7 +203,7 @@ func TestPrintApplyGateForecastNamesUnreadableOwnershipRecords(t *testing.T) {
 	ownershipDir := t.TempDir()
 
 	var out bytes.Buffer
-	printApplyGateForecast(&out, state, state, tasks, t.TempDir(), t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, ownershipDir, nil, []error{errors.New("decode resources/corrupt.json: invalid character 'n'")}, nil)
+	printApplyGateForecast(&out, state, state, tasks, t.TempDir(), t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, ownershipDir, nil, []error{errors.New("decode resources/corrupt.json: invalid character 'n'")}, nil, nil)
 	got := out.String()
 	if !strings.Contains(got, "a real run refuses before any prompt") || !strings.Contains(got, "could not be read") {
 		t.Fatalf("forecast must name the unreadable-record refusal its real run makes, got %q", got)

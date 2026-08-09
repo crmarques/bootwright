@@ -121,13 +121,15 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		opts.RecordRunLedger = true
 	}
 	if !opts.DryRun && opts.RunLease != nil {
-		if err := opts.RunLease.RequireOwned(); err != nil {
+		bound, release, err := opts.RunLease.BindContext(ctx)
+		if err != nil {
 			if ownedLease != nil {
 				_ = ownedLease.Close()
 			}
 			return RunResult{}, err
 		}
-		ctx = opts.RunLease.Context()
+		defer release()
+		ctx = bound
 	}
 	if ownedLease != nil {
 		defer func() {

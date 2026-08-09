@@ -148,7 +148,13 @@ func printInfraComponentDestroyBlocks(w io.Writer, decision converge.InfraCompon
 		}
 	}
 	for _, warning := range decision.Warnings {
-		p.Status(output.StatusWarn, "ownership scan", warning.Error()+"; treated as still in use")
+		detail := warning.Error()
+		if authorized {
+			detail += "; verification bypassed by --authorize " + authorizeSharedInfra + ", so teardown may remove a service another context still uses"
+		} else {
+			detail += "; treated as still in use and refused"
+		}
+		p.Status(output.StatusWarn, "ownership scan", detail)
 	}
 }
 

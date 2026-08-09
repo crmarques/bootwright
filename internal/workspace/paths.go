@@ -21,6 +21,10 @@ func CacheDir() string {
 	return filepath.Join(RootDir(), CacheDirName)
 }
 
+func SharedServiceMutationRunsDir() string {
+	return filepath.Join(RootDir(), "shared-service-mutation", RunsDirName)
+}
+
 func AnsibleVenvDir() string {
 	return filepath.Join(CacheDir(), ansibleVenvDirName)
 }

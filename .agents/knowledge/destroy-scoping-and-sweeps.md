@@ -191,17 +191,16 @@ the next apply can legitimately find the old OS reachable without a usable
 probe identity after teardown, and then needs the positive release to authorize
 its reinstall.
 
-**Release vs blocked (shared bastion services):** `PlanInfraComponentReleases`
-keys on the record ROLE — role=reference is released (extra-var
-`bootwright_infra_component_release_records`, comma-joined names: the roles skip
-every destructive step but remove this context's reference record); role=owner
-is BLOCKED unless `--authorize shared-infra` when any sibling context holds a
-reference OR a
-co-owner record for the same (kind,name,host). Co-owners block because the
-reference-role writer is not yet authorable — two contexts driving one shared
-service each stamp an owner record. Failing to enumerate sibling contexts at
-all is a hard error; one unreadable sibling store is a warning and the scan
-continues (over-counting referrers fails safe).
+**Release vs blocked (shared bastion services):** the consequence planner keys
+on exact `(kind,name,host)` identity and record role. A local `reference` is
+release-only: the Ansible service role is skipped and `remove_resource.yml`
+deletes the role-qualified `<name>@<context>.json`. An owner teardown is blocked
+when any sibling context owns or references the identity. Invalid, unreadable,
+or missing-Host evidence is a hard destroy refusal unless the exact retry adds
+`--authorize shared-infra`. A controller-global lease spans the decisive scan,
+remote teardown/release, and evidence cleanup, so different contexts cannot
+race the check. Apply uses the same lease and identity scan for degrading
+services, but offers no authorization bypass.
 
 ## Storage node-access revocation
 

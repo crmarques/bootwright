@@ -60,8 +60,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
-		var runLease *workflow.CommandRunLease
+		var runLease, sharedServiceLease *workflow.CommandRunLease
 		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, sharedServiceLease)
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
@@ -161,19 +162,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		tearsDownInfraComponents := artifactServerOnly || ((runScope.Name == "infra" || fullDestroy) && !sel.MachineSelection)
-		var componentDecision converge.InfraComponentDestroyDecision
-		if tearsDownInfraComponents {
-			blocksState := sel.RenderState
-			if artifactServerOnly {
-				blocksState = state
-			}
-			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly, dryRun, invocation)
-			sharedInfraReached = sharedInfraReached || blocked
-			if blocksErr != nil {
-				return failErr(1, blocksErr)
-			}
-			componentDecision = decision
+		sharedMutation, err := prepareDestroySharedServiceMutation(runContext, ctx.Name, state, sel, runScope, artifactServerOnly, dryRun, ownershipRecords, auth, invocation)
+		sharedServiceLease, runContext = sharedMutation.lease, sharedMutation.runContext
+		sharedInfraReached = sharedInfraReached || sharedMutation.reached
+		componentDecision := sharedMutation.decision
+		if err != nil {
+			return failErr(1, err)
 		}
 		var plan converge.WorkflowPlan
 		if artifactServerOnly {
@@ -315,6 +309,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
+		if err := requireSharedServiceMutationLease(sharedServiceLease, "before destroy execution"); err != nil {
+			return failErr(1, err)
+		}
 		var renderResult render.Result
 		switch {
 		case dryRun && !artifactServerOnly:
@@ -345,6 +342,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err := runLease.RequireOwned(); err != nil {
 				return failErr(1, err)
 			}
+			if err := requireSharedServiceMutationLease(sharedServiceLease, "before post-destroy evidence cleanup"); err != nil {
+				return failErr(1, err)
+			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
 				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable)
@@ -369,6 +369,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter, runLease, true, invocation.args())
 			if derr != nil {
 				return failErr(1, derr)
+			}
+			if err := requireSharedServiceMutationLease(sharedServiceLease, "before destroy completion"); err != nil {
+				return failErr(1, err)
 			}
 			if !dryRun && !plan.NoRemoteWork {
 				printWorkflowEnd(stdout, workflowLabel)

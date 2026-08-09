@@ -89,8 +89,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
-		var runLease *workflow.CommandRunLease
+		var runLease, sharedServiceLease *workflow.CommandRunLease
 		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, sharedServiceLease)
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
@@ -194,6 +195,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if mode == workflow.ApplyModeRebuild && converge.ScopeSkipsStorageDeviceGate(runScope) && converge.OverrideStorageDeviceGateApplies(sel.Active, sel.WorkStorageClusters, sel.RenderState) {
 			return failErr(2, errors.New("--mode rebuild --stage base skips the deps-phase device-empty gate that must precede a Ceph wipe-and-rebuild; use --mode rebuild --through base (runs the gate then the rebuild) or the full graph"))
 		}
+		sharedMutation, err := prepareApplySharedServiceMutation(runContext, ctx.Name, state, sel, runScope, dryRun, invocation)
+		sharedServiceLease, runContext = sharedMutation.lease, sharedMutation.runContext
+		if err != nil {
+			return failErr(1, err)
+		}
 		plan, err := prepareScopedApplyWorkflow(sel.RenderState, runScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
@@ -208,14 +214,13 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			return failErr(1, err)
 		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
-		artifactServerTargets := installOnlyArtifactServerTargets(state)
-		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, artifactServerTargets)
+		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, sharedMutation.artifactServerTargets)
 		ownershipRecords, ownershipSkipped, err := applyOwnershipRecords(ctx, dryRun, &invocation)
 		if err != nil {
 			return failErr(1, err)
 		}
 		provisionedStorageTenants := converge.ProvisionedStorageTenants(ownershipRecords)
-		if skip, serr := converge.ArtifactServerProvisionSkipRecords(artifactServerTargets, clustersDir, mode); serr != nil {
+		if skip, serr := converge.ArtifactServerProvisionSkipRecords(sharedMutation.artifactServerTargets, clustersDir, mode); serr != nil {
 			cliout.NewContinuation(c.ErrOrStderr()).Warning("artifact-server retention", serr.Error())
 		} else {
 			converge.ApplyArtifactServerSkipExtraVar(&plan, skip)
@@ -223,7 +228,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if flags.output == outputJSON {
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants)
-			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, &invocation)
+			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
 			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
 		}
 		var destructiveOverride []string
@@ -350,7 +355,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, &invocation)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices, provisionedStorageTenants))
 			warnUnusedAuthorizations(stdout, auth, true)
@@ -366,6 +371,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return nil
 		}
+		if err := requireSharedServiceMutationLease(sharedServiceLease, "before apply execution"); err != nil {
+			return failErr(1, err)
+		}
 		renderResult, bundleResult, ledger, err := converge.ExecuteApply(runContext, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 		if err != nil {
 			if hasApplyInstallRemedy(err) {
@@ -376,18 +384,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return failErr(1, applyInstallRemedialError(err, invocation))
 		}
-		printRenderResult(stdout, renderResult)
-		if usesAnsible {
-			printBundlePath(stdout, bundleResult.Dir)
+		if err := requireSharedServiceMutationLease(sharedServiceLease, "before post-apply cleanup"); err != nil {
+			return failErr(1, err)
 		}
-		if usesAnsible {
-			if rerr := converge.ReclaimInstallOnlyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, artifactServerTargets, reporter, runLease); rerr != nil {
-				cliout.NewContinuation(stdout).Warning("artifact-server reclaim", rerr.Error())
-			}
-		}
-		if plan.TargetsClusters {
-			printClusterAccess(stdout, plan.State, renderResult, ledger, ctx.Name, clustersDir)
-		}
+		reclaimApplyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, sharedMutation.artifactServerTargets, reporter, runLease, usesAnsible)
+		printScopedApplyResult(stdout, ctx, clustersDir, usesAnsible, bundleResult, plan, renderResult, ledger)
 		return nil
 	}
 	return cmd

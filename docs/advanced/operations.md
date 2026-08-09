@@ -50,7 +50,7 @@ nothing else; the `accepted by` column is normative:
 | `same-site-arbiter` | promoting a mon to stretch tiebreaker while another mon already sits in its site — the emergency fallback when the third site is gone | `storage-cluster replace-arbiter` |
 | `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum | `storage-cluster replace-arbiter` |
 | `unreadable-records` | proceeding when ownership records cannot be read | `destroy` |
-| `shared-infra` | storage-consumer conflicts and infra components owned or referenced by another context | `destroy` |
+| `shared-infra` | storage-consumer conflicts and exact infra-component Kind+Name+Host identities owned/referenced by another context or hidden by unreadable evidence; it never authorizes apply adoption | `destroy` |
 | `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents | `destroy` |
 
 An unknown token is a usage error listing the tokens the command accepts. So is

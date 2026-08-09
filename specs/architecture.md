@@ -213,6 +213,16 @@ cluster only partly torn down, Go stamps `destroyStatus=partial` onto that
 StorageCluster's ownership record so it is not treated as fully gone. Run,
 install, and convergence-safety ledgers remain Go-written.
 
+Machine-hosted shared services add a cross-context control boundary. The
+controller resolves the exact infra-component Kind+Name+Host consequence and
+holds one root-global lease around sibling ownership inspection, host mutation,
+and evidence cleanup, in addition to the context-local command lease. Executing
+roles write a context claim before their first package/config/service mutation;
+container roles stamp the same identity as a live label. A reference-only
+destroy deletes only the role-qualified reference record, while owner teardown
+fails closed on sibling or unreadable evidence unless destroy explicitly accepts
+`shared-infra`.
+
 Classification is additive-first: `diff --recorded` classifies only the resources
 the loaded desired state currently declares, so an object removed from desired
 state produces no `missing`/`match`/`drift`/`foreign` entry at all. It is not

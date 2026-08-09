@@ -2785,6 +2785,13 @@ command. The rest are registered per command, on the verbs that reach machines.
   input cannot change after a mutating run classified it, a second mutator
   cannot enter during post-run cleanup, and a nested workflow cannot create an
   unlocked gap. Acquiring an unregistered mutating-command kind fails closed.
+  An apply or destroy whose resolved work set mutates a machine-hosted shared
+  service additionally holds one controller-global shared-service lease across
+  the decisive cross-context ownership scan, remote work, and evidence cleanup.
+  This second lease is global rather than per context because two first applies
+  in different contexts otherwise both observe no sibling record and race the
+  same host. The run stops if either lease is lost. Dry runs acquire neither
+  lease and report a best-effort cross-context forecast.
 - Read-only verbs (`status`, `diff`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run
@@ -2854,6 +2861,18 @@ command. The rest are registered per command, on the verbs that reach machines.
 
   A slot absent from the self-contained row degrades. The "why" column is the
   test: a new service slot classifies itself by which sentence is true of it.
+  The same degrading classification gates contexts as well as selections. Before
+  a real apply, Bootwright compares the exact `(infra-component,
+  <provider>-<component>, <host>)` identity against every sibling context's
+  owner and reference records while holding the global shared-service lease. A
+  sibling relation, unreadable record, missing Host identity, or unreadable
+  context store refuses before host mutation; no apply authorization bypasses
+  the gate. The operator consolidates every consumer into the owning context or
+  detaches the sibling, repairs the reported evidence, and re-runs the exact same
+  command. On the host, a durable `.bootwright-context` claim is written before
+  package/config/service mutation and container services carry the same context
+  label. A failed first apply therefore cannot release the lease without leaving
+  evidence that blocks a different context from taking over.
 - A scoped `destroy` fails closed the same way on shared provider-service
   conflicts. No `--authorize` token widens the selection there; the remedy is
   to widen or narrow `--clusters`.
@@ -2967,6 +2986,12 @@ command. The rest are registered per command, on the verbs that reach machines.
   before their KubeVirt hosts. Container-cluster records and captured
   credentials wait on the whole machine-infrastructure set, and the exclusively
   owned infra-component services and provider services go last.
+  A local infra-component `reference` record is release-only: destroy removes
+  its role-qualified `<name>@<context>.json` record and never runs the shared
+  service's destroy role. Owner teardown matches the exact Kind+Name+Host
+  identity and refuses while any sibling owner/reference remains. Unreadable or
+  identity-incomplete sibling evidence is treated as still in use unless the
+  operator explicitly supplies `--authorize shared-infra`.
   Steps that name a single cluster are planned per cluster, so one cluster's
   failure blocks only its own dependents rather than the whole fleet. Without
   `--clusters`, the work set is the whole context and the infra teardown also
@@ -3025,7 +3050,7 @@ command. The rest are registered per command, on the verbs that reach machines.
   | `same-site-arbiter` | promoting a mon to tiebreaker while another mon already sits in its stretch failure domain, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter that shares a site with a voting mon cannot independently break a tie, so losing that site drops two votes at once and the survivor is left without quorum. The usual shape is an arbiter moved inside a data site, but the gate keys on the shared domain, not on the site's role | `storage-cluster replace-arbiter` |
   | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together | `storage-cluster replace-arbiter` |
   | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing | `destroy` |
-  | `shared-infra` | a `--stage infra` teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and infra components owned or referenced by another context (including the case where that cross-context check cannot be evaluated at all) | `destroy` |
+  | `shared-infra` | a resolved machine-layer teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and teardown of an exact infra-component Kind+Name+Host identity owned or referenced by another context (including unreadable or identity-incomplete cross-context evidence). It never authorizes apply to adopt or overwrite another context's service | `destroy` |
   | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing | `destroy` |
 
   No token widens `--clusters`, relaxes the shared-provider-service scope

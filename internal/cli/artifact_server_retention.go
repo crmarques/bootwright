@@ -1,9 +1,15 @@
 package cli
 
 import (
+	"context"
+	"io"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func installOnlyArtifactServerTargets(state v1alpha1.State) []converge.ArtifactServerReclaimTarget {
@@ -26,4 +32,13 @@ func installOnlyArtifactServerTargets(state v1alpha1.State) []converge.ArtifactS
 		})
 	}
 	return out
+}
+
+func reclaimApplyArtifactServers(runContext context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []converge.ArtifactServerReclaimTarget, reporter *workflowReporter, runLease *workflow.CommandRunLease, enabled bool) {
+	if !enabled {
+		return
+	}
+	if err := converge.ReclaimInstallOnlyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, executable, bundleDir, becomePasswordFile, state, targets, reporter, runLease); err != nil {
+		cliout.NewContinuation(stdout).Warning("artifact-server reclaim", err.Error())
+	}
 }

@@ -1166,6 +1166,24 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictAccepted,
 		want:    []string{"a real run refuses before any prompt", "could not be read"},
 	}, {
+		name:        "apply/cross-context degrading service: sibling ownership refuses with exact retry",
+		baseline:    safetyBaselineLibvirtKubeVirtHost,
+		seed:        seedSiblingDegradingInfraOwner,
+		args:        []string{"apply", "--stage", "fabric", "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		remedy:      remedySameSelection,
+		typedRemedy: convergeremedy.ActionRetrySameInvocation,
+		want:        []string{"matrix-sibling", "could remove sibling cluster endpoints", "no --authorize token", "`bootwright apply --mode reconcile --yes --stage fabric --ask-become-pass=false --trust-on-first-use=true --context matrix`"},
+		check:       checkSharedServiceMutationLeaseReleased,
+	}, {
+		name:     "apply/cross-context degrading service: JSON dry-run forecasts the same refusal",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingDegradingInfraOwner,
+		args:     []string{"apply", "--stage", "fabric", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict:  verdictAccepted,
+		want:     []string{"\"refusals\"", "matrix-sibling", "could remove sibling cluster endpoints", "no --authorize token"},
+		check:    checkSharedServiceMutationLeaseReleased,
+	}, {
 		name:    "destroy/unowned-networks: the token arms the wider blast radius only when asked for",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unowned-vms,unowned-networks", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
@@ -1175,6 +1193,31 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		args:    []string{"destroy", "--stage", "infra", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"ceph-storage", "--authorize shared-infra"},
+	}, {
+		name:     "destroy/shared-infra: cross-context component refuses with exact retry",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingDegradingInfraOwner,
+		args:     []string{"destroy", "--stage", "infra", "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		remedy:   remedySameSelection,
+		want:     []string{"matrix-sibling", "--authorize shared-infra", "same selected work set"},
+		check:    checkSharedServiceMutationLeaseReleased,
+	}, {
+		name:     "destroy/shared-infra: JSON dry-run forecasts cross-context component refusal",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingDegradingInfraOwner,
+		args:     []string{"destroy", "--stage", "infra", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict:  verdictAccepted,
+		want:     []string{"\"refusals\"", "matrix-sibling", "--authorize shared-infra"},
+		check:    checkSharedServiceMutationLeaseReleased,
+	}, {
+		name:     "destroy/shared-infra: explicit authorization tears down the exact consequence",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingDegradingInfraOwner,
+		args:     []string{"destroy", "--stage", "infra", "--authorize", "shared-infra", "--yes", "--ask-become-pass=false"},
+		verdict:  verdictAuthorized,
+		want:     []string{"matrix-sibling", "WILL BE TORN DOWN", "--authorize shared-infra"},
+		check:    checkSharedServiceMutationLeaseReleased,
 	}, {
 		name:    "destroy/unowned-vms: the token is inert outside the machine layer and says so",
 		args:    []string{"destroy", "--stage", "clusters", "--authorize", "unowned-vms", "--yes", "--ask-become-pass=false"},
@@ -1868,6 +1911,43 @@ func seedStandaloneManagedOSMachine(t *testing.T, ctx workspace.Context) {
 		}
 	}
 	t.Fatalf("standalone Machine fixture was not loaded from %s", file)
+}
+
+func seedSiblingDegradingInfraOwner(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load shared-service safety state: %v", err)
+	}
+	refs := selectedInfraComponentServiceRefs(state, false, true, nil)
+	if len(refs) == 0 {
+		t.Fatal("safety fixture resolves no degrading infra-component service")
+	}
+	sibling, err := workspace.NewContext("matrix-sibling")
+	if err != nil {
+		t.Fatalf("new sibling context: %v", err)
+	}
+	if err := workspace.EnsureDirs(sibling); err != nil {
+		t.Fatalf("create sibling context: %v", err)
+	}
+	ref := refs[0]
+	if err := ownership.SaveResource(sibling.OwnershipDir, ownership.ResourceRecord{
+		Kind:    "infra-component",
+		Name:    ref.Name,
+		Host:    ref.Host,
+		Owner:   ownership.Owner,
+		Context: sibling.Name,
+		Labels:  map[string]string{"bootwright.kind": ref.Kind},
+	}); err != nil {
+		t.Fatalf("save sibling shared-service owner: %v", err)
+	}
+}
+
+func checkSharedServiceMutationLeaseReleased(t *testing.T, _ workspace.Context) {
+	t.Helper()
+	if lease, found, err := workflow.LoadRunLease(workspace.SharedServiceMutationRunsDir()); err != nil || found {
+		t.Fatalf("shared-service mutation lease leaked after refusal: found=%v lease=%+v err=%v", found, lease, err)
+	}
 }
 
 const standaloneManagedOSMachineDocument = `apiVersion: bootwright.io/v1alpha1

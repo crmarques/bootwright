@@ -2,6 +2,7 @@ package ownership
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +59,54 @@ func TestOtherContextsWithRoleToleratesEmptySiblingStore(t *testing.T) {
 	referrers, skipped := OtherContextsWithRole(stores, "ctx-a", SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}, RoleOwner)
 	if len(referrers) != 0 || len(skipped) != 0 {
 		t.Fatalf("empty sibling store must yield no referrer and no skip, got referrers=%v skipped=%v", referrers, skipped)
+	}
+}
+
+func TestOtherContextsWithRolesForComponentsFailsClosedOnMissingHost(t *testing.T) {
+	root := t.TempDir()
+	dirB := filepath.Join(root, "ctx-b", "ownership")
+	if err := SaveResource(dirB, ResourceRecord{Kind: "infra-component", Name: "prov1-edge", Owner: Owner}); err != nil {
+		t.Fatalf("save B: %v", err)
+	}
+	id := SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}
+	relations, skipped := OtherContextsWithRolesForComponents([]ContextStore{{Context: "ctx-b", Dir: dirB}}, "ctx-a", []SharedComponentID{id}, RoleOwner, RoleReference)
+	if len(relations) != 0 {
+		t.Fatalf("identity-incomplete record must not be treated as an exact match: %v", relations)
+	}
+	if len(skipped) != 1 || !strings.Contains(skipped[0].Error(), "has no host") {
+		t.Fatalf("missing host must be surfaced as an unsafe scan warning, got %v", skipped)
+	}
+}
+
+func TestOtherContextsWithRolesForComponentsCombinesOwnerAndReference(t *testing.T) {
+	root := t.TempDir()
+	id := SharedComponentID{Kind: "infra-component", Name: "prov1-edge", Host: "bastion.lab"}
+	dirOwner := filepath.Join(root, "owner", "ownership")
+	dirReference := filepath.Join(root, "reference", "ownership")
+	if err := SaveResource(dirOwner, ResourceRecord{Kind: id.Kind, Name: id.Name, Host: id.Host, Owner: Owner}); err != nil {
+		t.Fatalf("save owner: %v", err)
+	}
+	if err := SaveResource(dirReference, ResourceRecord{Kind: id.Kind, Name: id.Name, Host: id.Host, Owner: Owner, Role: RoleReference, Context: "reference"}); err != nil {
+		t.Fatalf("save reference: %v", err)
+	}
+	relations, skipped := OtherContextsWithRolesForComponents([]ContextStore{{Context: "owner", Dir: dirOwner}, {Context: "reference", Dir: dirReference}}, "self", []SharedComponentID{id}, RoleOwner, RoleReference)
+	if len(skipped) != 0 {
+		t.Fatalf("unexpected scan warnings: %v", skipped)
+	}
+	got := relations[id]
+	if len(got) != 2 || got[0] != "owner" || got[1] != "reference" {
+		t.Fatalf("combined relations = %v, want [owner reference]", got)
+	}
+}
+
+func TestOtherContextsWithRolesForComponentsDoesNotScanWithoutAConsequence(t *testing.T) {
+	root := t.TempDir()
+	badStore := filepath.Join(root, "bad", "ownership")
+	if err := SaveResource(badStore, ResourceRecord{Kind: "infra-component", Name: "prov1-edge", Owner: Owner}); err != nil {
+		t.Fatalf("save incomplete record: %v", err)
+	}
+	relations, skipped := OtherContextsWithRolesForComponents([]ContextStore{{Context: "bad", Dir: badStore}}, "self", nil, RoleOwner, RoleReference)
+	if len(relations) != 0 || len(skipped) != 0 {
+		t.Fatalf("no destructive consequence must not be blocked by unrelated evidence: relations=%v skipped=%v", relations, skipped)
 	}
 }

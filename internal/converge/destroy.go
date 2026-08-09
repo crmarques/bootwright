@@ -84,10 +84,12 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 
 func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scopeName string, clusterScope string, plan WorkflowPlan, check bool, becomePasswordFile string, streamAnsible bool, label string, reporter workflow.ApplyReporter, runLease *workflow.CommandRunLease, invocationArgs []string) (render.Result, workflow.RunLedger, string, error) {
 	if runLease != nil {
-		if err := runLease.RequireOwned(); err != nil {
+		bound, release, err := runLease.BindContext(cmdCtx)
+		if err != nil {
 			return render.Result{}, workflow.RunLedger{}, "", err
 		}
-		cmdCtx = runLease.Context()
+		defer release()
+		cmdCtx = bound
 	}
 	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 	if err != nil {

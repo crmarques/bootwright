@@ -2,6 +2,7 @@ package converge
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/ownership"
@@ -28,7 +29,7 @@ func TestPlanInfraComponentDestroyBlocksOwnerTeardownWhileReferenced(t *testing.
 		t.Fatalf("want 1 block, got %d (%+v)", len(decision.Blocks), decision.Blocks)
 	}
 	block := decision.Blocks[0]
-	if block.Name != "prov1-edge" || block.ComponentKind != "artifacts" || !slices.Equal(block.Contexts, []string{"spoke"}) {
+	if block.Name != "prov1-edge" || block.Host != "bastion.lab" || block.ComponentKind != "artifacts" || !slices.Equal(block.Contexts, []string{"spoke"}) {
 		t.Fatalf("unexpected block %+v", block)
 	}
 	if refErr := InfraComponentDestroyBlockError(decision.Blocks); refErr == nil {
@@ -87,7 +88,7 @@ func TestPlanInfraComponentDestroyBlocksSiblingOwnedUnrecordedService(t *testing
 	owner := sharedArtifactRecord()
 	saveRecord(t, ctxHub.OwnershipDir, owner)
 
-	services := []InfraComponentServiceRef{{Name: "prov1-edge", Kind: "artifactServer"}}
+	services := []InfraComponentServiceRef{{Name: "prov1-edge", Kind: "artifactServer", Host: "bastion.lab"}}
 	decision, err := PlanInfraComponentDestroyBlocks("spoke", services, nil, false)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
@@ -101,6 +102,56 @@ func TestPlanInfraComponentDestroyBlocksSiblingOwnedUnrecordedService(t *testing
 	}
 	if InfraComponentDestroyBlockError(decision.Blocks) == nil {
 		t.Fatalf("sibling-owner block must render a refusal error")
+	}
+}
+
+func TestPlanInfraComponentDestroyReleasesLocalReferenceWithoutTearingOwner(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	spoke := mustContext(t, "spoke")
+	hub := mustContext(t, "hub")
+	owner := sharedArtifactRecord()
+	reference := owner
+	reference.Role = ownership.RoleReference
+	reference.Context = "spoke"
+	saveRecord(t, hub.OwnershipDir, owner)
+	saveRecord(t, spoke.OwnershipDir, reference)
+
+	services := []InfraComponentServiceRef{{Name: owner.Name, Kind: "artifactServer", Host: owner.Host}}
+	decision, err := PlanInfraComponentDestroyBlocks("spoke", services, []ownership.ResourceRecord{reference}, false)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(decision.Blocks) != 0 || len(decision.Warnings) != 0 {
+		t.Fatalf("reference release must not authorize or plan base teardown: %+v", decision)
+	}
+}
+
+func TestPlanInfraComponentDestroyFailsClosedOnIncompleteLocalReference(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	mustContext(t, "ctx-a")
+	decision, err := PlanInfraComponentDestroyBlocks("ctx-a", []InfraComponentServiceRef{{Name: "prov1-artifacts", Kind: "artifacts", Host: "bastion.lab"}}, []ownership.ResourceRecord{{Kind: ownershipInfraComponentKind, Name: "prov1-artifacts", Role: ownership.RoleReference}}, false)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(decision.Warnings) != 1 || !strings.Contains(decision.Warnings[0].Error(), "reference record") || !strings.Contains(decision.Warnings[0].Error(), "name/host") {
+		t.Fatalf("incomplete local reference must fail closed, got %#v", decision.Warnings)
+	}
+}
+
+func TestPlanInfraComponentDestroyFailsClosedOnIncompleteSiblingIdentity(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(t.TempDir()))
+	mustContext(t, "spoke")
+	hub := mustContext(t, "hub")
+	if err := ownership.SaveResource(hub.OwnershipDir, ownership.ResourceRecord{Kind: ownershipInfraComponentKind, Name: "prov1-edge", Owner: ownership.Owner}); err != nil {
+		t.Fatalf("save incomplete owner: %v", err)
+	}
+
+	decision, err := PlanInfraComponentDestroyBlocks("spoke", []InfraComponentServiceRef{{Name: "prov1-edge", Kind: "loadBalancer", Host: "bastion.lab"}}, nil, false)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if warningErr := InfraComponentDestroyScanWarningError(decision.Warnings); warningErr == nil {
+		t.Fatalf("identity-incomplete sibling record must produce a hard scan warning: %+v", decision)
 	}
 }
 

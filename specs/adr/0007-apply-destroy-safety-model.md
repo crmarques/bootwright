@@ -162,7 +162,11 @@ paths carry identical gates. Scoped destroys restrict recorded-resource cleanup
 to selected roots; scoped applies refuse to re-render shared machine services
 whose config derives from the full fleet (degrading), while self-contained
 services re-provision identically and pass — an unclassified service defaults
-to degrading.
+to degrading. That same classification applies across contexts: a degrading
+service is identified by exact Kind+Name+Host, and a sibling owner/reference or
+unreadable identity evidence refuses apply with no authorization bypass.
+Reference-only destroy releases its role-qualified evidence and never tears the
+base service down.
 
 The `--machines` apply/destroy selection axis follows the same
 render-inclusive / work-set-gated model at machine granularity. The render
@@ -195,6 +199,14 @@ post-run evidence update. `context update`, `diff --adopt`, and
 input; the arbiter verb passes the already-held lease into both embedded
 workflows. Losing the lease (takeover after a stall, or a failed heartbeat save)
 stops the run rather than risking a double mutator.
+
+Apply/destroy work that can change a machine-hosted shared service also acquires
+a controller-global shared-service lease after resolving its exact consequence.
+It holds both leases through the decisive sibling-store scan, host mutation, and
+evidence cleanup. The global layer closes the simultaneous-first-apply race
+between different contexts; the host-side context claim and container label
+close the partial-first-apply case after the lease is released. Nested runners
+bind cancellation from both leases instead of replacing the caller context.
 
 ### Teardown makes maximal progress behind dependency-aware gates
 

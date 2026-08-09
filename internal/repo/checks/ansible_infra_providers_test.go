@@ -201,7 +201,7 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 func TestInfraComponentContainerGateUsesLiveProvenanceLabel(t *testing.T) {
 	rel := bootwrightCollectionRoleRoot + "/ownership_record/tasks/infra_component_container_gate.yml"
 	body := readRepoFile(t, rel)
-	for _, banned := range []string{"bootwright_infra_component_owned_stat", "Stat ownership record", "bootwright_ownership_dir", "ansible.builtin.stat"} {
+	for _, banned := range []string{"bootwright_infra_component_owned_stat", "Stat ownership record", "bootwright_ownership_dir"} {
 		if strings.Contains(body, banned) {
 			t.Fatalf("container gate must not derive ownership from a per-context record; found %q", banned)
 		}
@@ -357,6 +357,30 @@ func TestServiceRecordDestroyScopedByClusterScope(t *testing.T) {
 		if !strings.Contains(when, "record_names") {
 			t.Fatalf("%s task %q must match the record name against the in-scope service allowlist: %v", tc.path, tc.task, recorded["when"])
 		}
+	}
+}
+
+func TestInfraComponentReferenceDestroyOnlyReleasesReference(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml"
+	plays := readAnsiblePlays(t, path)
+	if len(plays) != 1 {
+		t.Fatalf("%s plays = %d, want 1", path, len(plays))
+	}
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	serviceDestroy := tasks[findAnsibleTask(t, tasks, "Destroy infra component service roles")]
+	if when := fmt.Sprint(serviceDestroy["when"]); !strings.Contains(when, "bootwright_host_infra_component_reference_names") || !strings.Contains(when, "not in") {
+		t.Fatalf("reference-owned service must be excluded from destructive component roles: %v", serviceDestroy["when"])
+	}
+	release := tasks[findAnsibleTask(t, tasks, "Release recorded infra component references")]
+	if role := fmt.Sprint(release["ansible.builtin.include_role"]); !strings.Contains(role, "remove_resource.yml") {
+		t.Fatalf("reference release must remove only its role-specific record: %v", release)
+	}
+	if vars := fmt.Sprint(release["vars"]); !strings.Contains(vars, "reference") {
+		t.Fatalf("reference release must preserve the reference filename convention: %v", release["vars"])
+	}
+	destroy := tasks[findAnsibleTask(t, tasks, "Destroy recorded infra component resources")]
+	if when := fmt.Sprint(destroy["when"]); !strings.Contains(when, "!= 'reference'") {
+		t.Fatalf("reference records must never enter destructive recorded-resource cleanup: %v", destroy["when"])
 	}
 }
 
@@ -674,6 +698,70 @@ func TestSharedApplyModeGateDoesNotRecommendRebuildForForeignCreateState(t *test
 		if !strings.Contains(body, want) {
 			t.Fatalf("shared live-state gate missing foreign-create guidance %q", want)
 		}
+	}
+}
+
+func TestInfraComponentContainersCarryAndEnforceContextIdentity(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/infra_component_container_gate.yml"
+	gate := readRepoFile(t, path)
+	for _, want := range []string{
+		"Refuse unreadable container ownership probes",
+		"Refuse unreadable service context claim",
+		"Refuse unclaimed existing service state",
+		"Refuse unclaimed existing container",
+		"podman\n      - container\n      - inspect",
+		"bootwright.context",
+		"Refuse cross-context overwrite",
+		"Refuse cross-context service claim",
+		"bootwright_mutating_invocation",
+		"no apply authorization adopts another context's service",
+	} {
+		if !strings.Contains(gate, want) {
+			t.Fatalf("infra-component live gate missing %q", want)
+		}
+	}
+	tasks := readAnsibleTasks(t, path)
+	claimProbe := findAnsibleTaskByPrefix(t, tasks, "Probe service context marker")
+	liveRefusal := findAnsibleTaskByPrefix(t, tasks, "Refuse cross-context overwrite")
+	claimRefusal := findAnsibleTaskByPrefix(t, tasks, "Refuse cross-context service claim")
+	modeGate := findAnsibleTaskByPrefix(t, tasks, "Enforce apply mode")
+	claimDir := findAnsibleTaskByPrefix(t, tasks, "Create service claim directory")
+	claim := findAnsibleTaskByPrefix(t, tasks, "Claim service for this context before mutation")
+	if !(claimProbe < liveRefusal && liveRefusal < claimRefusal && claimRefusal < modeGate && modeGate < claimDir && claimDir < claim) {
+		t.Fatalf("read-only context and apply-mode gates must precede the durable claim: probe=%d live=%d claim-refusal=%d mode=%d dir=%d claim=%d", claimProbe, liveRefusal, claimRefusal, modeGate, claimDir, claim)
+	}
+	roles := []string{
+		"infra_component_artifact_server_http",
+		"infra_component_load_balancer_haproxy",
+		"infra_component_name_resolution_dnsmasq",
+		"infra_component_proxy_squid",
+		"infra_component_registry_mirror",
+	}
+	for _, role := range roles {
+		body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/"+role+"/tasks/main.yml")
+		if !strings.Contains(body, "bootwright.context: \"{{ bootwright_clusters_dir | dirname | basename }}\"") {
+			t.Fatalf("%s must stamp the context identity before a partial apply can release the global lease", role)
+		}
+	}
+}
+
+func TestNTPContextClaimPrecedesEveryServiceMutation(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_ntp_chrony/tasks/main.yml"
+	tasks := readAnsibleTasks(t, path)
+	rootProbe := findAnsibleTask(t, tasks, "Probe NTP service claim directory")
+	probe := findAnsibleTask(t, tasks, "Probe NTP service context marker")
+	unreadable := findAnsibleTask(t, tasks, "Refuse unreadable NTP service claim")
+	unknown := findAnsibleTask(t, tasks, "Refuse unclaimed existing NTP service state")
+	refusal := findAnsibleTask(t, tasks, "Refuse cross-context NTP overwrite")
+	modeGate := findAnsibleTask(t, tasks, "Enforce apply mode for this NTP service")
+	claimDir := findAnsibleTask(t, tasks, "Create NTP ownership-claim directory")
+	claim := findAnsibleTask(t, tasks, "Claim NTP service for this context before mutation")
+	packages := findAnsibleTask(t, tasks, "Install chrony packages")
+	if !(rootProbe < probe && probe < unreadable && unreadable < unknown && unknown < refusal && refusal < modeGate && modeGate < claimDir && claimDir < claim && claim < packages) {
+		t.Fatalf("NTP read and mode gates plus durable context claim must precede package/config/service mutation: root=%d marker=%d unreadable=%d unknown=%d refusal=%d mode=%d dir=%d claim=%d package=%d", rootProbe, probe, unreadable, unknown, refusal, modeGate, claimDir, claim, packages)
+	}
+	if body := readRepoFile(t, path); !strings.Contains(body, "bootwright_mutating_invocation") || !strings.Contains(body, "no apply authorization adopts another context's service") {
+		t.Fatalf("NTP context refusal must carry the exact controller-built retry and no bypass")
 	}
 }
 

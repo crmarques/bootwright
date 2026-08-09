@@ -76,8 +76,12 @@ guard the context's state, not individual clusters). And it is the unit
 Design fleets around that: put clusters that should share one destroy blast
 radius and one safety policy in one context, and split production from scratch
 into **separate contexts** rather than relying on remembering `--clusters` on
-every teardown. Shared services that cross contexts are exactly what
-`destroy --authorize shared-infra` guards — see the
+every teardown. A degrading service (load balancer, DNS, or NTP) cannot be
+reconfigured from a second context while the first still owns or references its
+exact provider/name/host identity; repair or detach the sibling evidence and
+re-run the same apply. There is no apply authorization to adopt it. Destroy also
+refuses sibling or unreadable evidence unless the exact retry explicitly adds
+`--authorize shared-infra` — see the
 [scoped-destroy shared-service warning](operations.md#bounded-ownership-gated-cleanup).
 
 ## The single cluster-selection namespace
@@ -233,6 +237,14 @@ bootwright apply --stage deps --through base --clusters dc1-ocp --yes
     without `--clusters`, or extend `--clusters` to include the unscoped
     clusters. Self-contained services — artifact server, proxy, mirror registry,
     BMC — re-provision identically under any scope and are not blocked.
+
+    The same rule spans contexts. Real shared-service applies and destroys hold
+    a controller-global lease around the sibling-evidence check and remote work,
+    while the host keeps a context claim through partial failures. If the
+    refusal names another context or unreadable evidence, reconcile/destroy from
+    that owner or repair the evidence, then copy the exact retry command shown.
+    Never remove the global lease or host claim until you have proved the named
+    run is inactive and the live service is safe.
 
 ## See also
 

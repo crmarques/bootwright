@@ -134,7 +134,10 @@ run *before* any mutation if its precondition is not met:
    is never recorded under `--yes`, `--dry-run`, or JSON output. Record it up
    front with `bootwright machine trust`.
 3. **Run lease.** A short-lived lease admits one mutating run at a time, so two
-   applies cannot race the same context.
+   applies cannot race the same context. Work that changes a machine-hosted
+   shared service also holds a controller-global lease, preventing two contexts'
+   first applies from both claiming the same host; a durable host context claim
+   keeps that proof after a partial failure.
 4. **Foreign-ownership refusal.** Structural drift and foreign outcomes fail
    closed; reconcilable-in-place drift converges; a plain `apply` never
    overwrites a resource it does not own.

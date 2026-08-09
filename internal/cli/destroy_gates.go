@@ -47,6 +47,9 @@ func destroyGateForecastRefusals(safety workflow.DestroySafetyDecision, inputSki
 	if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil && !auth.has(authorizeSharedInfra) {
 		out = append(out, err.Error())
 	}
+	if err := converge.InfraComponentDestroyScanWarningError(decision.Warnings); err != nil && !auth.has(authorizeSharedInfra) {
+		out = append(out, err.Error())
+	}
 	return out
 }
 
@@ -109,13 +112,16 @@ func destroyInfraComponentGate(auth *authorizations, contextName string, refs []
 	decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(contextName, refs, records, artifactServerOnly)
 	reached := false
 	if blocksErr != nil {
+		decision.Warnings = append(decision.Warnings, fmt.Errorf("scan sibling contexts: %w", blocksErr))
+	}
+	if warningErr := converge.InfraComponentDestroyScanWarningError(decision.Warnings); warningErr != nil {
 		reached = true
 		if !auth.allows(authorizeSharedInfra) && !dryRun {
 			command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeSharedInfra}})
 			if retryErr != nil {
 				return decision, reached, retryErr
 			}
-			return decision, reached, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run `%s` to tear down the same selected work set regardless", blocksErr, command.String())
+			return decision, reached, fmt.Errorf("%w; repair the reported context or ownership evidence after verifying the live service, or re-run `%s` to tear down the same selected work set despite the missing proof", warningErr, command.String())
 		}
 	}
 	if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil {
