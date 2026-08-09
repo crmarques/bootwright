@@ -550,10 +550,12 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 		if !ok || !strings.Contains(fmt.Sprint(assertion["that"]), tc.result+".rc") {
 			t.Fatalf("%s must hard-fail on the remover result before disk deletion, got %v", tasks[tc.refuse]["name"], tasks[tc.refuse])
 		}
-		for _, want := range []string{"bootwright_apply_rebuild_invocation", "same bootwright apply invocation", "data-loss authorization"} {
-			if !strings.Contains(fmt.Sprint(assertion["fail_msg"]), want) {
-				t.Fatalf("%s diagnostic missing intentional retry fragment %q: %v", tasks[tc.refuse]["name"], want, assertion["fail_msg"])
-			}
+		message := fmt.Sprint(assertion["fail_msg"])
+		if !strings.Contains(message, "bootwright_apply_rebuild_invocation") {
+			t.Fatalf("%s diagnostic must name the exact rebuild invocation: %v", tasks[tc.refuse]["name"], assertion["fail_msg"])
+		}
+		if strings.Contains(message, "same bootwright apply invocation") || strings.Contains(message, "bootwright_apply_rebuild_invocation | default") {
+			t.Fatalf("%s diagnostic must not fall back to a context-free rebuild suggestion: %v", tasks[tc.refuse]["name"], assertion["fail_msg"])
 		}
 	}
 	absent, ok := tasks[requireAbsentIdx]["ansible.builtin.assert"].(map[string]any)
@@ -635,6 +637,7 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 		name       string
 		path       string
 		probe      string
+		conclusive string
 		resolve    string
 		foreign    string
 		gate       string
@@ -646,6 +649,7 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 			name:       "libvirt",
 			path:       "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml",
 			probe:      "Read libvirt domain ownership metadata for apply",
+			conclusive: "Require a conclusive libvirt domain probe",
 			resolve:    "Resolve libvirt domain ownership for apply",
 			foreign:    "Refuse to mutate a non-Bootwright libvirt domain on apply",
 			gate:       "Enforce libvirt domain apply mode against live state",
@@ -657,6 +661,7 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 			name:       "vsphere",
 			path:       "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/probe.yml",
 			probe:      "Probe vSphere virtual machine",
+			conclusive: "Require a conclusive vSphere VM probe",
 			resolve:    "Resolve vSphere VM ownership for apply",
 			foreign:    "Refuse to mutate a non-Bootwright vSphere VM",
 			gate:       "Enforce vSphere VM apply mode against live state",
@@ -669,16 +674,30 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := readAnsibleTasks(t, tc.path)
 			probeIdx := findAnsibleTask(t, tasks, tc.probe)
+			conclusiveIdx := findAnsibleTask(t, tasks, tc.conclusive)
 			resolveIdx := findAnsibleTask(t, tasks, tc.resolve)
 			foreignIdx := findAnsibleTask(t, tasks, tc.foreign)
 			gateIdx := findAnsibleTask(t, tasks, tc.gate)
 			mutationIdx := findAnsibleTask(t, tasks, tc.mutation)
-			if !(probeIdx < resolveIdx && resolveIdx < foreignIdx && foreignIdx < gateIdx && gateIdx < mutationIdx) {
-				t.Fatalf("live probe and create gate must precede provider mutation: probe=%d resolve=%d foreign=%d gate=%d mutation=%d", probeIdx, resolveIdx, foreignIdx, gateIdx, mutationIdx)
+			if !(probeIdx < conclusiveIdx && conclusiveIdx < resolveIdx && resolveIdx < foreignIdx && foreignIdx < gateIdx && gateIdx < mutationIdx) {
+				t.Fatalf("live probe and create gate must precede provider mutation: probe=%d conclusive=%d resolve=%d foreign=%d gate=%d mutation=%d", probeIdx, conclusiveIdx, resolveIdx, foreignIdx, gateIdx, mutationIdx)
+			}
+			conclusiveMessage := ansibleFailureMessage(t, tasks[conclusiveIdx])
+			if !strings.Contains(conclusiveMessage, "bootwright_mutating_invocation") || strings.Contains(conclusiveMessage, "re-run apply") {
+				t.Fatalf("inconclusive provider probe must name the exact current invocation, got %s", conclusiveMessage)
 			}
 			foreignWhen := fmt.Sprint(tasks[foreignIdx]["when"])
 			if !strings.Contains(foreignWhen, "bootwright_apply_mode") || !strings.Contains(foreignWhen, "!= 'create'") {
 				t.Fatalf("provider-specific foreign refusal must yield create mode to the live greenfield gate, got when=%v", tasks[foreignIdx]["when"])
+			}
+			foreignMessage := ansibleFailureMessage(t, tasks[foreignIdx])
+			for _, want := range []string{"outside Bootwright", "No Bootwright retry command", "authorization token"} {
+				if !strings.Contains(foreignMessage, want) {
+					t.Fatalf("foreign provider refusal missing command-free remedy %q: %s", want, foreignMessage)
+				}
+			}
+			if strings.Contains(foreignMessage, "_invocation") {
+				t.Fatalf("foreign provider refusal must not render a Bootwright retry command: %s", foreignMessage)
 			}
 			include, ok := tasks[gateIdx]["ansible.builtin.include_role"].(map[string]any)
 			if !ok || include["name"] != "bootwright.core.ownership_record" || include["tasks_from"] != "apply_mode_gate.yml" {
@@ -693,12 +712,83 @@ func TestProviderBackedMachineApplyGatesLiveExistenceInCreateMode(t *testing.T) 
 }
 
 func TestSharedApplyModeGateDoesNotRecommendRebuildForForeignCreateState(t *testing.T) {
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/apply_mode_gate.yml")
-	for _, want := range []string{"bootwright_gate_owned", "not recognized as Bootwright-managed", "remove the existing object manually", "same --mode create command"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("shared live-state gate missing foreign-create guidance %q", want)
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/apply_mode_gate.yml")
+	owned := tasks[findAnsibleTask(t, tasks, "Refuse greenfield apply over existing owned {{ bootwright_gate_object }}")]
+	ownedMessage := ansibleFailureMessage(t, owned)
+	if !strings.Contains(ownedMessage, "bootwright_apply_reconcile_invocation") {
+		t.Fatalf("owned create-mode refusal must render the exact reconcile invocation: %s", ownedMessage)
+	}
+	for _, forbidden := range []string{"bootwright_apply_rebuild_invocation", "bootwright_mutating_invocation", "| default"} {
+		if strings.Contains(ownedMessage, forbidden) {
+			t.Fatalf("owned create-mode refusal must offer only the exact reconcile invocation, found %q in %s", forbidden, ownedMessage)
 		}
 	}
+	ownedWhen := fmt.Sprint(owned["when"])
+	if !strings.Contains(ownedWhen, "bootwright_gate_owned") || strings.Contains(ownedWhen, "not (bootwright_gate_owned") {
+		t.Fatalf("owned create-mode refusal must require positive ownership, got when=%v", owned["when"])
+	}
+
+	for _, name := range []string{
+		"Refuse greenfield apply over existing foreign {{ bootwright_gate_object }}",
+		"Refuse to modify foreign {{ bootwright_gate_object }}",
+	} {
+		task := tasks[findAnsibleTask(t, tasks, name)]
+		message := ansibleFailureMessage(t, task)
+		for _, want := range []string{"outside Bootwright", "No Bootwright retry command", "authorization token"} {
+			if !strings.Contains(message, want) {
+				t.Fatalf("%s missing command-free foreign remedy %q: %s", name, want, message)
+			}
+		}
+		if strings.Contains(message, "_invocation") {
+			t.Fatalf("%s must not render a Bootwright retry command: %s", name, message)
+		}
+	}
+}
+
+func TestProviderStructuralRefusalsUseExactRebuildInvocation(t *testing.T) {
+	cases := []struct {
+		path string
+		task string
+	}{
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml", task: "Refuse managed OS disk reset when the libvirt domain could not be stopped"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml", task: "Refuse managed OS disk reset when the libvirt domain could not be undefined"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml", task: "Require proven reset libvirt domain absence before disk deletion"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml", task: "Refuse undeclared machine data disks"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml", task: "Refuse an in-place libvirt root disk resize"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/gate.yml", task: "Refuse an in-place vSphere root disk resize"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_vsphere/tasks/gate.yml", task: "Refuse undeclared vSphere machine data disks"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.task, func(t *testing.T) {
+			tasks := readAnsibleTasks(t, tc.path)
+			message := ansibleFailureMessage(t, tasks[findAnsibleTask(t, tasks, tc.task)])
+			if !strings.Contains(message, "bootwright_apply_rebuild_invocation") {
+				t.Fatalf("structural refusal must render the exact selected rebuild invocation: %s", message)
+			}
+			for _, forbidden := range []string{"bootwright_mutating_invocation", "bootwright_apply_reconcile_invocation", "bootwright_apply_rebuild_invocation | default", "same bootwright apply invocation"} {
+				if strings.Contains(message, forbidden) {
+					t.Fatalf("structural refusal must use only the resolved rebuild invocation, found %q in %s", forbidden, message)
+				}
+			}
+		})
+	}
+}
+
+func ansibleFailureMessage(t *testing.T, task map[string]any) string {
+	t.Helper()
+	for _, module := range []string{"ansible.builtin.assert", "ansible.builtin.fail"} {
+		body, ok := task[module].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, field := range []string{"fail_msg", "msg"} {
+			if message, ok := body[field]; ok {
+				return fmt.Sprint(message)
+			}
+		}
+	}
+	t.Fatalf("task %v has no Ansible failure message", task["name"])
+	return ""
 }
 
 func TestInfraComponentContainersCarryAndEnforceContextIdentity(t *testing.T) {

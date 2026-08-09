@@ -47,6 +47,12 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		}
 	}
 	root := filepath.Join(repoRoot(t), "ansible/collections/ansible_collections/bootwright/core/roles")
+	strictResolvedRemedyPaths := map[string]bool{
+		filepath.Join(root, "machine_substrate_libvirt/tasks/machine.yml"): true,
+		filepath.Join(root, "machine_substrate_vsphere/tasks/gate.yml"):    true,
+		filepath.Join(root, "machine_substrate_vsphere/tasks/probe.yml"):   true,
+		filepath.Join(root, "ownership_record/tasks/apply_mode_gate.yml"):  true,
+	}
 	factPattern := regexp.MustCompile(`bootwright_[a-z0-9_]*invocation`)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -58,6 +64,19 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return err
+		}
+		if strictResolvedRemedyPaths[path] {
+			for _, forbidden := range []string{
+				"_invocation | default",
+				"re-run apply",
+				"then re-apply",
+				"same --mode create command",
+				"same bootwright apply invocation",
+			} {
+				if strings.Contains(string(body), forbidden) {
+					t.Errorf("%s contains generic apply remedy %q instead of a required resolved invocation fact", path, forbidden)
+				}
+			}
 		}
 		for lineNo, line := range strings.Split(string(body), "\n") {
 			if (strings.Contains(line, "bootwright apply") || strings.Contains(line, "bootwright destroy") || strings.Contains(line, "bootwright storage-cluster replace-arbiter")) && !strings.Contains(line, "_invocation") {

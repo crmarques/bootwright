@@ -1,27 +1,37 @@
 ---
-- name: "Refuse greenfield apply over existing {{ bootwright_gate_object }}"
+- name: "Refuse greenfield apply over existing owned {{ bootwright_gate_object }}"
   ansible.builtin.fail:
     msg: >-
       {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
-      apply --mode create requires a greenfield environment.
-      {% if bootwright_gate_owned | default(false) | bool %}
-      Re-run the same selected apply with --mode reconcile to reconcile it, or
-      --mode rebuild with the required authorization to rebuild it deliberately.
-      {% else %}
-      The existing object is not recognized as Bootwright-managed. Rename the
-      selected machine or remove the existing object manually after verifying
-      that is safe, then re-run the same --mode create command.
-      {% endif %}
+      `--mode create` requires a greenfield environment and cannot treat this
+      Bootwright-owned object as new. Reconcile exactly this selected work set
+      with `{{ bootwright_apply_reconcile_invocation }}`.
   when:
     - (bootwright_apply_mode | default('reconcile')) == 'create'
     - bootwright_gate_exists | default(false) | bool
+    - bootwright_gate_owned | default(false) | bool
+
+- name: "Refuse greenfield apply over existing foreign {{ bootwright_gate_object }}"
+  ansible.builtin.fail:
+    msg: >-
+      {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
+      `--mode create` requires a greenfield environment, but this object is not
+      recognized as Bootwright-managed. Verify its provenance and remove it
+      outside Bootwright only after establishing that is safe. No Bootwright
+      retry command, apply mode, or authorization token adopts a foreign object.
+  when:
+    - (bootwright_apply_mode | default('reconcile')) == 'create'
+    - bootwright_gate_exists | default(false) | bool
+    - not (bootwright_gate_owned | default(false) | bool)
 
 - name: "Refuse to modify foreign {{ bootwright_gate_object }}"
   ansible.builtin.fail:
     msg: >-
       {{ bootwright_gate_object }} exists on {{ inventory_hostname }} but is not
       recognized as Bootwright-managed; refusing to modify a component Bootwright did
-      not create. Remove it manually after verifying it is safe, then re-apply.
+      not create. Verify its provenance and remove it outside Bootwright only after
+      establishing that is safe. No Bootwright retry command, apply mode, or
+      authorization token adopts a foreign object.
   when:
     - (bootwright_apply_mode | default('reconcile')) in ['reconcile', 'rebuild']
     - bootwright_gate_exists | default(false) | bool

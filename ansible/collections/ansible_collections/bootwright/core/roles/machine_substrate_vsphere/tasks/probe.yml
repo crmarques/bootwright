@@ -26,7 +26,8 @@
       exists on {{ bootwright_vsphere.server }}:
       {{ bootwright_vsphere_probe.msg | default('probe failed with no detail') }}.
       Refusing to continue — an existing foreign VM could not be detected.
-      Fix vCenter access/credentials and re-run apply.
+      Fix vCenter access/credentials, then retry the exact invocation
+      `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve vSphere virtual machine presence
   ansible.builtin.set_fact:
@@ -50,8 +51,9 @@
       Refusing to apply over vSphere VM {{ bootwright_vsphere_vm_name }} on
       {{ bootwright_vsphere.server }}: it already exists but carries no Bootwright
       ownership marker for this context/cluster/machine, so it may belong to another
-      Bootwright context or a foreign owner. Rename this cluster/machine or remove
-      the existing VM manually, then retry.
+      Bootwright context or a foreign owner. Verify its provenance and remove it
+      outside Bootwright only after establishing that is safe. No Bootwright
+      retry command, apply mode, or authorization token adopts a foreign VM.
   when:
     - bootwright_vsphere_probe.instance is defined
     - (bootwright_apply_mode | default('reconcile')) != 'create'

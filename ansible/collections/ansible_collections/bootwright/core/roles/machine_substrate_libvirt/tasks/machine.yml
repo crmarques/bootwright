@@ -72,7 +72,8 @@
       exists on {{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}:
       {{ bootwright_libvirt_apply_domain_xml.stderr | default('probe failed with no detail') }}.
       Refusing to continue — an existing foreign domain could not be detected.
-      Fix libvirt connectivity and re-run apply.
+      Fix libvirt connectivity, then retry the exact invocation
+      `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve libvirt domain ownership for apply
   ansible.builtin.set_fact:
@@ -93,8 +94,9 @@
       Refusing to apply over libvirt domain {{ bootwright_libvirt_domain_name }}:
       it already exists on this hypervisor but carries no Bootwright ownership
       marker for this context/cluster/machine, so it may belong to another
-      Bootwright context or a foreign owner. Rename this cluster/machine or remove
-      the existing domain manually, then retry.
+      Bootwright context or a foreign owner. Verify its provenance and remove it
+      outside Bootwright only after establishing that is safe. No Bootwright
+      retry command, apply mode, or authorization token adopts a foreign domain.
   when:
     - bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
     - (bootwright_apply_mode | default('reconcile')) != 'create'
@@ -146,7 +148,7 @@
       {{ bootwright_libvirt_managed_os_reset_stop.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_stop.stderr | default('') }}.
       Restore libvirt access or stop the domain safely, then retry with
-      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
+      `{{ bootwright_apply_rebuild_invocation }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Undefine managed OS libvirt domain for override reinstall
@@ -177,7 +179,7 @@
       {{ bootwright_libvirt_managed_os_reset_undefine.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_undefine.stderr | default('') }}.
       Restore libvirt access or remove the domain safely, then retry with
-      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
+      `{{ bootwright_apply_rebuild_invocation }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Verify the reset libvirt domain is absent before disk deletion
@@ -207,7 +209,7 @@
       {{ bootwright_libvirt_managed_os_reset_absence.rc | default('<unknown>') }},
       stderr {{ bootwright_libvirt_managed_os_reset_absence.stderr | default('') }}.
       Inspect the domain, restore libvirt access, and retry with
-      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`.
+      `{{ bootwright_apply_rebuild_invocation }}`.
   when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Remove managed OS libvirt machine state for override reinstall
@@ -314,9 +316,8 @@
       Libvirt storage for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       contains undeclared data disk(s) {{ bootwright_libvirt_undeclared_data_disks | join(', ') }}.
       Rebuild exactly this selected work set with
-      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
-      before changing or removing machine data disks, or remove the Bootwright-owned
-      stale files after verifying ownership.
+      `{{ bootwright_apply_rebuild_invocation }}`
+      before changing or removing machine data disks.
   when: bootwright_libvirt_undeclared_data_disks | length > 0
 
 - name: Check existing machine data disk source locations ({{ bootwright_libvirt_data_disks | length }} configured)
@@ -371,7 +372,7 @@
       {{ (bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] }} bytes. Bootwright does not
       resize a provisioned root disk in place — the guest partitions would not follow.
       Rebuild exactly this selected work set with
-      `{{ bootwright_apply_rebuild_invocation | default('the same bootwright apply invocation in rebuild mode with data-loss authorization') }}`
+      `{{ bootwright_apply_rebuild_invocation }}`
       to change its root disk size.
   when:
     - bootwright_libvirt_root_disk_info.rc | default(1) == 0
