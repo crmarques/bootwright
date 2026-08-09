@@ -43,9 +43,10 @@ some other drifted object.
 missing from PATH, an unreadable/undecryptable kubeconfig, a network blip, an
 API timeout) is a fail-closed refusal in **every** mode, including
 `--mode rebuild`. `OverrideRebuildInstalledClusters` returns an error naming
-each unprovable cluster, the probe error, and three remedies (restore
-reachability, exclude it with `--clusters`, or `bootwright destroy --clusters
-<name> --yes` then re-apply); the run stops before any mutation. It previously
+each unprovable cluster and the probe error, with a typed same-invocation retry
+after reachability, kubeconfig access, and `oc` are restored; it does not infer
+an exclusion or destructive rebuild from a failed observation. The run stops
+before any mutation. It previously
 scheduled the reinstall instead, so `--mode rebuild --authorize data-loss
 --yes` could wipe the node disks of a healthy cluster whose API was momentarily
 unreachable. A *successful* probe reporting `Available=False` is different
@@ -92,7 +93,12 @@ cluster's rebuild legitimately faces its own old OS), feeds
 
 **Constraint (bounded resume and installer-version evidence):** ISO creation
 records the exact installer version and clears stale version evidence before a
-new create attempt. The bootstrap wait records both its running and completed
+new create attempt. An `iso-created` record reaches node boot only when
+`UpdatedAt` proves that the published media is less than 24 hours old. A
+missing, future-dated, or at-least-24-hour-old publish time cannot prove the
+embedded bootstrap certificates are fresh, so scheduler preparation returns a
+typed cluster-scoped ISO-regeneration refusal before it writes a run ledger or
+creates a runner. The bootstrap wait records both its running and completed
 phase. Post-boot retries use the original `StartedAt` and may start only inside
 the three-hour ceiling; a missing time or an expired ceiling is a pre-mutation
 refusal with typed, scoped destroy-and-reapply remedy data. A missing or

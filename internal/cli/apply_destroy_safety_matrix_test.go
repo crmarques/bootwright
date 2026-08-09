@@ -17,6 +17,7 @@ import (
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
+	convergeremedy "github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/preflight"
@@ -49,21 +50,45 @@ const (
 var gateRefusalMarkers = []string{"refusing to", "refuses to", "fails closed", "does not authorize data loss"}
 
 type safetyCase struct {
-	name     string
-	baseline string
-	seed     func(t *testing.T, ctx workspace.Context)
-	check    func(t *testing.T, ctx workspace.Context)
-	args     []string
-	verdict  safetyVerdict
-	remedy   remedyExpectation
-	want     []string
-	deny     []string
+	name        string
+	baseline    string
+	seed        func(t *testing.T, ctx workspace.Context)
+	check       func(t *testing.T, ctx workspace.Context)
+	checkRemedy func(t *testing.T, ctx workspace.Context, output string)
+	args        []string
+	verdict     safetyVerdict
+	remedy      remedyExpectation
+	typedRemedy convergeremedy.Action
+	want        []string
+	deny        []string
 }
 
 type safetyClusterAvailabilityChecker struct{}
 
 func (safetyClusterAvailabilityChecker) Available(context.Context, string) (bool, error) {
 	return true, nil
+}
+
+type safetyClusterAvailabilityResult struct {
+	available bool
+	err       error
+}
+
+type safetyClusterAvailabilitySequence struct {
+	results []safetyClusterAvailabilityResult
+	next    int
+}
+
+func (s *safetyClusterAvailabilitySequence) Available(context.Context, string) (bool, error) {
+	if len(s.results) == 0 {
+		return false, fmt.Errorf("availability sequence has no result")
+	}
+	index := s.next
+	if index >= len(s.results) {
+		index = len(s.results) - 1
+	}
+	s.next++
+	return s.results[index].available, s.results[index].err
 }
 
 func TestApplyDestroySafetyMatrix(t *testing.T) {
@@ -157,7 +182,28 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 			if tc.check != nil {
 				tc.check(t, ctx)
 			}
+			if tc.checkRemedy != nil {
+				tc.checkRemedy(t, ctx, out)
+			}
 		})
+	}
+}
+
+func TestEveryRegisteredRemedyActionHasASafetyMatrixScenario(t *testing.T) {
+	seen := map[convergeremedy.Action]bool{}
+	for _, tc := range safetyMatrixCases() {
+		if tc.typedRemedy == "" {
+			continue
+		}
+		if tc.verdict != verdictRefusal {
+			t.Fatalf("typed remedy action %q is attached to non-refusal matrix case %q", tc.typedRemedy, tc.name)
+		}
+		seen[tc.typedRemedy] = true
+	}
+	for _, action := range convergeremedy.RegisteredActions() {
+		if !seen[action] {
+			t.Errorf("registered remedy action %q has no apply/destroy safety-matrix scenario", action)
+		}
 	}
 }
 
@@ -1224,9 +1270,67 @@ func safetyStartingStateCases() []safetyCase {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp")
 			seedRunnableSafetyMutation(t, ctx)
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--mode", "create", "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"dc1-metal-ocp"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--mode", "create", "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionReconcileSameSelection,
+		want:        []string{"dc1-metal-ocp"},
+	}, {
+		name: "apply/installed availability failure preserves the exact non-destructive retry",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedSuccessfulApply(t, ctx)
+			seedMatchingInstalledCluster(t, ctx, safetyAdvancedContainerOCP)
+			applyClusterAvailabilityChecker = &safetyClusterAvailabilitySequence{results: []safetyClusterAvailabilityResult{{available: false}}}
+		},
+		args:        []string{"apply", "--mode", "reconcile", "--stage", "deps", "--through", "base", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRetrySameInvocation,
+		want:        []string{"does not report Available=True", "after completing the non-destructive recovery", "--mode reconcile", "--stage deps", "--through base", "--clusters " + safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			applyClusterAvailabilityChecker = safetyClusterAvailabilityChecker{}
+			reexecuteHermeticRemedy(t, output, "does not report Available=True", true)
+		},
+	}, {
+		name: "apply/availability changing after rebuild confirmation requires an exact reconfirmation",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedSuccessfulApply(t, ctx)
+			seedMatchingInstalledCluster(t, ctx, safetyAdvancedContainerOCP)
+			applyClusterAvailabilityChecker = &safetyClusterAvailabilitySequence{results: []safetyClusterAvailabilityResult{
+				{available: true},
+				{available: false},
+				{available: false},
+				{available: false},
+			}}
+		},
+		args:        []string{"apply", "--mode", "rebuild", "--stage", "deps", "--through", "base", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRebuildSameSelection,
+		want:        []string{"was Available=True when this apply was confirmed", "confirm the destructive rebuild again", "--mode rebuild", "--authorize data-loss", "--stage deps", "--through base", "--clusters " + safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			reexecuteHermeticRemedy(t, output, "requires the destructive decision to be confirmed again", false)
+		},
+	}, {
+		name: "apply/stale published ISO refuses node boot and names exact regeneration",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhaseISOCreated, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-25*time.Hour))
+			record, found, err := workflow.LoadClusterInstallRecord(ctx.ClustersDir, safetyAdvancedContainerOCP)
+			if err != nil || !found {
+				t.Fatalf("load stale ISO record: found=%v err=%v", found, err)
+			}
+			record.UpdatedAt = time.Now().UTC().Add(-25 * time.Hour)
+			if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, record); err != nil {
+				t.Fatalf("save stale ISO record: %v", err)
+			}
+		},
+		args:        []string{"apply", "--mode", "reconcile", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRegenerateClusterISO,
+		want:        []string{"outside the 24h0m0s freshness window", "refuses before node boot", "stale embedded bootstrap certificates", "regenerate only this cluster's agent ISO", "--mode rebuild", "--stage deps", "--clusters " + safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			reexecuteHermeticRemedyContaining(t, output, "--stage deps", "outside the 24h0m0s freshness window", false)
+		},
 	}, {
 		name: "apply/preboot installer skew names ISO regeneration and exact resume",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -1242,9 +1346,10 @@ func safetyStartingStateCases() []safetyCase {
 			seedRunnableSafetyMutation(t, ctx)
 			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusFailed, workflow.ClusterInstallPhaseNodesBooted, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-workflow.ClusterInstallResumeCeiling-time.Minute))
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize protected,data-loss", "bootwright apply --mode reconcile --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyAndReapplyCluster,
+		want:        []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize protected,data-loss", "bootwright apply --mode reconcile --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
 		name: "apply/completed installer skew names scoped data-loss rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -1252,9 +1357,10 @@ func safetyStartingStateCases() []safetyCase {
 			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalled, workflow.ClusterInstallPhaseComplete, "4.20.0", time.Now().Add(-time.Hour))
 			seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, safetyAdvancedContainerOCP)
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"rebuild only this installed cluster", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRebuildCluster,
+		want:        []string{"deliberately rebuild only ContainerCluster/" + safetyAdvancedContainerOCP, "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
 		name: "apply/uncertain node boot phase names an exact scoped rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -1383,6 +1489,48 @@ func safetyStartingStateCases() []safetyCase {
 		remedy:  remedyAlternative,
 		want:    []string{"ceph-storage-old", "orphan the old Ceph cluster"},
 	}}
+}
+
+func reexecuteHermeticRemedy(t *testing.T, output, refusedMarker string, requireSuccess bool) {
+	t.Helper()
+	commands := backtickedBootwrightCommands(output)
+	if len(commands) != 1 {
+		t.Fatalf("expected one exact retry to re-execute, got %v\n%s", commands, output)
+	}
+	reexecuteHermeticCommand(t, commands[0], refusedMarker, requireSuccess)
+}
+
+func reexecuteHermeticRemedyContaining(t *testing.T, output, commandFragment, refusedMarker string, requireSuccess bool) {
+	t.Helper()
+	var matching []string
+	for _, command := range backtickedBootwrightCommands(output) {
+		if strings.Contains(command, commandFragment) {
+			matching = append(matching, command)
+		}
+	}
+	if len(matching) != 1 {
+		t.Fatalf("expected one exact retry containing %q, got %v\n%s", commandFragment, matching, output)
+	}
+	reexecuteHermeticCommand(t, matching[0], refusedMarker, requireSuccess)
+}
+
+func reexecuteHermeticCommand(t *testing.T, command, refusedMarker string, requireSuccess bool) {
+	t.Helper()
+	args := strings.Fields(command)
+	if len(args) < 2 || args[0] != "bootwright" {
+		t.Fatalf("invalid exact retry command %q", command)
+	}
+	stdout, stderr, code := runCLI(t, args[1:]...)
+	out := stdout + stderr
+	if code == 2 {
+		t.Fatalf("exact retry is not parseable: exit %d\n%s", code, out)
+	}
+	if requireSuccess && code != 0 {
+		t.Fatalf("hermetic exact retry did not succeed: exit %d\n%s", code, out)
+	}
+	if strings.Contains(out, refusedMarker) {
+		t.Fatalf("exact retry did not clear its named gate %q:\n%s", refusedMarker, out)
+	}
 }
 
 const (

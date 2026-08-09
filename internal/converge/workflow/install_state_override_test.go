@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
@@ -113,9 +115,10 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		}
 		writeKubeconfig(t, clustersDir)
 		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeRebuild, nil, &fakeClusterAvailabilityChecker{available: true}, now)
-		if err == nil || !strings.Contains(err.Error(), "--authorize data-loss") || !strings.Contains(err.Error(), "was not acknowledged") {
-			t.Fatalf("unacked drifted reinstall must fail closed naming --authorize data-loss, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "was not acknowledged") {
+			t.Fatalf("unacked drifted reinstall must fail closed, got: %v", err)
 		}
+		assertClusterInstallRemedy(t, err, remedy.ActionRebuildSameSelection, cluster)
 	})
 	t.Run("unacked not available fails closed", func(t *testing.T) {
 		dir := t.TempDir()
@@ -135,9 +138,10 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		}
 		writeKubeconfig(t, clustersDir)
 		_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeRebuild, nil, &fakeClusterAvailabilityChecker{available: false}, now)
-		if err == nil || !strings.Contains(err.Error(), "--authorize data-loss") {
-			t.Fatalf("unacked unavailable reinstall must fail closed naming --authorize data-loss, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "requires the destructive decision to be confirmed again") {
+			t.Fatalf("unacked unavailable reinstall must fail closed, got: %v", err)
 		}
+		assertClusterInstallRemedy(t, err, remedy.ActionRebuildSameSelection, cluster)
 	})
 }
 
@@ -216,10 +220,11 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 		if len(got) != 0 {
 			t.Fatalf("a fail-closed probe must authorize no reinstall, got %v", got)
 		}
-		for _, want := range []string{"connection refused", "will not wipe its node disks", "bootwright destroy --clusters " + cluster} {
+		for _, want := range []string{"connection refused", "will not wipe its node disks", "restore API reachability", "retrying exactly this selected work"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Fatalf("probe-error refusal must contain %q, got %q", want, err)
 			}
 		}
+		assertClusterInstallRemedy(t, err, remedy.ActionRetrySameInvocation, cluster)
 	})
 }

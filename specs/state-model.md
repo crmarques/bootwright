@@ -2517,6 +2517,15 @@ known by the CLI, such as a dirty device path, may be named as the one additive
 flag change to the exact resolved base invocation; it never justifies printing
 an independently assembled or wider command.
 
+Go convergence code follows the same boundary: a refusal carries an argv-free,
+typed remedy action and typed targets, while the owning error carries the
+observed status, phase, record path, or probe failure that justified it. Only
+the CLI maps that action to flags and formats an executable command from the
+resolved invocation. Every registered action must have a CLI formatter and a
+safety-matrix scenario, so a new backend refusal cannot assemble a partial
+command or silently drop a future selection, identity, effect, or authorization
+flag.
+
 ### Machine-readable output
 
 `--output json` payloads split into contract and non-contract. Contract —
@@ -3251,7 +3260,11 @@ command. The rest are registered per command, on the verbs that reach machines.
   all of those proofs succeed.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
-  `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
+  `iso-created` skips the ISO and resumes from node boot only when its recorded
+  publish time proves the media is less than 24 hours old; a missing,
+  future-dated, or at-least-24-hour-old publish time fails closed before boot
+  and names an exact cluster-scoped ISO-regeneration command because the media's
+  embedded bootstrap certificates are no longer provably fresh; `nodes-booted` and
   `waiting-bootstrap` skip the ISO and boot and resume bootstrap wait;
   `bootstrap-complete` and `waiting` additionally skip bootstrap wait and resume
   install-complete wait; `complete` is a no-op. The bootstrap wait stamps both
@@ -3280,9 +3293,10 @@ command. The rest are registered per command, on the verbs that reach machines.
   candidate. When a `ContainerCluster` whose recorded install inputs match
   desired state cannot be probed at all — no reachable API, no usable
   kubeconfig, no `oc` — `apply --mode rebuild` fails closed before any
-  mutation, naming each unprovable cluster, the probe error, and the remedies
-  (restore reachability and re-run; exclude it with `--clusters`; or
-  `destroy --clusters <name>` then re-apply to rebuild it deliberately). A
+  mutation, naming each unprovable cluster, the probe error, and an exact retry
+  of the same resolved invocation after API reachability, kubeconfig access,
+  and the local `oc` command are restored. It never synthesizes a narrower
+  exclusion or destructive rebuild from a failed observation. A
   probe that succeeds and reports `Available=False` is different evidence — the
   cluster answered — and still authorizes the `--mode rebuild` under
   the data-loss acknowledgment.

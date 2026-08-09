@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
@@ -52,7 +53,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
 				writeKubeconfig(t, clustersDir)
 			},
-			wantErr: "existing kubeconfig but does not report Available=True",
+			wantErr: "existing kubeconfig but no install record and does not report Available=True",
 		},
 		{
 			name: "booting phase is uncertain",
@@ -94,13 +95,7 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 				t.Fatalf("expected fail-closed error containing %q, got %v", tc.wantErr, err)
 			}
 			if tc.name == "booting phase is uncertain" || tc.name == "unrecognized phase" {
-				var remedial ClusterInstallRemedialError
-				if !errors.As(err, &remedial) {
-					t.Fatalf("uncertain install state must carry typed recovery metadata, got %T: %v", err, err)
-				}
-				if got := remedial.ClusterInstallRemedy(); got.Action != ClusterInstallRemedyFutureRebuild || got.Cluster != cluster {
-					t.Fatalf("remedy = %#v, want a cluster-scoped deliberate rebuild", got)
-				}
+				assertClusterInstallRemedy(t, err, remedy.ActionRebuildCluster, cluster)
 			}
 		})
 	}

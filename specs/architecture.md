@@ -22,7 +22,10 @@ Apply execution records a durable run ledger under the context state directory
 and a short-lived local lease for the process updating it. Cluster install
 tasks also record per-cluster install state with a non-secret desired-input
 fingerprint so repeated applies can skip completed installs and resume only
-from known-safe phases. Ansible, `oc`, SSH, SCP, Ceph, and installer process
+from known-safe phases. An `iso-created` record permits node boot only while its
+publish time proves the agent ISO is less than 24 hours old; absent, future, or
+expired evidence returns a typed cluster-scoped ISO-regeneration refusal before
+any boot task can run. Ansible, `oc`, SSH, SCP, Ceph, and installer process
 output produced by apply and destroy tasks is captured into root-managed run,
 task, and cluster logs rather than streamed. The interactive passthrough verbs —
 `container-cluster oc`, `container-cluster kubectl`, and the `rsh`/`exec` shells
@@ -173,10 +176,18 @@ Execution-time skip-vs-fail decisions live at the concrete-probe sites: cluster
 install records, add-on records, managed OS markers, provider metadata, and
 storage comparison results. Cluster install reconcile reads per-cluster install
 records and probes live cluster availability, skips completed installs, resumes
-only from known-safe phases, and fails closed when install state exists for
+only from known-safe phases, treats only a provably fresh `iso-created` record
+as safe to boot, and fails closed when install state exists for
 missing or different inputs after node boot unless a command-scoped
 `--mode rebuild` is given. Destroy requires `--authorize protected` when selected state
 sets `Environment.spec.safety.destroyProtection: protected`.
+
+Convergence refusals never carry executable argv. They return a registered typed
+remedy action with typed targets, and retain the observation that caused the
+refusal on the owning error type. The CLI is the only layer that maps the action
+onto a resolved invocation and therefore the only layer that may render an exact
+`bootwright` retry; formatter coverage over the action registry and the
+apply/destroy safety matrix keep that boundary closed over new actions and flags.
 
 Ownership evidence is a named cross-boundary contract: executing collection
 roles write ownership through `bootwright.core.ownership_record` at mutation

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 type gatedApplyRunner struct {
@@ -104,6 +105,52 @@ func schedulerRunOptions(dir string) RunOptions {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
+	}
+}
+
+func TestRunApplyTaskGraphRefusesStaleAgentISOBeforeRunnerOrLedger(t *testing.T) {
+	dir := t.TempDir()
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
+	clustersDir := filepath.Join(dir, "clusters")
+	runsDir := filepath.Join(dir, "runs")
+	cluster := "sno-libvirt"
+	now := time.Now().UTC()
+	record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+	record.Status = ClusterInstallStatusInstalling
+	record.Phase = ClusterInstallPhaseISOCreated
+	record.UpdatedAt = now.Add(-publishedAgentISOFreshWindow - time.Minute)
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+
+	runnerCreated := false
+	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
+		State:                      state,
+		RenderedDir:                filepath.Join(dir, "rendered"),
+		ClustersDir:                clustersDir,
+		RunsDir:                    runsDir,
+		ContextName:                "test",
+		SecretsDir:                 secretsDir,
+		ManagedServicesDir:         filepath.Join(dir, "managed-services"),
+		ProviderStateDir:           filepath.Join(dir, "provider-state"),
+		BundleDir:                  filepath.Join(dir, "bundle"),
+		ApplyMode:                  ApplyModeReconcile,
+		ClusterAvailabilityChecker: &fakeClusterAvailabilityChecker{},
+	}, applyContainerClusterTarget(), cluster, mustPlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner {
+		runnerCreated = true
+		return &fakeRunner{}
+	})
+	var ageErr *ClusterInstallISOAgeError
+	if !errors.As(err, &ageErr) {
+		t.Fatalf("RunApplyTaskGraph error = %v, want ClusterInstallISOAgeError", err)
+	}
+	assertClusterInstallRemedy(t, ageErr, remedy.ActionRegenerateClusterISO, cluster)
+	if runnerCreated {
+		t.Fatal("stale agent ISO reached the runner factory")
+	}
+	if _, found, loadErr := LoadRunLedger(runsDir); loadErr != nil || found {
+		t.Fatalf("stale agent ISO wrote a run ledger: found=%v err=%v", found, loadErr)
 	}
 }
 

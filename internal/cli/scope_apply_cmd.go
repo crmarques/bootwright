@@ -253,8 +253,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			var ownedReclaim []string
 			if override {
 				var rerr error
-				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
-					return failErr(1, rerr)
+				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, applyClusterAvailabilityChecker); rerr != nil {
+					return failErr(1, applyInstallRemedialError(rerr, invocation))
 				}
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
 					return failErr(1, err)

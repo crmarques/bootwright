@@ -3,6 +3,8 @@ package workflow
 import (
 	"fmt"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
@@ -135,7 +137,13 @@ func ClusterInstallPostSuccessError(clustersDir string, task ApplyTask) error {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("ContainerCluster/%s completed its install wait but its install record is missing", task.Entry.Cluster)
+		return &ClusterInstallStateError{
+			Cluster:    task.Entry.Cluster,
+			Condition:  ClusterInstallConditionMissingPostSuccessRecord,
+			RecordPath: ClusterInstallRecordPath(clustersDir, task.Entry.Cluster),
+			Message:    fmt.Sprintf("ContainerCluster/%s completed its install wait but its install record is missing at %s; bootwright refuses to treat the cluster as safely installed or rerun its installer implicitly", task.Entry.Cluster, ClusterInstallRecordPath(clustersDir, task.Entry.Cluster)),
+			Request:    clusterInstallRemedy(remedy.ActionRebuildCluster, task.Entry.Cluster),
+		}
 	}
 	return clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(task.State, task.Entry.Cluster), true)
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func auditRunOptions(dir string) RunOptions {
@@ -75,9 +76,10 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 		t.Fatalf("override over an acked API-dead cluster must rebuild (skip 0 of %d install tasks), skipped %d", total, skipped)
 	}
 	_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeRebuild, nil, checker, now)
-	if err == nil || !strings.Contains(err.Error(), "--authorize data-loss") || !strings.Contains(err.Error(), "could not be verified at execution") {
-		t.Fatalf("override with an unacked probe error must fail closed naming --authorize data-loss, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "could not be verified at execution") {
+		t.Fatalf("override with an unacked probe error must fail closed, got: %v", err)
 	}
+	assertClusterInstallRemedy(t, err, remedy.ActionRebuildSameSelection, cluster)
 }
 
 func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
@@ -105,9 +107,10 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	if err == nil {
 		t.Fatal("continue mode must refuse an unverifiable probe")
 	}
-	if !strings.Contains(err.Error(), "availability could not be verified") || !strings.Contains(err.Error(), "--mode rebuild") || !strings.Contains(err.Error(), "--authorize data-loss") {
-		t.Fatalf("refusal must name the --mode rebuild --authorize data-loss remedy, got: %v", err)
+	if !strings.Contains(err.Error(), "availability could not be verified") || !strings.Contains(err.Error(), "restore API reachability") {
+		t.Fatalf("refusal must name the external availability recovery, got: %v", err)
 	}
+	assertClusterInstallRemedy(t, err, remedy.ActionRetrySameInvocation, cluster)
 }
 
 func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
@@ -123,9 +126,10 @@ func TestReconcileRefusesUnrecordedAvailableCluster(t *testing.T) {
 		writeAuditKubeconfig(t, clustersDir, cluster)
 		checker := &fakeClusterAvailabilityChecker{available: true}
 		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeReconcile, nil, checker, now)
-		if err == nil || !strings.Contains(err.Error(), "no install record") || !strings.Contains(err.Error(), "--authorize data-loss") {
-			t.Fatalf("record-less reachable cluster must be refused with the --authorize data-loss remedy, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "no install record") || !strings.Contains(err.Error(), "requires a deliberate rebuild") {
+			t.Fatalf("record-less reachable cluster must be refused with a deliberate-rebuild remedy, got: %v", err)
 		}
+		assertClusterInstallRemedy(t, err, remedy.ActionRebuildCluster, cluster)
 	})
 
 	t.Run("fresh cluster with no kubeconfig installs", func(t *testing.T) {

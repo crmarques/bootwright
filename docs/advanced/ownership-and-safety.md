@@ -109,7 +109,10 @@ the destructive kinds cross the destroy-protection boundary (below).
     phases for at most three hours from the original start, and refuses to
     proceed when install state exists for different inputs after node boot —
     unless you pass `--mode rebuild`. ISO creation records the installer version:
-    skew before boot requires regenerating the ISO; skew discovered after boot
+    node boot resumes only when the recorded publish time proves the ISO is less
+    than 24 hours old, while a missing, future, or expired time requires
+    regenerating the cluster ISO first. Version skew before boot likewise
+    requires regenerating the ISO; skew discovered after boot
     finishes the in-flight install, retains its evidence, and leaves the run
     nonzero until a deliberate future rebuild.
 

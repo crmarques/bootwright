@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/render"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
@@ -188,7 +189,15 @@ func clusterInstallRecordInputsMatch(runsDir string, record ClusterInstallRecord
 	}
 	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, input)
 	if err != nil {
-		return false, false, fmt.Errorf("cannot verify legacy install inputs for ContainerCluster/%s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", cluster, err, cluster)
+		return false, false, &ClusterInstallStateError{
+			Cluster:   cluster,
+			Condition: ClusterInstallConditionLegacyInstallEvidenceUnreadable,
+			Status:    record.Status,
+			Phase:     record.Phase,
+			Message:   fmt.Sprintf("cannot verify legacy install inputs for ContainerCluster/%s because its immutable successful-run evidence is missing or unreadable; bootwright refuses to infer that the installed cluster matches desired state", cluster),
+			Cause:     err,
+			Request:   clusterInstallRemedy(remedy.ActionRebuildCluster, cluster),
+		}
 	}
 	return matched, matched, nil
 }

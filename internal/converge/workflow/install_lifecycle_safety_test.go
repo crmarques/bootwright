@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestClusterInstallResumeCeilingBoundsRepeatedWaits(t *testing.T) {
@@ -35,9 +36,7 @@ func TestClusterInstallResumeCeilingBoundsRepeatedWaits(t *testing.T) {
 	if expired.Deadline != now || expired.Phase != ClusterInstallPhaseWaitingBootstrap {
 		t.Fatalf("expired error = %+v, want bootstrap-wait deadline %s", expired, now)
 	}
-	if got := expired.ClusterInstallRemedy(); got.Action != ClusterInstallRemedyDestroyAndReapply || got.Cluster != cluster {
-		t.Fatalf("remedy = %+v, want scoped destroy-and-reapply for %s", got, cluster)
-	}
+	assertClusterInstallRemedy(t, expired, remedy.ActionDestroyAndReapplyCluster, cluster)
 
 	record.StartedAt = now.Add(-ClusterInstallResumeCeiling).Add(time.Second)
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
@@ -74,6 +73,56 @@ func TestClusterInstallResumeWithoutStartTimeFailsClosed(t *testing.T) {
 	}
 }
 
+func TestPublishedAgentISOResumeRequiresProvableFreshness(t *testing.T) {
+	tests := []struct {
+		name        string
+		publishedAt func(time.Time) time.Time
+		wantRefusal bool
+	}{
+		{name: "fresh", publishedAt: func(now time.Time) time.Time { return now.Add(-publishedAgentISOFreshWindow + time.Second) }},
+		{name: "at freshness boundary", publishedAt: func(now time.Time) time.Time { return now.Add(-publishedAgentISOFreshWindow) }, wantRefusal: true},
+		{name: "missing publish time", publishedAt: func(time.Time) time.Time { return time.Time{} }, wantRefusal: true},
+		{name: "future publish time", publishedAt: func(now time.Time) time.Time { return now.Add(time.Minute) }, wantRefusal: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+			secretsDir := writeWorkflowInstallerSecrets(t, dir)
+			clustersDir := filepath.Join(dir, "clusters")
+			cluster := "sno-libvirt"
+			now := time.Date(2026, 8, 9, 18, 0, 0, 0, time.UTC)
+			record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+			record.Status = ClusterInstallStatusInstalling
+			record.Phase = ClusterInstallPhaseISOCreated
+			record.UpdatedAt = tc.publishedAt(now)
+			if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+				t.Fatalf("SaveClusterInstallRecord: %v", err)
+			}
+
+			planned, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, filepath.Join(dir, "runs"), "test", secretsDir, "next", state, mustPlanApplyTasks(applyContainerClusterTarget(), state), ApplyModeReconcile, nil, &fakeClusterAvailabilityChecker{}, now)
+			if !tc.wantRefusal {
+				if err != nil {
+					t.Fatalf("ReconcileApplyClusterInstallState: %v", err)
+				}
+				assertLifecycleTaskStatus(t, planned, ApplyTaskKindClusterISO, TaskStatusSkipped)
+				assertLifecycleTaskStatus(t, planned, ApplyTaskKindNodeBoot, TaskStatusPending)
+				return
+			}
+			var ageErr *ClusterInstallISOAgeError
+			if !errors.As(err, &ageErr) {
+				t.Fatalf("ReconcileApplyClusterInstallState error = %v, want ClusterInstallISOAgeError", err)
+			}
+			if ageErr.PublishedAt != record.UpdatedAt.UTC() || ageErr.ObservedAt != now.UTC() || ageErr.FreshWindow != publishedAgentISOFreshWindow {
+				t.Fatalf("ISO age evidence = %+v, want publish=%s observe=%s window=%s", ageErr, record.UpdatedAt.UTC(), now.UTC(), publishedAgentISOFreshWindow)
+			}
+			assertClusterInstallRemedy(t, ageErr, remedy.ActionRegenerateClusterISO, cluster)
+			assertLifecycleTaskStatus(t, planned, ApplyTaskKindClusterISO, TaskStatusPending)
+			assertLifecycleTaskStatus(t, planned, ApplyTaskKindNodeBoot, TaskStatusPending)
+		})
+	}
+}
+
 func TestClusterInstallPrebootVersionMismatchRequiresISORegeneration(t *testing.T) {
 	for _, installerVersion := range []string{"", "4.99.0"} {
 		t.Run(map[bool]string{true: "missing", false: "mismatch"}[installerVersion == ""], func(t *testing.T) {
@@ -99,9 +148,7 @@ func TestClusterInstallPrebootVersionMismatchRequiresISORegeneration(t *testing.
 			if versionErr.NodesMayHaveBooted || versionErr.InstallCompleted {
 				t.Fatalf("version error = %+v, want preboot refusal", versionErr)
 			}
-			if got := versionErr.ClusterInstallRemedy(); got.Action != ClusterInstallRemedyRegenerateISO || got.Cluster != cluster {
-				t.Fatalf("remedy = %+v, want scoped ISO regeneration", got)
-			}
+			assertClusterInstallRemedy(t, versionErr, remedy.ActionRegenerateClusterISO, cluster)
 		})
 	}
 }
@@ -167,9 +214,7 @@ func TestCompletedPostbootSkewIsNonzeroAndKeepsInstalledEvidence(t *testing.T) {
 	if !errors.As(result.err, &versionErr) || !versionErr.InstallCompleted {
 		t.Fatalf("runOneApplyTask error = %v, want completed ClusterInstallVersionError", result.err)
 	}
-	if got := versionErr.ClusterInstallRemedy(); got.Action != ClusterInstallRemedyFutureRebuild || got.Cluster != cluster {
-		t.Fatalf("remedy = %+v, want scoped future rebuild", got)
-	}
+	assertClusterInstallRemedy(t, versionErr, remedy.ActionRebuildCluster, cluster)
 	got, found, err := LoadClusterInstallRecord(clustersDir, cluster)
 	if err != nil || !found {
 		t.Fatalf("LoadClusterInstallRecord found=%v err=%v", found, err)

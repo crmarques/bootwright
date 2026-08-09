@@ -30,8 +30,8 @@ func filterReclaimAuthorizedClusters(state v1alpha1.State, objects []workflow.Ob
 	return out
 }
 
-func overrideReinstallPlan(cmdCtx context.Context, clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) (descriptors, acked []string, err error) {
-	reinstalls, err := workflow.OverrideRebuildInstalledClusters(cmdCtx, clustersDir, runsDir, contextName, secretsDir, state, tasks, nil)
+func overrideReinstallPlan(cmdCtx context.Context, clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask, checker workflow.ClusterAvailabilityChecker) (descriptors, acked []string, err error) {
+	reinstalls, err := workflow.OverrideRebuildInstalledClusters(cmdCtx, clustersDir, runsDir, contextName, secretsDir, state, tasks, checker)
 	if err != nil {
 		return nil, nil, err
 	}

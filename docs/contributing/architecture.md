@@ -113,8 +113,10 @@ Two contributor-facing subtleties are easy to get backwards:
     concrete-probe sites**: cluster install records, add-on records, managed OS
     markers, provider metadata, and storage comparison results. Cluster install
     reconcile probes live availability, skips completed installs, resumes only
-    from known-safe phases, and fails closed on missing or different inputs after
-    node boot unless a command-scoped `--mode rebuild` is given.
+    from known-safe phases, allows an `iso-created` record to reach node boot
+    only when its publish time proves the ISO is less than 24 hours old, and
+    fails closed on missing or different inputs after node boot unless a
+    command-scoped `--mode rebuild` is given.
 
 ## The three apply modes
 

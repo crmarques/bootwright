@@ -19,7 +19,7 @@ var allowedImports = map[string][]string{
 		"api/v1alpha1", "internal/addons/nativecatalog", "internal/addons/oc",
 		"internal/addons/plan", "internal/addons/records", "internal/cli/output",
 		"internal/clusteraccess", "internal/converge", "internal/converge/ansible",
-		"internal/converge/bastion", "internal/converge/bundle", "internal/converge/workflow",
+		"internal/converge/bastion", "internal/converge/bundle", "internal/converge/remedy", "internal/converge/workflow",
 		"internal/host/become", "internal/host/callerio", "internal/host/execution",
 		"internal/host/localroot", "internal/host/ptyexec", "internal/host/safefs",
 		"internal/host/shellquote", "internal/infra/artifacts",
@@ -73,7 +73,8 @@ var allowedImports = map[string][]string{
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/host/execution", "internal/render", "internal/roles"},
 	"internal/converge/bundle":            {},
-	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons", "internal/addons/steps", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
+	"internal/converge/remedy":            {},
+	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons", "internal/addons/steps", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/addons/records", "internal/addons/render", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/converge/remedy", "internal/host/execution", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 
 	"internal/storage/cephadopt":    {"api/v1alpha1", "internal/storage/cephdiff", "internal/storage/topology", "internal/workspace"},
 	"internal/storage/arbiter":      {"api/v1alpha1", "internal/storage/cephstate", "internal/storage/topology", "internal/workspace"},
