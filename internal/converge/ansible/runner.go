@@ -173,6 +173,7 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	command := r.Command(spec)
 	env := os.Environ()
 	env = appendSystemTempEnv(env)
+	env = append(env, "PYTHONUNBUFFERED=1")
 	if spec.AnsibleCfg != "" {
 		env = append(env, "ANSIBLE_CONFIG="+spec.AnsibleCfg)
 	}

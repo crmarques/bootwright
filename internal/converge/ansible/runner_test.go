@@ -125,6 +125,35 @@ exit 3
 	}
 }
 
+func TestCommandRunnerForcesUnbufferedPythonOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	t.Setenv("PYTHONUNBUFFERED", "")
+
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "fake-ansible-playbook")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
+printf 'unbuffered=%s\n' "$PYTHONUNBUFFERED"
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible-playbook: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := (CommandRunner{Stdout: &stdout}).Run(context.Background(), RunSpec{
+		Executable:   executable,
+		Inventory:    "inventory.yaml",
+		Playbook:     "playbook.yml",
+		ExtraVars:    "vars.yml",
+		ArtifactsDir: filepath.Join(dir, "artifacts"),
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "unbuffered=1\n") {
+		t.Fatalf("stdout missing %q; a piped ansible-playbook block-buffers its output and the task log freezes mid-play during long tasks:\n%s", "unbuffered=1\n", stdout.String())
+	}
+}
+
 func TestCommandRunnerForcesSystemTempEnvironment(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")
