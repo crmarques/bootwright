@@ -1330,6 +1330,24 @@ func safetyStartingStateCases() []safetyCase {
 		verdict: verdictAuthorized,
 		deny:    []string{"destroyed substrate"},
 	}, {
+		name:     "apply/a destroy-released bare-metal managed-OS machine requires the data-loss acknowledgment",
+		baseline: safetyBaselineBareMetalManagedOS,
+		seed: func(t *testing.T, ctx workspace.Context) {
+			if err := workflow.MarkSubstrateMachinesReleased(ctx.RunsDir, safetyBareMetalManagedOSCluster, []string{safetyBareMetalManagedOSMachine}, time.Now()); err != nil {
+				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
+			}
+		},
+		args:    []string{"apply", "--machines", safetyBareMetalManagedOSMachine, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"reinstall destroy-released bare-metal machine(s) " + safetyBareMetalManagedOSMachine, "still-running OS wiped", "--authorize data-loss", "bootwright apply --authorize data-loss --yes --machines " + safetyBareMetalManagedOSMachine},
+	}, {
+		name:     "apply/a released libvirt machine substrate hosting an installed KubeVirt tenant refuses a host-only rebuild",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedReleasedKubeVirtHostWithInstalledTenant,
+		args:     []string{"apply", "--stage", "infra", "--clusters", safetyLibvirtKubeVirtHostCluster, "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "bootwright destroy --stage clusters --clusters " + safetyLibvirtKubeVirtTenantCluster},
+	}, {
 		name: "apply/renamed ContainerCluster orphaning a provisioned one",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp-old")
@@ -1351,14 +1369,160 @@ func safetyStartingStateCases() []safetyCase {
 }
 
 const (
-	safetyBaselineAdvanced     = "baremetal-redfish-multidc-virtualized-odf-ceph"
-	safetyBaselineVirtualCeph  = "ceph-ibm-libvirt-lab"
-	safetyVirtualCephCluster   = "ceph-ibm"
-	safetyVirtualCephOSDNode   = "ceph-1"
-	safetyAdvancedCephCluster  = "ceph-storage"
-	safetyAdvancedCephOSDNode  = "ceph-dc1-0"
-	safetyAdvancedContainerOCP = "dc1-metal-ocp"
+	safetyBaselineAdvanced             = "baremetal-redfish-multidc-virtualized-odf-ceph"
+	safetyBaselineVirtualCeph          = "ceph-ibm-libvirt-lab"
+	safetyBaselineBareMetalManagedOS   = "ceph-ibm-baremetal-redfish"
+	safetyBaselineLibvirtKubeVirtHost  = "sno-libvirt-redfish"
+	safetyVirtualCephCluster           = "ceph-ibm"
+	safetyVirtualCephOSDNode           = "ceph-1"
+	safetyBareMetalManagedOSCluster    = "ceph-ibm"
+	safetyBareMetalManagedOSMachine    = "ceph-1"
+	safetyLibvirtKubeVirtHostCluster   = "sno-libvirt"
+	safetyLibvirtKubeVirtTenantCluster = "sno-kubevirt-child"
+	safetyAdvancedCephCluster          = "ceph-storage"
+	safetyAdvancedCephOSDNode          = "ceph-dc1-0"
+	safetyAdvancedContainerOCP         = "dc1-metal-ocp"
 )
+
+func seedReleasedKubeVirtHostWithInstalledTenant(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	appendStoredInputDocument(t, ctx, kubeVirtHostSafetyDocuments)
+	seedInstalledCluster(t, ctx, safetyLibvirtKubeVirtTenantCluster)
+	if err := workflow.MarkSubstrateReleased(ctx.RunsDir, safetyLibvirtKubeVirtHostCluster, time.Now()); err != nil {
+		t.Fatalf("MarkSubstrateReleased: %v", err)
+	}
+}
+
+const kubeVirtHostSafetyDocuments = `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: safety-openshift-virtualization
+spec:
+  type: olm
+  provides:
+    - kubevirt
+  olm:
+    namespace:
+      name: openshift-cnv
+      create: true
+    operatorGroup:
+      name: kubevirt-hyperconverged-group
+      targetNamespaces:
+        - openshift-cnv
+    subscription:
+      name: hco-operatorhub
+      package: kubevirt-hyperconverged
+      channel: stable
+      source: redhat-operators
+  readiness:
+    checks:
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: sno-libvirt-safety-addons
+spec:
+  clusterRef: sno-libvirt
+  addonRefs:
+    - safety-openshift-virtualization
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: safety-kubevirt-provider
+spec:
+  type: kubevirt
+  networkAttachments:
+    - name: safety-child-net
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: safety-child-net
+          namespace: safety-child
+  kubevirt:
+    namespace: safety-child
+    hostClusterRef: sno-libvirt
+    machineProfiles:
+      - name: child
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 80
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: safety-child-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.133.0/24
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.133.1
+            next-hop-interface: primary
+            table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: sno-kubevirt-child-master-0
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: safety-kubevirt-provider
+    profileRef: child
+  os:
+    provided: false
+  network:
+    config:
+      networkConfigRef: safety-child-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+  addresses:
+    - name: ip
+      address: 192.168.133.30
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: sno-kubevirt-child
+spec:
+  distribution:
+    release:
+      version: 4.21.15
+  install:
+    nodeSSH:
+      keyPairRef: sno-libvirt-cluster-admin-ssh-key
+    endpoints:
+      api:
+        source:
+          type: node
+      ingress:
+        source:
+          type: node
+  nodes:
+    - name: master-0
+      role: master
+      machineRef: sno-kubevirt-child-master-0
+`
 
 func initSafetyBaselineContext(t *testing.T, example string) workspace.Context {
 	t.Helper()

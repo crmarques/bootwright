@@ -336,29 +336,6 @@ learned; this file records what it still owes.
   `.agents/knowledge/`.
 - Related: add-ons/fusion-data-foundation/4.21/add-on.yaml, add-ons/catalog.yaml
 
-## B-037 — No managed-OS machine in the advanced safety-matrix baseline
-- Status: open
-- Area: examples / tests / safety-matrix
-- Origin: apply/destroy safety contract review 2026-07-26
-- Severity: low
-- Problem: `examples/baremetal-redfish-multidc-virtualized-odf-ceph` is the
-  advanced baseline the safety matrix
-  (internal/cli/apply_destroy_safety_matrix_test.go) runs on. Its KubeVirt-hosted
-  child clusters do give the matrix real machine-substrate rows (release
-  disclosure, machine-granular release), but every Ceph node declares
-  `os.provided: true` and every KubeVirt *host* is bare metal, so two paths stay
-  unreachable end-to-end: the bare-metal managed-OS reinstall data-loss
-  acknowledgment, and a machine-substrate rebuild of a KubeVirt host cluster.
-  Both are pinned only at unit level. The matrix now takes a per-case `baseline`
-  and already runs `examples/ceph-ibm-libvirt-lab` for the provider-backed
-  machine-layer data-loss rows (ADR 0031), so the second-baseline mechanism
-  exists; these two scenarios still have no matrix row.
-- Exit: promote the bare-metal managed-OS reinstall data-loss acknowledgment and a
-  KubeVirt-host machine-substrate rebuild into the matrix, adding whichever
-  baseline (a managed-OS bare-metal machine, a libvirt-hosted KubeVirt host)
-  each needs.
-- Related: [apply-destroy-authorization-guards.md](apply-destroy-authorization-guards.md)
-
 ## B-038 — The node sudoers drop-in sorts before hardening drop-ins that override it
 - Status: open
 - Area: ceph / node-access / sudoers

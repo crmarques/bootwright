@@ -85,10 +85,10 @@ depends on them.
   guard tests that enforce it are cataloged in
   `.agents/knowledge/apply-destroy-authorization-guards.md`. **Before adding a
   token, a flag on `apply`/`destroy`, an apply task kind, a substrate provider, a
-  shared-service slot, a gate, or a refusal, read that file's "Adding to the
-  destructive surface" table first** — it names the one registry each addition
-  belongs in and the guard that fails when it is missed. Registering it is part
-  of the change, not follow-up work.
+  Go→Ansible mutation-control variable, a shared-service slot, a gate, or a
+  refusal, read that file's "Adding to the destructive surface" table first** —
+  it names the one registry each addition belongs in and the guard that fails
+  when it is missed. Registering it is part of the change, not follow-up work.
 - **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
   teach workflows and link back. The per-kind field reference is the deliberate
   exception: every page under `docs/concepts/` is one by design (the

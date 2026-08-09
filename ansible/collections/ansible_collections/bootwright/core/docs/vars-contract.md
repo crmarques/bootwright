@@ -781,6 +781,36 @@ operator-facing retry guidance instead of assembling a `bootwright apply` or
 | `bootwright_apply_full_invocation` | Exact apply invocation with stage/range narrowing removed while retaining context and object selection |
 | `bootwright_apply_through_base_invocation` | Exact apply invocation changed to `--through base` while retaining context and object selection |
 
+## Mutation-Control Vars
+
+Go is the sole producer of the intent, authorization, scope, and execution vars
+that let an embedded playbook mutate a target. Their registry is
+`mutationSafetyVars` in `internal/converge`; a value missing from the run must
+under-authorize or narrow work, never widen it. The registry guard requires each
+entry to have a Go producer, an Ansible consumer, and this contract entry, and
+detects a newly rendered mutation-control name that was not registered.
+
+| Class | Facts | Shape |
+| --- | --- | --- |
+| Intent | `bootwright_apply_mode` | Exact `create`, `reconcile`, or `rebuild` value selected by the operator |
+| Authorization | `bootwright_ceph_authorize_foreign_daemons`, `bootwright_ceph_authorize_unowned_devices`, `bootwright_destroy_authorize_unowned_networks`, `bootwright_destroy_authorize_unowned_vms`, `bootwright_destroy_skip_unreachable` | Boolean risk grants derived from a consumed `--authorize` token; omitted when not granted |
+| Authorization | `bootwright_ceph_rebuild_authorized_clusters`, `bootwright_ceph_subobject_rebuild_authorized`, `bootwright_ocp_rebuild_authorized_clusters` | Exact clusters or storage sub-objects whose destructive rebuild was acknowledged |
+| Authorization | `bootwright_ceph_filter_reclaim_clusters`, `bootwright_ceph_reclaim_clusters`, `bootwright_ceph_reclaim_devices` | Exact cluster and device allowlists for an acknowledged reclaim; an empty or absent list authorizes no wipe |
+| Authorization | `bootwright_ceph_destroy_confirmed_fsids` | StorageCluster-to-fsid attestations accepted by the controller ownership-recovery gate |
+| Authorization | `bootwright_substrate_reset_clusters`, `bootwright_substrate_reset_machines` | Exact released or structurally drifted machine substrate whose reset was authorized; the machine form carries `<cluster>/<machine>` pairs |
+| Authorization | `bootwright_infra_component_reclaim_records` | Exact owned install-only InfraComponent records the controller authorized for end-of-apply reclaim |
+| Authorization | `bootwright_arbiter_allow_degraded`, `bootwright_arbiter_allow_same_site`, `bootwright_arbiter_old_host_offline` | Replacement-arbiter risk grants derived from the consumed tokens and the controller's retirement evidence |
+| Scope | `bootwright_destroy_cluster_scope`, `bootwright_destroy_machine_scope`, `bootwright_destroy_storage_scope`, `bootwright_destroy_container_cluster` | Exact cluster, machine, storage-cluster, or single-container-cluster work set for a destroy task |
+| Scope | `bootwright_infra_destroy_context_sweep`, `bootwright_infra_component_destroy_scope_records`, `bootwright_infra_component_service_scope` | Context-wide versus selected InfraComponent teardown bounds; absent scope never implies a wider selected teardown |
+| Scope | `bootwright_infra_component_apply_skip_records`, `bootwright_ceph_reconcilable_only_clusters` | Exact records or clusters the controller classified for a narrowed non-destructive path |
+| Scope | `bootwright_task_cluster_name`, `bootwright_task_host_cluster_name`, `bootwright_task_machine_names`, `bootwright_task_managed_os_group_name`, `bootwright_task_provider_host_name`, `bootwright_task_storage_cluster_name` | Scheduler-selected task identity and work set |
+| Scope | `bootwright_agent_node_cluster_name`, `bootwright_agent_node_machine_name`, `bootwright_machine_task_cluster_name`, `bootwright_machine_task_machine_name`, `bootwright_machine_task_provider_host_name` | Per-pseudo-host task identity; roles select the named cluster, machine, and provider host rather than re-deriving scope |
+| Scope | `bootwright_arbiter_cluster_name`, `bootwright_arbiter_desired_node`, `bootwright_arbiter_live_node` | Replacement-arbiter cluster and old/new machine selection |
+| Execution | `bootwright_destroy_cluster_levels`, `bootwright_destroy_cluster_order`, `bootwright_machine_infra_records_only` | Controller-derived teardown barriers, compatibility order, and records-only cleanup mode |
+| Execution | `bootwright_install_wait_target`, `bootwright_task_storage_prereqs_only`, `bootwright_task_storage_skip_prereqs` | Exact task entrypoint inside a split apply workflow |
+| Execution | `bootwright_arbiter_desired_addr`, `bootwright_arbiter_desired_mon`, `bootwright_arbiter_desired_site`, `bootwright_arbiter_failure_domain`, `bootwright_arbiter_live_mon`, `bootwright_arbiter_tiebreaker_mon` | Controller-resolved arbiter identities and topology facts |
+| Execution | `bootwright_arbiter_mon_hosts_during`, `bootwright_arbiter_mon_hosts_after`, `bootwright_arbiter_mon_locations`, `bootwright_arbiter_mon_locations_after` | JSON projections of the accepted during/after monitor topology |
+
 The OpenShift agent role uses those vars to create and publish one cluster ISO,
 boot all selected node pseudo-hosts through Ansible host fanout, and run the
 final installer wait after the boot-stage task has completed. Machine

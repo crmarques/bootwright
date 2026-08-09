@@ -79,6 +79,14 @@ host per machine so independent VMs in the same child-before-host cluster pass
 tear down concurrently; shared VIP preparation and ownership-record sweeps
 remain serialized at the real provider-host boundary.
 
+Mutation-control values that cross from Go into Ansible — intent, positive
+authorizations, resolved scope, and task execution selectors — are a named
+contract. Every such value is registered by the Go convergence layer,
+documented in the collection vars contract, and consumed by Ansible under the
+same spelling; the registry guard rejects an unregistered producer, a missing
+consumer, or an undocumented channel. A missing value must under-authorize or
+narrow the run, never expand what the playbook may mutate.
+
 The Ansible source tree is authored under `/ansible`. `make sync-bundle` packs
 that source and pinned external collections into the generated embedded archive
 under `internal/converge/bundle/ansible_bundle.zip`; `make build` runs that

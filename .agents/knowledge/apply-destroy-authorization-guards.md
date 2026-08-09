@@ -16,6 +16,7 @@ what turns "forgot" into a red test.
 | a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead; and a field emitted by `resolvedInvocation` so refusal retries preserve it | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix`, `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` |
 | an apply task kind | `workflow.ApplyTaskKinds`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToADestroyKind` |
 | a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, and `substrateResetConsumers` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer` |
+| a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
 | a refusal | the object, the consequence in the kind's own vocabulary, and the literal `bootwright …` invocation **carrying the run's own scope and stage flags** and any required token | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
@@ -63,6 +64,19 @@ classifier, pinning the owner-field schema in both directions: a record this
 writer produced must read back as `match`, a changed hash as `drift`, and a
 different manager as `foreign`. Without it the `foreign` tier has no writer and a
 record-schema change could silently flip every record — or orphan the refusal.
+
+**The Go→Ansible mutation contract is a registry, not a naming convention.**
+`mutationSafetyVars` classifies every rendered intent, positive authorization,
+scope allowlist, and execution selector that can change what an embedded
+playbook mutates. `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs`
+scans production Go for names that carry the mutation-control vocabulary,
+requires each one in that registry, then requires the same name in an Ansible
+consumer and in the collection's vars contract. The scan keys on generic
+authorization, destroy, rebuild, reclaim, reset, scope, skip, task, and provider
+control vocabulary, so a future provider or task fails when it invents an
+unregistered destructive channel. Role-local facts do not enter the registry:
+the boundary is specifically controller-produced values, and absence must
+under-authorize or narrow the run.
 
 **The scenario matrix.** `internal/cli/apply_destroy_safety_matrix_test.go` is
 table-driven over (command, flag combination, starting state, selected scope) and
@@ -137,19 +151,21 @@ permanent loop whose only named exit was destroying the cluster.
 task, *or* already matches the after task, *or* differs from it only by the
 tiebreaker.
 
-**Baseline coverage boundary.** Machine-substrate tasks in that example come
+**Baseline coverage boundary.** Machine-substrate tasks in the advanced example come
 only from the KubeVirt-hosted child clusters: `applyMachineHost` returns `""` for
 a bare-metal machine, so a bare-metal cluster root plans no
 `machineInfraPrepare`/`machineInfraFinalize` and `MachineSubstrateClusters`
 never names it — a substrate release for a bare-metal root is written by no
 destroy and consumed by no apply. Substrate-release rows must therefore target
 `dc1-child-ocp` (and seed its host installed + KubeVirt-ready, or the
-`hostClusterRef` readiness gate refuses first). Two paths stay out of reach on
-this baseline and are pinned at unit level instead: the bare-metal managed-OS
-reinstall data-loss acknowledgment (the example declares no managed-OS machine —
-`os.provided: true` on every Ceph node) via `TestDestructiveOverrideYesGuard`,
-and a machine-substrate rebuild of a KubeVirt *host* cluster (every host here is
-bare metal) via `TestCheckKubeVirtTenantRebuildScopeGatesEverySelectionAxis`.
+`hostClusterRef` readiness gate refuses first). The matrix uses two secondary
+baselines for the paths that topology cannot express: `ceph-ibm-baremetal-redfish`
+drives a destroy-released bare-metal managed-OS machine through the real
+`--yes` data-loss refusal, and `sno-libvirt-redfish` plus an in-test declared
+KubeVirt tenant drives a released libvirt host substrate through the real
+nested-tenant scope refusal. The focused unit tests remain useful for predicate
+detail, while the matrix now proves command parsing, desired-state resolution,
+record evidence, selection, the refusal, and the exact remedy end to end.
 
 **Selection-axis rule.** Gates that compare "what this run will destroy" against
 "what this run selected" must key on the resolved `clusteraccess.Selection`, not
