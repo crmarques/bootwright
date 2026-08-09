@@ -2831,6 +2831,10 @@ command. The rest are registered per command, on the verbs that reach machines.
   list grows. A `--stage` that orders after its `--through` is a usage error, and
   a range whose first stage is not the graph's first assumes the omitted earlier
   stages already applied and says so.
+  That assumption never skips a safety proof needed immediately before the
+  selected mutation: a storage-cluster `base` task resolves its Ceph image and
+  proves every selected node can start that image before rebuild, bootstrap, or
+  disk mutation, even when `deps` is outside the requested range.
   A family name used as a range endpoint resolves to that family's boundary
   sub-phase: as `--stage` it starts at the family's first sub-phase, as
   `--through` it ends at the family's last. So `--through infra` equals

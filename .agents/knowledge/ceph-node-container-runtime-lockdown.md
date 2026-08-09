@@ -43,8 +43,11 @@ normally with the same image, which makes the failure read as host-specific rath
 than as a Ceph or network fault.
 
 **Fix:** `phases/container_runtime.yml` runs on **every** storage node before
-`rebuild.yml` and before bootstrap, so the apply fails closed in seconds naming the
-host rather than ten minutes later on a daemon-readiness gate. It proves the runtime
+`rebuild.yml` and before bootstrap, including a base-only apply whose
+`skip_prereqs` execution flag omits the earlier deps work. The role resolves and
+requires the provider image outside that flag before entering the gate. The apply
+therefore fails closed naming the host rather than ten minutes later on a
+daemon-readiness gate. It proves the runtime
 by starting a real container from the pinned image; if that fails it retries under
 `--cgroup-manager=cgroupfs`, and when only that succeeds it writes
 `/etc/containers/containers.conf.d/20-bootwright-ceph-cgroup-manager.conf` selecting
@@ -79,8 +82,8 @@ A remediation that makes its own precondition stop reproducing cannot be re-test
 through the channel it repaired. Any future auto-remediation here needs the same
 shape: probe the unremediated path explicitly before withdrawing the remedy.
 
-The gate needs a resolvable `image.version` pin to have something to run; without one
-it is skipped.
+The gate needs the resolved provider image to have something to run. An empty image
+is a pre-mutation refusal rather than a reason to skip the proof.
 
 **Accept the trade deliberately:** under the cgroupfs manager the daemons on that
 node are not device-isolated by a cgroup BPF program. That is a real, if narrow,

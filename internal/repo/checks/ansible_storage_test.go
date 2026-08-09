@@ -1370,18 +1370,37 @@ func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
 
 func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	main := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
+	provider := strings.Index(main, "phases/context_provider.yml")
+	image := strings.Index(main, "Require a Ceph image for the container-runtime safety proof")
 	gate := strings.Index(main, "phases/container_runtime.yml")
 	rebuild := strings.Index(main, "phases/rebuild.yml")
 	bootstrap := strings.Index(main, "phases/bootstrap.yml")
 	endHost := strings.Index(main, "end_host")
-	if gate < 0 || rebuild < 0 || bootstrap < 0 || endHost < 0 {
-		t.Fatalf("the role is missing a step this ordering depends on (gate=%d rebuild=%d bootstrap=%d endHost=%d)", gate, rebuild, bootstrap, endHost)
+	if provider < 0 || image < 0 || gate < 0 || rebuild < 0 || bootstrap < 0 || endHost < 0 {
+		t.Fatalf("the role is missing a step this ordering depends on (provider=%d image=%d gate=%d rebuild=%d bootstrap=%d endHost=%d)", provider, image, gate, rebuild, bootstrap, endHost)
 	}
-	if gate > rebuild || gate > bootstrap {
-		t.Fatalf("the container runtime must be proven before the rebuild guard and before bootstrap: cephadm resolves the ceph uid/gid by starting a container before every deployment, so a node that cannot start one places no daemon at all and the run only discovers it on a readiness gate ten minutes later, after disks may already have been zapped (gate=%d rebuild=%d bootstrap=%d)", gate, rebuild, bootstrap)
+	if !(provider < image && image < gate && gate < rebuild && gate < bootstrap) {
+		t.Fatalf("the provider image must be resolved and required before the runtime proof, and the proof must precede rebuild and bootstrap (provider=%d image=%d gate=%d rebuild=%d bootstrap=%d)", provider, image, gate, rebuild, bootstrap)
 	}
 	if gate > endHost {
 		t.Fatalf("the container runtime gate must run before non-seed hosts leave the play, or it only ever proves the seed (gate=%d endHost=%d)", gate, endHost)
+	}
+
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
+	for _, name := range []string{
+		"Resolve the Ceph provider before any storage-cluster mutation",
+		"Require a Ceph image for the container-runtime safety proof",
+		"Prove the Ceph storage node container runtime",
+	} {
+		task := mainTasks[findAnsibleTask(t, mainTasks, name)]
+		if when := fmt.Sprint(task["when"]); strings.Contains(when, "bootwright_task_storage_skip_prereqs") {
+			t.Fatalf("%q is gated by skip_prereqs, so apply --stage base can bypass it: when=%v", name, task["when"])
+		}
+	}
+	imageTask := mainTasks[findAnsibleTask(t, mainTasks, "Require a Ceph image for the container-runtime safety proof")]
+	imageAssert, ok := imageTask["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(imageAssert["that"]), "bootwright_ceph_bootstrap_image") {
+		t.Fatalf("the pre-mutation image gate must fail closed on an unresolved provider image, got %v", imageTask)
 	}
 
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/container_runtime.yml")

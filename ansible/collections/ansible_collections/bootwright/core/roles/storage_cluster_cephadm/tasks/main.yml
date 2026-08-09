@@ -2,6 +2,21 @@
 - name: Resolve Ceph storage role variables
   ansible.builtin.include_tasks: phases/context_vars.yml
 
+- name: Resolve the Ceph provider before any storage-cluster mutation
+  ansible.builtin.include_tasks: phases/context_provider.yml
+
+- name: Require a Ceph image for the container-runtime safety proof
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_bootstrap_image | default('') | length > 0
+    fail_msg: >-
+      StorageCluster/{{ bootwright_task_storage_cluster_name }} resolved no Ceph
+      container image. Bootwright cannot prove that every selected storage node can
+      start the image cephadm will use, so this apply refuses before rebuild,
+      bootstrap, or disk mutation. Correct the StorageCluster provider/image inputs
+      and re-run {{ bootwright_mutating_invocation | default('the same apply invocation') }}.
+    quiet: true
+
 - name: Resolve and gate Ceph storage node identity
   ansible.builtin.include_tasks: phases/node_identity.yml
 
@@ -29,9 +44,6 @@
 
 - name: Prove the Ceph storage node container runtime
   ansible.builtin.include_tasks: phases/container_runtime.yml
-  when:
-    - not bootwright_task_storage_skip_prereqs | default(false) | bool
-    - bootwright_ceph_bootstrap_image | default('') | length > 0
 
 - name: Guard and clean an authorized Ceph cluster rebuild
   ansible.builtin.include_tasks: phases/rebuild.yml

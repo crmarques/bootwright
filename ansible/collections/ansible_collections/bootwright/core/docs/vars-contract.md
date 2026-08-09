@@ -784,7 +784,7 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_task_provider_host_name` | Provider host selected for one shared machine infrastructure prepare/finalize task |
 | `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage or machine registration task |
 | `bootwright_task_storage_prereqs_only` | Optional boolean that limits a storage task to node prerequisites before seed-only cephadm work |
-| `bootwright_task_storage_skip_prereqs` | Optional boolean that limits a storage task to the seed-only cephadm bootstrap, skipping node prerequisites |
+| `bootwright_task_storage_skip_prereqs` | Optional boolean that limits a storage task to seed-only cephadm convergence after earlier node prerequisites; it never skips the provider-image or container-runtime safety proof that precedes cluster and disk mutation |
 | `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_agent_node_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_machine_task_cluster_name` | ContainerCluster or managed OS group name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |

@@ -338,6 +338,10 @@ bootwright apply --stage deps --through end --yes    # deps to the end
 
 A range that starts past the first phase assumes the earlier phases already
 applied, and the run reports which ones it skipped on that assumption.
+Safety gates that must immediately precede a selected mutation are not treated
+as skippable prerequisites. In particular, `--stage base` resolves the selected
+Ceph image and proves every storage node can start it before any rebuild,
+bootstrap, or disk change.
 
 ### Selecting clusters
 
