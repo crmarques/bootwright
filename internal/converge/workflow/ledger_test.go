@@ -556,16 +556,26 @@ func TestRunLedgerRecordsReadyAtOnceAndDedupesBlockedOn(t *testing.T) {
 	ledger.RecordBlockedOn("t", "resource libvirt:host")
 	ledger.RecordBlockedOn("t", "redfish budget")
 	ledger.RecordBlockedOn("t", "  ")
+	task, _ = ledger.Task("t")
+	if want := []string{"resource libvirt:host", "redfish budget"}; !slices.Equal(task.BlockedOn, want) {
+		t.Fatalf("BlockedOn = %v, want %v", task.BlockedOn, want)
+	}
+
+	ledger.RecordBlockedOn("t", "resource libvirt:host")
+	task, _ = ledger.Task("t")
+	if want := []string{"redfish budget", "resource libvirt:host"}; !slices.Equal(task.BlockedOn, want) {
+		t.Fatalf("BlockedOn = %v, want a re-observed reason moved to the end: the run frame reads the last entry as the budget the task is waiting on right now, so a deduped reason left in place reports a queue the task already left", task.BlockedOn)
+	}
+
 	for i := 0; i < maxBlockedOnReasons+4; i++ {
 		ledger.RecordBlockedOn("t", "resource "+string(rune('a'+i)))
 	}
 	task, _ = ledger.Task("t")
-	want := []string{"resource libvirt:host", "redfish budget"}
-	if !slices.Equal(task.BlockedOn[:2], want) {
-		t.Fatalf("BlockedOn head = %v, want %v", task.BlockedOn[:2], want)
-	}
 	if len(task.BlockedOn) != maxBlockedOnReasons {
 		t.Fatalf("BlockedOn length = %d, want the recorded reasons capped at %d", len(task.BlockedOn), maxBlockedOnReasons)
+	}
+	if got := task.BlockedOn[len(task.BlockedOn)-1]; got != "resource "+string(rune('a'+maxBlockedOnReasons+3)) {
+		t.Fatalf("BlockedOn tail = %q, want the most recent reason: the cap must evict the oldest, never refuse the newest", got)
 	}
 }
 

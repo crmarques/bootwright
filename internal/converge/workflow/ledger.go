@@ -569,13 +569,15 @@ func (l *RunLedger) RecordBlockedOn(id, reason string) {
 		return
 	}
 	l.updateTask(id, func(task *TaskLedgerEntry) {
-		for _, existing := range task.BlockedOn {
-			if existing == reason {
-				return
+		for i, existing := range task.BlockedOn {
+			if existing != reason {
+				continue
 			}
+			task.BlockedOn = append(append(task.BlockedOn[:i:i], task.BlockedOn[i+1:]...), reason)
+			return
 		}
 		if len(task.BlockedOn) >= maxBlockedOnReasons {
-			return
+			task.BlockedOn = task.BlockedOn[1:]
 		}
 		task.BlockedOn = append(task.BlockedOn, reason)
 	})
@@ -641,7 +643,7 @@ func (l *RunLedger) BlockDependents(failedID string, now time.Time) {
 					task.Status = TaskStatusBlocked
 					t := now.UTC()
 					task.EndedAt = &t
-					task.SkippedReason = "dependency " + dep + " failed"
+					task.SkippedReason = blockedDependencyReason(*l, dep, failedID)
 					blocked[task.ID] = true
 					changed = true
 					break
@@ -649,6 +651,16 @@ func (l *RunLedger) BlockDependents(failedID string, now time.Time) {
 			}
 		}
 	}
+}
+
+func blockedDependencyReason(ledger RunLedger, dep, failedID string) string {
+	if dep == failedID {
+		return "dependency " + dep + " failed"
+	}
+	if depTask, ok := ledger.Task(dep); ok && depTask.Status == TaskStatusFailed {
+		return "dependency " + dep + " failed"
+	}
+	return "dependency " + dep + " is blocked by failed " + failedID
 }
 
 func (l RunLedger) FailedTasks() []TaskLedgerEntry {

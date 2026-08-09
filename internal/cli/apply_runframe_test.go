@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -230,4 +231,52 @@ func TestApplyTaskDisplayLabelKeepsSingularAndPluralProvisionLabels(t *testing.T
 	if got := applyTaskDisplayLabel("provision machine node01"); got != "Provision machine node01" {
 		t.Fatalf("singular label = %q", got)
 	}
+}
+
+func TestApplyRunFrameNamesEveryBudgetWaitNotOnlyTheInstallSlot(t *testing.T) {
+	readyAt := time.Now().UTC()
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "osinstall.ceph", Kind: workflow.ApplyTaskKindManagedMachineOS, Label: "managed OS ceph machines", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning},
+		{ID: "boot.ocp", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot ocp nodes", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, ReadyAt: &readyAt, BlockedOn: []string{workflow.ApplyClusterInstallBlocker, "redfish budget"}},
+	}, time.Now())
+
+	for _, group := range applyRunFrame(ledger, nil).Groups {
+		if group.Title != "ocp (ContainerCluster)" {
+			continue
+		}
+		if got := group.Steps[0].Detail; got != "waiting for Redfish slots" {
+			t.Fatalf("ocp cluster install detail = %q, want the budget the task is waiting on right now: an hour-long Redfish wait rendered as a bare PENDING row is indistinguishable from a hang, and the stale install-slot entry names a queue it already left", got)
+		}
+		return
+	}
+	t.Fatalf("ocp group missing")
+}
+
+func TestApplyRunFrameProgressDoesNotCountBlockedRowsAsDone(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "storage.ceph", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusFailed, Failure: "failure: OSDs never came in"},
+		{ID: "wait.ocp", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
+		{ID: "addon.ocp.fdf", Kind: workflow.ApplyTaskKindClusterAddon, Label: "addon fusion-data-foundation", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph"}},
+		{ID: "nodeconfig.ocp.apply", Kind: workflow.ApplyTaskKindNodeConfigApply, Label: "node config ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},
+	}, time.Now())
+
+	frame := applyRunFrame(ledger, nil)
+	if frame.Done != 0 {
+		t.Fatalf("Done = %d of %d, want 0: a failed storage cluster and an add-on row blocked behind it are not finished work, and counting them filled the bar to 75%% on a run where nothing had installed yet", frame.Done, frame.Total)
+	}
+	for _, group := range frame.Groups {
+		if group.Title != "ocp (ContainerCluster)" {
+			continue
+		}
+		for _, step := range group.Steps {
+			if step.Status != output.StatusBlocked {
+				continue
+			}
+			if !strings.Contains(step.Detail, "settled") {
+				t.Fatalf("blocked add-on row detail = %q, want the settled fraction so a row whose other members still run does not read as terminal", step.Detail)
+			}
+			return
+		}
+	}
+	t.Fatalf("blocked add-on row missing")
 }
