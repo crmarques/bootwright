@@ -3032,9 +3032,10 @@ verbs that reach machines.
   machine-granular: `destroy --machines` writes (or merges into) the cluster's
   record the names of the released machines, while a cluster-scoped destroy
   releases the whole cluster (no machine list); the managed-OS install probe
-  honors the release only for covered machines. A release is consumed only for
-  the machines an apply actually covered: a `--machines`-scoped apply shrinks
-  the record to the still-released remainder and clears it when none remain.
+  honors the release only for covered machines. When the selected workflow can
+  consume a release, it consumes only the machines that apply actually covered:
+  a `--machines`-scoped apply shrinks the record to the still-released remainder
+  and clears it when none remain.
   Consumption happens only through work that actually completes the rebuild,
   never through an install task skipped at plan time: the managed-OS install
   (`managedMachineOS`, a machines-phase task) for a storage machine, and the
@@ -3044,11 +3045,12 @@ verbs that reach machines.
   complete cannot authorize an individual-node recovery. The next apply that
   selects that machine fails closed before mutation, keeps the release record,
   and names the supported whole-cluster sequence exactly:
-  `bootwright destroy --clusters <cluster> --authorize data-loss --yes`, then
-  `bootwright apply --clusters <cluster> --yes`. The other sanctioned path is
-  the platform's external node-recovery procedure; Bootwright does not claim
-  that recovery as an apply. A cluster-wide release remains consumable by a
-  fresh whole-cluster install. With `destroy --authorize unreachable-nodes`, a
+  `bootwright destroy --clusters <cluster> --yes`, then
+  `bootwright apply --clusters <cluster> --authorize data-loss --yes`. The other
+  sanctioned path is the platform's external node-recovery procedure;
+  Bootwright does not claim that recovery as an apply. A cluster-wide release
+  remains consumable by a fresh whole-cluster install. With
+  `destroy --authorize unreachable-nodes`, a
   managed storage cluster receives the release only when its teardown completion
   report proves that no topology node was skipped. A partially destroyed storage
   cluster withholds it, as do infra-only, machine-scoped, and non-storage
@@ -3091,14 +3093,14 @@ verbs that reach machines.
   when every machine named by that task is selected; it always keeps the run
   ledger, shared run log, and parent cluster's flow log because those records
   also describe the still-live cluster. A component's history includes its prior
-  destroy runs: destroy-run ledgers record their components as task resource keys, and
-  the purge matches those keys the same way it matches an apply task's cluster
-  or node. A fully successful unscoped destroy has no surviving component, so
-  instead of per-component matching it sweeps every entry under `runs/history/`
-  — archived apply and destroy runs alike, and crashed runs that never archived
-  a ledger — keeping only the purging destroy run's own record, which the
-  current-run ledger still references. The purging run never deletes its own
-  record on any path. It never removes the destroy-authorization
+  destroy runs: destroy-run ledgers record their components as task resource
+  keys, and the purge matches those keys the same way it matches an apply task's
+  cluster or node. A fully successful unscoped destroy has no surviving
+  component, so instead of per-component matching it sweeps every entry under
+  `runs/history/` — archived apply and destroy runs alike, and crashed runs that
+  never archived a ledger — keeping only the purging destroy run's own record,
+  which the current-run ledger still references. The purging run never deletes
+  its own record on any path. It never removes the destroy-authorization
   substrate-release record (`runs/substrate-release/`, needed so a later `apply`
   can reinstall the released substrate) or unrelated context state (the
   ownership store, the input-history rollback snapshots). Rejected with the
@@ -3193,6 +3195,18 @@ verbs that reach machines.
   install task failed still reports `missing`) — and a bare `apply` re-runs it,
   while an object with a prior successful record keeps classifying against that
   record.
+- Every convergence and install-record desired hash carries a schema number. A
+  schema change never treats the old hash as proof that current desired state
+  matches. A successful task also writes an immutable, non-secret copy of its
+  exact hash input under that run's history. Bootwright may rebaseline a record
+  from exactly the immediately preceding schema only when the record names that
+  run, the snapshot identity and task status match, the archived ledger is an
+  `ok` run with exactly one matching task, and the snapshot input equals the
+  current input. Changed input is drift. A missing, unreadable, failed-run,
+  mismatched, or ambiguous snapshot is unknown evidence and fails closed before
+  mutation; the operator must restore the immutable run evidence or deliberately
+  rebuild the same selection. Rebaseline writes the current schema only after
+  all of those proofs succeed.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
   `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
@@ -3369,9 +3383,12 @@ verbs that reach machines.
     cluster-filtered desired state for their full-drift signal but also carry a
     structural projection that excludes day-2-owned intent (cluster add-ons, node
     labels/taints), so an edit confined to that intent is reconcilable-in-place
-    drift on the install object rather than a destructive reinstall; a change to
-    install-config/agent-config identity still moves the structural hash and stays
-    a rebuild. A present `StorageCluster` lists its out-of-sync sub-objects under
+    drift on the install object rather than a destructive reinstall; referenced
+    `NetworkConfig` data remains part of install identity, so a change to
+    install-config/agent-config identity moves the structural hash and stays a
+    rebuild. An erasure-coded `StoragePool`'s resolved CRUSH failure domain is
+    likewise structural because the in-place pool setters cannot change it. A
+    present `StorageCluster` lists its out-of-sync sub-objects under
     the cluster root, while a never-applied cluster still collapses to one absence.
     The `infrastructure` root aggregates the provider and infra-component host
     tasks.

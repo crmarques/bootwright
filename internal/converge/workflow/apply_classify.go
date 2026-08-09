@@ -105,7 +105,10 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		}
 		class := ConvergeSafetyMissing
 		if found {
-			class = ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
+			class, err = classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+			if err != nil {
+				return nil, err
+			}
 		}
 		reconcilable, err := taskDriftReconcilableWithRecord(task, record, found, class, desiredHash)
 		if err != nil {
@@ -200,7 +203,7 @@ func taskStretchArbiterShapeChange(task ApplyTask, record ConvergeSafetyRecord, 
 	if class != ConvergeSafetyDrift || reconcilable || !found {
 		return stretchArbiterUnchanged
 	}
-	if record.HashSchema < ConvergeHashSchema {
+	if record.HashSchema != ConvergeHashSchema {
 		return stretchArbiterUnchanged
 	}
 	cluster := task.Entry.Cluster

@@ -61,11 +61,14 @@ flag exists for.
 **Semantics (structural hash migration safety):** Install records carry both
 `DesiredHash` (full install-input hash) and `StructuralHash` (same payload
 with day-2-owned intent — cluster add-ons, per-node labels/taints — projected
-out). The gate compares on `StructuralHash` when present so a day-2-only edit
-reconciles in place; a legacy record with an empty `StructuralHash` falls back
-to the full `DesiredHash` comparison, so upgrading bootwright never turns an
-installed cluster into drift. Every record write stamps both hashes together
-(`clusterInstallHashes`). The machine-infra *prepare* and *finalize* tasks
+out). Referenced NetworkConfigs remain in the structural projection because
+they reach install-config/agent-config. The gate compares on `StructuralHash`
+when present so a day-2-only edit reconciles in place. Every record write stamps
+both hashes and the current hash schema together (`clusterInstallHashes`). A
+previous-schema record matches only through the immutable successful-input
+snapshot and its exact archived successful ledger task; absent or ambiguous
+evidence fails closed, and changed input remains drift. The machine-infra
+*prepare* and *finalize* tasks
 share the install task's structural projection for the same reason: without
 it, any day-2 edit flipped them to structural drift and `apply` refused with a
 false "would reinstall the machine — its disks wiped".

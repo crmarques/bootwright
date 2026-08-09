@@ -194,6 +194,13 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		return err
 	}
 	resourceID := applyTaskSafetyResourceID(task)
+	input, err := applyTaskDesiredHashInput(task)
+	if err != nil {
+		return err
+	}
+	if err := saveSuccessfulInputSnapshot(runsDir, runID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
+		return err
+	}
 	record := ConvergeSafetyRecord{
 		APIVersion:              ConvergeSafetyAPIVersion,
 		ResourceID:              resourceID,
@@ -244,7 +251,7 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 		if !found {
 			continue
 		}
-		rebaselinable, err := convergeRecordRebaselinable(record, applyTaskByID(before, task.Entry.ID), task)
+		rebaselinable, err := convergeRecordRebaselinable(runsDir, record, applyTaskByID(before, task.Entry.ID), task)
 		if err != nil {
 			return nil, err
 		}
@@ -260,15 +267,15 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 	return carried, nil
 }
 
-func convergeRecordRebaselinable(record ConvergeSafetyRecord, before *ApplyTask, after ApplyTask) (bool, error) {
-	matched, err := recordMatchesTask(record, before)
+func convergeRecordRebaselinable(runsDir string, record ConvergeSafetyRecord, before *ApplyTask, after ApplyTask) (bool, error) {
+	matched, err := recordMatchesTask(runsDir, record, before)
 	if err != nil {
 		return false, err
 	}
 	if matched {
 		return true, nil
 	}
-	matched, err = recordMatchesTask(record, &after)
+	matched, err = recordMatchesTask(runsDir, record, &after)
 	if err != nil {
 		return false, err
 	}
@@ -299,7 +306,7 @@ func applyTaskByID(tasks []ApplyTask, id string) *ApplyTask {
 	return nil
 }
 
-func recordMatchesTask(record ConvergeSafetyRecord, task *ApplyTask) (bool, error) {
+func recordMatchesTask(runsDir string, record ConvergeSafetyRecord, task *ApplyTask) (bool, error) {
 	if task == nil {
 		return false, nil
 	}
@@ -307,11 +314,18 @@ func recordMatchesTask(record ConvergeSafetyRecord, task *ApplyTask) (bool, erro
 	if err != nil {
 		return false, err
 	}
+	class, err := classifyApplyTaskWithRecord(*task, runsDir, record, desiredHash)
+	if err != nil {
+		return false, err
+	}
+	if class != ConvergeSafetyMatch {
+		return false, nil
+	}
 	structuralHash, err := ApplyTaskStructuralHash(*task)
 	if err != nil {
 		return false, err
 	}
-	return record.DesiredHash == desiredHash && record.StructuralHash == structuralHash, nil
+	return record.HashSchema == ConvergeHashSchema && record.StructuralHash == structuralHash || record.HashSchema == ConvergeHashSchema-1, nil
 }
 
 type applyTaskHashCache struct {
@@ -398,6 +412,15 @@ func ApplyTaskStructuralHash(task ApplyTask) (string, error) {
 }
 
 func computeApplyTaskDesiredHash(task ApplyTask) (string, error) {
+	data, err := applyTaskDesiredHashInput(task)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func applyTaskDesiredHashInput(task ApplyTask) ([]byte, error) {
 	payload := struct {
 		APIVersion   string          `json:"apiVersion"`
 		TaskID       string          `json:"taskID"`
@@ -435,10 +458,9 @@ func computeApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("encode apply task safety hash input: %w", err)
+		return nil, fmt.Errorf("encode apply task safety hash input: %w", err)
 	}
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return data, nil
 }
 
 func computeApplyTaskStructuralHash(task ApplyTask) (string, error) {
@@ -550,7 +572,7 @@ func applyTaskTiebreakerNodes(task ApplyTask) map[string]string {
 }
 
 func IsTiebreakerOnlyStructuralDrift(record ConvergeSafetyRecord, structuralHash, tiebreakerInvariantHash string, tiebreakerNodes map[string]string) bool {
-	if record.HashSchema < ConvergeHashSchema {
+	if record.HashSchema != ConvergeHashSchema {
 		return false
 	}
 	if strings.TrimSpace(record.StructuralHash) == "" || strings.TrimSpace(structuralHash) == "" {
@@ -572,7 +594,7 @@ func IsReconcilableDrift(record ConvergeSafetyRecord, desiredHash, structuralHas
 	if record.DesiredHash == desiredHash {
 		return false
 	}
-	if record.HashSchema < ConvergeHashSchema {
+	if record.HashSchema != ConvergeHashSchema {
 		return false
 	}
 	if strings.TrimSpace(structuralHash) == "" || strings.TrimSpace(record.StructuralHash) == "" {
@@ -588,10 +610,43 @@ func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManag
 	if record.Owner.Manager != ownerManager {
 		return ConvergeSafetyForeign
 	}
-	if record.DesiredHash == desiredHash {
+	if record.HashSchema == ConvergeHashSchema && record.DesiredHash == desiredHash {
 		return ConvergeSafetyMatch
 	}
 	return ConvergeSafetyDrift
+}
+
+func successfulTaskStatus(status ConvergeSafetyStatus) TaskStatus {
+	if status == ConvergeSafetyStatusSkipped {
+		return TaskStatusSkipped
+	}
+	return TaskStatusOK
+}
+
+func classifyApplyTaskWithRecord(task ApplyTask, runsDir string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
+	class := ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
+	if class == ConvergeSafetyMissing || class == ConvergeSafetyForeign || record.HashSchema != ConvergeHashSchema-1 {
+		return class, nil
+	}
+	resourceID := applyTaskSafetyResourceID(task)
+	if record.ResourceID != resourceID || record.TaskID != task.Entry.ID || record.TaskKind != task.Entry.Kind {
+		return ConvergeSafetyUnknown, fmt.Errorf("legacy converge record %s has ambiguous resource or task identity; rebuild the selected object to establish current safety evidence", resourceID)
+	}
+	input, err := applyTaskDesiredHashInput(task)
+	if err != nil {
+		return ConvergeSafetyUnknown, err
+	}
+	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(record.Status), record.HashSchema, input)
+	if err != nil {
+		if task.Entry.Cluster != "" {
+			return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", resourceID, err, task.Entry.Cluster)
+		}
+		return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild the same selection with --mode rebuild", resourceID, err)
+	}
+	if matched {
+		return ConvergeSafetyMatch, nil
+	}
+	return ConvergeSafetyDrift, nil
 }
 
 func applyTaskSafetyResourceID(task ApplyTask) string {

@@ -147,6 +147,41 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	}
 }
 
+func TestErasureCodedPoolFailureDomainIsStructural(t *testing.T) {
+	pool := storageSubObjectTestPool("ec", 3)
+	pool.Spec.Ceph.Type = v1alpha1.StoragePoolTypeErasureCode
+	pool.Spec.Ceph.Replicated = v1alpha1.StorageCephPoolReplicas{}
+	pool.Spec.Ceph.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
+	pool.Spec.PlacementPolicyRef.Name = "ec-policy"
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "demo"},
+			Spec:     v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}},
+		}},
+		StoragePools: []v1alpha1.StoragePool{pool},
+		StoragePlacementPolicies: []v1alpha1.StoragePlacementPolicy{{
+			Metadata: v1alpha1.Metadata{Name: "ec-policy"},
+			Spec: v1alpha1.StoragePlacementPolicySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				Ceph:              v1alpha1.StoragePlacementCephSpec{FailureDomain: "rack"},
+			},
+		}},
+	}
+	sub := storageSubObject{storageSubObjectKindPool, "demo", "ec"}
+	base, err := storageSubObjectStructuralHash(state, sub)
+	if err != nil {
+		t.Fatalf("base structural hash: %v", err)
+	}
+	state.StoragePlacementPolicies[0].Spec.Ceph.FailureDomain = "datacenter"
+	changed, err := storageSubObjectStructuralHash(state, sub)
+	if err != nil {
+		t.Fatalf("changed structural hash: %v", err)
+	}
+	if base == changed {
+		t.Fatal("changing an erasure-coded pool failure domain must change its structural hash")
+	}
+}
+
 func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)

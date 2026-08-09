@@ -1097,6 +1097,7 @@ there.
 | `runs/history/<run-id>/clusters/<cluster>/steps/<task-id>/` | One step's Ansible output log for that cluster, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
 | `runs/history/<run-id>/clusters/<cluster>/addons/<addon>/` | One add-on's output log, under the cluster it was applied to. |
 | `runs/history/<run-id>/input/` | The forensic snapshot of the input YAML an `apply` loaded, written at the start of the mutating run. |
+| `runs/history/<run-id>/successful-inputs/` | Immutable, non-secret per-resource hash inputs bound to successful ledger tasks. A later hash-schema change may use them to prove an exact match; missing or ambiguous evidence fails closed. |
 | `runs/history/<run-id>/tasks/<task-id>/artifacts/` | One non-cluster task's Ansible output log (fabric and infra work that owns no cluster), plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
@@ -1108,9 +1109,11 @@ updating process; cluster install tasks additionally record per-cluster install
 state. The lease is per context and spans input read, safety gates, remote work,
 and final evidence cleanup. Input-mutating `context update`, `diff --adopt`, and
 arbiter replacement share it, so they cannot race an apply or destroy that
-already classified the previous input. The forensic input snapshots capture
-what was applied — nothing reads them back, and `plan` / `--dry-run` never write
-them.
+already classified the previous input. The forensic YAML input snapshots
+capture what was loaded and are not
+classification input. The separate successful-input snapshots are machine-read
+only for fail-closed hash-schema rebaseline proof. `plan` / `--dry-run` write
+neither kind.
 
 !!! note "Commands re-exec through `sudo` for context state"
     The context tree under `/var/lib/bootwright/` is root-managed. Commands that

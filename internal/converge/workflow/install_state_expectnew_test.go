@@ -38,7 +38,7 @@ func TestReconcileApplyClusterInstallStateExpectNewRefusesExistingRecord(t *test
 				t.Fatalf("SaveClusterInstallRecord: %v", err)
 			}
 			checker := &fakeClusterAvailabilityChecker{available: true}
-			_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", secretsDir, "run", state, tasks, ApplyModeCreate, nil, checker, now)
+			_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeCreate, nil, checker, now)
 			if err == nil || !strings.Contains(err.Error(), "requires a greenfield environment") {
 				t.Fatalf("expect-new against an existing install record must fail closed, got %v", err)
 			}
@@ -64,7 +64,7 @@ func TestOverrideReinstallInputDriftedClusters(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
-	drifted := OverrideReinstallInputDriftedClusters(clustersDir, "", secretsDir, state, tasks)
+	drifted := OverrideReinstallInputDriftedClusters(clustersDir, "", "", secretsDir, state, tasks)
 	if len(drifted) != 1 || drifted[0] != cluster {
 		t.Fatalf("stale install inputs must flag the cluster for reinstall, got %v", drifted)
 	}
@@ -79,7 +79,7 @@ func TestOverrideReinstallInputDriftedClusters(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
-	if got := OverrideReinstallInputDriftedClusters(clustersDir, "", secretsDir, state, tasks); len(got) != 0 {
+	if got := OverrideReinstallInputDriftedClusters(clustersDir, "", "", secretsDir, state, tasks); len(got) != 0 {
 		t.Fatalf("matching install inputs must not flag a reinstall, got %v", got)
 	}
 }

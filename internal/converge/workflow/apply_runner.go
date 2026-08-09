@@ -136,7 +136,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}
-	if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
+	if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, runsDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
 	if recordErr := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, now); recordErr != nil {
@@ -196,7 +196,14 @@ func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, task A
 		return false, "", nil
 	}
 	desiredHash, err := ApplyTaskDesiredHash(task)
-	if err != nil || record.DesiredHash != desiredHash {
+	if err != nil {
+		return false, "", err
+	}
+	class, err := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+	if err != nil {
+		return false, "", err
+	}
+	if class != ConvergeSafetyMatch {
 		return false, "", nil
 	}
 	if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusSkipped, time.Now()); err != nil {

@@ -172,13 +172,20 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 			default:
 				p.Status(cliout.StatusWarn, label, stateCheckRootSummary(root))
 				for _, resource := range root.Resources {
-					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
+					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, stateCheckResourceDetail(resource))
 				}
 			}
 		}
 	}
 	printStateCheckOrphans(p, report.Undeclared)
 	printStateCheckLoadWarnings(p, report.LoadWarnings)
+}
+
+func stateCheckResourceDetail(resource workflow.StateCheckResource) string {
+	if resource.Classification == workflow.ConvergeSafetyDrift && resource.DriftAction != "" {
+		return string(resource.Classification) + " (" + string(resource.DriftAction) + ")"
+	}
+	return string(resource.Classification)
 }
 
 func printStateCheckLoadWarnings(p *cliout.Printer, warnings []string) {

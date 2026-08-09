@@ -13,7 +13,7 @@ var structuralFieldClass = map[string]string{
 	"Machines":                 "excluded",
 	"MachineImages":            "excluded",
 	"MachineInstallProfiles":   "excluded",
-	"NetworkConfigs":           "excluded",
+	"NetworkConfigs":           "container-identity",
 	"InfraProviders":           "excluded",
 	"InfraComponents":          "excluded",
 	"ContainerClusters":        "identity",
@@ -36,7 +36,7 @@ func TestStateFieldsAllStructurallyClassified(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		name := typ.Field(i).Name
 		if _, ok := structuralFieldClass[name]; !ok {
-			t.Fatalf("v1alpha1.State field %q is not classified for the structural-hash projection; add it to structuralFieldClass as identity, subobject, day2, excluded, or excludePending so a new kind cannot silently leak into the destructive-rebuild hash (2026-07-12 lifecycle review H4)", name)
+			t.Fatalf("v1alpha1.State field %q is not classified for the structural-hash projection; add it to structuralFieldClass as identity, container-identity, subobject, day2, excluded, or excludePending so a new kind cannot silently leak into the destructive-rebuild hash (2026-07-12 lifecycle review H4)", name)
 		}
 	}
 }
@@ -58,12 +58,37 @@ func TestStorageStructuralProjectionClearsExcludedKinds(t *testing.T) {
 		"InfraComponents": len(projected.InfraComponents),
 		"Secrets":         len(projected.Secrets),
 	} {
-		if structuralFieldClass[field] != "excluded" {
+		if structuralFieldClass[field] != "excluded" && structuralFieldClass[field] != "container-identity" {
 			t.Fatalf("field %q is asserted cleared but not classified excluded", field)
 		}
 		if value != 0 {
 			t.Fatalf("storage structural projection must clear excluded kind %q, but it survived (%d entries)", field, value)
 		}
+	}
+}
+
+func TestContainerClusterStructuralProjectionIncludesReferencedNetworkConfig(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	if len(state.NetworkConfigs) == 0 {
+		t.Fatal("fixture has no referenced NetworkConfig")
+	}
+	base := ApplyTask{
+		Entry:              TaskLedgerEntry{ID: "wait.sno-libvirt", Kind: ApplyTaskKindInstallWait},
+		StructuralHashVars: containerClusterInstallStructuralHashVars(state),
+	}
+	baseHash, err := ApplyTaskStructuralHash(base)
+	if err != nil {
+		t.Fatalf("base structural hash: %v", err)
+	}
+	state.NetworkConfigs[0].Spec.MachineNetwork = append(state.NetworkConfigs[0].Spec.MachineNetwork, v1alpha1.MachineNetworkCIDR{CIDR: "192.0.2.0/24"})
+	changed := base
+	changed.StructuralHashVars = containerClusterInstallStructuralHashVars(state)
+	changedHash, err := ApplyTaskStructuralHash(changed)
+	if err != nil {
+		t.Fatalf("changed structural hash: %v", err)
+	}
+	if changedHash == baseHash {
+		t.Fatal("a referenced NetworkConfig edit must change the ContainerCluster install structural hash")
 	}
 }
 
@@ -96,8 +121,8 @@ func TestStorageStructuralProjectionClearsReferencedInstallKinds(t *testing.T) {
 		"NetworkConfigs":         len(projected.NetworkConfigs),
 		"CustomPlaybooks":        len(projected.CustomPlaybooks),
 	} {
-		if structuralFieldClass[field] != "excluded" {
-			t.Fatalf("field %q is asserted cleared but not classified excluded", field)
+		if structuralFieldClass[field] != "excluded" && structuralFieldClass[field] != "container-identity" {
+			t.Fatalf("field %q is asserted cleared from storage but not classified excluded or container-only identity", field)
 		}
 		if value != 0 {
 			t.Fatalf("storage structural projection must clear %q so its edits never classify as wipe-and-rebuild, but it survived (%d entries)", field, value)

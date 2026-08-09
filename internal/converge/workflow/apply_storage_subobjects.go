@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 const (
@@ -119,6 +120,15 @@ func storagePoolHashSpec(state v1alpha1.State, pool v1alpha1.StoragePool) any {
 }
 
 func storageSubObjectDesiredHash(state v1alpha1.State, sub storageSubObject) (string, error) {
+	data, err := storageSubObjectDesiredHashInput(state, sub)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func storageSubObjectDesiredHashInput(state v1alpha1.State, sub storageSubObject) ([]byte, error) {
 	payload := struct {
 		APIVersion string `json:"apiVersion"`
 		Kind       string `json:"kind"`
@@ -134,10 +144,9 @@ func storageSubObjectDesiredHash(state v1alpha1.State, sub storageSubObject) (st
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("encode storage sub-object desired hash input: %w", err)
+		return nil, fmt.Errorf("encode storage sub-object desired hash input: %w", err)
 	}
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return data, nil
 }
 
 func storageSubObjectStructuralSpec(state v1alpha1.State, sub storageSubObject) any {
@@ -145,10 +154,20 @@ func storageSubObjectStructuralSpec(state v1alpha1.State, sub storageSubObject) 
 	case storageSubObjectKindPool:
 		for _, pool := range state.StoragePools {
 			if pool.Spec.StorageClusterRef.Name == sub.Cluster && pool.Metadata.Name == sub.Name {
+				failureDomain := ""
+				if pool.Spec.Ceph.Type == v1alpha1.StoragePoolTypeErasureCode {
+					for _, cluster := range state.StorageClusters {
+						if cluster.Metadata.Name == sub.Cluster && cluster.Spec.Ceph != nil {
+							failureDomain = topology.StoragePoolFailureDomain(state, cluster, pool)
+							break
+						}
+					}
+				}
 				return struct {
-					Type    string                           `json:"type,omitempty"`
-					Erasure *v1alpha1.StoragePoolErasureCode `json:"erasure,omitempty"`
-				}{Type: pool.Spec.Ceph.Type, Erasure: pool.Spec.Ceph.ErasureCoded}
+					Type          string                           `json:"type,omitempty"`
+					Erasure       *v1alpha1.StoragePoolErasureCode `json:"erasure,omitempty"`
+					FailureDomain string                           `json:"failureDomain,omitempty"`
+				}{Type: pool.Spec.Ceph.Type, Erasure: pool.Spec.Ceph.ErasureCoded, FailureDomain: failureDomain}
 			}
 		}
 	case storageSubObjectKindFilesystem:
@@ -242,7 +261,30 @@ func classifyStorageSubObject(state v1alpha1.State, sub storageSubObject, runsDi
 	if !found {
 		return ConvergeSafetyMissing, nil
 	}
-	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), nil
+	return classifyStorageSubObjectWithRecord(state, sub, runsDir, record, desiredHash)
+}
+
+func classifyStorageSubObjectWithRecord(state v1alpha1.State, sub storageSubObject, runsDir string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
+	class := ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
+	if class == ConvergeSafetyMissing || class == ConvergeSafetyForeign || record.HashSchema != ConvergeHashSchema-1 {
+		return class, nil
+	}
+	taskID := "storage." + sub.Cluster
+	if record.ResourceID != sub.resourceID() || record.TaskID != taskID || record.TaskKind != ApplyTaskKindStorageCluster {
+		return ConvergeSafetyUnknown, fmt.Errorf("legacy converge record %s has ambiguous resource or task identity; rebuild the selected object to establish current safety evidence", sub.resourceID())
+	}
+	input, err := storageSubObjectDesiredHashInput(state, sub)
+	if err != nil {
+		return ConvergeSafetyUnknown, err
+	}
+	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(record.Status), record.HashSchema, input)
+	if err != nil {
+		return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", sub.resourceID(), err, sub.Cluster)
+	}
+	if matched {
+		return ConvergeSafetyMatch, nil
+	}
+	return ConvergeSafetyDrift, nil
 }
 
 func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, state v1alpha1.State, cluster string, status ConvergeSafetyStatus, now time.Time) error {
@@ -250,19 +292,25 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 		return nil
 	}
 	for _, sub := range storageSubObjects(state, cluster) {
-		desiredHash, err := storageSubObjectDesiredHash(state, sub)
+		input, err := storageSubObjectDesiredHashInput(state, sub)
 		if err != nil {
 			return err
 		}
+		sum := sha256.Sum256(input)
+		desiredHash := "sha256:" + hex.EncodeToString(sum[:])
 		structuralHash, err := storageSubObjectStructuralHash(state, sub)
 		if err != nil {
+			return err
+		}
+		taskID := "storage." + cluster
+		if err := saveSuccessfulInputSnapshot(runsDir, runID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
 			return err
 		}
 		record := ConvergeSafetyRecord{
 			APIVersion:     ConvergeSafetyAPIVersion,
 			ResourceID:     sub.resourceID(),
 			ResourceKind:   sub.Kind,
-			TaskID:         "storage." + cluster,
+			TaskID:         taskID,
 			TaskKind:       ApplyTaskKindStorageCluster,
 			DesiredHash:    desiredHash,
 			StructuralHash: structuralHash,

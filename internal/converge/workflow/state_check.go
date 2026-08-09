@@ -12,7 +12,15 @@ type StateCheckResource struct {
 	Label          string                       `json:"label"`
 	Classification ConvergeSafetyClassification `json:"classification"`
 	Reconcilable   bool                         `json:"reconcilable,omitempty"`
+	DriftAction    StateCheckDriftAction        `json:"driftAction,omitempty"`
 }
+
+type StateCheckDriftAction string
+
+const (
+	StateCheckDriftActionReconcile StateCheckDriftAction = "reconcile"
+	StateCheckDriftActionRebuild   StateCheckDriftAction = "rebuild"
+)
 
 type StateCheckRoot struct {
 	Kind      string               `json:"kind"`
@@ -76,11 +84,13 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		}
 		if warning != "" {
 			loadWarnings = append(loadWarnings, warning)
-			continue
 		}
-		reconcilable, err := taskDriftReconcilable(task, runsDir, class)
-		if err != nil {
-			return StateCheckReport{}, err
+		reconcilable := false
+		if warning == "" {
+			reconcilable, err = taskDriftReconcilable(task, runsDir, class)
+			if err != nil {
+				return StateCheckReport{}, err
+			}
 		}
 		accumulate(rootFor(kind, name), class, stateCheckResource(task, class, reconcilable))
 	}
@@ -103,11 +113,13 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 			}
 			if warning != "" {
 				loadWarnings = append(loadWarnings, warning)
-				continue
 			}
-			reconcilable, err := storageSubObjectReconcilableDrift(state, sub, runsDir)
-			if err != nil {
-				return StateCheckReport{}, err
+			reconcilable := false
+			if warning == "" {
+				reconcilable, err = storageSubObjectReconcilableDrift(state, sub, runsDir)
+				if err != nil {
+					return StateCheckReport{}, err
+				}
 			}
 			accumulate(acc, class, storageSubObjectResource(sub, class, reconcilable))
 		}
@@ -146,12 +158,16 @@ func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafe
 		return "", "", err
 	}
 	if warning != "" {
-		return "", warning, nil
+		return ConvergeSafetyUnknown, warning, nil
 	}
 	if !found {
 		return ConvergeSafetyMissing, "", nil
 	}
-	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), "", nil
+	class, classifyErr := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+	if classifyErr != nil {
+		return ConvergeSafetyUnknown, classifyErr.Error(), nil
+	}
+	return class, "", nil
 }
 
 func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject, runsDir string) (ConvergeSafetyClassification, string, error) {
@@ -164,12 +180,16 @@ func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject,
 		return "", "", err
 	}
 	if warning != "" {
-		return "", warning, nil
+		return ConvergeSafetyUnknown, warning, nil
 	}
 	if !found {
 		return ConvergeSafetyMissing, "", nil
 	}
-	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), "", nil
+	class, classifyErr := classifyStorageSubObjectWithRecord(state, sub, runsDir, record, desiredHash)
+	if classifyErr != nil {
+		return ConvergeSafetyUnknown, classifyErr.Error(), nil
+	}
+	return class, "", nil
 }
 
 func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClassification, error) {
@@ -184,25 +204,39 @@ func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClass
 	if !found {
 		return ConvergeSafetyMissing, nil
 	}
-	return ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner), nil
+	return classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
 }
 
 func stateCheckResource(task ApplyTask, class ConvergeSafetyClassification, reconcilable bool) StateCheckResource {
-	return StateCheckResource{
+	resource := StateCheckResource{
 		ResourceID:     applyTaskSafetyResourceID(task),
 		Kind:           task.Entry.Kind,
 		Label:          task.Entry.Label,
 		Classification: class,
 		Reconcilable:   reconcilable,
 	}
+	resource.DriftAction = stateCheckDriftAction(class, reconcilable)
+	return resource
 }
 
 func storageSubObjectResource(sub storageSubObject, class ConvergeSafetyClassification, reconcilable bool) StateCheckResource {
-	return StateCheckResource{
+	resource := StateCheckResource{
 		ResourceID:     sub.resourceID(),
 		Kind:           sub.Kind,
 		Label:          sub.resourceID(),
 		Classification: class,
 		Reconcilable:   reconcilable,
 	}
+	resource.DriftAction = stateCheckDriftAction(class, reconcilable)
+	return resource
+}
+
+func stateCheckDriftAction(class ConvergeSafetyClassification, reconcilable bool) StateCheckDriftAction {
+	if class != ConvergeSafetyDrift {
+		return ""
+	}
+	if reconcilable {
+		return StateCheckDriftActionReconcile
+	}
+	return StateCheckDriftActionRebuild
 }

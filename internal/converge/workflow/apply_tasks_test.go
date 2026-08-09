@@ -274,17 +274,17 @@ func TestConvergeSafetyClassification(t *testing.T) {
 		},
 		{
 			name:   "match",
-			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, HashSchema: ConvergeHashSchema, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
 			want:   ConvergeSafetyMatch,
 		},
 		{
 			name:   "drift",
-			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: "sha256:old", Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: "sha256:old", HashSchema: ConvergeHashSchema, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
 			want:   ConvergeSafetyDrift,
 		},
 		{
 			name:   "foreign",
-			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, Owner: ConvergeSafetyOwnerIdentity{Manager: "other"}},
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, HashSchema: ConvergeHashSchema, Owner: ConvergeSafetyOwnerIdentity{Manager: "other"}},
 			want:   ConvergeSafetyForeign,
 		},
 	}

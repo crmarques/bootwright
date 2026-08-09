@@ -268,7 +268,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
+			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants)
 			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped)
 			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
@@ -297,7 +297,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			var ownedReclaim []string
 			if override {
 				var rerr error
-				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
+				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks); rerr != nil {
 					return failErr(1, rerr)
 				}
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
@@ -393,7 +393,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			reporter.DryRunTasks(runCommandLabel, planEntries, limits, applyPlanGroups(planEntries, buildClusterDisplays(state)))
 			var reinstallDrift []string
 			if mode == workflow.ApplyModeRebuild {
-				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
+				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			}
 			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)

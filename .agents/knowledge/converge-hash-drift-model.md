@@ -83,16 +83,28 @@ the full State with a payload byte-identical to the prior definition (a non-nil
 State pointer marshals the same as the value) — changing the marshal shape
 false-drifts every recorded object on upgrade.
 
-**Shared fabric is cleared from the install structural hash:** InfraProviders,
-InfraComponents, and NetworkConfigs are excised from the ContainerCluster
-install structural hash because each re-applies via its own reconfigure-only
-task — left in, one BMC TLS/proxy/artifact-server edit would refuse the whole
-fleet as a reinstall. Install-material changes still move the hash through the
-rendered InstallConfig/AgentConfig/Manifests hashed alongside. The container
+**Shared fabric is cleared from the install structural hash:** InfraProviders
+and InfraComponents are excised from the ContainerCluster install structural
+hash because each re-applies via its own reconfigure-only task — left in, one
+BMC TLS/proxy/artifact-server edit would refuse the whole fleet as a reinstall.
+A referenced NetworkConfig is different: it contributes installer networking,
+so omitting it made an install-identity edit look reconcilable and then do
+nothing. Referenced NetworkConfigs therefore remain structural. The container
 machine-infra prepare/finalize tasks share the install structural projection
 for the same reason: without it any day-2 edit flipped them to structural drift
 and continue refused with a false "would reinstall the machine — its disks
 wiped".
+
+**Schema rebaseline needs immutable successful-run proof:** a schema bump never
+compares an old desired hash directly with a new one. Each successful task
+writes its exact, non-secret hash input under
+`runs/history/<run-id>/successful-inputs/`; the record, snapshot, and archived
+`ok` ledger must agree on run, resource, one task identity, terminal status, and
+the immediately preceding schema. Only byte-equivalent canonical JSON may be
+rebaselined. Missing, unreadable, failed-run, mismatched, or duplicate evidence
+is unknown and fails closed; different valid input is drift. The immutable file
+writer refuses replacement. This lets a future projection fix preserve a true
+match without forging a baseline or turning absent evidence into permission.
 
 **Override allowlist fails safe, and holds only live task kinds:**
 `overrideReconfigureOnlyKinds` is an allowlist (unlisted kind = destructive).

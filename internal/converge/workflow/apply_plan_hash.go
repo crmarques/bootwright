@@ -20,7 +20,6 @@ func containerClusterInstallStructuralHashVars(clusterState v1alpha1.State) v1al
 	clone.ClusterAddonProfiles = nil
 	clone.InfraProviders = nil
 	clone.InfraComponents = nil
-	clone.NetworkConfigs = nil
 	clone.Entitlements = nil
 	clone.MachineImages = nil
 	clone.MachineInstallProfiles = nil

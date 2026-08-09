@@ -264,7 +264,7 @@ func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRec
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, mode ApplyMode, ackedReinstalls []string, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, []string, error) {
+func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, mode ApplyMode, ackedReinstalls []string, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, []string, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -279,7 +279,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if !stateHasContainerCluster(state, name) {
 			continue
 		}
-		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
+		hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, state, name, secretsDir)
 		if err != nil {
 			return out, installedMatching, err
 		}
@@ -287,7 +287,14 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if err != nil {
 			return out, installedMatching, err
 		}
-		hashMatches := !found || installInputsMatch(record, hash, structuralHash)
+		hashMatches := !found
+		rebaseline := false
+		if found {
+			hashMatches, rebaseline, err = clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+			if err != nil {
+				return out, installedMatching, err
+			}
+		}
 		if err := guardStaleAgentISOBoot(out, name, record, found, hashMatches); err != nil {
 			return out, installedMatching, err
 		}
@@ -301,7 +308,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			if !found || record.Status != ClusterInstallStatusInstalled {
 				continue
 			}
-			if !installInputsMatch(record, hash, structuralHash) {
+			if !hashMatches {
 				if acked[name] {
 					continue
 				}
@@ -314,6 +321,11 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 				return err
 			})
 			if availErr == nil && available {
+				if rebaseline {
+					if err := rebaselineClusterInstallRecord(clustersDir, &record, hash, structuralHash, now); err != nil {
+						return out, installedMatching, err
+					}
+				}
 				out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs; --mode rebuild rebuilds only drifted objects, not a healthy in-sync cluster", now)
 				installedMatching = append(installedMatching, name)
 				continue
@@ -349,6 +361,11 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 			if !available {
 				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; to keep its data, repair the cluster to Available=True and re-run apply, or rebuild it with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes", name, name)
 			}
+			if rebaseline {
+				if err := rebaselineClusterInstallRecord(clustersDir, &record, hash, structuralHash, now); err != nil {
+					return out, installedMatching, err
+				}
+			}
 			out = skipClusterInstallTasks(out, name, allClusterInstallTaskKinds(), "cluster already installed and Available=True for desired install inputs", now)
 			installedMatching = append(installedMatching, name)
 		case ClusterInstallStatusInstalling, ClusterInstallStatusFailed:
@@ -376,6 +393,23 @@ func stampInstalledClusterConvergeRecords(runsDir, contextName, runID string, ta
 	for _, task := range tasks {
 		if !set[task.Entry.Cluster] || !isClusterInstallTaskKind(task.Entry.Kind) {
 			continue
+		}
+		record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+		if err != nil {
+			return err
+		}
+		if found && record.HashSchema != ConvergeHashSchema {
+			desiredHash, err := ApplyTaskDesiredHash(task)
+			if err != nil {
+				return err
+			}
+			class, err := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+			if err != nil {
+				return err
+			}
+			if class != ConvergeSafetyMatch {
+				return fmt.Errorf("ContainerCluster/%s cannot rebaseline legacy converge record %s because its exact successful-run input snapshot is missing or differs; rebuild the cluster to establish current safety evidence", task.Entry.Cluster, record.ResourceID)
+			}
 		}
 		if err := MarkApplyTaskConvergeSafety(runsDir, contextName, runID, task, ConvergeSafetyStatusSkipped, now); err != nil {
 			return fmt.Errorf("record verified-installed cluster %s: %w", task.Entry.Cluster, err)
@@ -405,7 +439,7 @@ func ClusterReinstallDescriptors(reinstalls []ClusterReinstall) []string {
 	return out
 }
 
-func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask, checker ClusterAvailabilityChecker) ([]ClusterReinstall, error) {
+func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask, checker ClusterAvailabilityChecker) ([]ClusterReinstall, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -415,7 +449,7 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 		if !stateHasContainerCluster(state, name) {
 			continue
 		}
-		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
+		hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, state, name, secretsDir)
 		if err != nil {
 			continue
 		}
@@ -435,7 +469,11 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, contextN
 			}
 			continue
 		}
-		if !installInputsMatch(record, hash, structuralHash) {
+		matches, _, err := clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+		if err != nil {
+			return nil, err
+		}
+		if !matches {
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --mode rebuild reinstalls the cluster and wipes its node disks)", name)})
 			continue
 		}
@@ -478,13 +516,13 @@ func unverifiableOverrideProbeError(unverifiable, details, planned []string) err
 		strings.Join(details, ", "), exclude, strings.Join(unverifiable, ","))
 }
 
-func OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask) []string {
+func OverrideReinstallInputDriftedClusters(clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []ApplyTask) []string {
 	var out []string
 	for _, name := range installTaskClusterNames(tasks) {
 		if !stateHasContainerCluster(state, name) {
 			continue
 		}
-		hash, structuralHash, err := clusterInstallHashes(contextName, state, name, secretsDir)
+		hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, state, name, secretsDir)
 		if err != nil {
 			continue
 		}
@@ -492,7 +530,8 @@ func OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir 
 		if err != nil || !found || record.Status != ClusterInstallStatusInstalled {
 			continue
 		}
-		if !installInputsMatch(record, hash, structuralHash) {
+		matches, _, matchErr := clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+		if matchErr != nil || !matches {
 			out = append(out, name)
 		}
 	}
@@ -631,7 +670,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	return nil
 }
 
-func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskSucceeded(clustersDir, runsDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskSuccessPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -646,9 +685,14 @@ func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID
 	if !found {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
-	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
+	hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
+	}
+	if task.Entry.Kind == ApplyTaskKindInstallWait {
+		if err := saveSuccessfulInputSnapshot(runsDir, runID, clusterInstallSnapshotResourceID(task.Entry.Cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, ConvergeHashSchema, input); err != nil {
+			return err
+		}
 	}
 	record.DesiredHash = hash
 	record.StructuralHash = structuralHash
@@ -796,6 +840,15 @@ func clusterInstallHashInputsFor(contextName string, state v1alpha1.State, clust
 }
 
 func finishClusterInstallHash(clusterName string, inputs *clusterInstallHashInputs, secretInputs []render.InstallerSecretInputStat, projectDay2 bool) (string, error) {
+	data, err := clusterInstallHashInput(clusterName, inputs, secretInputs, projectDay2)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func clusterInstallHashInput(clusterName string, inputs *clusterInstallHashInputs, secretInputs []render.InstallerSecretInputStat, projectDay2 bool) ([]byte, error) {
 	embedState := inputs.scopedState
 	if projectDay2 {
 		embedState = inputs.structuralState
@@ -819,10 +872,9 @@ func finishClusterInstallHash(clusterName string, inputs *clusterInstallHashInpu
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("encode cluster install hash input: %w", err)
+		return nil, fmt.Errorf("encode cluster install hash input: %w", err)
 	}
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return data, nil
 }
 
 func clusterInstallHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string, projectDay2 bool) (string, error) {
@@ -847,7 +899,7 @@ func clusterInstallHashParts(contextName string, state v1alpha1.State, clusterNa
 }
 
 func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
-	if record.HashSchema < ConvergeHashSchema {
+	if record.HashSchema != ConvergeHashSchema {
 		return false
 	}
 	if record.StructuralHash != "" && structuralHash != "" {
@@ -857,20 +909,62 @@ func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash
 }
 
 func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
+	hash, structuralHash, _, err = clusterInstallHashesAndInput(contextName, state, clusterName, secretsDir)
+	return hash, structuralHash, err
+}
+
+func clusterInstallHashesAndInput(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, input []byte, err error) {
 	contextName = effectiveContextName(contextName)
 	inputs, secretInputs, err := clusterInstallHashParts(contextName, state, clusterName, secretsDir)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	hash, err = finishClusterInstallHash(clusterName, inputs, secretInputs, false)
+	input, err = clusterInstallHashInput(clusterName, inputs, secretInputs, false)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
+	sum := sha256.Sum256(input)
+	hash = "sha256:" + hex.EncodeToString(sum[:])
 	structuralHash, err = finishClusterInstallHash(clusterName, inputs, secretInputs, true)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	return hash, structuralHash, nil
+	return hash, structuralHash, input, nil
+}
+
+func clusterInstallSnapshotResourceID(cluster string) string {
+	return ObjectKindContainerCluster + "Install/" + cluster
+}
+
+func installWaitTask(tasks []ApplyTask, cluster string) *ApplyTask {
+	for i := range tasks {
+		if tasks[i].Entry.Cluster == cluster && tasks[i].Entry.Kind == ApplyTaskKindInstallWait {
+			return &tasks[i]
+		}
+	}
+	return nil
+}
+
+func clusterInstallRecordInputsMatch(runsDir string, record ClusterInstallRecord, cluster string, task *ApplyTask, desiredHash, structuralHash string, input []byte) (bool, bool, error) {
+	if record.HashSchema == ConvergeHashSchema {
+		return installInputsMatch(record, desiredHash, structuralHash), false, nil
+	}
+	if record.HashSchema != ConvergeHashSchema-1 || record.Status != ClusterInstallStatusInstalled || task == nil || record.Cluster != cluster {
+		return false, false, nil
+	}
+	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, input)
+	if err != nil {
+		return false, false, fmt.Errorf("cannot verify legacy install inputs for ContainerCluster/%s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", cluster, err, cluster)
+	}
+	return matched, matched, nil
+}
+
+func rebaselineClusterInstallRecord(clustersDir string, record *ClusterInstallRecord, desiredHash, structuralHash string, now time.Time) error {
+	record.DesiredHash = desiredHash
+	record.StructuralHash = structuralHash
+	record.HashSchema = ConvergeHashSchema
+	record.UpdatedAt = now.UTC()
+	return SaveClusterInstallRecord(clustersDir, *record)
 }
 
 func ComputeClusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, string, error) {

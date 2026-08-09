@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-const ConvergeHashSchema = 3
+const ConvergeHashSchema = 4
 
 func hashScopedState(state v1alpha1.State) v1alpha1.State {
 	state.Environments = environmentsWithoutAuthorizationPolicy(state.Environments)

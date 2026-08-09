@@ -870,24 +870,6 @@ learned; this file records what it still owes.
   means the same thing on every node, and the preflight converges on the
   repositories ADR 0051 says it proves.
 
-## B-081 — Silent no-ops from two structural projections that drop identity fields
-- Status: open
-- Area: apply / drift classification
-- Origin: apply/destroy safety-contract review (2026-08-06)
-- Problem: two edits an operator can author classify as reconcilable-in-place and
-  then converge nothing. (1) The `ContainerCluster` structural projection nulls
-  `NetworkConfigs`, so an agent-config/install-config identity edit — which needs a
-  reinstall — reads as day-2 drift. (2) An erasure-coded `StoragePool`'s derived
-  crush failure domain is absent from the pool's structural spec, so changing it
-  classifies as reconcilable and `ceph … set` cannot express it. Both are silent
-  no-ops: `apply` reports success and the live object keeps the old identity, which
-  is the quiet failure mode of a desired-state tool. `diff` additionally never
-  prints the reconcilable-vs-rebuild annotation the contract requires per drifted
-  resource, so neither is visible before the run.
-- Exit: fold the identity-bearing inputs into each structural projection (they are
-  hash inputs, so re-baselining rules in `converge-hash-drift-model.md` apply), and
-  emit the per-resource classification in `diff`.
-
 ## B-082 — Refusals that name no way forward, and four spec gaps the review surfaced
 - Status: open
 - Area: CLI contract / diagnostics

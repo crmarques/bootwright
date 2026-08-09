@@ -30,8 +30,8 @@ func filterReclaimAuthorizedClusters(state v1alpha1.State, objects []workflow.Ob
 	return out
 }
 
-func overrideReinstallPlan(cmdCtx context.Context, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) (descriptors, acked []string, err error) {
-	reinstalls, err := workflow.OverrideRebuildInstalledClusters(cmdCtx, clustersDir, contextName, secretsDir, state, tasks, nil)
+func overrideReinstallPlan(cmdCtx context.Context, clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) (descriptors, acked []string, err error) {
+	reinstalls, err := workflow.OverrideRebuildInstalledClusters(cmdCtx, clustersDir, runsDir, contextName, secretsDir, state, tasks, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,11 +151,11 @@ func describeReleasedSubstrates(records []workflow.SubstrateReleaseRecord) strin
 	return "cluster(s) " + strings.Join(parts, "; ")
 }
 
-func applyJSONReinstallDrift(mode workflow.ApplyMode, clustersDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) []string {
+func applyJSONReinstallDrift(mode workflow.ApplyMode, clustersDir, runsDir, contextName, secretsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) []string {
 	if mode != workflow.ApplyModeRebuild {
 		return nil
 	}
-	return workflow.OverrideReinstallInputDriftedClusters(clustersDir, contextName, secretsDir, state, tasks)
+	return workflow.OverrideReinstallInputDriftedClusters(clustersDir, runsDir, contextName, secretsDir, state, tasks)
 }
 
 func forecastReleasedReinstallDataLoss(stdout io.Writer, dryRun bool, runsDir string, state v1alpha1.State, tasks []workflow.ApplyTask) {
