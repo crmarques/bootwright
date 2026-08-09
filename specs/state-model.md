@@ -1248,6 +1248,17 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   identity changed, never prunes. This is the Ceph instance of the product-wide
   additive-apply rule in the [CLI Contract](#cli-contract): removal crosses the
   `destroy` authorization boundary or is performed out of band.
+- Every selected node in a managed Ceph cluster must pass a live package-mode
+  daemon residue gate during storage preflight and again immediately before
+  apply's first storage mutation. The package-fact probe fails closed when it
+  cannot return a package mapping. The presence of `ceph-mds`, `ceph-mgr`,
+  `ceph-mon`, `ceph-osd`, `ceph-radosgw`, or `rbd-mirror` also refuses the run:
+  those host daemons can own ports and systemd or udev resources required by
+  cephadm's containerized daemons. Bootwright never removes those foreign
+  packages. The refusal names the discovered subset and the exact external
+  `dnf remove <packages>` correction; an apply retry uses the controller-rendered
+  current invocation, while standalone preflight only asks for that preflight
+  to be re-run.
 
 ### Distribution and builds
 

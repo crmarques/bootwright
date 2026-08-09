@@ -555,6 +555,166 @@ func TestStoragePreflightRefusesUnprobeableDevicesFromPerDeviceExitStatus(t *tes
 	}
 }
 
+func TestStoragePreflightRefusesPackageModeCephDaemonRPMs(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/package_mode_daemons.yml"
+	tasks := readAnsibleTasks(t, path)
+
+	inspect := tasks[findAnsibleTask(t, tasks, "Inspect installed package facts for package-mode Ceph daemons")]
+	block := nestedAnsibleTasks(t, inspect, "block")
+	probe := block[findAnsibleTask(t, block, "Gather installed storage node package facts")]
+	packageFacts, ok := probe["ansible.builtin.package_facts"].(map[string]any)
+	if !ok || packageFacts["manager"] != "auto" {
+		t.Fatalf("package-mode daemon residue must be discovered from live package facts, got %v", probe)
+	}
+	if probe["changed_when"] != false {
+		t.Fatalf("the package fact probe must be read-only, got changed_when=%v", probe["changed_when"])
+	}
+	for _, forbidden := range []string{"failed_when", "ignore_errors", "ignore_unreachable", "run_once", "delegate_to"} {
+		if value, found := probe[forbidden]; found {
+			t.Fatalf("the package fact probe must fail closed on each selected host, but sets %s=%v", forbidden, value)
+		}
+	}
+	conclusive := block[findAnsibleTask(t, block, "Require a conclusive storage node package inventory")]
+	assert, ok := conclusive["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("a successful package-facts call must still prove it returned a package mapping, got %v", conclusive)
+	}
+	that := fmt.Sprint(assert["that"])
+	for _, want := range []string{"ansible_facts.packages is defined", "ansible_facts.packages is mapping"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("the package inventory proof is missing %q, got %v", want, assert["that"])
+		}
+	}
+	rescue := nestedAnsibleTasks(t, inspect, "rescue")
+	probeFailure := rescue[findAnsibleTask(t, rescue, "Refuse storage mutation when package facts cannot be read")]
+	if _, ok := probeFailure["ansible.builtin.fail"].(map[string]any); !ok {
+		t.Fatalf("an inconclusive package probe must end the host instead of continuing, got %v", probeFailure)
+	}
+	probeFailureMessage := fmt.Sprint(probeFailure["ansible.builtin.fail"])
+	for _, want := range []string{"ansible_failed_result.msg", "before any Ceph mutation", "bootwright_mutating_invocation", "same preflight"} {
+		if !strings.Contains(probeFailureMessage, want) {
+			t.Fatalf("the package probe refusal is missing %q, got %v", want, probeFailure["ansible.builtin.fail"])
+		}
+	}
+
+	resolve := tasks[findAnsibleTask(t, tasks, "Resolve installed package-mode Ceph daemon RPMs")]
+	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("installed package-mode daemon names must be resolved from package facts, got %v", resolve)
+	}
+	expr := fmt.Sprint(facts["bootwright_preflight_package_mode_ceph_daemons"])
+	for _, name := range []string{"ceph-mds", "ceph-mgr", "ceph-mon", "ceph-osd", "ceph-radosgw", "rbd-mirror"} {
+		if strings.Count(expr, "'"+name+"'") != 1 {
+			t.Fatalf("package-mode daemon classifier must contain %s exactly once, got %s", name, expr)
+		}
+	}
+	for _, want := range []string{"select('in', ansible_facts.packages)", "| list"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("package-mode daemon classifier must derive the installed subset at runtime (missing %q), got %s", want, expr)
+		}
+	}
+
+	refuse := tasks[findAnsibleTask(t, tasks, "Refuse pre-existing package-mode Ceph daemon RPMs")]
+	assert, ok = refuse["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("installed package-mode daemons must trip an assertion, got %v", refuse)
+	}
+	if got := fmt.Sprint(assert["that"]); !strings.Contains(got, "bootwright_preflight_package_mode_ceph_daemons | length == 0") {
+		t.Fatalf("the package-mode daemon gate must refuse every non-empty discovered set, got %v", assert["that"])
+	}
+	message := fmt.Sprint(assert["fail_msg"])
+	for _, want := range []string{
+		"bootwright_preflight_package_mode_ceph_daemons | join(', ')",
+		"dnf remove {{ bootwright_preflight_package_mode_ceph_daemons | join(' ') }}",
+		"will not uninstall",
+		"bootwright_mutating_invocation",
+		"same preflight",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("the package-mode daemon refusal is missing %q, got %s", want, message)
+		}
+	}
+	for _, task := range append(append(block, rescue...), tasks[1:]...) {
+		for _, mutator := range []string{"ansible.builtin.package", "ansible.builtin.dnf", "ansible.builtin.yum", "ansible.builtin.command", "ansible.builtin.shell"} {
+			if _, found := task[mutator]; found {
+				t.Fatalf("package-mode residue detection must never mutate or uninstall packages, but task %q uses %s", task["name"], mutator)
+			}
+		}
+	}
+}
+
+func TestStoragePackageModeDaemonGatePrecedesMutationOnEverySelectedHost(t *testing.T) {
+	preflightPath := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml"
+	preflightTasks := readAnsibleTasks(t, preflightPath)
+	resolveIdx := findAnsibleTask(t, preflightTasks, "Resolve storage nodes on this host")
+	gateIdx := findAnsibleTask(t, preflightTasks, "Check for package-mode Ceph daemon residue")
+	systemdIdx := findAnsibleTask(t, preflightTasks, "Check storage node systemd")
+	if !(resolveIdx < gateIdx && gateIdx < systemdIdx) {
+		t.Fatalf("storage preflight must select this host's nodes, run the package gate, then continue with later checks (resolve=%d gate=%d systemd=%d)", resolveIdx, gateIdx, systemdIdx)
+	}
+	assertIncludeTasksFile(t, preflightTasks[gateIdx], "package_mode_daemons.yml")
+	if got := fmt.Sprint(preflightTasks[gateIdx]["when"]); !strings.Contains(got, "bootwright_host_storage_nodes | length > 0") {
+		t.Fatalf("standalone preflight must run the package gate only on selected storage hosts, got when=%v", preflightTasks[gateIdx]["when"])
+	}
+
+	rolePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml"
+	roleTasks := readAnsibleTasks(t, rolePath)
+	applyGateIdx := findAnsibleTask(t, roleTasks, "Check package-mode Ceph daemon residue before storage mutation")
+	nodeIdentityIdx := findAnsibleTask(t, roleTasks, "Resolve and gate Ceph storage node identity")
+	repositoryIdx := findAnsibleTask(t, roleTasks, "Prepare Ceph repository and subscription")
+	rebuildIdx := findAnsibleTask(t, roleTasks, "Guard and clean an authorized Ceph cluster rebuild")
+	bootstrapIdx := findAnsibleTask(t, roleTasks, "Bootstrap and converge Ceph cluster")
+	if !(applyGateIdx < nodeIdentityIdx && applyGateIdx < repositoryIdx && applyGateIdx < rebuildIdx && applyGateIdx < bootstrapIdx) {
+		t.Fatalf("the package-mode daemon gate must precede every Ceph host or cluster mutation (gate=%d identity=%d repository=%d rebuild=%d bootstrap=%d)", applyGateIdx, nodeIdentityIdx, repositoryIdx, rebuildIdx, bootstrapIdx)
+	}
+	include, ok := roleTasks[applyGateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.check_storage_preflight" || include["tasks_from"] != "package_mode_daemons.yml" {
+		t.Fatalf("apply must reuse the exact storage-preflight package gate, got %v", roleTasks[applyGateIdx])
+	}
+	for _, flag := range []string{"bootwright_task_storage_skip_prereqs", "bootwright_task_storage_prereqs_only"} {
+		if strings.Contains(fmt.Sprint(roleTasks[applyGateIdx]["when"]), flag) {
+			t.Fatalf("the package gate must run in both storage apply halves, but is conditional on %s", flag)
+		}
+	}
+
+	nodeAccessPath := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_node_access_apply.yml"
+	nodeAccessPlays := readAnsiblePlays(t, nodeAccessPath)
+	if len(nodeAccessPlays) != 1 {
+		t.Fatalf("%s has %d plays, want 1", nodeAccessPath, len(nodeAccessPlays))
+	}
+	nodeAccessPlay := nodeAccessPlays[0]
+	if nodeAccessPlay["hosts"] != "bootwright_storage_hosts" || nodeAccessPlay["strategy"] != "linear" || nodeAccessPlay["any_errors_fatal"] != true {
+		t.Fatalf("the node-access gate requires the selected storage group under linear any-errors-fatal execution, got hosts=%v strategy=%v any_errors_fatal=%v", nodeAccessPlay["hosts"], nodeAccessPlay["strategy"], nodeAccessPlay["any_errors_fatal"])
+	}
+	nodeAccessTasks := nestedAnsibleTasks(t, nodeAccessPlay, "tasks")
+	nodeAccessSelectIdx := findAnsibleTask(t, nodeAccessTasks, "End hosts outside selected storage cluster")
+	nodeAccessGateIdx := findAnsibleTask(t, nodeAccessTasks, "Check package-mode Ceph daemon residue before node access mutation")
+	nodeAccessApplyIdx := findAnsibleTask(t, nodeAccessTasks, "Apply Ceph storage node access")
+	if !(nodeAccessSelectIdx < nodeAccessGateIdx && nodeAccessGateIdx < nodeAccessApplyIdx) {
+		t.Fatalf("storage node selection and the package gate must precede orchestration-account mutation (select=%d gate=%d apply=%d)", nodeAccessSelectIdx, nodeAccessGateIdx, nodeAccessApplyIdx)
+	}
+	nodeAccessInclude, ok := nodeAccessTasks[nodeAccessGateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || nodeAccessInclude["name"] != "bootwright.core.check_storage_preflight" || nodeAccessInclude["tasks_from"] != "package_mode_daemons.yml" {
+		t.Fatalf("node-access apply must reuse the exact storage-preflight package gate, got %v", nodeAccessTasks[nodeAccessGateIdx])
+	}
+
+	playbookPath := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml"
+	plays := readAnsiblePlays(t, playbookPath)
+	if len(plays) != 1 {
+		t.Fatalf("%s has %d plays, want 1", playbookPath, len(plays))
+	}
+	play := plays[0]
+	if play["hosts"] != "bootwright_storage_hosts" || play["strategy"] != "linear" || play["any_errors_fatal"] != true {
+		t.Fatalf("the cross-host gate requires the selected storage group under linear any-errors-fatal execution, got hosts=%v strategy=%v any_errors_fatal=%v", play["hosts"], play["strategy"], play["any_errors_fatal"])
+	}
+	playTasks := nestedAnsibleTasks(t, play, "tasks")
+	selectIdx := findAnsibleTask(t, playTasks, "End hosts outside selected storage cluster")
+	applyIdx := findAnsibleTask(t, playTasks, "Apply Ceph storage cluster")
+	if selectIdx >= applyIdx {
+		t.Fatalf("hosts outside the selected storage cluster must end before the role containing the package gate runs (select=%d apply=%d)", selectIdx, applyIdx)
+	}
+}
+
 func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
 	tasks := readAnsibleTasks(t, path)

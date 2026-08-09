@@ -34,6 +34,10 @@
     fail_msg: "Storage node {{ bootwright_host_name }} must already run RHEL or a Red Hat family OS before managed Ceph apply."
   when: bootwright_host_storage_nodes | length > 0
 
+- name: Check for package-mode Ceph daemon residue
+  ansible.builtin.include_tasks: package_mode_daemons.yml
+  when: bootwright_host_storage_nodes | length > 0
+
 - name: Check storage node systemd
   ansible.builtin.command:
     argv:

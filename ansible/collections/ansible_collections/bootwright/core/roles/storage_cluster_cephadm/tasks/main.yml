@@ -17,6 +17,11 @@
       and re-run {{ bootwright_mutating_invocation | default('the same apply invocation') }}.
     quiet: true
 
+- name: Check package-mode Ceph daemon residue before storage mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.check_storage_preflight
+    tasks_from: package_mode_daemons.yml
+
 - name: Resolve and gate Ceph storage node identity
   ansible.builtin.include_tasks: phases/node_identity.yml
 

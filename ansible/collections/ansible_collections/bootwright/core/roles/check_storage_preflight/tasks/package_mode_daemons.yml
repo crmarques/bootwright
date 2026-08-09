@@ -1,0 +1,64 @@
+---
+- name: Inspect installed package facts for package-mode Ceph daemons
+  block:
+    - name: Gather installed storage node package facts
+      ansible.builtin.package_facts:
+        manager: auto
+      changed_when: false
+
+    - name: Require a conclusive storage node package inventory
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.packages is defined
+          - ansible_facts.packages is mapping
+        quiet: true
+  rescue:
+    - name: Refuse storage mutation when package facts cannot be read
+      ansible.builtin.fail:
+        msg: >-
+          Storage node {{ bootwright_host_name | default(inventory_hostname) }}
+          package facts could not be read: {{ ansible_failed_result.msg | default('no package inventory returned') }}.
+          Failing closed before any Ceph mutation because Bootwright cannot prove
+          that package-mode Ceph daemons are absent.
+          {% if bootwright_mutating_invocation | default('') | trim | length > 0 %}
+          Repair the package inventory provider, then re-run `{{ bootwright_mutating_invocation }}`.
+          {% else %}
+          Repair the package inventory provider, then re-run the same preflight.
+          {% endif %}
+
+- name: Resolve installed package-mode Ceph daemon RPMs
+  ansible.builtin.set_fact:
+    bootwright_preflight_package_mode_ceph_daemons: >-
+      {{
+        [
+          'ceph-mds',
+          'ceph-mgr',
+          'ceph-mon',
+          'ceph-osd',
+          'ceph-radosgw',
+          'rbd-mirror'
+        ]
+        | select('in', ansible_facts.packages)
+        | list
+      }}
+  changed_when: false
+
+- name: Refuse pre-existing package-mode Ceph daemon RPMs
+  ansible.builtin.assert:
+    that:
+      - bootwright_preflight_package_mode_ceph_daemons | length == 0
+    fail_msg: >-
+      Storage node {{ bootwright_host_name | default(inventory_hostname) }} has
+      pre-existing package-mode Ceph daemon RPMs installed:
+      {{ bootwright_preflight_package_mode_ceph_daemons | join(', ') }}.
+      They can bind ports and own systemd or udev resources that cephadm's
+      containerized daemons require. Bootwright will not uninstall packages it
+      did not install. Run exactly
+      `dnf remove {{ bootwright_preflight_package_mode_ceph_daemons | join(' ') }}`
+      on this node.
+      {% if bootwright_mutating_invocation | default('') | trim | length > 0 %}
+      Then re-run `{{ bootwright_mutating_invocation }}`.
+      {% else %}
+      Then re-run the same preflight.
+      {% endif %}
+    quiet: true

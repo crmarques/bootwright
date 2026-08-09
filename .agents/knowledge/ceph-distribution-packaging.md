@@ -57,6 +57,20 @@ reconcilable drift, not structural: it is nulled from both
 latter because that task kind is not reconfigure-only and would propose a machine
 reinstall.
 
+**Constraint:** Package-mode daemon RPMs and cephadm container daemons cannot
+share a storage node safely. The fixed conflict set is `ceph-mds`, `ceph-mgr`,
+`ceph-mon`, `ceph-osd`, `ceph-radosgw`, and `rbd-mirror`: these packages can own
+the ports, systemd units, or udev behavior the containers require. The shared
+`check_storage_preflight/tasks/package_mode_daemons.yml` gate gathers live
+`package_facts` on every selected node, fails closed if the inventory is not a
+mapping, and runs from standalone storage preflight, before the storage-node
+orchestration account mutates the host, and again at the head of the cephadm
+apply role before hostname, repository, package, rebuild, or bootstrap mutation.
+It reports the installed subset and the exact external `dnf remove` command;
+Bootwright never removes a package it did not install. Apply-time retry text
+consumes `bootwright_mutating_invocation`, while standalone preflight stays
+command-free and asks for the same preflight to be re-run.
+
 **Constraint:** The only storage-node OS check is `ansible_os_family == 'RedHat'`
 (mirrored by a `family: rhel` validation error). That is a Bootwright capability
 statement — the subscription provider implements RHEL-family package sources only

@@ -467,27 +467,6 @@ learned; this file records what it still owes.
   change with it. These are cephadm option names, not a vendor catalog.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
 
-## B-052 — No preflight for pre-existing package-mode Ceph daemon RPMs
-- Status: open
-- Area: storage / preflight
-- Origin: cephadm-ansible parity audit 2026-07-31
-- Severity: low
-- Problem: IBM's `cephadm-preflight.yml` removes `ceph-mds`, `ceph-mgr`,
-  `ceph-mon`, `ceph-osd`, `ceph-radosgw` and `rbd-mirror` before bootstrap,
-  because a package-mode Ceph install binds the ports and udev/systemd units the
-  containerized daemons want. Bootwright has no equivalent on the apply path —
-  `roles/check_storage_preflight/tasks/main.yml` gathers no package facts — and
-  `destroy_steps/wipe_and_cleanup.yml` removes only Bootwright's own managed
-  package list, on destroy. It bites on an `os.provided` node that carried a
-  previous package-mode Ceph: the seed is already covered by the
-  `/etc/ceph/ceph.conf` gate and the disks by the device-signature gate, so the
-  residue is a non-seed host with `ceph-mon`/`ceph-radosgw` still installed.
-- Exit: gather `package_facts` in `check_storage_preflight` and fail closed when
-  any of those six names is installed, naming what was found and the
-  `dnf remove` that clears it. A check, never a mutation — Bootwright must not
-  uninstall what it did not install. Six static RPM names are not a catalog.
-- Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
-
 ## B-053 — `sos` is absent from Bootwright-installed storage nodes
 - Status: open
 - Area: storage / supportability

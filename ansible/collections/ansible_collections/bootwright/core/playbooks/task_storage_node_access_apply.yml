@@ -35,6 +35,11 @@
           Storage node access task did not receive a rendered context for
           {{ bootwright_task_storage_cluster_name | default('<unset>') }}.
 
+    - name: Check package-mode Ceph daemon residue before node access mutation
+      ansible.builtin.include_role:
+        name: bootwright.core.check_storage_preflight
+        tasks_from: package_mode_daemons.yml
+
     - name: Apply Ceph storage node access
       ansible.builtin.include_role:
         name: bootwright.core.storage_node_access

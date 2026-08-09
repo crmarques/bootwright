@@ -472,6 +472,21 @@ Each monitoring-service block (`prometheus`, `grafana`, `alertmanager`,
 | `retentionSize` | No | `10GB` | Retention size (Prometheus only). cephadm leaves the TSDB size-unbounded and caps it by time alone, so on a Ceph node the TSDB grows on the same filesystem as `/var/lib/ceph` for the whole retention window. Bootwright always renders a `retention_size` to bound it; raise it when you have the headroom. |
 | `networks` | No | — | Bind the service to one or more CIDRs (cephadm `networks`), e.g. a dedicated management VLAN on multi-homed nodes. |
 
+### Package-mode Ceph daemon residue
+
+Managed Ceph runs its daemons in containers. Before storage mutation,
+Bootwright reads installed package facts on every selected storage node and
+refuses a host carrying any package-mode daemon RPM: `ceph-mds`, `ceph-mgr`,
+`ceph-mon`, `ceph-osd`, `ceph-radosgw`, or `rbd-mirror`. The same read-only gate
+runs under `bootwright preflight`; an unreadable package inventory also fails
+closed instead of being treated as clean.
+
+Bootwright never uninstalls those pre-existing packages. The refusal lists only
+the packages found on that node and prints the exact external correction, for
+example `dnf remove ceph-mon ceph-radosgw`. Run it only after confirming the
+host no longer serves a package-mode cluster, then retry the controller-provided
+apply invocation or re-run the same preflight.
+
 ### Node root-filesystem budget
 
 Everything cephadm keeps outside the OSD data disks — container images, the
