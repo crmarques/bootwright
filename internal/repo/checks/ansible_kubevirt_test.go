@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 const kubeVirtBootTasks = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_kubevirt/tasks/main.yml"
@@ -713,5 +715,69 @@ func TestHostVirtctlUsesMaterializedHostKubeconfig(t *testing.T) {
 	}
 	if strings.Contains(body, "bootwright_clusters_dir") {
 		t.Fatal("host virtctl playbook constructs a durable cluster-secret path")
+	}
+}
+
+func TestKubeVirtRebuildPurgesTheRootClaimItsDataVolumeLeavesBehind(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtSubstrateTasks)
+	deleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt root DataVolume for authorized rebuild")
+	purgeIdx := findAnsibleTask(t, tasks, "Purge the KubeVirt root disk PersistentVolumeClaim for authorized rebuild")
+	applyIdx := findAnsibleTask(t, tasks, "Apply KubeVirt root disk DataVolume")
+	if !(deleteIdx < purgeIdx && purgeIdx < applyIdx) {
+		t.Fatalf("an authorized rebuild must delete the root DataVolume, prove its claim is gone, then recreate it (delete=%d purge=%d apply=%d): CDI creates the claim as a dependent, and a claim that outlives its DataVolume cannot be adopted by a new one of the same name, so the recreate stalls on the remedy the volume-mode refusal itself recommends", deleteIdx, purgeIdx, applyIdx)
+	}
+	include, ok := tasks[purgeIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok {
+		t.Fatalf("the rebuild purge must reuse the shared claim-purge tasks, got %v", tasks[purgeIdx])
+	}
+	if include["name"] != "bootwright.core.container_cluster_boot_kubevirt" || include["tasks_from"] != "purge_media_pvc.yml" {
+		t.Fatalf("the rebuild purge must include the same purge_media_pvc.yml destroy already reuses, got %v", include)
+	}
+	purgeVars, ok := tasks[purgeIdx]["vars"].(map[string]any)
+	if !ok || purgeVars["bootwright_kubevirt_media_pvc_name"] != "{{ bootwright_kubevirt_root_dv_name }}" {
+		t.Fatalf("the rebuild purge must target the root disk claim, got vars=%v", tasks[purgeIdx]["vars"])
+	}
+	guard := fmt.Sprint(tasks[purgeIdx]["when"])
+	for _, want := range []string{"bootwright_kubevirt_rebuild_authorized", "bootwright_kubevirt_root_dv_exists"} {
+		if !strings.Contains(guard, want) {
+			t.Fatalf("the rebuild purge must run only for an authorized rebuild of an existing disk (missing %q), got when=%v", want, tasks[purgeIdx]["when"])
+		}
+	}
+}
+
+func TestKubeVirtRootDiskWaitIsBudgetedAndDiagnosed(t *testing.T) {
+	tasks := readAnsibleTasks(t, kubeVirtSubstrateTasks)
+	waitIdx := findAnsibleTask(t, tasks, "Wait for KubeVirt root disk DataVolume")
+	assertIdx := findAnsibleTask(t, tasks, "Require the KubeVirt root disk DataVolume to be ready")
+	if waitIdx > assertIdx {
+		t.Fatalf("the root disk wait must resolve before its assertion (wait=%d assert=%d)", waitIdx, assertIdx)
+	}
+	wait := tasks[waitIdx]
+	if wait["failed_when"] != false {
+		t.Fatalf("the root disk wait must defer failure to its assertion so the diagnosis runs first, got failed_when=%v", wait["failed_when"])
+	}
+	command, ok := wait["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the root disk wait must be a command probe, got %v", wait)
+	}
+	if !stringListContains(command["argv"], "--timeout={{ bootwright_kubevirt_root_dv_ready_timeout }}") {
+		t.Fatalf("the root disk wait budget must be configurable rather than hardcoded: a blank disk on a busy or externally backed storage class is slow, not broken, got argv=%v", command["argv"])
+	}
+	var defaults map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, bootwrightCollectionRoleRoot+"/machine_substrate_kubevirt/defaults/main.yml")), &defaults); err != nil {
+		t.Fatalf("decode machine_substrate_kubevirt defaults: %v", err)
+	}
+	if defaults["bootwright_kubevirt_root_dv_ready_timeout"] == nil {
+		t.Fatalf("the root disk wait budget must have a role default, got %v", defaults)
+	}
+	assertBody, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the root disk readiness gate must be an assert, got %v", tasks[assertIdx])
+	}
+	failMsg := fmt.Sprint(assertBody["fail_msg"])
+	for _, want := range []string{"storage", "describe pvc", "bootwright_kubevirt_root_dv_ready_timeout"} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("a root disk that never provisions is a storage condition on the host cluster; the failure must name it and where to look (missing %q), got %q", want, failMsg)
+		}
 	}
 }

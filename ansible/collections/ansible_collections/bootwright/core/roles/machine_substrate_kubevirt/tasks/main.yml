@@ -360,6 +360,16 @@
     - bootwright_kubevirt_rebuild_authorized | bool
     - bootwright_kubevirt_root_dv_exists | bool
 
+- name: Purge the KubeVirt root disk PersistentVolumeClaim for authorized rebuild
+  ansible.builtin.include_role:
+    name: bootwright.core.container_cluster_boot_kubevirt
+    tasks_from: purge_media_pvc.yml
+  vars:
+    bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_root_dv_name }}"
+  when:
+    - bootwright_kubevirt_rebuild_authorized | bool
+    - bootwright_kubevirt_root_dv_exists | bool
+
 - name: Ensure KubeVirt namespace exists
   ansible.builtin.command:
     argv:
@@ -415,8 +425,56 @@
       - wait
       - "datavolume/{{ bootwright_kubevirt_root_dv_name }}"
       - --for=condition=Ready
-      - --timeout=10m
+      - "--timeout={{ bootwright_kubevirt_root_dv_ready_timeout }}"
+  register: bootwright_kubevirt_root_dv_wait
   changed_when: false
+  failed_when: false
+
+- name: Collect KubeVirt root disk provisioning state when the DataVolume did not become ready
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - "datavolume/{{ bootwright_kubevirt_root_dv_name }}"
+      - "persistentvolumeclaim/{{ bootwright_kubevirt_root_dv_name }}"
+      - -o
+      - >-
+        jsonpath={range .items[*]}{.kind}/{.metadata.name} phase={.status.phase}
+        progress={.status.progress} storageClass={.spec.storageClassName}
+        volumeMode={.spec.volumeMode}{"\n"}{end}
+  register: bootwright_kubevirt_root_dv_diagnosis
+  changed_when: false
+  failed_when: false
+  when: (bootwright_kubevirt_root_dv_wait.rc | default(1) | int) != 0
+
+- name: Require the KubeVirt root disk DataVolume to be ready
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_root_dv_wait.rc | default(1) | int) == 0
+    fail_msg: >-
+      KubeVirt root disk DataVolume
+      {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_root_dv_name }} for machine
+      {{ bootwright_component.name }} of cluster {{ bootwright_current_cluster.name }} did not
+      reach condition=Ready within {{ bootwright_kubevirt_root_dv_ready_timeout }}.
+      The disk is provisioned by CDI through the storage class this machine's provider
+      declares, so a DataVolume stuck at ImportScheduled or Pending is a storage condition on
+      the host cluster, not a KubeVirt one: the class has no provisioner answering, the
+      backing storage is out of capacity, or — when the class is served by an external Ceph
+      cluster through Data Foundation — its CSI driver cannot reach that cluster. Read the
+      claim's events with
+      `kubectl -n {{ bootwright_kubevirt_namespace }} describe pvc {{ bootwright_kubevirt_root_dv_name }}`
+      before re-applying. Raise bootwright_kubevirt_root_dv_ready_timeout when the storage is
+      merely slow rather than stuck.
+      Observed: {{ (bootwright_kubevirt_root_dv_diagnosis.stdout | default('') | trim)
+                   or '(kubectl reported no DataVolume or claim state)' }}
+      kubectl wait reported: {{ (bootwright_kubevirt_root_dv_wait.stderr | default('') | trim)
+                                or (bootwright_kubevirt_root_dv_wait.stdout | default('') | trim)
+                                or '(no output)' }}
+    quiet: true
 
 - name: Record KubeVirt machine ownership
   ansible.builtin.include_role:

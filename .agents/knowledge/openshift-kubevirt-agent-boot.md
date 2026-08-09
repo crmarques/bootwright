@@ -141,3 +141,37 @@ DataVolume. Present-and-stale is therefore positive evidence that no rebuild is
 coming. Do not "simplify" the clause by dropping either the field-count guard
 or the attempts floor: the floor is what covers the brief race where a peer
 polls before the elected machine has issued its delete.
+
+## A CDI claim outlives its DataVolume, so every recreate path must purge it
+
+CDI creates the PersistentVolumeClaim as a dependent of its DataVolume, but the
+claim can outlive one — held by a finalizer while a populator or prime claim is
+still running. A new DataVolume of the same name cannot adopt that claim, so the
+recreate stalls or the upload is refused with `No DataVolume is associated with
+the existing PVC`. `container_cluster_boot_kubevirt/tasks/purge_media_pvc.yml`
+is the shared delete-and-prove-gone helper for exactly this, and every path that
+deletes a DataVolume intending to recreate it must call it.
+
+Three such paths exist and all three now do: the agent-ISO media rebuild in
+`container_cluster_boot_kubevirt`, the guest teardown in
+`machine_substrate_kubevirt/tasks/destroy.yml`, and — added late, after it was
+found missing — the authorized root-disk rebuild in
+`machine_substrate_kubevirt/tasks/main.yml`. The last one matters most because it
+is the *advertised remedy*: the volume-mode drift refusal a few tasks above it
+tells the operator to run `bootwright apply --mode rebuild`, and following that
+advice used to delete the DataVolume, immediately recreate it, and stall against
+the claim the deletion had not finished releasing. Pinned by
+`TestKubeVirtRebuildPurgesTheRootClaimItsDataVolumeLeavesBehind`.
+
+**Constraint (a blank root disk that never provisions is a storage condition, not
+a KubeVirt one):** the root DataVolume wait was a bare
+`kubectl wait --for=condition=Ready --timeout=10m` with no registered result and
+no failure message, so a stuck disk surfaced as raw kubectl stderr naming neither
+the machine nor the cluster. It is now budgeted by
+`bootwright_kubevirt_root_dv_ready_timeout` (the role had no `defaults/main.yml`
+at all before this) and asserted with a diagnosis that reads the DataVolume and
+claim phase, because the real causes sit under the storage class the provider
+declares — no provisioner answering, no capacity, or a CSI driver that cannot
+reach the external Ceph cluster backing it. Nine blank disks per hosted cluster
+are requested at once (one task, `Forks=9`), so this is the path that feels a
+storage hiccup first.
