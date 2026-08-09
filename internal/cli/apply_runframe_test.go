@@ -93,6 +93,25 @@ func TestApplyRunFrameNamesTheCrossClusterBlocker(t *testing.T) {
 	t.Fatalf("guest group missing")
 }
 
+func TestApplyRunFrameNamesTheClusterInstallSlotWait(t *testing.T) {
+	readyAt := time.Now().UTC()
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "iso.hub", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso hub", Cluster: "hub", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
+		{ID: "iso.ocp", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso ocp", Cluster: "ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, ReadyAt: &readyAt, BlockedOn: []string{workflow.ApplyClusterInstallBlocker}},
+	}, time.Now())
+
+	for _, group := range applyRunFrame(ledger, nil).Groups {
+		if group.Title != "ocp (ContainerCluster)" {
+			continue
+		}
+		if got := group.Steps[0].Detail; got != "waiting for a cluster install slot" {
+			t.Fatalf("ocp prerequisites detail = %q, want the cluster install slot wait named instead of a bare PENDING", got)
+		}
+		return
+	}
+	t.Fatalf("ocp group missing")
+}
+
 func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "infra", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: workflow.ApplyTaskKindProvider, Label: "provider services", Status: workflow.TaskStatusRunning},

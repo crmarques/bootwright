@@ -380,7 +380,7 @@ func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
 
 const (
 	applyTaskBudgetBlocker     = "task budget"
-	applyClusterInstallBlocker = "cluster install budget"
+	ApplyClusterInstallBlocker = "cluster install budget"
 )
 
 func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int, heldClusterInstalls map[string]int, clusterInstallLimit int) string {
@@ -395,7 +395,7 @@ func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runni
 		return "host slot " + key
 	}
 	if !taskClusterInstallAvailable(task, heldClusterInstalls, clusterInstallLimit) {
-		return applyClusterInstallBlocker
+		return ApplyClusterInstallBlocker
 	}
 	return ""
 }
@@ -548,6 +548,15 @@ func releaseIdleClusterInstalls(ledger RunLedger, tasks []ApplyTask, started map
 }
 
 func clusterInstallChainAdvancing(ledger RunLedger, task TaskLedgerEntry) bool {
+	return clusterInstallChainAdvancingFrom(ledger, task, map[string]bool{})
+}
+
+func clusterInstallChainAdvancingFrom(ledger RunLedger, task TaskLedgerEntry, visiting map[string]bool) bool {
+	if visiting[task.ID] {
+		return false
+	}
+	visiting[task.ID] = true
+	defer delete(visiting, task.ID)
 	advancing := false
 	for _, dep := range task.Dependencies {
 		depTask, ok := ledger.Task(dep)
@@ -557,7 +566,7 @@ func clusterInstallChainAdvancing(ledger RunLedger, task TaskLedgerEntry) bool {
 		if depTask.Status == TaskStatusOK || depTask.Status == TaskStatusSkipped {
 			continue
 		}
-		if !clusterInstallDependencyAdvancing(depTask, task.Cluster) {
+		if !clusterInstallDependencyAdvancing(ledger, depTask, task.Cluster, visiting) {
 			return false
 		}
 		advancing = true
@@ -570,7 +579,7 @@ func clusterInstallChainAdvancing(ledger RunLedger, task TaskLedgerEntry) bool {
 		if taskTerminal(depTask.Status) {
 			continue
 		}
-		if !clusterInstallDependencyAdvancing(depTask, task.Cluster) {
+		if !clusterInstallDependencyAdvancing(ledger, depTask, task.Cluster, visiting) {
 			return false
 		}
 		advancing = true
@@ -578,8 +587,26 @@ func clusterInstallChainAdvancing(ledger RunLedger, task TaskLedgerEntry) bool {
 	return advancing
 }
 
-func clusterInstallDependencyAdvancing(dep TaskLedgerEntry, cluster string) bool {
-	return !taskTerminal(dep.Status) && dep.Cluster == cluster
+func clusterInstallDependencyAdvancing(ledger RunLedger, dep TaskLedgerEntry, cluster string, visiting map[string]bool) bool {
+	if taskTerminal(dep.Status) || dep.Cluster != cluster {
+		return false
+	}
+	if dep.Status == TaskStatusReady || dep.Status == TaskStatusRunning {
+		return true
+	}
+	return taskReady(ledger, dep) || clusterInstallChainAdvancingFrom(ledger, dep, visiting)
+}
+
+func TaskWaitingOnClusterInstallSlot(task TaskLedgerEntry) bool {
+	if task.Status != TaskStatusPending || task.ReadyAt == nil {
+		return false
+	}
+	for _, reason := range task.BlockedOn {
+		if reason == ApplyClusterInstallBlocker {
+			return true
+		}
+	}
+	return false
 }
 
 func applyTaskWriters(task ApplyTask, logs *applyLogSet, streamOut, streamErr io.Writer, stream bool) (io.Writer, io.Writer) {

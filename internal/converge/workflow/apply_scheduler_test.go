@@ -315,8 +315,8 @@ func TestTaskDispatchBlockerReportsTheFirstUnavailableBudget(t *testing.T) {
 func TestTaskClusterInstallAdmissionCountsClustersNotTasks(t *testing.T) {
 	install := ApplyTask{Entry: TaskLedgerEntry{ID: "boot.ocp-b.node-0", Kind: ApplyTaskKindNodeBoot, Cluster: "ocp-b"}}
 	other := ApplyTask{Entry: TaskLedgerEntry{ID: "addon.ocp-b.logging", Kind: ApplyTaskKindClusterAddon, Cluster: "ocp-b"}}
-	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1); got != applyClusterInstallBlocker {
-		t.Fatalf("blocker for a second installing cluster = %q, want %q", got, applyClusterInstallBlocker)
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1); got != ApplyClusterInstallBlocker {
+		t.Fatalf("blocker for a second installing cluster = %q, want %q", got, ApplyClusterInstallBlocker)
 	}
 	if got := taskDispatchBlocker(other, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1); got != "" {
 		t.Fatalf("a non-install task must not wait on the cluster install budget, got %q", got)
@@ -364,7 +364,7 @@ func TestRunApplyTaskGraphInstallsOneClusterAtATime(t *testing.T) {
 	blocked := ""
 	for _, task := range ledger.Tasks {
 		for _, blocker := range task.BlockedOn {
-			if blocker == applyClusterInstallBlocker {
+			if blocker == ApplyClusterInstallBlocker {
 				blocked = task.ID
 			}
 		}
@@ -502,6 +502,11 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotToTheClusterItWaitsOn(t *te
 			State:    state,
 		},
 		{
+			Entry:    TaskLedgerEntry{ID: "infra.child.machine-0", Kind: ApplyTaskKindClusterInstall, Label: "provision machine machine-0", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Node: "machine-0", Host: "parent-bm", Dependencies: []string{"wait.parent"}, Status: TaskStatusPending},
+			Playbook: "infra.child",
+			State:    state,
+		},
+		{
 			Entry:    TaskLedgerEntry{ID: "iso.parent", Kind: ApplyTaskKindClusterISO, Label: "iso parent", Cluster: "parent", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
 			Playbook: "iso.parent",
 			State:    state,
@@ -512,8 +517,18 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotToTheClusterItWaitsOn(t *te
 			State:    state,
 		},
 		{
-			Entry:    TaskLedgerEntry{ID: "boot.child", Kind: ApplyTaskKindNodeBoot, Label: "boot child nodes", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"iso.child", "wait.parent"}, Status: TaskStatusPending},
+			Entry:    TaskLedgerEntry{ID: "boot.child", Kind: ApplyTaskKindNodeBoot, Label: "boot child nodes", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"iso.child", "infra.child.machine-0", "wait.parent"}, Status: TaskStatusPending},
 			Playbook: "boot.child",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "wait-bootstrap.child", Kind: ApplyTaskKindBootstrapWait, Label: "wait bootstrap child", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"boot.child"}, Status: TaskStatusPending},
+			Playbook: "wait-bootstrap.child",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "wait.child", Kind: ApplyTaskKindInstallWait, Label: "wait install child", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"wait-bootstrap.child"}, Status: TaskStatusPending},
+			Playbook: "wait.child",
 			State:    state,
 		},
 	}

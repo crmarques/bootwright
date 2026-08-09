@@ -1017,17 +1017,21 @@ path, and one slow path is enough to time both of them out. Everything outside
 those four task kinds (fabric, infrastructure, machines, add-ons, storage) still
 runs at whatever the other three caps allow, and a cluster that has started
 installing is no longer held by this cap for the rest of its install — the cap
-only decides how many clusters are in that state at a time. Raise it when the
-estate has the registry bandwidth and BMC headroom to install several clusters
-side by side:
+only decides how many clusters are in that state at a time. A cluster whose
+chain parks on another cluster — a KubeVirt-hosted cluster that has built its
+ISO but cannot provision machines until its host cluster finishes installing —
+gives the slot back while it waits, so the host or any third cluster can
+install in the meantime. Raise the cap when the estate has the registry
+bandwidth and BMC headroom to install several clusters side by side:
 
 ```text
 BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=3 bootwright apply --yes
 ```
 
 A cluster held back by it shows in `status --timings` as
-`blocked … on cluster install budget`, which is what a long queue wait on a
-multi-cluster run means before you go looking for a slow install.
+`blocked … on cluster install budget`, and the live run tree marks its phase
+row with `waiting for a cluster install slot` — which is what a long queue wait
+on a multi-cluster run means before you go looking for a slow install.
 
 `apply` prints the caps it resolved in its run header, with the cluster cap as a
 fourth segment whenever the run installs at least one cluster:

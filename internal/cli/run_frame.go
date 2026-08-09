@@ -113,10 +113,22 @@ func runPhaseActivity(phase status.RunPhase, ledger workflow.RunLedger) string {
 		}
 		return ""
 	case workflow.TaskStatusPending:
-		return runPhaseWaitingOn(phase, ledger)
+		if waiting := runPhaseWaitingOn(phase, ledger); waiting != "" {
+			return waiting
+		}
+		return runPhaseSlotWait(phase)
 	default:
 		return ""
 	}
+}
+
+func runPhaseSlotWait(phase status.RunPhase) string {
+	for _, task := range phase.Tasks {
+		if workflow.TaskWaitingOnClusterInstallSlot(task) {
+			return "waiting for a cluster install slot"
+		}
+	}
+	return ""
 }
 
 func runPhaseWaitingOn(phase status.RunPhase, ledger workflow.RunLedger) string {
