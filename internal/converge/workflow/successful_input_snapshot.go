@@ -76,11 +76,15 @@ func saveSuccessfulInputSnapshot(runsDir, runID, resourceID, taskID, taskKind st
 }
 
 func successfulInputSnapshotMatches(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, currentInput []byte) (bool, error) {
-	if strings.TrimSpace(runID) == "" {
-		return false, fmt.Errorf("successful input snapshot has no run identity")
-	}
 	if hashSchema != ConvergeHashSchema-1 {
 		return false, fmt.Errorf("successful input snapshot schema %d cannot prove a schema-%d record", hashSchema, ConvergeHashSchema)
+	}
+	return successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind, taskStatus, hashSchema, currentInput)
+}
+
+func successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, currentInput []byte) (bool, error) {
+	if strings.TrimSpace(runID) == "" {
+		return false, fmt.Errorf("successful input snapshot has no run identity")
 	}
 	path := successfulInputSnapshotPath(runsDir, runID, resourceID)
 	data, err := os.ReadFile(path)

@@ -303,9 +303,6 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 			return err
 		}
 		taskID := "storage." + cluster
-		if err := saveSuccessfulInputSnapshot(runsDir, runID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
-			return err
-		}
 		record := ConvergeSafetyRecord{
 			APIVersion:     ConvergeSafetyAPIVersion,
 			ResourceID:     sub.resourceID(),
@@ -326,6 +323,16 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 			Status:    status,
 			RunID:     runID,
 			UpdatedAt: now.UTC(),
+		}
+		retained, err := retainCurrentConvergeSafetyEvidence(runsDir, record, input)
+		if err != nil {
+			return err
+		}
+		if retained {
+			continue
+		}
+		if err := saveSuccessfulInputSnapshot(runsDir, runID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
+			return err
 		}
 		if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
 			return err

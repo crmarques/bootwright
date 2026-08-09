@@ -123,8 +123,8 @@ edit and `spec.ceph.security.fips.enabled` toggle are detected as structural
 drift.
 
 **Schema rebaseline needs immutable successful-run proof:** a schema bump never
-compares an old desired hash directly with a new one. Each successful task
-writes its exact, non-secret hash input under
+compares an old desired hash directly with a new one. Each fresh convergence
+record writes its exact, non-secret hash input under
 `runs/history/<run-id>/successful-inputs/`; the record, snapshot, and archived
 `ok` ledger must agree on run, resource, one task identity, terminal status, and
 the immediately preceding schema. Only byte-equivalent canonical JSON may be
@@ -132,6 +132,19 @@ rebaselined. Missing, unreadable, failed-run, mismatched, or duplicate evidence
 is unknown and fails closed; different valid input is drift. The immutable file
 writer refuses replacement. This lets a future projection fix preserve a true
 match without forging a baseline or turning absent evidence into permission.
+
+**An unchanged task keeps its strongest successful-run proof:** apply task and
+storage sub-object record writers first compare the complete current-schema
+record identity, hashes, owner, tiebreaker data, and resource keys, then validate
+the recorded immutable input against its archived `ok` ledger. An exact proven
+match stays bound to that earlier run instead of being rebound to a later apply.
+This matters when task A succeeds or skips and unrelated task B fails: the
+failed graph ledger cannot replace A's valid migration proof. Changed desired
+input, changed record identity, or evidence that cannot be proved writes fresh
+task evidence; it is never mistaken for an unchanged retained record. Pinned by
+TestFailedApplyGraphPreservesPriorSuccessfulTaskEvidence,
+TestFailedApplyGraphPreservesPriorSuccessfulStorageSubObjectEvidence, and
+TestApplyTaskConvergeSafetyWritesFreshEvidenceWithoutReusableProof.
 
 **Override allowlist fails safe, and holds only live task kinds:**
 `overrideReconfigureOnlyKinds` is an allowlist (unlisted kind = destructive).

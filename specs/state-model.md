@@ -3402,15 +3402,22 @@ command. The rest are registered per command, on the verbs that reach machines.
   recorded", not "nothing exists on the substrate" (a half-provisioned VM whose
   install task failed still reports `missing`) — and a bare `apply` re-runs it,
   while an object with a prior successful record keeps classifying against that
-  record.
+  record. When a completed task or convergence skip has the same current-schema
+  identity and hash input as an existing record, Bootwright retains that record
+  only if its immutable input snapshot and archived `ok` ledger still prove it;
+  it does not replace stronger evidence with a record bound to the current run.
+  Therefore a later, unrelated task failure cannot weaken previously successful
+  evidence. Changed desired input writes a fresh record and immutable snapshot
+  for the task that actually converged it.
 - Every convergence and install-record desired hash carries a schema number. A
   schema change never treats the old hash as proof that current desired state
-  matches. A successful task also writes an immutable, non-secret copy of its
-  exact hash input under that run's history. Bootwright may rebaseline a record
-  from exactly the immediately preceding schema only when the record names that
-  run, the snapshot identity and task status match, the archived ledger is an
-  `ok` run with exactly one matching task, and the snapshot input equals the
-  current input. Changed input is drift. A missing, unreadable, failed-run,
+  matches. A task that writes fresh convergence evidence also writes an
+  immutable, non-secret copy of its exact hash input under that run's history.
+  Bootwright may rebaseline a record from exactly the immediately preceding
+  schema only when the record names that run, the snapshot identity and task
+  status match, the archived ledger is an `ok` run with exactly one matching
+  task, and the snapshot input equals the current input. Changed input is drift.
+  A missing, unreadable, failed-run,
   mismatched, or ambiguous snapshot is unknown evidence and fails closed before
   mutation; the operator must restore the immutable run evidence or deliberately
   rebuild the same resolved selection. That refusal carries the typed

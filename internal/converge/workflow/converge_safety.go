@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -198,9 +199,6 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 	if err != nil {
 		return err
 	}
-	if err := saveSuccessfulInputSnapshot(runsDir, runID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
-		return err
-	}
 	record := ConvergeSafetyRecord{
 		APIVersion:              ConvergeSafetyAPIVersion,
 		ResourceID:              resourceID,
@@ -225,7 +223,48 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		ResourceKeys: append([]string(nil), task.Entry.ResourceKeys...),
 		UpdatedAt:    now.UTC(),
 	}
+	retained, err := retainCurrentConvergeSafetyEvidence(runsDir, record, input)
+	if err != nil {
+		return err
+	}
+	if retained {
+		return nil
+	}
+	if err := saveSuccessfulInputSnapshot(runsDir, runID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(status), ConvergeHashSchema, input); err != nil {
+		return err
+	}
 	return SaveConvergeSafetyRecord(runsDir, record)
+}
+
+func retainCurrentConvergeSafetyEvidence(runsDir string, expected ConvergeSafetyRecord, input []byte) (bool, error) {
+	record, found, err := LoadConvergeSafetyRecord(runsDir, expected.ResourceID)
+	if err != nil || !found {
+		return false, err
+	}
+	if record.APIVersion != expected.APIVersion ||
+		record.ResourceID != expected.ResourceID ||
+		record.ResourceKind != expected.ResourceKind ||
+		record.TaskID != expected.TaskID ||
+		record.TaskKind != expected.TaskKind ||
+		record.DesiredHash != expected.DesiredHash ||
+		record.StructuralHash != expected.StructuralHash ||
+		record.TiebreakerInvariantHash != expected.TiebreakerInvariantHash ||
+		record.HashSchema != ConvergeHashSchema ||
+		record.Owner != expected.Owner ||
+		!maps.Equal(record.TiebreakerNodes, expected.TiebreakerNodes) ||
+		!slices.Equal(record.ResourceKeys, expected.ResourceKeys) {
+		return false, nil
+	}
+	switch record.Status {
+	case ConvergeSafetyStatusCreated, ConvergeSafetyStatusReconciled, ConvergeSafetyStatusSkipped:
+	default:
+		return false, nil
+	}
+	matched, proofErr := successfulInputSnapshotMatchesRecordedSchema(runsDir, record.RunID, record.ResourceID, record.TaskID, record.TaskKind, successfulTaskStatus(record.Status), record.HashSchema, input)
+	if proofErr != nil {
+		return false, nil
+	}
+	return matched, nil
 }
 
 var storageClusterConvergeTaskKinds = map[string]bool{
