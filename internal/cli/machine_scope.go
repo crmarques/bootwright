@@ -48,7 +48,7 @@ func resolveScopeSelection(state v1alpha1.State, targetName, clusterScope, machi
 	return clusteraccess.Resolve(state, targetName, clusterScope)
 }
 
-func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, storageRoots []string, ownershipRecords []ownership.ResourceRecord) error {
+func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, storageRoots []string, ownershipRecords []ownership.ResourceRecord, invocation resolvedInvocation) error {
 	if len(containerRoots) == 0 && len(storageRoots) == 0 {
 		return nil
 	}
@@ -73,7 +73,11 @@ func machineDestroyInstalledClusterGuard(clustersDir string, containerRoots, sto
 		return nil
 	}
 	sort.Strings(installed)
-	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster and destroy whatever data those nodes hold; destroy the cluster first (bootwright destroy --clusters %s), or re-run with --authorize %s to tear down the machine(s) anyway", strings.Join(installed, ", "), strings.Join(installed, ","), authorizeInstalledClusterNode)
+	command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeInstalledClusterNode}})
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("refusing to destroy machine(s) that are nodes of installed cluster(s) %s: tearing down their substrate would break the running cluster and destroy whatever data those nodes hold; this requires --authorize %s; re-run `%s` to tear down exactly the selected machine(s) anyway", strings.Join(installed, ", "), authorizeInstalledClusterNode, command.String())
 }
 
 func printDestroyRecordReset(stdout io.Writer, sel clusteraccess.Selection, runsDir, clustersDir, contextName string, runScope converge.Scope, plan converge.WorkflowPlan, resetPartial []string, succeeded map[string]bool, destroyRunID string, purgeHistory, skipUnreachable bool) error {

@@ -48,11 +48,15 @@ func destroyConfirmPrompt(dataLossUnauthorized bool) string {
 	return "Continue with destroy? [y/N] (default: no): "
 }
 
-func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool, selection runSelection) error {
+func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool, invocation resolvedInvocation) error {
 	if allowDestroy || !yes || !dataLoss.Planned() {
 		return nil
 	}
-	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with %s to narrow the work set", dataLoss.Consequence(), selection.command("destroy", "--authorize "+authorizeDataLoss, "--yes"), selection.narrowFlag())
+	command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeDataLoss}})
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: add --authorize %s and re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with %s to narrow the work set", dataLoss.Consequence(), authorizeDataLoss, command.String(), invocation.flags.selection.narrowFlag())
 }
 
 func mergeSkippedInputDocuments(groups ...[]error) []error {
@@ -70,12 +74,16 @@ func mergeSkippedInputDocuments(groups ...[]error) []error {
 	return out
 }
 
-func staleInputRefusal(contextName string, skipped []error) error {
+func staleInputRefusal(contextName string, skipped []error, invocation resolvedInvocation) error {
 	details := make([]string, 0, len(skipped))
 	for _, err := range skipped {
 		details = append(details, err.Error())
 	}
-	return fmt.Errorf("%d input document(s) of context %q no longer decode or validate against this build, so destroy cannot plan a teardown from them: %s; re-render the input for the current schema and run `bootwright context update --name %s -f <dir>`, run destroy from the build that applied this context, or re-run `bootwright destroy --authorize %s` to plan the teardown without those document(s) — whatever they declared is then left standing and reported", len(skipped), contextName, strings.Join(details, "; "), contextName, authorizeStaleInput)
+	command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeStaleInput}})
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("%d input document(s) of context %q no longer decode or validate against this build, so destroy cannot plan a teardown from them: %s; re-render the input for the current schema and run `bootwright context update --name %s -f <dir>`, run destroy from the build that applied this context, or re-run `%s` to plan the same teardown without those document(s) — whatever they declared is then left standing and reported", len(skipped), contextName, strings.Join(details, "; "), contextName, command.String())
 }
 
 func printSkippedInputDocuments(w io.Writer, skipped []error, authorized bool) {

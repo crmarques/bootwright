@@ -182,6 +182,21 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
+		invocation, err := newResolvedInvocation(invocationApply, ctx.Name, invocationFlags{
+			mode:            mode,
+			selection:       selection,
+			reclaimDevices:  reclaimDevices,
+			authorizations:  auth.all(),
+			dryRun:          dryRun,
+			output:          flags.output,
+			yes:             yes,
+			askBecomePass:   askBecomePass,
+			trustOnFirstUse: trustOnFirstUse,
+			verbose:         verbose,
+		})
+		if err != nil {
+			return failErr(1, err)
+		}
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
 			return e
@@ -254,7 +269,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if !dryRun {
 			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
-				return failErr(1, err)
+				return failErr(1, applyModePreflightRefusal(err, invocation))
 			}
 			if err := converge.CheckApplyRenameOrphan(state, objects, clustersDir, ownershipRecords); err != nil {
 				return failErr(1, err)
@@ -282,7 +297,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			if reclaimDevices != "" {
 				var rerr error
-				if reclaimDevices, ownedReclaim, rerr = resolveApplyReclaimDevices(stdout, &plan, auth, objects, reclaimDevices); rerr != nil {
+				if reclaimDevices, ownedReclaim, rerr = resolveApplyReclaimDevices(stdout, &plan, auth, objects, reclaimDevices, invocation); rerr != nil {
 					return rerr
 				}
 			}
@@ -292,7 +307,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if len(destructiveOverride) > 0 {
 				auth.note(authorizeDataLoss)
 			}
-			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy, selection); err != nil {
+			if err := destructiveOverrideYesGuard(destructiveOverride, yes, allowDestroy, invocation); err != nil {
 				return failErr(1, err)
 			}
 			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)

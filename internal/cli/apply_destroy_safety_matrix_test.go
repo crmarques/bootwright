@@ -267,6 +267,16 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 
 func safetyFlagCoherenceCases() []safetyCase {
 	return []safetyCase{{
+		name:    "apply/persistent context and SSH identity controls are part of the mutating flag matrix",
+		args:    []string{"apply", "--context", "matrix", "--ssh-user", "operator", "--ssh-user-for-provisioned", "--ssh-ask-sudo-password=false", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"plan only"},
+	}, {
+		name:    "apply/persistent SSH identity file is validated before mutation",
+		args:    []string{"apply", "--ssh-id-file", "/bootwright-matrix-missing-identity", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--ssh-id-file", "no such file"},
+	}, {
 		name:    "apply/retired --expect-new is an unknown flag/greenfield/full",
 		args:    []string{"apply", "--expect-new", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
@@ -399,7 +409,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"re-run with `bootwright apply --mode rebuild`"},
+		want:    []string{"re-run `bootwright apply --mode rebuild --authorize data-loss"},
 		deny:    []string{"bootwright storage-cluster replace-arbiter --name"},
 	}, {
 		name: "replace-arbiter/refreshing the storage records leaves the next apply no drift to refuse",
@@ -419,7 +429,7 @@ func safetyReplaceArbiterCases() []safetyCase {
 		},
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"re-run with `bootwright apply --mode rebuild`"},
+		want:    []string{"re-run `bootwright apply --mode rebuild --authorize data-loss"},
 	}, {
 		name:    "apply/adding an arbiter to a built cluster is refused as a day-1 shape, naming no command that refuses",
 		seed:    seedEnabledStretchArbiter,
@@ -743,7 +753,7 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		seed:    seedRetiredKindInStoredInput,
 		args:    []string{"destroy", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"--authorize stale-input"},
+		want:    []string{"--authorize stale-input", "re-run `bootwright destroy --authorize stale-input --dry-run", "--context matrix"},
 	}, {
 		name:    "destroy/stale-input: the token lets a dry run preview the blast radius before a real run",
 		seed:    seedRetiredKindInStoredInput,

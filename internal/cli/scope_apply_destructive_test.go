@@ -114,8 +114,9 @@ func TestResolveApplyReclaimDevicesActsWithoutOwnershipUnderTheToken(t *testing.
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
 	plan := &converge.WorkflowPlan{State: state}
+	invocation := resolvedInvocation{verb: invocationApply, flags: invocationFlags{mode: workflow.ApplyModeReconcile, reclaimDevices: "all"}}
 	var out bytes.Buffer
-	resolved, clusters, rerr := resolveApplyReclaimDevices(&out, plan, auth, objects, "all")
+	resolved, clusters, rerr := resolveApplyReclaimDevices(&out, plan, auth, objects, "all", invocation)
 	if rerr != nil {
 		t.Fatalf("the token pair must let the reclaim act on a cluster a destroy released, got %v", rerr)
 	}
@@ -133,7 +134,7 @@ func TestResolveApplyReclaimDevicesActsWithoutOwnershipUnderTheToken(t *testing.
 	if err != nil {
 		t.Fatalf("parseAuthorizations: %v", err)
 	}
-	resolved, clusters, rerr = resolveApplyReclaimDevices(&bytes.Buffer{}, &converge.WorkflowPlan{State: state}, bare, objects, "all")
+	resolved, clusters, rerr = resolveApplyReclaimDevices(&bytes.Buffer{}, &converge.WorkflowPlan{State: state}, bare, objects, "all", invocation)
 	if rerr != nil || resolved != "all" || len(clusters) != 0 {
 		t.Fatalf("without the token an unowned cluster must stay out of the reclaim (resolved=%q clusters=%v err=%v)", resolved, clusters, rerr)
 	}
@@ -194,7 +195,8 @@ func TestDestructiveOverrideYesGuard(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := destructiveOverrideYesGuard(tc.destructive, tc.yes, tc.allow, runSelection{clusters: "dc1-ocp"})
+			invocation := resolvedInvocation{verb: invocationApply, flags: invocationFlags{mode: workflow.ApplyModeReconcile, selection: runSelection{clusters: "dc1-ocp"}, yes: tc.yes}}
+			err := destructiveOverrideYesGuard(tc.destructive, tc.yes, tc.allow, invocation)
 			if tc.wantErr != (err != nil) {
 				t.Fatalf("guard(destructive=%v yes=%v allow=%v) err=%v, wantErr=%v", tc.destructive, tc.yes, tc.allow, err, tc.wantErr)
 			}

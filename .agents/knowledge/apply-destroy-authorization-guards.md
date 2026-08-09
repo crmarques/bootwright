@@ -13,7 +13,7 @@ what turns "forgot" into a red test.
 | You are adding | Register it in | Guard that fails otherwise |
 | --- | --- | --- |
 | an `--authorize` token | `authorizationTokens` (`internal/cli/authorize.go`), the `\| token \| authorizes \| accepted by \|` tables in `specs/state-model.md` and `docs/advanced/operations.md`, a `safetyMatrixCases()` row, and the verb's preview forecast | `authorize_contract_test.go`, `TestEveryTokenAVerbAcceptsIsNamedByItsPreviewForecast` |
-| a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` |
+| a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead; and a field emitted by `resolvedInvocation` so refusal retries preserve it | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix`, `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` |
 | an apply task kind | `workflow.ApplyTaskKinds`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToADestroyKind` |
 | a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, and `substrateResetConsumers` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
@@ -340,9 +340,27 @@ ledger now carries `Machines`, populated from `opts.SelectedMachines` in
 older spine guard only checked that a hint parsed as a registered command, which
 `bootwright destroy --yes` does.
 
+**A refusal retry reproduces the resolved invocation, not a hand-built flag
+fragment.** The earlier refusal helper retained only `--stage`/`--through` and
+one selection axis. Adding a required token could therefore drop the resolved
+context, apply mode, `--reclaim-devices`, `--recover-ceph-ownership`,
+`--purge-history`, an authorization already granted, and the SSH identity that
+made the probe meaningful. Most dangerously, a refused `destroy --dry-run`
+could be rendered as a real destroy. `resolvedInvocation` captures every local
+and persistent flag that can affect or describe the run; `retryIntent` may only
+change the apply mode and union in a token the same verb accepts; and the final
+command is shell-quoted from its argument vector. Mode-preflight refusals are
+typed so the CLI, which owns the resolved flags, supplies the exact command;
+foreign ownership supplies no fake bypass and directs the operator back to the
+recorded manager. `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` closes
+this over future flags, while the exact-parse and gate-clear tests prove the
+printed command is accepted, keeps the original scope and effects, and clears
+the refusal it names.
+
 **Every flag on a mutating verb is exercised by the matrix.**
 `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` walks the registered
-flag set of `apply` and `destroy` and requires each one to appear in a
+local and inherited-persistent flag set of `apply` and `destroy` and requires
+each one to appear in a
 `safetyMatrixCases()` row, or in `safetyMatrixFlagExemptions` naming the test
 that pins it instead; `TestSafetyMatrixFlagExemptionsHoldOnlyLiveFlags` rejects a
 dead exemption. Before this, a new flag on either verb could ship with no

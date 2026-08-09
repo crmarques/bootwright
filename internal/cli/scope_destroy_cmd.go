@@ -126,6 +126,20 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
+		invocation, err := newResolvedInvocation(invocationDestroy, ctx.Name, invocationFlags{
+			selection:            selection,
+			recoverCephOwnership: cephRecovery,
+			purgeHistory:         purgeHistory,
+			authorizations:       auth.all(),
+			dryRun:               dryRun,
+			output:               flags.output,
+			yes:                  yes,
+			askBecomePass:        askBecomePass,
+			verbose:              verbose,
+		})
+		if err != nil {
+			return failErr(1, err)
+		}
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
@@ -137,7 +151,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		inputSkipped := mergeSkippedInputDocuments(localitySkipped, stateSkipped)
 		staleInputReached := len(inputSkipped) > 0
 		if staleInputReached && !auth.allows(authorizeStaleInput) {
-			return failErr(1, staleInputRefusal(ctx.Name, inputSkipped))
+			return failErr(1, staleInputRefusal(ctx.Name, inputSkipped, invocation))
 		}
 		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
 		if purgeHistory && artifactServerOnly {
@@ -156,7 +170,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		unreadableRecordsReached := len(ownershipSkipped) > 0
 		if unreadableRecordsReached && !dryRun && !auth.allows(authorizeUnreadableRecords) {
-			return failErr(1, unreadableOwnershipRefusal(ctx, ownershipSkipped))
+			return failErr(1, unreadableOwnershipRefusal(ctx, ownershipSkipped, invocation))
 		}
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
@@ -164,13 +178,13 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords); err != nil {
 			return failErr(1, err)
 		}
-		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope, dryRun)
+		sharedInfraReached, storageConsumerOverrideNotice, consumerErr := destroyStorageConsumerGate(auth, state, sel, runScope, dryRun, invocation)
 		if consumerErr != nil {
 			return failErr(1, consumerErr)
 		}
 		installedClusterNodeReached := false
 		if sel.MachineSelection {
-			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots, sel.StorageRoots, ownershipRecords); err != nil {
+			if err := machineDestroyInstalledClusterGuard(clustersDir, sel.ContainerRoots, sel.StorageRoots, ownershipRecords, invocation); err != nil {
 				installedClusterNodeReached = true
 				if !auth.allows(authorizeInstalledClusterNode) && !dryRun {
 					return failErr(1, err)
@@ -187,7 +201,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if artifactServerOnly {
 				blocksState = state
 			}
-			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly, dryRun)
+			decision, blocked, blocksErr := destroyInfraComponentGate(auth, ctx.Name, infraComponentServiceRefs(blocksState, artifactServerOnly), ownershipRecords, artifactServerOnly, dryRun, invocation)
 			sharedInfraReached = sharedInfraReached || blocked
 			if blocksErr != nil {
 				return failErr(1, blocksErr)
@@ -257,7 +271,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
-			return failErr(1, fmt.Errorf("%s; re-run `%s` to destroy it anyway", destroySafety.Summary(), selection.command("destroy", "--authorize "+authorizeProtected)))
+			command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeProtected}})
+			if retryErr != nil {
+				return failErr(1, retryErr)
+			}
+			return failErr(1, fmt.Errorf("%s; this requires --authorize %s; re-run `%s` to destroy it anyway", destroySafety.Summary(), authorizeProtected, command.String()))
 		}
 		if !dryRun {
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
@@ -298,7 +316,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		warnUnusedAuthorizations(stdout, auth, dryRun)
 		if dataLossPlanned {
-			if err := destroyDataLossYesGuard(dataLoss, yes, allowDestroy, selection); err != nil {
+			if err := destroyDataLossYesGuard(dataLoss, yes, allowDestroy, invocation); err != nil {
 				return failErr(1, err)
 			}
 		}

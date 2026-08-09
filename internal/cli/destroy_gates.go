@@ -13,12 +13,16 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func unreadableOwnershipRefusal(ctx workspace.Context, skipped []error) error {
+func unreadableOwnershipRefusal(ctx workspace.Context, skipped []error, invocation resolvedInvocation) error {
 	details := make([]string, 0, len(skipped))
 	for _, warning := range skipped {
 		details = append(details, warning.Error())
 	}
-	return fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run `bootwright destroy --authorize %s` to destroy the rest without them", len(skipped), ctx.OwnershipDir, strings.Join(details, "; "), authorizeUnreadableRecords)
+	command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeUnreadableRecords}})
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run `%s` to destroy the same selected work set without them", len(skipped), ctx.OwnershipDir, strings.Join(details, "; "), command.String())
 }
 
 func destroyDryRunDisclosure(safety workflow.DestroySafetyDecision, inputSkipped, ownershipSkipped []error, decision converge.InfraComponentDestroyDecision, auth *authorizations, purgeHistory bool) dryRunDisclosure {
@@ -66,7 +70,7 @@ func destroyScopeConflictGates(state v1alpha1.State, sel clusteraccess.Selection
 	return nil
 }
 
-func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, dryRun bool) (bool, string, error) {
+func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, dryRun bool, invocation resolvedInvocation) (bool, string, error) {
 	if !sel.Active || len(sel.StorageRoots) == 0 {
 		return false, "", nil
 	}
@@ -74,31 +78,46 @@ func destroyStorageConsumerGate(auth *authorizations, state v1alpha1.State, sel 
 	if len(conflicts) == 0 {
 		return false, "", nil
 	}
-	if runScope.Name != "infra" {
+	if converge.ScopeTearsClusterLayer(runScope) {
 		return false, "", clusteraccess.FormatStorageConsumerConflicts(conflicts)
+	}
+	if !converge.ScopeTearsMachineLayer(runScope) {
+		return false, "", nil
 	}
 	if !auth.allows(authorizeSharedInfra) {
 		if dryRun {
 			return true, "", nil
 		}
-		return true, "", fmt.Errorf("%w; this infra-stage teardown destroys the storage cluster's machine substrate, losing its OSD data; destroy the consuming cluster(s) first, or re-run with --authorize %s to proceed anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), authorizeSharedInfra)
+		command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeSharedInfra}})
+		if retryErr != nil {
+			return true, "", retryErr
+		}
+		return true, "", fmt.Errorf("%w; this machine-layer teardown destroys the storage cluster's machine substrate, losing its OSD data; re-run `%s` to proceed with the same selected work set anyway", clusteraccess.FormatStorageConsumerConflicts(conflicts), command.String())
 	}
 	return true, clusteraccess.FormatStorageConsumerConflicts(conflicts).Error() + "; proceeding because --authorize " + authorizeSharedInfra + " was supplied", nil
 }
 
-func destroyInfraComponentGate(auth *authorizations, contextName string, refs []converge.InfraComponentServiceRef, records []ownership.ResourceRecord, artifactServerOnly, dryRun bool) (converge.InfraComponentDestroyDecision, bool, error) {
+func destroyInfraComponentGate(auth *authorizations, contextName string, refs []converge.InfraComponentServiceRef, records []ownership.ResourceRecord, artifactServerOnly, dryRun bool, invocation resolvedInvocation) (converge.InfraComponentDestroyDecision, bool, error) {
 	decision, blocksErr := converge.PlanInfraComponentDestroyBlocks(contextName, refs, records, artifactServerOnly)
 	reached := false
 	if blocksErr != nil {
 		reached = true
 		if !auth.allows(authorizeSharedInfra) && !dryRun {
-			return decision, reached, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run with --authorize %s to tear them down regardless", blocksErr, authorizeSharedInfra)
+			command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeSharedInfra}})
+			if retryErr != nil {
+				return decision, reached, retryErr
+			}
+			return decision, reached, fmt.Errorf("cannot verify whether shared services are owned or referenced by other contexts: %w; resolve the contexts directory or re-run `%s` to tear down the same selected work set regardless", blocksErr, command.String())
 		}
 	}
 	if err := converge.InfraComponentDestroyBlockError(decision.Blocks); err != nil {
 		reached = true
 		if !auth.allows(authorizeSharedInfra) && !dryRun {
-			return decision, reached, err
+			command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeSharedInfra}})
+			if retryErr != nil {
+				return decision, reached, retryErr
+			}
+			return decision, reached, fmt.Errorf("%w; re-run `%s` to tear down the same selected work set regardless", err, command.String())
 		}
 	}
 	return decision, reached, nil

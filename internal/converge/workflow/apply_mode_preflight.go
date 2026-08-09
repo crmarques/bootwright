@@ -8,17 +8,52 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+type ApplyModePreflightRefusal struct {
+	message                   string
+	retryMode                 ApplyMode
+	requiresDataLossAuthorize bool
+}
+
+func (r *ApplyModePreflightRefusal) Error() string {
+	return r.message
+}
+
+func (r *ApplyModePreflightRefusal) RetryMode() (ApplyMode, bool) {
+	return r.retryMode, r.retryMode != ""
+}
+
+func (r *ApplyModePreflightRefusal) RequiresDataLossAuthorization() bool {
+	return r.requiresDataLossAuthorize
+}
+
 func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) error {
 	switch mode {
 	case ApplyModeCreate:
-		var existing []ObjectClassification
+		var existing, structural, foreign []ObjectClassification
 		for _, o := range objects {
-			if o.Recorded() {
-				existing = append(existing, o)
+			if !o.Recorded() {
+				continue
+			}
+			existing = append(existing, o)
+			switch {
+			case o.HasForeign():
+				foreign = append(foreign, o)
+			case o.HasStructuralDrift():
+				structural = append(structural, o)
 			}
 		}
-		if len(existing) > 0 {
-			return fmt.Errorf("apply --mode create requires a greenfield environment and these objects already exist: %s; use --mode reconcile to reconcile them, or run `bootwright apply --mode rebuild` to rebuild drifted objects", summarizeApplyObjects(existing))
+		switch {
+		case len(foreign) > 0:
+			return &ApplyModePreflightRefusal{message: fmt.Sprintf("apply --mode create requires a greenfield environment and these objects already exist: %s. Some are recorded by another manager: %s; use the recorded manager to reconcile or remove them, then retry create only after its ownership evidence no longer conflicts. No bootwright apply mode or authorization token adopts a foreign object", summarizeApplyObjects(existing), summarizeApplyObjects(foreign))}
+		case len(structural) > 0:
+			refusal := continueDriftRefusal(structural, nil)
+			refusal.message = fmt.Sprintf("apply --mode create requires a greenfield environment and these objects already exist: %s. %s", summarizeApplyObjects(existing), refusal.message)
+			return refusal
+		case len(existing) > 0:
+			return &ApplyModePreflightRefusal{
+				message:   fmt.Sprintf("apply --mode create requires a greenfield environment and these objects already exist: %s; reconcile the same selected work set, or remove those objects deliberately before retrying create", summarizeApplyObjects(existing)),
+				retryMode: ApplyModeReconcile,
+			}
 		}
 	case ApplyModeReconcile:
 		var drifted, foreign []ObjectClassification
@@ -41,14 +76,16 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(foreign) > 0 {
-			return fmt.Errorf("apply --mode rebuild never rebuilds objects recorded by another manager: %s; resolve ownership before retrying", summarizeApplyObjects(foreign))
+			return &ApplyModePreflightRefusal{message: fmt.Sprintf("apply --mode rebuild never rebuilds objects recorded by another manager: %s; use the recorded manager to reconcile or remove them, then retry after its ownership evidence no longer conflicts. No bootwright apply mode or authorization token adopts a foreign object", summarizeApplyObjects(foreign))}
 		}
 	}
 	return nil
 }
 
-func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
+func continueDriftRefusal(drifted, foreign []ObjectClassification) *ApplyModePreflightRefusal {
 	var parts []string
+	retryMode := ApplyMode("")
+	requiresDataLossAuthorize := false
 	switch {
 	case len(drifted) > 0 && stretchArbiterShapeDriftSet(drifted):
 		parts = append(parts, stretchArbiterShapeRefusal(drifted))
@@ -60,12 +97,18 @@ func continueDriftRefusal(drifted, foreign []ObjectClassification) error {
 			items = append(items, fmt.Sprintf("%s (would %s)", o.Label, structuralRebuildConsequence(o)))
 		}
 		sort.Strings(items)
-		parts = append(parts, fmt.Sprintf("apply refuses this change to %s: it is not a safe in-place reconcile. To proceed, revert the change to match the recorded desired state, or — if you intend the rebuild — re-run with `bootwright apply --mode rebuild` (a destructive rebuild additionally needs `--authorize data-loss`, or on a protected environment a `bootwright destroy` for that scope first)", strings.Join(items, ", ")))
+		parts = append(parts, fmt.Sprintf("apply refuses this change to %s: it is not a safe in-place reconcile. To proceed, revert the change to match the recorded desired state, or retry this same resolved selection with --mode rebuild and the required data-loss authorization after resolving any protection gate", strings.Join(items, ", ")))
+		retryMode = ApplyModeRebuild
+		requiresDataLossAuthorize = true
 	}
 	if len(foreign) > 0 {
-		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; resolve ownership before retrying (foreign objects are never rebuilt)", summarizeApplyObjects(foreign)))
+		parts = append(parts, fmt.Sprintf("apply never modifies objects recorded by another manager: %s; use the recorded manager to reconcile or remove them, then retry after its ownership evidence no longer conflicts. No bootwright apply mode or authorization token adopts a foreign object", summarizeApplyObjects(foreign)))
 	}
-	return fmt.Errorf("%s", strings.Join(parts, ". "))
+	return &ApplyModePreflightRefusal{
+		message:                   strings.Join(parts, ". "),
+		retryMode:                 retryMode,
+		requiresDataLossAuthorize: requiresDataLossAuthorize,
+	}
 }
 
 func tiebreakerOnlyDriftSet(drifted []ObjectClassification) bool {
@@ -125,7 +168,7 @@ func stretchArbiterShapeRefusal(drifted []ObjectClassification) string {
 		change = "adds a stretch tiebreaker to"
 		shape = "a stretch cluster arbitrated by a tiebreaker mon"
 	}
-	return fmt.Sprintf("apply refuses this change to %s: it %s a cluster that is already built, and whether a stretch cluster carries an arbiter is fixed when the cluster is bootstrapped. Bootwright has no path that moves a running cluster between the two shapes — not this apply, and not `bootwright storage-cluster replace-arbiter`, which moves an existing tiebreaker between nodes and cannot create or retire one. Revert the change to match the recorded desired state and keep running the shape you have, or rebuild the cluster deliberately as %s: that is `bootwright destroy` for this cluster followed by a fresh apply, and it destroys all OSD data. `--mode rebuild` is not the remedy here either — it reaches the same data loss (cephadm rm-cluster --zap-osds) without saying so",
+	return fmt.Sprintf("apply refuses this change to %s: it %s a cluster that is already built, and whether a stretch cluster carries an arbiter is fixed when the cluster is bootstrapped. Bootwright has no path that moves a running cluster between the two shapes — not this apply, and not `bootwright storage-cluster replace-arbiter`, which moves an existing tiebreaker between nodes and cannot create or retire one. Revert the change to match the recorded desired state and keep running the shape you have. If replacement with %s is intentional, first export or back up the data and perform a separately reviewed full teardown and fresh apply; no bootwright retry command can make that shape change in place, and the replacement destroys all OSD data. `--mode rebuild` is not the remedy here either — it reaches the same data loss (cephadm rm-cluster --zap-osds) without saying so",
 		strings.Join(labels, ", "), change, shape)
 }
 

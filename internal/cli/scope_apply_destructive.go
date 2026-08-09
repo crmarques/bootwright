@@ -212,10 +212,14 @@ func reclaimDestructiveDescriptors(reclaimDevices string, owned []string) []stri
 	return []string{"reclaim-devices " + reclaimDevices + " on Ceph cluster(s) " + strings.Join(owned, ", ")}
 }
 
-func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, objects []workflow.ObjectClassification, reclaimDevices string) (string, []string, error) {
+func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, auth *authorizations, objects []workflow.ObjectClassification, reclaimDevices string, invocation resolvedInvocation) (string, []string, error) {
 	clusters := reclaimEligibleClusters(plan.State, auth, objects)
 	if err := converge.CheckReclaimDestroyProtection(plan.State, clusters, auth.has(authorizeDataLoss)); err != nil {
-		return "", nil, failErr(1, err)
+		command, retryErr := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeDataLoss}})
+		if retryErr != nil {
+			return "", nil, failErr(1, retryErr)
+		}
+		return "", nil, failErr(1, fmt.Errorf("%w; re-run `%s` to authorize the protected device wipe", err, command.String()))
 	}
 	resolved, err := converge.ResolveReclaimDevices(plan.State, clusters, reclaimDevices)
 	if err != nil {
@@ -298,9 +302,13 @@ func destructiveApplyConfirmPrompt(destructive []string, allowDestroy bool) stri
 	return "Confirm this DESTRUCTIVE action (accept data loss)? [y/N] (default: no): "
 }
 
-func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool, selection runSelection) error {
+func destructiveOverrideYesGuard(destructive []string, yes, allowDestroy bool, invocation resolvedInvocation) error {
 	if len(destructive) == 0 || allowDestroy || !yes {
 		return nil
 	}
-	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with %s to narrow the destructive set", strings.Join(destructive, ", "), selection.command("apply", "--authorize "+authorizeDataLoss, "--yes"), selection.narrowFlag())
+	command, err := invocation.retry(retryIntent{requiredAuthorizations: []string{authorizeDataLoss}})
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("apply would destroy data: %s — disks are wiped and any Ceph OSD data is zapped. --yes does not authorize data loss: re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names an object you did not intend to rebuild, re-run with %s to narrow the destructive set", strings.Join(destructive, ", "), command.String(), invocation.flags.selection.narrowFlag())
 }
