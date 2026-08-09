@@ -221,9 +221,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			converge.ApplyArtifactServerSkipExtraVar(&plan, skip)
 		}
 		if flags.output == outputJSON {
-			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
-			}
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants)
 			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, &invocation)

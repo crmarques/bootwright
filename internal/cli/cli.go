@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
@@ -20,6 +21,10 @@ import (
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	if code, handled := callerio.RunHelper(args, stdout, stderr); handled {
 		return code
+	}
+	if err := rejectMutatingJSONIntentArgs(args); err != nil {
+		_ = writeCommandErrorJSON(stdout, args, 2, err)
+		return 2
 	}
 	if code, handled, err := ensureLocalRootForArgs(ctx, args, stdin, stdout, stderr); handled {
 		return code
@@ -54,6 +59,46 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 	output.New(stderr).Error(err)
 	return 1
+}
+
+func rejectMutatingJSONIntentArgs(args []string) error {
+	if !argsRequestJSON(args) {
+		return nil
+	}
+	commandArgs := stripLeadingGlobalFlags(argsBeforeCommandPayload(args))
+	if len(commandArgs) == 0 || (commandArgs[0] != "apply" && commandArgs[0] != "destroy") {
+		return nil
+	}
+	askSSHSudoPassword, valid := rawBoolFlagValue(argsBeforeCommandPayload(args), flagSSHAskSudoPassword)
+	if valid && askSSHSudoPassword {
+		return jsonSSHSudoPasswordConflict()
+	}
+	dryRun, valid := rawBoolFlagValue(argsBeforeCommandPayload(args), "--dry-run")
+	if !valid || dryRun {
+		return nil
+	}
+	return mutatingJSONDryRunConflict(commandArgs[0])
+}
+
+func rawBoolFlagValue(args []string, name string) (bool, bool) {
+	value := false
+	for _, arg := range args {
+		switch {
+		case arg == name:
+			value = true
+		case strings.HasPrefix(arg, name+"="):
+			parsed, err := strconv.ParseBool(strings.TrimPrefix(arg, name+"="))
+			if err != nil {
+				return false, false
+			}
+			value = parsed
+		}
+	}
+	return value, true
+}
+
+func mutatingJSONDryRunConflict(verb string) error {
+	return fmt.Errorf("--output json is supported only with --dry-run for %s; re-run with --dry-run to preview JSON, or use --output text for a real %s", verb, verb)
 }
 
 type commandErrorReport struct {

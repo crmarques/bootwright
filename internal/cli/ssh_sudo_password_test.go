@@ -54,6 +54,42 @@ func TestAskSudoPasswordPromptsOnStderrBeforeTheCommandRuns(t *testing.T) {
 	}
 }
 
+func TestJSONDryRunRejectsSSHSudoPasswordBeforePrompt(t *testing.T) {
+	for _, verb := range []string{"apply", "destroy"} {
+		t.Run(verb, func(t *testing.T) {
+			setTestHomeAndRoot(t)
+			withoutControllingTTY(t)
+			previous := localRootGate
+			localRootCalled := false
+			localRootGate = localRootGateDeps{
+				enabled: true,
+				geteuid: func() int { return 1000 },
+				executable: func() (string, error) {
+					localRootCalled = true
+					return "", os.ErrPermission
+				},
+			}
+			t.Cleanup(func() { localRootGate = previous })
+			stdout, stderr, code := runCLIWithInput(t, "hunter2\n", verb, "--dry-run", "--output", "json", "--ssh-ask-sudo-password", "--ask-become-pass=false")
+			output := stdout + stderr
+			if code != 2 {
+				t.Fatalf("%s JSON dry-run with an SSH sudo prompt exited %d, want 2:\n%s", verb, code, output)
+			}
+			for _, want := range []string{"--ssh-ask-sudo-password cannot be used with --output json", "remove --ssh-ask-sudo-password", "passwordless sudo"} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("%s refusal missing %q:\n%s", verb, want, output)
+				}
+			}
+			if strings.Contains(stderr, sshSudoPasswordPrompt) || strings.Contains(output, "hunter2") {
+				t.Fatalf("%s JSON dry-run prompted or echoed the answer: stdout=%q stderr=%q", verb, stdout, stderr)
+			}
+			if localRootCalled {
+				t.Fatalf("%s JSON dry-run reached the local sudo gate before rejecting its prompt conflict", verb)
+			}
+		})
+	}
+}
+
 func TestAskSudoPasswordPromptNamesTheAccountItAnswersFor(t *testing.T) {
 	setTestHomeAndRoot(t)
 	withoutControllingTTY(t)

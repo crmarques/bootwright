@@ -129,7 +129,7 @@ func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryComman
 	next.flags.trustOnFirstUse = false
 	next.flags.clusterName = ""
 	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationDestroy)
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationDestroy)
 	return retryCommand{args: next.args()}, nil
 }
 
@@ -146,7 +146,7 @@ func (i resolvedInvocation) applyClustersRetry(clusters []string, requiredAuthor
 	next.flags.purgeHistory = false
 	next.flags.clusterName = ""
 	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationApply)
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationApply)
 	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
 }
 
@@ -186,7 +186,7 @@ func (i resolvedInvocation) destroySelectedLayerRetry(stage string, requiredAuth
 	next.flags.trustOnFirstUse = false
 	next.flags.clusterName = ""
 	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationDestroy)
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationDestroy)
 	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
 }
 
@@ -204,7 +204,7 @@ func (i resolvedInvocation) clusterLifecycleRetry(verb invocationVerb, cluster, 
 	next.flags.purgeHistory = false
 	next.flags.clusterName = ""
 	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, verb)
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, verb)
 	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
 }
 
@@ -223,15 +223,23 @@ func (i resolvedInvocation) replaceArbiterRetry(cluster string) (retryCommand, e
 	next.flags.trustOnFirstUse = false
 	next.flags.clusterName = cluster
 	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationReplaceArbiter)
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationReplaceArbiter)
 	return retryCommand{args: next.args()}, nil
 }
 
-func authorizationsAcceptedByVerb(names []string, verb invocationVerb) []string {
-	accepted := authorizationTokenNamesForVerb(string(verb))
+func authorizationsAcceptedByVerb(names []string, sourceVerb, targetVerb invocationVerb) []string {
+	accepted := authorizationTokenNamesForVerb(string(targetVerb))
 	var out []string
 	for _, name := range names {
-		if name == authorizeAll || slices.Contains(accepted, name) {
+		if name == authorizeAll && sourceVerb != targetVerb {
+			for _, expanded := range authorizationTokenNamesForVerb(string(sourceVerb)) {
+				if expanded != authorizeAll && slices.Contains(accepted, expanded) && !slices.Contains(out, expanded) {
+					out = append(out, expanded)
+				}
+			}
+			continue
+		}
+		if slices.Contains(accepted, name) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}

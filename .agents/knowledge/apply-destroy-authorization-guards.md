@@ -262,6 +262,16 @@ unused-token warning pointed the other way. Adding a future token puts it inside
 `all` on the day it lands, so the disclosure line is the only record of what a
 given run expanded to.
 
+The same boundary applies to executable remedies. A same-verb retry retains
+literal `all`; a cross-verb retry expands it under the source registry, projects
+the explicit intersection onto the target registry, and only then adds the
+target tokens required by the typed remedy. Carrying literal `all` into the
+target would silently grant every target-only token added in the future.
+`TestCrossVerbRetryExpandsAllUnderTheSourceAndCarriesOnlyTargetIntersection`
+shell-round-trips hostile values and denies every unrelated target-only token;
+the apply/destroy matrix drives every live apply-to-destroy formatter, while
+`TestSameVerbRetryPreservesLiteralAll` pins the non-crossing case.
+
 **The preview reads the gate's predicate, not a copy of it.** Every dry run and
 `plan` of the three authorizing verbs emits a `Required authorizations` block,
 so a token is learnable before a refusal teaches it. The rule that keeps the
@@ -305,6 +315,11 @@ dialect never mentioned. `converge.DryRunReport` now carries `refusals` and
 forecast also unions destroy-released clusters into the KubeVirt-collateral
 check the way the real gate does, and evaluates `UnmatchedReclaimDevices`, which
 previously exited 2 on the real run after a preview had affirmed the device.
+Apply and destroy reject JSON without `--dry-run` in their first intent
+resolver, ahead of context, lease, desired-input, or Git work. Root pre-run also
+rejects JSON together with `--ssh-ask-sudo-password` before reading an answer;
+`TestJSONDryRunRejectsSSHSudoPasswordBeforePrompt` covers both verbs without a
+controlling TTY.
 
 **A skipped task still satisfies the release that authorized it.**
 `runApplyTask` returned early on `result.Skipped` before reaching
@@ -387,9 +402,10 @@ the refusal it names.
 protected apply rebuild returns one registered action plus a non-empty unique
 set of `machine-layer`/`cluster-layer` roles. The CLI alone maps those roles to
 fixed destroy stages, retains the resolved original `--machines` or `--clusters`
-and all applicable global flags, drops apply-only effects, unions `protected`
-and cluster-teardown `data-loss`, and renders the unchanged-selection rebuild
-resume. Backend evidence names are never operands. Unknown, duplicate or empty
+and all applicable global flags, projects prior authorizations across the verb
+boundary, drops apply-only effects, unions `protected` and cluster-teardown
+`data-loss`, and renders the unchanged-selection rebuild resume. Backend
+evidence names are never operands. Unknown, duplicate or empty
 role shapes emit no command. The action formatter, exact parse/re-execution
 tests and machine/cluster/mixed matrix rows close that alternative over future
 flags without creating a grandfather allowlist. The destructive apply-kind
@@ -420,7 +436,9 @@ value.
 **Every flag on a mutating verb is exercised by the matrix.**
 `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` walks the registered
 local and inherited-persistent flag set of `apply` and `destroy` and requires
-each one to appear in a
+each one to appear in a row for that same verb, not merely somewhere in one
+shared-name set. Every persistent global therefore needs apply-side and
+destroy-side coverage independently. A flag must appear in a
 `safetyMatrixCases()` row, or in `safetyMatrixFlagExemptions` naming the test
 that pins it instead; `TestSafetyMatrixFlagExemptionsHoldOnlyLiveFlags` rejects a
 dead exemption. Before this, a new flag on either verb could ship with no

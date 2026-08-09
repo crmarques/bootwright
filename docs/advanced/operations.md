@@ -72,7 +72,10 @@ authorized the wrong risk instead of assuming a gate was cleared.
     (scope conflicts, the KubeVirt tenant gate, a mounted or in-use device, a
     `protectedKinds` rebuild on `apply`); and it never answers a confirmation
     prompt — `--yes` still does that, separately. A real run that used it prints
-    which tokens it stood in for, so the blast radius stays on the record.
+    which tokens it stood in for, so the blast radius stays on the record. If a
+    refusal's remedy changes verbs, the printed command expands `all` under the
+    source verb and carries only shared explicit tokens plus tokens that remedy
+    itself requires; literal `all` never crosses into the other verb.
 
 !!! warning "`--yes` authorizes nothing"
     `--yes` answers the ordinary confirmation prompt on either verb and never

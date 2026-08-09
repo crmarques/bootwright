@@ -65,6 +65,9 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.PersistentFlags().BoolVar(&sshAskSudoPassword, "ssh-ask-sudo-password", false, flagSSHAskSudoPasswordUsage)
 	root.PersistentFlags().BoolVar(&sshUserForProvisioned, "ssh-user-for-provisioned", false, flagSSHUserForProvisionedUsage)
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if err := rejectJSONSSHSudoPasswordPrompt(cmd); err != nil {
+			return err
+		}
 		path, err := resolveSSHIDFile()
 		if err != nil {
 			return failErr(2, err)
@@ -124,6 +127,21 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newVersionCmd(stdout),
 	)
 	return root
+}
+
+func rejectJSONSSHSudoPasswordPrompt(cmd *cobra.Command) error {
+	if !sshAskSudoPassword {
+		return nil
+	}
+	flag := cmd.Flags().Lookup("output")
+	if flag == nil || flag.Value.String() != outputJSON {
+		return nil
+	}
+	return failErr(2, jsonSSHSudoPasswordConflict())
+}
+
+func jsonSSHSudoPasswordConflict() error {
+	return errors.New("--ssh-ask-sudo-password cannot be used with --output json because JSON output never prompts; remove --ssh-ask-sudo-password and configure passwordless sudo for the selected SSH account")
 }
 
 func addGroup(parent *cobra.Command, group string, cmds ...*cobra.Command) {

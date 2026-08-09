@@ -65,7 +65,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
-		auth, err := resolveScopeDestroyIntent(flags.output, authorizeFlag)
+		auth, err := resolveScopeDestroyIntent(flags.output, dryRun, authorizeFlag)
 		if err != nil {
 			return err
 		}
@@ -231,9 +231,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			unreadableRecordDir: ctx.OwnershipDir,
 		})
 		if flags.output == outputJSON {
-			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
-			}
 			disclosure := destroyDryRunDisclosure(destroySafety, inputSkipped, ownershipSkipped, componentDecision, auth, purgeHistory && !plan.NoRemoteWork)
 			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}

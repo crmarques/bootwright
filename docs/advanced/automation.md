@@ -30,7 +30,9 @@ Verbs that accept `--output json`, and what the JSON describes. On the mutating
 verbs JSON is a **preview-only** format: `apply`, `destroy`, and
 `storage-cluster replace-arbiter` accept it only
 together with `--dry-run` (exit `2` otherwise). The read-only verbs report
-results, `preflight` included.
+results, `preflight` included. That usage error is decided before the mutating
+verb resolves a context or reads desired state, so an invalid machine-output
+request never takes a lease or begins Git work.
 
 | Verb(s) | Requires `--dry-run` | The JSON describes |
 | --- | --- | --- |
@@ -104,7 +106,10 @@ The flag set that guarantees no prompt:
 - **Become-password handling.** Run as root, or ensure passwordless sudo
   (non-interactive sudo is auto-detected before any prompt), or pass
   `--ask-become-pass=false` explicitly — the flag defaults to `false` as root
-  and `true` otherwise.
+  and `true` otherwise. Do not combine `--ssh-ask-sudo-password` with
+  `--output json`: JSON runs never prompt, so Bootwright rejects that
+  combination before asking for a password. Configure passwordless sudo and
+  remove `--ssh-ask-sudo-password` from the invocation.
 - **`--output json`** where supported, for machine-readable results.
 
 Gate a pipeline on convergence with `diff`: `diff --recorded` is the fast

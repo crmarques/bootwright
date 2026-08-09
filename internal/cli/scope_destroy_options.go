@@ -39,9 +39,12 @@ func resolveScopeDestroyLabels(scope converge.Scope, options scopeDestroyOptions
 	return labels
 }
 
-func resolveScopeDestroyIntent(output string, authorizeFlag []string) (*authorizations, error) {
+func resolveScopeDestroyIntent(output string, dryRun bool, authorizeFlag []string) (*authorizations, error) {
 	if err := validateOutputFormat(output); err != nil {
 		return nil, failErr(2, err)
+	}
+	if output == outputJSON && !dryRun {
+		return nil, failErr(2, mutatingJSONDryRunConflict(authorizeVerbDestroy))
 	}
 	auth, err := parseAuthorizations(authorizeFlag, authorizeVerbDestroy)
 	if err != nil {

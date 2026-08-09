@@ -359,6 +359,32 @@ func assertRefusalRemedy(t *testing.T, args []string, output string, expectation
 	t.Fatalf("refusal retry widens or changes the resolved selection: no one exact command preserves %v; commands=%v\n%s", required, commands, output)
 }
 
+func assertApplyToDestroyAuthorizationProjection(t *testing.T, output string, want []string) {
+	t.Helper()
+	seen := 0
+	for _, rendered := range backtickedBootwrightCommands(output) {
+		args := shellParseWords(t, rendered)
+		if len(args) < 2 || args[0] != "bootwright" || args[1] != "destroy" {
+			continue
+		}
+		seen++
+		if got := retryAuthorizations(args); !slices.Equal(got, want) {
+			t.Fatalf("apply-to-destroy remedy authorizations = %v, want %v; command=%q\n%s", got, want, rendered, output)
+		}
+		for _, forbidden := range []string{authorizeAll, authorizeProtected, authorizeInstalledClusterNode, authorizeUnownedVMs, authorizeUnownedNetworks, authorizeUnreachableNodes, authorizeUnreadableRecords, authorizeSharedInfra, authorizeStaleInput} {
+			if slices.Contains(want, forbidden) {
+				continue
+			}
+			if slices.Contains(retryAuthorizations(args), forbidden) {
+				t.Fatalf("apply-to-destroy remedy carried unrelated destroy-only authorization %q: %q", forbidden, rendered)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatalf("expected an exact apply-to-destroy remedy, got:\n%s", output)
+	}
+}
+
 func isTargetMutatingCommand(command string) bool {
 	return strings.HasPrefix(command, "bootwright apply ") || strings.HasPrefix(command, "bootwright destroy ") || strings.HasPrefix(command, "bootwright storage-cluster replace-arbiter ")
 }
@@ -417,9 +443,12 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
 			}
 		},
-		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--dry-run", "--ask-become-pass=false"},
+		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--authorize", authorizeAll, "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
-		want:    []string{"a real run refuses", "dc1-child-ocp-infra-master-0", "bootwright destroy --clusters dc1-child-ocp --dry-run", "bootwright apply --mode reconcile --authorize data-loss --clusters dc1-child-ocp --dry-run"},
+		want:    []string{"a real run refuses", "dc1-child-ocp-infra-master-0", "bootwright destroy --authorize data-loss,unowned-devices --clusters dc1-child-ocp --dry-run", "bootwright apply --mode reconcile --authorize all --clusters dc1-child-ocp --dry-run"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices})
+		},
 	}, {
 		name:    "destroy/preview: the json dialect discloses the history purge the text dialect warns about",
 		args:    []string{"destroy", "--purge-history", "--dry-run", "--output", "json", "--ask-become-pass=false"},
@@ -592,6 +621,16 @@ func safetyFlagCoherenceCases() []safetyCase {
 		verdict: verdictUsageError,
 		want:    []string{"--ssh-id-file", "no such file"},
 	}, {
+		name:    "destroy/persistent context and SSH identity controls are part of the mutating flag matrix",
+		args:    []string{"destroy", "--context", "matrix", "--ssh-user", "operator", "--ssh-user-for-provisioned", "--ssh-ask-sudo-password=false", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"plan only"},
+	}, {
+		name:    "destroy/persistent SSH identity file is validated before mutation",
+		args:    []string{"destroy", "--ssh-id-file", "/bootwright-matrix-missing-identity", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--ssh-id-file", "no such file"},
+	}, {
 		name:    "apply/retired --expect-new is an unknown flag/greenfield/full",
 		args:    []string{"apply", "--expect-new", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
@@ -672,10 +711,29 @@ func safetyFlagCoherenceCases() []safetyCase {
 		verdict: verdictUsageError,
 		want:    []string{"--purge-history"},
 	}, {
-		name:    "apply/json without dry-run/greenfield/full",
-		args:    []string{"apply", "--output", "json", "--yes", "--ask-become-pass=false"},
+		name:    "apply/json without dry-run is rejected before context and mutation work",
+		args:    []string{"apply", "--context", "missing-json-intent", "--output", "json", "--yes", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"--dry-run"},
+		want:    []string{"--output json is supported only with --dry-run for apply", "re-run with --dry-run to preview JSON", "use --output text for a real apply"},
+		deny:    []string{"context \"missing-json-intent\" does not exist"},
+	}, {
+		name:    "destroy/json without dry-run is rejected before context and mutation work",
+		args:    []string{"destroy", "--context", "missing-json-intent", "--output", "json", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--output json is supported only with --dry-run for destroy", "re-run with --dry-run to preview JSON", "use --output text for a real destroy"},
+		deny:    []string{"context \"missing-json-intent\" does not exist"},
+	}, {
+		name:    "apply/json dry-run rejects an SSH sudo password before prompting",
+		args:    []string{"apply", "--dry-run", "--output", "json", "--ssh-ask-sudo-password", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--ssh-ask-sudo-password cannot be used with --output json", "passwordless sudo"},
+		deny:    []string{sshSudoPasswordPrompt},
+	}, {
+		name:    "destroy/json dry-run rejects an SSH sudo password before prompting",
+		args:    []string{"destroy", "--dry-run", "--output", "json", "--ssh-ask-sudo-password", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--ssh-ask-sudo-password cannot be used with --output json", "passwordless sudo"},
+		deny:    []string{sshSudoPasswordPrompt},
 	}}
 }
 
@@ -1256,34 +1314,37 @@ func safetyStorageDataLossCases() []safetyCase {
 		name:        "apply/protected machine rebuild retains the exact machine selection in destroy and resume",
 		baseline:    safetyBaselineBareMetalManagedOS,
 		seed:        seedProtectedMachineLayerDrift,
-		args:        []string{"apply", "--machines", safetyBareMetalManagedOSMachine, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		args:        []string{"apply", "--machines", safetyBareMetalManagedOSMachine, "--mode", "rebuild", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
-		want:        []string{"protected machine layer", "bootwright destroy", "--stage infra", "--machines " + safetyBareMetalManagedOSMachine, "--authorize data-loss,protected", "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
+		want:        []string{"protected machine layer", "bootwright destroy", "--stage infra", "--machines " + safetyBareMetalManagedOSMachine, "--authorize data-loss,unowned-devices,protected", "resume exactly the original selected work", "bootwright apply --mode rebuild --authorize all", "--context matrix"},
 		deny:        []string{"--clusters " + safetyBareMetalManagedOSCluster},
 		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
 			assertProtectedLayerCommands(t, output, "--machines", safetyBareMetalManagedOSMachine, []string{"infra"})
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected})
 		},
 	}, {
 		name:        "apply/protected cluster rebuild retains the exact cluster selection in destroy and resume",
 		seed:        seedProtectedClusterLayerDrift,
-		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--mode", "rebuild", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
 		want:        []string{"protected cluster layer", "bootwright destroy", "--stage clusters", "--clusters " + safetyAdvancedCephCluster, "data-loss", "protected", "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
 		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
 			assertProtectedLayerCommands(t, output, "--clusters", safetyAdvancedCephCluster, []string{"clusters"})
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected})
 		},
 	}, {
 		name:        "apply/protected mixed rebuild retains one selection across both destroy layers and resume",
 		baseline:    safetyBaselineBareMetalManagedOS,
 		seed:        seedProtectedMixedLayerDrift,
-		args:        []string{"apply", "--clusters", safetyBareMetalManagedOSCluster, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		args:        []string{"apply", "--clusters", safetyBareMetalManagedOSCluster, "--mode", "rebuild", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
 		want:        []string{"protected cluster layer", "protected machine layer", "--stage clusters", "--stage infra", "--clusters " + safetyBareMetalManagedOSCluster, "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
 		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
 			assertProtectedLayerCommands(t, output, "--clusters", safetyBareMetalManagedOSCluster, []string{"clusters", "infra"})
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected})
 		},
 	}, {
 		name:    "apply/re-applying the identical desired state reports no drift at all",
@@ -1437,10 +1498,13 @@ func safetyStartingStateCases() []safetyCase {
 			seedRunnableSafetyMutation(t, ctx)
 			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusFailed, workflow.ClusterInstallPhaseNodesBooted, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-workflow.ClusterInstallResumeCeiling-time.Minute))
 		},
-		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--authorize", authorizeAll, "--yes", "--ask-become-pass=false"},
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionDestroyAndReapplyCluster,
-		want:        []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize protected,data-loss", "bootwright apply --mode reconcile --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		want:        []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize data-loss,unowned-devices,protected", "bootwright apply --mode reconcile --authorize all", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected})
+		},
 	}, {
 		name: "apply/completed installer skew names scoped data-loss rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -1504,10 +1568,10 @@ func safetyStartingStateCases() []safetyCase {
 				t.Fatalf("MarkSubstrateMachinesReleased: %v", err)
 			}
 		},
-		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--yes", "--ask-become-pass=false"},
+		args:    []string{"apply", "--machines", "dc1-child-ocp-infra-master-0", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		remedy:  remedyAlternative,
-		want:    []string{"initial-install workflow cannot recover individual cluster nodes", "dc1-child-ocp-infra-master-0", "release remains recorded", "bootwright destroy --yes --clusters dc1-child-ocp", "bootwright apply --mode reconcile --authorize data-loss --yes --clusters dc1-child-ocp"},
+		want:    []string{"initial-install workflow cannot recover individual cluster nodes", "dc1-child-ocp-infra-master-0", "release remains recorded", "bootwright destroy --authorize data-loss,unowned-devices --yes --clusters dc1-child-ocp", "bootwright apply --mode reconcile --authorize all --yes --clusters dc1-child-ocp"},
 		check: func(t *testing.T, ctx workspace.Context) {
 			released, err := workflow.ReleasedSubstrateClusters(ctx.RunsDir)
 			if err != nil || strings.Join(released, ",") != "dc1-child-ocp" {
@@ -1516,6 +1580,9 @@ func safetyStartingStateCases() []safetyCase {
 			if _, found, err := workflow.LoadRunLedger(ctx.RunsDir); err != nil || found {
 				t.Fatalf("refusal must happen before a mutating run ledger is created: found=%v err=%v", found, err)
 			}
+		},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices})
 		},
 	}, {
 		name: "apply/no release leaves an unreleased machine unauthorized for rebuild",
@@ -1541,10 +1608,13 @@ func safetyStartingStateCases() []safetyCase {
 		name:     "apply/a released libvirt machine substrate hosting an installed KubeVirt tenant refuses a host-only rebuild",
 		baseline: safetyBaselineLibvirtKubeVirtHost,
 		seed:     seedReleasedKubeVirtHostWithInstalledTenant,
-		args:     []string{"apply", "--stage", "infra", "--clusters", safetyLibvirtKubeVirtHostCluster, "--yes", "--ask-become-pass=false"},
+		args:     []string{"apply", "--stage", "infra", "--clusters", safetyLibvirtKubeVirtHostCluster, "--authorize", authorizeAll, "--yes", "--ask-become-pass=false"},
 		verdict:  verdictRefusal,
 		remedy:   remedyAlternative,
-		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "`bootwright destroy --yes --clusters " + safetyLibvirtKubeVirtTenantCluster + " --ask-become-pass=false --context matrix`"},
+		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "`bootwright destroy --authorize data-loss,unowned-devices --yes --clusters " + safetyLibvirtKubeVirtTenantCluster + " --ask-become-pass=false --context matrix`"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices})
+		},
 	}, {
 		name:     "apply/a standalone managed-OS machine has no invented provisioning path",
 		baseline: safetyBaselineBareMetalManagedOS,
@@ -1566,19 +1636,25 @@ func safetyStartingStateCases() []safetyCase {
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedInstalledCluster(t, ctx, "dc1-metal-ocp-old")
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		remedy:  remedyAlternative,
 		want:    []string{"dc1-metal-ocp-old", "the signature of a rename"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices})
+		},
 	}, {
 		name: "apply/renamed StorageCluster orphaning an owned Ceph cluster",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedStorageOwnership(t, ctx, "ceph-storage-old")
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", "ceph-storage", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		remedy:  remedyAlternative,
 		want:    []string{"ceph-storage-old", "orphan the old Ceph cluster"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertApplyToDestroyAuthorizationProjection(t, output, []string{authorizeDataLoss, authorizeUnownedDevices})
+		},
 	}}
 }
 
@@ -1606,7 +1682,7 @@ func assertProtectedLayerCommands(t *testing.T, output, selectionFlag, selection
 		if !commandHasFlagValue(command, "--context", "matrix") {
 			t.Fatalf("protected-layer command lost context: %s", command)
 		}
-		assertRetryParses(t, retryCommand{args: strings.Fields(command)}, func(*cobra.Command) {})
+		assertRetryParses(t, retryCommand{args: shellParseWords(t, command)}, func(*cobra.Command) {})
 		if strings.HasPrefix(command, "bootwright apply ") {
 			resume = command
 			continue
@@ -1625,7 +1701,8 @@ func assertProtectedLayerCommands(t *testing.T, output, selectionFlag, selection
 			t.Fatalf("protected-layer remedy lacks --stage %s: %v", stage, commands)
 		}
 	}
-	if resume == "" || !strings.Contains(resume, "--mode rebuild") || !strings.Contains(resume, "data-loss") {
+	resumeAuth := retryAuthorizations(shellParseWords(t, resume))
+	if resume == "" || !strings.Contains(resume, "--mode rebuild") || (!slices.Contains(resumeAuth, authorizeAll) && !slices.Contains(resumeAuth, authorizeDataLoss)) {
 		t.Fatalf("protected-layer remedy lacks exact data-loss rebuild resume: %v", commands)
 	}
 }

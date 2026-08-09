@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -202,6 +203,192 @@ func TestDestroyRetryPreservesClusterScopeRecoveryPurgeAndAuthorizations(t *test
 		assertParsedFlag(t, cmd, "purge-history", "true")
 		assertParsedFlag(t, cmd, "context", "matrix")
 	})
+}
+
+func TestCrossVerbRetryExpandsAllUnderTheSourceAndCarriesOnlyTargetIntersection(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "must-not-exist")
+	hostileCluster := "cluster west;$(touch " + marker + ")"
+	hostileContext := "context west;$(touch " + marker + ")"
+	hostileIdentity := "/tmp/operator key;$(touch " + marker + ")"
+	hostileUser := "operator;$(touch " + marker + ")"
+	apply := resolvedInvocation{
+		verb:                  invocationApply,
+		contextName:           hostileContext,
+		sshIdentityFile:       hostileIdentity,
+		sshUser:               hostileUser,
+		sshAskSudoPassword:    true,
+		sshUserForProvisioned: true,
+		flags: invocationFlags{
+			mode:            workflow.ApplyModeReconcile,
+			selection:       runSelection{stage: "clusters", clusters: "original"},
+			authorizations:  []string{authorizeAll},
+			dryRun:          true,
+			yes:             true,
+			askBecomePass:   false,
+			trustOnFirstUse: true,
+			verbose:         true,
+		},
+	}
+	destroy := apply
+	destroy.verb = invocationDestroy
+	applyMachine := apply
+	applyMachine.flags.selection = runSelection{machines: hostileCluster}
+	applyCluster := apply
+	applyCluster.flags.selection = runSelection{clusters: hostileCluster}
+
+	tests := []struct {
+		name      string
+		build     func() (retryCommand, error)
+		wantVerb  invocationVerb
+		wantAuth  []string
+		scopeFlag string
+		wantScope string
+	}{
+		{
+			name: "apply to destroy selected clusters",
+			build: func() (retryCommand, error) {
+				return apply.destroyClustersRetry([]string{hostileCluster})
+			},
+			wantVerb:  invocationDestroy,
+			wantAuth:  []string{authorizeDataLoss, authorizeUnownedDevices},
+			scopeFlag: "clusters",
+			wantScope: hostileCluster,
+		},
+		{
+			name: "apply to destroy incomplete cluster",
+			build: func() (retryCommand, error) {
+				return apply.destroyIncompleteClusterRetry(hostileCluster)
+			},
+			wantVerb:  invocationDestroy,
+			wantAuth:  []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected},
+			scopeFlag: "clusters",
+			wantScope: hostileCluster,
+		},
+		{
+			name: "apply to destroy protected machine layer",
+			build: func() (retryCommand, error) {
+				return applyMachine.destroySelectedMachineLayerRetry()
+			},
+			wantVerb:  invocationDestroy,
+			wantAuth:  []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected},
+			scopeFlag: "machines",
+			wantScope: hostileCluster,
+		},
+		{
+			name: "apply to destroy protected cluster layer",
+			build: func() (retryCommand, error) {
+				return applyCluster.destroySelectedClusterLayerRetry()
+			},
+			wantVerb:  invocationDestroy,
+			wantAuth:  []string{authorizeDataLoss, authorizeUnownedDevices, authorizeProtected},
+			scopeFlag: "clusters",
+			wantScope: hostileCluster,
+		},
+		{
+			name: "apply to replace arbiter",
+			build: func() (retryCommand, error) {
+				return apply.replaceArbiterRetry(hostileCluster)
+			},
+			wantVerb:  invocationReplaceArbiter,
+			scopeFlag: "name",
+			wantScope: hostileCluster,
+		},
+		{
+			name: "destroy to apply selected clusters",
+			build: func() (retryCommand, error) {
+				return destroy.applyClustersRetry([]string{hostileCluster}, authorizeForeignDaemons)
+			},
+			wantVerb:  invocationApply,
+			wantAuth:  []string{authorizeDataLoss, authorizeUnownedDevices, authorizeForeignDaemons},
+			scopeFlag: "clusters",
+			wantScope: hostileCluster,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			command, err := tc.build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := shellParseWords(t, command.String()); !reflect.DeepEqual(got, command.Args()) {
+				t.Fatalf("shell round trip = %#v\nwant %#v", got, command.Args())
+			}
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Fatalf("hostile retry operand escaped shell quoting: %v", err)
+			}
+			if got := retryAuthorizations(command.Args()); !reflect.DeepEqual(got, tc.wantAuth) {
+				t.Fatalf("projected authorizations = %v, want %v", got, tc.wantAuth)
+			}
+			for _, forbidden := range []string{authorizeAll, authorizeProtected, authorizeInstalledClusterNode, authorizeUnownedVMs, authorizeUnownedNetworks, authorizeUnreachableNodes, authorizeUnreadableRecords, authorizeSharedInfra, authorizeStaleInput, authorizeSameSiteArbiter, authorizeDegradedQuorum} {
+				if slices.Contains(tc.wantAuth, forbidden) {
+					continue
+				}
+				if slices.Contains(retryAuthorizations(command.Args()), forbidden) {
+					t.Fatalf("cross-verb retry invented unrelated target authorization %q: %s", forbidden, command.String())
+				}
+			}
+			assertRetryParses(t, command, func(cmd *cobra.Command) {
+				assertParsedFlag(t, cmd, "context", hostileContext)
+				assertParsedFlag(t, cmd, "ssh-id-file", hostileIdentity)
+				assertParsedFlag(t, cmd, "ssh-user", hostileUser)
+				assertParsedFlag(t, cmd, "ssh-ask-sudo-password", "true")
+				assertParsedFlag(t, cmd, "ssh-user-for-provisioned", "true")
+				assertParsedFlag(t, cmd, tc.scopeFlag, tc.wantScope)
+			})
+		})
+	}
+}
+
+func TestSameVerbRetryPreservesLiteralAll(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func() (retryCommand, error)
+	}{
+		{
+			name: "apply",
+			build: func() (retryCommand, error) {
+				invocation := resolvedInvocation{verb: invocationApply, flags: invocationFlags{mode: workflow.ApplyModeReconcile, authorizations: []string{authorizeAll}}}
+				return invocation.applyClustersRetry([]string{"ocp"}, authorizeDataLoss)
+			},
+		},
+		{
+			name: "destroy",
+			build: func() (retryCommand, error) {
+				invocation := resolvedInvocation{verb: invocationDestroy, flags: invocationFlags{authorizations: []string{authorizeAll}}}
+				return invocation.clusterLifecycleRetry(invocationDestroy, "ocp", "clusters", "", authorizeProtected)
+			},
+		},
+		{
+			name: "replace-arbiter",
+			build: func() (retryCommand, error) {
+				invocation := resolvedInvocation{verb: invocationReplaceArbiter, flags: invocationFlags{authorizations: []string{authorizeAll}}}
+				return invocation.replaceArbiterRetry("ceph")
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			command, err := tc.build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := retryAuthorizations(command.Args()); !reflect.DeepEqual(got, []string{authorizeAll}) {
+				t.Fatalf("same-verb retry authorizations = %v, want literal all: %s", got, command.String())
+			}
+		})
+	}
+}
+
+func retryAuthorizations(args []string) []string {
+	for i, arg := range args {
+		if arg == "--authorize" && i+1 < len(args) {
+			return strings.Split(args[i+1], ",")
+		}
+		if value, found := strings.CutPrefix(arg, "--authorize="); found {
+			return strings.Split(value, ",")
+		}
+	}
+	return nil
 }
 
 func TestResolvedInvocationKeepsTheExplicitContextIdentity(t *testing.T) {

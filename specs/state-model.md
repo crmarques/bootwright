@@ -2551,6 +2551,15 @@ known by the CLI, such as a dirty device path, may be named as the one additive
 flag change to the exact resolved base invocation; it never justifies printing
 an independently assembled or wider command.
 
+A remedy that keeps the same verb keeps a literal `--authorize all`. A remedy
+that changes verbs never carries that literal across the boundary: it expands
+`all` to the explicit tokens accepted by the source verb, retains only the
+intersection accepted by the target verb, and then unions only the target
+tokens the named remedy requires. In particular, an `apply` refusal may carry
+`data-loss` and `unowned-devices` into an explicit `destroy` remedy, but it
+cannot acquire `protected`, `installed-cluster-node`, or any other destroy-only
+authorization unless that remedy's own gate requires the token.
+
 Go convergence code follows the same boundary: a refusal carries an argv-free,
 typed remedy action and typed targets, while the owning error carries the
 observed status, phase, record path, or probe failure that justified it. Only
@@ -2607,6 +2616,11 @@ have run. Exit codes do not change with the output format, and machine-readable
 output suppresses every prompt — the interactive host-key trust prompt included
 — so a check that would have prompted reports its status instead of stalling a
 pipeline.
+For `apply` and `destroy`, `--output json` without `--dry-run` is rejected as
+initial intent, before context resolution, the command lease, desired-input or
+Git reads, and any mutation work. `--ssh-ask-sudo-password` cannot accompany
+JSON output: that combination is rejected before the password prompt and names
+passwordless sudo plus removal of the prompt flag as the operator path.
 
 ### Global flags
 
@@ -2647,6 +2661,8 @@ command. The rest are registered per command, on the verbs that reach machines.
   run for that account's sudo password. The answer is
   held in memory only, omitted from rendered inputs and logs, and reused when
   the controller-local root gate already collected the same account's password.
+  It is incompatible with `--output json`, because machine-readable output
+  never prompts; configure passwordless sudo and remove the flag for a JSON run.
 - None of these SSH overrides reaches an ownership record. A record captures the
   **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
   reach a host that has left desired state cannot inherit one operator's account

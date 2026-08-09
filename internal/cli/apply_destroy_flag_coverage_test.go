@@ -33,9 +33,14 @@ func mutatingVerbCommands(t *testing.T) map[string]*cobra.Command {
 	return out
 }
 
-func safetyMatrixExercisedFlags() map[string]bool {
-	exercised := map[string]bool{}
+func safetyMatrixExercisedFlags() map[string]map[string]bool {
+	exercised := map[string]map[string]bool{"apply": {}, "destroy": {}}
 	for _, tc := range safetyMatrixCases() {
+		args := stripLeadingGlobalFlags(tc.args)
+		if len(args) == 0 || (args[0] != "apply" && args[0] != "destroy") {
+			continue
+		}
+		verbFlags := exercised[args[0]]
 		for _, arg := range tc.args {
 			if !strings.HasPrefix(arg, "--") {
 				continue
@@ -44,7 +49,7 @@ func safetyMatrixExercisedFlags() map[string]bool {
 			if idx := strings.IndexByte(name, '='); idx >= 0 {
 				name = name[:idx]
 			}
-			exercised[name] = true
+			verbFlags[name] = true
 		}
 	}
 	return exercised
@@ -58,7 +63,7 @@ func TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix(t *testing.T) {
 			if _, exempt := safetyMatrixFlagExemptions[verb+"/"+f.Name]; exempt {
 				return
 			}
-			if !exercised[f.Name] {
+			if !exercised[verb][f.Name] {
 				missing = append(missing, f.Name)
 			}
 		}

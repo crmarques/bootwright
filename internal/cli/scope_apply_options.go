@@ -58,6 +58,9 @@ func resolveScopeApplyIntent(output string, defaultPlan, dryRun bool, modeFlag s
 	if err := validateOutputFormat(output); err != nil {
 		return "", nil, failErr(2, err)
 	}
+	if output == outputJSON && !dryRun {
+		return "", nil, failErr(2, mutatingJSONDryRunConflict(authorizeVerbApply))
+	}
 	if defaultPlan && !dryRun {
 		return "", nil, failErr(2, errors.New("plan is always read-only"))
 	}
