@@ -2814,6 +2814,66 @@ func TestStorageCephadmDestroySettlesBeforeReleasingTheNode(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmDestroySweepsTheCephLVMTheDeviceWipeDidNotCover(t *testing.T) {
+	chain := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	settlePos := strings.Index(chain, "destroy_steps/settle_gate.yml")
+	sweepPos := strings.Index(chain, "destroy_steps/lvm_sweep.yml")
+	releasePos := strings.Index(chain, "destroy_steps/release_node.yml")
+	if sweepPos < 0 {
+		t.Fatalf("the Ceph destroy chain must import lvm_sweep.yml: every gate before it reads the device list the run resolved for itself, so a declared device that probed absent, an OSD on a path no declaration names, and a disk re-signed after its wipe was verified all leave a green teardown with this cluster's volume groups still on the node")
+	}
+	if !(settlePos < sweepPos && sweepPos < releasePos) {
+		t.Fatalf("the sweep must run after the settle gate proved no Ceph daemon outlived the teardown (taking LVM down under a live OSD is what the teardown refuses) and before the node is released (a refusal must keep the ownership evidence a re-run needs): settle=%d sweep=%d release=%d", settlePos, sweepPos, releasePos)
+	}
+
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/lvm_sweep.yml"
+	sweep := readAnsibleTasks(t, path)
+	scanIdx := findAnsibleTask(t, sweep, "Scan the storage node for Ceph LVM the device wipe did not cover")
+	scanRanIdx := findAnsibleTask(t, sweep, "Refuse to release a storage node whose Ceph LVM scan did not run")
+	rowsIdx := findAnsibleTask(t, sweep, "Resolve the Ceph volume groups the storage node still carries")
+	classifyIdx := findAnsibleTask(t, sweep, "Resolve which Ceph LVM this teardown may take down on the storage node")
+	teardownIdx := findAnsibleTask(t, sweep, "Take the LVM stack down on the Ceph volume groups that outlived the wipe")
+	wipeIdx := findAnsibleTask(t, sweep, "Wipe the signatures of the Ceph devices that outlived the wipe")
+	zapIdx := findAnsibleTask(t, sweep, "Zap the partition tables of the Ceph devices that outlived the wipe")
+	verifyIdx := findAnsibleTask(t, sweep, "Re-scan the storage node for Ceph LVM once the sweep finished")
+	verifyRanIdx := findAnsibleTask(t, sweep, "Refuse to release a storage node whose Ceph LVM re-scan did not run")
+	survivorIdx := findAnsibleTask(t, sweep, "Refuse to release a storage node still carrying this cluster's Ceph LVM")
+	if !(scanIdx < scanRanIdx && scanRanIdx < rowsIdx && rowsIdx < classifyIdx && classifyIdx < teardownIdx && teardownIdx < wipeIdx && wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < verifyRanIdx && verifyRanIdx < survivorIdx) {
+		t.Fatalf("the sweep must scan the node, prove the scan ran, classify what it may take down, remove the LVM stack, wipe and zap the devices, then re-scan and refuse a survivor (scan=%d ran=%d rows=%d classify=%d teardown=%d wipe=%d zap=%d verify=%d verifyRan=%d survivor=%d)", scanIdx, scanRanIdx, rowsIdx, classifyIdx, teardownIdx, wipeIdx, zapIdx, verifyIdx, verifyRanIdx, survivorIdx)
+	}
+
+	body := readRepoFile(t, path)
+	if strings.Contains(body, "bootwright_ceph_present_devices") {
+		t.Error("the sweep must read the node, not the device list every earlier gate already read: a host whose declared devices probed absent resolves an empty present set, and a sweep scoped to it proves exactly nothing")
+	}
+	for _, want := range []string{
+		"bootwright_ceph_settle_owned_fsid",
+		"bootwright_ceph_settle_preserved_fsids",
+		"bootwright_current_storage_host.devices",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s must classify the volume groups it found by %s: it may take down only LVM this teardown's own cluster fsid claims or a device this node declares, and must preserve the co-resident cluster the local-state removal preserves", path, want)
+		}
+	}
+	if got := fmt.Sprint(sweep[teardownIdx]["ansible.builtin.include_tasks"]); got != "lvm_teardown.yml" {
+		t.Errorf("the sweep must take the LVM stack down through the same lvm_teardown.yml both wipe paths use, so one sequence owns vgchange/vgremove/pvremove and the fsid-scoped cluster release, got %v", sweep[teardownIdx]["ansible.builtin.include_tasks"])
+	}
+	if got := fmt.Sprint(sweep[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_zap_tool_present") {
+		t.Errorf("the sweep zap must degrade to the wipefs-only wipe on a host with no sgdisk, got when=%v", sweep[zapIdx]["when"])
+	}
+	if !strings.Contains(body, "ensure_zap_tool.yml") {
+		t.Errorf("%s must reach the zap tool through ensure_zap_tool.yml: a node whose declared devices all probed absent never needed it earlier in the run, and the sweep is exactly the path that then finds disks to zap", path)
+	}
+	for _, idx := range []int{scanRanIdx, verifyRanIdx, survivorIdx} {
+		if _, ok := sweep[idx]["ansible.builtin.assert"]; !ok {
+			t.Errorf("sweep refusal %v must be a hard assert so any_errors_fatal stops every host before any of them releases its ownership evidence", sweep[idx]["name"])
+		}
+		if got := fmt.Sprint(sweep[idx]["when"]); strings.Contains(got, "authorize") {
+			t.Errorf("no --authorize token may relax the sweep proof: it reports what the node holds now, not who owned it, got when=%v", sweep[idx]["when"])
+		}
+	}
+}
+
 func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
 	if len(plays) != 1 {
@@ -3507,6 +3567,7 @@ func storageCephDestroyTasks(t *testing.T) []map[string]any {
 		base+"wipe_and_cleanup.yml",
 		base+"filter_device_reclaim.yml",
 		base+"settle_gate.yml",
+		base+"lvm_sweep.yml",
 		base+"release_node.yml",
 	)
 }

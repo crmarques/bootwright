@@ -17,6 +17,9 @@
 - name: Prove no Ceph daemon or device signature outlived the teardown
   ansible.builtin.import_tasks: destroy_steps/settle_gate.yml
 
+- name: Take down the Ceph LVM the device wipe did not cover
+  ansible.builtin.import_tasks: destroy_steps/lvm_sweep.yml
+
 - name: Remove local Ceph state and release the storage node
   ansible.builtin.import_tasks: destroy_steps/release_node.yml
 

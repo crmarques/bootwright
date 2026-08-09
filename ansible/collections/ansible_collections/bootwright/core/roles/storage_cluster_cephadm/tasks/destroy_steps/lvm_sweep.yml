@@ -1,0 +1,220 @@
+---
+- name: Resolve the Ceph LVM scan this teardown reads the storage node with
+  ansible.builtin.set_fact:
+    bootwright_ceph_sweep_scan_command: >-
+      set -o pipefail;
+      command -v pvs >/dev/null 2>&1 || exit 0;
+      pvs --noheadings --readonly --options pv_name,vg_name 2>/dev/null
+      | while read -r pv vg; do
+      [ -n "$pv" ] || continue;
+      [ -n "$vg" ] || continue;
+      fsid=$(lvs --noheadings --readonly --options lv_tags "$vg" 2>/dev/null
+      | tr ',' '\n'
+      | sed -n 's/^[[:space:]]*ceph\.cluster_fsid=//p'
+      | head -n 1);
+      signed=no;
+      case "$vg" in ceph-*) signed=yes ;; esac;
+      if [ -n "$fsid" ]; then signed=yes; fi;
+      if [ "$signed" = no ]; then continue; fi;
+      label="$vg on $pv";
+      if [ -n "$fsid" ]; then label="$vg (fsid $fsid) on $pv"; fi;
+      printf '{"vg":"%s","fsid":"%s","pv":"%s","label":"%s"}\n' "$vg" "$fsid" "$pv" "$label";
+      done
+  changed_when: false
+
+- name: Scan the storage node for Ceph LVM the device wipe did not cover
+  ansible.builtin.shell:
+    cmd: "{{ bootwright_ceph_sweep_scan_command }}"
+    executable: /bin/bash
+  register: bootwright_ceph_sweep_scan
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to release a storage node whose Ceph LVM scan did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_sweep_scan.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the Ceph LVM scan exited
+      {{ bootwright_ceph_sweep_scan.rc | default('without running') }}
+      ({{ bootwright_ceph_sweep_scan.stderr | default('no diagnostic was recorded') | trim }}).
+      Every gate before this one reads the device list this run resolved for itself, so a node
+      whose declared devices probed absent, whose OSDs stand on a path no declaration names, or
+      whose disks were re-signed after their wipe was verified proves nothing to them. This
+      scan is the only reading that covers the node rather than that list, and a scan that did
+      not run cannot show a bluestore volume group that outlived the teardown — the residue
+      that leaves `pvs` naming `ceph-<uuid>` groups on a node this run reports destroyed and
+      makes the next apply refuse those disks as foreign data. Failing closed instead.
+
+- name: Resolve the Ceph volume groups the storage node still carries
+  ansible.builtin.set_fact:
+    bootwright_ceph_sweep_rows: >-
+      {{ bootwright_ceph_sweep_scan.stdout_lines | default([]) | map('trim')
+         | reject('equalto', '') | map('from_json') | list }}
+  changed_when: false
+
+- name: Resolve which Ceph LVM this teardown may take down on the storage node
+  vars:
+    bootwright_ceph_sweep_envelope: >-
+      {{ ((bootwright_current_storage_host.devices | default([]))
+          + (bootwright_ceph_settle_devices | default([]))) | unique | list }}
+    bootwright_ceph_sweep_all_pvs: >-
+      {{ bootwright_ceph_sweep_rows | map(attribute='pv') | unique | list }}
+    bootwright_ceph_sweep_preserved_pvs: >-
+      {{ bootwright_ceph_sweep_rows
+         | selectattr('fsid', 'in', bootwright_ceph_settle_preserved_fsids | default([]))
+         | map(attribute='pv') | unique | list }}
+    bootwright_ceph_sweep_claimed_pvs: >-
+      {{ ((bootwright_ceph_sweep_rows
+           | selectattr('fsid', 'equalto', bootwright_ceph_settle_owned_fsid | default(''))
+           | map(attribute='pv') | list)
+          if (bootwright_ceph_settle_owned_fsid | default('') | length > 0)
+          else [])
+         + (bootwright_ceph_sweep_rows | map(attribute='pv') | list
+            | intersect(bootwright_ceph_sweep_envelope)) }}
+  ansible.builtin.set_fact:
+    bootwright_ceph_sweep_devices: >-
+      {{ bootwright_ceph_sweep_claimed_pvs | unique
+         | difference(bootwright_ceph_sweep_preserved_pvs) }}
+    bootwright_ceph_sweep_kept_labels: >-
+      {{ bootwright_ceph_sweep_rows
+         | selectattr('pv', 'in', bootwright_ceph_sweep_preserved_pvs)
+         | map(attribute='label') | unique | list }}
+    bootwright_ceph_sweep_unclaimed_labels: >-
+      {{ bootwright_ceph_sweep_rows
+         | rejectattr('pv', 'in', bootwright_ceph_sweep_preserved_pvs)
+         | rejectattr('pv', 'in', bootwright_ceph_sweep_claimed_pvs)
+         | map(attribute='label') | unique | list }}
+  changed_when: false
+
+- name: Report the Ceph LVM this teardown takes down outside its device wipe
+  ansible.builtin.debug:
+    msg: >-
+      Taking down Ceph volume group(s) that outlived the device wipe of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      {{ bootwright_ceph_sweep_devices | join(', ') }}. Each one carries this teardown's own
+      cluster fsid in its OSD tags, or stands on a device this node declares, so it is this
+      cluster's OSD data and this teardown destroys it either way. It outlived the
+      declared-device wipe because that wipe covers the device list this run resolved before
+      the cluster came down: a declared device that probed absent contributes nothing to it,
+      an OSD ceph-volume created on a path no declaration names is not in it, and a disk a
+      surviving manager re-signed after its wipe was verified is clean in it. Left standing it
+      is what makes `pvs` show `ceph-<uuid>` volume groups on a node this run reported
+      destroyed, and what makes the next apply refuse those disks as foreign data.
+  when: (bootwright_ceph_sweep_devices | default([])) | length > 0
+
+- name: Report the co-resident Ceph LVM this teardown preserves on the storage node
+  ansible.builtin.debug:
+    msg: >-
+      Preserving Ceph volume group(s)
+      {{ bootwright_ceph_sweep_kept_labels | join('; ') }} on
+      {{ bootwright_current_storage_host.hostname }}: they belong to a Ceph cluster this node
+      still holds /var/lib/ceph state for and this teardown does not own, which is the same
+      co-resident cluster the local-state removal preserves.
+  when: (bootwright_ceph_sweep_kept_labels | default([])) | length > 0
+
+- name: Report the Ceph LVM this teardown is not authorized to take down
+  ansible.builtin.debug:
+    msg: >-
+      Leaving Ceph volume group(s)
+      {{ bootwright_ceph_sweep_unclaimed_labels | join('; ') }} untouched on
+      {{ bootwright_current_storage_host.hostname }}: they carry neither this teardown's
+      cluster fsid nor a device this node declares, and no /var/lib/ceph state on this node
+      names their cluster either, so this teardown cannot prove whose data they are. Destroy
+      wipes the devices a node declares; a disk outside that declaration is never wiped on the
+      strength of a `ceph-` volume group prefix alone. Read them with
+      `lvs -o lv_name,vg_name,lv_tags` and clear them by hand before reusing the hardware, or
+      declare the device and re-run destroy.
+  when: (bootwright_ceph_sweep_unclaimed_labels | default([])) | length > 0
+
+- name: Take the LVM stack down on the Ceph volume groups that outlived the wipe
+  ansible.builtin.include_tasks: lvm_teardown.yml
+  vars:
+    bootwright_ceph_lvm_teardown_devices: "{{ bootwright_ceph_sweep_devices | default([]) }}"
+    bootwright_ceph_lvm_teardown_owned_devices: "{{ bootwright_ceph_sweep_devices | default([]) }}"
+  when: (bootwright_ceph_sweep_devices | default([])) | length > 0
+
+- name: Ensure the Ceph device zap tool for the volume groups that outlived the wipe
+  ansible.builtin.include_tasks: ../ensure_zap_tool.yml
+  vars:
+    bootwright_ceph_zap_tool_needed: >-
+      {{ (bootwright_ceph_sweep_devices | default([])) | length > 0 }}
+  when: (bootwright_ceph_sweep_devices | default([])) | length > 0
+
+- name: Wipe the signatures of the Ceph devices that outlived the wipe
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --all
+      - --force
+      - "{{ item }}"
+  register: bootwright_ceph_sweep_wipefs
+  changed_when: true
+  failed_when: bootwright_ceph_sweep_wipefs.rc != 0
+  loop: "{{ bootwright_ceph_sweep_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Zap the partition tables of the Ceph devices that outlived the wipe
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --zap-all
+      - "{{ item }}"
+  register: bootwright_ceph_sweep_sgdisk
+  changed_when: true
+  failed_when: bootwright_ceph_sweep_sgdisk.rc != 0
+  loop: "{{ bootwright_ceph_sweep_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  when: bootwright_ceph_zap_tool_present | default(false) | bool
+
+- name: Re-scan the storage node for Ceph LVM once the sweep finished
+  ansible.builtin.shell:
+    cmd: "{{ bootwright_ceph_sweep_scan_command }}"
+    executable: /bin/bash
+  register: bootwright_ceph_sweep_verify
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to release a storage node whose Ceph LVM re-scan did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_sweep_verify.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to release the Ceph state of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      the Ceph LVM re-scan exited
+      {{ bootwright_ceph_sweep_verify.rc | default('without running') }}
+      ({{ bootwright_ceph_sweep_verify.stderr | default('no diagnostic was recorded') | trim }}).
+      That re-scan is what proves the volume groups this sweep took down are gone, and this
+      run releases the node's ownership marker and this cluster's ownership record next — the
+      evidence a re-run reads to recognize these disks as Bootwright's rather than refuse them
+      as foreign data. Failing closed instead.
+
+- name: Refuse to release a storage node still carrying this cluster's Ceph LVM
+  vars:
+    bootwright_ceph_sweep_survivors: >-
+      {{ bootwright_ceph_sweep_verify.stdout_lines | default([]) | map('trim')
+         | reject('equalto', '') | map('from_json')
+         | selectattr('pv', 'in', bootwright_ceph_sweep_devices | default([]))
+         | map(attribute='label') | unique | list }}
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_sweep_survivors | length) == 0
+    fail_msg: >-
+      Ceph volume group(s) {{ bootwright_ceph_sweep_survivors | join('; ') }} of
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}
+      are still on this node after this teardown removed them and wiped their devices.
+      A volume group that survives `vgremove`, `pvremove` and `wipefs --all --force` was
+      written again behind this run: on a cluster removed host by host that is a cephadm
+      manager still running somewhere this teardown has not proved dead, driving ceph-volume
+      over the OSD devices it just freed. This node is therefore not released: its ownership
+      marker and this cluster's ownership record are kept, so a re-run of destroy still
+      recognizes the devices as Bootwright's and takes them down again rather than refusing
+      them as foreign data. Name the writer with `lvs -o lv_name,vg_name,lv_tags`,
+      `dmsetup ls --tree` and `systemctl list-units 'ceph-*@*.service'` on this node and on
+      its peers before re-running. No --authorize token relaxes this.
+    quiet: true

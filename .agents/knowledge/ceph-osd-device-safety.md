@@ -400,3 +400,46 @@ reads clean (`wipefs --no-act` over `bootwright_ceph_present_devices` +
 siblings carry). Whatever re-signs a disk — a manager the disable missed, a host
 whose removal was skipped, a daemon whose state is gone while its unit runs — is
 named here instead of being discovered by the next apply.
+
+**Constraint (the release proof reads the node, not the device list the run
+resolved — `destroy_steps/lvm_sweep.yml`):** every gate above shares one blind
+spot. They all iterate `bootwright_ceph_present_devices` (or the filter set),
+which is resolved from the declared paths BEFORE the cluster comes down, so each
+one is vacuously green on a node whose devices that resolution missed. Three
+paths reach it, and `display_skipped_hosts = False` prints nothing for any of
+them: a declared device that `lsblk` reported as "not a block device" is
+classified absent and drops out of the present set (a deliberate config-drift
+tolerance — NVMe namespace numbering alone decides whether the data disks are
+`nvme0n1`–`nvme3n1` or `nvme1n1`–`nvme4n1`); an OSD ceph-volume created on a
+path no declaration names is never in it; and a disk re-signed after its own
+verification read clean is *clean* in it. In all three the node ends the run
+carrying `ceph-<uuid>` volume groups with `osd-block-<uuid>` LVs while the run
+reports the cluster destroyed and releases its ownership evidence — the shape
+that leaves `pvs -o pv_name,vg_name,lv_name` naming five OSD volume groups on
+the seed while every peer is bare, and that leaves the next destroy unable to
+prove ownership of the cluster the residue still names (the operator exit is
+`--recover-ceph-ownership <cluster>=<fsid>`; observed on ceph-prd-01/srv4203 on
+2026-08-07 and again 2026-08-09).
+
+`lvm_sweep.yml` runs between `settle_gate.yml` and `release_node.yml` — after
+the settle gate proved no Ceph daemon outlived the teardown (taking LVM down
+under a live OSD is what the teardown refuses) and before any ownership evidence
+is released (a refusal must keep what a re-run reads). It scans the whole node
+once (`pvs -o pv_name,vg_name`, then `lvs -o lv_tags` per VG) and emits one JSON
+row per PV of every Ceph-signed VG — name matching `ceph-*`, or an LV carrying a
+`ceph.cluster_fsid=` tag — so the classification runs on filter chains rather
+than a regex (this project's Jinja has no comprehensions, and regex escaping
+differs between `>-` scalars and `msg=`). A scan that could not run is a hard
+refusal: it proves nothing, and nothing else covers the node. The rows are then
+split three ways: **taken down** when the VG carries this teardown's own cluster
+fsid or stands on a device this node declares (`vgchange -an` → `vgremove` →
+`pvremove` through the shared `lvm_teardown.yml`, then `wipefs --all --force`
+and the `bootwright_ceph_zap_tool_present`-gated `sgdisk --zap-all`);
+**preserved** when its fsid is one the settle gate resolved as a co-resident
+cluster this node still holds `/var/lib/ceph` state for, exactly what
+`release_node.yml` preserves; and **left untouched and named** otherwise — a
+`ceph-` prefix on an undeclared disk is not evidence of ownership, and destroy's
+contract is the devices a node declares. A re-scan then proves the taken-down
+set is gone and refuses the node's release when it is not. No `--authorize`
+token relaxes any of it: like the settle gate, it reports what the node holds
+now, not who owned it.
