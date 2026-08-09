@@ -111,7 +111,10 @@ func runPhaseActivity(phase status.RunPhase, ledger workflow.RunLedger) string {
 				return applyTaskDisplayLabel(task.Label)
 			}
 		}
-		return ""
+		if waiting := runPhaseWaitingOn(phase, ledger); waiting != "" {
+			return waiting
+		}
+		return runPhaseSlotWait(phase)
 	case workflow.TaskStatusPending:
 		if waiting := runPhaseWaitingOn(phase, ledger); waiting != "" {
 			return waiting

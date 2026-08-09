@@ -112,6 +112,26 @@ func TestApplyRunFrameNamesTheClusterInstallSlotWait(t *testing.T) {
 	t.Fatalf("ocp group missing")
 }
 
+func TestApplyRunFrameExplainsAPartiallySettledPhaseWithNothingRunning(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "wait.host", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install host", Cluster: "host", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
+		{ID: "iso.guest", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso guest", Cluster: "guest", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "infra.guest.machine-0", Kind: workflow.ApplyTaskKindClusterInstall, Label: "provision machine machine-0", Cluster: "guest", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"wait.host"}},
+		{ID: "infrafinalize.guest.host", Kind: workflow.ApplyTaskKindMachineInfraFinalize, Label: "finalize infra guest", Cluster: "guest", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, Dependencies: []string{"wait.host"}},
+	}, time.Now())
+
+	for _, group := range applyRunFrame(ledger, nil).Groups {
+		if group.Title != "guest (ContainerCluster)" {
+			continue
+		}
+		if got := group.Steps[0].Detail; got != "waiting on host: "+status.PhaseClusterInstall+"  1/3" {
+			t.Fatalf("guest prerequisites detail = %q, want the cross-cluster wait named even though a task already settled", got)
+		}
+		return
+	}
+	t.Fatalf("guest group missing")
+}
+
 func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "infra", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: workflow.ApplyTaskKindProvider, Label: "provider services", Status: workflow.TaskStatusRunning},
