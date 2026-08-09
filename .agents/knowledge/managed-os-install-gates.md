@@ -137,15 +137,16 @@ torn down ONLY by the infra stage — a clusters-stage
 `destroy --authorize protected` never
 touches their convergence records, so pointing a blocked managed-OS machine at
 the clusters destroy loops forever (destroy, re-apply, blocked again).
-`overrideDestroyRemedy` therefore emits
-`bootwright destroy --stage infra --clusters <affected> --authorize protected`, and hints
-`--authorize unreachable-nodes` because a machine whose host substrate was never
-provisioned or is powered off (e.g. a nested cluster on a host cluster that
-never came up) would otherwise fail closed at the infra destroy.
-`OverrideDestructiveMachineSubstrate` reports the distinct clusters so the
-remedy can scope the command. Pinned by
-TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy (which also locks
-out the old dead-end "for that scope" guidance).
+The convergence gate now returns an argv-free protected-layer action with a
+validated machine-layer role. Only the CLI maps that role to `destroy --stage
+infra`, retaining the original resolved `--machines` or `--clusters`, context,
+identity and global flags; affected cluster names observed by the backend are
+evidence and never widen a machine selection. A cluster-layer role maps to
+`destroy --stage clusters`, and mixed evidence emits both before the exact
+original-selection rebuild. Pinned by
+TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy,
+TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly and the
+three protected-layer safety-matrix rows.
 
 **`customizations.storage.wipe` was REMOVED (2026-07-23):** the field was
 decorative — no validator, renderer var consumer, or playbook ever read it,

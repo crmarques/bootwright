@@ -91,7 +91,8 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 	}
 	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
 	if err != nil {
-		return applyGateRefusalMessages(refusals)
+		refusals = append(refusals, err)
+		return applyGateRefusalMessages(refusals, invocation)
 	}
 	if err := converge.CheckApplyRenameOrphan(fullState, objects, clustersDir, ownershipRecords); err != nil {
 		refusals = append(refusals, err)
@@ -121,7 +122,7 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 			}
 		}
 	}
-	return applyGateRefusalMessages(refusals)
+	return applyGateRefusalMessages(refusals, invocation)
 }
 
 func forecastRebuiltHosts(objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode, reinstallDrift []string) []string {
@@ -137,9 +138,12 @@ func forecastRebuiltHosts(objects []workflow.ObjectClassification, tasks []workf
 	return hosts
 }
 
-func applyGateRefusalMessages(refusals []error) []string {
+func applyGateRefusalMessages(refusals []error, invocation *resolvedInvocation) []string {
 	out := make([]string, 0, len(refusals))
 	for _, e := range refusals {
+		if invocation != nil {
+			e = applyInstallRemedialError(e, *invocation)
+		}
 		out = append(out, e.Error())
 	}
 	return out

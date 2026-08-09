@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestApplyTaskKindsRegistryCoversEveryConstant(t *testing.T) {
@@ -65,6 +67,42 @@ func TestEveryApplyTaskKindHasAnOverrideClassification(t *testing.T) {
 		}
 		if consequence := structuralRebuildConsequence(drifted); strings.TrimSpace(consequence) == "" {
 			t.Errorf("destructive apply task kind %q has no refusal consequence text; a refusal must name what it would do", kind)
+		}
+	}
+}
+
+func TestEveryDestructiveApplyTaskKindMapsToExactlyOneProtectedLayer(t *testing.T) {
+	live := map[string]bool{}
+	for _, kind := range ApplyTaskKinds() {
+		live[kind] = true
+		drifted := ObjectClassification{
+			Kind:   kind,
+			Label:  kind + "/demo",
+			counts: map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1},
+		}
+		if !isOverrideDestructive(drifted) {
+			if _, registered := overrideDestructiveLayerRole(kind); registered {
+				t.Errorf("reconfigure-only apply task kind %q is registered as a destructive protected layer", kind)
+			}
+			continue
+		}
+		role, registered := overrideDestructiveLayerRole(kind)
+		if !registered {
+			t.Errorf("destructive apply task kind %q has no explicit protected-layer role; classify it as machine-layer or cluster-layer before it can ship", kind)
+			continue
+		}
+		if role != remedy.TargetRoleMachineLayer && role != remedy.TargetRoleClusterLayer {
+			t.Errorf("destructive apply task kind %q has unsupported protected-layer role %q", kind, role)
+		}
+		machines, _ := OverrideDestructiveMachineSubstrate([]ObjectClassification{drifted})
+		clusters := OverrideDestructiveClusterScope([]ObjectClassification{drifted})
+		if (len(machines) > 0) == (len(clusters) > 0) {
+			t.Errorf("destructive apply task kind %q maps to machine=%v cluster=%v; protected rebuild remedies require exactly one fixed destroy layer", kind, machines, clusters)
+		}
+	}
+	for kind := range overrideDestructiveLayerRoles {
+		if !live[kind] {
+			t.Errorf("protected-layer registry holds retired apply task kind %q", kind)
 		}
 	}
 }

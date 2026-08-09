@@ -189,6 +189,11 @@ refusal on the owning error type. The CLI is the only layer that maps the action
 onto a resolved invocation and therefore the only layer that may render an exact
 `bootwright` retry; formatter coverage over the action registry and the
 apply/destroy safety matrix keep that boundary closed over new actions and flags.
+Protection remedies name only a validated unique set of machine-layer and
+cluster-layer roles; the CLI projects fixed `infra`/`clusters` destroy stages
+onto the original resolved object selection and never consumes backend names as
+selection argv. The destructive apply-kind registry makes the layer choice
+explicit and rejects an unclassified or retired task kind in guard tests.
 
 Ownership evidence is a named cross-boundary contract: executing collection
 roles write ownership through `bootwright.core.ownership_record` at mutation

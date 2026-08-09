@@ -166,6 +166,30 @@ func (i resolvedInvocation) rebuildInstalledClusterRetry(cluster string) (retryC
 	return i.clusterLifecycleRetry(invocationApply, cluster, converge.ClustersScope.Name, workflow.ApplyModeRebuild, authorizeDataLoss)
 }
 
+func (i resolvedInvocation) destroySelectedMachineLayerRetry() (retryCommand, error) {
+	return i.destroySelectedLayerRetry(converge.InfraScope.Name, authorizeProtected)
+}
+
+func (i resolvedInvocation) destroySelectedClusterLayerRetry() (retryCommand, error) {
+	return i.destroySelectedLayerRetry(converge.ClustersScope.Name, authorizeProtected, authorizeDataLoss)
+}
+
+func (i resolvedInvocation) destroySelectedLayerRetry(stage string, requiredAuthorizations ...string) (retryCommand, error) {
+	next := i
+	next.verb = invocationDestroy
+	next.flags.mode = ""
+	next.flags.selection.stage = stage
+	next.flags.selection.through = ""
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.trustOnFirstUse = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocationDestroy)
+	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
+}
+
 func (i resolvedInvocation) clusterLifecycleRetry(verb invocationVerb, cluster, stage string, mode workflow.ApplyMode, requiredAuthorizations ...string) (retryCommand, error) {
 	cluster = strings.TrimSpace(cluster)
 	if cluster == "" {

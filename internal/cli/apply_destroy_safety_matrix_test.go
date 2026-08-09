@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge"
@@ -817,6 +819,10 @@ func safetyStorageClusterInputPath(t *testing.T, ctx workspace.Context) string {
 }
 
 func safetyNamedStorageClusterInputPath(t *testing.T, ctx workspace.Context, cluster string) string {
+	return safetyObjectInputPath(t, ctx, v1alpha1.KindStorageCluster, cluster)
+}
+
+func safetyObjectInputPath(t *testing.T, ctx workspace.Context, kind, name string) string {
 	t.Helper()
 	files, err := desiredstate.LoadedInputFiles(ctx.InputPaths)
 	if err != nil {
@@ -828,11 +834,11 @@ func safetyNamedStorageClusterInputPath(t *testing.T, ctx workspace.Context, clu
 			t.Fatalf("read %s: %v", file, err)
 		}
 		body := string(data)
-		if strings.Contains(body, "kind: "+v1alpha1.KindStorageCluster) && strings.Contains(body, "name: "+cluster) {
+		if strings.Contains(body, "kind: "+kind) && strings.Contains(body, "name: "+name) {
 			return file
 		}
 	}
-	t.Fatalf("no %s input file declares %s", v1alpha1.KindStorageCluster, cluster)
+	t.Fatalf("no %s input file declares %s", kind, name)
 	return ""
 }
 
@@ -877,6 +883,29 @@ func seedRenamedStretchRule(t *testing.T, ctx workspace.Context) {
 	rewriteSafetyInput(t, safetyStorageClusterInputPath(t, ctx), [][2]string{
 		{"        failureDomain: datacenter", "        failureDomain: datacenter\n        ruleName: stretch-rule-alt"},
 	})
+}
+
+func seedProtectedMachineLayerDrift(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	rewriteSafetyInput(t, safetyObjectInputPath(t, ctx, v1alpha1.KindMachine, safetyBareMetalManagedOSMachine), [][2]string{{"deviceName: /dev/sda", "deviceName: /dev/nvme0n1"}})
+	seedRunnableSafetyMutation(t, ctx)
+}
+
+func seedProtectedClusterLayerDrift(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	seedProtectedEnvironment(t, ctx)
+	seedRenamedStretchRule(t, ctx)
+	seedRunnableSafetyMutation(t, ctx)
+}
+
+func seedProtectedMixedLayerDrift(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	path := safetyObjectInputPath(t, ctx, v1alpha1.KindStorageCluster, safetyBareMetalManagedOSCluster)
+	rewriteSafetyInput(t, path, [][2]string{{"release: \"9.9.1.0\"", "release: \"9.9.1.1\""}})
+	seedRunnableSafetyMutation(t, ctx)
 }
 
 const (
@@ -1224,6 +1253,39 @@ func safetyStorageDataLossCases() []safetyCase {
 		verdict: verdictNoChange,
 		deny:    []string{"not a safe in-place reconcile", "would reinstall the cluster"},
 	}, {
+		name:        "apply/protected machine rebuild retains the exact machine selection in destroy and resume",
+		baseline:    safetyBaselineBareMetalManagedOS,
+		seed:        seedProtectedMachineLayerDrift,
+		args:        []string{"apply", "--machines", safetyBareMetalManagedOSMachine, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		want:        []string{"protected machine layer", "bootwright destroy", "--stage infra", "--machines " + safetyBareMetalManagedOSMachine, "--authorize data-loss,protected", "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
+		deny:        []string{"--clusters " + safetyBareMetalManagedOSCluster},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertProtectedLayerCommands(t, output, "--machines", safetyBareMetalManagedOSMachine, []string{"infra"})
+		},
+	}, {
+		name:        "apply/protected cluster rebuild retains the exact cluster selection in destroy and resume",
+		seed:        seedProtectedClusterLayerDrift,
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		want:        []string{"protected cluster layer", "bootwright destroy", "--stage clusters", "--clusters " + safetyAdvancedCephCluster, "data-loss", "protected", "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertProtectedLayerCommands(t, output, "--clusters", safetyAdvancedCephCluster, []string{"clusters"})
+		},
+	}, {
+		name:        "apply/protected mixed rebuild retains one selection across both destroy layers and resume",
+		baseline:    safetyBaselineBareMetalManagedOS,
+		seed:        seedProtectedMixedLayerDrift,
+		args:        []string{"apply", "--clusters", safetyBareMetalManagedOSCluster, "--mode", "rebuild", "--authorize", "data-loss", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		want:        []string{"protected cluster layer", "protected machine layer", "--stage clusters", "--stage infra", "--clusters " + safetyBareMetalManagedOSCluster, "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			assertProtectedLayerCommands(t, output, "--clusters", safetyBareMetalManagedOSCluster, []string{"clusters", "infra"})
+		},
+	}, {
 		name:    "apply/re-applying the identical desired state reports no drift at all",
 		seed:    seedSuccessfulApply,
 		args:    []string{"diff", "--recorded"},
@@ -1527,6 +1589,45 @@ func reexecuteHermeticRemedy(t *testing.T, output, refusedMarker string, require
 		t.Fatalf("expected one exact retry to re-execute, got %v\n%s", commands, output)
 	}
 	reexecuteHermeticCommand(t, commands[0], refusedMarker, requireSuccess)
+}
+
+func assertProtectedLayerCommands(t *testing.T, output, selectionFlag, selectionValue string, stages []string) {
+	t.Helper()
+	commands := backtickedBootwrightCommands(output)
+	if len(commands) != len(stages)+1 {
+		t.Fatalf("protected-layer remedy commands = %v, want %d destroy command(s) plus one rebuild resume\n%s", commands, len(stages), output)
+	}
+	seenStages := map[string]bool{}
+	resume := ""
+	for _, command := range commands {
+		if !commandHasFlagValue(command, selectionFlag, selectionValue) {
+			t.Fatalf("protected-layer command widened or lost %s %s: %s", selectionFlag, selectionValue, command)
+		}
+		if !commandHasFlagValue(command, "--context", "matrix") {
+			t.Fatalf("protected-layer command lost context: %s", command)
+		}
+		assertRetryParses(t, retryCommand{args: strings.Fields(command)}, func(*cobra.Command) {})
+		if strings.HasPrefix(command, "bootwright apply ") {
+			resume = command
+			continue
+		}
+		if !strings.Contains(command, "protected") {
+			t.Fatalf("destroy alternative lacks protected authorization: %s", command)
+		}
+		for _, stage := range stages {
+			if commandHasFlagValue(command, "--stage", stage) {
+				seenStages[stage] = true
+			}
+		}
+	}
+	for _, stage := range stages {
+		if !seenStages[stage] {
+			t.Fatalf("protected-layer remedy lacks --stage %s: %v", stage, commands)
+		}
+	}
+	if resume == "" || !strings.Contains(resume, "--mode rebuild") || !strings.Contains(resume, "data-loss") {
+		t.Fatalf("protected-layer remedy lacks exact data-loss rebuild resume: %v", commands)
+	}
 }
 
 func reexecuteHermeticRemedyContaining(t *testing.T, output, commandFragment, refusedMarker string, requireSuccess bool) {

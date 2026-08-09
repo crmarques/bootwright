@@ -271,7 +271,7 @@ func classifyStorageSubObjectWithRecord(state v1alpha1.State, sub storageSubObje
 	}
 	taskID := "storage." + sub.Cluster
 	if record.ResourceID != sub.resourceID() || record.TaskID != taskID || record.TaskKind != ApplyTaskKindStorageCluster {
-		return ConvergeSafetyUnknown, fmt.Errorf("legacy converge record %s has ambiguous resource or task identity; rebuild the selected object to establish current safety evidence", sub.resourceID())
+		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: sub.resourceID(), Cause: fmt.Errorf("the converge record has ambiguous resource or task identity")}
 	}
 	input, err := storageSubObjectDesiredHashInput(state, sub)
 	if err != nil {
@@ -279,7 +279,7 @@ func classifyStorageSubObjectWithRecord(state v1alpha1.State, sub storageSubObje
 	}
 	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(record.Status), record.HashSchema, input)
 	if err != nil {
-		return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", sub.resourceID(), err, sub.Cluster)
+		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: sub.resourceID(), Cause: err}
 	}
 	if matched {
 		return ConvergeSafetyMatch, nil

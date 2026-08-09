@@ -387,8 +387,15 @@ A listed kind crosses the same destroy authorization boundary as
 `destroyProtection: protected`, but scoped to that kind. Even when
 `destroyProtection` is `allow`, a `destroy` whose scope tears down a protected
 kind requires `--authorize protected`, and an `apply --mode rebuild` that would
-destructively rebuild one fails closed and directs you to
-`destroy --authorize protected` for that scope first. Reconfigure-only drift — an in-place service re-apply that touches
+destructively rebuild one fails closed and prints the exact least-privilege
+sequence for the selection you gave. A machine-layer rebuild uses `destroy
+--stage infra`; a cluster-layer rebuild uses `destroy --stage clusters`; mixed
+work prints both, followed by the original selection under `apply --mode
+rebuild`. Every command retains your `--machines` or `--clusters`, context, SSH
+identity, dry-run/output and confirmation flags, so a selected machine is never
+expanded to its cluster and a selected cluster is never expanded to the whole
+context. Cluster teardown includes both `--authorize protected` and
+`--authorize data-loss`. Reconfigure-only drift — an in-place service re-apply that touches
 no data, OS, or VM — does not trip it; only destructive rebuilds of the protected
 kind do. `destroyProtection` and `protectedKinds` combine: a resource is
 protected if either covers it.

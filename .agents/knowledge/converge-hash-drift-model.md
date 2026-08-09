@@ -141,8 +141,12 @@ NO wipe (a stale bundle can only under-authorize). Its sibling
 **Display twins:** `ApplyTransitionAction` (create/reconcile/rebuild/refuse/
 unchanged) mirrors `EvaluateApplyModePreflight` for the read-only
 plan/`--dry-run` change ledger; any preflight decision change must be reflected
-there. The ledger reads only convergence records and skips classification
-errors silently — the mutating run's preflight stays authoritative.
+there. The ledger reads only convergence records. A classification failure stays
+fail-closed in the mutating run and is also carried into text and JSON preview
+refusals; legacy immutable-evidence failures use the typed same-selection
+rebuild action, so the CLI renders the exact stage/range, object selection,
+context and effects rather than either swallowing the preview error or printing
+a backend-built cluster command.
 
 **Effective-state freshness shape:** `stateFreshnessShape` zeroes the computed
 fields `SourcePath` and normalize-injected `DefaultedRefs` (both `yaml:"-"`,

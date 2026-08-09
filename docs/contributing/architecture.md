@@ -143,8 +143,11 @@ combination. A rebuild that destroys data additionally needs
 `--authorize data-loss`. Under
 `Environment.spec.safety.destroyProtection: protected`,
 `apply --mode rebuild` fails closed before any mutation: that destruction
-must cross the destroy authorization boundary
-(`destroy --authorize protected` for the scope, then re-apply). See
+must cross the destroy authorization boundary. The backend returns typed
+machine-layer/cluster-layer evidence without argv; the CLI retains the exact
+resolved object selection while mapping those roles to `destroy --stage infra`
+and/or `destroy --stage clusters`, then the original rebuild. Every destructive
+apply task kind must join the explicit layer registry before its guard passes. See
 [Operations and Recovery](../advanced/operations.md) for the recovery patterns.
 
 ## The rendering contract

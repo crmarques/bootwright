@@ -9,6 +9,9 @@ import (
 )
 
 func applyModePreflightRefusal(err error, invocation resolvedInvocation) error {
+	if hasApplyInstallRemedy(err) {
+		return applyInstallRemedialError(err, invocation)
+	}
 	var refusal *workflow.ApplyModePreflightRefusal
 	if !errors.As(err, &refusal) {
 		return err

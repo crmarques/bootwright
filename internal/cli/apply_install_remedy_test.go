@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -201,6 +202,253 @@ func TestApplyInstallRemedialErrorsNameCompleteExactSequences(t *testing.T) {
 	}
 }
 
+func TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly(t *testing.T) {
+	tests := []struct {
+		name         string
+		selection    runSelection
+		machineLayer []string
+		clusterLayer []string
+		wantStages   []string
+	}{
+		{name: "machine selection", selection: runSelection{stage: "deps", through: "base", machines: "worker-0"}, machineLayer: []string{"managedMachineOS/worker-0"}, wantStages: []string{"infra"}},
+		{name: "cluster selection", selection: runSelection{stage: "clusters", clusters: "ceph"}, clusterLayer: []string{"StorageCluster/ceph"}, wantStages: []string{"clusters"}},
+		{name: "mixed selection", selection: runSelection{through: "base", clusters: "ceph"}, machineLayer: []string{"managedMachineOS/ceph-0"}, clusterLayer: []string{"StorageCluster/ceph"}, wantStages: []string{"clusters", "infra"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := resolvedInvocation{
+				verb:                  invocationApply,
+				contextName:           "prod",
+				sshIdentityFile:       "/tmp/operator-key",
+				sshUser:               "operator",
+				sshAskSudoPassword:    true,
+				sshUserForProvisioned: true,
+				flags: invocationFlags{
+					mode:            workflow.ApplyModeRebuild,
+					selection:       tc.selection,
+					reclaimDevices:  "all",
+					authorizations:  []string{authorizeForeignDaemons, authorizeUnownedDevices},
+					dryRun:          true,
+					output:          outputJSON,
+					yes:             true,
+					askBecomePass:   false,
+					trustOnFirstUse: true,
+					verbose:         true,
+				},
+			}
+			typed := &converge.ApplyOverrideDestroyProtectionError{
+				Reason:       converge.ApplyOverrideProtectionEnvironment,
+				Destructive:  []string{"typed object"},
+				MachineLayer: tc.machineLayer,
+				ClusterLayer: tc.clusterLayer,
+			}
+			formatted := applyInstallRemedialError(typed, invocation)
+			commands := backtickedBootwrightCommands(formatted.Error())
+			if len(commands) != len(tc.wantStages)+1 {
+				t.Fatalf("commands = %v, want %d teardown(s) plus resume: %v", commands, len(tc.wantStages), formatted)
+			}
+			for i, stage := range tc.wantStages {
+				command := commands[i]
+				for _, want := range []string{"bootwright destroy", "--stage " + stage, "--authorize ", "protected", "--dry-run", "--output json", "--yes", "--context prod", "--ssh-user operator"} {
+					if !strings.Contains(command, want) {
+						t.Fatalf("destroy alternative missing %q: %s", want, command)
+					}
+				}
+				if tc.selection.machines != "" && !commandHasFlagValue(command, "--machines", tc.selection.machines) {
+					t.Fatalf("destroy widened machine selection: %s", command)
+				}
+				if tc.selection.clusters != "" && !commandHasFlagValue(command, "--clusters", tc.selection.clusters) {
+					t.Fatalf("destroy widened cluster selection: %s", command)
+				}
+				for _, deny := range []string{"--mode", "--through", "--reclaim-devices", "--trust-on-first-use", authorizeForeignDaemons} {
+					if strings.Contains(command, deny) {
+						t.Fatalf("destroy alternative retained apply-only effect %q: %s", deny, command)
+					}
+				}
+				if stage == "clusters" && !strings.Contains(command, "data-loss") {
+					t.Fatalf("cluster teardown lacks data-loss authorization: %s", command)
+				}
+				assertRetryParses(t, retryCommand{args: strings.Fields(command)}, func(*cobra.Command) {})
+			}
+			resume := commands[len(commands)-1]
+			for _, want := range []string{"bootwright apply", "--mode rebuild", "data-loss", "--reclaim-devices all", "--dry-run", "--output json", "--context prod"} {
+				if !strings.Contains(resume, want) {
+					t.Fatalf("resume missing %q: %s", want, resume)
+				}
+			}
+			if tc.selection.stage != "" && !commandHasFlagValue(resume, "--stage", tc.selection.stage) {
+				t.Fatalf("resume lost original stage: %s", resume)
+			}
+			if tc.selection.through != "" && !commandHasFlagValue(resume, "--through", tc.selection.through) {
+				t.Fatalf("resume lost original range: %s", resume)
+			}
+			if tc.selection.machines != "" && !commandHasFlagValue(resume, "--machines", tc.selection.machines) {
+				t.Fatalf("resume lost original machine selection: %s", resume)
+			}
+			if tc.selection.clusters != "" && !commandHasFlagValue(resume, "--clusters", tc.selection.clusters) {
+				t.Fatalf("resume lost original cluster selection: %s", resume)
+			}
+			assertRetryParses(t, retryCommand{args: strings.Fields(resume)}, func(*cobra.Command) {})
+		})
+	}
+}
+
+func TestProtectedLayerRemedyCommandsReexecuteHermetically(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	tests := []struct {
+		name         string
+		selection    runSelection
+		machineLayer []string
+		clusterLayer []string
+	}{
+		{name: "machine", selection: runSelection{machines: "master-0"}, machineLayer: []string{"managedMachineOS/master-0"}},
+		{name: "cluster", selection: runSelection{clusters: "sno-libvirt"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}},
+		{name: "mixed", selection: runSelection{clusters: "sno-libvirt"}, machineLayer: []string{"managedMachineOS/master-0"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := resolvedInvocation{
+				verb:        invocationApply,
+				contextName: "test",
+				flags: invocationFlags{
+					mode:            workflow.ApplyModeRebuild,
+					selection:       tc.selection,
+					dryRun:          true,
+					askBecomePass:   false,
+					trustOnFirstUse: false,
+				},
+			}
+			formatted := applyInstallRemedialError(&converge.ApplyOverrideDestroyProtectionError{
+				Reason:       converge.ApplyOverrideProtectionEnvironment,
+				Destructive:  []string{"typed object"},
+				MachineLayer: tc.machineLayer,
+				ClusterLayer: tc.clusterLayer,
+			}, invocation)
+			commands := backtickedBootwrightCommands(formatted.Error())
+			if len(commands) == 0 {
+				t.Fatalf("typed protection action emitted no commands: %v", formatted)
+			}
+			for _, command := range commands {
+				reexecuteHermeticCommand(t, command, "typed object", false)
+			}
+		})
+	}
+}
+
+func TestProtectedLayerTargetNamesNeverBecomeSelection(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode:            workflow.ApplyModeRebuild,
+			selection:       runSelection{clusters: "selected-cluster"},
+			dryRun:          true,
+			askBecomePass:   false,
+			trustOnFirstUse: false,
+		},
+	}
+	typed := &workflow.ClusterInstallStateError{
+		Message: "typed protection refusal",
+		Request: remedy.Request{
+			Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+			Targets: []remedy.Target{
+				{Role: remedy.TargetRoleMachineLayer, Name: "backend-machine-cluster"},
+				{Role: remedy.TargetRoleClusterLayer, Name: "backend-cluster"},
+			},
+		},
+	}
+	formatted := applyInstallRemedialError(typed, invocation)
+	commands := backtickedBootwrightCommands(formatted.Error())
+	if len(commands) != 3 {
+		t.Fatalf("commands = %v, want both destroy layers and one resume", commands)
+	}
+	for _, command := range commands {
+		if !commandHasFlagValue(command, "--clusters", "selected-cluster") {
+			t.Fatalf("command lost resolved selection: %s", command)
+		}
+		for _, forbidden := range []string{"backend-machine-cluster", "backend-cluster"} {
+			if strings.Contains(command, forbidden) {
+				t.Fatalf("backend evidence became executable selection argv %q: %s", forbidden, command)
+			}
+		}
+	}
+}
+
+func TestLegacyConvergenceEvidenceRemedyPreservesStageRangeAndMachineSelections(t *testing.T) {
+	tests := []struct {
+		name      string
+		selection runSelection
+	}{
+		{name: "stage", selection: runSelection{stage: "clusters", clusters: "ceph"}},
+		{name: "range", selection: runSelection{stage: "deps", through: "base", clusters: "ocp"}},
+		{name: "machine", selection: runSelection{machines: "worker-0"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := resolvedInvocation{
+				verb:        invocationApply,
+				contextName: "prod",
+				flags: invocationFlags{
+					mode:            workflow.ApplyModeReconcile,
+					selection:       tc.selection,
+					reclaimDevices:  "all",
+					authorizations:  []string{authorizeForeignDaemons},
+					dryRun:          true,
+					yes:             true,
+					askBecomePass:   false,
+					trustOnFirstUse: false,
+				},
+			}
+			typed := &workflow.LegacyConvergenceEvidenceError{ResourceID: "StoragePool/ceph.rbd", Cause: fmt.Errorf("snapshot is missing")}
+			formatted := applyInstallRemedialError(typed, invocation)
+			commands := backtickedBootwrightCommands(formatted.Error())
+			if len(commands) != 1 {
+				t.Fatalf("legacy evidence commands = %v, want one exact rebuild: %v", commands, formatted)
+			}
+			command := commands[0]
+			for _, want := range []string{"--mode rebuild", "--authorize foreign-daemons,data-loss", "--reclaim-devices all", "--dry-run", "--yes", "--context prod"} {
+				if !strings.Contains(command, want) {
+					t.Fatalf("legacy evidence remedy missing %q: %s", want, command)
+				}
+			}
+			for flag, value := range map[string]string{"--stage": tc.selection.stage, "--through": tc.selection.through, "--clusters": tc.selection.clusters, "--machines": tc.selection.machines} {
+				if value != "" && !commandHasFlagValue(command, flag, value) {
+					t.Fatalf("legacy evidence remedy lost %s=%s: %s", flag, value, command)
+				}
+			}
+			assertRetryParses(t, retryCommand{args: strings.Fields(command)}, func(*cobra.Command) {})
+		})
+	}
+}
+
+func TestLegacyConvergenceEvidenceSelectionsReexecuteHermetically(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	selections := []runSelection{
+		{stage: "clusters", clusters: "sno-libvirt"},
+		{stage: "deps", through: "base", clusters: "sno-libvirt"},
+		{machines: "master-0"},
+	}
+	for _, selection := range selections {
+		invocation := resolvedInvocation{
+			verb:        invocationApply,
+			contextName: "test",
+			flags: invocationFlags{
+				mode:            workflow.ApplyModeReconcile,
+				selection:       selection,
+				dryRun:          true,
+				askBecomePass:   false,
+				trustOnFirstUse: false,
+			},
+		}
+		formatted := applyInstallRemedialError(&workflow.LegacyConvergenceEvidenceError{ResourceID: "StoragePool/ceph.rbd", Cause: fmt.Errorf("snapshot is missing")}, invocation)
+		commands := backtickedBootwrightCommands(formatted.Error())
+		if len(commands) != 1 {
+			t.Fatalf("legacy evidence selection %#v emitted %v", selection, commands)
+		}
+		reexecuteHermeticCommand(t, commands[0], "cannot verify legacy safety evidence", false)
+	}
+}
+
 func TestEveryRegisteredRemedyActionHasAnExactCLIFormatter(t *testing.T) {
 	invocation := resolvedInvocation{
 		verb:        invocationApply,
@@ -216,9 +464,13 @@ func TestEveryRegisteredRemedyActionHasAnExactCLIFormatter(t *testing.T) {
 	}
 	for _, action := range remedy.RegisteredActions() {
 		t.Run(string(action), func(t *testing.T) {
+			request := clusterInstallRemedyRequest(action, "ocp")
+			if action == remedy.ActionDestroyProtectedLayersThenRebuildSameSelection {
+				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}}}
+			}
 			typed := &workflow.ClusterInstallStateError{
 				Message: "typed refusal",
-				Request: clusterInstallRemedyRequest(action, "ocp"),
+				Request: request,
 			}
 			formatted := applyInstallRemedialError(typed, invocation)
 			if strings.Contains(formatted.Error(), "has no CLI formatter") {
@@ -241,6 +493,9 @@ func TestUnknownOrMalformedRemedyFailsClosedWithoutACommand(t *testing.T) {
 		{Action: remedy.Action("future-action"), Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}},
 		{Action: remedy.ActionRegenerateClusterISO},
 		{Action: remedy.ActionRegenerateClusterISO, Targets: []remedy.Target{{Role: remedy.TargetRole("future-role"), Name: "ocp"}}},
+		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection},
+		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRole("future-layer")}}},
+		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleMachineLayer}}},
 	}
 	for _, request := range tests {
 		err := applyInstallRemedialError(&workflow.ClusterInstallStateError{Message: "typed refusal", Request: request}, invocation)

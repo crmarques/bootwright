@@ -257,7 +257,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, applyInstallRemedialError(rerr, invocation))
 				}
 				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
-					return failErr(1, err)
+					return failErr(1, applyInstallRemedialError(err, invocation))
 				}
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
 			}

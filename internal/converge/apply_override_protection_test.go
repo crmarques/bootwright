@@ -1,12 +1,45 @@
 package converge
 
 import (
+	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
+
+func assertProtectedLayerRemedy(t *testing.T, err error, roles ...remedy.TargetRole) *ApplyOverrideDestroyProtectionError {
+	t.Helper()
+	var typed *ApplyOverrideDestroyProtectionError
+	if !errors.As(err, &typed) {
+		t.Fatalf("error %T does not retain typed protection evidence: %v", err, err)
+	}
+	var remedial remedy.Error
+	if !errors.As(err, &remedial) {
+		t.Fatalf("error %T does not carry a typed remedy: %v", err, err)
+	}
+	request := remedial.Remedy()
+	if request.Action != remedy.ActionDestroyProtectedLayersThenRebuildSameSelection {
+		t.Fatalf("action = %q, want protected-layer teardown and same-selection rebuild", request.Action)
+	}
+	if len(request.Targets) != len(roles) {
+		t.Fatalf("targets = %#v, want roles %v", request.Targets, roles)
+	}
+	for i, role := range roles {
+		if request.Targets[i].Role != role {
+			t.Fatalf("target %d role = %q, want %q", i, request.Targets[i].Role, role)
+		}
+	}
+	for _, forbidden := range []string{"bootwright apply", "bootwright destroy"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("backend protection error embeds executable argv %q: %v", forbidden, err)
+		}
+	}
+	return typed
+}
 
 func protectedEnvState() v1alpha1.State {
 	return v1alpha1.State{Environments: []v1alpha1.Environment{{
@@ -55,13 +88,14 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected env with destructive drift must fail closed")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "nprd", "bootwright destroy --clusters ceph --authorize protected"} {
+	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleClusterLayer)
+	for _, want := range []string{"StorageCluster/ceph", "nprd", "explicit destroy boundary"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("gate error must contain %q: %v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "destroy --force` for that scope") {
-		t.Fatalf("cluster-scope remedy must quote a scoped destroy, not the full-estate command: %v", err)
+	if len(typed.ClusterLayer) != 1 || typed.ClusterLayer[0] != "ceph" {
+		t.Fatalf("cluster-layer evidence = %v, want ceph", typed.ClusterLayer)
 	}
 }
 
@@ -78,7 +112,8 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
 	}
-	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "bootwright destroy --clusters ceph --authorize protected"} {
+	assertProtectedLayerRemedy(t, err, remedy.TargetRoleClusterLayer)
+	for _, want := range []string{"StorageCluster/ceph", "protectedKinds", "explicit destroy boundary"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("granular gate error must contain %q: %v", want, err)
 		}
@@ -101,7 +136,8 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected env with a cluster reinstall and no drift must fail closed")
 	}
-	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "nprd", "destroy --authorize protected"} {
+	assertProtectedLayerRemedy(t, err, remedy.TargetRoleClusterLayer)
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "nprd", "explicit destroy boundary"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("protected-env reinstall refusal must contain %q: %v", want, err)
 		}
@@ -110,7 +146,8 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("protected ContainerCluster kind must fail closed on a reinstall")
 	}
-	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "protectedKinds", "destroy --authorize protected"} {
+	assertProtectedLayerRemedy(t, err, remedy.TargetRoleClusterLayer)
+	for _, want := range []string{"reinstall ContainerCluster/dc1-ocp", "protectedKinds", "explicit destroy boundary"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("protectedKinds reinstall refusal must contain %q: %v", want, err)
 		}
@@ -149,10 +186,14 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t 
 	if err == nil {
 		t.Fatal("in-place reimage of a managed-RHSM storage node must be routed to destroy, not reimaged in place")
 	}
-	for _, want := range []string{"managed-RHSM", "bootwright destroy --stage infra --clusters ceph --authorize protected", "RHSM"} {
+	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer)
+	for _, want := range []string{"managed-RHSM", "explicit destroy boundary", "RHSM"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("managed-RHSM reimage refusal must contain %q: %v", want, err)
 		}
+	}
+	if len(typed.ManagedRHSMClusters) != 1 || typed.ManagedRHSMClusters[0] != "ceph" {
+		t.Fatalf("managed-RHSM evidence = %v, want ceph", typed.ManagedRHSMClusters)
 	}
 
 	ossState := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
@@ -166,6 +207,32 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t 
 	}
 }
 
+func TestCheckApplyOverrideDestroyProtectionManagedRHSMMixedWithProtectedClusterLayer(t *testing.T) {
+	state := managedRHSMStorageState("ceph")
+	state.Environments = []v1alpha1.Environment{{
+		Metadata: v1alpha1.Metadata{Name: "nprd"},
+		Spec: v1alpha1.EnvironmentSpec{Safety: v1alpha1.EnvironmentSafetySpec{
+			ProtectedKinds: []string{v1alpha1.KindStorageCluster},
+		}},
+	}}
+	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph", "ceph")
+	storage := driftedObjects(t, workflow.ApplyTaskKindStorageCluster, "storage.ceph", "ceph")
+
+	err := CheckApplyOverrideDestroyProtection(state, append(machine, storage...), nil)
+	if err == nil {
+		t.Fatal("managed-RHSM machine work mixed with a protected cluster rebuild must fail closed on both layers")
+	}
+	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer, remedy.TargetRoleClusterLayer)
+	if len(typed.ClusterLayer) != 1 || typed.ClusterLayer[0] != "ceph" {
+		t.Fatalf("cluster-layer evidence = %v, want ceph", typed.ClusterLayer)
+	}
+	for _, want := range []string{"managed-RHSM", "protected cluster-layer work ceph", "explicit destroy boundary"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("mixed managed-RHSM refusal must contain %q: %v", want, err)
+		}
+	}
+}
+
 func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T) {
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph-nprd", "ceph-nprd")
 
@@ -173,13 +240,22 @@ func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T)
 	if err == nil {
 		t.Fatal("protected env with a drifted managed-OS machine must fail closed")
 	}
-	if want := "bootwright destroy --stage infra --clusters ceph-nprd --authorize protected"; !strings.Contains(err.Error(), want) {
-		t.Fatalf("machine-substrate remedy must direct to %q: %v", want, err)
+	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer)
+	if len(typed.MachineLayer) != 1 || typed.MachineLayer[0] != "osinstall.ceph-nprd" {
+		t.Fatalf("machine-layer evidence = %v, want selected managed-OS object", typed.MachineLayer)
 	}
-	if strings.Contains(err.Error(), "for that scope") {
-		t.Fatalf("machine-substrate remedy must not point at the clusters-scope destroy that cannot clear it: %v", err)
-	}
-	if !strings.Contains(err.Error(), "--authorize unreachable-nodes") {
-		t.Fatalf("machine-substrate remedy must hint --authorize unreachable-nodes for never-provisioned/powered-off host substrate: %v", err)
+}
+
+func TestApplyProtectionSourceNeverEmbedsStateChangeArgv(t *testing.T) {
+	for _, name := range []string{"apply.go", "apply_override_remedy.go"} {
+		source, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, forbidden := range []string{"bootwright apply", "bootwright destroy"} {
+			if strings.Contains(string(source), forbidden) {
+				t.Fatalf("%s embeds state-changing argv %q; return typed layer evidence and let internal/cli render the resolved selection", name, forbidden)
+			}
+		}
 	}
 }

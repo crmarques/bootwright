@@ -188,7 +188,7 @@ func MachineSubstrateClusters(tasks []ApplyTask) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, task := range tasks {
-		if !machineSubstrateKinds[task.Entry.Kind] || task.Entry.Cluster == "" || seen[task.Entry.Cluster] {
+		if !isMachineSubstrateKind(task.Entry.Kind) || task.Entry.Cluster == "" || seen[task.Entry.Cluster] {
 			continue
 		}
 		seen[task.Entry.Cluster] = true

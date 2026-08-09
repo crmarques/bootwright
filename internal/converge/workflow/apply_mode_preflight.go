@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 type ApplyModePreflightRefusal struct {
@@ -219,7 +220,7 @@ func structuralRebuildConsequence(o ObjectClassification) string {
 		return "destroy the data in that pool/filesystem and recreate it"
 	case o.Kind == ObjectKindContainerCluster:
 		return "reinstall the cluster — its nodes re-imaged"
-	case machineSubstrateKinds[o.Kind]:
+	case isMachineSubstrateKind(o.Kind):
 		return "reinstall the machine — its disks wiped"
 	default:
 		return "rebuild the resource"
@@ -246,10 +247,40 @@ var overrideReconfigureOnlyKinds = map[string]bool{
 	ApplyTaskKindPlaybook:               true,
 }
 
-var machineSubstrateKinds = map[string]bool{
-	ApplyTaskKindManagedMachineOS:     true,
-	ApplyTaskKindMachineInfraPrepare:  true,
-	ApplyTaskKindMachineInfraFinalize: true,
+var overrideDestructiveLayerRoles = map[string]remedy.TargetRole{
+	ApplyTaskKindMachineInfraPrepare:  remedy.TargetRoleMachineLayer,
+	ApplyTaskKindMachineInfraFinalize: remedy.TargetRoleMachineLayer,
+	ApplyTaskKindManagedMachineOS:     remedy.TargetRoleMachineLayer,
+	ApplyTaskKindClusterInstall:       remedy.TargetRoleClusterLayer,
+	ApplyTaskKindStorageNodeAccess:    remedy.TargetRoleClusterLayer,
+	ApplyTaskKindStorageInfra:         remedy.TargetRoleClusterLayer,
+	ApplyTaskKindClusterISO:           remedy.TargetRoleClusterLayer,
+	ApplyTaskKindNodeBoot:             remedy.TargetRoleClusterLayer,
+	ApplyTaskKindBootstrapWait:        remedy.TargetRoleClusterLayer,
+	ApplyTaskKindInstallWait:          remedy.TargetRoleClusterLayer,
+	ApplyTaskKindStorageCluster:       remedy.TargetRoleClusterLayer,
+}
+
+func overrideDestructiveLayerRole(kind string) (remedy.TargetRole, bool) {
+	role, ok := overrideDestructiveLayerRoles[kind]
+	return role, ok
+}
+
+func overrideDestructiveObjectLayerRole(kind string) (remedy.TargetRole, bool) {
+	if kind == ObjectKindContainerCluster || kind == ObjectKindStorageCluster || IsStorageSubObjectKind(kind) {
+		return remedy.TargetRoleClusterLayer, true
+	}
+	return overrideDestructiveLayerRole(kind)
+}
+
+func isMachineSubstrateKind(kind string) bool {
+	role, ok := overrideDestructiveObjectLayerRole(kind)
+	return ok && role == remedy.TargetRoleMachineLayer
+}
+
+func isClusterLayerKind(kind string) bool {
+	role, ok := overrideDestructiveObjectLayerRole(kind)
+	return ok && role == remedy.TargetRoleClusterLayer
 }
 
 func isOverrideDestructive(o ObjectClassification) bool {
@@ -276,7 +307,7 @@ func objectProtectedKind(o ObjectClassification) string {
 		return v1alpha1.KindStorageCluster
 	case o.Kind == ObjectKindContainerCluster:
 		return v1alpha1.KindContainerCluster
-	case machineSubstrateKinds[o.Kind]:
+	case isMachineSubstrateKind(o.Kind):
 		return v1alpha1.KindMachine
 	}
 	return ""
@@ -300,12 +331,16 @@ func OverrideDestructiveClusterScope(objects []ObjectClassification) []string {
 	seen := map[string]bool{}
 	var clusters []string
 	for _, o := range objects {
-		if !isOverrideDestructive(o) || machineSubstrateKinds[o.Kind] || o.Cluster == "" {
+		if !isOverrideDestructive(o) || !isClusterLayerKind(o.Kind) {
 			continue
 		}
-		if !seen[o.Cluster] {
-			seen[o.Cluster] = true
-			clusters = append(clusters, o.Cluster)
+		evidence := o.Cluster
+		if evidence == "" {
+			evidence = o.Label
+		}
+		if !seen[evidence] {
+			seen[evidence] = true
+			clusters = append(clusters, evidence)
 		}
 	}
 	sort.Strings(clusters)
@@ -316,15 +351,19 @@ func OverrideDestructiveProtectedClusterScope(objects []ObjectClassification, pr
 	seen := map[string]bool{}
 	var clusters []string
 	for _, o := range objects {
-		if !isOverrideDestructive(o) || machineSubstrateKinds[o.Kind] || o.Cluster == "" {
+		if !isOverrideDestructive(o) || !isClusterLayerKind(o.Kind) {
 			continue
 		}
 		if kind := objectProtectedKind(o); kind == "" || !protected[kind] {
 			continue
 		}
-		if !seen[o.Cluster] {
-			seen[o.Cluster] = true
-			clusters = append(clusters, o.Cluster)
+		evidence := o.Cluster
+		if evidence == "" {
+			evidence = o.Label
+		}
+		if !seen[evidence] {
+			seen[evidence] = true
+			clusters = append(clusters, evidence)
 		}
 	}
 	sort.Strings(clusters)
@@ -334,7 +373,7 @@ func OverrideDestructiveProtectedClusterScope(objects []ObjectClassification, pr
 func OverrideDestructiveMachineSubstrate(objects []ObjectClassification) (labels, clusters []string) {
 	seen := map[string]bool{}
 	for _, o := range objects {
-		if !isOverrideDestructive(o) || !machineSubstrateKinds[o.Kind] {
+		if !isOverrideDestructive(o) || !isMachineSubstrateKind(o.Kind) {
 			continue
 		}
 		labels = append(labels, o.Label)

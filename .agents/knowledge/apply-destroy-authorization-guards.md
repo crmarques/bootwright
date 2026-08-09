@@ -383,6 +383,19 @@ this over future flags, while the exact-parse and gate-clear tests prove the
 printed command is accepted, keeps the original scope and effects, and clears
 the refusal it names.
 
+**A sanctioned cross-verb alternative changes only the typed consequence.** A
+protected apply rebuild returns one registered action plus a non-empty unique
+set of `machine-layer`/`cluster-layer` roles. The CLI alone maps those roles to
+fixed destroy stages, retains the resolved original `--machines` or `--clusters`
+and all applicable global flags, drops apply-only effects, unions `protected`
+and cluster-teardown `data-loss`, and renders the unchanged-selection rebuild
+resume. Backend evidence names are never operands. Unknown, duplicate or empty
+role shapes emit no command. The action formatter, exact parse/re-execution
+tests and machine/cluster/mixed matrix rows close that alternative over future
+flags without creating a grandfather allowlist. The destructive apply-kind
+registry assigns every live destructive task to exactly one layer; its guard
+rejects a new unclassified kind and any retired registry member.
+
 **Ansible consumes resolved commands; it never rebuilds them.** Runtime roles
 see only part of a run and cannot recover its context, persistent SSH flags,
 selection axes, effect flags, or prior authorizations from a task-local cluster

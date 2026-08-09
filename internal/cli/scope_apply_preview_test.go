@@ -153,6 +153,50 @@ func TestPrintApplyGateForecastReinstallRefusal(t *testing.T) {
 	}
 }
 
+func TestApplyGateForecastSurfacesLegacyClassificationErrorWithExactRemedy(t *testing.T) {
+	task := workflow.ApplyTask{Entry: workflow.TaskLedgerEntry{ID: "service.demo", Kind: workflow.ApplyTaskKindInfraComponentServices}}
+	desiredHash, err := workflow.ApplyTaskDesiredHash(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runsDir := t.TempDir()
+	resourceID := workflow.ApplyTaskKindInfraComponentServices + "/service.demo"
+	if err := workflow.SaveConvergeSafetyRecord(runsDir, workflow.ConvergeSafetyRecord{
+		ResourceID:  resourceID,
+		TaskID:      task.Entry.ID,
+		TaskKind:    task.Entry.Kind,
+		DesiredHash: desiredHash,
+		HashSchema:  workflow.ConvergeHashSchema - 1,
+		Owner:       workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner},
+		Status:      workflow.ConvergeSafetyStatusReconciled,
+		RunID:       "missing-run",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode:            workflow.ApplyModeReconcile,
+			selection:       runSelection{stage: "deps", through: "base", machines: "worker-0"},
+			authorizations:  []string{authorizeForeignDaemons},
+			dryRun:          true,
+			yes:             true,
+			askBecomePass:   false,
+			trustOnFirstUse: false,
+		},
+	}
+	refusals := applyGateForecastRefusals(v1alpha1.State{}, v1alpha1.State{}, []workflow.ApplyTask{task}, runsDir, t.TempDir(), workflow.ApplyModeReconcile, false, false, "", clusteraccess.Selection{}, nil, t.TempDir(), nil, nil, &invocation)
+	if len(refusals) != 1 {
+		t.Fatalf("classification refusal was swallowed or duplicated: %v", refusals)
+	}
+	for _, want := range []string{"cannot verify legacy safety evidence", "bootwright apply", "--mode rebuild", "--authorize foreign-daemons,data-loss", "--stage deps", "--through base", "--machines worker-0", "--dry-run", "--context prod"} {
+		if !strings.Contains(refusals[0], want) {
+			t.Fatalf("preview refusal missing %q: %s", want, refusals[0])
+		}
+	}
+}
+
 func TestPrintApplyGateForecastNamesUnreadableOwnershipRecords(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)

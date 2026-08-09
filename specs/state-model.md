@@ -2558,7 +2558,11 @@ the CLI maps that action to flags and formats an executable command from the
 resolved invocation. Every registered action must have a CLI formatter and a
 safety-matrix scenario, so a new backend refusal cannot assemble a partial
 command or silently drop a future selection, identity, effect, or authorization
-flag.
+flag. An action whose alternatives depend on target roles accepts only its
+published non-empty, unique role set; an empty, duplicate, or unknown role fails
+closed without rendering a command. Every destructive apply task kind is
+explicitly registered as machine-layer or cluster-layer; a new task kind has no
+default role and cannot pass the authorization guard until that choice is made.
 
 Every real `apply` and `destroy` ledger records that run's exact resolved
 invocation as argv, not as an inferred display string. A failed-run retry in
@@ -3304,8 +3308,12 @@ command. The rest are registered per command, on the verbs that reach machines.
   current input. Changed input is drift. A missing, unreadable, failed-run,
   mismatched, or ambiguous snapshot is unknown evidence and fails closed before
   mutation; the operator must restore the immutable run evidence or deliberately
-  rebuild the same selection. Rebaseline writes the current schema only after
-  all of those proofs succeed.
+  rebuild the same resolved selection. That refusal carries the typed
+  same-selection rebuild action rather than backend-built argv, so real apply
+  and both text and JSON previews render the exact original stage/range,
+  cluster-or-machine selection, context, identity, effects, and authorizations.
+  A preview classification error is a reported refusal, never omitted.
+  Rebaseline writes the current schema only after all of those proofs succeed.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
   `iso-created` skips the ISO and resumes from node boot only when its recorded
@@ -3380,8 +3388,18 @@ command. The rest are registered per command, on the verbs that reach machines.
   protected`, `apply --mode rebuild` fails closed before any mutation when the
   drift it would resolve is a destructive rebuild (a machine or cluster), rather
   than rebuilding protected resources: that destruction must cross the destroy
-  authorization boundary, so the operator runs `destroy --authorize protected`
-  for the affected scope and then re-applies. Drift confined to reconfigure-only kinds is
+  authorization boundary. The refusal identifies whether the selected rebuild
+  reaches the machine layer, cluster layer, or both, without carrying command
+  fragments. The CLI derives least-privilege alternatives from the original
+  resolved selection: machine-layer work becomes `destroy --stage infra` with
+  the exact original `--machines` or `--clusters`; cluster-layer work becomes
+  `destroy --stage clusters` with that same selection; a mixed rebuild names
+  both commands; and all cases end with the exact original selection under
+  `apply --mode rebuild`. Destroy alternatives retain context, SSH identity,
+  dry-run/output, `--yes`, verbosity and applicable granted authorizations,
+  discard apply-only effects, add `protected`, and add `data-loss` to the cluster
+  teardown. Neither a machine selection may widen to its cluster nor a selected
+  cluster teardown to the whole context. Drift confined to reconfigure-only kinds is
   an in-place re-apply and does not trip the protection gate. `protectedKinds`
   narrows this to specific kinds: on an `allow`-default environment, a destructive
   `apply --mode rebuild` of a protected kind still fails closed the same way,
@@ -3390,8 +3408,8 @@ command. The rest are registered per command, on the verbs that reach machines.
   of a managed-RHSM `StorageCluster`: an in-place reinstall would strand the
   Satellite consumer, and the reused host DMI UUID would then block
   re-registration. Such a rebuild fails closed naming the affected clusters and
-  the remedy — `destroy --stage infra --clusters <cluster> --authorize protected`, then
-  re-apply — because destroy unregisters the node from RHSM before wiping it.
+  the same typed machine-layer destroy then original-selection rebuild sequence,
+  because destroy unregisters the node from RHSM before wiping it.
   This refusal is independent of `destroyProtection` and `protectedKinds`: it
   fires on an unprotected environment too.
 - Independent of `destroyProtection`, a destructive `apply --mode rebuild` (a

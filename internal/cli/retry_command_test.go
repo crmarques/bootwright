@@ -101,6 +101,69 @@ func TestRetryCommandPreservesResolvedInvocationAndAddsOnlyTheRequiredIntent(t *
 	})
 }
 
+func TestProtectedLayerDestroyRetriesRetainExactSelectionAndClearApplyEffects(t *testing.T) {
+	base := resolvedInvocation{
+		verb:                  invocationApply,
+		contextName:           "prod",
+		sshIdentityFile:       "/tmp/operator-key",
+		sshUser:               "operator",
+		sshAskSudoPassword:    true,
+		sshUserForProvisioned: true,
+		flags: invocationFlags{
+			mode:                 workflow.ApplyModeRebuild,
+			selection:            runSelection{stage: "deps", through: "base", machines: "worker-0,worker-1"},
+			reclaimDevices:       "all",
+			recoverCephOwnership: "ceph=fsid",
+			purgeHistory:         true,
+			authorizations:       []string{authorizeForeignDaemons, authorizeUnownedDevices},
+			dryRun:               true,
+			output:               outputJSON,
+			yes:                  true,
+			askBecomePass:        false,
+			trustOnFirstUse:      true,
+			verbose:              true,
+		},
+	}
+	tests := []struct {
+		name      string
+		make      func() (retryCommand, error)
+		stage     string
+		authorize string
+	}{
+		{name: "machine layer", make: base.destroySelectedMachineLayerRetry, stage: "infra", authorize: "unowned-devices,protected"},
+		{name: "cluster layer", make: base.destroySelectedClusterLayerRetry, stage: "clusters", authorize: "unowned-devices,protected,data-loss"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			command, err := tc.make()
+			if err != nil {
+				t.Fatal(err)
+			}
+			joined := strings.Join(command.Args(), " ")
+			for _, want := range []string{
+				"bootwright destroy", "--authorize " + tc.authorize, "--stage " + tc.stage,
+				"--machines worker-0,worker-1", "--dry-run", "--output json", "--yes",
+				"--ask-become-pass=false", "--verbose", "--context prod", "--ssh-id-file /tmp/operator-key",
+				"--ssh-user operator", "--ssh-ask-sudo-password", "--ssh-user-for-provisioned",
+			} {
+				if !strings.Contains(joined, want) {
+					t.Fatalf("protected-layer retry missing %q: %s", want, joined)
+				}
+			}
+			for _, deny := range []string{"--mode", "--through", "--clusters", "--reclaim-devices", "--recover-ceph-ownership", "--purge-history", "--trust-on-first-use", authorizeForeignDaemons} {
+				if strings.Contains(joined, deny) {
+					t.Fatalf("protected-layer retry retained inapplicable effect %q: %s", deny, joined)
+				}
+			}
+			assertRetryParses(t, command, func(cmd *cobra.Command) {
+				assertParsedFlag(t, cmd, "stage", tc.stage)
+				assertParsedFlag(t, cmd, "machines", "worker-0,worker-1")
+				assertParsedFlag(t, cmd, "clusters", "")
+			})
+		})
+	}
+}
+
 func TestDestroyRetryPreservesClusterScopeRecoveryPurgeAndAuthorizations(t *testing.T) {
 	invocation := resolvedInvocation{
 		verb:        invocationDestroy,

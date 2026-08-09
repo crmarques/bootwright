@@ -630,7 +630,7 @@ func classifyApplyTaskWithRecord(task ApplyTask, runsDir string, record Converge
 	}
 	resourceID := applyTaskSafetyResourceID(task)
 	if record.ResourceID != resourceID || record.TaskID != task.Entry.ID || record.TaskKind != task.Entry.Kind {
-		return ConvergeSafetyUnknown, fmt.Errorf("legacy converge record %s has ambiguous resource or task identity; rebuild the selected object to establish current safety evidence", resourceID)
+		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: resourceID, Cause: fmt.Errorf("the converge record has ambiguous resource or task identity")}
 	}
 	input, err := applyTaskDesiredHashInput(task)
 	if err != nil {
@@ -638,10 +638,7 @@ func classifyApplyTaskWithRecord(task ApplyTask, runsDir string, record Converge
 	}
 	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(record.Status), record.HashSchema, input)
 	if err != nil {
-		if task.Entry.Cluster != "" {
-			return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", resourceID, err, task.Entry.Cluster)
-		}
-		return ConvergeSafetyUnknown, fmt.Errorf("cannot verify legacy safety evidence for %s: %w; restore the immutable run evidence or intentionally rebuild the same selection with --mode rebuild", resourceID, err)
+		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: resourceID, Cause: err}
 	}
 	if matched {
 		return ConvergeSafetyMatch, nil

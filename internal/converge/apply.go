@@ -21,30 +21,47 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		return nil
 	}
 	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
-		machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
-		hasMachine := len(machineLabels) > 0
-		hasCluster := len(destructive) > len(machineLabels)
-		remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, workflow.OverrideDestructiveClusterScope(objects))
-		return fmt.Errorf("apply --mode rebuild would destructively rebuild protected resource(s) %s in Environment %s; %s, then re-apply (drifted reconfigure-only services do not trip this — align their desired state or let --mode rebuild reconcile them in place)", strings.Join(destructive, ", "), strings.Join(protected, ", "), remedy)
+		machineLabels, _ := workflow.OverrideDestructiveMachineSubstrate(objects)
+		clusterLayer := append(workflow.OverrideDestructiveClusterScope(objects), reinstallDescriptors...)
+		return &ApplyOverrideDestroyProtectionError{
+			Reason:                ApplyOverrideProtectionEnvironment,
+			Destructive:           append([]string(nil), destructive...),
+			ProtectedEnvironments: append([]string(nil), protected...),
+			MachineLayer:          append([]string(nil), machineLabels...),
+			ClusterLayer:          clusterLayer,
+		}
 	}
 	protectedKinds := workflow.ProtectedKindSet(state)
 	blocked := workflow.OverrideDestructiveKindProtected(objects, protectedKinds)
 	if protectedKinds[v1alpha1.KindContainerCluster] {
 		blocked = append(blocked, reinstallDescriptors...)
 	}
+	clusterLayer := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
+	if protectedKinds[v1alpha1.KindContainerCluster] {
+		clusterLayer = append(clusterLayer, reinstallDescriptors...)
+	}
 	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
 	if rhsmClusters := managedRegistrationClustersInScope(state, machineClusters); len(rhsmClusters) > 0 {
-		remedy := overrideDestroyRemedy(true, false, rhsmClusters, nil)
-		return fmt.Errorf("apply --mode rebuild would reimage managed-RHSM storage node(s) of Ceph cluster(s) %s in place, stranding their Satellite registration so the reused host DMI UUID blocks re-registration; %s, then re-apply — destroy unregisters the node from RHSM before wiping it", strings.Join(rhsmClusters, ", "), remedy)
+		return &ApplyOverrideDestroyProtectionError{
+			Reason:              ApplyOverrideProtectionManagedRHSM,
+			ManagedRHSMClusters: append([]string(nil), rhsmClusters...),
+			MachineLayer:        append([]string(nil), machineLabels...),
+			ClusterLayer:        append([]string(nil), clusterLayer...),
+		}
 	}
 	if len(blocked) == 0 {
 		return nil
 	}
-	hasMachine := protectedKinds[v1alpha1.KindMachine] && len(machineLabels) > 0
-	clusterNames := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
-	hasCluster := len(clusterNames) > 0 || (protectedKinds[v1alpha1.KindContainerCluster] && len(reinstallDescriptors) > 0)
-	remedy := overrideDestroyRemedy(hasMachine, hasCluster, machineClusters, clusterNames)
-	return fmt.Errorf("apply --mode rebuild would destructively rebuild %s, protected by spec.safety.protectedKinds; %s, then re-apply (drifted reconfigure-only services do not trip this)", strings.Join(blocked, ", "), remedy)
+	var machineLayer []string
+	if protectedKinds[v1alpha1.KindMachine] {
+		machineLayer = append(machineLayer, machineLabels...)
+	}
+	return &ApplyOverrideDestroyProtectionError{
+		Reason:       ApplyOverrideProtectionKinds,
+		Destructive:  append([]string(nil), blocked...),
+		MachineLayer: machineLayer,
+		ClusterLayer: clusterLayer,
+	}
 }
 
 func CheckApplyRenameOrphan(state v1alpha1.State, objects []workflow.ObjectClassification, clustersDir string, ownershipRecords []ownership.ResourceRecord) error {
@@ -148,31 +165,6 @@ func managedRegistrationClustersInScope(state v1alpha1.State, machineClusters []
 		}
 	}
 	return out
-}
-
-func overrideDestroyRemedy(hasMachine, hasCluster bool, machineClusters, clusterNames []string) string {
-	infra := "bootwright destroy --stage infra --authorize protected"
-	if len(machineClusters) > 0 {
-		infra = "bootwright destroy --stage infra --clusters " + strings.Join(machineClusters, ",") + " --authorize protected"
-	}
-	cluster := "bootwright destroy --authorize protected"
-	clusterScoped := false
-	if len(clusterNames) > 0 {
-		cluster = "bootwright destroy --clusters " + strings.Join(clusterNames, ",") + " --authorize protected"
-		clusterScoped = true
-	}
-	skipHint := " (add --authorize unreachable-nodes if a machine's host substrate was never provisioned or is powered off)"
-	switch {
-	case hasMachine && !hasCluster:
-		return "machine substrate is torn down by the infra stage, not the clusters stage, so run `" + infra + "` first" + skipHint
-	case hasMachine && hasCluster:
-		return "run `" + cluster + "` for the cluster scope AND `" + infra + "` for the machine substrate (torn down only by the infra stage) first" + skipHint
-	default:
-		if clusterScoped {
-			return "run `" + cluster + "` first"
-		}
-		return "run `bootwright destroy --authorize protected` for that scope first"
-	}
 }
 
 func CheckReclaimDestroyProtection(state v1alpha1.State, ownedClusters []string, override bool) error {

@@ -129,4 +129,5 @@ func TestLegacyClassificationWithoutSnapshotIsUnknown(t *testing.T) {
 	if errors.As(err, &pathError) {
 		t.Fatalf("operator error should carry contextual safety guidance, got raw path error: %v", err)
 	}
+	assertLegacyConvergenceEvidenceRemedy(t, err, applyTaskSafetyResourceID(task))
 }
