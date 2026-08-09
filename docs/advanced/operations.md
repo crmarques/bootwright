@@ -734,7 +734,8 @@ run never reaches the machine-substrate teardown, so the token reports that it
 had no effect.
 
 ```text
-bootwright destroy --stage infra --clusters ceph-storage --authorize unowned-vms --yes
+bootwright destroy --stage infra --clusters ceph-storage \
+  --authorize data-loss,unowned-vms --yes
 ```
 
 The cluster's **libvirt network** and its **KubeVirt DataVolumes** are a
@@ -744,7 +745,7 @@ that use it. Authorizing VMs never authorizes networks.
 
 ```text
 bootwright destroy --stage infra --clusters ceph-storage \
-  --authorize unowned-vms,unowned-networks --yes
+  --authorize data-loss,unowned-vms,unowned-networks --yes
 ```
 
 !!! warning "Neither token relaxes anything else"
@@ -766,6 +767,7 @@ teardown:
 bootwright destroy \
   --clusters ceph-storage \
   --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 \
+  --authorize data-loss \
   --yes
 ```
 

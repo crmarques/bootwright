@@ -217,16 +217,16 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 
   # Tear down VMs that match the naming but lost their ownership marker
   # (e.g. machine or cluster names changed after the last apply)
-  bootwright destroy --stage infra --clusters ceph-storage --authorize unowned-vms --yes
+  bootwright destroy --stage infra --clusters ceph-storage --authorize data-loss,unowned-vms --yes
 
   # Recover a verified Ceph ownership marker and destroy that storage cluster
-  bootwright destroy --clusters ceph-storage --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 --yes
+  bootwright destroy --clusters ceph-storage --recover-ceph-ownership ceph-storage=2088ddee-875b-11f1-9b98-303ea72d7724 --authorize data-loss --yes
 
   # Remove only the generated artifact publication service
   bootwright destroy --stage infra --clusters artifact-server --yes
 
   # Tear down selected clusters and their exclusively owned infrastructure
-  bootwright destroy --clusters dc1-ocp,ceph-storage --yes`,
+  bootwright destroy --clusters dc1-ocp,ceph-storage --authorize data-loss --yes`,
 	})
 	return cmd
 }

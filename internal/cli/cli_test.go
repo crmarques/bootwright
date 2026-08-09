@@ -248,6 +248,13 @@ func TestDestroyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("destroy help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
 	}
+	for _, line := range strings.Split(stdout, "\n") {
+		cephExample := strings.Contains(line, "bootwright destroy") && strings.Contains(line, "ceph-storage")
+		nonInteractive := strings.Contains(line, "--yes")
+		if cephExample && nonInteractive && !strings.Contains(line, "data-loss") {
+			t.Fatalf("a non-interactive Ceph destroy example must include the data-loss authorization it needs to proceed: %s", line)
+		}
+	}
 }
 
 func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
