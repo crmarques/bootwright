@@ -1317,3 +1317,53 @@ source claim; where the claim is not `ReadWriteMany` the machines of a cluster
 cannot all do that at once, and the direct upload is the faster answer anyway.
 Raise `bootwright_kubevirt_iso_clone_retries` only when the report shows progress
 was moving.
+
+## A host reached status "error" and the rendezvous node never became a Node
+
+The bootstrap wait fails, and the message opens with the classification rather
+than the command line:
+
+```text
+assisted-service moved a declared host to status "error" and stopped installing
+this cluster, so bootwright did not re-run the wait
+...
+Declared nodes with no Node object in the cluster: master-01.
+The absent node master-01 is this cluster's rendezvous host
+```
+
+Read that order literally. One host failing an installation stage — most often
+`Joined took longer than expected 1h0m0s` on a control-plane node whose images
+are still pulling — makes assisted-service stop installing the cluster and
+divert into recovery. The recovery does not include the last step of the agent
+flow: rebooting the rendezvous host out of bootstrap into its own role. The
+rendezvous host is the first master by sorted name, the one whose address
+bootwright renders as `rendezvousIP`, and it keeps serving the bootstrap control
+plane for as long as it is left alone. Everything below that line in the message
+— the degraded `authentication`, `ingress`, `monitoring` and
+`openshift-apiserver` operators — is downstream of the missing node, not a
+second problem.
+
+Bootstrap can still complete from the two remaining masters, so a cluster in
+this state can report success while being permanently one node short. Confirm on
+the host itself:
+
+```bash
+ls /etc/kubernetes/manifests
+```
+
+A real master carries `etcd-pod.yaml` and `kube-apiserver-pod.yaml`; a host
+still in bootstrap carries `etcd-member-pod.yaml` and `keepalived.yaml`.
+
+Re-running the apply does not help — the wait resumes, observes the same state,
+and fails the same way, which is why bootwright classifies this give-up as
+non-resumable and does not spend a second installer window on it. The RHCOS
+master image is already on the rendezvous host's install disk, so rebooting it
+**from disk** pivots it into its role; check first that its BMC is no longer
+presenting the agent ISO through virtual media, and whether it still holds the
+API and ingress VIPs. Otherwise, repair whatever failed on the errored host and
+rebuild:
+
+```bash
+bootwright apply --stage clusters --clusters <cluster> --mode rebuild \
+  --authorize data-loss --yes
+```

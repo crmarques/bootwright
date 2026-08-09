@@ -12,6 +12,7 @@ bootwright_install_stalled_wait_delay_seconds: 30
 bootwright_install_stalled_wait_pattern: "failed to progress after all hosts available|failed to prepare cluster installation"
 bootwright_install_timed_out_wait_pattern: "bootstrap process timed out"
 bootwright_install_cluster_init_wait_pattern: "failed to initialize the cluster|timed out waiting for the condition"
+bootwright_install_host_error_pattern: "has hosts in error|updated status from [a-z-]+ to error(?![-a-z])"
 bootwright_install_installer_wait_window_seconds: 3600
 bootwright_install_cluster_init_wait_window_seconds: 2400
 bootwright_install_resumable_wait_pattern: "{{ bootwright_install_stalled_wait_pattern }}|{{ bootwright_install_timed_out_wait_pattern }}|{{ bootwright_install_cluster_init_wait_pattern }}"
@@ -19,6 +20,21 @@ bootwright_install_wait_budget_seconds: >-
   {{ bootwright_install_bootstrap_timeout_seconds
      if bootwright_install_wait_target == 'bootstrap'
      else bootwright_install_timeout_seconds }}
+bootwright_install_wait_budget_var: >-
+  {{ 'bootwright_install_bootstrap_timeout_seconds'
+     if bootwright_install_wait_target == 'bootstrap'
+     else 'bootwright_install_timeout_seconds' }}
+bootwright_install_host_error_hint: >-
+  assisted-service moved a declared host to status "error" and stopped
+  installing this cluster, so bootwright did not re-run the wait: another
+  {{ bootwright_install_installer_wait_window_seconds }}-second window would
+  watch the same state. A cluster that has diverted into recovery is never
+  pivoted out of bootstrap, so an install left short of a declared node does
+  not finish on its own — rebuild it with bootwright apply --stage clusters
+  --clusters {{ bootwright_current_cluster.name }} --mode rebuild --authorize
+  data-loss --yes. Bootstrap can still complete from the remaining
+  control-plane hosts, so when every declared node is present re-run the apply
+  to resume watching instead.
 bootwright_install_timed_out_wait_hint: >-
   openshift-install caps one `agent wait-for` invocation at
   {{ bootwright_install_installer_wait_window_seconds }} seconds and exposes no
@@ -31,7 +47,7 @@ bootwright_install_timed_out_wait_hint: >-
   images — several clusters installing at once compete for one registry path —
   can converge past this budget. Confirm the nodes are idle before treating
   this as a failed install; raise
-  bootwright_install_bootstrap_timeout_seconds to buy another window, or
+  {{ bootwright_install_wait_budget_var | trim }} to buy another window, or
   re-run the apply to resume watching where this run stopped.
 bootwright_install_stalled_wait_hint: >-
   The cluster reached assisted-service status "ready", but the rendezvous node
@@ -71,11 +87,27 @@ bootwright_install_missing_nodes_hint: >-
   registers with is the one declared for it, that its install disk was accepted,
   and that the rendezvous node rebooted out of bootstrap into its own role
   instead of holding the cluster short of its declared control plane.
+bootwright_install_rendezvous_node: >-
+  {{ ((bootwright_current_cluster.nodes | default({}) | dict2items
+       | selectattr('value.role', 'equalto', 'master')
+       | map(attribute='key') | sort | first) | default('', true))
+     | regex_replace('\..*$', '') }}
+bootwright_install_rendezvous_missing_hint: >-
+  The absent node {{ bootwright_install_rendezvous_node | trim }} is this
+  cluster's rendezvous host: it runs assisted-service and the bootstrap control
+  plane, and the agent flow reboots it into its own role last, once every other
+  declared node has joined. A cluster that loses a host to status "error"
+  before that pivot never performs it, so the rendezvous host keeps serving the
+  bootstrap control plane and the cluster stays a node short indefinitely.
+  Confirm it on the host itself: /etc/kubernetes/manifests holds
+  etcd-pod.yaml and kube-apiserver-pod.yaml on a real master, and
+  etcd-member-pod.yaml and keepalived.yaml on a host still in bootstrap.
 bootwright_install_log_diagnostic_hint: >-
   Installer log ({{ bootwright_install_work_dir }}/.openshift_install.log):
   {{ bootwright_install_log_diagnostics | default([]) | join(' | ') }}
 bootwright_install_log_tail_lines: 200
 bootwright_install_log_diagnostic_pattern: "status from|error|Degraded|failed"
+bootwright_install_log_diagnostic_max_lines: 12
 bootwright_install_node_probe_request_timeout: "10s"
 bootwright_install_bootstrap_marker_path: "{{ bootwright_install_work_dir }}/bootstrap-complete"
 bootwright_install_publish_probe_timeout: 60

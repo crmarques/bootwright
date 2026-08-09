@@ -796,6 +796,15 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			t.Fatalf("resumable wait pattern must union %s, got %v", want, defaults["bootwright_install_resumable_wait_pattern"])
 		}
 	}
+	hostError, _ := defaults["bootwright_install_host_error_pattern"].(string)
+	for _, want := range []string{"has hosts in error", "to error"} {
+		if !strings.Contains(hostError, want) {
+			t.Fatalf("host-error pattern must cover %q, got %v", want, defaults["bootwright_install_host_error_pattern"])
+		}
+	}
+	if strings.Contains(resumable, "bootwright_install_host_error_pattern") {
+		t.Fatalf("a host assisted-service moved to status error has stopped the install and is not a give-up bootwright can resume, got %q", resumable)
+	}
 	if got, ok := defaults["bootwright_install_installer_wait_window_seconds"].(int); !ok || got != 3600 {
 		t.Fatalf("installer wait window got %v, want 3600", defaults["bootwright_install_installer_wait_window_seconds"])
 	}
@@ -808,8 +817,37 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			t.Fatalf("wait budget must select per target using %s, got %q", want, budget)
 		}
 	}
-	if hint, _ := defaults["bootwright_install_timed_out_wait_hint"].(string); !strings.Contains(hint, "bootwright_install_installer_wait_window_seconds") {
-		t.Fatalf("timed-out wait hint must name the installer window, got %q", hint)
+	timedOutHint, _ := defaults["bootwright_install_timed_out_wait_hint"].(string)
+	if !strings.Contains(timedOutHint, "bootwright_install_installer_wait_window_seconds") {
+		t.Fatalf("timed-out wait hint must name the installer window, got %q", timedOutHint)
+	}
+	if !strings.Contains(timedOutHint, "bootwright_install_wait_budget_var") {
+		t.Fatalf("the knob that buys another window differs per wait target, so the hint must name the selected one, got %q", timedOutHint)
+	}
+	budgetVar, _ := defaults["bootwright_install_wait_budget_var"].(string)
+	for _, want := range []string{"bootwright_install_bootstrap_timeout_seconds", "bootwright_install_timeout_seconds", "bootwright_install_wait_target"} {
+		if !strings.Contains(budgetVar, want) {
+			t.Fatalf("the named budget knob must select per target using %s, got %q", want, budgetVar)
+		}
+	}
+	hostErrorHint, _ := defaults["bootwright_install_host_error_hint"].(string)
+	if !strings.Contains(hostErrorHint, "--mode rebuild") {
+		t.Fatalf("a cluster that diverted into recovery is not pivoted out of bootstrap, so its hint must name the rebuild, got %q", hostErrorHint)
+	}
+	if strings.Contains(hostErrorHint, "not proof of a failed install") {
+		t.Fatalf("a declared host in status error is a real failure and its hint must not repeat the timed-out wording, got %q", hostErrorHint)
+	}
+	rendezvous, _ := defaults["bootwright_install_rendezvous_node"].(string)
+	for _, want := range []string{"bootwright_current_cluster.nodes", "'master'", "sort", "first"} {
+		if !strings.Contains(rendezvous, want) {
+			t.Fatalf("the rendezvous node is the first master by sorted name, matching agentHosts, and must be derived with %s, got %q", want, rendezvous)
+		}
+	}
+	if hint, _ := defaults["bootwright_install_rendezvous_missing_hint"].(string); !strings.Contains(hint, "bootwright_install_rendezvous_node") {
+		t.Fatalf("the rendezvous hint must name the node it resolved, got %v", defaults["bootwright_install_rendezvous_missing_hint"])
+	}
+	if got, ok := defaults["bootwright_install_log_diagnostic_max_lines"].(int); !ok || got < 1 {
+		t.Fatalf("the diagnostic excerpt must be bounded, got %v", defaults["bootwright_install_log_diagnostic_max_lines"])
 	}
 	clusterInitHint, _ := defaults["bootwright_install_cluster_init_wait_hint"].(string)
 	if !strings.Contains(clusterInitHint, "bootwright_install_cluster_init_wait_window_seconds") {
@@ -861,6 +899,9 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 		if !strings.Contains(until, "bootwright_install_wait_deadline") || !strings.Contains(until, "now(utc=true).timestamp()") {
 			t.Fatalf("%s must stop retrying once the wait budget is spent, got until=%v", tc.wait, wait["until"])
 		}
+		if !strings.Contains(until, "bootwright_install_host_error_pattern") {
+			t.Fatalf("%s must stop retrying once a declared host reached status error, since another window watches the same state, got until=%v", tc.wait, wait["until"])
+		}
 		if got := wait["retries"]; got != "{{ bootwright_install_stalled_wait_retries }}" {
 			t.Fatalf("%s retries got %v", tc.wait, got)
 		}
@@ -887,11 +928,26 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 			"bootwright_install_cluster_init_wait_pattern",
 			"bootwright_install_missing_nodes_hint",
 			"bootwright_install_log_diagnostic_hint",
+			"bootwright_install_host_error_hint",
+			"bootwright_install_host_error_observed",
+			"bootwright_install_rendezvous_missing_hint",
 			"stderr_lines",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Fatalf("%s message must carry %q, got %q", tc.report, want, msg)
 			}
+		}
+		if strings.Index(msg, "bootwright_install_host_error_hint") > strings.Index(msg, "bootwright_install_timed_out_wait_hint") {
+			t.Fatalf("the same stderr carries both the host error and the installer's own timeout, so %s must classify the host error first, got %q", tc.report, msg)
+		}
+		if strings.Index(msg, "bootwright_install_host_error_hint") > strings.Index(msg, "did not complete for") {
+			t.Fatalf("the run tree keeps only the head of this message, so %s must lead with the classification rather than the command line, got %q", tc.report, msg)
+		}
+		if other := otherWaitRegister(tc.register); strings.Contains(msg, other) {
+			t.Fatalf("%s must classify from its own wait, got a reference to %s in %q", tc.report, other, msg)
+		}
+		if !strings.Contains(msg, "bootwright_install_log_diagnostic_max_lines") {
+			t.Fatalf("%s must bound the installer stderr it quotes, got %q", tc.report, msg)
 		}
 		if !strings.Contains(msg, "else bootwright_install_unclassified_wait_hint") {
 			t.Fatalf("%s must fall back to a real hint instead of an empty string when it does not recognise the give-up, got %q", tc.report, msg)
@@ -912,6 +968,43 @@ func TestInstallAgentRetriesTheStalledAgentWait(t *testing.T) {
 	if !strings.Contains(stamp, "now(utc=true).timestamp()") || !strings.Contains(stamp, "bootwright_install_wait_budget_seconds") {
 		t.Fatalf("wait budget deadline got %q", stamp)
 	}
+
+	observedIdx := findAnsibleTask(t, tasks, "Resolve whether a declared host reached assisted-service status error")
+	for _, name := range []string{"Fail when the agent bootstrap wait did not complete", "Fail when the agent install wait did not complete"} {
+		if observedIdx > findAnsibleTask(t, tasks, name) {
+			t.Fatalf("the host-error classification must be resolved before %s reads it", name)
+		}
+	}
+	observed, ok := tasks[observedIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[observedIdx]["name"])
+	}
+	resolved := fmt.Sprint(observed["bootwright_install_host_error_observed"])
+	for _, want := range []string{"bootwright_install_bootstrap_wait.stderr", "bootwright_install_wait.stderr", "bootwright_install_log_tail.stdout"} {
+		if !strings.Contains(resolved, want) {
+			t.Fatalf("the installer writes the host transition to both streams and only the log keeps it at debug level, so the classification must read %s, got %q", want, resolved)
+		}
+	}
+
+	diagnosticsIdx := findAnsibleTask(t, tasks, "Resolve agent install log diagnostics")
+	diagnostics, ok := tasks[diagnosticsIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[diagnosticsIdx]["name"])
+	}
+	selected := fmt.Sprint(diagnostics["bootwright_install_log_diagnostics"])
+	if !strings.Contains(selected, "bootwright_install_log_diagnostic_max_lines") {
+		t.Fatalf("the log excerpt must be bounded or it buries every other hint, got %q", selected)
+	}
+	if strings.Index(selected, "bootwright_install_host_error_pattern") > strings.Index(selected, "bootwright_install_log_diagnostic_pattern") {
+		t.Fatalf("the bound drops the tail of the excerpt, so the host-error lines must be selected ahead of the cluster-operator lines, got %q", selected)
+	}
+}
+
+func otherWaitRegister(register string) string {
+	if register == "bootwright_install_wait" {
+		return "bootwright_install_bootstrap_wait."
+	}
+	return "bootwright_install_wait."
 }
 
 func TestInstallAgentClearsBootstrapMarkerBeforeISOGeneration(t *testing.T) {

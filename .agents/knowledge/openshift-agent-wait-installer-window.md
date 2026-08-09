@@ -62,10 +62,28 @@ budget remains.
 
 The budget bounds when a new attempt may *start*, not when the task returns: at
 the 5400s default, a wait that keeps timing out starts a second 3600s window and
-so runs up to ~two hours. Raise `bootwright_install_bootstrap_timeout_seconds`
-to buy further windows.
+so runs up to ~two hours. Raising the budget buys further windows, but the knob
+differs per target — the bootstrap wait reads
+`bootwright_install_bootstrap_timeout_seconds` and the install wait reads
+`bootwright_install_timeout_seconds`, which the bootstrap one merely defaults
+from. `bootwright_install_wait_budget_var` resolves the one that applies and is
+what the hint names, so the reported remedy is never the inert knob.
 
-Each give-up class carries its own hint. `bootwright_install_stalled_wait_hint`
+**One give-up is never re-invoked.** `bootwright_install_host_error_pattern`
+matches `has hosts in error` and `updated status from <stage> to error`, and
+both `until` expressions exit on it. That class is deliberately outside
+`bootwright_install_resumable_wait_pattern`: assisted-service has stopped
+installing the cluster and diverted into recovery, so a second window watches a
+state that cannot change, and the "still converging, not proof of a failed
+install" wording above would be actively wrong. See
+[openshift-agent-host-error-strands-rendezvous.md](openshift-agent-host-error-strands-rendezvous.md)
+for why that state does not resolve on its own.
+
+Each give-up class carries its own hint, and the classification leads the
+failure message rather than trailing the command line: the run tree keeps only
+a 180-rune middle-ellipsis of it (`apply_failures.go`, `status/applyrun.go`), so
+whatever comes first is the only part an operator reads without opening the log.
+`bootwright_install_stalled_wait_hint`
 names the declared-vs-known host count; `bootwright_install_timed_out_wait_hint`
 names the installer window and says the ClusterOperator dump is the state at the
 last give-up, not proof of failure. Reporting the stalled hint for a timed-out

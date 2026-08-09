@@ -40,6 +40,8 @@
       register: bootwright_install_bootstrap_wait
       until: >-
         (bootwright_install_bootstrap_wait.rc | default(1) | int) == 0
+        or (bootwright_install_bootstrap_wait.stderr | default('')
+            is search(bootwright_install_host_error_pattern))
         or not (bootwright_install_bootstrap_wait.stderr | default('')
                 is search(bootwright_install_resumable_wait_pattern))
         or (now(utc=true).timestamp() | int)
@@ -77,6 +79,8 @@
       register: bootwright_install_wait
       until: >-
         (bootwright_install_wait.rc | default(1) | int) == 0
+        or (bootwright_install_wait.stderr | default('')
+            is search(bootwright_install_host_error_pattern))
         or not (bootwright_install_wait.stderr | default('')
                 is search(bootwright_install_resumable_wait_pattern))
         or (now(utc=true).timestamp() | int)
@@ -115,8 +119,24 @@
     - name: Resolve agent install log diagnostics
       ansible.builtin.set_fact:
         bootwright_install_log_diagnostics: >-
-          {{ (bootwright_install_log_tail.stdout_lines | default([]))
-             | select('search', bootwright_install_log_diagnostic_pattern) | list }}
+          {{ (((bootwright_install_log_tail.stdout_lines | default([]))
+                | select('search', bootwright_install_host_error_pattern) | list)
+              + ((bootwright_install_log_tail.stdout_lines | default([]))
+                 | select('search', bootwright_install_log_diagnostic_pattern)
+                 | reject('search', bootwright_install_host_error_pattern) | list)
+             )[:(bootwright_install_log_diagnostic_max_lines | int)] }}
+      changed_when: false
+      when: not (bootwright_install_wait_succeeded | bool)
+
+    - name: Resolve whether a declared host reached assisted-service status error
+      ansible.builtin.set_fact:
+        bootwright_install_host_error_observed: >-
+          {{ ((bootwright_install_bootstrap_wait.stderr | default(''))
+              is search(bootwright_install_host_error_pattern))
+             or ((bootwright_install_wait.stderr | default(''))
+                 is search(bootwright_install_host_error_pattern))
+             or ((bootwright_install_log_tail.stdout | default(''))
+                 is search(bootwright_install_host_error_pattern)) }}
       changed_when: false
       when: not (bootwright_install_wait_succeeded | bool)
 
@@ -160,28 +180,38 @@
     - name: Fail when the agent bootstrap wait did not complete
       ansible.builtin.fail:
         msg: >-
-          {{ bootwright_openshift_install }} agent wait-for bootstrap-complete
-          did not complete for {{ bootwright_current_cluster.name }} after
-          {{ bootwright_install_bootstrap_wait.attempts | default(1) }} attempt(s).
-          {{ bootwright_install_stalled_wait_hint
-             if (bootwright_install_bootstrap_wait.stderr | default('')
-                 is search(bootwright_install_stalled_wait_pattern))
-             else (bootwright_install_timed_out_wait_hint
+          {{ bootwright_install_host_error_hint
+             if (bootwright_install_host_error_observed | default(false) | bool)
+             else (bootwright_install_stalled_wait_hint
                    if (bootwright_install_bootstrap_wait.stderr | default('')
-                       is search(bootwright_install_timed_out_wait_pattern))
-                   else (bootwright_install_cluster_init_wait_hint
+                       is search(bootwright_install_stalled_wait_pattern))
+                   else (bootwright_install_timed_out_wait_hint
                          if (bootwright_install_bootstrap_wait.stderr | default('')
-                             is search(bootwright_install_cluster_init_wait_pattern))
-                         else bootwright_install_unclassified_wait_hint)) }}
+                             is search(bootwright_install_timed_out_wait_pattern))
+                         else (bootwright_install_cluster_init_wait_hint
+                               if (bootwright_install_bootstrap_wait.stderr | default('')
+                                   is search(bootwright_install_cluster_init_wait_pattern))
+                               else bootwright_install_unclassified_wait_hint))) }}
           {{ bootwright_install_missing_nodes_hint
              if (bootwright_install_missing_declared_nodes | default([]) | length) > 0
              else '' }}
+          {{ bootwright_install_rendezvous_missing_hint
+             if (bootwright_install_rendezvous_node | trim)
+                in (bootwright_install_missing_declared_nodes | default([]))
+             else '' }}
+          {{ bootwright_openshift_install }} agent wait-for bootstrap-complete
+          did not complete for {{ bootwright_current_cluster.name }} after
+          {{ bootwright_install_bootstrap_wait.attempts | default(1) }} attempt(s).
           {{ bootwright_install_log_diagnostic_hint
              if (bootwright_install_log_diagnostics | default([]) | length) > 0
              else '' }}
           Installer reported: {{ bootwright_install_bootstrap_wait.msg | default('') }}
-          {{ bootwright_install_bootstrap_wait.stderr_lines | default([])
-             | select('search', 'level=error') | list | join(' | ') }}
+          {{ ((bootwright_install_bootstrap_wait.stderr_lines | default([])
+               | select('search', bootwright_install_host_error_pattern) | list)
+              + (bootwright_install_bootstrap_wait.stderr_lines | default([])
+                 | select('search', 'level=error')
+                 | reject('search', bootwright_install_host_error_pattern) | list)
+             )[:(bootwright_install_log_diagnostic_max_lines | int)] | join(' | ') }}
           Follow the install with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log
       when:
         - bootwright_install_wait_target == 'bootstrap'
@@ -191,28 +221,38 @@
     - name: Fail when the agent install wait did not complete
       ansible.builtin.fail:
         msg: >-
-          {{ bootwright_openshift_install }} agent wait-for install-complete
-          did not complete for {{ bootwright_current_cluster.name }} after
-          {{ bootwright_install_wait.attempts | default(1) }} attempt(s).
-          {{ bootwright_install_stalled_wait_hint
-             if (bootwright_install_wait.stderr | default('')
-                 is search(bootwright_install_stalled_wait_pattern))
-             else (bootwright_install_timed_out_wait_hint
+          {{ bootwright_install_host_error_hint
+             if (bootwright_install_host_error_observed | default(false) | bool)
+             else (bootwright_install_stalled_wait_hint
                    if (bootwright_install_wait.stderr | default('')
-                       is search(bootwright_install_timed_out_wait_pattern))
-                   else (bootwright_install_cluster_init_wait_hint
+                       is search(bootwright_install_stalled_wait_pattern))
+                   else (bootwright_install_timed_out_wait_hint
                          if (bootwright_install_wait.stderr | default('')
-                             is search(bootwright_install_cluster_init_wait_pattern))
-                         else bootwright_install_unclassified_wait_hint)) }}
+                             is search(bootwright_install_timed_out_wait_pattern))
+                         else (bootwright_install_cluster_init_wait_hint
+                               if (bootwright_install_wait.stderr | default('')
+                                   is search(bootwright_install_cluster_init_wait_pattern))
+                               else bootwright_install_unclassified_wait_hint))) }}
           {{ bootwright_install_missing_nodes_hint
              if (bootwright_install_missing_declared_nodes | default([]) | length) > 0
              else '' }}
+          {{ bootwright_install_rendezvous_missing_hint
+             if (bootwright_install_rendezvous_node | trim)
+                in (bootwright_install_missing_declared_nodes | default([]))
+             else '' }}
+          {{ bootwright_openshift_install }} agent wait-for install-complete
+          did not complete for {{ bootwright_current_cluster.name }} after
+          {{ bootwright_install_wait.attempts | default(1) }} attempt(s).
           {{ bootwright_install_log_diagnostic_hint
              if (bootwright_install_log_diagnostics | default([]) | length) > 0
              else '' }}
           Installer reported: {{ bootwright_install_wait.msg | default('') }}
-          {{ bootwright_install_wait.stderr_lines | default([])
-             | select('search', 'level=error') | list | join(' | ') }}
+          {{ ((bootwright_install_wait.stderr_lines | default([])
+               | select('search', bootwright_install_host_error_pattern) | list)
+              + (bootwright_install_wait.stderr_lines | default([])
+                 | select('search', 'level=error')
+                 | reject('search', bootwright_install_host_error_pattern) | list)
+             )[:(bootwright_install_log_diagnostic_max_lines | int)] | join(' | ') }}
           Follow the install with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log
       when:
         - bootwright_install_wait_target == 'install'
