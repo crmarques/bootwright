@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
@@ -172,5 +174,32 @@ func TestClusterInstallHashInputMemoIsKeyedOnTheFilteredState(t *testing.T) {
 	}
 	if back != first {
 		t.Fatalf("recomputing the original state returned %s, want %s", back, first)
+	}
+}
+
+func TestResumeFromISOCreatedNamesAStaleAgentISO(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	tasks := []ApplyTask{
+		{Entry: TaskLedgerEntry{ID: "iso.ocp", Kind: ApplyTaskKindClusterISO, Cluster: "ocp", Status: TaskStatusPending}},
+		{Entry: TaskLedgerEntry{ID: "boot.ocp", Kind: ApplyTaskKindNodeBoot, Cluster: "ocp", Status: TaskStatusPending}},
+	}
+
+	fresh, err := resumeClusterInstallTasks(tasks, ClusterInstallRecord{Phase: ClusterInstallPhaseISOCreated, UpdatedAt: now.Add(-2 * time.Hour)}, "ocp", now)
+	if err != nil {
+		t.Fatalf("resumeClusterInstallTasks: %v", err)
+	}
+	if got := fresh[0].Entry.SkippedReason; strings.Contains(got, "stale") || strings.Contains(got, "ago") {
+		t.Fatalf("a two-hour-old ISO must resume without an age warning, got %q", got)
+	}
+
+	stale, err := resumeClusterInstallTasks(tasks, ClusterInstallRecord{Phase: ClusterInstallPhaseISOCreated, UpdatedAt: now.Add(-30 * time.Hour)}, "ocp", now)
+	if err != nil {
+		t.Fatalf("resumeClusterInstallTasks: %v", err)
+	}
+	got := stale[0].Entry.SkippedReason
+	for _, want := range []string{"30h", "bootstrap certificates", "--through base"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("resuming a day-old published ISO must say so and name the regeneration command (missing %q): the boot then fails during bootstrap with certificate errors that read like a network fault, got %q", want, got)
+		}
 	}
 }

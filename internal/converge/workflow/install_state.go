@@ -534,7 +534,7 @@ func guardUnrecordedCluster(ctx context.Context, contextName, clustersDir, name 
 func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, name string, now time.Time) ([]ApplyTask, error) {
 	switch record.Phase {
 	case ClusterInstallPhaseISOCreated:
-		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO}, "previous install already created the agent ISO; resuming from node boot", now), nil
+		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO}, "previous install already created the agent ISO; resuming from node boot"+publishedAgentISOAgeNote(record, name, now), now), nil
 	case ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaiting:
 		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot}, "previous install already booted nodes; resuming install wait", now), nil
 	case "", ClusterInstallPhaseCreatingISO:
@@ -546,6 +546,21 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	default:
 		return tasks, fmt.Errorf("ContainerCluster/%s has unrecognized install phase %q; refusing to continue without --mode rebuild", name, record.Phase)
 	}
+}
+
+const publishedAgentISOFreshWindow = 24 * time.Hour
+
+func publishedAgentISOAgeNote(record ClusterInstallRecord, name string, now time.Time) string {
+	if record.UpdatedAt.IsZero() {
+		return ""
+	}
+	age := now.Sub(record.UpdatedAt)
+	if age < publishedAgentISOFreshWindow {
+		return ""
+	}
+	return fmt.Sprintf(
+		". That ISO was published at least %dh ago; an agent ISO carries bootstrap certificates minted when it was created, so booting a stale one fails during bootstrap with certificate errors that read like a network fault. Regenerate it with bootwright apply --through base --clusters %s",
+		int(age.Hours()), name)
 }
 
 func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
