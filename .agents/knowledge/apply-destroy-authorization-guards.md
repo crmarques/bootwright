@@ -414,6 +414,20 @@ dead exemption. Before this, a new flag on either verb could ship with no
 scenario coverage at all — the matrix was comprehensive over *tokens* and merely
 incidental over *flags*.
 
+**The command lease encloses the input read and its locality decision.** A
+context must be resolved far enough to locate its lease before that lease can be
+acquired, but resolving it through the ordinary desired-state helper also loads
+input for the controller-locality check. If apply or destroy performs that load
+before the lease and then reloads for execution after it, `context update` can
+replace the tree between the two reads and the command executes state that never
+received the decision it relied on. Real apply and destroy therefore resolve
+only context identity/readiness before acquiring the lease. Their strict and
+tolerant loaders classify controller locality from the exact state they return,
+inside the lease. `TestDesiredStateMutatorsLeaseBeforeReadingOrWriting` rejects
+the hidden pre-lease resolver paths as well as explicit early loads, and
+`TestDesiredStateLoadersClassifyLocalityFromTheReturnedState` closes the loader
+side of the invariant over future refactors.
+
 **The published contract is guard-synced in both directions.** The `accepted by`
 column of the `--authorize` tables in `specs/state-model.md` and
 `docs/advanced/operations.md` is set-compared with each token's verb set

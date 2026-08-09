@@ -136,7 +136,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if reclaimDevices != "" && !converge.ScopeIncludesApplyPhase(runScope, converge.PhaseDeps) {
 			return failErr(2, errors.New("--reclaim-devices wipes devices during the deps phase, which is not in this run's scope; re-run with a scope that includes it (--stage deps, --through base, or the full graph)"))
 		}
-		ctx, err := cf.resolve()
+		ctx, err := cf.resolveLocalOnly()
 		if err != nil {
 			return failErr(1, err)
 		}

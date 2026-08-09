@@ -10,7 +10,14 @@ func loadDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	if err != nil {
 		return v1alpha1.State{}, err
 	}
-	return desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		return v1alpha1.State{}, err
+	}
+	if err := enforceControllerLocality(state); err != nil {
+		return v1alpha1.State{}, err
+	}
+	return state, nil
 }
 
 func loadDesiredStateTolerant(cf *commonFlags) (v1alpha1.State, []error, error) {
@@ -20,6 +27,9 @@ func loadDesiredStateTolerant(cf *commonFlags) (v1alpha1.State, []error, error) 
 	}
 	loaded, err := desiredstate.LoadNormalizeValidateTolerant(ctx.InputPaths)
 	if err != nil {
+		return v1alpha1.State{}, nil, err
+	}
+	if err := enforceControllerLocality(loaded.State); err != nil {
 		return v1alpha1.State{}, nil, err
 	}
 	return loaded.State, loaded.Skipped, nil

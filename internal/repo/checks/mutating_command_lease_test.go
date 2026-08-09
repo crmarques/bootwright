@@ -7,15 +7,16 @@ import (
 
 func TestDesiredStateMutatorsLeaseBeforeReadingOrWriting(t *testing.T) {
 	cases := []struct {
-		file    string
-		acquire string
-		after   []string
+		file          string
+		acquire       string
+		after         []string
+		forbiddenLoad string
 	}{
-		{"internal/cli/scope_apply_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "apply")`, []string{"loadDesiredState(cf)", "RemovePlaybookRecordsForClusters"}},
-		{"internal/cli/scope_destroy_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "destroy")`, []string{"loadDesiredStateTolerant(cf)", "SnapshotMutatingRunInput"}},
-		{"internal/cli/context_update.go", `AcquireCommandRunLease(cmd.Context(), ctx.RunsDir, "context-update")`, []string{"workspace.ReplaceInput(ctx"}},
-		{"internal/cli/diff_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "diff-adopt")`, []string{"loadDesiredState(cf)", "cephadopt.Adopt(cf.ctx"}},
-		{"internal/cli/storage_cluster_replace_arbiter.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "replace-arbiter")`, []string{"loadDesiredState(cf)", "arbiter.Apply(ctx", "prepareArbiterMachine(runContext", "RunArbiterReplacement(runContext"}},
+		{"internal/cli/scope_apply_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "apply")`, []string{"loadDesiredState(cf)", "RemovePlaybookRecordsForClusters"}, "cf.resolve()"},
+		{"internal/cli/scope_destroy_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "destroy")`, []string{"loadDesiredStateTolerant(cf)", "SnapshotMutatingRunInput"}, "resolveTolerantInput"},
+		{"internal/cli/context_update.go", `AcquireCommandRunLease(cmd.Context(), ctx.RunsDir, "context-update")`, []string{"workspace.ReplaceInput(ctx"}, ""},
+		{"internal/cli/diff_cmd.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "diff-adopt")`, []string{"loadDesiredState(cf)", "cephadopt.Adopt(cf.ctx"}, ""},
+		{"internal/cli/storage_cluster_replace_arbiter.go", `AcquireCommandRunLease(c.Context(), ctx.RunsDir, "replace-arbiter")`, []string{"loadDesiredState(cf)", "arbiter.Apply(ctx", "prepareArbiterMachine(runContext", "RunArbiterReplacement(runContext"}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -33,7 +34,23 @@ func TestDesiredStateMutatorsLeaseBeforeReadingOrWriting(t *testing.T) {
 					t.Fatalf("%s performs %q before acquiring its command-wide mutation lease", tc.file, marker)
 				}
 			}
+			if tc.forbiddenLoad != "" && strings.Contains(source, tc.forbiddenLoad) {
+				t.Fatalf("%s performs hidden desired-state locality loading through %q before its command lease; resolve only context identity/readiness before the lease and classify locality from the exact state loaded after it", tc.file, tc.forbiddenLoad)
+			}
 		})
+	}
+}
+
+func TestDesiredStateLoadersClassifyLocalityFromTheReturnedState(t *testing.T) {
+	source := readRepoFile(t, "internal/cli/state_input.go")
+	for _, loader := range []string{"LoadNormalizeValidateInputFiles(ctx.InputPaths)", "LoadNormalizeValidateTolerant(ctx.InputPaths)"} {
+		load := strings.Index(source, loader)
+		if load < 0 {
+			t.Fatalf("desired-state loader no longer contains %q; update the exact-state locality guard", loader)
+		}
+		if !strings.Contains(source[load:], "enforceControllerLocality(") {
+			t.Fatalf("desired state loaded by %q is returned without locality classification over that exact state", loader)
+		}
 	}
 }
 

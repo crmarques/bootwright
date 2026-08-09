@@ -79,7 +79,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return err
 		}
-		ctx, localitySkipped, err := cf.resolveTolerantInput()
+		ctx, err := cf.resolveLocalOnly()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -115,7 +115,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if err != nil {
 			return failErr(1, err)
 		}
-		inputSkipped := mergeSkippedInputDocuments(localitySkipped, stateSkipped)
+		inputSkipped := stateSkipped
 		staleInputReached := len(inputSkipped) > 0
 		if staleInputReached && !auth.allows(authorizeStaleInput) {
 			return failErr(1, staleInputRefusal(ctx.Name, inputSkipped, invocation))

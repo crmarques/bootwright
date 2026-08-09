@@ -17,14 +17,6 @@ func EnforceContextLocality(ctx workspace.Context, policy locality.Policy) error
 	return EnforceControllerLocality(state, policy)
 }
 
-func EnforceContextLocalityTolerant(ctx workspace.Context, policy locality.Policy) ([]error, error) {
-	loaded, err := desiredstate.LoadNormalizeTolerant(ctx.InputPaths)
-	if err != nil {
-		return nil, err
-	}
-	return loaded.Skipped, EnforceControllerLocality(loaded.State, policy)
-}
-
 func EnforceControllerLocality(state v1alpha1.State, policy locality.Policy) error {
 	result := locality.CheckController(state, policy)
 	if result.OK {
