@@ -55,7 +55,7 @@ func LoadContextOwnershipRecordsWithWarnings(ownershipDir, contextName string) (
 	return ownership.LoadContextWithWarnings(ownershipDir, contextName)
 }
 
-func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, playbook string, plan WorkflowPlan, artifactsBaseName string, check bool, becomePasswordFile string, dryRun bool, streamAnsible bool, label string, reporter workflow.Reporter) (workflow.RunResult, string, error) {
+func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, playbook string, plan WorkflowPlan, artifactsBaseName string, check bool, becomePasswordFile string, dryRun bool, streamAnsible bool, label string, reporter workflow.Reporter, runLease *workflow.CommandRunLease, recordRunLedger bool) (workflow.RunResult, string, error) {
 	logPath := workflow.DestroyLogPath(ctx.RunsDir, artifactsBaseName)
 	runner := ansible.CommandRunner{}
 	if streamAnsible {
@@ -74,12 +74,20 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 	opts.UseControllingTTY = UseControllingTTYForWorkflow(plan.Selected, plan.AskBecomePass && becomePasswordFile == "")
 	opts.DryRun = dryRun
 	opts.Label = label
-	opts.AcquireRunLease = true
+	opts.AcquireRunLease = runLease == nil
+	opts.RecordRunLedger = recordRunLedger
+	opts.RunLease = runLease
 	result, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return result, logPath, err
 }
 
-func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scopeName string, clusterScope string, plan WorkflowPlan, check bool, becomePasswordFile string, streamAnsible bool, label string, reporter workflow.ApplyReporter) (render.Result, workflow.RunLedger, string, error) {
+func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scopeName string, clusterScope string, plan WorkflowPlan, check bool, becomePasswordFile string, streamAnsible bool, label string, reporter workflow.ApplyReporter, runLease *workflow.CommandRunLease) (render.Result, workflow.RunLedger, string, error) {
+	if runLease != nil {
+		if err := runLease.RequireOwned(); err != nil {
+			return render.Result{}, workflow.RunLedger{}, "", err
+		}
+		cmdCtx = runLease.Context()
+	}
 	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err
@@ -95,6 +103,7 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	runOpts.BecomePasswordFile = becomePasswordFile
 	runOpts.StreamAnsible = streamAnsible
 	runOpts.SelectedMachines = plan.SelectedMachines
+	runOpts.RunLease = runLease
 	prepared, err := workflow.PrepareDestroyTaskGraph(ctx.RunsDir, runOpts, tasks, workflow.ConcurrencyLimits{})
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err

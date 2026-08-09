@@ -12,6 +12,13 @@ import (
 func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
+	if opts.RunLease != nil {
+		if err := opts.RunLease.RequireOwned(); err != nil {
+			return PreparedApplyTaskGraph{}, err
+		}
+		startedAt = opts.RunLease.StartedAt
+		runID = opts.RunLease.RunID
+	}
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return PreparedApplyTaskGraph{}, fmt.Errorf("clusters dir is required")
 	}
@@ -93,19 +100,48 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	ledger.Machines = append([]string(nil), opts.SelectedMachines...)
-	now := time.Now()
-	lease := NewRunLease(runID, now)
-	if err := AcquireRunLease(runsDir, lease, now); err != nil {
-		return ledger, err
+	ownsLease := opts.RunLease == nil
+	var stopLeaseHeartbeat func()
+	var leaseErrors <-chan error
+	if ownsLease {
+		now := time.Now()
+		lease := NewRunLease(runID, now)
+		if err := AcquireRunLease(runsDir, lease, now); err != nil {
+			return ledger, err
+		}
+		stopLeaseHeartbeat, leaseErrors = startRunLeaseHeartbeat(ctx, runsDir, lease)
+	} else {
+		if opts.RunLease.RunID != runID {
+			return ledger, fmt.Errorf("prepared run %s does not own mutating run lease %s", runID, opts.RunLease.RunID)
+		}
+		if err := opts.RunLease.RequireOwned(); err != nil {
+			return ledger, err
+		}
+		leaseErrors = opts.RunLease.Errors()
+		stopLeaseHeartbeat = func() {}
 	}
-	if err := SaveRunLedger(runsDir, ledger); err != nil {
-		_ = RemoveRunLease(runsDir)
+	saveLedger := func() error {
+		if !ownsLease {
+			if err := opts.RunLease.RequireOwned(); err != nil {
+				return err
+			}
+		}
+		return SaveRunLedger(runsDir, ledger)
+	}
+	if err := saveLedger(); err != nil {
+		if ownsLease {
+			stopLeaseHeartbeat()
+			_ = RemoveRunLease(runsDir)
+		}
 		return ledger, err
 	}
 	sweepStaleRuntimeSecrets(runsDir, runID)
-	stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
 	finishRun := func(status RunStatus) error {
-		stopLeaseHeartbeat()
+		if ownsLease {
+			stopLeaseHeartbeat()
+		} else if err := opts.RunLease.RequireOwned(); err != nil {
+			return err
+		}
 		ledger.Finish(status, time.Now())
 		data, err := runLedgerBytes(ledger)
 		if err != nil {
@@ -117,8 +153,10 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		if err := archiveRunLedgerBytes(runsDir, ledger.RunID, data); err != nil {
 			return err
 		}
-		if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
-			return err
+		if ownsLease {
+			if err := RemoveRunLeaseIfOwner(runsDir, runID); err != nil && !isLeaseNotOwned(err) {
+				return err
+			}
 		}
 		return nil
 	}
@@ -216,7 +254,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- executor(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
-			if err := SaveRunLedger(runsDir, ledger); err != nil && fatalErr == nil {
+			if err := saveLedger(); err != nil && fatalErr == nil {
 				fatalErr = err
 				cancel()
 			}
@@ -260,7 +298,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		} else {
 			ledger.MarkOK(event.id, time.Now())
 		}
-		saveErr := SaveRunLedger(runsDir, ledger)
+		saveErr := saveLedger()
 		if saveErr != nil && fatalErr == nil {
 			fatalErr = saveErr
 			cancel()
@@ -276,7 +314,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		blocked := blockUnfinishedApplyTasks(&ledger, time.Now())
 		if len(blocked) > 0 {
 			progressErr := fmt.Errorf("apply task graph could not make progress; blocked task(s): %s", strings.Join(blocked, ", "))
-			if saveErr := SaveRunLedger(runsDir, ledger); saveErr != nil {
+			if saveErr := saveLedger(); saveErr != nil {
 				fatalErr = fmt.Errorf("%v; save apply ledger: %w", progressErr, saveErr)
 			} else if firstTaskErr == nil {
 				fatalErr = progressErr

@@ -1,13 +1,33 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
+
+func closeMutatingRunLease(runErr error, lease *workflow.CommandRunLease) error {
+	if lease == nil {
+		return runErr
+	}
+	closeErr := lease.Close()
+	if closeErr == nil {
+		return runErr
+	}
+	if runErr == nil {
+		return failErr(1, closeErr)
+	}
+	var exited *exitError
+	if errors.As(runErr, &exited) {
+		return failErr(exited.code, fmt.Errorf("%w; additionally failed to close the mutating run transaction: %v", runErr, closeErr))
+	}
+	return fmt.Errorf("%w; additionally failed to close the mutating run transaction: %v", runErr, closeErr)
+}
 
 func checkCurrentApplyBeforeMutation(runsDir string) error {
 	return converge.CheckCurrentApplyActive(runsDir)

@@ -79,7 +79,12 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
-	cmd.RunE = func(c *cobra.Command, _ []string) error {
+	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
+		var runLease *workflow.CommandRunLease
+		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, runLease)
+		}()
+		runContext := c.Context()
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
 		}
@@ -303,6 +308,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 		}
 		if !dryRun {
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "destroy")
+			if err != nil {
+				return failErr(1, err)
+			}
+			runContext = runLease.Context()
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -345,7 +355,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			renderResult = result
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
-			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr)
+			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
 				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
@@ -353,6 +363,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			resetPartial := partial.Clusters
 			if partialErr != nil {
 				resetPartial = storageScopeNames
+			}
+			if err := runLease.RequireOwned(); err != nil {
+				return failErr(1, err)
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
@@ -372,7 +385,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			renderResult = result
 		default:
-			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter)
+			runResult, destroyLogPath, derr := converge.ExecuteDestroy(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter, runLease, true)
 			if derr != nil {
 				return failErr(1, derr)
 			}

@@ -288,6 +288,12 @@ func reportBundleReady(r ApplyRunReporter, result bundle.AnsibleBundleResult) {
 }
 
 func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, runOpts workflow.RunOptions, applyTarget workflow.ApplyTarget, clusterScope string, plan WorkflowPlan, tasks []workflow.ApplyTask, limits workflow.ConcurrencyLimits, usesAnsible bool, bundleResult bundle.AnsibleBundleResult, bundleVersionMarker string, reporter ApplyRunReporter, applyReporter workflow.ApplyReporter) (render.Result, bundle.AnsibleBundleResult, workflow.RunLedger, error) {
+	if runOpts.RunLease != nil {
+		if err := runOpts.RunLease.RequireOwned(); err != nil {
+			return render.Result{}, bundleResult, workflow.RunLedger{}, err
+		}
+		cmdCtx = runOpts.RunLease.Context()
+	}
 	reportRenderStart(reporter)
 	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 	if err != nil {
@@ -299,6 +305,11 @@ func ExecuteApply(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspac
 	}
 	if err := SnapshotMutatingRunInput(workflow.RunInputSnapshotDir(ctx.RunsDir, prepared.RunID), ctx); err != nil {
 		return render.Result{}, bundleResult, workflow.RunLedger{}, err
+	}
+	if runOpts.RunLease != nil {
+		if err := runOpts.RunLease.RequireOwned(); err != nil {
+			return render.Result{}, bundleResult, workflow.RunLedger{}, err
+		}
 	}
 	if plan.TargetsClusters {
 		reportResolveInstallerStart(reporter)

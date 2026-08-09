@@ -69,6 +69,8 @@ type RunOptions struct {
 	ResolveInstaller           bool
 	Label                      string
 	AcquireRunLease            bool
+	RecordRunLedger            bool
+	RunLease                   *CommandRunLease
 	ApplyMode                  ApplyMode
 	OverrideAckedReinstalls    []string
 	SelectedMachines           []string
@@ -90,7 +92,7 @@ type Reporter interface {
 	AnsibleStart(executable string)
 }
 
-func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter Reporter) (RunResult, error) {
+func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter Reporter) (result RunResult, runErr error) {
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return RunResult{}, errors.New("clusters dir is required")
 	}
@@ -105,6 +107,32 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	}
 	if strings.TrimSpace(opts.ProviderStateDir) == "" {
 		return RunResult{}, errors.New("provider state dir is required")
+	}
+	var ownedLease *CommandRunLease
+	if !opts.DryRun && opts.AcquireRunLease && opts.RunLease == nil {
+		var err error
+		ownedLease, err = AcquireCommandRunLease(ctx, opts.RunsDir, "destroy")
+		if err != nil {
+			return RunResult{}, err
+		}
+		opts.RunLease = ownedLease
+		opts.RecordRunLedger = true
+	}
+	if !opts.DryRun && opts.RunLease != nil {
+		if err := opts.RunLease.RequireOwned(); err != nil {
+			if ownedLease != nil {
+				_ = ownedLease.Close()
+			}
+			return RunResult{}, err
+		}
+		ctx = opts.RunLease.Context()
+	}
+	if ownedLease != nil {
+		defer func() {
+			if err := ownedLease.Close(); err != nil && runErr == nil {
+				runErr = err
+			}
+		}()
 	}
 	ownershipDir := opts.OwnershipDir
 	if strings.TrimSpace(ownershipDir) == "" {
@@ -137,7 +165,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		return RunResult{}, err
 	}
 	defer os.RemoveAll(hostKubeconfigDir)
-	var result RunResult
+	result = RunResult{}
 	tolerateMissing := playbookToleratesMissingKubeVirtHostKubeconfig(opts.Playbook)
 	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, tolerateMissing, func(paths map[string]string) error {
 		var runErr error
@@ -174,6 +202,11 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 	}
 	if err != nil {
 		return RunResult{}, err
+	}
+	if opts.RunLease != nil {
+		if err := opts.RunLease.RequireOwned(); err != nil {
+			return RunResult{Render: result}, err
+		}
 	}
 	if !opts.DryRun {
 		if err := materializeRunSecrets(contextName, opts.SecretsDir, runSecretsDir, perTask, result); err != nil {
@@ -244,10 +277,10 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		}
 		return RunResult{Render: result, Command: command, Skipped: true}, nil
 	}
-	if opts.AcquireRunLease {
-		now := time.Now()
-		lease := NewRunLease(destroyRunID(now), now)
-		if err := AcquireRunLease(opts.RunsDir, lease, now); err != nil {
+	if opts.RecordRunLedger && opts.RunLease != nil {
+		now := opts.RunLease.StartedAt
+		lease := opts.RunLease.lease
+		if err := opts.RunLease.RequireOwned(); err != nil {
 			return RunResult{Render: result, Command: command}, err
 		}
 		sweepStaleRuntimeSecrets(opts.RunsDir, lease.RunID)
@@ -263,17 +296,15 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		}}, now)
 		ledger.MarkRunning(lease.RunID, opts.OutputLogPath, now)
 		if err := SaveRunLedger(opts.RunsDir, ledger); err != nil {
-			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
 			return RunResult{Render: result, Command: command}, err
 		}
-		leaseCtx, leaseCancel := context.WithCancel(ctx)
-		defer leaseCancel()
-		stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(leaseCtx, opts.RunsDir, lease)
-		defer func() {
-			stopLeaseHeartbeat()
-			_ = RemoveRunLeaseIfOwner(opts.RunsDir, lease.RunID)
-		}()
 		finishLedger := func(runErr error) error {
+			if err := opts.RunLease.RequireOwned(); err != nil {
+				if runErr != nil {
+					return fmt.Errorf("%w; additionally lost the mutating run lease: %v", runErr, err)
+				}
+				return err
+			}
 			finished := time.Now()
 			if runErr == nil {
 				ledger.MarkOK(lease.RunID, finished)
@@ -302,14 +333,13 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		if reporter != nil {
 			reporter.AnsibleStart(command[0])
 		}
-		runErr := make(chan error, 1)
-		go func() { runErr <- runner.Run(leaseCtx, spec) }()
+		runDone := make(chan error, 1)
+		go func() { runDone <- runner.Run(ctx, spec) }()
 		select {
-		case err := <-runErr:
+		case err := <-runDone:
 			return RunResult{Render: result, Command: command}, finishLedger(err)
-		case err := <-leaseErrors:
-			leaseCancel()
-			<-runErr
+		case err := <-opts.RunLease.Errors():
+			<-runDone
 			if err == nil {
 				err = errors.New("apply lease heartbeat stopped")
 			}

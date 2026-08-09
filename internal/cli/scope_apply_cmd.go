@@ -120,7 +120,12 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			_ = cmd.Flags().MarkHidden(name)
 		}
 	}
-	cmd.RunE = func(c *cobra.Command, _ []string) error {
+	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
+		var runLease *workflow.CommandRunLease
+		defer func() {
+			returnErr = closeMutatingRunLease(returnErr, runLease)
+		}()
+		runContext := c.Context()
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
 		}
@@ -298,9 +303,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "apply")
+			if err != nil {
+				return failErr(1, err)
+			}
+			runContext = runLease.Context()
 			hostTrustScope := workflow.ApplyTaskConnectedMachines(tasks)
 			if trustOnFirstUse && !yes && flags.output == outputText {
-				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps, hostTrustScope); err != nil {
+				if err := offerTrustOnFirstUse(runContext, stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps, hostTrustScope); err != nil {
 					return failErr(1, err)
 				}
 			}
@@ -343,6 +353,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 		}
 		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
+		runOpts.RunLease = runLease
 		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
 		runOpts.SelectedMachines = sel.MachineScopeNames()
 		if dryRun {
@@ -374,7 +385,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return nil
 		}
-		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
+		renderResult, bundleResult, ledger, err := converge.ExecuteApply(runContext, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 		if err != nil {
 			if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 				return silentExit(1)
@@ -386,7 +397,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printBundlePath(stdout, bundleResult.Dir)
 		}
 		if usesAnsible {
-			if rerr := converge.ReclaimInstallOnlyArtifactServers(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, artifactServerTargets, reporter); rerr != nil {
+			if rerr := converge.ReclaimInstallOnlyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, artifactServerTargets, reporter, runLease); rerr != nil {
 				cliout.NewContinuation(stdout).Warning("artifact-server reclaim", rerr.Error())
 			}
 		}

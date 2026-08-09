@@ -123,7 +123,7 @@ func ArtifactServerReclaimPreview(ownershipDir, contextName, clustersDir string,
 	return selectArtifactServerReclaims(targets, ownedInfraComponentRecords(records), blocked, clustersDir)
 }
 
-func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []ArtifactServerReclaimTarget, reporter workflow.Reporter) error {
+func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []ArtifactServerReclaimTarget, reporter workflow.Reporter, runLease *workflow.CommandRunLease) error {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -151,6 +151,6 @@ func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io
 	if plan.NoRemoteWork {
 		return nil
 	}
-	_, _, err = ExecuteDestroy(cmdCtx, stdout, stderr, ctx, clustersDir, executable, bundleDir, InfraDestroyArtifactServerPlaybook, plan, InfraDestroyArtifactServerArtifactsBaseName, false, becomePasswordFile, false, false, "infra reclaim artifact-server", reporter)
+	_, _, err = ExecuteDestroy(cmdCtx, stdout, stderr, ctx, clustersDir, executable, bundleDir, InfraDestroyArtifactServerPlaybook, plan, InfraDestroyArtifactServerArtifactsBaseName, false, becomePasswordFile, false, false, "infra reclaim artifact-server", reporter, runLease, false)
 	return err
 }

@@ -607,6 +607,14 @@ func machineInfraDestroyGraph(state v1alpha1.State) (map[string]bool, map[string
 
 func PrepareDestroyTaskGraph(runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
 	startedAt := time.Now()
+	runID := destroyRunID(startedAt)
+	if opts.RunLease != nil {
+		if err := opts.RunLease.RequireOwned(); err != nil {
+			return PreparedApplyTaskGraph{}, err
+		}
+		startedAt = opts.RunLease.StartedAt
+		runID = opts.RunLease.RunID
+	}
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return PreparedApplyTaskGraph{}, fmt.Errorf("clusters dir is required")
 	}
@@ -617,7 +625,7 @@ func PrepareDestroyTaskGraph(runsDir string, opts RunOptions, tasks []ApplyTask,
 		return PreparedApplyTaskGraph{}, fmt.Errorf("runs dir is required")
 	}
 	return PreparedApplyTaskGraph{
-		RunID:     destroyRunID(startedAt),
+		RunID:     runID,
 		StartedAt: startedAt,
 		Tasks:     tasks,
 		Limits:    ResolveApplyConcurrencyLimits(limits, tasks),
