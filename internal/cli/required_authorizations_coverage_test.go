@@ -32,7 +32,7 @@ func forecastTokensForVerb(t *testing.T, verb string) []string {
 	case authorizeVerbApply:
 		state := loadFixtureState(t, "006-ceph-3nodes-libvirt-managed-os")
 		tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
-		entries = applyRequiredAuthorizations(auth, workflow.ApplyModeRebuild, state, state, tasks, t.TempDir(), t.TempDir(), []string{"ceph-storage"}, "all", nil)
+		entries = applyRequiredAuthorizations(auth, "test", workflow.ApplyModeRebuild, state, state, tasks, t.TempDir(), t.TempDir(), []string{"ceph-storage"}, "all", nil, nil)
 	case authorizeVerbReplaceArbiter:
 		entries = replaceArbiterRequiredAuthorizations(auth, true, "mon(s) mon-b are outside quorum", "mon.mon-c shares its site with mon-a", true)
 	default:

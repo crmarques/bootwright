@@ -20,6 +20,16 @@ the authored keys before comparing, so Ceph's defaulted keys (`w`,
 `packetsize`, ...) never force a rebuild — but an authored key missing from the
 live profile reads as a mismatch.
 
+**Semantics:** `bootwright_ceph_rebuild_authorized_clusters` is exclusively the
+controller's structural-drift allowlist. Markerless recovery after an interrupted
+first bootstrap uses the separate
+`bootwright_ceph_incomplete_bootstrap_authorized_clusters` allowlist because no
+successful converge record exists to classify structural drift. That second list
+requires the selected managed cluster's exact controller owner record and desired
+seed plus consumed rebuild and `data-loss` intent; Ansible re-validates the same
+record and host evidence before a shared cleanup predicate can authorize
+`rm-cluster --zap-osds`. Neither list implies the other.
+
 **Semantics:** Live probes used by the decision: pool type is the numeric
 `type` field of `ceph osd pool ls detail` (1 = replicated, 3 = erasure).
 `ceph fs ls` does not expose data-pool ordering; `ceph fs get` does — the

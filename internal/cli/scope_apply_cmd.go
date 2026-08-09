@@ -227,7 +227,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		if flags.output == outputJSON {
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
-			jsonRequiredAuth := applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants)
+			jsonRequiredAuth := applyRequiredAuthorizations(auth, ctx.Name, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants, ownershipRecords)
 			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
 			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
 		}
@@ -284,7 +284,11 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 			converge.ApplyOCPRebuildAuthorizedClustersExtraVar(&plan, ocpReinstallAcked)
+			consumedDataLoss := applyIncompleteBootstrapRebuildAuthorization(stdout, ctx.Name, mode, &plan, tasks, ownershipRecords, allowDestroy)
 			if emitApplyDataLossWarningsAndVars(stdout, mode, objects, tasks, &plan, reclaimDevices, ownedReclaim, releasedRecords, clustersDir, ocpReinstallDescriptors, allowDestroy) {
+				consumedDataLoss = true
+			}
+			if consumedDataLoss {
 				auth.note(authorizeDataLoss)
 			}
 			warnUnusedAuthorizations(stdout, auth, false)
@@ -357,7 +361,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
 			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
-			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices, provisionedStorageTenants))
+			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, ctx.Name, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices, provisionedStorageTenants, ownershipRecords))
 			warnUnusedAuthorizations(stdout, auth, true)
 			printExtensionDryRun(stdout, dryRunTasks)
 			printPlaybookDryRun(stdout, dryRunTasks)

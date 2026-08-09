@@ -292,6 +292,19 @@ preview performs no probe to settle one, and silence would read as "none
 needed". Matrix rows assert a dry run names every token its non-dry counterpart
 refuses on.
 
+**A host-only destructive shape needs a dedicated positive allowlist, not a
+controller guess.** The interrupted-first-Ceph-bootstrap case cannot be found in
+converge-safety records because the successful apply never completed. Its
+controller half therefore names only selected managed clusters with an exact
+owner-role record for the current context and desired seed, under rebuild plus a
+consumed `data-loss` acknowledgment. The host half re-reads that record and
+combines it with the live config/marker/reachability proof into one consequence
+predicate used by refusal, ownership classification, and cleanup. Register such
+an allowlist in `mutationSafetyVars`, the Ansible vars contract, focused producer
+and sole-consumer guards, and the safety-matrix preview. Never reuse a list whose
+controller evidence means something else: the normal Ceph rebuild list means
+proven structural drift, not an interrupted bootstrap.
+
 **A gate that refuses on a dry run cannot be forecast, and a forecast the CLI
 cannot reach proves nothing.** `shared-infra` and `installed-cluster-node`
 refused unconditionally, so their `consult()` entries could only ever render

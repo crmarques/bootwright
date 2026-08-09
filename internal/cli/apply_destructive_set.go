@@ -6,6 +6,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 type applyDestructiveSet struct {
@@ -55,7 +56,7 @@ func applyDestructiveDescriptors(in applyDestructiveSet) []string {
 	return out
 }
 
-func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string, provisionedStorage map[string]bool) []requiredAuthorization {
+func applyRequiredAuthorizations(auth *authorizations, contextName string, mode workflow.ApplyMode, state, planState v1alpha1.State, tasks []workflow.ApplyTask, runsDir, clustersDir string, reinstallDrift []string, reclaimDevices string, provisionedStorage map[string]bool, ownershipRecords []ownership.ResourceRecord) []requiredAuthorization {
 	forecast := newAuthorizationForecast(auth)
 	reclaimUnownedRequired := false
 	objects, classifyErr := workflow.ClassifyApplyObjects(tasks, runsDir)
@@ -94,6 +95,7 @@ func applyRequiredAuthorizations(auth *authorizations, mode workflow.ApplyMode, 
 		})
 		forecast.consult(authorizeDataLoss, len(descriptors) > 0, "a real run would "+strings.Join(descriptors, ", ")+" — target disks wiped and any Ceph OSD data zapped")
 		forecast.mayConsult(authorizeDataLoss, len(descriptors) == 0 && mode == workflow.ApplyModeRebuild && len(workflow.InstalledRecordedClusters(clustersDir, tasks)) > 0, "plan mode does not probe cluster availability; a real --mode rebuild additionally reinstalls (node disks wiped) any installed cluster that does not report Available=True")
+		forecast.mayConsult(authorizeDataLoss, mode == workflow.ApplyModeRebuild && len(incompleteBootstrapRebuildCandidates(contextName, planState, tasks, ownershipRecords)) > 0, "a selected managed StorageCluster with an exact Bootwright owner record for its desired seed may be an interrupted first bootstrap; only the host can prove the config-plus-record, missing-marker, unreachable-cluster shape whose cleanup runs cephadm rm-cluster --zap-osds")
 	}
 	forecast.mayConsult(authorizeUnownedDevices, reclaimDevices != "" && !reclaimUnownedRequired, "whether a named --reclaim-devices path carries LVM or dm-crypt holders without a Bootwright OSD ownership record is decided on the node, so a preview cannot settle it")
 	forecast.mayConsult(authorizeForeignDaemons, len(workflow.StorageConvergeClusterNames(tasks)) > 0, "whether an enrolled storage node still runs cephadm units of an fsid this apply does not own is decided on the node, so a preview cannot settle it")

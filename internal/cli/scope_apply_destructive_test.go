@@ -9,6 +9,8 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render"
 )
 
 func TestReclaimDestructiveDescriptors(t *testing.T) {
@@ -107,6 +109,104 @@ func TestForeignDaemonReclaimRidesTheTokenAndAStorageConverge(t *testing.T) {
 			}
 			if idle := len(auth.unused()) > 0; idle != tc.wantIdle {
 				t.Fatalf("a token the run consumed must never report as inert and one it could not consume must: want inert=%v, got %v", tc.wantIdle, auth.unused())
+			}
+		})
+	}
+}
+
+func TestIncompleteBootstrapRebuildAuthorizationNeedsEveryControllerProof(t *testing.T) {
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Management: v1alpha1.StorageClusterManagementManaged,
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Cephadm: v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "node-a"}},
+			},
+		},
+	}, {
+		Metadata: v1alpha1.Metadata{Name: "external"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Management: v1alpha1.StorageClusterManagementExternal,
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Cephadm: v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "node-b"}},
+			},
+		},
+	}}}
+	seedHost := render.StorageSeedHostName(state.StorageClusters[0])
+	externalSeedHost := render.StorageSeedHostName(state.StorageClusters[1])
+	exactRecord := ownership.ResourceRecord{
+		APIVersion: "bootwright.io/ownership/v1alpha1",
+		Kind:       string(ownership.KindStorageCluster),
+		Name:       "ceph",
+		Owner:      ownership.Owner,
+		Context:    "ctx",
+		Host:       seedHost,
+		Cluster:    "ceph",
+		Attributes: map[string]string{"seedHost": seedHost},
+	}
+	externalRecord := ownership.ResourceRecord{
+		APIVersion: "bootwright.io/ownership/v1alpha1",
+		Kind:       string(ownership.KindStorageCluster),
+		Name:       "external",
+		Owner:      ownership.Owner,
+		Context:    "ctx",
+		Host:       externalSeedHost,
+		Cluster:    "external",
+		Attributes: map[string]string{"seedHost": externalSeedHost},
+	}
+	with := func(edit func(*ownership.ResourceRecord)) []ownership.ResourceRecord {
+		record := exactRecord
+		record.Attributes = map[string]string{"seedHost": exactRecord.Attributes["seedHost"]}
+		edit(&record)
+		return []ownership.ResourceRecord{record}
+	}
+	storageTasks := []workflow.ApplyTask{
+		{Entry: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph"}},
+		{Entry: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "external"}},
+	}
+	cases := []struct {
+		name    string
+		mode    workflow.ApplyMode
+		allow   bool
+		records []ownership.ResourceRecord
+		tasks   []workflow.ApplyTask
+		wantArm bool
+	}{
+		{name: "explicit rebuild and data loss on selected exact owner record", mode: workflow.ApplyModeRebuild, allow: true, records: []ownership.ResourceRecord{exactRecord, externalRecord}, tasks: storageTasks, wantArm: true},
+		{name: "missing data loss stays closed", mode: workflow.ApplyModeRebuild, records: []ownership.ResourceRecord{exactRecord}, tasks: storageTasks},
+		{name: "reconcile stays closed", mode: workflow.ApplyModeReconcile, allow: true, records: []ownership.ResourceRecord{exactRecord}, tasks: storageTasks},
+		{name: "missing controller owner record stays closed", mode: workflow.ApplyModeRebuild, allow: true, tasks: storageTasks},
+		{name: "wrong api version stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.APIVersion = "" }), tasks: storageTasks},
+		{name: "wrong owner stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Owner = "other" }), tasks: storageTasks},
+		{name: "reference role stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Role = ownership.RoleReference }), tasks: storageTasks},
+		{name: "wrong name stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Name = "other" }), tasks: storageTasks},
+		{name: "wrong context stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Context = "other" }), tasks: storageTasks},
+		{name: "wrong cluster stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Cluster = "other" }), tasks: storageTasks},
+		{name: "wrong host stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Host = "other" }), tasks: storageTasks},
+		{name: "wrong recorded seed stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: with(func(record *ownership.ResourceRecord) { record.Attributes["seedHost"] = "other" }), tasks: storageTasks},
+		{name: "scope without storage converge stays closed", mode: workflow.ApplyModeRebuild, allow: true, records: []ownership.ResourceRecord{exactRecord}, tasks: []workflow.ApplyTask{{Entry: workflow.TaskLedgerEntry{Kind: workflow.ApplyTaskKindStorageInfra, Cluster: "ceph"}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := &converge.WorkflowPlan{State: state}
+			var out bytes.Buffer
+			armed := applyIncompleteBootstrapRebuildAuthorization(&out, "ctx", tc.mode, plan, tc.tasks, tc.records, tc.allow)
+			if armed != tc.wantArm {
+				t.Fatalf("armed=%v, want %v; vars=%v output=%q", armed, tc.wantArm, plan.ExtraVarPairs, out.String())
+			}
+			if !tc.wantArm {
+				if len(plan.ExtraVarPairs) != 0 || out.Len() != 0 {
+					t.Fatalf("closed case emitted authority: vars=%v output=%q", plan.ExtraVarPairs, out.String())
+				}
+				return
+			}
+			if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != "bootwright_ceph_incomplete_bootstrap_authorized_clusters=ceph" {
+				t.Fatalf("authority must name only the selected owned managed cluster, got %v", plan.ExtraVarPairs)
+			}
+			for _, want := range []string{"interrupted first Ceph bootstrap", "ceph", "exact Bootwright owner record", "selected desired seed", "marker is absent", "unreachable", "rm-cluster --zap-osds", "healthy matching cluster", "untouched"} {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("conditional authorization warning missing %q: %q", want, out.String())
+				}
 			}
 		})
 	}

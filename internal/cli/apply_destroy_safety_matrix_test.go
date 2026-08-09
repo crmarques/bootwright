@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/preflight"
+	"github.com/crmarques/bootwright/internal/render"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
@@ -1117,6 +1118,14 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictGateCleared,
 		want:    []string{"--authorize data-loss had no effect"},
 		deny:    []string{"will DESTROY data"},
+	}, {
+		name: "apply/data-loss: preview discloses host-proven incomplete bootstrap cleanup",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedStorageOwnership(t, ctx, "ceph-storage")
+		},
+		args:    []string{"apply", "--mode", "rebuild", "--stage", "clusters", "--clusters", "ceph-storage", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeDataLoss + ": " + authorizationMaybe, "interrupted first bootstrap", "missing-marker", "unreachable-cluster", "cephadm rm-cluster --zap-osds"},
 	}, {
 		name:    "destroy/protected: a protected Environment refuses and names its token",
 		seed:    seedProtectedEnvironment,
@@ -2386,14 +2395,28 @@ func seedKubeVirtReadyHost(t *testing.T, ctx workspace.Context, cluster string) 
 
 func seedStorageOwnership(t *testing.T, ctx workspace.Context, cluster string) {
 	t.Helper()
-	if err := ownership.SaveResource(ctx.OwnershipDir, ownership.ResourceRecord{
+	record := ownership.ResourceRecord{
 		Kind:      string(ownership.KindStorageCluster),
 		Name:      cluster,
 		Owner:     ownership.Owner,
 		Context:   ctx.Name,
 		Cluster:   cluster,
 		UpdatedAt: time.Now().UTC(),
-	}); err != nil {
+	}
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state for StorageCluster ownership: %v", err)
+	}
+	for _, candidate := range state.StorageClusters {
+		if candidate.Metadata.Name != cluster || !v1alpha1.StorageClusterManaged(candidate) || candidate.Spec.Ceph == nil {
+			continue
+		}
+		seedHost := render.StorageSeedHostName(candidate)
+		record.Host = seedHost
+		record.Attributes = map[string]string{"seedHost": seedHost}
+		break
+	}
+	if err := ownership.SaveResource(ctx.OwnershipDir, record); err != nil {
 		t.Fatalf("SaveResource(%s): %v", cluster, err)
 	}
 }

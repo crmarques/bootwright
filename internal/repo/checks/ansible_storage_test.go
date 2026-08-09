@@ -1592,12 +1592,38 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
+	statIdx := findAnsibleTask(t, tasks, "Stat Bootwright storage cluster ownership record for override rebuild")
+	readIdx := findAnsibleTask(t, tasks, "Read Bootwright storage cluster ownership record for override rebuild")
+	decodeIdx := findAnsibleTask(t, tasks, "Decode Bootwright storage cluster ownership record for override rebuild")
+	validateIdx := findAnsibleTask(t, tasks, "Validate incomplete-bootstrap controller ownership evidence")
 	detectIdx := findAnsibleTask(t, tasks, "Detect an incomplete Bootwright bootstrap eligible for override rebuild")
+	authorizeIdx := findAnsibleTask(t, tasks, "Decide whether the controller authorizes this exact incomplete bootstrap cleanup")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
 	rebuildIdx := findAnsibleTask(t, tasks, "Decide whether this cluster requires an authorized override rebuild")
 	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")
-	if !(detectIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < zapIdx) {
-		t.Fatalf("incomplete-bootstrap detection must run before the gate, rebuild decision, and zap (detect=%d gate=%d rebuild=%d zap=%d)", detectIdx, gateIdx, rebuildIdx, zapIdx)
+	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright Ceph ownership marker")
+	if !(statIdx < readIdx && readIdx < decodeIdx && decodeIdx < validateIdx && validateIdx < detectIdx && detectIdx < authorizeIdx && authorizeIdx < refuseIdx && refuseIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < zapIdx && zapIdx < stampIdx) {
+		t.Fatalf("exact controller evidence and positive authorization must precede the refusal, gate, cleanup, and marker stamp (stat=%d read=%d decode=%d validate=%d detect=%d authorize=%d refuse=%d gate=%d rebuild=%d zap=%d stamp=%d)", statIdx, readIdx, decodeIdx, validateIdx, detectIdx, authorizeIdx, refuseIdx, gateIdx, rebuildIdx, zapIdx, stampIdx)
+	}
+	if tasks[readIdx]["delegate_to"] != "localhost" || tasks[readIdx]["become"] != false || tasks[readIdx]["failed_when"] != false {
+		t.Fatalf("incomplete-bootstrap record read must be a non-mutating controller-local probe whose ambiguity reaches the explicit refusal, got %v", tasks[readIdx])
+	}
+	decode := fmt.Sprint(tasks[decodeIdx])
+	for _, want := range []string{"from_json", "rescue", "bootwright_ceph_override_record_decode_failed"} {
+		if !strings.Contains(decode, want) {
+			t.Fatalf("incomplete-bootstrap record decode must fail closed into explicit evidence classification; missing %q in %v", want, tasks[decodeIdx])
+		}
+	}
+	validate, ok := tasks[validateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("incomplete-bootstrap record validation must be a set_fact, got %v", tasks[validateIdx])
+	}
+	validateExpr := fmt.Sprint(validate["bootwright_ceph_incomplete_bootstrap_record_valid"])
+	for _, want := range []string{"bootwright.io/ownership/v1alpha1", "storage-cluster", ".name", ".owner", ".role", ".context", ".cluster", ".host", ".seedHost", "bootwright_selected_storage_cluster.name", "bootwright_selected_storage_cluster.seedHost"} {
+		if !strings.Contains(validateExpr, want) {
+			t.Fatalf("incomplete-bootstrap record validation must prove exact owner identity and desired seed; missing %q in %v", want, validateExpr)
+		}
 	}
 
 	detect, ok := tasks[detectIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -1606,7 +1632,7 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 	}
 	expr := fmt.Sprint(detect["bootwright_ceph_incomplete_bootstrap"])
 	for _, want := range []string{
-		"bootwright_ceph_override_record.stat.exists",
+		"bootwright_ceph_incomplete_bootstrap_record_valid",
 		"bootwright_ceph_override_owned_fsid | default('') | length == 0",
 		"bootwright_ceph_override_reachable",
 		"bootwright_selected_storage_cluster.seedHost",
@@ -1618,30 +1644,47 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 	if !strings.Contains(expr, "not (bootwright_ceph_override_reachable") {
 		t.Fatalf("incomplete-bootstrap detection must require the cluster to be unreachable, got %v", detect["bootwright_ceph_incomplete_bootstrap"])
 	}
+	authorize, ok := tasks[authorizeIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("incomplete-bootstrap authorization must be a set_fact, got %v", tasks[authorizeIdx])
+	}
+	authorizeExpr := fmt.Sprint(authorize["bootwright_ceph_incomplete_bootstrap_cleanup_authorized"])
+	for _, want := range []string{"bootwright_apply_mode", "rebuild", "bootwright_ceph_incomplete_bootstrap", "bootwright_selected_storage_cluster.name", "bootwright_ceph_incomplete_bootstrap_authorized_clusters"} {
+		if !strings.Contains(authorizeExpr, want) {
+			t.Fatalf("the shared incomplete-bootstrap consequence predicate must consume mode, host proof, and the exact controller list; missing %q in %v", want, authorizeExpr)
+		}
+	}
+	applyMode := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/apply_mode.yml")
+	if got := strings.Count(applyMode, "bootwright_ceph_incomplete_bootstrap_authorized_clusters"); got != 1 {
+		t.Fatalf("the dedicated positive list must be consumed solely by the shared incomplete-bootstrap consequence predicate, got %d consumers", got)
+	}
 
 	rebuild, ok := tasks[rebuildIdx]["ansible.builtin.set_fact"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"]), "bootwright_ceph_incomplete_bootstrap") {
+	if !ok || !strings.Contains(fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"]), "bootwright_ceph_incomplete_bootstrap_cleanup_authorized") {
 		t.Fatalf("override rebuild decision must honor the incomplete-bootstrap decision, got %v", tasks[rebuildIdx])
 	}
-	rebuildExpr := fmt.Sprint(rebuild["bootwright_ceph_rebuild_cleanup_required"])
-	incompleteIdx := strings.LastIndex(rebuildExpr, "bootwright_ceph_incomplete_bootstrap")
-	authorizedIdx := strings.LastIndex(rebuildExpr, "bootwright_ceph_rebuild_authorized")
-	if incompleteIdx < 0 || authorizedIdx < incompleteIdx || !strings.Contains(rebuildExpr[incompleteIdx:authorizedIdx], "and") {
-		t.Fatalf("incomplete-bootstrap cleanup must still require this exact cluster in the controller rebuild-authorized list, got %v", rebuild["bootwright_ceph_rebuild_cleanup_required"])
+	gateVars, ok := tasks[gateIdx]["vars"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(gateVars["bootwright_gate_owned"]), "bootwright_ceph_incomplete_bootstrap_cleanup_authorized") {
+		t.Fatalf("the ownership gate must consume the same incomplete-bootstrap consequence predicate as cleanup, got %v", tasks[gateIdx]["vars"])
 	}
 	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") {
 		t.Fatalf("override rebuild zap must consume the authorized rebuild decision, got %v", tasks[zapIdx]["when"])
 	}
 
-	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing")
-	if !(detectIdx < refuseIdx && refuseIdx < gateIdx) {
-		t.Fatalf("missing-marker refusal must run after detection and before the gate (detect=%d refuse=%d gate=%d)", detectIdx, refuseIdx, gateIdx)
-	}
-	if _, ok := tasks[refuseIdx]["ansible.builtin.fail"].(map[string]any); !ok {
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.fail"].(map[string]any)
+	if !ok {
 		t.Fatalf("missing-marker refusal must be a fail, got %v", tasks[refuseIdx])
 	}
-	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "bootwright_ceph_override_owned_fsid | default('') | length == 0") {
-		t.Fatalf("missing-marker refusal must be gated on the absent ownership marker, got %v", tasks[refuseIdx]["when"])
+	when := fmt.Sprint(tasks[refuseIdx]["when"])
+	for _, want := range []string{"bootwright_selected_storage_cluster.seedHost", "bootwright_ceph_override_owned_fsid | default('') | length == 0", "not (bootwright_ceph_incomplete_bootstrap_cleanup_authorized"} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("missing-marker refusal must stay closed until the shared consequence predicate is true; missing %q in %v", want, tasks[refuseIdx]["when"])
+		}
+	}
+	for _, want := range []string{"cleanup, bootstrap, and ownership-marker stamping", "missing, unreadable, or does not exactly identify", "selected desired seed", "bootwright_apply_rebuild_invocation", "data-loss authorization", "retains this context and selection"} {
+		if got := fmt.Sprint(refuse["msg"]); !strings.Contains(got, want) {
+			t.Fatalf("missing-marker refusal must use the exact controller-built recovery invocation; missing %q in %v", want, refuse["msg"])
+		}
 	}
 }
 
@@ -3709,6 +3752,9 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	}
 	reclaimTop := readAnsibleTasks(t, reclaimPath)
 	reclaimBlockIdx := findAnsibleTask(t, reclaimTop, "Auto-reclaim dirty filter-selected OSD devices before the OSD apply")
+	if _, ok := reclaimTop[reclaimBlockIdx]["rescue"]; ok {
+		t.Fatalf("%s reclaim block must not rescue a zap-result refusal; a rescue would let the persistent OSD service run after a failed wipe", reclaimPath)
+	}
 	reclaimTasks := nestedAnsibleTasks(t, reclaimTop[reclaimBlockIdx], "block")
 	refreshIdx := findAnsibleTask(t, reclaimTasks, "Refresh cephadm device inventory for filter-OSD hosts")
 	if until := fmt.Sprint(reclaimTasks[refreshIdx]["until"]); !strings.Contains(until, "bootwright_ceph_filter_device_ls.attempts") {
@@ -3736,6 +3782,11 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	refuseZap, ok := reclaimTasks[refuseZapIdx]["ansible.builtin.fail"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s zap-result gate must be a hard fail, got %v", reclaimPath, reclaimTasks[refuseZapIdx])
+	}
+	for _, suppressor := range []string{"failed_when", "ignore_errors", "ignore_unreachable"} {
+		if _, ok := reclaimTasks[refuseZapIdx][suppressor]; ok {
+			t.Fatalf("%s zap-result gate must propagate its hard failure; found %s=%v", reclaimPath, suppressor, reclaimTasks[refuseZapIdx][suppressor])
+		}
 	}
 	for _, want := range []string{"bootwright_ceph_filter_zap.results", "rejectattr('rc', 'equalto', 0)"} {
 		if got := fmt.Sprint(reclaimTasks[refuseZapIdx]["loop"]); !strings.Contains(got, want) {

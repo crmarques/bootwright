@@ -548,7 +548,20 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
 - **Owned-Ceph cluster rebuild.** `apply --mode rebuild` cleanly rebuilds a managed
   Ceph cluster with `cephadm rm-cluster --zap-osds`, but **only** when a
   Bootwright ownership marker proves the live cluster is the one Bootwright
-  created. A foreign or co-resident cluster fails closed.
+  created. A foreign or co-resident cluster fails closed. If the first bootstrap
+  stopped after writing `/etc/ceph/ceph.conf` but before stamping that marker,
+  recovery is deliberately narrower: the controller and seed must agree on the
+  exact Bootwright owner record, context, selected cluster, and desired seed;
+  the marker must be absent and the cluster unreachable. Then use the exact
+  selected retry printed by the refusal, equivalent to:
+
+  ```shell
+  bootwright apply --clusters ceph-storage --mode rebuild --authorize data-loss
+  ```
+
+  A missing, unreadable, stale, or seed-mismatched record remains a refusal. Do
+  not recreate it unless trusted evidence proves that identity; otherwise treat
+  the cluster as foreign and remove it out of band.
 
 !!! note "Override rebuilds still-declared structure; it does not prune"
     Ceph convergence is additive-only across the whole storage domain. `apply`

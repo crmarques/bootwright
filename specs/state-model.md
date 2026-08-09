@@ -3464,6 +3464,19 @@ command. The rest are registered per command, on the verbs that reach machines.
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
+- An interrupted first Ceph bootstrap is the markerless recovery exception, not
+  an ownership inference. Before `cephadm bootstrap`, Bootwright records the
+  selected managed `StorageCluster` and its rendered seed host on the controller.
+  A later run emits a separate incomplete-bootstrap cleanup allowlist only for an
+  exact owner record (ownership API, owner role, context, name, cluster, host, and
+  recorded `seedHost` all match the selected desired cluster), only under
+  `--mode rebuild`, and only when the run consumes `data-loss`. The seed then
+  re-reads and validates that same record and must prove a configured fsid, no
+  on-host Bootwright marker, and an unreachable cluster. One consequence
+  predicate feeds the missing-marker refusal, the ownership gate, and cleanup;
+  any absent, unreadable, stale, mismatched, reachable, or unauthorized evidence
+  refuses before `rm-cluster --zap-osds`, bootstrap, or marker stamping and names
+  the exact controller-built retry preserving context and selection.
 - Rebuild intent never waives OSD device selection. A managed dynamic data,
   DB, or WAL selector is read-only gated before its persistent service is
   applied, and unknown inventory or probe state fails closed in every mode.

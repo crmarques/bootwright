@@ -10,6 +10,8 @@ import (
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -43,6 +45,51 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 		return nil
 	}
 	return []string{"auto-reclaim dirty unbounded all-devices OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
+}
+
+func incompleteBootstrapRebuildCandidates(contextName string, state v1alpha1.State, tasks []workflow.ApplyTask, records []ownership.ResourceRecord) []string {
+	managed := make(map[string]bool, len(state.StorageClusters))
+	for _, cluster := range state.StorageClusters {
+		if !v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph == nil {
+			continue
+		}
+		name := cluster.Metadata.Name
+		seedHost := render.StorageSeedHostName(cluster)
+		for _, record := range records {
+			if record.APIVersion == "bootwright.io/ownership/v1alpha1" &&
+				record.Kind == string(ownership.KindStorageCluster) &&
+				record.Name == name &&
+				record.Owner == ownership.Owner &&
+				record.EffectiveRole() == ownership.RoleOwner &&
+				record.Context == contextName &&
+				record.Cluster == name &&
+				record.Host == seedHost &&
+				record.Attributes["seedHost"] == seedHost {
+				managed[name] = true
+				break
+			}
+		}
+	}
+	var out []string
+	for _, name := range workflow.StorageConvergeClusterNames(tasks) {
+		if managed[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func applyIncompleteBootstrapRebuildAuthorization(stdout io.Writer, contextName string, mode workflow.ApplyMode, plan *converge.WorkflowPlan, tasks []workflow.ApplyTask, records []ownership.ResourceRecord, allowDestroy bool) bool {
+	if mode != workflow.ApplyModeRebuild || !allowDestroy {
+		return false
+	}
+	clusters := incompleteBootstrapRebuildCandidates(contextName, plan.State, tasks, records)
+	if len(clusters) == 0 {
+		return false
+	}
+	converge.ApplyIncompleteBootstrapAuthorizedStorageExtraVar(plan, clusters)
+	cliout.NewContinuation(stdout).Warning("authorize data-loss", "conditionally authorizes recovery of an interrupted first Ceph bootstrap for selected managed StorageCluster(s) "+strings.Join(clusters, ", ")+". The host must prove that /etc/ceph/ceph.conf and this context's exact Bootwright owner record for the selected desired seed exist, the Bootwright host marker is absent, and the cluster is unreachable; only then may apply run cephadm rm-cluster --zap-osds and bootstrap again. A healthy matching cluster, a foreign cluster, or a cluster without that exact evidence is untouched by this allowlist.")
+	return true
 }
 
 func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, reclaimClusters []string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) bool {

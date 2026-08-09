@@ -127,6 +127,16 @@ contradictory evidence. The full token vocabulary, and the gate each
 token does and does not relax, is specified in
 [`state-model.md`](../state-model.md) ("CLI Contract").
 
+The markerless state left by an interrupted first Ceph bootstrap has its own
+positive allowlist; it never borrows the structural-drift list. The controller
+may name only a selected managed `StorageCluster` whose exact owner record still
+names this context and the selected desired seed, and only when rebuild intent
+and the `data-loss` acknowledgment were both consumed. The seed independently
+re-validates that record plus config-present, marker-absent, and unreachable
+host evidence. Refusal, ownership classification, and cleanup share the one
+result, so missing or contradictory evidence cannot fall through to bootstrap
+and stamp a new marker over an unknown cluster.
+
 ### Destroy is the only remover, and it fails closed
 
 `apply` is additive: deletion is never a plannable apply action, and the

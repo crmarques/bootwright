@@ -153,3 +153,17 @@ func TestRebuildAuthorizationSkipsHealthyMatchStorageCluster(t *testing.T) {
 		t.Fatalf("a no-drift owned StorageCluster must not appear in the data-loss warning, got %v", wiped)
 	}
 }
+
+func TestIncompleteBootstrapAuthorizationIsASeparatePositiveList(t *testing.T) {
+	plan := &WorkflowPlan{}
+	ApplyIncompleteBootstrapAuthorizedStorageExtraVar(plan, []string{"ceph-a", "ceph-b"})
+	if len(plan.ExtraVarPairs) != 1 || plan.ExtraVarPairs[0] != "bootwright_ceph_incomplete_bootstrap_authorized_clusters=ceph-a,ceph-b" {
+		t.Fatalf("incomplete-bootstrap authorization = %v", plan.ExtraVarPairs)
+	}
+
+	empty := &WorkflowPlan{}
+	ApplyIncompleteBootstrapAuthorizedStorageExtraVar(empty, nil)
+	if len(empty.ExtraVarPairs) != 0 {
+		t.Fatalf("an empty incomplete-bootstrap list must under-authorize, got %v", empty.ExtraVarPairs)
+	}
+}

@@ -76,6 +76,13 @@ func ApplyRebuildAuthorizedStorageExtraVar(plan *WorkflowPlan, names []string) {
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_rebuild_authorized_clusters="+strings.Join(names, ","))
 }
 
+func ApplyIncompleteBootstrapAuthorizedStorageExtraVar(plan *WorkflowPlan, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_ceph_incomplete_bootstrap_authorized_clusters="+strings.Join(names, ","))
+}
+
 func ReconcilableOnlyStorageClusters(objects []workflow.ObjectClassification) []string {
 	var out []string
 	for _, o := range objects {

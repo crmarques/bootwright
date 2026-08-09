@@ -45,6 +45,7 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_ceph_authorize_unowned_devices", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_destroy_confirmed_fsids", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_filter_reclaim_clusters", Class: mutationSafetyVarAuthorization},
+	{Name: "bootwright_ceph_incomplete_bootstrap_authorized_clusters", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_rebuild_authorized_clusters", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_reclaim_clusters", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_reclaim_devices", Class: mutationSafetyVarAuthorization},
