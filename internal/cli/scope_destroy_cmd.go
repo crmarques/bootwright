@@ -374,7 +374,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease)
-			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, selection)
+			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, invocation)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
 				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))

@@ -24,11 +24,19 @@ func TestDestroyGraphCompletionRefusesRequiredSkippedWork(t *testing.T) {
 			Status:       workflow.TaskStatusOK,
 		},
 	}}
-	outcome, err := destroyGraphCompletion(ledger, runSelection{stage: "infra", machines: "demo-0"})
+	outcome, err := destroyGraphCompletion(ledger, resolvedInvocation{
+		verb:        invocationDestroy,
+		contextName: "matrix",
+		flags: invocationFlags{
+			selection:    runSelection{stage: "infra", machines: "demo-0"},
+			purgeHistory: true,
+			yes:          true,
+		},
+	})
 	if err == nil {
 		t.Fatal("a selected destructive task skipped without completion proof must fail closed")
 	}
-	for _, want := range []string{"Machine infrastructure demo", "no remote hosts matched task limit", "records and substrate-release authorization were kept", "bootwright destroy --stage infra --machines demo-0"} {
+	for _, want := range []string{"Machine infrastructure demo", "no remote hosts matched task limit", "records and substrate-release authorization were kept", "bootwright destroy --yes --stage infra --machines demo-0 --purge-history --ask-become-pass=false --context matrix"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("skip refusal must contain %q: %v", want, err)
 		}
@@ -49,7 +57,7 @@ func TestDestroyGraphCompletionAllowsEmptyNoOpSkipWithoutClaimingSuccess(t *test
 		Status:        workflow.TaskStatusSkipped,
 		SkippedReason: "no remote hosts matched task limit",
 	}}}
-	outcome, err := destroyGraphCompletion(ledger, runSelection{})
+	outcome, err := destroyGraphCompletion(ledger, resolvedInvocation{verb: invocationDestroy})
 	if err != nil {
 		t.Fatalf("a task with no selected resource is an empty no-op, not an incomplete destructive selection: %v", err)
 	}

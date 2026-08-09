@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func destroyGraphCompletion(ledger workflow.RunLedger, selection runSelection) (workflow.DestroyOutcome, error) {
+func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvocation) (workflow.DestroyOutcome, error) {
 	outcome := workflow.SucceededDestroyTaskKinds(ledger)
 	var skipped []string
 	for _, task := range ledger.Tasks {
@@ -27,7 +27,11 @@ func destroyGraphCompletion(ledger workflow.RunLedger, selection runSelection) (
 	if len(skipped) == 0 {
 		return outcome, nil
 	}
-	return outcome, fmt.Errorf("destroy could not prove completion of required selected teardown task(s): %s; their convergence/install records and substrate-release authorization were kept, so the next apply cannot mistake skipped work for destroyed state. Restore the selected hosts to the generated inventory or correct the desired-state selection, then re-run `%s` with the same authorization and execution flags", strings.Join(skipped, ", "), selection.command("destroy"))
+	retry, err := invocation.retry(retryIntent{})
+	if err != nil {
+		return outcome, err
+	}
+	return outcome, fmt.Errorf("destroy could not prove completion of required selected teardown task(s): %s; their convergence/install records and substrate-release authorization were kept, so the next apply cannot mistake skipped work for destroyed state. Restore the selected hosts to the generated inventory or correct the desired-state selection, then re-run `%s`", strings.Join(skipped, ", "), retry.String())
 }
 
 func destroyTaskNeedsCompletionProof(task workflow.TaskLedgerEntry) bool {
