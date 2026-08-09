@@ -250,7 +250,7 @@ func ArbiterPreparePreflight(tasks []workflow.ApplyTask, runsDir, cluster string
 	return workflow.EvaluateApplyModePreflight(workflow.ApplyModeReconcile, workflow.WithoutTiebreakerDrift(objects, cluster))
 }
 
-func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode, streamAnsible bool) workflow.RunOptions {
+func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode, streamAnsible bool, invocationArgs []string) workflow.RunOptions {
 	opts := runOptionsForContext(ctx, clustersDir, executable, plan.State)
 	opts.Playbook = runScope.ApplyPlaybook
 	opts.Limit = plan.Limit
@@ -266,6 +266,7 @@ func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable 
 	opts.Label = label
 	opts.ApplyMode = mode
 	opts.StreamAnsible = streamAnsible
+	opts.InvocationArgs = append([]string(nil), invocationArgs...)
 	return opts
 }
 

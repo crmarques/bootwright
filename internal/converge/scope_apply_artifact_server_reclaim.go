@@ -151,6 +151,6 @@ func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io
 	if plan.NoRemoteWork {
 		return nil
 	}
-	_, _, err = ExecuteDestroy(cmdCtx, stdout, stderr, ctx, clustersDir, executable, bundleDir, InfraDestroyArtifactServerPlaybook, plan, InfraDestroyArtifactServerArtifactsBaseName, false, becomePasswordFile, false, false, "infra reclaim artifact-server", reporter, runLease, false)
+	_, _, err = ExecuteDestroy(cmdCtx, stdout, stderr, ctx, clustersDir, executable, bundleDir, InfraDestroyArtifactServerPlaybook, plan, InfraDestroyArtifactServerArtifactsBaseName, false, becomePasswordFile, false, false, "infra reclaim artifact-server", reporter, runLease, false, nil)
 	return err
 }

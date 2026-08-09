@@ -147,6 +147,7 @@ func TestRunLedgerRoundTrip(t *testing.T) {
 		Kind:  "providerServices",
 		Label: "provider services",
 	}}, now)
+	ledger.InvocationArgs = []string{"bootwright", "apply", "--mode", "reconcile", "--clusters", "cluster-a", "--context", "matrix"}
 
 	dir := t.TempDir()
 	if err := SaveRunLedger(dir, ledger); err != nil {
@@ -161,6 +162,9 @@ func TestRunLedgerRoundTrip(t *testing.T) {
 	}
 	if loaded.RunID != "run-1" || loaded.Tasks[0].Status != TaskStatusPending {
 		t.Fatalf("loaded ledger mismatch: %+v", loaded)
+	}
+	if !slices.Equal(loaded.InvocationArgs, ledger.InvocationArgs) {
+		t.Fatalf("loaded invocation args = %#v, want %#v", loaded.InvocationArgs, ledger.InvocationArgs)
 	}
 	if got := filepath.Base(LedgerPath(dir)); got != "current.json" {
 		t.Fatalf("ledger path base = %q", got)

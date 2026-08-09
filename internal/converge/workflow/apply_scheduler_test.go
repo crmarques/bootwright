@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -224,6 +225,31 @@ func TestRunApplyTaskGraphArchivesTheSameBytesItSaves(t *testing.T) {
 	}
 	if !bytes.Equal(current, archived) {
 		t.Fatalf("the archived run ledger must be the same document the finish step persisted:\ncurrent=%s\narchived=%s", current, archived)
+	}
+}
+
+func TestRunApplyTaskGraphPersistsAnIndependentCopyOfInvocationArgs(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	opts := schedulerRunOptions(dir)
+	opts.InvocationArgs = []string{"bootwright", "apply", "--mode", "reconcile", "--stage", "infra", "--context", "matrix"}
+	want := append([]string(nil), opts.InvocationArgs...)
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, opts,
+		ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", nil,
+		ConcurrencyLimits{Parallelism: 1}, nil, nil)
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	opts.InvocationArgs[0] = "changed-after-run"
+	if !slices.Equal(ledger.InvocationArgs, want) {
+		t.Fatalf("returned ledger invocation args = %#v, want independent copy %#v", ledger.InvocationArgs, want)
+	}
+	loaded, found, err := LoadRunLedger(runsDir)
+	if err != nil || !found {
+		t.Fatalf("LoadRunLedger: found=%v err=%v", found, err)
+	}
+	if !slices.Equal(loaded.InvocationArgs, want) {
+		t.Fatalf("persisted ledger invocation args = %#v, want %#v", loaded.InvocationArgs, want)
 	}
 }
 

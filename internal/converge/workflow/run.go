@@ -74,6 +74,7 @@ type RunOptions struct {
 	ApplyMode                  ApplyMode
 	OverrideAckedReinstalls    []string
 	SelectedMachines           []string
+	InvocationArgs             []string
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 	StreamAnsible              bool
 }
@@ -294,6 +295,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 			Label:  label,
 			Status: TaskStatusPending,
 		}}, now)
+		ledger.InvocationArgs = append([]string(nil), opts.InvocationArgs...)
 		ledger.MarkRunning(lease.RunID, opts.OutputLogPath, now)
 		if err := SaveRunLedger(opts.RunsDir, ledger); err != nil {
 			return RunResult{Render: result, Command: command}, err

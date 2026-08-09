@@ -100,6 +100,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	ledger.Machines = append([]string(nil), opts.SelectedMachines...)
+	ledger.InvocationArgs = append([]string(nil), opts.InvocationArgs...)
 	ownsLease := opts.RunLease == nil
 	var stopLeaseHeartbeat func()
 	var leaseErrors <-chan error

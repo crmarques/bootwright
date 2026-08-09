@@ -335,7 +335,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			renderResult = result
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
-			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease)
+			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease, invocation.args())
 			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, invocation)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
@@ -369,7 +369,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			renderResult = result
 		default:
-			runResult, destroyLogPath, derr := converge.ExecuteDestroy(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter, runLease, true)
+			runResult, destroyLogPath, derr := converge.ExecuteDestroy(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, false, become.PasswordFile, dryRun, false, workflowLabel, reporter, runLease, true, invocation.args())
 			if derr != nil {
 				return failErr(1, derr)
 			}

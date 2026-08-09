@@ -335,7 +335,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false)
+		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false, invocation.args())
 		runOpts.RunLease = runLease
 		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
 		runOpts.SelectedMachines = sel.MachineScopeNames()

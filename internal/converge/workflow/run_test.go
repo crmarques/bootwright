@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -197,6 +198,41 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	}
 	if reporter.dryRunLabel != "" {
 		t.Fatalf("non-dry-run must not report dry-run, got %q", reporter.dryRunLabel)
+	}
+}
+
+func TestRunPersistsExactInvocationArgsForRecordedPlaybookLedger(t *testing.T) {
+	baseDir := t.TempDir()
+	runsDir := filepath.Join(baseDir, "runs")
+	args := []string{"bootwright", "destroy", "--stage", "infra", "--clusters", "artifact-server", "--context", "matrix"}
+	runner := &fakeRunner{}
+	if _, err := Run(context.Background(), RunOptions{
+		State:              minimalState(),
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: filepath.Join(baseDir, "managed-services"),
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		OwnershipDir:       filepath.Join(baseDir, "ownership"),
+		BundleDir:          filepath.Join(baseDir, "bundle"),
+		Playbook:           "bootwright.core.workflow_infra_destroy",
+		ArtifactsBaseName:  "infra-destroy",
+		OutputLogPath:      filepath.Join(baseDir, "destroy.log"),
+		AcquireRunLease:    true,
+		RecordRunLedger:    true,
+		InvocationArgs:     args,
+	}, runner, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	args[0] = "changed-after-run"
+	ledger, found, err := LoadRunLedger(runsDir)
+	if err != nil || !found {
+		t.Fatalf("LoadRunLedger: found=%v err=%v", found, err)
+	}
+	want := []string{"bootwright", "destroy", "--stage", "infra", "--clusters", "artifact-server", "--context", "matrix"}
+	if !slices.Equal(ledger.InvocationArgs, want) {
+		t.Fatalf("persisted playbook invocation args = %#v, want %#v", ledger.InvocationArgs, want)
 	}
 }
 

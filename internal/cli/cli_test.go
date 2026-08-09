@@ -4200,6 +4200,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 		{ID: "boot.sno-libvirt", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt nodes", Cluster: "sno-libvirt", ClusterKind: workflow.ApplyClusterKindContainer, Dependencies: []string{"iso.sno-libvirt"}},
 		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", ClusterKind: workflow.ApplyClusterKindContainer, Dependencies: []string{"boot.sno-libvirt"}},
 	}, now)
+	ledger.InvocationArgs = []string{"bootwright", "apply", "--mode", "reconcile", "--context", "test"}
 	ledger.MarkOK("provider", now.Add(time.Second))
 	ledger.MarkOK("iso.sno-libvirt", now.Add(2*time.Second))
 	ledger.MarkRunning("boot.sno-libvirt", "/tmp/boot.log", now.Add(3*time.Second))

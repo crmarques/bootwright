@@ -10,38 +10,52 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, secretHints []string, needsHostTrust bool, applied bool) []string {
+const unavailableContextNextStepGuidance = "select a context explicitly before continuing; no runnable command is suggested because status could not resolve its target context"
+
+type NextStepHint struct {
+	Args     []string
+	Guidance string
+}
+
+func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretHints []NextStepHint, needsHostTrust bool, applied bool) []NextStepHint {
+	if strings.TrimSpace(contextName) == "" {
+		return []NextStepHint{{Guidance: unavailableContextNextStepGuidance}}
+	}
 	if stateLoaded {
-		hints := []string{"bootwright secret list"}
+		hints := []NextStepHint{contextCommandHint(contextName, "bootwright", "secret", "list")}
 		hints = append(hints, secretHints...)
 		if needsHostTrust {
-			hints = append(hints, "bootwright machine trust")
+			hints = append(hints, contextCommandHint(contextName, "bootwright", "machine", "trust"))
 		}
-		hints = append(hints, "bootwright bastion setup --yes", "bootwright preflight all", "bootwright render effective")
+		hints = append(hints,
+			contextCommandHint(contextName, "bootwright", "bastion", "setup"),
+			contextCommandHint(contextName, "bootwright", "preflight", "all"),
+			contextCommandHint(contextName, "bootwright", "render", "effective"),
+		)
 		if applied {
-			hints = append(hints, "bootwright diff")
+			hints = append(hints, contextCommandHint(contextName, "bootwright", "diff"))
 		}
 		needsInstaller := ClustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
-			hints = append(hints, "bootwright plan")
+			hints = append(hints, contextCommandHint(contextName, "bootwright", "plan"))
 			return hints
 		}
 		hints = append(hints,
-			"bootwright plan",
-			"bootwright apply --yes",
-			"bootwright status --watch",
-			"bootwright cluster info",
+			contextCommandHint(contextName, "bootwright", "plan"),
+			contextCommandHint(contextName, "bootwright", "apply"),
+			contextCommandHint(contextName, "bootwright", "status", "--watch"),
+			contextCommandHint(contextName, "bootwright", "cluster", "info"),
 		)
 		return hints
 	}
-	return []string{
-		"edit desired-state YAML under the context input directory",
-		"bootwright secret list",
-		"bootwright preflight all",
+	return []NextStepHint{
+		{Guidance: "edit desired-state YAML under the context input directory"},
+		contextCommandHint(contextName, "bootwright", "secret", "list"),
+		contextCommandHint(contextName, "bootwright", "preflight", "all"),
 	}
 }
 
-func SecretNextStepHints(state v1alpha1.State, entries []SecretEntry, err error) []string {
+func SecretNextStepHints(state v1alpha1.State, entries []SecretEntry, err error, contextName string) []NextStepHint {
 	if err != nil {
 		return nil
 	}
@@ -65,24 +79,37 @@ func SecretNextStepHints(state v1alpha1.State, entries []SecretEntry, err error)
 			contextMissing = append(contextMissing, entry.Name)
 		}
 	}
-	var hints []string
+	var hints []NextStepHint
 	if materializedMissing || generatedMissing {
-		hints = append(hints, "bootwright secret generate")
+		hints = append(hints, contextCommandHint(contextName, "bootwright", "secret", "generate"))
 	}
-	hints = append(hints, ContextSecretSetHints(contextMissing)...)
+	hints = append(hints, ContextSecretSetHints(contextName, contextMissing)...)
 	return hints
 }
 
-func ContextSecretSetHints(missing []string) []string {
-	var pull, rest []string
+func ContextSecretSetHints(contextName string, missing []string) []NextStepHint {
+	if len(missing) > 0 && strings.TrimSpace(contextName) == "" {
+		return []NextStepHint{{Guidance: unavailableContextNextStepGuidance}}
+	}
+	var pull, rest []NextStepHint
 	for _, name := range missing {
 		if name == v1alpha1.DefaultPullSecretName {
-			pull = append(pull, "bootwright secret set --name "+name+" --pull-secret <path>")
+			pull = append(pull, contextCommandHint(contextName, "bootwright", "secret", "set", "--name", name, "--pull-secret", "<path>"))
 		} else {
-			rest = append(rest, "bootwright secret set --name "+name+" --from-file <path>")
+			rest = append(rest, contextCommandHint(contextName, "bootwright", "secret", "set", "--name", name, "--from-file", "<path>"))
 		}
 	}
 	return append(pull, rest...)
+}
+
+func contextCommandHint(contextName string, args ...string) NextStepHint {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" {
+		return NextStepHint{Guidance: unavailableContextNextStepGuidance}
+	}
+	command := append([]string(nil), args...)
+	command = append(command, "--context", contextName)
+	return NextStepHint{Args: command}
 }
 
 func ClustersNeedingInstallerRender(state v1alpha1.State, renderedDir, clustersDir string) []string {

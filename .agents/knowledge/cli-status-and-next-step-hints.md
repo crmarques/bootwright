@@ -36,22 +36,29 @@ most universally required and would otherwise sort last alphabetically.
 fails.** `preflight.NeedsHostTrust` reports whether the desired state
 declares machines requiring Bootwright-managed SSH host trust whose
 records are absent or stale, so the spine can suggest
-`bootwright machine trust` before the workflow reaches a strict SSH
+the context-qualified `bootwright machine trust` before the workflow reaches a strict SSH
 check instead of silently skipping a mandatory step on remote-host
 layouts.
 
-**Semantics: the failed-run retry hint maps the ledger target back to
-the exact verb+flags.** Destroy stamps its target as `<stage> destroy`
-(via converge `ExecuteDestroyGraph`), so such a target retries as
-`bootwright destroy [--stage infra|clusters]` — never a re-apply of what
-a teardown just failed to remove. A `through-<phase>` target retries
-with `--through <phase>`; family/sub-phase targets
-(infra|clusters|fabric|machines|deps|base|add-ons) retry with `--stage`
-so a narrow rerun never silently widens to a full apply; the remaining
-scope names (all, container-cluster, storage-cluster) carry no stage
-flag; a recorded `--clusters` scope is re-threaded. The "destroy" token
-never appears in apply targets, which is what separates the verbs.
-Pinned by `ledger_audit_test.go` (finding L4).
+**Semantics: normal runnable hints carry the resolved context and do not
+pre-authorize mutation.** `internal/status` returns normal hints as structured
+argv or command-free guidance; `internal/cli` shell-quotes the argv for display.
+Every command carries the explicit resolved `--context`. If none is available,
+the spine emits one command-free instruction instead. Setup and apply hints do
+not add `--yes`, so the next state change still needs an operator confirmation.
+
+**Semantics: a failed-run retry comes only from exact recorded argv.** Every
+real apply and destroy threads `resolvedInvocation.args()` through `RunOptions`
+into both graph and playbook ledgers. `internal/status` validates the recorded
+verb and explicit context, then renders those arguments with
+`shellquote.QuoteWords`; it never derives a verb, stage, range, cluster or
+machine selection from the lossy `Target`/`Scope`/`Machines` display fields and
+never adds `--yes`. The argv preserves context, selection, mode, reclaim or
+recovery/purge effects, authorizations, SSH globals, and the original
+confirmation choice. A legacy, absent, preview-shaped, or malformed invocation
+yields command-free operator-history guidance. Pinned by
+`ledger_audit_test.go`, workflow ledger round-trip/scheduler tests, and the CLI
+next-step spine test.
 
 **Semantics: cluster access is advertised only for completed
 installs.** `StorageSummariesForApply` (mirroring

@@ -18,8 +18,9 @@ YAML desired state
 per-package import matrix it describes is enforced structurally by
 `internal/repo/checks`.
 
-Apply execution records a durable run ledger under the context state directory
-and a short-lived local lease for the process updating it. Cluster install
+Apply and destroy execution record a durable run ledger under the context state
+directory, including the CLI's exact resolved mutating invocation argv, and a
+short-lived local lease for the process updating it. Cluster install
 tasks also record per-cluster install state with a non-secret desired-input
 fingerprint so repeated applies can skip completed installs and resume only
 from known-safe phases. An `iso-created` record permits node boot only while its

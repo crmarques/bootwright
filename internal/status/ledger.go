@@ -1,21 +1,23 @@
 package status
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 )
+
+const unavailableLedgerRetryGuidance = "review the failed run and repeat the original mutating invocation from operator history; its exact command was not recorded with a validated context"
 
 func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, existing []string) []string {
 	switch ledger.Status {
 	case workflow.RunStatusRunning:
 		if activity.State == workflow.RunActivityStale {
-			return append([]string{ledgerRetryCommand(ledger)}, existing...)
+			return append([]string{ledgerRetryHint(ledger)}, existing...)
 		}
-		return append([]string{"bootwright status --watch"}, existing...)
+		return append([]string{ledgerWatchHint(ledger)}, existing...)
 	case workflow.RunStatusFailed:
-		hints := []string{ledgerRetryCommand(ledger)}
+		hints := []string{ledgerRetryHint(ledger)}
 		for _, task := range ledger.FailedTasks() {
 			if task.LogPath != "" {
 				hints = append(hints, "inspect "+task.LogPath)
@@ -27,81 +29,44 @@ func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 	}
 }
 
-func ledgerRetryCommand(ledger workflow.RunLedger) string {
-	machines := ledgerMachineSelection(ledger)
-	command := "bootwright apply"
-	if stage, ok := ledgerDestroyStage(ledger.Target); ok {
-		command = "bootwright destroy"
-		if machines != "" {
-			stage = ""
-		}
-		if stage != "" {
-			command += " --stage " + stage
-		}
-	} else if through, ok := strings.CutPrefix(ledger.Target, "through-"); ok {
-		command += " --through " + through
-	} else if stage, through, ok := ledgerApplyRange(ledger.Target); ok {
-		command += " --stage " + stage + " --through " + through
-	} else if ledgerTargetIsApplyStage(ledger.Target) && machines == "" {
-		command += " --stage " + ledger.Target
+func ledgerRetryHint(ledger workflow.RunLedger) string {
+	if _, ok := recordedMutatingInvocationContext(ledger.InvocationArgs); !ok {
+		return unavailableLedgerRetryGuidance
 	}
-	switch {
-	case machines != "":
-		command += " --machines " + machines
-	case ledger.Scope != "":
-		command += " --clusters " + ledger.Scope
-	}
-	return command + " --yes"
+	return shellquote.QuoteWords(ledger.InvocationArgs)
 }
 
-func ledgerMachineSelection(ledger workflow.RunLedger) string {
-	names := make([]string, 0, len(ledger.Machines))
-	for _, name := range ledger.Machines {
-		if trimmed := strings.TrimSpace(name); trimmed != "" {
-			names = append(names, trimmed)
-		}
+func ledgerWatchHint(ledger workflow.RunLedger) string {
+	contextName, ok := recordedMutatingInvocationContext(ledger.InvocationArgs)
+	if !ok {
+		return "continue monitoring the active run from the explicitly selected context; its exact context was not recorded, so no runnable status command is suggested"
 	}
-	sort.Strings(names)
-	return strings.Join(names, ",")
+	return shellquote.QuoteWords([]string{"bootwright", "status", "--watch", "--context", contextName})
 }
 
-func ledgerDestroyStage(target string) (string, bool) {
-	fields := strings.Fields(target)
-	destroy := false
-	for _, f := range fields {
-		if f == "destroy" {
-			destroy = true
-			break
-		}
-	}
-	if !destroy {
+func recordedMutatingInvocationContext(args []string) (string, bool) {
+	if len(args) < 4 || args[0] != "bootwright" || (args[1] != "apply" && args[1] != "destroy") {
 		return "", false
 	}
-	if len(fields) > 0 {
-		switch fields[0] {
-		case "infra", "clusters":
-			return fields[0], true
+	contextName := ""
+	for i, arg := range args[2:] {
+		if arg == "--dry-run" || strings.HasPrefix(arg, "--dry-run=") {
+			return "", false
+		}
+		if arg == "--context" {
+			index := i + 3
+			if contextName != "" || index >= len(args) || strings.TrimSpace(args[index]) == "" || strings.HasPrefix(args[index], "-") {
+				return "", false
+			}
+			contextName = args[index]
+			continue
+		}
+		if value, ok := strings.CutPrefix(arg, "--context="); ok {
+			if contextName != "" || strings.TrimSpace(value) == "" || strings.HasPrefix(value, "-") {
+				return "", false
+			}
+			contextName = value
 		}
 	}
-	return "", true
-}
-
-func ledgerApplyRange(target string) (stage, through string, ok bool) {
-	rem, found := strings.CutPrefix(target, "range-")
-	if !found {
-		return "", "", false
-	}
-	i := strings.Index(rem, "-")
-	if i <= 0 || i >= len(rem)-1 {
-		return "", "", false
-	}
-	return rem[:i], rem[i+1:], true
-}
-
-func ledgerTargetIsApplyStage(target string) bool {
-	switch target {
-	case "infra", "clusters", "fabric", "machines", "deps", "base", "add-ons":
-		return true
-	}
-	return false
+	return contextName, contextName != ""
 }

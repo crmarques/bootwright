@@ -1104,7 +1104,7 @@ there.
 
 | Path under `…/contexts/<context>/` | Holds |
 | --- | --- |
-| `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger, and the short-lived local lease for the updating process. |
+| `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger (including exact resolved mutating invocation argv), and the short-lived local lease for the updating process. |
 | `runs/history/<run-id>/bootwright.log` | The shared apply flow log: shared-stage tool output plus one `<cluster> apply initiated … / finished successfully \| failed` marker per cluster that points at its split-out log. |
 | `runs/history/<run-id>/clusters/<cluster>/cluster.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
 | `runs/history/<run-id>/clusters/<cluster>/steps/<task-id>/` | One step's Ansible output log for that cluster, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
@@ -1117,9 +1117,14 @@ there.
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |
 | `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint, exact installer version, original start time, and ISO/boot/bootstrap/install phase that bounded resume reads. |
 
-A run records a durable ledger entry plus a short-lived lease that marks the
-updating process; cluster install tasks additionally record per-cluster install
-state. The lease is per context and spans input read, safety gates, remote work,
+A real apply or destroy records its exact resolved invocation argv in the
+durable ledger, so a failed-run status hint can preserve context, scope, intent,
+effect flags, SSH overrides, authorizations, and the original confirmation
+choice without reconstructing or widening them. Status quotes that argv for the
+shell and never invents `--yes`; an older ledger without it yields command-free
+guidance. The short-lived lease marks the updating process; cluster install
+tasks additionally record per-cluster install state. The lease is per context
+and spans input read, safety gates, remote work,
 and final evidence cleanup. Input-mutating `context update`, `diff --adopt`, and
 arbiter replacement share it, so they cannot race an apply or destroy that
 already classified the previous input. The forensic YAML input snapshots

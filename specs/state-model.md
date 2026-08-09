@@ -2556,6 +2556,16 @@ safety-matrix scenario, so a new backend refusal cannot assemble a partial
 command or silently drop a future selection, identity, effect, or authorization
 flag.
 
+Every real `apply` and `destroy` ledger records that run's exact resolved
+invocation as argv, not as an inferred display string. A failed-run retry in
+`status` shell-quotes only those recorded arguments: it retains the explicit
+context, stage or range, cluster or machine selection, mode, effect flags, SSH
+overrides, authorizations, and whether the operator did or did not pass
+`--yes`. It never adds `--yes`. A legacy, incomplete, or malformed ledger that
+does not carry a validated apply/destroy invocation with an explicit context
+produces command-free guidance to consult operator history instead of a guessed
+command.
+
 ### Machine-readable output
 
 `--output json` payloads split into contract and non-contract. Contract —
@@ -3545,16 +3555,21 @@ command. The rest are registered per command, on the verbs that reach machines.
   change, host/service/CRUSH topology) is reported as detected-but-not-adopted for a
   deliberate manual edit rather than silently dropped.
   Once the context has a recorded apply, the `status` next-step spine surfaces
-  `diff` ahead of `plan`/`apply`. When the last run failed, the spine's
-  next step is instead the exact scoped retry command — the failed run's own verb
-  carrying its own selection (`--stage`/`--through`, and `--clusters` or
-  `--machines`) — alongside the failed tasks' log paths
+  `diff` ahead of `plan`/`apply`. Every runnable normal spine entry carries the
+  explicitly resolved `--context` and leaves routine confirmation unanswered;
+  when no context can be resolved it emits command-free guidance instead. When
+  the last run failed, the spine's next step is instead the shell-quoted exact
+  invocation argv recorded for that run — including its verb, context,
+  `--stage`/`--through`, `--clusters` or `--machines`, mode, effect flags,
+  authorizations, SSH globals, and the original presence or absence of `--yes`
+  — alongside the failed tasks' log paths
   under `runs/history/<run-id>/`, so an interrupted apply resumes without an
   operator reaching for `--mode rebuild` or `destroy`. A retry hint never widens
   what the failed run selected: dropping a selection axis the run used offers a
   mutation the operator never asked for, and on `destroy` an unscoped retry is a
-  whole-context teardown with its confirmation already answered. The run ledger
-  therefore records the machine selection beside the cluster one.
+  whole-context teardown with its confirmation already answered. Status never
+  reconstructs a retry from the ledger's display target, cluster scope, or
+  machine list; an older ledger without exact argv yields no runnable retry.
   Every spine entry is either a command the CLI accepts verbatim — it resolves
   to a registered command path and carries only flags that command registers —
   or command-free prose. A spine that ends on a verb the CLI no longer has

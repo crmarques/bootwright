@@ -197,11 +197,16 @@ objects that already converged are recorded and skip on the next run. Do **not**
 reach for `--mode rebuild` or `destroy`; those are for drift and rebuilds, not a
 resumable interruption.
 
-Run `bootwright status`: on a failed run it prints the exact scoped retry command
-(for example `bootwright apply --clusters <name> --yes`) and the log path of each
-failed task under `/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/`.
-Read that log, fix the cause, then re-run the printed command — completed objects
-skip or re-run idempotently, and only the failed and pending work runs again.
+Run `bootwright status`: on a failed run it prints the shell-quoted exact
+invocation recorded when that run started, including `--context`, selection,
+mode, effect flags, authorizations, SSH overrides, and whether you originally
+passed `--yes`, plus the log path of each failed task under
+`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/`. It never adds
+`--yes` for you. Read that log, fix the cause, then re-run the printed command —
+completed objects skip or re-run idempotently, and only the failed and pending
+work runs again. A ledger written by an older build without exact argv produces
+command-free guidance; recover the invocation from your shell or automation
+history rather than widening it from the ledger's display label.
 
 See [Ownership and Safety](advanced/ownership-and-safety.md) for why the rerun is
 safe, and [Operations and Recovery](advanced/operations.md) only for the drift

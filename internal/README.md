@@ -28,7 +28,8 @@ state, validate it, render tool inputs, converge, observe.
 - `preflight`: environmental-readiness rules (tools, secret material, SSH
   trust, entitlements). Returns plain check data; cli renders it.
 - `status`: observe-stage analysis — report model, freshness, ledger
-  summaries, next-step hints, state-check classification. Returns data.
+  summaries, structured normal hints, validated exact-ledger retry quoting,
+  state-check classification. Returns data.
 - `clusteraccess`: selection-by-name validation, kubeconfig generation, and
   access summaries for installed clusters.
 

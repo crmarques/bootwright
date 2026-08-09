@@ -13,21 +13,21 @@ import (
 )
 
 func TestNextStepSpineHintsResolveToRegisteredCommands(t *testing.T) {
-	secretHints := status.ContextSecretSetHints([]string{"bmc-credentials", v1alpha1.DefaultPullSecretName})
+	secretHints := status.ContextSecretSetHints("matrix", []string{"bmc-credentials", v1alpha1.DefaultPullSecretName})
 	cases := []struct {
 		name  string
 		hints []string
 	}{
-		{"no state", status.NextStepHints(false, v1alpha1.State{}, "", "", nil, false, false)},
-		{"state loaded", status.NextStepHints(true, v1alpha1.State{}, "", "", nil, false, false)},
-		{"state loaded and applied", status.NextStepHints(true, v1alpha1.State{}, "", "", nil, false, true)},
-		{"host trust missing", status.NextStepHints(true, v1alpha1.State{}, "", "", secretHints, true, false)},
-		{"generated secrets missing", status.NextStepHints(true, v1alpha1.State{}, "", "", []string{"bootwright secret generate"}, false, false)},
-		{"failed apply ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "range-base-add-ons", Scope: "dc1", Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
-		{"failed destroy ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "clusters destroy", Scope: "dc1", Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
-		{"failed machine-scoped apply ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "infra", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
-		{"failed machine-scoped destroy ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "machines destroy", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
-		{"running ledger", status.LedgerNextSteps(workflow.RunLedger{Target: "all", Status: workflow.RunStatusRunning}, workflow.RunActivity{}, nil)},
+		{"no state", renderNextStepHints(status.NextStepHints(false, v1alpha1.State{}, "", "", "matrix", nil, false, false))},
+		{"state loaded", renderNextStepHints(status.NextStepHints(true, v1alpha1.State{}, "", "", "matrix", nil, false, false))},
+		{"state loaded and applied", renderNextStepHints(status.NextStepHints(true, v1alpha1.State{}, "", "", "matrix", nil, false, true))},
+		{"host trust missing", renderNextStepHints(status.NextStepHints(true, v1alpha1.State{}, "", "", "matrix", secretHints, true, false))},
+		{"generated secrets missing", renderNextStepHints(status.NextStepHints(true, v1alpha1.State{}, "", "", "matrix", []status.NextStepHint{{Args: []string{"bootwright", "secret", "generate", "--context", "matrix"}}}, false, false))},
+		{"failed apply ledger", status.LedgerNextSteps(workflow.RunLedger{InvocationArgs: []string{"bootwright", "apply", "--mode", "reconcile", "--stage", "base", "--through", "add-ons", "--clusters", "dc1", "--context", "matrix"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"failed destroy ledger", status.LedgerNextSteps(workflow.RunLedger{InvocationArgs: []string{"bootwright", "destroy", "--stage", "clusters", "--clusters", "dc1", "--context", "matrix"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"failed machine-scoped apply ledger", status.LedgerNextSteps(workflow.RunLedger{InvocationArgs: []string{"bootwright", "apply", "--mode", "reconcile", "--machines", "dc1-worker-1", "--context", "matrix"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"failed machine-scoped destroy ledger", status.LedgerNextSteps(workflow.RunLedger{InvocationArgs: []string{"bootwright", "destroy", "--machines", "dc1-worker-1", "--context", "matrix"}, Status: workflow.RunStatusFailed}, workflow.RunActivity{}, nil)},
+		{"running ledger", status.LedgerNextSteps(workflow.RunLedger{Status: workflow.RunStatusRunning}, workflow.RunActivity{}, nil)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,28 +41,33 @@ func TestNextStepSpineHintsResolveToRegisteredCommands(t *testing.T) {
 	}
 }
 
-func TestFailedRunRetryHintReproducesTheRunSelection(t *testing.T) {
+func TestFailedRunRetryHintReproducesTheRecordedInvocation(t *testing.T) {
 	cases := []struct {
 		name   string
 		ledger workflow.RunLedger
 		want   string
-	}{{
-		name:   "cluster-scoped apply",
-		ledger: workflow.RunLedger{Target: "range-base-add-ons", Scope: "dc1-ocp", Status: workflow.RunStatusFailed},
-		want:   "bootwright apply --stage base --through add-ons --clusters dc1-ocp --yes",
-	}, {
-		name:   "cluster-scoped destroy",
-		ledger: workflow.RunLedger{Target: "clusters destroy", Scope: "dc1-ocp", Status: workflow.RunStatusFailed},
-		want:   "bootwright destroy --stage clusters --clusters dc1-ocp --yes",
-	}, {
-		name:   "machine-scoped apply",
-		ledger: workflow.RunLedger{Target: "infra", Machines: []string{"dc1-worker-1"}, Status: workflow.RunStatusFailed},
-		want:   "bootwright apply --machines dc1-worker-1 --yes",
-	}, {
-		name:   "machine-scoped destroy",
-		ledger: workflow.RunLedger{Target: "machines destroy", Machines: []string{"dc1-worker-2", "dc1-worker-1"}, Status: workflow.RunStatusFailed},
-		want:   "bootwright destroy --machines dc1-worker-1,dc1-worker-2 --yes",
-	}}
+	}{
+		{
+			name:   "cluster-scoped apply",
+			ledger: workflow.RunLedger{Target: "all destroy", Scope: "wider", InvocationArgs: []string{"bootwright", "apply", "--mode", "reconcile", "--stage", "base", "--through", "add-ons", "--clusters", "dc1-ocp", "--context", "matrix"}, Status: workflow.RunStatusFailed},
+			want:   "bootwright apply --mode reconcile --stage base --through add-ons --clusters dc1-ocp --context matrix",
+		},
+		{
+			name:   "cluster-scoped destroy",
+			ledger: workflow.RunLedger{Target: "all", Scope: "wider", InvocationArgs: []string{"bootwright", "destroy", "--stage", "clusters", "--clusters", "dc1-ocp", "--context", "matrix"}, Status: workflow.RunStatusFailed},
+			want:   "bootwright destroy --stage clusters --clusters dc1-ocp --context matrix",
+		},
+		{
+			name:   "machine-scoped apply",
+			ledger: workflow.RunLedger{Target: "all destroy", Machines: []string{"wider-machine"}, InvocationArgs: []string{"bootwright", "apply", "--mode", "reconcile", "--machines", "dc1-worker-1", "--context", "matrix"}, Status: workflow.RunStatusFailed},
+			want:   "bootwright apply --mode reconcile --machines dc1-worker-1 --context matrix",
+		},
+		{
+			name:   "machine-scoped destroy",
+			ledger: workflow.RunLedger{Target: "all", Machines: []string{"wider-machine"}, InvocationArgs: []string{"bootwright", "destroy", "--machines", "dc1-worker-2,dc1-worker-1", "--context", "matrix"}, Status: workflow.RunStatusFailed},
+			want:   "bootwright destroy --machines dc1-worker-2,dc1-worker-1 --context matrix",
+		},
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			hints := status.LedgerNextSteps(tc.ledger, workflow.RunActivity{}, nil)
@@ -70,16 +75,16 @@ func TestFailedRunRetryHintReproducesTheRunSelection(t *testing.T) {
 				t.Fatal("a failed run must emit a retry hint")
 			}
 			if hints[0] != tc.want {
-				t.Fatalf("retry hint is %q, want %q; the hint must reproduce the failed run's own selection — a hint that widens it points the operator at a mutation they never asked for", hints[0], tc.want)
+				t.Fatalf("retry hint is %q, want %q; the hint must reproduce the exact recorded invocation rather than reconstructing it from lossy ledger labels", hints[0], tc.want)
 			}
 		})
 	}
 }
 
 func TestNextStepSpineEndsOnClusterInfo(t *testing.T) {
-	hints := status.NextStepHints(true, v1alpha1.State{}, "", "", nil, false, true)
-	if got := hints[len(hints)-1]; got != "bootwright cluster info" {
-		t.Fatalf("the spine ends on %q, want the post-apply access verb `bootwright cluster info`", got)
+	hints := renderNextStepHints(status.NextStepHints(true, v1alpha1.State{}, "", "", "matrix", nil, false, true))
+	if got := hints[len(hints)-1]; got != "bootwright cluster info --context matrix" {
+		t.Fatalf("the spine ends on %q, want the post-apply access verb `bootwright cluster info` for the resolved context", got)
 	}
 }
 
