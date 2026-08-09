@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, sel clusteraccess.Selection, rebuiltHosts []string, provisionedStorage map[string]bool) error {
+func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, sel clusteraccess.Selection, rebuiltHosts []string, provisionedStorage map[string]bool, invocation *resolvedInvocation) error {
 	if !sel.Active || len(rebuiltHosts) == 0 {
 		return nil
 	}
@@ -27,7 +27,15 @@ func checkKubeVirtTenantRebuildScope(state v1alpha1.State, clustersDir string, s
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - ContainerCluster %s hosts installed %s\n", c.Host, strings.Join(c.Tenants, ", ")))
 	}
-	b.WriteString("include the nested cluster(s) in the run's selection (--clusters, or --machines covering their nodes) to rebuild them in the same run, or run bootwright destroy --stage clusters --clusters " + strings.Join(kubeVirtTenantNames(conflicts), ",") + " --yes first")
+	b.WriteString("include the nested cluster(s) in the run's selection (--clusters, or --machines covering their nodes) to rebuild them in the same run")
+	if invocation != nil {
+		retry, err := invocation.destroyClustersRetry(kubeVirtTenantNames(conflicts))
+		if err != nil {
+			return err
+		}
+		b.WriteString(", or destroy them first with `" + retry.String() + "`")
+	}
+	b.WriteString("; no --authorize token widens the selected work set")
 	return errors.New(b.String())
 }
 
@@ -94,7 +102,7 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 			refusals = append(refusals, err)
 		}
 	}
-	if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, rebuiltHosts, converge.ProvisionedStorageTenants(ownershipRecords)); err != nil {
+	if err := checkKubeVirtTenantRebuildScope(fullState, clustersDir, sel, rebuiltHosts, converge.ProvisionedStorageTenants(ownershipRecords), invocation); err != nil {
 		refusals = append(refusals, err)
 	}
 	if reclaimDevices != "" {

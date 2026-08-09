@@ -263,7 +263,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			substrateResetClusters = workflow.UnionClusterNames(substrateResetClusters, releasedClusters)
 			rebuiltHosts := workflow.UnionClusterNames(ocpReinstallAcked, substrateResetClusters)
-			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts, provisionedStorageTenants); err != nil {
+			if err := checkKubeVirtTenantRebuildScope(state, clustersDir, sel, rebuiltHosts, provisionedStorageTenants, &invocation); err != nil {
 				return failErr(1, err)
 			}
 			if reclaimDevices != "" {

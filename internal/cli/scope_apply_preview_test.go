@@ -183,6 +183,14 @@ func TestCheckKubeVirtTenantRebuildScopeGatesEverySelectionAxis(t *testing.T) {
 	host := "sno-libvirt"
 	rebuilt := []string{host}
 	tenantState := kubeVirtTenantState(state, host)
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "test",
+		flags: invocationFlags{
+			mode: workflow.ApplyModeRebuild,
+			yes:  true,
+		},
+	}
 
 	cases := []struct {
 		name       string
@@ -196,13 +204,16 @@ func TestCheckKubeVirtTenantRebuildScopeGatesEverySelectionAxis(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkKubeVirtTenantRebuildScope(tenantState, clustersDir, tc.sel, rebuilt, nil)
+			err := checkKubeVirtTenantRebuildScope(tenantState, clustersDir, tc.sel, rebuilt, nil, &invocation)
 			if tc.wantRefuse {
 				if err == nil {
 					t.Fatal("a scoped rebuild of the host must refuse while the nested cluster is left out of the selection")
 				}
 				if !strings.Contains(err.Error(), "child") {
 					t.Fatalf("refusal must name the stranded nested cluster, got %v", err)
+				}
+				if !strings.Contains(err.Error(), "`bootwright destroy --yes --clusters child --ask-become-pass=false --context test`") {
+					t.Fatalf("refusal must give the exact context-preserving alternative, got %v", err)
 				}
 				return
 			}

@@ -15,7 +15,11 @@ type mutationSafetyVarContract struct {
 }
 
 var mutationSafetyVars = []mutationSafetyVarContract{
+	{Name: "bootwright_apply_full_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_mode", Class: mutationSafetyVarIntent},
+	{Name: "bootwright_apply_rebuild_invocation", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_apply_reconcile_invocation", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_apply_through_base_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_arbiter_allow_degraded", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_arbiter_allow_same_site", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_arbiter_cluster_name", Class: mutationSafetyVarScope},
@@ -73,4 +77,5 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_machine_task_cluster_name", Class: mutationSafetyVarScope},
 	{Name: "bootwright_machine_task_machine_name", Class: mutationSafetyVarScope},
 	{Name: "bootwright_machine_task_provider_host_name", Class: mutationSafetyVarScope},
+	{Name: "bootwright_mutating_invocation", Class: mutationSafetyVarExecution},
 }

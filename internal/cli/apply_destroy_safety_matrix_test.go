@@ -1339,14 +1339,15 @@ func safetyStartingStateCases() []safetyCase {
 		},
 		args:    []string{"apply", "--machines", safetyBareMetalManagedOSMachine, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"reinstall destroy-released bare-metal machine(s) " + safetyBareMetalManagedOSMachine, "still-running OS wiped", "--authorize data-loss", "bootwright apply --authorize data-loss --yes --machines " + safetyBareMetalManagedOSMachine},
+		want:    []string{"reinstall destroy-released bare-metal machine(s) " + safetyBareMetalManagedOSMachine, "still-running OS wiped", "--authorize data-loss", "`bootwright apply --mode reconcile --authorize data-loss --yes --machines " + safetyBareMetalManagedOSMachine + " --ask-become-pass=false --trust-on-first-use=true --context matrix`"},
 	}, {
 		name:     "apply/a released libvirt machine substrate hosting an installed KubeVirt tenant refuses a host-only rebuild",
 		baseline: safetyBaselineLibvirtKubeVirtHost,
 		seed:     seedReleasedKubeVirtHostWithInstalledTenant,
 		args:     []string{"apply", "--stage", "infra", "--clusters", safetyLibvirtKubeVirtHostCluster, "--yes", "--ask-become-pass=false"},
 		verdict:  verdictRefusal,
-		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "bootwright destroy --stage clusters --clusters " + safetyLibvirtKubeVirtTenantCluster},
+		remedy:   remedyAlternative,
+		want:     []string{safetyLibvirtKubeVirtHostCluster, safetyLibvirtKubeVirtTenantCluster, "left out of scope", "`bootwright destroy --yes --clusters " + safetyLibvirtKubeVirtTenantCluster + " --ask-become-pass=false --context matrix`"},
 	}, {
 		name: "apply/renamed ContainerCluster orphaning a provisioned one",
 		seed: func(t *testing.T, ctx workspace.Context) {
