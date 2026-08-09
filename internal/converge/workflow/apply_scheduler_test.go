@@ -298,16 +298,19 @@ func TestTaskDispatchBlockerReportsTheFirstUnavailableBudget(t *testing.T) {
 		},
 		RedfishSlots: 2,
 	}
-	if got := taskDispatchBlocker(task, 1, 2, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1); got != "redfish budget" {
+	if got := taskDispatchBlocker(task, 2, 2, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1, nil); got != "redfish budget" {
 		t.Fatalf("blocker with an exhausted Redfish budget = %q, want %q", got, "redfish budget")
 	}
-	if got := taskDispatchBlocker(task, 0, 2, map[string]int{"libvirt:host-a": 1}, map[string]int{}, 1, map[string]int{}, 1); got != "resource libvirt:host-a" {
+	if got := taskDispatchBlocker(task, 1, 2, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1, nil); got != "" {
+		t.Fatalf("a task whose full Redfish demand does not fit must still dispatch on the free slots, got %q", got)
+	}
+	if got := taskDispatchBlocker(task, 0, 2, map[string]int{"libvirt:host-a": 1}, map[string]int{}, 1, map[string]int{}, 1, nil); got != "resource libvirt:host-a" {
 		t.Fatalf("blocker with a held resource key = %q", got)
 	}
-	if got := taskDispatchBlocker(task, 0, 2, map[string]int{}, map[string]int{"host:bastion:machine": 1}, 1, map[string]int{}, 1); got != "host slot host:bastion:machine" {
+	if got := taskDispatchBlocker(task, 0, 2, map[string]int{}, map[string]int{"host:bastion:machine": 1}, 1, map[string]int{}, 1, nil); got != "host slot host:bastion:machine" {
 		t.Fatalf("blocker with a full host slot = %q", got)
 	}
-	if got := taskDispatchBlocker(task, 0, 2, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1); got != "" {
+	if got := taskDispatchBlocker(task, 0, 2, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1, nil); got != "" {
 		t.Fatalf("blocker for a dispatchable task = %q, want empty", got)
 	}
 }
@@ -315,17 +318,23 @@ func TestTaskDispatchBlockerReportsTheFirstUnavailableBudget(t *testing.T) {
 func TestTaskClusterInstallAdmissionCountsClustersNotTasks(t *testing.T) {
 	install := ApplyTask{Entry: TaskLedgerEntry{ID: "boot.ocp-b.node-0", Kind: ApplyTaskKindNodeBoot, Cluster: "ocp-b"}}
 	other := ApplyTask{Entry: TaskLedgerEntry{ID: "addon.ocp-b.logging", Kind: ApplyTaskKindClusterAddon, Cluster: "ocp-b"}}
-	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1); got != ApplyClusterInstallBlocker {
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1, nil); got != ApplyClusterInstallBlocker {
 		t.Fatalf("blocker for a second installing cluster = %q, want %q", got, ApplyClusterInstallBlocker)
 	}
-	if got := taskDispatchBlocker(other, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1); got != "" {
+	if got := taskDispatchBlocker(other, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 1, nil); got != "" {
 		t.Fatalf("a non-install task must not wait on the cluster install budget, got %q", got)
 	}
-	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-b": 1}, 1); got != "" {
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-b": 1}, 1, nil); got != "" {
 		t.Fatalf("another install task of the already-admitted cluster must dispatch, got %q", got)
 	}
-	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 2); got != "" {
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-a": 1}, 2, nil); got != "" {
 		t.Fatalf("a raised cluster install limit must admit a second cluster, got %q", got)
+	}
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{}, 1, map[string]bool{"ocp-c": true}); got != ApplyClusterInstallBlocker {
+		t.Fatalf("a free slot must not go to a cluster outside the admission set, got %q", got)
+	}
+	if got := taskDispatchBlocker(install, 0, 1, map[string]int{}, map[string]int{}, 1, map[string]int{"ocp-b": 1}, 1, map[string]bool{"ocp-c": true}); got != "" {
+		t.Fatalf("a cluster already holding the slot must keep dispatching regardless of admission, got %q", got)
 	}
 }
 
@@ -541,6 +550,167 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotToTheClusterItWaitsOn(t *te
 	for _, task := range ledger.Tasks {
 		if task.Status != TaskStatusOK {
 			t.Fatalf("task %s ended %s (%s); every task of both clusters must run", task.ID, task.Status, task.SkippedReason)
+		}
+	}
+}
+
+func TestRedfishGrantUsesTheFreeSlotsRatherThanStarvingTheTask(t *testing.T) {
+	storageOS := ApplyTask{Entry: TaskLedgerEntry{ID: "osinstall.ceph", Kind: ApplyTaskKindManagedMachineOS}, RedfishSlots: 6}
+	nodeBoot := ApplyTask{Entry: TaskLedgerEntry{ID: "boot.ocp", Kind: ApplyTaskKindNodeBoot}, RedfishSlots: 3}
+	if got := taskRedfishGrant(storageOS, 0, DefaultParallelismRedfish); got != 6 {
+		t.Fatalf("grant for the first task = %d, want its full demand of 6", got)
+	}
+	if got := taskRedfishGrant(nodeBoot, 6, DefaultParallelismRedfish); got != 2 {
+		t.Fatalf("grant for a 3-slot node boot against 2 free slots = %d, want 2: an all-or-nothing hold parks the whole bare-metal cluster behind an unrelated storage OS install for its full duration", got)
+	}
+	if got := taskRedfishGrant(nodeBoot, DefaultParallelismRedfish, DefaultParallelismRedfish); got != 0 {
+		t.Fatalf("grant against a fully committed budget = %d, want 0", got)
+	}
+	if got := taskRedfishGrant(ApplyTask{Entry: TaskLedgerEntry{ID: "iso.ocp", Kind: ApplyTaskKindClusterISO}}, 0, DefaultParallelismRedfish); got != 0 {
+		t.Fatalf("a task charging no Redfish slots must take none, got %d", got)
+	}
+}
+
+func TestRunApplyTaskGraphBootsWhileAStorageOSInstallHoldsMostRedfishSlots(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := newGatedPlaybookRunner("osinstall.ceph", "boot.ocp")
+	tasks := []ApplyTask{
+		{
+			Entry:        TaskLedgerEntry{ID: "osinstall.ceph", Kind: ApplyTaskKindManagedMachineOS, Label: "managed OS ceph machines", Cluster: "ceph", ClusterKind: ApplyClusterKindStorage, Status: TaskStatusPending},
+			Playbook:     "osinstall.ceph",
+			RedfishSlots: 6,
+			State:        state,
+		},
+		{
+			Entry:        TaskLedgerEntry{ID: "boot.ocp", Kind: ApplyTaskKindNodeBoot, Label: "boot ocp nodes", Cluster: "ocp", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook:     "boot.ocp",
+			RedfishSlots: 3,
+			State:        state,
+		},
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
+			ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseMachines, ApplyPhaseBase}}, "", tasks,
+			ConcurrencyLimits{ParallelismRedfish: DefaultParallelismRedfish}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- err
+	}()
+	runner.awaitStart(t, "osinstall.ceph")
+	runner.awaitStart(t, "boot.ocp")
+	runner.releasePlaybook("osinstall.ceph")
+	runner.releasePlaybook("boot.ocp")
+	if err := <-done; err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+}
+
+func TestRunApplyTaskGraphGivesTheInstallSlotToAnUnparkedChainFirst(t *testing.T) {
+	t.Setenv(ParallelismClustersEnvVar, "")
+	dir := t.TempDir()
+	state := minimalState()
+	runner := newGatedPlaybookRunner("iso.child", "boot.child", "iso.metal", "boot.metal", "wait.metal")
+	tasks := []ApplyTask{
+		{
+			Entry:    TaskLedgerEntry{ID: "iso.child", Kind: ApplyTaskKindClusterISO, Label: "iso child", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook: "iso.child",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "boot.child", Kind: ApplyTaskKindNodeBoot, Label: "boot child nodes", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"iso.child", "wait.metal"}, Status: TaskStatusPending},
+			Playbook: "boot.child",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "iso.metal", Kind: ApplyTaskKindClusterISO, Label: "iso metal", Cluster: "metal", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook: "iso.metal",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "boot.metal", Kind: ApplyTaskKindNodeBoot, Label: "boot metal nodes", Cluster: "metal", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"iso.metal"}, Status: TaskStatusPending},
+			Playbook: "boot.metal",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "wait.metal", Kind: ApplyTaskKindInstallWait, Label: "wait install metal", Cluster: "metal", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"boot.metal"}, Status: TaskStatusPending},
+			Playbook: "wait.metal",
+			State:    state,
+		},
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
+			ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
+			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- err
+	}()
+	runner.awaitStart(t, "iso.metal")
+	for _, playbook := range runner.startedPlaybooks() {
+		if playbook == "iso.child" {
+			t.Fatal("a hosted cluster parked on another cluster took the only install slot ahead of a bare-metal cluster whose chain could run to completion; the bare-metal install then queues behind ISO builds it does not depend on")
+		}
+	}
+	runner.releasePlaybook("iso.metal")
+	runner.awaitStart(t, "boot.metal")
+	time.Sleep(100 * time.Millisecond)
+	for _, playbook := range runner.startedPlaybooks() {
+		if playbook == "iso.child" {
+			t.Fatal("the parked hosted cluster took the install slot in a gap inside the bare-metal cluster's install chain")
+		}
+	}
+	runner.releasePlaybook("boot.metal")
+	runner.awaitStart(t, "wait.metal")
+	runner.releasePlaybook("wait.metal")
+	runner.awaitStart(t, "iso.child")
+	runner.releasePlaybook("iso.child")
+	runner.awaitStart(t, "boot.child")
+	runner.releasePlaybook("boot.child")
+	if err := <-done; err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	got := runner.startedPlaybooks()
+	want := []string{"iso.metal", "boot.metal", "wait.metal", "iso.child", "boot.child"}
+	if len(got) != len(want) {
+		t.Fatalf("started playbooks = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("started playbooks = %v, want the parked hosted cluster to run only after the unparked cluster's chain: %v", got, want)
+		}
+	}
+}
+
+func TestRunApplyTaskGraphAdmitsAParkedChainWhenNoUnparkedChainRemains(t *testing.T) {
+	t.Setenv(ParallelismClustersEnvVar, "")
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &recordingApplyRunner{}
+	tasks := []ApplyTask{
+		{
+			Entry:    TaskLedgerEntry{ID: "infra.metal.machine-0", Kind: ApplyTaskKindClusterInstall, Label: "provision machine machine-0", Cluster: "metal", ClusterKind: ApplyClusterKindContainer, Node: "machine-0", Host: "metal-bm", Status: TaskStatusPending},
+			Playbook: "infra.metal",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "iso.child", Kind: ApplyTaskKindClusterISO, Label: "iso child", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook: "iso.child",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "boot.child", Kind: ApplyTaskKindNodeBoot, Label: "boot child nodes", Cluster: "child", ClusterKind: ApplyClusterKindContainer, Dependencies: []string{"iso.child", "infra.metal.machine-0"}, Status: TaskStatusPending},
+			Playbook: "boot.child",
+			State:    state,
+		},
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
+		ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
+		ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	for _, task := range ledger.Tasks {
+		if task.Status != TaskStatusOK {
+			t.Fatalf("task %s ended %s; a parked chain must still get the slot when it is the only chain wanting one", task.ID, task.Status)
 		}
 	}
 }

@@ -258,214 +258,234 @@
         - bootwright_install_wait_target == 'install'
         - (bootwright_install_wait.rc | default(1) | int) != 0
 
-    - name: Record kubeconfig path
-      ansible.builtin.copy:
-        dest: "{{ bootwright_install_work_dir }}/kubeconfig.path"
-        mode: "0600"
-        content: "{{ bootwright_install_work_dir }}/auth/kubeconfig\n"
-      when: bootwright_install_wait_succeeded | bool
 
-    - name: Create local installer auth directory
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}/auth"
-        state: directory
-        mode: "0700"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Resolve whether the installer credentials must be captured
+  ansible.builtin.set_fact:
+    bootwright_install_credentials_capture: >-
+      {{ (bootwright_install_wait_succeeded | default(false) | bool)
+         or ((bootwright_install_already_complete | bool)
+             and bootwright_install_wait_target == 'install') }}
+  changed_when: false
 
-    - name: Fetch kubeconfig to local runtime state
-      ansible.builtin.fetch:
-        src: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
-        dest: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
-        flat: true
-      when: bootwright_install_wait_succeeded | bool
+- name: Record kubeconfig path
+  ansible.builtin.copy:
+    dest: "{{ bootwright_install_work_dir }}/kubeconfig.path"
+    mode: "0600"
+    content: "{{ bootwright_install_work_dir }}/auth/kubeconfig\n"
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Restrict local kubeconfig permissions
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Create local installer auth directory
+  ansible.builtin.file:
+    path: "{{ bootwright_install_local_work_dir }}/auth"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Fetch kubeadmin password to local runtime state
-      ansible.builtin.fetch:
-        src: "{{ bootwright_install_work_dir }}/auth/kubeadmin-password"
-        dest: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-        flat: true
-      when: bootwright_install_wait_succeeded | bool
+- name: Fetch kubeconfig to local runtime state
+  ansible.builtin.fetch:
+    src: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
+    dest: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+    flat: true
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Restrict local kubeadmin password permissions
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Restrict local kubeconfig permissions
+  ansible.builtin.file:
+    path: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Create local cluster secrets directory
-      ansible.builtin.file:
-        path: "{{ bootwright_cluster_secrets_dir }}"
-        state: directory
-        mode: "0700"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Stat the installer kubeadmin password
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_work_dir }}/auth/kubeadmin-password"
+  register: bootwright_install_kubeadmin_password_stat
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Store kubeconfig in cluster secrets
-      ansible.builtin.copy:
-        src: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
-        dest: "{{ bootwright_cluster_secrets_dir }}/kubeconfig"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Fetch kubeadmin password to local runtime state
+  ansible.builtin.fetch:
+    src: "{{ bootwright_install_work_dir }}/auth/kubeadmin-password"
+    dest: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+    flat: true
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_kubeadmin_password_stat.stat.exists | default(false) | bool
 
-    - name: Store kubeadmin password in cluster secrets
-      ansible.builtin.copy:
-        src: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-        dest: "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Restrict local kubeadmin password permissions
+  ansible.builtin.file:
+    path: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Record local kubeconfig path
-      ansible.builtin.copy:
-        dest: "{{ bootwright_install_local_work_dir }}/kubeconfig.path"
-        mode: "0600"
-        content: "{{ bootwright_cluster_secrets_dir }}/kubeconfig\n"
-      delegate_to: localhost
-      become: false
-      when: bootwright_install_wait_succeeded | bool
+- name: Create local cluster secrets directory
+  ansible.builtin.file:
+    path: "{{ bootwright_cluster_secrets_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Clean virtual media after successful install
-      ansible.builtin.include_role:
-        name: "{{ bootwright_cleanup_media_component.cleanupMediaRole }}"
-      vars:
-        bootwright_component: "{{ bootwright_cleanup_media_component }}"
-        bootwright_vmedia_action: cleanup_media
-      loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('cleanupMediaRole', 'defined') | list }}"
-      loop_control:
-        loop_var: bootwright_cleanup_media_component
-        label: "{{ bootwright_cleanup_media_component.name }} via {{ bootwright_cleanup_media_component.cleanupMediaRole }}"
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Store kubeconfig in cluster secrets
+  ansible.builtin.copy:
+    src: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+    dest: "{{ bootwright_cluster_secrets_dir }}/kubeconfig"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Find remote generated agent ISO files
-      ansible.builtin.find:
-        paths: "{{ bootwright_install_work_dir }}"
-        patterns: "agent.*.iso"
-        file_type: any
-      register: bootwright_remote_agent_iso_cleanup_find
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Store kubeadmin password in cluster secrets
+  ansible.builtin.copy:
+    src: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+    dest: "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Remove remote generated agent ISO files
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ bootwright_remote_agent_iso_cleanup_find.files | default([]) }}"
-      loop_control:
-        label: "{{ item.path }}"
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Record local kubeconfig path
+  ansible.builtin.copy:
+    dest: "{{ bootwright_install_local_work_dir }}/kubeconfig.path"
+    mode: "0600"
+    content: "{{ bootwright_cluster_secrets_dir }}/kubeconfig\n"
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_credentials_capture | bool
 
-    - name: Remove remote generated boot artifacts
-      ansible.builtin.file:
-        path: "{{ bootwright_install_work_dir }}/boot-artifacts"
-        state: absent
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Clean virtual media after successful install
+  ansible.builtin.include_role:
+    name: "{{ bootwright_cleanup_media_component.cleanupMediaRole }}"
+  vars:
+    bootwright_component: "{{ bootwright_cleanup_media_component }}"
+    bootwright_vmedia_action: cleanup_media
+  loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('cleanupMediaRole', 'defined') | list }}"
+  loop_control:
+    loop_var: bootwright_cleanup_media_component
+    label: "{{ bootwright_cleanup_media_component.name }} via {{ bootwright_cleanup_media_component.cleanupMediaRole }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Find local generated agent ISO files
-      ansible.builtin.find:
-        paths: "{{ bootwright_install_local_work_dir }}"
-        patterns: "agent.*.iso"
-        file_type: file
-      register: bootwright_local_agent_iso_cleanup_find
-      delegate_to: localhost
-      become: false
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Find remote generated agent ISO files
+  ansible.builtin.find:
+    paths: "{{ bootwright_install_work_dir }}"
+    patterns: "agent.*.iso"
+    file_type: any
+  register: bootwright_remote_agent_iso_cleanup_find
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Remove local generated agent ISO files
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ bootwright_local_agent_iso_cleanup_find.files | default([]) }}"
-      loop_control:
-        label: "{{ item.path }}"
-      delegate_to: localhost
-      become: false
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Remove remote generated agent ISO files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ bootwright_remote_agent_iso_cleanup_find.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Remove remote agent ISO path record
-      ansible.builtin.file:
-        path: "{{ bootwright_install_work_dir }}/agent-iso.path"
-        state: absent
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
+- name: Remove remote generated boot artifacts
+  ansible.builtin.file:
+    path: "{{ bootwright_install_work_dir }}/boot-artifacts"
+    state: absent
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Remove local agent ISO path record
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
-        state: absent
-      delegate_to: localhost
-      become: false
-      when:
-        - bootwright_install_wait_succeeded | bool
-        - bootwright_install_wait_target == 'install'
-  always:
-    - name: Read agent ISO publish token for cleanup
-      ansible.builtin.slurp:
-        src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
-      register: bootwright_agent_iso_publish_cleanup_token_file
-      delegate_to: localhost
-      become: false
-      failed_when: false
-      no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when:
-        - bootwright_install_wait_target == 'install'
-        - (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
+- name: Find local generated agent ISO files
+  ansible.builtin.find:
+    paths: "{{ bootwright_install_local_work_dir }}"
+    patterns: "agent.*.iso"
+    file_type: file
+  register: bootwright_local_agent_iso_cleanup_find
+  delegate_to: localhost
+  become: false
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Set agent ISO publish cleanup token
-      ansible.builtin.set_fact:
-        bootwright_agent_iso_publish_token: "{{ bootwright_agent_iso_publish_cleanup_token_file.content | b64decode | trim }}"
-      changed_when: false
-      no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when:
-        - bootwright_install_wait_target == 'install'
-        - bootwright_agent_iso_publish_cleanup_token_file is defined
-        - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
+- name: Remove local generated agent ISO files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ bootwright_local_agent_iso_cleanup_find.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  delegate_to: localhost
+  become: false
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Remove staged agent ISO publish directories
-      ansible.builtin.include_tasks: ../iso/cleanup_target.yml
-      loop: "{{ bootwright_current_cluster.agentIsoPublishTargets | default([]) }}"
-      loop_control:
-        loop_var: bootwright_agent_iso_publish_target
-        label: "{{ bootwright_agent_iso_publish_target.stagePath }}"
-      when:
-        - bootwright_install_wait_target == 'install'
-        - (bootwright_agent_iso_publish_token | default('') | length) > 0
+- name: Remove remote agent ISO path record
+  ansible.builtin.file:
+    path: "{{ bootwright_install_work_dir }}/agent-iso.path"
+    state: absent
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
 
-    - name: Remove local agent ISO publish token
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
-        state: absent
-      delegate_to: localhost
-      become: false
-      no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when:
-        - bootwright_install_wait_target == 'install'
-        - bootwright_agent_iso_publish_cleanup_token_file is defined
-        - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
+- name: Remove local agent ISO path record
+  ansible.builtin.file:
+    path: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+    state: absent
+  delegate_to: localhost
+  become: false
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
+- name: Read agent ISO publish token for cleanup
+  ansible.builtin.slurp:
+    src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+  register: bootwright_agent_iso_publish_cleanup_token_file
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
+    - (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
+
+- name: Set agent ISO publish cleanup token
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_publish_token: "{{ bootwright_agent_iso_publish_cleanup_token_file.content | b64decode | trim }}"
+  changed_when: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
+    - bootwright_agent_iso_publish_cleanup_token_file is defined
+    - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
+
+- name: Remove staged agent ISO publish directories
+  ansible.builtin.include_tasks: ../iso/cleanup_target.yml
+  loop: "{{ bootwright_current_cluster.agentIsoPublishTargets | default([]) }}"
+  loop_control:
+    loop_var: bootwright_agent_iso_publish_target
+    label: "{{ bootwright_agent_iso_publish_target.stagePath }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
+    - (bootwright_agent_iso_publish_token | default('') | length) > 0
+
+- name: Remove local agent ISO publish token
+  ansible.builtin.file:
+    path: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+    state: absent
+  delegate_to: localhost
+  become: false
+  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  when:
+    - bootwright_install_credentials_capture | bool
+    - bootwright_install_wait_target == 'install'
+    - bootwright_agent_iso_publish_cleanup_token_file is defined
+    - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0

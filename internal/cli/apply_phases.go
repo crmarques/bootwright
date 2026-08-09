@@ -73,7 +73,11 @@ func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry
 	if dep, ok := status.ApplyBlockingRoot(ledger, task); ok {
 		label := applyTaskDisplayLabel(dep.Label)
 		if dep.Cluster != "" && dep.Cluster != task.Cluster {
-			return fmt.Sprintf("host cluster %s not ready (blocked by %s)", dep.Cluster, label)
+			noun := "cluster"
+			if dep.ClusterKind == workflow.ApplyClusterKindStorage {
+				noun = "storage cluster"
+			}
+			return fmt.Sprintf("%s %s not ready (blocked by %s)", noun, dep.Cluster, label)
 		}
 		return "blocked by " + label
 	}

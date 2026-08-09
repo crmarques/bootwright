@@ -153,6 +153,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	runningResources := map[string]int{}
 	runningHostSlots := map[string]int{}
 	heldClusterInstalls := map[string]int{}
+	grantedRedfish := map[string]int{}
 	running := 0
 	runningRedfish := 0
 	completed := initiallyCompletedApplyTasks(tasks)
@@ -164,6 +165,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	for completed < len(tasks) {
 		startedAny := false
 		releaseIdleClusterInstalls(ledger, tasks, started, heldClusterInstalls)
+		slotAdmission := clusterInstallSlotAdmission(ledger)
 		for _, task := range tasks {
 			if fatalErr != nil || ctx.Err() != nil {
 				break
@@ -176,11 +178,11 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 				ledger.RecordBlockedOn(task.Entry.ID, applyTaskBudgetBlocker)
 				continue
 			}
-			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit, heldClusterInstalls, clusterInstallLimit); blocker != "" {
+			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit, heldClusterInstalls, clusterInstallLimit, slotAdmission); blocker != "" {
 				ledger.RecordBlockedOn(task.Entry.ID, blocker)
 				continue
 			}
-			redfishSlots := taskRedfishSlots(task, redfishLimit)
+			redfishSlots := taskRedfishGrant(task, runningRedfish, redfishLimit)
 			taskToRun := task
 			if redfishSlots > 0 && (task.Entry.Kind == ApplyTaskKindNodeBoot || task.Entry.Kind == ApplyTaskKindManagedMachineOS) {
 				taskToRun.Forks = redfishSlots
@@ -190,6 +192,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			running++
 			if redfishSlots > 0 {
 				runningRedfish += redfishSlots
+				grantedRedfish[task.Entry.ID] = redfishSlots
 			}
 			acquireTaskResources(task, runningResources)
 			acquireTaskHostSlots(task, runningHostSlots)
@@ -235,7 +238,8 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			continue
 		}
 		running--
-		runningRedfish -= taskRedfishSlots(taskByID[event.id], redfishLimit)
+		runningRedfish -= grantedRedfish[event.id]
+		delete(grantedRedfish, event.id)
 		releaseTaskResources(taskByID[event.id], runningResources)
 		releaseTaskHostSlots(taskByID[event.id], runningHostSlots)
 		if event.err != nil {
@@ -383,7 +387,7 @@ const (
 	ApplyClusterInstallBlocker = "cluster install budget"
 )
 
-func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int, heldClusterInstalls map[string]int, clusterInstallLimit int) string {
+func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runningResources, runningHostSlots map[string]int, perHostLimit int, heldClusterInstalls map[string]int, clusterInstallLimit int, slotAdmission map[string]bool) string {
 	if !taskRedfishAvailable(task, runningRedfish, redfishLimit) {
 		return "redfish budget"
 	}
@@ -394,7 +398,7 @@ func taskDispatchBlocker(task ApplyTask, runningRedfish, redfishLimit int, runni
 		key, _ := taskHostSlot(task)
 		return "host slot " + key
 	}
-	if !taskClusterInstallAvailable(task, heldClusterInstalls, clusterInstallLimit) {
+	if !taskClusterInstallAvailable(task, heldClusterInstalls, clusterInstallLimit, slotAdmission) {
 		return ApplyClusterInstallBlocker
 	}
 	return ""
@@ -404,7 +408,22 @@ func taskRedfishAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool
 	if task.RedfishSlots < 1 {
 		return true
 	}
-	return runningRedfish+taskRedfishSlots(task, redfishLimit) <= redfishLimit
+	return taskRedfishGrant(task, runningRedfish, redfishLimit) > 0
+}
+
+func taskRedfishGrant(task ApplyTask, runningRedfish, redfishLimit int) int {
+	demand := taskRedfishSlots(task, redfishLimit)
+	if demand < 1 {
+		return 0
+	}
+	free := redfishLimit - runningRedfish
+	if free < 1 {
+		return 0
+	}
+	if demand > free {
+		return free
+	}
+	return demand
 }
 
 func taskRedfishSlots(task ApplyTask, redfishLimit int) int {
@@ -447,7 +466,7 @@ func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bo
 	return running[key]+count <= limit
 }
 
-func taskClusterInstallAvailable(task ApplyTask, held map[string]int, limit int) bool {
+func taskClusterInstallAvailable(task ApplyTask, held map[string]int, limit int, slotAdmission map[string]bool) bool {
 	cluster := clusterInstallKey(task.Entry)
 	if cluster == "" {
 		return true
@@ -458,7 +477,62 @@ func taskClusterInstallAvailable(task ApplyTask, held map[string]int, limit int)
 	if held[cluster] > 0 {
 		return true
 	}
+	if slotAdmission != nil && !slotAdmission[cluster] {
+		return false
+	}
 	return len(held) < limit
+}
+
+func clusterInstallSlotAdmission(ledger RunLedger) map[string]bool {
+	candidates := map[string]bool{}
+	unparked := map[string]bool{}
+	for _, task := range ledger.Tasks {
+		cluster := clusterInstallKey(task)
+		if cluster == "" || taskTerminal(task.Status) || candidates[cluster] {
+			continue
+		}
+		candidates[cluster] = true
+		if !clusterInstallChainParked(ledger, cluster) {
+			unparked[cluster] = true
+		}
+	}
+	if len(unparked) > 0 {
+		return unparked
+	}
+	return candidates
+}
+
+func clusterInstallChainParked(ledger RunLedger, cluster string) bool {
+	for _, task := range ledger.Tasks {
+		if clusterInstallKey(task) != cluster || taskTerminal(task.Status) {
+			continue
+		}
+		if installChainWaitsOnAnotherCluster(ledger, task, cluster, map[string]bool{}) {
+			return true
+		}
+	}
+	return false
+}
+
+func installChainWaitsOnAnotherCluster(ledger RunLedger, task TaskLedgerEntry, cluster string, visiting map[string]bool) bool {
+	if visiting[task.ID] {
+		return false
+	}
+	visiting[task.ID] = true
+	deps := append(append([]string(nil), task.Dependencies...), task.OrderingDependencies...)
+	for _, dep := range deps {
+		depTask, ok := ledger.Task(dep)
+		if !ok || taskTerminal(depTask.Status) {
+			continue
+		}
+		if depTask.Cluster != cluster && depTask.Cluster != "" {
+			return true
+		}
+		if installChainWaitsOnAnotherCluster(ledger, depTask, cluster, visiting) {
+			return true
+		}
+	}
+	return false
 }
 
 func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {

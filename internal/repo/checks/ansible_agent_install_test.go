@@ -629,9 +629,40 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	}
 }
 
+func TestInstallAgentCapturesCredentialsWhenAResumedWaitFindsTheClusterInstalled(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml"
+	tasks := readAnsibleTasks(t, path)
+	waitBlock := tasks[findAnsibleTask(t, tasks, "Wait for agent install completion when install is not already complete")]
+	nested := nestedAnsibleTasks(t, waitBlock, "block")
+	for _, name := range []string{"Store kubeconfig in cluster secrets", "Store kubeadmin password in cluster secrets", "Clean virtual media after successful install"} {
+		if findAnsibleTaskIndex(nested, name) >= 0 {
+			t.Fatalf("%q sits inside the not-already-complete block, so a resumed wait against a cluster that finished installing on its own records the install as complete with no kubeconfig captured, and every add-on on that cluster then fails", name)
+		}
+		if findAnsibleTaskIndex(tasks, name) < 0 {
+			t.Fatalf("missing top-level Ansible task %q", name)
+		}
+	}
+	capture := tasks[findAnsibleTask(t, tasks, "Resolve whether the installer credentials must be captured")]
+	facts, ok := capture["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("credential capture must resolve through a fact, got %v", capture)
+	}
+	condition := fmt.Sprint(facts["bootwright_install_credentials_capture"])
+	for _, want := range []string{"bootwright_install_wait_succeeded", "bootwright_install_already_complete"} {
+		if !strings.Contains(condition, want) {
+			t.Fatalf("credential capture condition missing %q, got %v", want, condition)
+		}
+	}
+	for _, name := range []string{"Remove staged agent ISO publish directories", "Remove local agent ISO publish token"} {
+		idx := findAnsibleTask(t, tasks, name)
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_install_credentials_capture") {
+			t.Fatalf("%q must not run on a failed wait: purging the staged ISO while virtual media is still inserted kills an install that is still writing from it, and the timed-out hint tells the operator to resume; got when=%v", name, tasks[idx]["when"])
+		}
+	}
+}
+
 func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
-	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 	recordIdx := findAnsibleTask(t, tasks, "Record local kubeconfig path")
 	cleanMediaIdx := findAnsibleTask(t, tasks, "Clean virtual media after successful install")
 	findRemoteIdx := findAnsibleTask(t, tasks, "Find remote generated agent ISO files")
@@ -693,8 +724,8 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 		t.Fatalf("local ISO path cleanup must run locally, got %v", got)
 	}
 	for _, idx := range []int{cleanMediaIdx, findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
-		if !stringListContains(tasks[idx]["when"], "bootwright_install_wait_succeeded | bool") {
-			t.Fatalf("%s must only clean after a successful wait, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
+		if !stringListContains(tasks[idx]["when"], "bootwright_install_credentials_capture | bool") {
+			t.Fatalf("%s must only clean once the install is proven complete, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
 		}
 		if !stringListContains(tasks[idx]["when"], "bootwright_install_wait_target == 'install'") {
 			t.Fatalf("%s must not clean installer media at the bootstrap gate, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
@@ -713,15 +744,19 @@ func TestInstallAgentWaitsForBootstrapBeforePublishingCredentials(t *testing.T) 
 		t.Fatalf("wait target validation got %v", guardAssert["that"])
 	}
 
-	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	waitBlockIdx := findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")
+	tasks := nestedAnsibleTasks(t, topTasks[waitBlockIdx], "block")
 	markerIdx := findAnsibleTask(t, tasks, "Check recorded agent bootstrap completion")
 	bootstrapIdx := findAnsibleTask(t, tasks, "Wait for agent bootstrap completion")
 	recordIdx := findAnsibleTask(t, tasks, "Record agent bootstrap completion")
 	installIdx := findAnsibleTask(t, tasks, "Wait for agent install completion")
 	outcomeIdx := findAnsibleTask(t, tasks, "Determine agent wait outcome")
-	kubeconfigIdx := findAnsibleTask(t, tasks, "Store kubeconfig in cluster secrets")
-	if !(markerIdx < bootstrapIdx && bootstrapIdx < recordIdx && recordIdx < installIdx && installIdx < outcomeIdx && outcomeIdx < kubeconfigIdx) {
+	if !(markerIdx < bootstrapIdx && bootstrapIdx < recordIdx && recordIdx < installIdx && installIdx < outcomeIdx) {
 		t.Fatalf("wait_install must probe the bootstrap marker, wait, record it, then resolve the outcome before publishing credentials")
+	}
+	kubeconfigIdx := findAnsibleTask(t, topTasks, "Store kubeconfig in cluster secrets")
+	if kubeconfigIdx < waitBlockIdx {
+		t.Fatalf("credentials must be published after the wait resolves, got kubeconfig=%d waitBlock=%d", kubeconfigIdx, waitBlockIdx)
 	}
 
 	bootstrap, ok := tasks[bootstrapIdx]["ansible.builtin.command"].(map[string]any)
@@ -753,20 +788,19 @@ func TestInstallAgentWaitsForBootstrapBeforePublishingCredentials(t *testing.T) 
 	if got := tasks[installIdx]["when"]; got != "bootwright_install_wait_target == 'install'" {
 		t.Fatalf("install wait when got %v", got)
 	}
-	if got := tasks[kubeconfigIdx]["when"]; got != "bootwright_install_wait_succeeded | bool" {
+	if got := topTasks[kubeconfigIdx]["when"]; got != "bootwright_install_credentials_capture | bool" {
 		t.Fatalf("credential publication when got %v", got)
 	}
 
-	always := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "always")
 	for _, name := range []string{
 		"Read agent ISO publish token for cleanup",
 		"Set agent ISO publish cleanup token",
 		"Remove staged agent ISO publish directories",
 		"Remove local agent ISO publish token",
 	} {
-		idx := findAnsibleTask(t, always, name)
-		if !stringListContains(always[idx]["when"], "bootwright_install_wait_target == 'install'") {
-			t.Fatalf("%s must not unstage boot media at the bootstrap gate, got when=%v", name, always[idx]["when"])
+		idx := findAnsibleTask(t, topTasks, name)
+		if !stringListContains(topTasks[idx]["when"], "bootwright_install_wait_target == 'install'") {
+			t.Fatalf("%s must not unstage boot media at the bootstrap gate, got when=%v", name, topTasks[idx]["when"])
 		}
 	}
 }
@@ -1037,8 +1071,7 @@ func TestInstallAgentWaitPollsPromptly(t *testing.T) {
 }
 
 func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
-	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 
 	ensureIdx := findAnsibleTask(t, tasks, "Create local cluster secrets directory")
 	ensure, ok := tasks[ensureIdx]["ansible.builtin.file"].(map[string]any)
@@ -1073,8 +1106,8 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 		if got := tasks[idx]["become"]; got != false {
 			t.Fatalf("%s must not become remotely, got %v", tasks[idx]["name"], got)
 		}
-		if got := tasks[idx]["when"]; got != "bootwright_install_wait_succeeded | bool" {
-			t.Fatalf("%s must only run after successful wait, got %v", tasks[idx]["name"], got)
+		if got := tasks[idx]["when"]; got != "bootwright_install_credentials_capture | bool" {
+			t.Fatalf("%s must only run once the install is proven complete, got %v", tasks[idx]["name"], got)
 		}
 	}
 }

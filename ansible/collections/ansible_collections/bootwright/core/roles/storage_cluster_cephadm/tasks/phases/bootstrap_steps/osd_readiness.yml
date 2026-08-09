@@ -63,16 +63,17 @@
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_osd_stat.rc == 0
-      and (
-        (bootwright_ceph_osd_readiness_mode == 'exact'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
-             >= (bootwright_ceph_osd_expected_count | int))
-        or
-        (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-         and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
-             >= (bootwright_ceph_osd_expected_count | int))
-      )
+      (bootwright_ceph_osd_readiness_mode == 'exact'
+       and (bootwright_ceph_osd_stat.stdout | default('', true)
+            | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+            | default(['-1'], true) | first | int)
+           >= (bootwright_ceph_osd_expected_count | int))
+      or
+      (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+       and (bootwright_ceph_osd_stat.stdout | default('', true)
+            | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+            | default(['-1'], true) | first | int)
+           >= (bootwright_ceph_osd_expected_count | int))
     )
     or
     ((bootwright_ceph_osd_stat.attempts | default(1) | int)
@@ -86,18 +87,29 @@
   ansible.builtin.set_fact:
     bootwright_ceph_osd_ready: >-
       {{
-        (bootwright_ceph_osd_stat.rc | default(1) | int) == 0
-        and (
-          (bootwright_ceph_osd_readiness_mode == 'exact'
-           and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
-               >= (bootwright_ceph_osd_expected_count | int))
-          or
-          (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
-           and ((bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int)
-               >= (bootwright_ceph_osd_expected_count | int))
-        )
+        (bootwright_ceph_osd_readiness_mode == 'exact'
+         and (bootwright_ceph_osd_stat.stdout | default('', true)
+              | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+              | default(['-1'], true) | first | int)
+             >= (bootwright_ceph_osd_expected_count | int))
+        or
+        (bootwright_ceph_osd_readiness_mode == 'atLeastOne'
+         and (bootwright_ceph_osd_stat.stdout | default('', true)
+              | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+              | default(['-1'], true) | first | int)
+             >= (bootwright_ceph_osd_expected_count | int))
       }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'
+
+- name: Grant the dynamic-host CRUSH poll its own share of the readiness deadline
+  ansible.builtin.set_fact:
+    bootwright_ceph_osd_readiness_deadline: >-
+      {{ [(bootwright_ceph_osd_readiness_deadline | int),
+          ((now(utc=true).timestamp() | int)
+           + (bootwright_ceph_osd_tree_min_budget_seconds | default(600) | int))] | max }}
+  when:
+    - bootwright_ceph_osd_dynamic_hosts | length > 0
+    - bootwright_ceph_osd_ready | default(false) | bool
 
 - name: Wait for an in OSD on every dynamic-selection host
   ansible.builtin.command:
@@ -120,7 +132,8 @@
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_osd_host_tree.rc == 0
+      ((bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
+       or ((bootwright_ceph_osd_host_tree.stdout | default('', true) | regex_search('\}\s*$')) is not none))
       and (
         (
           (bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
@@ -156,7 +169,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_osd_dynamic_ready: >-
       {{
-        (bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
+        ((bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
+         or ((bootwright_ceph_osd_host_tree.stdout | default('', true) | regex_search('\}\s*$')) is not none))
         and (
           (bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
           | default([])
@@ -568,15 +582,27 @@
       {{ 'exactly ' ~ bootwright_ceph_osd_expected_count if bootwright_ceph_osd_readiness_mode == 'exact' else 'at least ' ~ bootwright_ceph_osd_expected_count }}
       OSD(s) 'in'{{ ' (a per-host floor — the declaration selects devices dynamically, so the exact OSD count is not knowable before the device scan)' if bootwright_ceph_osd_dynamic_hosts | length > 0 else '' }},
       observed
-      {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default('unknown') }}
-      (up {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_up_osds | default('unknown') }})
+      {{ bootwright_ceph_osd_stat.stdout | default('', true)
+         | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+         | default(['unknown'], true) | first }}
+      (up {{ bootwright_ceph_osd_stat.stdout | default('', true)
+             | regex_search('"num_up_osds"\s*:\s*([0-9]+)', '\1')
+             | default(['unknown'], true) | first }})
       after {{ bootwright_ceph_osd_stat.attempts | default('unknown') }} of
-      {{ bootwright_ceph_osd_readiness_attempts | default('unknown') }} attempts. The poll
-      also ends at a {{ bootwright_ceph_osd_readiness_budget_seconds | default('unknown') }}s
-      wall-clock deadline: an attempt count short of that budget means the deadline is what
-      stopped it, so cephadm was answering slowly rather than not at all. Each attempt is
-      capped at 120s by `timeout`, and the deadline is what keeps a degraded mon or a
-      flapping mgr from stretching the attempt budget into hours.
+      {{ bootwright_ceph_osd_readiness_attempts | default('unknown') }} attempts.
+      {{ 'The ' ~ (bootwright_ceph_osd_readiness_budget_seconds | default('unknown'))
+         ~ 's wall-clock deadline is what ended this poll, not the attempt budget: every
+         attempt also pays its own runtime (capped at 120s by `timeout`), so the attempt
+         count is never the binding limit on a cluster answering slowly. Raise
+         bootwright_ceph_osd_readiness_wall_seconds, not the retry count, to wait longer.'
+         if (bootwright_ceph_osd_stat.attempts | default(0) | int)
+            < (bootwright_ceph_osd_readiness_attempts | int)
+         else ('The attempt budget is what ended this poll, inside its '
+               ~ (bootwright_ceph_osd_readiness_budget_seconds | default('unknown'))
+               ~ 's wall-clock deadline.') }}
+      The verdict reads the sampled `ceph osd stat` output, not the sampler's exit status,
+      so a cephadm shell that times out while tearing down its container cannot fail a
+      cluster whose OSDs are all in.
       {% if ((bootwright_ceph_osd_declared_unavailable_total | default(0) | int)
              + (bootwright_ceph_osd_reclaim_all_unavailable_total | default(0) | int)) > 0
             or not (bootwright_ceph_osd_device_evidence | default(false) | bool) %}
@@ -645,7 +671,10 @@
 - name: Assert an in OSD exists on every dynamic-selection host
   vars:
     bootwright_ceph_osd_tree_doc: >-
-      {{ bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json }}
+      {{ (bootwright_ceph_osd_host_tree.stdout | default('', true) | from_json)
+         if ((bootwright_ceph_osd_host_tree.stdout | default('', true)
+              | regex_search('\}\s*$')) is not none)
+         else {} }}
     bootwright_ceph_osd_all_osds: >-
       {{ (bootwright_ceph_osd_tree_doc.nodes | default([])) + (bootwright_ceph_osd_tree_doc.stray | default([])) }}
     bootwright_ceph_osd_total_count: >-
@@ -657,7 +686,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
+        ((bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
+         or ((bootwright_ceph_osd_host_tree.stdout | default('', true) | regex_search('\}\s*$')) is not none))
         and (
           (
             ((bootwright_ceph_osd_host_tree.stdout | default('{}', true) | from_json).nodes
@@ -746,9 +776,15 @@
       mode: "{{ bootwright_ceph_osd_readiness_mode }}"
       expected: "{{ bootwright_ceph_osd_expected_count | int }}"
       inOSDs: >-
-        {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_in_osds | default(0) | int }}
+        {{ bootwright_ceph_osd_stat.stdout | default('', true)
+           | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
+           | default(['0'], true) | first | int }}
       upOSDs: >-
-        {{ (bootwright_ceph_osd_stat.stdout | default('{}', true) | from_json).num_up_osds | default(0) | int }}
+        {{ bootwright_ceph_osd_stat.stdout | default('', true)
+           | regex_search('"num_up_osds"\s*:\s*([0-9]+)', '\1')
+           | default(['0'], true) | first | int }}
       health: >-
-        {{ (bootwright_ceph_health_probe.stdout | default('{}', true) | from_json).status | default('UNKNOWN') }}
+        {{ bootwright_ceph_health_probe.stdout | default('', true)
+           | regex_search('"status"\s*:\s*"([A-Z_]+)"', '\1')
+           | default(['UNKNOWN'], true) | first }}
   when: bootwright_ceph_osd_readiness_mode != 'skip'

@@ -101,7 +101,7 @@ func TestApplyRunFrameTitlesUseSubstrateDescriptor(t *testing.T) {
 	}
 }
 
-func TestApplyBlockedReasonNamesHostParent(t *testing.T) {
+func TestApplyBlockedReasonNamesBlockingCluster(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "wait.dc1-metal-ocp", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install dc1-metal-ocp", Cluster: "dc1-metal-ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusFailed},
 		{ID: "boot.dc1-child-ocp", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot dc1-child-ocp", Cluster: "dc1-child-ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"wait.dc1-metal-ocp"}},
@@ -109,11 +109,23 @@ func TestApplyBlockedReasonNamesHostParent(t *testing.T) {
 	}, time.Now())
 
 	boot, _ := ledger.Task("boot.dc1-child-ocp")
-	if got := applyBlockedReason(ledger, boot); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
+	if got := applyBlockedReason(ledger, boot); got != "cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("blocked reason = %q", got)
 	}
 	wait, _ := ledger.Task("wait.dc1-child-ocp")
-	if got := applyBlockedReason(ledger, wait); got != "host cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
+	if got := applyBlockedReason(ledger, wait); got != "cluster dc1-metal-ocp not ready (blocked by Install dc1-metal-ocp)" {
 		t.Fatalf("transitive blocked reason = %q", got)
+	}
+}
+
+func TestApplyBlockedReasonNamesTheStorageClusterRoot(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "storage.ceph-01", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage ceph-01", Cluster: "ceph-01", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusFailed},
+		{ID: "addon.dc1-metal-ocp.fusion-data-foundation", Kind: workflow.ApplyTaskKindClusterAddon, Label: "addon fusion-data-foundation", Cluster: "dc1-metal-ocp", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-01"}},
+	}, time.Now())
+
+	addon, _ := ledger.Task("addon.dc1-metal-ocp.fusion-data-foundation")
+	if got := applyBlockedReason(ledger, addon); got != "storage cluster ceph-01 not ready (blocked by Provision ceph-01)" {
+		t.Fatalf("blocked reason = %q", got)
 	}
 }

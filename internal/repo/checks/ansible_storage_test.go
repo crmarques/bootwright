@@ -602,6 +602,9 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if strings.Count(globalUntil, "bootwright_ceph_osd_expected_count") < 2 {
 		t.Fatalf("global OSD readiness must enforce expectedCount for exact and dynamic selections, got %v", globalUntil)
 	}
+	if strings.Contains(globalUntil, "bootwright_ceph_osd_stat.rc") {
+		t.Fatalf("global OSD readiness must judge the sampled stdout, not the sampler's exit status: a cephadm shell teardown timeout on the final poll must not fail a cluster whose OSDs are all in, got %v", globalUntil)
+	}
 	readyFacts, ok := tasks[evaluateIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("global OSD readiness must evaluate the exhausted poll before diagnostics, got %v", tasks[evaluateIdx])
@@ -615,9 +618,15 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if strings.Count(ready, "bootwright_ceph_osd_expected_count") < 2 {
 		t.Fatalf("global OSD readiness evaluation must preserve expectedCount for exact and dynamic selections, got %v", ready)
 	}
+	if strings.Contains(ready, "bootwright_ceph_osd_stat.rc") {
+		t.Fatalf("the OSD readiness verdict must not require the final sample's exit status, got %v", ready)
+	}
 	globalAssert, ok := tasks[globalAssertIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(globalAssert["that"]), "bootwright_ceph_osd_ready") {
 		t.Fatalf("global OSD readiness must fail through the evaluated readiness fact after diagnostics, got %v", tasks[globalAssertIdx])
+	}
+	if msg := fmt.Sprint(globalAssert["fail_msg"]); strings.Contains(msg, "from_json).num_in_osds") {
+		t.Fatalf("the readiness failure message must render on partial stdout; from_json on the raw sample explodes the assert instead of reporting, got %v", msg)
 	}
 
 	perHost := tasks[perHostIdx]
@@ -689,8 +698,9 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("dynamic-host OSD assertion must derive its stray/down counts from a vars block, got %v", tasks[dynamicAssertIdx]["vars"])
 	}
-	if got := fmt.Sprint(dynamicVars["bootwright_ceph_osd_tree_doc"]); !strings.Contains(got, "from_json") || !strings.Contains(got, "default('{}', true)") {
-		t.Fatalf("dynamic-host OSD assertion fail_msg parses the CRUSH tree eagerly, so it must guard from_json against an empty (rc!=0) stdout with default('{}', true), got %v", got)
+	treeDoc := fmt.Sprint(dynamicVars["bootwright_ceph_osd_tree_doc"])
+	if !strings.Contains(treeDoc, "from_json") || !strings.Contains(treeDoc, "regex_search") {
+		t.Fatalf("dynamic-host OSD assertion fail_msg parses the CRUSH tree eagerly, so from_json must be reached only for a snapshot that terminates: an empty (rc!=0) OR half-written stdout must yield a default instead of exploding the assert, got %v", treeDoc)
 	}
 }
 
