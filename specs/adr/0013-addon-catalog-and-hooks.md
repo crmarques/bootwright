@@ -70,6 +70,16 @@ content digest both fold into `render.DesiredHash`, so editing an input or a
 shipped playbook re-applies an otherwise-ready add-on. Input effects (global
 pull-secret merge) run before any resource applies.
 
+The scheduler serializes a playbook step against each `StorageCluster` its
+target resolves, not the whole add-on task. Resolution is fail-closed and the
+exclusive `storage:<name>` resource spans the playbook, captured outputs,
+consumer manifests, output cleanup, and the ready record. The read-only
+requirement wait happens before it; operator installation and the potentially
+45-minute readiness wait remain outside it. This closes the shared-cephx
+delete/remint race between Data Foundation consumers without adding hours of
+task-wide serialization, while unrelated storage clusters and manifest-only
+steps still run concurrently.
+
 **externalDetails is fromSecretRef-only.** `StorageExport
 externalDetails.fromSecretRef` is the single operator-supplied arm for
 external-cluster details (the `generated` and `sshExecution` arms are
@@ -91,6 +101,9 @@ input ref-chain, not a compiled attachment task.
 - Gate failures are diagnosable as what they are: a catalog that never went
   READY or a CSV that never succeeded, without mislabeling the already-applied
   CatalogSource/Subscription as failed apply targets.
+- Concurrent add-on tasks may reach their steps together, but mutating
+  playbooks with the same resolved storage target enter that target one at a
+  time; an unknown target or missing coordinator refuses before mutation.
 - Add-ons without readiness checks re-apply on every run (idempotently), and
   `run: always` steps or a pull-secret merge effect disable the already-ready
   skip — converge-on-every-apply is the deliberate cost of correctness.

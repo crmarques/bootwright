@@ -83,6 +83,15 @@ host per machine so independent VMs in the same child-before-host cluster pass
 tear down concurrently; shared VIP preparation and ownership-record sweeps
 remain serialized at the real provider-host boundary.
 
+Add-on playbooks use a narrower dynamic lock after their read-only requirement
+wait. A playbook whose resolved target includes a `StorageCluster` acquires all
+of those clusters as `storage:<name>` resources for the playbook, output
+capture, bound-cluster manifests, secret-output reclamation, and step-record
+write. This serializes external-Ceph credential exports that share one provider
+without serializing either add-on's operator install or readiness wait. Target
+resolution and lock acquisition fail closed before the playbook; unrelated
+storage targets and manifest-only steps remain concurrent.
+
 Mutation-control values that cross from Go into Ansible — intent, positive
 authorizations, resolved scope, and task execution selectors — are a named
 contract. Every such value is registered by the Go convergence layer,

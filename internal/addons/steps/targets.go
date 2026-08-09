@@ -1,6 +1,9 @@
 package steps
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
@@ -38,6 +41,88 @@ func TargetClusters(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundClus
 		}
 	}
 	return c.list(), s.list()
+}
+
+func StorageMutationTargets(state v1alpha1.State, addon v1alpha1.ClusterAddon, boundCluster string, step v1alpha1.ClusterAddonStep, inputs []v1alpha1.ClusterAddonBindingInput) ([]string, error) {
+	if step.Playbook == "" {
+		return nil, nil
+	}
+	target := step.Target
+	modes := 0
+	if target.BoundCluster != nil {
+		modes++
+	}
+	if target.FromInput != nil {
+		modes++
+	}
+	if target.Static != nil {
+		modes++
+	}
+	if modes != 1 {
+		return nil, fmt.Errorf("target must select exactly one of boundCluster, fromInput, or static")
+	}
+	storage := newClusterSet()
+	if target.BoundCluster != nil {
+		if !hasContainerCluster(state, boundCluster) {
+			return nil, fmt.Errorf("target.boundCluster references unknown ContainerCluster %q", boundCluster)
+		}
+	}
+	if target.Static != nil {
+		if len(target.Static.Clusters) == 0 && len(target.Static.Machines) == 0 {
+			return nil, fmt.Errorf("target.static resolves to no clusters or machines")
+		}
+		for _, name := range target.Static.Clusters {
+			switch {
+			case hasContainerCluster(state, name):
+			case hasStorageCluster(state, name):
+				storage.add(name)
+			default:
+				return nil, fmt.Errorf("target.static references unknown cluster %q", name)
+			}
+		}
+		for _, name := range target.Static.Machines {
+			if !hasMachine(state, name) {
+				return nil, fmt.Errorf("target.static references unknown Machine %q", name)
+			}
+			addMachineStorageOwners(state, name, storage)
+		}
+	}
+	if target.FromInput != nil {
+		refKind, refName, ok := resolveInputRef(addon, step, inputs, *target.FromInput)
+		if !ok {
+			return nil, fmt.Errorf("target.fromInput %q does not resolve to a resource", target.FromInput.Input)
+		}
+		switch refKind {
+		case RefKindStorageExport:
+			cluster, ok := storageExportCluster(state, refName)
+			if !ok {
+				return nil, fmt.Errorf("target.fromInput %q references unknown StorageExport %q", target.FromInput.Input, refName)
+			}
+			if !hasStorageCluster(state, cluster) {
+				return nil, fmt.Errorf("StorageExport/%s references unknown StorageCluster %q", refName, cluster)
+			}
+			storage.add(cluster)
+		case RefKindStorageCluster:
+			if !hasStorageCluster(state, refName) {
+				return nil, fmt.Errorf("target.fromInput %q references unknown StorageCluster %q", target.FromInput.Input, refName)
+			}
+			storage.add(refName)
+		case RefKindContainerCluster:
+			if !hasContainerCluster(state, refName) {
+				return nil, fmt.Errorf("target.fromInput %q references unknown ContainerCluster %q", target.FromInput.Input, refName)
+			}
+		case RefKindMachine:
+			if !hasMachine(state, refName) {
+				return nil, fmt.Errorf("target.fromInput %q references unknown Machine %q", target.FromInput.Input, refName)
+			}
+			addMachineStorageOwners(state, refName, storage)
+		default:
+			return nil, fmt.Errorf("target.fromInput %q resolves unsupported kind %q", target.FromInput.Input, refKind)
+		}
+	}
+	out := storage.list()
+	sort.Strings(out)
+	return out, nil
 }
 
 func resolveInputRef(addon v1alpha1.ClusterAddon, step v1alpha1.ClusterAddonStep, inputs []v1alpha1.ClusterAddonBindingInput, from v1alpha1.ClusterAddonStepInputTarget) (refKind, name string, ok bool) {
@@ -111,6 +196,56 @@ func classifyMachineOwners(state v1alpha1.State, machine string, containers, sto
 			}
 		}
 	}
+}
+
+func addMachineStorageOwners(state v1alpha1.State, machine string, storage *clusterSet) {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			if node.MachineRef.Name == machine {
+				storage.add(cluster.Metadata.Name)
+				break
+			}
+		}
+	}
+}
+
+func hasContainerCluster(state v1alpha1.State, name string) bool {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStorageCluster(state v1alpha1.State, name string) bool {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Metadata.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMachine(state v1alpha1.State, name string) bool {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func storageExportCluster(state v1alpha1.State, name string) (string, bool) {
+	for _, export := range state.StorageExports {
+		if export.Metadata.Name == name {
+			return export.Spec.StorageClusterRef.Name, true
+		}
+	}
+	return "", false
 }
 
 func acceptedInput(addon v1alpha1.ClusterAddon, name string) (v1alpha1.ClusterAddonAcceptedInput, bool) {

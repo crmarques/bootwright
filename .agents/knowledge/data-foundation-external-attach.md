@@ -234,11 +234,16 @@ Other traps:
   credentials Ceph no longer holds — a silent authentication failure with no
   `Malformed input` to explain it. The window is open only on the first apply
   after `keyType` is declared: once the keys carry the declared type, the stale
-  list comes back empty and the second cluster adopts rather than deletes. The
-  step now re-reads `ceph auth ls` after the export and refuses when any exported
-  `userKey` is no longer one Ceph holds, naming the race and saying to rerun.
-  Prevention rather than detection would need the orchestrator to serialize
-  per-`StorageExport`, which is a larger change than the one-rerun repair earns.
+  list comes back empty and the second cluster adopts rather than deletes.
+  Apply now prevents that interleave at step granularity: every mutating
+  playbook resolves its target `StorageExport` to a `StorageCluster`, acquires
+  the per-run `storage:<name>` resource after requirement polling, and holds it
+  through exporter output capture and consumer manifest apply. A peer exporter
+  for the same storage cluster can run only after the first has installed its
+  payload; it then observes the reminted type and adopts the same live keys.
+  Operator install and readiness waiting stay outside the resource, avoiding
+  the hours of serialization a task-level key caused. The post-export
+  `ceph auth ls` recheck remains as defense in depth.
 - Bootwright passes no `--restricted-auth-permission`, so every attached
   OpenShift cluster shares the five entities (`client.healthchecker`,
   `client.csi-rbd-node`, `client.csi-rbd-provisioner`,

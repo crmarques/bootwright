@@ -2031,6 +2031,16 @@ Rules:
     Storage-cluster targets connect through the
     cluster's post-install `cephadm.clusterSSH` user and key; container-cluster
     and direct Machine targets use the Machine's `access.ssh` identity.
+    Before a playbook whose resolved target includes one or more
+    `StorageCluster`s runs, apply must resolve every such target exactly and
+    atomically acquire the per-run `storage:<name>` step resources. It holds
+    them through output capture, manifest apply, secret-output reclamation, and
+    the step-record write. An unresolved storage target or unavailable resource
+    coordinator refuses before the playbook. Requirement polling precedes the
+    lock, and operator installation and readiness waiting sit outside it, so
+    steps against different storage clusters and manifest-only steps remain
+    concurrent while two external-Ceph exports against one cluster cannot
+    delete and remint the same credentials at once.
   - `steps[].secretRefs[]` name `Secret`s materialized into the step's scoped
     per-run secrets directory (`bootwright_step_secrets_dir`) — only the declared
     secrets, never the whole store. `steps[].extraVars` is a free-form map handed

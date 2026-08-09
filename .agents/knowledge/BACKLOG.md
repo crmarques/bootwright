@@ -658,31 +658,6 @@ learned; this file records what it still owes.
   rather than the controller, and report measured throughput, not just reachability
   — the failure mode is slowness, not refusal.
 
-## B-087 — Concurrent external-Ceph exports against one storage cluster still race
-- Status: open
-- Area: add-ons / Data Foundation
-- Origin: prd apply review (2026-08-09); refines
-  `data-foundation-external-attach.md`, which records the race and declines
-  orchestrator serialization
-- Problem: every consumer cluster's `fusion-data-foundation` step deletes and
-  remints the same shared cephx entities on the storage cluster it attaches to.
-  `addonSharedResourceKeys` emits only `pullsecret:<cluster>`, so nothing
-  serializes two add-on tasks against the same `StorageCluster` — on the prd
-  estate four clusters bind one export, and two of them dispatch in the same
-  scheduler pass as soon as the storage task settles. The knowledge file says the
-  remint recheck names the race; it does not cover the window where the peer's
-  `ceph auth rm` lands between this run's remint and its recheck, which surfaces
-  instead as a 45-minute readiness timeout with no mention of a peer.
-- Deliberately not fixed here: the planner already resolves the storage-cluster
-  mapping (`stepCrossClusterDependencies` → `steps.TargetClusters`) so a
-  `storage:<name>` shared resource key would serialize them for a few lines of
-  code — but a resource key is per task, not per step, so it would serialize the
-  whole 45-minute add-on apply of every consumer, adding hours to each apply to
-  protect a step that runs in seconds.
-- Exit: serialize at step granularity (a step-level resource key or an exporter
-  lock on the storage cluster), or make the recheck name the peer explicitly so
-  the one-rerun repair is self-evident.
-
 ## B-088 — Most `cephadm shell` invocations still run unbounded
 - Status: open
 - Area: ansible / storage

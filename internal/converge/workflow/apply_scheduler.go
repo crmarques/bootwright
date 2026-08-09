@@ -92,6 +92,9 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 		return RunLedger{}, fmt.Errorf("apply start time is required")
 	}
 	opts.RunsDir = runsDir
+	if opts.addonStepResources == nil {
+		opts.addonStepResources = newAddonStepResourcePool()
+	}
 	tasks := prepared.Tasks
 	limits := ResolveApplyConcurrencyLimits(prepared.Limits, tasks)
 	runID := prepared.RunID

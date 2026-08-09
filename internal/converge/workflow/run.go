@@ -77,6 +77,7 @@ type RunOptions struct {
 	InvocationArgs             []string
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 	StreamAnsible              bool
+	addonStepResources         *addonStepResourcePool
 }
 
 type RunResult struct {

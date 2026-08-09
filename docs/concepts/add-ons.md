@@ -412,6 +412,16 @@ and running it on a Ceph node. A storage-cluster target uses that cluster's
 post-install `cephadm.clusterSSH` user and key; direct Machine and
 container-cluster targets use their Machine `access.ssh` identity.
 
+Playbook steps that resolve to the same `StorageCluster` serialize only their
+mutating step. The lock begins after `requires` polling and covers the
+playbook, captured outputs, the step's bound-cluster manifests, output cleanup,
+and its ready record. Operator installation and the add-on's readiness wait stay
+concurrent, as do playbooks against different storage clusters and
+manifest-only steps. If Bootwright cannot resolve the storage target or the
+shared step coordinator is unavailable, it refuses before running the
+playbook. This prevents two Data Foundation consumers from deleting and
+reminting the same external-Ceph credentials concurrently.
+
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
 `{{ output <name> }}`, `{{ input <in> }}`, `{{ secret <name> }}`, and
 `{{ exportDetails <in> }}` (the operator-supplied

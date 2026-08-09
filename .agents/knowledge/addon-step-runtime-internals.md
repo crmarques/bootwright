@@ -64,6 +64,21 @@ compiled attachment task exists (pinned by
 manifest-only add-on (imported Ceph, `externalDetails.fromSecretRef`) needs no
 Ceph-side dependency at all.
 
+**Step-level storage mutation resources:** Every playbook step resolves its
+target through `steps.StorageMutationTargets` before its first side effect. A
+`StorageExport` target resolves through `storageClusterRef`; direct storage
+targets and storage-owned static machines resolve to the same cluster names.
+Unknown refs fail closed. After read-only `requires` polling, the per-run
+scheduler coordinator atomically acquires every `storage:<name>` key and holds
+it through the playbook, output capture, bound-cluster manifests, output
+reclamation, and step record. Do not move the key to the add-on task's
+`ResourceKeys`: that would hold it across operator install and the 45-minute
+readiness budget. Any future step executor must use the shared coordinator;
+running a storage-targeted playbook without it is an explicit refusal. This is
+what prevents two Data Foundation exporters from interleaving a shared cephx
+delete/remint while preserving parallelism for other storage clusters and
+manifest-only steps.
+
 **Single owner of the attachment walk:** `inputs.StorageExportAttachments`
 owns the "walk the dataFoundation storageExportAttachment effect bindings and
 resolve each exportRef input to its StorageExport" pattern; callers needing a

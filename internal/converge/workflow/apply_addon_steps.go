@@ -37,6 +37,7 @@ type addonStepExecutor struct {
 	ocRunner       extensionoc.OCRunner
 	readRunner     extensionoc.OCRunner
 	runnerFactory  ApplyTaskRunnerFactory
+	stepResources  *addonStepResourcePool
 	binding        v1alpha1.ClusterAddonBinding
 	inputs         []v1alpha1.ClusterAddonBindingInput
 }
@@ -66,6 +67,7 @@ func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig s
 		ocRunner:      extensionoc.CommandRunner{LogPath: logPath, Stdout: stdout, Stderr: stderr, RedactLog: true},
 		readRunner:    extensionoc.CommandRunner{},
 		runnerFactory: runnerFactory,
+		stepResources: opts.addonStepResources,
 		binding:       binding,
 		inputs:        inputs,
 	}
@@ -105,9 +107,22 @@ func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAd
 	if v1alpha1.ClusterAddonStepRun(step) == v1alpha1.PlaybookRunOnChange && e.stepConverged(step.Name, digest) {
 		return nil, nil
 	}
+	storageTargets, err := steps.StorageMutationTargets(e.state, e.plan.Addon, e.plan.Cluster, step, e.inputs)
+	if err != nil {
+		return nil, fmt.Errorf("ClusterAddon/%s step %s cannot prove the target of its mutating playbook: %w; fix the step target before applying again", e.plan.Name, step.Name, err)
+	}
 	if err := extensionoc.WaitStepRequirements(ctx, e.readRunner, e.kubeconfig, e.plan.Name, step.Name, step.Requires, e.plan.Addon.Spec.Readiness.Timeout, 0, e.stdout); err != nil {
 		return nil, err
 	}
+	resourceKeys := make([]string, 0, len(storageTargets))
+	for _, target := range storageTargets {
+		resourceKeys = append(resourceKeys, "storage:"+target)
+	}
+	releaseResources, err := e.stepResources.acquire(ctx, resourceKeys)
+	if err != nil {
+		return nil, fmt.Errorf("ClusterAddon/%s step %s cannot acquire its mutation lock: %w", e.plan.Name, step.Name, err)
+	}
+	defer releaseResources()
 	stepRoot := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "steps", step.Name)
 	defer os.RemoveAll(stepRoot)
 	outputs := map[string]string{}
