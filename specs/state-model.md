@@ -2474,6 +2474,11 @@ Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
   - **The replaced machine keeps running.** Only its Ceph membership is removed;
     its OS and substrate are untouched, and tearing the machine down stays a
     separate `destroy` decision.
+  - **Preview and output.** `--dry-run` performs the live reads needed to identify
+    the current tiebreaker but changes neither input nor cluster. Text prints the
+    ordered plan and Required authorizations; `--output json` is accepted only
+    with `--dry-run` and emits that plan, any proposed input rewrite, the order,
+    and an always-present `requiredAuthorizations` array.
   - **What the run records.** A successful replacement refreshes the cluster's
     recorded desired and structural state exactly as a successful `apply` writes
     it. Otherwise the next plain `apply` would refuse on drift this verb itself
@@ -2542,9 +2547,9 @@ pipeline.
 
 ### Global flags
 
-`--context`, `--ssh-id-file`, and `--ssh-user` are persistent root
-flags, accepted on every command. The rest are registered per command, on the
-verbs that reach machines.
+`--context`, `--ssh-id-file`, `--ssh-user`, `--ssh-ask-sudo-password`, and
+`--ssh-user-for-provisioned` are persistent root flags, accepted on every
+command. The rest are registered per command, on the verbs that reach machines.
 
 - `--context <name>` selects the context the invocation operates in, overriding
   the current-context selection for that invocation only. It must name an
@@ -2557,10 +2562,12 @@ verbs that reach machines.
 - `--ssh-user <name>` names the account only for machines whose resolved auth
   arm is `operatorIdentity` — the inventory `ansible_user`, the add-on step
   targets, and the connection identity of the Ceph node-access role. It never
-  moves a login Bootwright created nor one a `Secret` names, never renames a
-  cluster's orchestration account, and `apply`, `plan`, and `destroy`
-  **refuse** when no machine in the run declares that arm rather than silently
-  changing nothing. It is refused unless the value is a valid POSIX user name,
+  moves a login Bootwright created nor one a `Secret` names, and never renames a
+  cluster's orchestration account unless `--ssh-user-for-provisioned`
+  deliberately widens its reach. Without that widening, `apply`, `plan`, and
+  `destroy` **refuse** when no machine in the run declares the
+  `operatorIdentity` arm rather than silently changing nothing. It is refused
+  unless the value is a valid POSIX user name,
   and is likewise never recorded. On `machine rsh`/`exec` and
   `cluster rsh`/`exec` it keeps `ssh(1)` semantics and reaches any account: a
   value naming an identity Bootwright holds — the `Machine`'s own login, or the
@@ -2568,7 +2575,16 @@ verbs that reach machines.
   identity's credential; any other value offers no stored credential, leaving
   the operator's own identities to authenticate. A name two clusters own with
   different credentials is refused, naming both (ADR 0033).
-- Neither SSH flag reaches an ownership record. A record captures the
+- `--ssh-user-for-provisioned` requires `--ssh-user` and deliberately applies
+  that account to every selected machine, including managed machines Bootwright
+  ordinarily reaches as `bootwright`. The account must already exist and carry
+  the required sudo authority; the flag never creates or authorizes it.
+- `--ssh-ask-sudo-password` applies to the resolved `operatorIdentity` account,
+  whether declared or overridden by `--ssh-user`, and prompts once before the
+  run for that account's sudo password. The answer is
+  held in memory only, omitted from rendered inputs and logs, and reused when
+  the controller-local root gate already collected the same account's password.
+- None of these SSH overrides reaches an ownership record. A record captures the
   **declared** `ansible_user` and `ansible_ssh_common_args`, so replaying it to
   reach a host that has left desired state cannot inherit one operator's account
   or key path from the run that wrote it.
@@ -3142,6 +3158,14 @@ verbs that reach machines.
   express it would destroy every OSD's data to change an arbiter. A drift set
   that reaches anything beyond the tiebreaker keeps the rebuild remedy, because
   the verb converges only the arbiter.
+- Adding the first stretch tiebreaker to a built cluster or removing its last
+  tiebreaker is a different, immutable bootstrap-shape change. Apply cannot make
+  it in place, `storage-cluster replace-arbiter` cannot create or retire the
+  arbiter role, and `--mode rebuild` is not a sanctioned shortcut because its
+  Ceph rebuild wipes every OSD without establishing a supported shape
+  transition. Revert the authored shape to the running one, or perform a
+  separately reviewed full teardown and fresh apply after exporting or backing
+  up the data; no Bootwright retry command changes that shape in place.
 - A recorded desired hash covers only the desired state that reaches a host, so
   editing controller-side authorization policy never reads as drift.
   `Environment.spec.safety` (`destroyProtection`, `protectedKinds`) is consumed
@@ -3223,9 +3247,10 @@ verbs that reach machines.
   `bootstrap-complete` and `waiting` additionally skip bootstrap wait and resume
   install-complete wait; `complete` is a no-op. The bootstrap wait stamps both
   its start and success phases. The `booting` phase fails closed — node-boot
-  completion is uncertain, so Bootwright refuses to reboot without `--mode
-  rebuild` (which recreates the agent ISO and reboots the nodes; no completed
-  cluster is destroyed). An unrecognized phase also fails closed.
+  completion is uncertain, so Bootwright names an exact cluster-scoped
+  `--mode rebuild --authorize data-loss` invocation that recreates the agent ISO
+  and reboots the nodes. An unrecognized phase receives the same typed,
+  cluster-scoped remedy because Bootwright cannot prove which install steps ran.
 - Automatic post-boot resume is bounded by the original install record's
   `StartedAt`, not by an attempt counter. A wait may be replanned only before the
   three-hour resume ceiling; exactly at or after the deadline, or when the start
@@ -3302,7 +3327,11 @@ verbs that reach machines.
   `--mode rebuild`). A reconfigure-only or reconcilable-in-place rebuild touches nothing
   destructive and reaches neither gate.
 - `apply --reclaim-devices <paths>` takes a comma-separated list of block-device
-  paths to WIPE in-band before a managed-Ceph apply — the recovery path for an
+  paths to WIPE in-band before a managed-Ceph apply. The single value `all`
+  expands only to every statically declared OSD data, DB, and WAL path of the
+  selected owned StorageClusters; it cannot be combined with another entry, and
+  a filter-only drivegroup that declares no static path makes `all` refuse rather
+  than broadening to whatever disks happen to be visible. This is the recovery path for an
   owned OSD disk whose on-node marker was lost (for example by a managed-OS
   reinstall). It is irreversible and fail-closed: it wipes only a named device
   that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a

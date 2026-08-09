@@ -185,15 +185,14 @@
   ansible.builtin.fail:
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} already runs an
-      OS ({{ (bootwright_os_pre_marker_owned | default(false) | bool)
-      | ternary('Bootwright-owned', 'not marked as Bootwright-owned') }}) but this
-      apply ran with --mode create, which requires a greenfield environment. Use
-      --mode reconcile to reconcile the machine, or tear it down first with `bootwright
-      destroy --stage infra --clusters {{ bootwright_current_cluster.name }}` and
-      re-apply.
+      OS with a verified Bootwright ownership marker, but this apply ran with
+      --mode create, which asserts a greenfield environment. Reconcile exactly the
+      selected work instead with
+      `{{ bootwright_apply_reconcile_invocation | default('the same bootwright apply invocation with --mode reconcile') }}`.
   when:
     - bootwright_managed_os_already_ready | bool
     - (bootwright_apply_mode | default('reconcile')) == 'create'
+    - bootwright_os_pre_marker_owned | default(false) | bool
     - not (bootwright_os_machine_released | default(false) | bool)
 
 - name: Refuse foreign or unmarked reachable managed OS
@@ -201,9 +200,12 @@
     msg: >-
       managed OS at {{ bootwright_component.osInstall.ssh.address }} accepts SSH but
       {{ bootwright_os_marker_path }} is absent, unreadable, or not owned by bootwright;
-      refusing to
-      reinstall, wipe, or adopt a host Bootwright does not own (--mode rebuild does not
-      bypass foreign ownership).
+      refusing to reinstall, wipe, or adopt a host Bootwright does not own. Restore
+      the marker from a verified backup only if this exact machine is genuinely
+      Bootwright-owned; otherwise decommission or remove the foreign host out of band.
+      No bootwright retry command, --mode, or --authorize token bypasses foreign
+      ownership. After the external ownership conflict is resolved, re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
   when:
     - bootwright_managed_os_already_ready | bool
     - not (bootwright_os_pre_marker_owned | default(false) | bool)

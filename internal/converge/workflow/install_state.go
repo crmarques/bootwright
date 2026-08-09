@@ -3,25 +3,19 @@ package workflow
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/host/safefs"
-	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/secrets"
-	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -758,11 +752,17 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	case "", ClusterInstallPhaseCreatingISO:
 		return tasks, nil
 	case ClusterInstallPhaseBooting:
-		return tasks, fmt.Errorf("ContainerCluster/%s has prior install state at phase %s; node boot completion is uncertain, refusing to reboot without --mode rebuild", name, record.Phase)
+		return tasks, &ClusterInstallStateError{
+			Message: fmt.Sprintf("ContainerCluster/%s has prior install state at phase %s; node boot completion is uncertain, so bootwright refuses to reboot before any mutation", name, record.Phase),
+			Remedy:  ClusterInstallRemedy{Action: ClusterInstallRemedyFutureRebuild, Cluster: name},
+		}
 	case ClusterInstallPhaseComplete:
 		return tasks, nil
 	default:
-		return tasks, fmt.Errorf("ContainerCluster/%s has unrecognized install phase %q; refusing to continue without --mode rebuild", name, record.Phase)
+		return tasks, &ClusterInstallStateError{
+			Message: fmt.Sprintf("ContainerCluster/%s has unrecognized install phase %q; bootwright cannot prove which install steps already changed the cluster and refuses before any mutation", name, record.Phase),
+			Remedy:  ClusterInstallRemedy{Action: ClusterInstallRemedyFutureRebuild, Cluster: name},
+		}
 	}
 }
 
@@ -779,371 +779,6 @@ func publishedAgentISOAgeNote(record ClusterInstallRecord, name string, now time
 	return fmt.Sprintf(
 		". That ISO was published at least %dh ago; an agent ISO carries bootstrap certificates minted when it was created, so booting a stale one fails during bootstrap with certificate errors that read like a network fault. Regenerate it with bootwright apply --through base --clusters %s",
 		int(age.Hours()), name)
-}
-
-func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
-	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
-	if !ok || task.Entry.Cluster == "" {
-		return nil
-	}
-	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
-		return nil
-	}
-	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
-	if err != nil {
-		return err
-	}
-	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
-	if err != nil {
-		return err
-	}
-	if !found || record.Status == ClusterInstallStatusInstalled {
-		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
-	}
-	record.DesiredHash = hash
-	record.StructuralHash = structuralHash
-	record.HashSchema = ConvergeHashSchema
-	record.Status = ClusterInstallStatusInstalling
-	record.Phase = phase
-	record.RunID = runID
-	record.UpdatedAt = now.UTC()
-	record.InstalledAt = nil
-	if task.Entry.Kind == ApplyTaskKindClusterISO {
-		record.InstallerVersion = ""
-	}
-	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
-		return err
-	}
-	if task.Entry.Kind == ApplyTaskKindInstallWait {
-		return SaveClusterConnectionRecord(clustersDir, clusterConnectionRecord(clustersDir, task.Entry.Cluster, task.State.Environments, now))
-	}
-	return nil
-}
-
-func MarkClusterInstallTaskSucceeded(clustersDir, runsDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
-	phase, ok := clusterInstallTaskSuccessPhase(task.Entry.Kind)
-	if !ok || task.Entry.Cluster == "" {
-		return nil
-	}
-	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
-		return nil
-	}
-	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
-	if err != nil {
-		return err
-	}
-	if !found {
-		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
-	}
-	hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, task.State, task.Entry.Cluster, secretsDir)
-	if err != nil {
-		return err
-	}
-	if task.Entry.Kind == ApplyTaskKindInstallWait {
-		if err := saveSuccessfulInputSnapshot(runsDir, runID, clusterInstallSnapshotResourceID(task.Entry.Cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, ConvergeHashSchema, input); err != nil {
-			return err
-		}
-	}
-	record.DesiredHash = hash
-	record.StructuralHash = structuralHash
-	record.HashSchema = ConvergeHashSchema
-	record.RunID = runID
-	record.Phase = phase
-	record.UpdatedAt = now.UTC()
-	if task.Entry.Kind == ApplyTaskKindClusterISO {
-		installerVersion, err := LoadClusterInstallerVersion(clustersDir, task.Entry.Cluster)
-		if err != nil {
-			return err
-		}
-		record.InstallerVersion = installerVersion
-	}
-	if task.Entry.Kind == ApplyTaskKindInstallWait {
-		record.Status = ClusterInstallStatusInstalled
-		t := now.UTC()
-		record.InstalledAt = &t
-	} else {
-		record.Status = ClusterInstallStatusInstalling
-	}
-	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
-		return err
-	}
-	if task.Entry.Kind == ApplyTaskKindInstallWait {
-		return SaveClusterConnectionRecord(clustersDir, clusterConnectionRecord(clustersDir, task.Entry.Cluster, task.State.Environments, now))
-	}
-	return nil
-}
-
-func MarkClusterInstallTaskFailed(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
-	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
-	if !ok || task.Entry.Cluster == "" {
-		return nil
-	}
-	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
-		return nil
-	}
-	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
-	if err != nil {
-		return err
-	}
-	if !found {
-		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
-	}
-	hash, structuralHash, err := clusterInstallHashes(contextName, task.State, task.Entry.Cluster, secretsDir)
-	if err != nil {
-		return err
-	}
-	record.DesiredHash = hash
-	record.StructuralHash = structuralHash
-	record.HashSchema = ConvergeHashSchema
-	record.Status = ClusterInstallStatusFailed
-	record.Phase = phase
-	record.RunID = runID
-	record.UpdatedAt = now.UTC()
-	return SaveClusterInstallRecord(clustersDir, record)
-}
-
-func ClusterInstallPostSuccessError(clustersDir string, task ApplyTask) error {
-	if task.Entry.Kind != ApplyTaskKindInstallWait || task.Entry.Cluster == "" || !stateHasContainerCluster(task.State, task.Entry.Cluster) {
-		return nil
-	}
-	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return fmt.Errorf("ContainerCluster/%s completed its install wait but its install record is missing", task.Entry.Cluster)
-	}
-	return clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(task.State, task.Entry.Cluster), true)
-}
-
-func clusterInstallTaskStartPhase(kind string) (ClusterInstallPhase, bool) {
-	switch kind {
-	case ApplyTaskKindClusterISO:
-		return ClusterInstallPhaseCreatingISO, true
-	case ApplyTaskKindNodeBoot:
-		return ClusterInstallPhaseBooting, true
-	case ApplyTaskKindBootstrapWait:
-		return ClusterInstallPhaseWaitingBootstrap, true
-	case ApplyTaskKindInstallWait:
-		return ClusterInstallPhaseWaiting, true
-	default:
-		return "", false
-	}
-}
-
-func clusterInstallTaskSuccessPhase(kind string) (ClusterInstallPhase, bool) {
-	switch kind {
-	case ApplyTaskKindClusterISO:
-		return ClusterInstallPhaseISOCreated, true
-	case ApplyTaskKindNodeBoot:
-		return ClusterInstallPhaseNodesBooted, true
-	case ApplyTaskKindBootstrapWait:
-		return ClusterInstallPhaseBootstrapComplete, true
-	case ApplyTaskKindInstallWait:
-		return ClusterInstallPhaseComplete, true
-	default:
-		return "", false
-	}
-}
-
-func clusterInstallPhaseMayHaveBooted(phase ClusterInstallPhase) bool {
-	switch phase {
-	case ClusterInstallPhaseBooting, ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaitingBootstrap, ClusterInstallPhaseBootstrapComplete, ClusterInstallPhaseWaiting, ClusterInstallPhaseComplete:
-		return true
-	default:
-		return false
-	}
-}
-
-func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
-	return clusterInstallHashForContext(contextName, state, clusterName, secretsDir, false)
-}
-
-type clusterInstallHashInputs struct {
-	clusterState    v1alpha1.State
-	ocp             v1alpha1.ContainerCluster
-	installConfig   map[string]any
-	agentConfig     map[string]any
-	manifests       []render.InstallerManifest
-	scopedState     v1alpha1.State
-	structuralState v1alpha1.State
-}
-
-var clusterInstallHashInputCache = struct {
-	mu      sync.Mutex
-	entries map[string]*clusterInstallHashInputs
-}{}
-
-func clusterInstallHashInputCacheKey(contextName, clusterName, secretsDir string) string {
-	return contextName + "\x00" + clusterName + "\x00" + secretsDir
-}
-
-func clusterInstallHashInputsFor(contextName string, state v1alpha1.State, clusterName, secretsDir string) (*clusterInstallHashInputs, error) {
-	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
-	if len(clusterState.ContainerClusters) != 1 {
-		return nil, fmt.Errorf("ContainerCluster/%s does not resolve to exactly one selected cluster", clusterName)
-	}
-	key := clusterInstallHashInputCacheKey(contextName, clusterName, secretsDir)
-	clusterInstallHashInputCache.mu.Lock()
-	defer clusterInstallHashInputCache.mu.Unlock()
-	if cached := clusterInstallHashInputCache.entries[key]; cached != nil && reflect.DeepEqual(cached.clusterState, clusterState) {
-		return cached, nil
-	}
-	ocp := clusterState.ContainerClusters[0]
-	installConfig, err := render.InstallerConfig(clusterState, ocp)
-	if err != nil {
-		return nil, err
-	}
-	agentConfig, err := render.AgentConfig(clusterState, ocp)
-	if err != nil {
-		return nil, err
-	}
-	inputs := &clusterInstallHashInputs{
-		clusterState:    clusterState,
-		ocp:             ocp,
-		installConfig:   installConfig,
-		agentConfig:     agentConfig,
-		manifests:       render.InstallerManifests(ocp, render.PlaceholderInstallerSecrets(clusterState, ocp)),
-		scopedState:     hashScopedState(clusterState),
-		structuralState: containerClusterInstallStructuralHashVars(clusterState),
-	}
-	if clusterInstallHashInputCache.entries == nil {
-		clusterInstallHashInputCache.entries = map[string]*clusterInstallHashInputs{}
-	}
-	clusterInstallHashInputCache.entries[key] = inputs
-	return inputs, nil
-}
-
-func finishClusterInstallHash(clusterName string, inputs *clusterInstallHashInputs, secretInputs []render.InstallerSecretInputStat, projectDay2 bool) (string, error) {
-	data, err := clusterInstallHashInput(clusterName, inputs, secretInputs, projectDay2)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
-}
-
-func clusterInstallHashInput(clusterName string, inputs *clusterInstallHashInputs, secretInputs []render.InstallerSecretInputStat, projectDay2 bool) ([]byte, error) {
-	embedState := inputs.scopedState
-	if projectDay2 {
-		embedState = inputs.structuralState
-	}
-	payload := struct {
-		APIVersion    string                            `json:"apiVersion"`
-		Cluster       string                            `json:"cluster"`
-		State         v1alpha1.State                    `json:"state"`
-		InstallConfig map[string]any                    `json:"installConfig"`
-		AgentConfig   map[string]any                    `json:"agentConfig"`
-		Manifests     []render.InstallerManifest        `json:"manifests"`
-		SecretInputs  []render.InstallerSecretInputStat `json:"secretInputs"`
-	}{
-		APIVersion:    v1alpha1.APIVersion,
-		Cluster:       clusterName,
-		State:         embedState,
-		InstallConfig: inputs.installConfig,
-		AgentConfig:   inputs.agentConfig,
-		Manifests:     inputs.manifests,
-		SecretInputs:  secretInputs,
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("encode cluster install hash input: %w", err)
-	}
-	return data, nil
-}
-
-func clusterInstallHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string, projectDay2 bool) (string, error) {
-	contextName = effectiveContextName(contextName)
-	inputs, secretInputs, err := clusterInstallHashParts(contextName, state, clusterName, secretsDir)
-	if err != nil {
-		return "", err
-	}
-	return finishClusterInstallHash(clusterName, inputs, secretInputs, projectDay2)
-}
-
-func clusterInstallHashParts(contextName string, state v1alpha1.State, clusterName, secretsDir string) (*clusterInstallHashInputs, []render.InstallerSecretInputStat, error) {
-	inputs, err := clusterInstallHashInputsFor(contextName, state, clusterName, secretsDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	secretInputs, err := render.InstallerSecretInputStatsForContext(contextName, inputs.clusterState, inputs.ocp, secretsDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	return inputs, secretInputs, nil
-}
-
-func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
-	if record.HashSchema != ConvergeHashSchema {
-		return false
-	}
-	if record.StructuralHash != "" && structuralHash != "" {
-		return record.StructuralHash == structuralHash
-	}
-	return record.DesiredHash == desiredHash
-}
-
-func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
-	hash, structuralHash, _, err = clusterInstallHashesAndInput(contextName, state, clusterName, secretsDir)
-	return hash, structuralHash, err
-}
-
-func clusterInstallHashesAndInput(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, input []byte, err error) {
-	contextName = effectiveContextName(contextName)
-	inputs, secretInputs, err := clusterInstallHashParts(contextName, state, clusterName, secretsDir)
-	if err != nil {
-		return "", "", nil, err
-	}
-	input, err = clusterInstallHashInput(clusterName, inputs, secretInputs, false)
-	if err != nil {
-		return "", "", nil, err
-	}
-	sum := sha256.Sum256(input)
-	hash = "sha256:" + hex.EncodeToString(sum[:])
-	structuralHash, err = finishClusterInstallHash(clusterName, inputs, secretInputs, true)
-	if err != nil {
-		return "", "", nil, err
-	}
-	return hash, structuralHash, input, nil
-}
-
-func clusterInstallSnapshotResourceID(cluster string) string {
-	return ObjectKindContainerCluster + "Install/" + cluster
-}
-
-func installWaitTask(tasks []ApplyTask, cluster string) *ApplyTask {
-	for i := range tasks {
-		if tasks[i].Entry.Cluster == cluster && tasks[i].Entry.Kind == ApplyTaskKindInstallWait {
-			return &tasks[i]
-		}
-	}
-	return nil
-}
-
-func clusterInstallRecordInputsMatch(runsDir string, record ClusterInstallRecord, cluster string, task *ApplyTask, desiredHash, structuralHash string, input []byte) (bool, bool, error) {
-	if record.HashSchema == ConvergeHashSchema {
-		return installInputsMatch(record, desiredHash, structuralHash), false, nil
-	}
-	if record.HashSchema != ConvergeHashSchema-1 || record.Status != ClusterInstallStatusInstalled || task == nil || record.Cluster != cluster {
-		return false, false, nil
-	}
-	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, input)
-	if err != nil {
-		return false, false, fmt.Errorf("cannot verify legacy install inputs for ContainerCluster/%s: %w; restore the immutable run evidence or intentionally rebuild with bootwright apply --clusters %s --mode rebuild --authorize data-loss --yes", cluster, err, cluster)
-	}
-	return matched, matched, nil
-}
-
-func rebaselineClusterInstallRecord(clustersDir string, record *ClusterInstallRecord, desiredHash, structuralHash string, now time.Time) error {
-	record.DesiredHash = desiredHash
-	record.StructuralHash = structuralHash
-	record.HashSchema = ConvergeHashSchema
-	record.UpdatedAt = now.UTC()
-	return SaveClusterInstallRecord(clustersDir, *record)
-}
-
-func ComputeClusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, string, error) {
-	return clusterInstallHashes(contextName, state, clusterName, secretsDir)
 }
 
 func clusterKubeconfigPath(clustersDir, clusterName string) string {

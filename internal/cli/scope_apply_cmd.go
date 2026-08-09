@@ -18,22 +18,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-type scopeApplyOptions struct {
-	use           string
-	short         string
-	long          string
-	example       string
-	defaultPlan   bool
-	hideDryRun    bool
-	hideApproval  bool
-	hideExecFlags bool
-	stageSelector bool
-	commandLabel  string
-	action        string
-}
-
-var applyClusterAvailabilityChecker workflow.ClusterAvailabilityChecker
-
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
@@ -50,32 +34,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		reclaimDevices  string
 		machinesScope   string
 	)
-	use := "apply"
-	if options.use != "" {
-		use = options.use
-	}
-	short := "Apply " + scope.Name + " desired state"
-	if options.short != "" {
-		short = options.short
-	}
-	example := ""
-	if options.example != "" {
-		example = options.example
-	}
-	commandLabel := scope.Name + " apply"
-	if options.commandLabel != "" {
-		commandLabel = options.commandLabel
-	}
-	action := "apply"
-	if options.action != "" {
-		action = options.action
-	}
+	labels := resolveScopeApplyLabels(scope, options)
+	commandLabel, action := labels.commandLabel, labels.action
 	cmd := &cobra.Command{
-		Use:     use,
-		Short:   short,
+		Use:     labels.use,
+		Short:   labels.short,
 		Long:    options.long,
 		Args:    cobra.NoArgs,
-		Example: example,
+		Example: labels.example,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", options.defaultPlan, flagDryRunUsage)
@@ -128,19 +94,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
-		if err := validateOutputFormat(flags.output); err != nil {
-			return failErr(2, err)
-		}
-		if options.defaultPlan && !dryRun {
-			return failErr(2, errors.New("plan is always read-only"))
-		}
-		mode, err := parseApplyMode(modeFlag)
+		mode, auth, err := resolveScopeApplyIntent(flags.output, options.defaultPlan, dryRun, modeFlag, authorizeFlag)
 		if err != nil {
-			return failErr(2, err)
-		}
-		auth, err := parseAuthorizations(authorizeFlag, authorizeVerbApply)
-		if err != nil {
-			return failErr(2, err)
+			return err
 		}
 		override := mode == workflow.ApplyModeRebuild
 		runScope := scope

@@ -1,13 +1,53 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/workspace"
 )
+
+func TestReplaceArbiterJSONPreviewIsMachineReadableAndComplete(t *testing.T) {
+	ctx := initSafetyBaselineContext(t, "")
+	seedLiveStretchClusterOffItsArbiter(t, ctx)
+	before := safetyDurableStateSnapshot(t, ctx)
+	stdout, stderr, code := runCLI(t,
+		"storage-cluster", "replace-arbiter",
+		"--name", safetyAdvancedCephCluster,
+		"--dry-run", "--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("JSON preview exited %d, stderr=%q stdout=%q", code, stderr, stdout)
+	}
+	var report replaceArbiterDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode replace-arbiter JSON preview: %v\n%s", err, stdout)
+	}
+	if report.Context != ctx.Name || report.Target != safetyAdvancedCephCluster || !report.DryRun || !report.PlanOnly {
+		t.Fatalf("preview identity = %#v", report)
+	}
+	if report.Plan.Cluster != safetyAdvancedCephCluster || report.Plan.DesiredMon == "" || len(report.Order) != 4 {
+		t.Fatalf("preview plan = %#v, order=%v", report.Plan, report.Order)
+	}
+	wantTokens := []string{authorizeSameSiteArbiter, authorizeDegradedQuorum, authorizeUnreachableNodes}
+	for _, token := range wantTokens {
+		found := false
+		for _, entry := range report.RequiredAuthorizations {
+			found = found || entry.Token == token
+		}
+		if !found {
+			t.Fatalf("requiredAuthorizations missing %q: %#v", token, report.RequiredAuthorizations)
+		}
+	}
+	if after := safetyDurableStateSnapshot(t, ctx); !maps.Equal(before, after) {
+		t.Fatalf("JSON preview changed durable state at %v", safetySnapshotDelta(before, after))
+	}
+}
 
 const arbiterLiveMonDumpJSON = `{
   "fsid": "3f1c0a2e-0000-4000-8000-00000000ceph",

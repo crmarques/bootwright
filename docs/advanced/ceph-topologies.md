@@ -416,9 +416,11 @@ bootwright storage-cluster replace-arbiter --name ceph-prd-01 \
 
 !!! warning "Editing `tiebreaker.node` and re-running `apply` does not move the arbiter"
     A re-authored `stretch.tiebreaker.node` is structural drift: `apply` refuses
-    it before mutating, and the refusal's `--mode rebuild` suggestion is the
-    owned-Ceph **wipe-and-rebuild** path, not the arbiter move.
-    `storage-cluster replace-arbiter` is the verb that moves it.
+    it before mutating and routes the one-field move to
+    `storage-cluster replace-arbiter`. Adding an arbiter to a built cluster or
+    removing its last arbiter is a different, unsupported bootstrap-shape
+    change: neither this verb nor `--mode rebuild` makes that transition in
+    place.
 
 Mark every machine that may hold the tiebreaker with the `ceph-arbiter`
 capability (it requires `ceph-node`), give it the site it stands in, and keep it
@@ -476,6 +478,11 @@ failure ahead of the swap therefore leaves the original arbiter in place with th
 cluster's quorum intact, every step is idempotent, and re-running resumes where
 it stopped. A run whose desired arbiter already holds the tiebreaker reports a
 no-op.
+
+Preview the live plan with `--dry-run`. Add `--output json` for a clean
+machine-readable report containing `plan`, `inputRewrite`, the four-step
+`order`, and an always-present `requiredAuthorizations` array. JSON is
+preview-only; omitting `--dry-run` is a usage error and changes nothing.
 
 Three situations fail closed and name the token that proceeds:
 

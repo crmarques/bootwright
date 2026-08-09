@@ -31,6 +31,7 @@ type replaceArbiterFlags struct {
 	authorize    []string
 	yes          bool
 	dryRun       bool
+	output       string
 	verbose      bool
 	askBecomePas bool
 	executable   string
@@ -86,6 +87,7 @@ it.`,
 	cmd.Flags().StringVar(&flags.machineName, "new-arbiter-machine", "", "Machine to make the stretch tiebreaker; it must declare the "+v1alpha1.MachineCapabilityCephArbiter+" capability and be bound by no other cluster. Rewrites the context input to name it, then reconciles. Omit it to reconcile the arbiter the input already declares")
 	registerArbiterMachineCompletion(cmd)
 	cmd.Flags().BoolVar(&flags.dryRun, "dry-run", false, flagDryRunUsage)
+	addOutputFlagDryRun(cmd, &flags.output)
 	addYesFlag(cmd, &flags.yes, "replace-arbiter")
 	addVerboseFlag(cmd, &flags.verbose)
 	addAskBecomePassFlag(cmd, &flags.askBecomePas)

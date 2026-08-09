@@ -27,6 +27,7 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 	}
 
 	_, stderr, code = runCLI(t,
+		"--context", ctx.Name,
 		"destroy",
 		"--stage", "infra",
 		"--recover-ceph-ownership", cluster+"="+fsid,
@@ -92,6 +93,20 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 	)
 	if code != 1 || !strings.Contains(stderr, "ownership evidence conflicts") {
 		t.Fatalf("conflicting recovery code=%d stderr=%q", code, stderr)
+	}
+	commands := backtickedBootwrightCommands(stderr)
+	if len(commands) != 1 {
+		t.Fatalf("conflicting recovery must name one exact retry after external repair, got %v in %q", commands, stderr)
+	}
+	for _, want := range []string{"--context " + ctx.Name, "--clusters " + cluster, "--recover-ceph-ownership " + cluster + "=" + fsid, "--dry-run", "--ask-become-pass=false"} {
+		if !strings.Contains(commands[0], want) {
+			t.Fatalf("retry lost %q: %s", want, commands[0])
+		}
+	}
+	for _, want := range []string{ctx.OwnershipDir, "no --authorize token bypasses", "trusted live evidence"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("conflicting recovery guidance missing %q: %s", want, stderr)
+		}
 	}
 
 	record.Host = seedHost

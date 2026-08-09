@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,6 +92,15 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeReconcile, nil, checker, now)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("expected fail-closed error containing %q, got %v", tc.wantErr, err)
+			}
+			if tc.name == "booting phase is uncertain" || tc.name == "unrecognized phase" {
+				var remedial ClusterInstallRemedialError
+				if !errors.As(err, &remedial) {
+					t.Fatalf("uncertain install state must carry typed recovery metadata, got %T: %v", err, err)
+				}
+				if got := remedial.ClusterInstallRemedy(); got.Action != ClusterInstallRemedyFutureRebuild || got.Cluster != cluster {
+					t.Fatalf("remedy = %#v, want a cluster-scoped deliberate rebuild", got)
+				}
 			}
 		})
 	}

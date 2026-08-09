@@ -15,6 +15,16 @@ const DestroyCephOwnershipRecoveryExtraVar = "bootwright_ceph_destroy_confirmed_
 
 var cephFSIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+type CephOwnershipRecoveryConflictError struct {
+	Cluster  string
+	SeedHost string
+	Detail   string
+}
+
+func (e *CephOwnershipRecoveryConflictError) Error() string {
+	return fmt.Sprintf("--recover-ceph-ownership cannot recover StorageCluster %q: existing controller ownership evidence conflicts with declared seed host %q (%s)", e.Cluster, e.SeedHost, e.Detail)
+}
+
 func ParseDestroyCephOwnershipRecovery(value string) (map[string]string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -64,7 +74,7 @@ func ValidateDestroyCephOwnershipRecovery(state v1alpha1.State, storageWorkNames
 		}
 		seedHost := render.StorageSeedHostName(cluster)
 		if conflict := conflictingCephOwnershipRecoveryRecord(records, name, seedHost); conflict != "" {
-			return fmt.Errorf("--recover-ceph-ownership cannot recover StorageCluster %q: existing controller ownership evidence conflicts with declared seed host %q (%s); resolve that contradiction before retrying", name, seedHost, conflict)
+			return &CephOwnershipRecoveryConflictError{Cluster: name, SeedHost: seedHost, Detail: conflict}
 		}
 	}
 	return nil

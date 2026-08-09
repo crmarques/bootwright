@@ -841,48 +841,6 @@ learned; this file records what it still owes.
   means the same thing on every node, and the preflight converges on the
   repositories ADR 0051 says it proves.
 
-## B-082 — Refusals that name no way forward, and four spec gaps the review surfaced
-- Status: open
-- Area: CLI contract / diagnostics
-- Origin: apply/destroy safety-contract review (2026-08-06)
-- Problem: the Diagnostics clause requires every fail-closed refusal to name one
-  way forward. These name none: `Refuse foreign or unmarked reachable managed OS`
-  (`machine_os_identity/tasks/probe_existing.yml`) — which is where `--mode
-  create`'s own remedy lands; the `booting` and unrecognized install-phase
-  refusals; the contradictory-controller-record refusal of
-  `--recover-ceph-ownership`; the cross-context infra-component refusal; and the
-  `--reclaim-devices` protected-environment refusals. Four normative gaps sit
-  alongside them: `--reclaim-devices all` is absent from the CLI Contract; the
-  Global-flags section enumerates three persistent root flags where the binary
-  registers five (`--ssh-ask-sudo-password` and `--ssh-user-for-provisioned`, and
-  the second silently waives the `--ssh-user` refusal the same clause states
-  absolutely); the stretch-arbiter *shape*-change refusal is a third routing arm
-  the spec does not publish; and `storage-cluster replace-arbiter` registers no
-  `--output` although the spec promises its JSON preview carries
-  `requiredAuthorizations`.
-- Exit: give each refusal its `bootwright …` invocation or its sanctioned external
-  remedy, and close the four spec gaps in the same change. The prose-command guard
-  (`TestEveryBootwrightCommandInProseParses`) already proves any command they name
-  parses.
-
-## B-083 — Storage-consumer and `--mode create` gates still key on a stage or a provider
-- Status: open
-- Area: destroy / apply gates
-- Origin: apply/destroy safety-contract review (2026-08-06)
-- Problem: two gates decide on something other than the consequence, which ADR 0031
-  forbids. (1) `destroyStorageConsumerGate` (`internal/cli/destroy_gates.go`) tests
-  `runScope.Name != "infra"` and hard-refuses on every other scope, so the strictly
-  larger full-lifecycle and clusters-stage teardowns carry no token where
-  `--stage infra` takes `--authorize shared-infra` — and, because the refusal is
-  returned before the dry-run branch, `destroy --dry-run --clusters <storage>` exits
-  1 instead of previewing, and the JSON dialect never mentions it. (2) `--mode
-  create`'s live-host existence gate exists only on the KubeVirt substrate; libvirt
-  and vSphere enforce the greenfield assertion against recorded state alone, which
-  the spec says can never make a live host look greenfield.
-- Exit: key the storage-consumer gate on the resolved selection and the consequence
-  and give it one behavior across scopes (previewable, token-or-not decided once);
-  add the live existence check to the libvirt and vSphere substrates.
-
 ## B-086 — No preflight proves the release payload is reachable from the nodes
 - Status: open
 - Area: preflight

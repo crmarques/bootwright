@@ -29,6 +29,9 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return failErr(2, err)
 	}
+	if err := validateOutputFormat(flags.output); err != nil {
+		return failErr(2, err)
+	}
 	ctx, err := cf.resolve()
 	if err != nil {
 		return failErr(1, err)
@@ -41,6 +44,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		newArbiterMachine: flags.machineName,
 		authorizations:    flags.authorize,
 		dryRun:            flags.dryRun,
+		output:            flags.output,
 		yes:               flags.yes,
 		askBecomePass:     flags.askBecomePas,
 		verbose:           flags.verbose,
@@ -48,7 +52,10 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return failErr(1, err)
 	}
-	printMutatingRunPreamble(stdout, outputText, "storage-cluster replace-arbiter")
+	if flags.output == outputJSON && !flags.dryRun {
+		return failErr(2, fmt.Errorf("--output json is supported only with --dry-run for storage-cluster replace-arbiter"))
+	}
+	printMutatingRunPreamble(stdout, flags.output, "storage-cluster replace-arbiter")
 	if !flags.dryRun {
 		if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 			return failErr(1, mutatingRunLeaseRefusal(err, invocation))
@@ -84,7 +91,11 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return failErr(1, err)
 	}
-	live, err := discoverArbiterClusterState(runContext, stdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name)
+	discoveryStdout := stdout
+	if flags.output == outputJSON {
+		discoveryStdout = io.Discard
+	}
+	live, err := discoverArbiterClusterState(runContext, discoveryStdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name)
 	if err != nil {
 		return failErr(1, err)
 	}
@@ -93,6 +104,9 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		return failErr(1, err)
 	}
 	if plan.Settled && promotion.Empty() {
+		if flags.output == outputJSON {
+			return writeReplaceArbiterDryRunJSON(stdout, ctx.Name, plan, promotion, nil)
+		}
 		cliout.New(stdout).Summary(cliout.StatusSkip, plan.Cluster, "mon."+plan.DesiredMon+" already holds the stretch tiebreaker and no replaced mon or host is left to retire; nothing to replace")
 		if flags.dryRun {
 			printRequiredAuthorizations(stdout, nil)
@@ -103,13 +117,17 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 		warnUnusedAuthorizations(stdout, auth, flags.dryRun)
 		return nil
 	}
-	printArbiterPlan(stdout, plan, promotion, flags.dryRun)
 	requiredAuth := replaceArbiterRequiredAuthorizations(auth, plan.SameSite(), plan.Degraded, arbiterSameSiteReason(plan), plan.LiveNode != "")
 	if flags.dryRun {
+		if flags.output == outputJSON {
+			return writeReplaceArbiterDryRunJSON(stdout, ctx.Name, plan, promotion, requiredAuth)
+		}
+		printArbiterPlan(stdout, plan, promotion, true)
 		printRequiredAuthorizations(stdout, requiredAuth)
 		warnUnusedAuthorizations(stdout, auth, true)
 		return nil
 	}
+	printArbiterPlan(stdout, plan, promotion, false)
 	if err := replaceArbiterGateRefusals(auth, plan, invocation); err != nil {
 		return failErr(1, err)
 	}

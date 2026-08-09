@@ -17,15 +17,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-type scopeDestroyOptions struct {
-	use           string
-	short         string
-	long          string
-	example       string
-	stageSelector bool
-	commandLabel  string
-}
-
 func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
 		flags         scopeCommonFlags
@@ -39,25 +30,14 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		stage         string
 		machinesScope string
 	)
-	use := "destroy"
-	if options.use != "" {
-		use = options.use
-	}
-	short := "Destroy " + scope.Name + " runtime state"
-	if options.short != "" {
-		short = options.short
-	}
-	example := options.example
-	commandLabel := scope.Name + " destroy"
-	if options.commandLabel != "" {
-		commandLabel = options.commandLabel
-	}
+	labels := resolveScopeDestroyLabels(scope, options)
+	commandLabel := labels.commandLabel
 	cmd := &cobra.Command{
-		Use:     use,
-		Short:   short,
+		Use:     labels.use,
+		Short:   labels.short,
 		Long:    options.long,
 		Args:    cobra.NoArgs,
-		Example: example,
+		Example: options.example,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
@@ -85,42 +65,19 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
-		if err := validateOutputFormat(flags.output); err != nil {
-			return failErr(2, err)
-		}
-		auth, err := parseAuthorizations(authorizeFlag, authorizeVerbDestroy)
+		auth, err := resolveScopeDestroyIntent(flags.output, authorizeFlag)
 		if err != nil {
-			return failErr(2, err)
+			return err
 		}
-		runScope := scope
-		runCommandLabel := commandLabel
-		if options.stageSelector {
-			var err error
-			runScope, err = converge.DestroyStageScope(stage)
-			if err != nil {
-				return failErr(2, err)
-			}
-			runCommandLabel = converge.DestroyStageCommandLabel(stage, commandLabel)
+		runScope, runCommandLabel, selection, err := resolveScopeDestroyRun(scope, commandLabel, options.stageSelector, stage, flags.clusterScope, machinesScope)
+		if err != nil {
+			return err
 		}
-		if machinesScope != "" {
-			var merr error
-			if runScope, runCommandLabel, merr = machineDestroyScope(flags.clusterScope, stage); merr != nil {
-				return merr
-			}
-		}
-		selection := runSelection{stage: stage, clusters: flags.clusterScope, machines: machinesScope}
 		fullDestroy := converge.DestroyIsFullScope(runScope)
-		forceUnowned, forceUnownedNetworks := false, false
-		if converge.ScopeTearsMachineLayer(runScope) {
-			forceUnowned = auth.allows(authorizeUnownedVMs)
-			forceUnownedNetworks = auth.allows(authorizeUnownedNetworks)
-		}
-		confirmedCephFSIDs, err := converge.ParseDestroyCephOwnershipRecovery(cephRecovery)
+		forceUnowned, forceUnownedNetworks := destroyUnownedAuthorizations(runScope, auth)
+		confirmedCephFSIDs, err := resolveDestroyCephRecovery(runScope, cephRecovery)
 		if err != nil {
-			return failErr(2, err)
-		}
-		if len(confirmedCephFSIDs) > 0 && !converge.ScopeTearsClusterLayer(runScope) {
-			return failErr(2, errors.New("--recover-ceph-ownership runs only with the clusters stage or a full destroy"))
+			return err
 		}
 		ctx, localitySkipped, err := cf.resolveTolerantInput()
 		if err != nil {
@@ -183,7 +140,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, unreadableOwnershipRefusal(ctx, ownershipSkipped, invocation))
 		}
 		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
-			return failErr(1, err)
+			return failErr(1, destroyCephOwnershipRecoveryRefusal(err, ctx.OwnershipDir, invocation))
 		}
 		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords, invocation); err != nil {
 			return failErr(1, err)

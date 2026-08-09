@@ -21,6 +21,24 @@ func TestManagedOSRefusesForeignHostRegardlessOfMode(t *testing.T) {
 	if !strings.Contains(foreignWhen, "bootwright_os_pre_marker_owned") || !strings.Contains(foreignWhen, "bootwright_managed_os_already_ready") {
 		t.Fatalf("foreign refusal must fire for a reachable host that is not Bootwright-owned, got when=%v", foreign["when"])
 	}
+	foreignMessage := fmt.Sprint(foreign["ansible.builtin.fail"])
+	for _, want := range []string{"verified backup", "out of band", "No bootwright retry command", "bootwright_mutating_invocation"} {
+		if !strings.Contains(foreignMessage, want) {
+			t.Fatalf("foreign refusal must name the sanctioned external recovery and exact post-repair invocation; missing %q in %s", want, foreignMessage)
+		}
+	}
+
+	create := probe[findAnsibleTask(t, probe, "Refuse a pre-existing managed OS under --mode create")]
+	createWhen := fmt.Sprint(create["when"])
+	if !strings.Contains(createWhen, "bootwright_os_pre_marker_owned") {
+		t.Fatalf("create-mode owned-state remedy must not preempt the foreign-ownership refusal, got when=%v", create["when"])
+	}
+	createMessage := fmt.Sprint(create["ansible.builtin.fail"])
+	for _, want := range []string{"greenfield", "bootwright_apply_reconcile_invocation"} {
+		if !strings.Contains(createMessage, want) {
+			t.Fatalf("create-mode refusal must name the exact reconcile invocation; missing %q in %s", want, createMessage)
+		}
+	}
 
 	drifted := probe[findAnsibleTask(t, probe, "Refuse drifted Bootwright-owned managed OS without override")]
 	driftedWhen := fmt.Sprint(drifted["when"])

@@ -137,6 +137,15 @@ func TestApplyInstallRemedialErrorsNameCompleteExactSequences(t *testing.T) {
 			commandCount:  1,
 			wantFragments: []string{"--mode rebuild", "--authorize foreign-daemons,data-loss", "--stage clusters", "--clusters ocp"},
 		},
+		{
+			name: "uncertain boot rebuilds",
+			err: &workflow.ClusterInstallStateError{
+				Message: "node boot completion is uncertain",
+				Remedy:  workflow.ClusterInstallRemedy{Action: workflow.ClusterInstallRemedyFutureRebuild, Cluster: "ocp"},
+			},
+			commandCount:  1,
+			wantFragments: []string{"--mode rebuild", "--authorize foreign-daemons,data-loss", "--stage clusters", "--clusters ocp"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

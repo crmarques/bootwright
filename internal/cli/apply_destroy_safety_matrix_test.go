@@ -707,6 +707,18 @@ func safetyReplaceArbiterCases() []safetyCase {
 		want:    []string{"rm -f"},
 		deny:    []string{"now declares tiebreaker", "input-history"},
 	}, {
+		name:    "replace-arbiter/output json without dry-run is a usage error before live discovery",
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--output", "json", "--yes", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--output json is supported only with --dry-run"},
+	}, {
+		name:    "replace-arbiter/JSON preview carries every required authorization without mutation",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{`"requiredAuthorizations"`, `"token": "` + authorizeSameSiteArbiter + `"`, `"token": "` + authorizeDegradedQuorum + `"`, `"token": "` + authorizeUnreachableNodes + `"`},
+		deny:    []string{"Bootwright:", "Required authorizations"},
+	}, {
 		name:    "replace-arbiter/preview: a dry run names every gate the real run consults, in one refusal-free pass",
 		seed:    seedLiveStretchClusterOffItsArbiter,
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
@@ -1243,6 +1255,24 @@ func safetyStartingStateCases() []safetyCase {
 		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"rebuild only this installed cluster", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+	}, {
+		name: "apply/uncertain node boot phase names an exact scoped rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhaseBooting, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"node boot completion is uncertain", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+	}, {
+		name: "apply/unrecognized install phase names an exact scoped rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhase("future-phase"), safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
+		},
+		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"unrecognized install phase", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {

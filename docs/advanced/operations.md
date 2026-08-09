@@ -486,11 +486,13 @@ installed.
 
 ### Moving a Ceph stretch arbiter
 
-Re-authoring `spec.ceph.topology.stretch.tiebreaker` is the one recovery that a
-plain `apply` never converges: the change is classified as structural drift and
-the apply fails closed before mutating. Do not follow that refusal toward
-`--mode rebuild` — that is the owned-Ceph wipe-and-rebuild, not an arbiter move.
-The verb that moves a live stretch tiebreaker is
+Re-authoring the node named by `spec.ceph.topology.stretch.tiebreaker` is the one
+recovery that a plain `apply` never converges: the change is classified as
+structural drift and the apply fails closed before mutating. The refusal routes
+only that one-field move to the dedicated verb; adding an arbiter to a built
+cluster or removing its last arbiter is an unsupported bootstrap-shape change,
+not a rebuild shortcut. The verb that moves an existing live stretch
+tiebreaker is
 `bootwright storage-cluster replace-arbiter --name <cluster>
 --new-arbiter-machine <machine>`. It adds the replacement mon and proves it is
 in the monmap, in quorum, and located **before** removing the old arbiter, so a

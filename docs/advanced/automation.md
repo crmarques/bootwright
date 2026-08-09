@@ -27,7 +27,8 @@ and are outside this contract.
 ## JSON output
 
 Verbs that accept `--output json`, and what the JSON describes. On the mutating
-verbs JSON is a **preview-only** format: `apply` and `destroy` accept it only
+verbs JSON is a **preview-only** format: `apply`, `destroy`, and
+`storage-cluster replace-arbiter` accept it only
 together with `--dry-run` (exit `2` otherwise). The read-only verbs report
 results, `preflight` included.
 
@@ -41,7 +42,7 @@ results, `preflight` included.
 | `preflight infra\|clusters\|container-cluster\|storage-cluster\|all` | no | The executed check results of that live preflight: `checks[]` of `{name, target, status, detail, impact, fix}` and a `summary` of `{total, failed}`, plus `ok`, `context`, `target`, and the run `log`. With `--dry-run` it returns the planned preflight command graph instead. |
 | `preflight add-ons` | no | The same executed check results, in the same shape. It has no `--dry-run`. |
 | `plan` | always a preview | The planned task graph. |
-| `apply`, `destroy` | **yes** | The plan, plus `requiredAuthorizations` — a real mutating run has no JSON mode. |
+| `apply`, `destroy`, `storage-cluster replace-arbiter` | **yes** | The plan, plus `requiredAuthorizations` — a real mutating run has no JSON mode. |
 
 Every `preflight` target reports results in that one shape. Only the targets
 that run an Ansible preflight accept `--dry-run` to describe the plan instead;
