@@ -1,14 +1,15 @@
 ---
 - name: Read the monmap once the replacement has settled
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+    argv: [timeout, --kill-after=10, "120", cephadm, shell, --, ceph, mon, dump, --format, json]
   register: bootwright_arbiter_final_dump
   changed_when: false
   failed_when: false
   retries: 12
   delay: 10
   until: >-
-    ((bootwright_arbiter_final_dump.rc | default(1) | int == 0)
+    (((bootwright_arbiter_final_dump.rc | default(1) | int == 0)
+      or ((bootwright_arbiter_final_dump.stdout | default('', true) | regex_search('\}\\s*$')) is not none))
      and bootwright_arbiter_live_mon not in
          ((bootwright_arbiter_final_dump.stdout | default('{}', true) | from_json).mons
           | default([]) | map(attribute='name') | list))

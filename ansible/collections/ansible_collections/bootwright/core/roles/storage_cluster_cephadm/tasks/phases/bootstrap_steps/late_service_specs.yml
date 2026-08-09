@@ -14,3 +14,24 @@
       - /mnt/late-services.yaml
   register: bootwright_ceph_late_services_apply
   changed_when: true
+  failed_when: false
+
+- name: Refuse a late service spec cephadm reported an error for
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_late_services_apply.rc | default(1) | int == 0
+      - not (bootwright_ceph_late_services_apply.stdout | default('') | lower is search('error|failed|invalid|specvalidationerror|unexpected keyword'))
+      - not (bootwright_ceph_late_services_apply.stderr | default('') | lower is search('error|failed|invalid|specvalidationerror|unexpected keyword'))
+    fail_msg: >-
+      cephadm reported an error while applying the late service spec (RGW, ingress, MDS, NFS and monitoring) for
+      {{ bootwright_selected_storage_cluster.name }}. `ceph orch apply -i` takes a
+      multi-document spec and can reject ONE document while accepting the rest and still
+      exiting zero, so the run must read what it said rather than trust the exit code.
+      A rejected document here is never created, and the service-readiness gate cannot
+      catch it: that gate compares running against size for the services `ceph orch ls`
+      reports, and a service cephadm refused is simply absent from that list. The apply
+      would then go green with a declared object gateway, filesystem or monitoring service missing, and the failure would
+      surface days later as a consumer that cannot attach.
+      rc: {{ bootwright_ceph_late_services_apply.rc | default('<none>') }}
+      stdout: {{ bootwright_ceph_late_services_apply.stdout | default('') }}
+      stderr: {{ bootwright_ceph_late_services_apply.stderr | default('') }}

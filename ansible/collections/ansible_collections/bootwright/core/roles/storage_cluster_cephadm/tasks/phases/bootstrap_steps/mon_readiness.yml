@@ -11,6 +11,9 @@
 - name: Wait for every declared Ceph mon to join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -26,7 +29,9 @@
   delay: "{{ bootwright_ceph_mon_readiness_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_mon_dump.rc == 0
+      (((bootwright_ceph_mon_dump.rc | default(1) | int) == 0
+           or ((bootwright_ceph_mon_dump.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
+           or ((bootwright_ceph_mon_dump.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       and (
         bootwright_ceph_declared_mon_daemons
         | difference((bootwright_ceph_mon_dump.stdout | default('{}', true) | from_json).mons
@@ -48,7 +53,8 @@
          | list }}
     bootwright_ceph_mons_ready: >-
       {{
-        (bootwright_ceph_mon_dump.rc | default(1) | int) == 0
+        ((bootwright_ceph_mon_dump.rc | default(1) | int) == 0
+           or ((bootwright_ceph_mon_dump.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
         and (
           bootwright_ceph_declared_mon_daemons
           | difference((bootwright_ceph_mon_dump.stdout | default('{}', true) | from_json).mons

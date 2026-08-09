@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 type ansibleArgvBlock struct {
@@ -117,4 +119,74 @@ func ansibleArgvBoundsItsChildren(argv []string) bool {
 		}
 	}
 	return false
+}
+
+func TestAnsibleBoundsEveryRetriedCephadmShellPoll(t *testing.T) {
+	root := repoRoot(t)
+	base := filepath.Join(root, "ansible/collections/ansible_collections/bootwright/core")
+	var polls int
+	var offenders []string
+	err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || (filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		var tasks []map[string]any
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if yaml.Unmarshal(data, &tasks) != nil {
+			return nil
+		}
+		for _, task := range tasks {
+			command, isCommand := task["ansible.builtin.command"].(map[string]any)
+			if !isCommand {
+				continue
+			}
+			if _, retried := task["retries"]; !retried {
+				continue
+			}
+			argv := ansibleArgvStrings(command["argv"])
+			if !stringListContains(command["argv"], "cephadm") || !stringListContains(command["argv"], "shell") {
+				continue
+			}
+			polls++
+			if len(argv) == 0 || argv[0] != "timeout" {
+				offenders = append(offenders, fmt.Sprintf("%s: %v", rel, task["name"]))
+				continue
+			}
+			if !ansibleArgvBoundsItsChildren(argv) {
+				offenders = append(offenders, fmt.Sprintf("%s: %v bounds without --kill-after", rel, task["name"]))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", base, err)
+	}
+	if polls == 0 {
+		t.Fatal("no retried cephadm shell poll found: the scanner no longer matches the gates it guards")
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("a retried `cephadm shell` gate must run each sample under `timeout --kill-after`: cephadm shell starts a container, and a wedged teardown holds the command module's stdout pipe open, so the play freezes on that banner with no error and no attempt budget left to exhaust:\n%s", strings.Join(offenders, "\n"))
+	}
+}
+
+func ansibleArgvStrings(v any) []string {
+	items, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, fmt.Sprint(item))
+	}
+	return out
 }

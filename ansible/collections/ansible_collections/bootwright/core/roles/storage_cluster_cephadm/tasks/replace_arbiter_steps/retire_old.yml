@@ -48,6 +48,9 @@
 - name: Remove a replaced arbiter mon daemon cephadm still runs
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --

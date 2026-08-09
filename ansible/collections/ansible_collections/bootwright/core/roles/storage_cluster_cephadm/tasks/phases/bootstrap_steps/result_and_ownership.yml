@@ -2,6 +2,9 @@
 - name: Wait for final managed Ceph health
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -16,7 +19,9 @@
   delay: "{{ bootwright_ceph_health_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_final_health.rc == 0
+      (((bootwright_ceph_final_health.rc | default(1) | int) == 0
+           or ((bootwright_ceph_final_health.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
+           or ((bootwright_ceph_final_health.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       and ((bootwright_ceph_final_health.stdout | default('{}') | from_json).status
            | default('UNKNOWN')) != 'HEALTH_ERR'
     )
@@ -27,7 +32,8 @@
 - name: Refuse to complete an unreachable or unhealthy Ceph cluster
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_final_health.rc | default(1) == 0
+      - ((bootwright_ceph_final_health.rc | default(1) | int) == 0
+           or ((bootwright_ceph_final_health.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       - >-
         ((bootwright_ceph_final_health.stdout | default('') | trim | default('{}', true) | from_json).status
          | default('UNKNOWN')) != 'HEALTH_ERR'

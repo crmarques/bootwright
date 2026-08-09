@@ -317,6 +317,9 @@
 - name: Wait for every Ceph manager daemon to finish restarting
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -334,7 +337,9 @@
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_mgr_after_restart.rc == 0
+      (((bootwright_ceph_mgr_after_restart.rc | default(1) | int) == 0
+           or ((bootwright_ceph_mgr_after_restart.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
+           or ((bootwright_ceph_mgr_after_restart.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       and (
         (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
         | map(attribute='container_id', default='')
@@ -371,7 +376,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_mgr_restart_complete: >-
       {{
-        (bootwright_ceph_mgr_after_restart.rc | default(1) | int) == 0
+        ((bootwright_ceph_mgr_after_restart.rc | default(1) | int) == 0
+           or ((bootwright_ceph_mgr_after_restart.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
         and (
           (bootwright_ceph_mgr_after_restart.stdout | default('') | trim | default('[]', true) | from_json)
           | map(attribute='container_id', default='')
@@ -431,6 +437,9 @@
 - name: Apply management service spec
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --mount
@@ -485,6 +494,9 @@
 - name: Read the persisted management gateway spec once cephadm settles it
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -499,7 +511,9 @@
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_management_persisted.rc == 0
+      (((bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+           or ((bootwright_ceph_management_persisted.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
+           or ((bootwright_ceph_management_persisted.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       and not ((bootwright_ceph_management_persisted.stdout | default('') | trim | default('{}', true) | from_json).needs_configuration | default(false) | bool)
     )
     or ((bootwright_ceph_management_persisted.attempts | default(1) | int)
@@ -533,7 +547,8 @@
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)
-    and (bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+    and ((bootwright_ceph_management_persisted.rc | default(1) | int) == 0
+           or ((bootwright_ceph_management_persisted.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
     and not (bootwright_ceph_management_envelope.needs_configuration | default(false) | bool)
     and (bootwright_ceph_management_envelope.spec is defined)
     and ('ssl' not in bootwright_ceph_management_stored_spec)

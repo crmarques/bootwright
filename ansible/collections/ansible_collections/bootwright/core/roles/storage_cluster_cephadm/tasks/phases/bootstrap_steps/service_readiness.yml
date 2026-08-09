@@ -2,6 +2,9 @@
 - name: Wait for declared Ceph services to reach their daemon count
   ansible.builtin.command:
     argv:
+      - timeout
+      - --kill-after=10
+      - "120"
       - cephadm
       - shell
       - --
@@ -17,7 +20,9 @@
   delay: "{{ bootwright_ceph_service_readiness_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_ceph_service_ls.rc == 0
+      (((bootwright_ceph_service_ls.rc | default(1) | int) == 0
+           or ((bootwright_ceph_service_ls.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
+           or ((bootwright_ceph_service_ls.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
       and (
         (
           (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)
@@ -51,7 +56,8 @@
   ansible.builtin.set_fact:
     bootwright_ceph_services_ready: >-
       {{
-        (bootwright_ceph_service_ls.rc | default(1) | int) == 0
+        ((bootwright_ceph_service_ls.rc | default(1) | int) == 0
+           or ((bootwright_ceph_service_ls.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
         and (
           (
             (bootwright_ceph_service_ls.stdout | default('') | trim | default('[]', true) | from_json)

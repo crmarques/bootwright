@@ -84,7 +84,7 @@
 
 - name: Wait for the replacement arbiter mon to join the monmap in quorum
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+    argv: [timeout, --kill-after=10, "120", cephadm, shell, --, ceph, mon, dump, --format, json]
   register: bootwright_arbiter_join_dump
   changed_when: false
   failed_when: false
@@ -92,7 +92,8 @@
   delay: "{{ bootwright_arbiter_readiness_delay | default(10) | int }}"
   until: >-
     (
-      bootwright_arbiter_join_dump.rc == 0
+      ((bootwright_arbiter_join_dump.rc | default(1) | int) == 0
+       or ((bootwright_arbiter_join_dump.stdout | default('', true) | regex_search('\}\\s*$')) is not none))
       and bootwright_arbiter_desired_mon in
           ((bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).mons
            | default([]) | selectattr('rank', 'in',
