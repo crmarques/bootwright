@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -86,6 +90,63 @@ func TestNextStepSpineEndsOnClusterInfo(t *testing.T) {
 	if got := hints[len(hints)-1]; got != "bootwright cluster info --context matrix" {
 		t.Fatalf("the spine ends on %q, want the post-apply access verb `bootwright cluster info` for the resolved context", got)
 	}
+}
+
+func TestTypedApplySpineActionPreservesResolvedGlobalIntent(t *testing.T) {
+	identity := filepath.Join(t.TempDir(), "operator's key")
+	if err := os.WriteFile(identity, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previousContext := contextOverride
+	previousIdentity := sshIDFile
+	previousUser := sshUserOverride
+	previousAsk := sshAskSudoPassword
+	previousProvisioned := sshUserForProvisioned
+	contextOverride = "matrix; $(touch /tmp/not-run)"
+	sshIDFile = identity
+	sshUserOverride = "operator"
+	sshAskSudoPassword = true
+	sshUserForProvisioned = true
+	t.Cleanup(func() {
+		contextOverride = previousContext
+		sshIDFile = previousIdentity
+		sshUserOverride = previousUser
+		sshAskSudoPassword = previousAsk
+		sshUserForProvisioned = previousProvisioned
+	})
+
+	hints := renderNextStepHints([]status.NextStepHint{{Action: status.NextStepActionApply, ContextName: contextOverride}})
+	if len(hints) != 1 {
+		t.Fatalf("typed action rendered %v", hints)
+	}
+	args := shellParseWords(t, hints[0])
+	for flag, value := range map[string]string{
+		"--mode":        string(workflow.ApplyModeReconcile),
+		"--context":     contextOverride,
+		"--ssh-id-file": identity,
+		"--ssh-user":    "operator",
+	} {
+		if !parsedWordsHaveFlagValue(args, flag, value) {
+			t.Fatalf("typed apply action lost %s=%q: %#v", flag, value, args)
+		}
+	}
+	for _, want := range []string{fmt.Sprintf("--ask-become-pass=%t", askBecomePassDefault()), "--trust-on-first-use=true", "--ssh-ask-sudo-password", "--ssh-user-for-provisioned"} {
+		if !slices.Contains(args, want) {
+			t.Fatalf("typed apply action lost %q: %#v", want, args)
+		}
+	}
+	if slices.Contains(args, "--yes") {
+		t.Fatalf("normal status action invented confirmation: %#v", args)
+	}
+}
+
+func parsedWordsHaveFlagValue(args []string, flag, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == flag && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func assertSpineHintIsAcceptedCommand(t *testing.T, hint string) {

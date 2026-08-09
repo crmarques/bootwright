@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/preflight"
 )
 
 func TestClusterLifecycleRetryCommandsKeepIdentityAndReplaceUnsafeEffects(t *testing.T) {
@@ -200,6 +202,87 @@ func TestApplyInstallRemedialErrorsNameCompleteExactSequences(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHostClusterReconcileRemedyKeepsTargetAndOriginalIntentSeparate(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:                  invocationApply,
+		contextName:           "prod; $(touch /tmp/not-run)",
+		sshIdentityFile:       "/keys/operator's key",
+		sshUser:               "operator",
+		sshAskSudoPassword:    true,
+		sshUserForProvisioned: true,
+		flags: invocationFlags{
+			mode:                 workflow.ApplyModeRebuild,
+			selection:            runSelection{stage: "deps", through: "base", clusters: "child-a,child-b"},
+			reclaimDevices:       "/dev/disk/by-id/original",
+			recoverCephOwnership: "ceph=2088ddee-875b-11f1-9b98-303ea72d7724",
+			purgeHistory:         true,
+			authorizations:       []string{authorizeDataLoss, authorizeForeignDaemons},
+			dryRun:               true,
+			output:               outputJSON,
+			yes:                  true,
+			askBecomePass:        false,
+			trustOnFirstUse:      true,
+			verbose:              true,
+		},
+	}
+	request := clusterInstallRemedyRequest(remedy.ActionReconcileContainerClusterThenRetrySameSelection, "host; $(touch /tmp/not-run)")
+	guidance, err := applyRemedialGuidance(request, invocation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := backtickedBootwrightCommands(guidance)
+	if len(commands) != 2 {
+		t.Fatalf("commands = %v, want one host reconcile and one exact original retry", commands)
+	}
+	wantPrepare, err := invocation.reconcileContainerClusterRetry("host; $(touch /tmp/not-run)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantResume, err := invocation.retry(retryIntent{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := shellParseWords(t, commands[0]); !slices.Equal(got, wantPrepare.Args()) {
+		t.Fatalf("host reconcile argv = %#v, want %#v", got, wantPrepare.Args())
+	}
+	if got := shellParseWords(t, commands[1]); !slices.Equal(got, wantResume.Args()) {
+		t.Fatalf("original retry argv = %#v, want %#v", got, wantResume.Args())
+	}
+	for _, forbidden := range []string{"child-a,child-b", "--reclaim-devices", "--recover-ceph-ownership", "--purge-history"} {
+		if strings.Contains(commands[0], forbidden) {
+			t.Fatalf("host reconcile inherited original-only selection or effect %q: %s", forbidden, commands[0])
+		}
+	}
+}
+
+func TestReadOnlyPreflightRemedyNeverInfersAnOriginalApply(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode:            workflow.ApplyModeReconcile,
+			askBecomePass:   false,
+			trustOnFirstUse: false,
+		},
+	}
+	checks := []preflight.Check{{
+		Status: preflight.StatusFail,
+		Remedy: clusterInstallRemedyRequest(remedy.ActionReconcileContainerClusterThenRetrySameSelection, "host-ocp"),
+	}}
+	rendered := preflightChecksToOutputForPreflight(checks, invocation)
+	if len(rendered) != 1 {
+		t.Fatalf("rendered checks = %v", rendered)
+	}
+	commands := backtickedBootwrightCommands(rendered[0].Remediation)
+	if len(commands) != 1 {
+		t.Fatalf("read-only preflight inferred a second mutating apply: %v", commands)
+	}
+	if !commandHasFlagValue(commands[0], "--clusters", "host-ocp") || !commandHasFlagValue(commands[0], "--stage", "clusters") || strings.Contains(commands[0], "--yes") {
+		t.Fatalf("preflight remedy is not the exact interactive host reconcile: %s", commands[0])
+	}
+	assertRetryParses(t, retryCommand{args: shellParseWords(t, commands[0])}, func(*cobra.Command) {})
 }
 
 func TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly(t *testing.T) {

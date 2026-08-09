@@ -102,7 +102,11 @@ run as part of `go test` (so `check-fast` covers them). They enforce, among
 other things: no prose comments in source (ADR 0006), per-file size floors,
 that every documented schema term is current, that the MkDocs nav and the docs
 tree agree, that the `.agents/knowledge` and ADR indexes match their
-directories, and that every shipped example validates. When a guard fails, it
+directories, that every shipped example validates, and that production Go
+outside `internal/cli` cannot assemble a runnable apply/destroy remedy. That
+mutation-remedy guard has no per-file allowlist: backend code returns typed
+evidence, the CLI alone formats resolved commands, and every registered action
+must also appear in the apply/destroy safety matrix. When a guard fails, it
 names the file and the rule; fix the artifact rather than the test unless the
 rule itself has genuinely changed.
 

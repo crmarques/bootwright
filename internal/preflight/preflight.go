@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/host/callerio"
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -39,6 +40,7 @@ type Check struct {
 	Evidence    string
 	Impact      string
 	Remediation string
+	Remedy      remedy.Request
 }
 
 type Phase struct {
@@ -264,7 +266,7 @@ func addonsKubeconfigChecks(state v1alpha1.State, clustersDir string, deps Deps)
 		info, err := deps.StatPath(path)
 		switch {
 		case err != nil:
-			checks = append(checks, failCheck(checkGroupInstallerTools, cluster+" kubeconfig", path+" missing", "Add-ons need the installed cluster kubeconfig", "run bootwright apply --stage clusters --clusters "+cluster+" --yes before applying add-ons"))
+			checks = append(checks, containerClusterReconcileCheck(checkGroupInstallerTools, cluster+" kubeconfig", path+" missing", "Add-ons need the installed cluster kubeconfig", "install or reconcile the named ContainerCluster before applying add-ons", cluster))
 		case info.IsDir():
 			checks = append(checks, failCheck(checkGroupInstallerTools, cluster+" kubeconfig", path+" is a directory", "Add-ons need a kubeconfig file", "replace "+path+" with the cluster kubeconfig"))
 		default:
@@ -375,4 +377,16 @@ func failCheck(group, name, evidence, impact, remediation string) Check {
 		Impact:      impact,
 		Remediation: remediation,
 	}
+}
+
+func containerClusterReconcileCheck(group, name, evidence, impact, remediation, cluster string) Check {
+	check := failCheck(group, name, evidence, impact, remediation)
+	check.Remedy = remedy.Request{
+		Action: remedy.ActionReconcileContainerClusterThenRetrySameSelection,
+		Targets: []remedy.Target{{
+			Role: remedy.TargetRoleContainerCluster,
+			Name: cluster,
+		}},
+	}
+	return check
 }

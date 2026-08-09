@@ -13,9 +13,15 @@ import (
 const unavailableContextNextStepGuidance = "select a context explicitly before continuing; no runnable command is suggested because status could not resolve its target context"
 
 type NextStepHint struct {
-	Args     []string
-	Guidance string
+	Args        []string
+	Guidance    string
+	Action      NextStepAction
+	ContextName string
 }
+
+type NextStepAction string
+
+const NextStepActionApply NextStepAction = "apply"
 
 func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretHints []NextStepHint, needsHostTrust bool, applied bool) []NextStepHint {
 	if strings.TrimSpace(contextName) == "" {
@@ -42,7 +48,7 @@ func NextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 		}
 		hints = append(hints,
 			contextCommandHint(contextName, "bootwright", "plan"),
-			contextCommandHint(contextName, "bootwright", "apply"),
+			NextStepHint{Action: NextStepActionApply, ContextName: contextName},
 			contextCommandHint(contextName, "bootwright", "status", "--watch"),
 			contextCommandHint(contextName, "bootwright", "cluster", "info"),
 		)

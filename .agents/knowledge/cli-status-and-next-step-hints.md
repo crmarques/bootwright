@@ -41,11 +41,15 @@ check instead of silently skipping a mandatory step on remote-host
 layouts.
 
 **Semantics: normal runnable hints carry the resolved context and do not
-pre-authorize mutation.** `internal/status` returns normal hints as structured
-argv or command-free guidance; `internal/cli` shell-quotes the argv for display.
-Every command carries the explicit resolved `--context`. If none is available,
-the spine emits one command-free instruction instead. Setup and apply hints do
-not add `--yes`, so the next state change still needs an operator confirmation.
+pre-authorize mutation.** `internal/status` returns read-only/setup hints as
+structured argv, the normal apply step as a typed action plus its lossless
+context, and unresolved cases as command-free guidance. `internal/cli` resolves
+the apply action through the same invocation builder used by real mutation, so
+the current SSH globals, explicit context, reconcile mode, and current default
+safety-flag values are preserved and shell-quoted. It never adds `--yes`, so
+the next state change still needs an operator confirmation. This does not alter
+failed run handling: an exact recorded `InvocationArgs` remains authoritative
+and is never replaced by the normal typed action.
 
 **Semantics: a failed-run retry comes only from exact recorded argv.** Every
 real apply and destroy threads `resolvedInvocation.args()` through `RunOptions`

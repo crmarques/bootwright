@@ -19,7 +19,7 @@ what turns "forgot" into a red test.
 | a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
-| a refusal | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; converge errors remain typed evidence only | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
+| a refusal or next-step action | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; every production Go package outside `internal/cli` returns typed or command-free evidence only | `TestOnlyCLIConstructsMutatingBootwrightInvocations`, the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
 | an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
 
 Three failure shapes recur often enough to name:
@@ -397,6 +397,20 @@ recorded manager. `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` closes
 this over future flags, while the exact-parse and gate-clear tests prove the
 printed command is accepted, keeps the original scope and effects, and clears
 the refusal it names.
+
+**Backend mutation remedies are structurally impossible, not review-only.**
+`TestOnlyCLIConstructsMutatingBootwrightInvocations` parses every production Go
+file outside the owning `internal/cli` package. With no file allowlist, it
+rejects runnable apply/destroy/replace-arbiter text plus split argv assembled in
+calls, composites, or concatenations. Backend refusals, preflight checks,
+status actions, generated advisories, and renderers therefore carry typed or
+command-free evidence. Exact `RunLedger.InvocationArgs` remains lossless run
+evidence and is validated/replayed, never reconstructed. A real apply may
+format a typed prerequisite followed by its exact original selection; a
+read-only preflight may format only the losslessly known interactive
+prerequisite and must not infer a second apply. The action registry, exact CLI
+formatter test, safety-matrix row, hostile-argv round trip, and hermetic
+re-execution close the behavior over new actions and flags.
 
 **A sanctioned cross-verb alternative changes only the typed consequence.** A
 protected apply rebuild returns one registered action plus a non-empty unique

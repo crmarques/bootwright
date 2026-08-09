@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
 )
@@ -17,6 +18,25 @@ import (
 type KubeVirtTenantConflict struct {
 	Host    string
 	Tenants []string
+}
+
+type KubeVirtHostClusterReadinessError struct {
+	Child string
+	Host  string
+}
+
+func (e *KubeVirtHostClusterReadinessError) Error() string {
+	return fmt.Sprintf("ContainerCluster/%s uses KubeVirt hostClusterRef %q but that host cluster is not installed and KubeVirt-ready; include ContainerCluster/%s in the selected work or reconcile it before retrying", e.Child, e.Host, e.Host)
+}
+
+func (e *KubeVirtHostClusterReadinessError) Remedy() remedy.Request {
+	return remedy.Request{
+		Action: remedy.ActionReconcileContainerClusterThenRetrySameSelection,
+		Targets: []remedy.Target{{
+			Role: remedy.TargetRoleContainerCluster,
+			Name: e.Host,
+		}},
+	}
 }
 
 func KubeVirtTenantsByHost(state v1alpha1.State) map[string][]string {
@@ -153,7 +173,7 @@ func ValidateKubeVirtClusterSelection(state v1alpha1.State, containerNames []str
 				return err
 			}
 			if !ready {
-				return fmt.Errorf("ContainerCluster/%s uses KubeVirt hostClusterRef %q but the host cluster is not installed and KubeVirt-ready; include %s in --clusters or apply it first", child, parent, parent)
+				return &KubeVirtHostClusterReadinessError{Child: child, Host: parent}
 			}
 		}
 	}

@@ -1492,8 +1492,27 @@ func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("scoped child apply unexpectedly succeeded, stdout=%q stderr=%q", stdout, stderr)
 	}
-	if !strings.Contains(stdout+stderr, "include dc1-metal-ocp in --clusters or apply it first") {
-		t.Fatalf("scoped child apply error missing host dependency remediation, stdout=%q stderr=%q", stdout, stderr)
+	out := stdout + stderr
+	if !strings.Contains(out, "ContainerCluster/dc1-metal-ocp") {
+		t.Fatalf("scoped child apply error missing typed host dependency, stdout=%q stderr=%q", stdout, stderr)
+	}
+	var commands []string
+	for _, command := range backtickedBootwrightCommands(out) {
+		commands = appendUniqueString(commands, command)
+	}
+	if len(commands) != 2 {
+		t.Fatalf("scoped child apply commands = %v, want host reconcile and exact original retry", commands)
+	}
+	if !commandHasFlagValue(commands[0], "--clusters", "dc1-metal-ocp") || !commandHasFlagValue(commands[0], "--stage", "clusters") {
+		t.Fatalf("host reconcile command changed its typed target: %s", commands[0])
+	}
+	if !commandHasFlagValue(commands[1], "--clusters", "dc1-child-ocp") {
+		t.Fatalf("original retry widened its selection: %s", commands[1])
+	}
+	for _, command := range commands {
+		if !strings.Contains(command, "--dry-run") || !strings.Contains(command, "--output json") || strings.Contains(command, "--yes") {
+			t.Fatalf("dry-run remedy changed read-only or confirmation intent: %s", command)
+		}
 	}
 }
 

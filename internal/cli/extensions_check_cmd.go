@@ -52,7 +52,11 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), cf.ctx.SecretsDir, sel.RenderState)
+		invocation, err := preflightRemedyInvocation(cf.ctx.Name, false, true)
+		if err != nil {
+			return failErr(1, err)
+		}
+		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), cf.ctx.SecretsDir, sel.RenderState, invocation)
 		failed := 0
 		for _, check := range results {
 			if check.Status != cliout.StatusOK {
@@ -72,11 +76,11 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func extensionPreflightChecks(clustersDir, secretsDir string, state v1alpha1.State) []cliout.Check {
+func extensionPreflightChecks(clustersDir, secretsDir string, state v1alpha1.State, invocation resolvedInvocation) []cliout.Check {
 	raw := preflight.ExtensionPreflight(clustersDir, state, preflight.ExtensionDeps{
 		LookPath: preflight.DefaultDeps.LookPath,
 		StatPath: preflight.DefaultDeps.StatPath,
 	})
 	raw = append(raw, preflight.AddonSecretChecks(state, secretsDir, preflight.DefaultDeps)...)
-	return preflightChecksToOutput(raw)
+	return preflightChecksToOutputForPreflight(raw, invocation)
 }

@@ -3,13 +3,14 @@ package remedy
 type Action string
 
 const (
-	ActionRetrySameInvocation                            Action = "retry-same-invocation"
-	ActionReconcileSameSelection                         Action = "reconcile-same-selection"
-	ActionRebuildSameSelection                           Action = "rebuild-same-selection"
-	ActionRegenerateClusterISO                           Action = "regenerate-cluster-iso"
-	ActionDestroyAndReapplyCluster                       Action = "destroy-and-reapply-cluster"
-	ActionRebuildCluster                                 Action = "rebuild-cluster"
-	ActionDestroyProtectedLayersThenRebuildSameSelection Action = "destroy-protected-layers-then-rebuild-same-selection"
+	ActionRetrySameInvocation                             Action = "retry-same-invocation"
+	ActionReconcileSameSelection                          Action = "reconcile-same-selection"
+	ActionReconcileContainerClusterThenRetrySameSelection Action = "reconcile-container-cluster-then-retry-same-selection"
+	ActionRebuildSameSelection                            Action = "rebuild-same-selection"
+	ActionRegenerateClusterISO                            Action = "regenerate-cluster-iso"
+	ActionDestroyAndReapplyCluster                        Action = "destroy-and-reapply-cluster"
+	ActionRebuildCluster                                  Action = "rebuild-cluster"
+	ActionDestroyProtectedLayersThenRebuildSameSelection  Action = "destroy-protected-layers-then-rebuild-same-selection"
 )
 
 type TargetRole string
@@ -38,6 +39,7 @@ type Error interface {
 var registeredActions = []Action{
 	ActionRetrySameInvocation,
 	ActionReconcileSameSelection,
+	ActionReconcileContainerClusterThenRetrySameSelection,
 	ActionRebuildSameSelection,
 	ActionRegenerateClusterISO,
 	ActionDestroyAndReapplyCluster,

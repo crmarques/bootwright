@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/roles"
@@ -600,8 +601,16 @@ func TestRunRejectsMissingKubeVirtHostKubeconfigForApply(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "ContainerCluster/metal-ocp") {
 		t.Fatalf("Run error = %v, want a named missing-kubeconfig refusal", err)
 	}
-	if !strings.Contains(err.Error(), "bootwright apply --clusters metal-ocp") {
-		t.Fatalf("Run error = %v, want the remedy command", err)
+	var remedial remedy.Error
+	if !errors.As(err, &remedial) {
+		t.Fatalf("Run error = %v, want typed remedy evidence", err)
+	}
+	request := remedial.Remedy()
+	if request.Action != remedy.ActionReconcileContainerClusterThenRetrySameSelection || len(request.Targets) != 1 || request.Targets[0].Role != remedy.TargetRoleContainerCluster || request.Targets[0].Name != "metal-ocp" {
+		t.Fatalf("Run typed remedy = %#v", request)
+	}
+	if strings.Contains(err.Error(), "bootwright apply") || strings.Contains(err.Error(), "bootwright destroy") {
+		t.Fatalf("workflow error assembled runnable argv: %v", err)
 	}
 	if runner.runCalled {
 		t.Fatal("apply must not run without the KubeVirt host kubeconfig")

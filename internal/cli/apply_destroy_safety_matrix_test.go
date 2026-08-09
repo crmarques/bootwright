@@ -1493,6 +1493,35 @@ func safetyStartingStateCases() []safetyCase {
 		typedRemedy: convergeremedy.ActionReconcileSameSelection,
 		want:        []string{"dc1-metal-ocp"},
 	}, {
+		name: "apply/a KubeVirt child without host access names a typed target reconcile and exact original retry",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+		},
+		args:        []string{"apply", "--mode", "reconcile", "--stage", "infra", "--clusters", "dc1-child-ocp", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--verbose"},
+		verdict:     verdictRefusal,
+		remedy:      remedySameSelection,
+		typedRemedy: convergeremedy.ActionReconcileContainerClusterThenRetrySameSelection,
+		want: []string{
+			"ContainerCluster/dc1-metal-ocp",
+			"bootwright apply --mode reconcile --yes --stage clusters --clusters dc1-metal-ocp --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+			"retry exactly the original selected work",
+			"bootwright apply --mode reconcile --yes --stage infra --clusters dc1-child-ocp --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+		},
+		deny: []string{"--mode rebuild", "--authorize"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			var commands []string
+			for _, command := range backtickedBootwrightCommands(output) {
+				commands = appendUniqueString(commands, command)
+			}
+			if len(commands) != 2 {
+				t.Fatalf("host-access refusal commands = %v, want target reconcile and exact original retry", commands)
+			}
+			for _, command := range commands {
+				assertRetryParses(t, retryCommand{args: shellParseWords(t, command)}, func(*cobra.Command) {})
+			}
+			reexecuteHermeticCommand(t, commands[0], "hosts KubeVirt machines in this run but holds no captured kubeconfig", false)
+		},
+	}, {
 		name: "apply/installed availability failure preserves the exact non-destructive retry",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedRunnableSafetyMutation(t, ctx)

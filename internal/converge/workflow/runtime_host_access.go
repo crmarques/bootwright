@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/roles"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 )
@@ -98,6 +99,25 @@ func extraVarValue(pairs []string, name string) string {
 	return ""
 }
 
+type KubeVirtHostClusterAccessError struct {
+	Cluster string
+	Path    string
+}
+
+func (e *KubeVirtHostClusterAccessError) Error() string {
+	return fmt.Sprintf("ContainerCluster/%s hosts KubeVirt machines in this run but holds no captured kubeconfig at %s; install or reconcile that host cluster before retrying", e.Cluster, e.Path)
+}
+
+func (e *KubeVirtHostClusterAccessError) Remedy() remedy.Request {
+	return remedy.Request{
+		Action: remedy.ActionReconcileContainerClusterThenRetrySameSelection,
+		Targets: []remedy.Target{{
+			Role: remedy.TargetRoleContainerCluster,
+			Name: e.Cluster,
+		}},
+	}
+}
+
 func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubeconfigDir string, clusters []string, tolerateMissing bool, fn func(map[string]string) error) error {
 	if fn == nil {
 		return errors.New("KubeVirt host kubeconfig callback is nil")
@@ -129,7 +149,7 @@ func withMaterializedKubeVirtHostKubeconfigs(contextName, clustersDir, hostKubec
 			if tolerateMissing {
 				return materialize(index + 1)
 			}
-			return fmt.Errorf("ContainerCluster/%s hosts KubeVirt machines in this run but holds no captured kubeconfig at %s: install or converge that host cluster first (bootwright apply --clusters %s)", cluster, status.Path, cluster)
+			return &KubeVirtHostClusterAccessError{Cluster: cluster, Path: status.Path}
 		}
 		return store.WithMaterialized(secret.MaterialKey{Name: "kubeconfig", Role: secret.MaterialPrimary}, hostKubeconfigDir, func(path string) error {
 			paths[cluster] = path

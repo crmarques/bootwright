@@ -42,10 +42,14 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if err != nil {
 			return failErr(1, err)
 		}
+		invocation, err := preflightRemedyInvocation(cf.ctx.Name, verbose, trustOnFirstUse)
+		if err != nil {
+			return failErr(1, err)
+		}
 		if output == outputJSON {
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
 			if !dryRun {
-				return runAllPreflightJSON(c, stdout, cf, scopeFlags, state, verbose)
+				return runAllPreflightJSON(c, stdout, cf, scopeFlags, state, verbose, invocation)
 			}
 			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AllScope.AnsibleLimit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
@@ -61,7 +65,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, nil, nil); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, nil, nil, invocation); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout, "Run")

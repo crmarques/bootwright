@@ -34,7 +34,7 @@ func ExtensionPreflight(clustersDir string, state v1alpha1.State, deps Extension
 		info, err := deps.StatPath(path)
 		switch {
 		case err != nil:
-			checks = append(checks, failCheck("Cluster access", plan.Cluster+" kubeconfig", path+" missing", "Add-ons need the installed cluster kubeconfig", "run bootwright apply --stage clusters --clusters "+plan.Cluster+" --yes before applying add-ons"))
+			checks = append(checks, containerClusterReconcileCheck("Cluster access", plan.Cluster+" kubeconfig", path+" missing", "Add-ons need the installed cluster kubeconfig", "install or reconcile the named ContainerCluster before applying add-ons", plan.Cluster))
 		case info.IsDir():
 			checks = append(checks, failCheck("Cluster access", plan.Cluster+" kubeconfig", path+" is a directory", "Add-ons need a kubeconfig file", "replace "+path+" with the cluster kubeconfig"))
 		default:

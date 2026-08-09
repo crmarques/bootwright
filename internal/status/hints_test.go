@@ -32,6 +32,12 @@ func TestNextStepHintsCarryResolvedContextAndNeverInventYes(t *testing.T) {
 		t.Fatal("loaded state must produce next-step hints")
 	}
 	for _, hint := range hints {
+		if hint.Action != "" {
+			if hint.Action != NextStepActionApply || hint.ContextName != contextName || len(hint.Args) != 0 {
+				t.Fatalf("typed next-step action lost its exact context or carried backend argv: %+v", hint)
+			}
+			continue
+		}
 		if len(hint.Args) == 0 {
 			t.Fatalf("resolved context produced command-free hint: %+v", hint)
 		}

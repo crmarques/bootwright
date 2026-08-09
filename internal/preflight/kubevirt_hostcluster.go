@@ -82,7 +82,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, contextNa
 			case err != nil && provisionedThisRun[target.name]:
 				checks = append(checks, infoCheck(checkGroupInstallerTools, target.name+" kubeconfig", "will be provisioned this run: "+target.name+" installs in the base phase before its dependent KubeVirt child clusters boot"))
 			case err != nil:
-				checks = append(checks, failCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+target.name+" in --clusters or run bootwright apply --stage clusters --clusters "+target.name+" --yes first"))
+				checks = append(checks, containerClusterReconcileCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include the host ContainerCluster in the selected work or reconcile it before retrying", target.name))
 			case info.IsDir():
 				checks = append(checks, failCheck(checkGroupInstallerTools, target.name+" kubeconfig", target.path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+target.path+" with the host cluster kubeconfig"))
 			default:
@@ -149,7 +149,7 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps Deps) Check {
 		}
 		kubernetesOut, kubernetesErr := deps.CommandOutputLocalRoot("kubectl", "--kubeconfig", kubeconfigPath, "--request-timeout=5s", "get", "--raw=/version")
 		if kubernetesErr == nil && strings.Contains(string(kubernetesOut), `"gitVersion"`) {
-			return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
+			return containerClusterReconcileCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "reconcile the host ContainerCluster and its OpenShift Virtualization add-on before retrying", name)
 		}
 		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need access to the host cluster Kubernetes API", "ensure "+kubeconfigPath+" identifies a reachable Kubernetes API server and grants access (Bootwright manages it under the root-owned workspace)")
 	}

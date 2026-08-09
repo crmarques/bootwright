@@ -45,6 +45,10 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 		}
 		ctx := cf.ctx
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
+		invocation, err := preflightRemedyInvocation(ctx.Name, verbose, trustOnFirstUse)
+		if err != nil {
+			return failErr(1, err)
+		}
 		sel, err := clusteraccess.Resolve(state, scope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
@@ -62,14 +66,14 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 				selected := converge.PhasesForState(scope.Phases(), state)
 				return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, converge.VerboseNoLogExtraVarPairs(verbose), "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, nil, 0)
 			}
-			return runScopePreflightJSON(c, stdout, cf, flags, scope, state, limit, verbose, hostTrustScope, secretScope)
+			return runScopePreflightJSON(c, stdout, cf, flags, scope, state, limit, verbose, hostTrustScope, secretScope, invocation)
 		}
 		if trustOnFirstUse && !dryRun {
 			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps, hostTrustScope); err != nil {
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope, invocation); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout, "Run")

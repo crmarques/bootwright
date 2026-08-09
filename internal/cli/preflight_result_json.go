@@ -52,19 +52,19 @@ func registerScopePreflightFlags(cmd *cobra.Command, f *scopeCommonFlags, scope 
 	registerClusterScopeCompletion(cmd, clusterKindForTargetLabel(targetKind))
 }
 
-func runScopePreflightJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, state v1alpha1.State, limit string, verbose bool, hostTrustScope map[string]bool, secretScope *preflight.SecretScope) error {
-	return runPreflightResultJSON(cmd, stdout, cf, flags, scope, state, limit, verbose, hostTrustScope, secretScope, nil)
+func runScopePreflightJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, state v1alpha1.State, limit string, verbose bool, hostTrustScope map[string]bool, secretScope *preflight.SecretScope, invocation resolvedInvocation) error {
+	return runPreflightResultJSON(cmd, stdout, cf, flags, scope, state, limit, verbose, hostTrustScope, secretScope, nil, invocation)
 }
 
-func runAllPreflightJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, state v1alpha1.State, verbose bool) error {
+func runAllPreflightJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, state v1alpha1.State, verbose bool, invocation resolvedInvocation) error {
 	bastion := preflightCheckResults(preflightChecksToOutput(preflight.CollectBastionChecks(preflight.DefaultDeps)))
-	return runPreflightResultJSON(cmd, stdout, cf, flags, converge.AllScope, state, converge.AllScope.AnsibleLimit, verbose, nil, nil, bastion)
+	return runPreflightResultJSON(cmd, stdout, cf, flags, converge.AllScope, state, converge.AllScope.AnsibleLimit, verbose, nil, nil, bastion, invocation)
 }
 
-func runPreflightResultJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, state v1alpha1.State, limit string, verbose bool, hostTrustScope map[string]bool, secretScope *preflight.SecretScope, leading []preflightCheckResult) error {
+func runPreflightResultJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope converge.Scope, state v1alpha1.State, limit string, verbose bool, hostTrustScope map[string]bool, secretScope *preflight.SecretScope, leading []preflightCheckResult, invocation resolvedInvocation) error {
 	ctx := cf.ctx
 	clustersDir := workspace.ControllerClustersDir(ctx.Name)
-	checks, err := collectHostChecks(state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope)
+	checks, err := collectHostChecks(state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope, invocation)
 	if err != nil {
 		return failErr(1, err)
 	}

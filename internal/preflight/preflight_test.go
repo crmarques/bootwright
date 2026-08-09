@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
@@ -297,8 +298,11 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	if check.Status == "OK" {
 		t.Fatalf("missing KubeVirt API accepted: %+v", check)
 	}
-	if !strings.Contains(check.Remediation, "bootwright apply --stage clusters --clusters metal-ocp --yes") {
-		t.Fatalf("remediation = %q", check.Remediation)
+	if check.Remedy.Action != remedy.ActionReconcileContainerClusterThenRetrySameSelection || len(check.Remedy.Targets) != 1 || check.Remedy.Targets[0].Role != remedy.TargetRoleContainerCluster || check.Remedy.Targets[0].Name != "metal-ocp" {
+		t.Fatalf("typed remedy = %#v", check.Remedy)
+	}
+	if strings.Contains(check.Remediation, "bootwright apply") || strings.Contains(check.Remediation, "bootwright destroy") {
+		t.Fatalf("backend remediation assembled runnable argv: %q", check.Remediation)
 	}
 }
 
@@ -320,8 +324,8 @@ func TestKubeVirtHostClusterPreflightClassifiesGenericNotFoundAsMissingKubeVirtW
 	if check.Status != StatusFail {
 		t.Fatalf("generic API NotFound accepted: %+v", check)
 	}
-	if !strings.Contains(check.Remediation, "apply --stage clusters") {
-		t.Fatalf("generic KubeVirt API NotFound misreported: %q", check.Remediation)
+	if check.Remedy.Action != remedy.ActionReconcileContainerClusterThenRetrySameSelection || len(check.Remedy.Targets) != 1 || check.Remedy.Targets[0].Name != "metal-ocp" {
+		t.Fatalf("generic KubeVirt API NotFound lost typed host-cluster remedy: %#v", check.Remedy)
 	}
 }
 

@@ -2601,18 +2601,32 @@ tokens the named remedy requires. In particular, an `apply` refusal may carry
 cannot acquire `protected`, `installed-cluster-node`, or any other destroy-only
 authorization unless that remedy's own gate requires the token.
 
-Go convergence code follows the same boundary: a refusal carries an argv-free,
-typed remedy action and typed targets, while the owning error carries the
-observed status, phase, record path, or probe failure that justified it. Only
-the CLI maps that action to flags and formats an executable command from the
-resolved invocation. Every registered action must have a CLI formatter and a
-safety-matrix scenario, so a new backend refusal cannot assemble a partial
-command or silently drop a future selection, identity, effect, or authorization
-flag. An action whose alternatives depend on target roles accepts only its
-published non-empty, unique role set; an empty, duplicate, or unknown role fails
-closed without rendering a command. Every destructive apply task kind is
-explicitly registered as machine-layer or cluster-layer; a new task kind has no
-default role and cannot pass the authorization guard until that choice is made.
+Production Go outside `internal/cli` follows the same boundary: a refusal,
+preflight check, status action, or advisory carries argv-free typed evidence,
+while its owning value carries the observed status, phase, record path, probe
+failure, or losslessly known target that justified it. It never constructs a
+runnable `apply`, `destroy`, or `storage-cluster replace-arbiter` invocation.
+The exact mutating argv recorded by a real run is the deliberate exception:
+status may validate and replay those bytes, but never infer missing bytes from
+display fields. Only the CLI maps a typed action to flags and formats a new
+executable command from a resolved invocation. Every registered action must
+have a CLI formatter and a safety-matrix scenario, so a new backend refusal
+cannot assemble a partial command or silently drop a future selection,
+identity, effect, or authorization flag. An action whose alternatives depend
+on target roles accepts only its published non-empty, unique role set; an
+empty, duplicate, or unknown role fails closed without rendering a command.
+Every destructive apply task kind is explicitly registered as machine-layer or
+cluster-layer; a new task kind has no default role and cannot pass the
+authorization guard until that choice is made.
+
+When a selected KubeVirt child cannot proceed until its host
+`ContainerCluster` is installed, KubeVirt-ready, or has a captured kubeconfig,
+the typed target is that exact host cluster. During a real `apply`, the CLI
+renders a cluster-stage reconcile of that host followed by the unchanged
+original resolved apply. A read-only `preflight` has no original apply intent
+to preserve, so it renders only the interactive host reconcile and tells the
+operator to rerun the same preflight; it never invents a broad apply from the
+preflight scope.
 
 Every real `apply` and `destroy` ledger records that run's exact resolved
 invocation as argv, not as an inferred display string. A failed-run retry in

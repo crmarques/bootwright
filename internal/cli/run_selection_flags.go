@@ -172,6 +172,10 @@ func (i resolvedInvocation) regenerateClusterISORetry(cluster string) (retryComm
 	return i.clusterLifecycleRetry(invocationApply, cluster, converge.PhaseDeps, workflow.ApplyModeRebuild)
 }
 
+func (i resolvedInvocation) reconcileContainerClusterRetry(cluster string) (retryCommand, error) {
+	return i.clusterLifecycleRetry(invocationApply, cluster, converge.ClustersScope.Name, workflow.ApplyModeReconcile)
+}
+
 func (i resolvedInvocation) destroyIncompleteClusterRetry(cluster string) (retryCommand, error) {
 	return i.clusterLifecycleRetry(invocationDestroy, cluster, converge.ClustersScope.Name, "", authorizeProtected, authorizeDataLoss)
 }

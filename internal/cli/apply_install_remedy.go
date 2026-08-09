@@ -14,92 +14,121 @@ func applyInstallRemedialError(err error, invocation resolvedInvocation) error {
 	if !errors.As(err, &remedial) {
 		return err
 	}
-	request := remedial.Remedy()
+	guidance, formatErr := applyRemedialGuidance(remedial.Remedy(), invocation)
+	if formatErr != nil {
+		return fmt.Errorf("%w; %v", err, formatErr)
+	}
+	return fmt.Errorf("%w; %s", err, guidance)
+}
+
+func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation) (string, error) {
 	switch request.Action {
 	case remedy.ActionRetrySameInvocation:
 		command, commandErr := invocation.retry(retryIntent{})
 		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact retry command: %v", err, commandErr)
+			return "", fmt.Errorf("cannot construct the exact retry command: %v", commandErr)
 		}
-		return fmt.Errorf("%w; after completing the non-destructive recovery named above, re-run `%s` with exactly the same selected work and intent", err, command.String())
+		return fmt.Sprintf("after completing the non-destructive recovery named above, re-run `%s` with exactly the same selected work and intent", command.String()), nil
 	case remedy.ActionReconcileSameSelection:
 		command, commandErr := invocation.retry(retryIntent{mode: workflow.ApplyModeReconcile})
 		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact reconcile command: %v", err, commandErr)
+			return "", fmt.Errorf("cannot construct the exact reconcile command: %v", commandErr)
 		}
-		return fmt.Errorf("%w; re-run `%s` to reconcile exactly this selected work set", err, command.String())
-	case remedy.ActionRebuildSameSelection:
-		command, commandErr := invocation.retry(retryIntent{mode: workflow.ApplyModeRebuild, requiredAuthorizations: []string{authorizeDataLoss}})
+		return fmt.Sprintf("re-run `%s` to reconcile exactly this selected work set", command.String()), nil
+	case remedy.ActionReconcileContainerClusterThenRetrySameSelection:
+		cluster, prepare, commandErr := containerClusterReconcileCommand(request, invocation)
 		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact confirmed-rebuild command: %v", err, commandErr)
-		}
-		return fmt.Errorf("%w; re-run `%s` to confirm the destructive rebuild again for exactly this selected work set", err, command.String())
-	case remedy.ActionRegenerateClusterISO:
-		cluster, targetErr := singleContainerClusterRemedyTarget(request)
-		if targetErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact ISO-regeneration command: %v", err, targetErr)
-		}
-		regenerate, commandErr := invocation.regenerateClusterISORetry(cluster)
-		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact ISO-regeneration command: %v", err, commandErr)
+			return "", commandErr
 		}
 		resume, commandErr := invocation.retry(retryIntent{})
 		if commandErr != nil {
-			return fmt.Errorf("%w; regenerate the ISO with `%s`; cannot construct the exact command that resumes this work: %v", err, regenerate.String(), commandErr)
+			return "", fmt.Errorf("cannot construct the exact original-selection retry command: %v", commandErr)
 		}
-		return fmt.Errorf("%w; regenerate only this cluster's agent ISO with `%s`, then resume the original selected work with `%s`", err, regenerate.String(), resume.String())
+		return fmt.Sprintf("reconcile ContainerCluster/%s with `%s`, then retry exactly the original selected work with `%s`", cluster, prepare.String(), resume.String()), nil
+	case remedy.ActionRebuildSameSelection:
+		command, commandErr := invocation.retry(retryIntent{mode: workflow.ApplyModeRebuild, requiredAuthorizations: []string{authorizeDataLoss}})
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact confirmed-rebuild command: %v", commandErr)
+		}
+		return fmt.Sprintf("re-run `%s` to confirm the destructive rebuild again for exactly this selected work set", command.String()), nil
+	case remedy.ActionRegenerateClusterISO:
+		cluster, targetErr := singleContainerClusterRemedyTarget(request)
+		if targetErr != nil {
+			return "", fmt.Errorf("cannot construct the exact ISO-regeneration command: %v", targetErr)
+		}
+		regenerate, commandErr := invocation.regenerateClusterISORetry(cluster)
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact ISO-regeneration command: %v", commandErr)
+		}
+		resume, commandErr := invocation.retry(retryIntent{})
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact command that resumes this work after ISO regeneration: %v", commandErr)
+		}
+		return fmt.Sprintf("regenerate only this cluster's agent ISO with `%s`, then resume the original selected work with `%s`", regenerate.String(), resume.String()), nil
 	case remedy.ActionDestroyAndReapplyCluster:
 		cluster, targetErr := singleContainerClusterRemedyTarget(request)
 		if targetErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact cluster reset sequence: %v", err, targetErr)
+			return "", fmt.Errorf("cannot construct the exact cluster reset sequence: %v", targetErr)
 		}
 		destroy, commandErr := invocation.destroyIncompleteClusterRetry(cluster)
 		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact cluster destroy command: %v", err, commandErr)
+			return "", fmt.Errorf("cannot construct the exact cluster destroy command: %v", commandErr)
 		}
 		reapply, commandErr := invocation.reapplyDestroyedClusterRetry(cluster)
 		if commandErr != nil {
-			return fmt.Errorf("%w; destroy the incomplete cluster with `%s`; cannot construct the exact reapply command: %v", err, destroy.String(), commandErr)
+			return "", fmt.Errorf("cannot construct the exact reapply command after the cluster destroy: %v", commandErr)
 		}
-		return fmt.Errorf("%w; deliberately reset only this cluster's incomplete install with `%s`, then reinstall it with `%s`", err, destroy.String(), reapply.String())
+		return fmt.Sprintf("deliberately reset only this cluster's incomplete install with `%s`, then reinstall it with `%s`", destroy.String(), reapply.String()), nil
 	case remedy.ActionRebuildCluster:
 		cluster, targetErr := singleContainerClusterRemedyTarget(request)
 		if targetErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact cluster rebuild command: %v", err, targetErr)
+			return "", fmt.Errorf("cannot construct the exact cluster rebuild command: %v", targetErr)
 		}
 		command, commandErr := invocation.rebuildInstalledClusterRetry(cluster)
 		if commandErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact cluster rebuild command: %v", err, commandErr)
+			return "", fmt.Errorf("cannot construct the exact cluster rebuild command: %v", commandErr)
 		}
-		return fmt.Errorf("%w; deliberately rebuild only ContainerCluster/%s with `%s`", err, cluster, command.String())
+		return fmt.Sprintf("deliberately rebuild only ContainerCluster/%s with `%s`", cluster, command.String()), nil
 	case remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:
 		machineLayer, clusterLayer, targetErr := protectedLayerRemedyTargets(request)
 		if targetErr != nil {
-			return fmt.Errorf("%w; cannot construct the exact protected-layer teardown and rebuild sequence: %v", err, targetErr)
+			return "", fmt.Errorf("cannot construct the exact protected-layer teardown and rebuild sequence: %v", targetErr)
 		}
 		var teardown []string
 		if clusterLayer {
 			command, commandErr := invocation.destroySelectedClusterLayerRetry()
 			if commandErr != nil {
-				return fmt.Errorf("%w; cannot construct the exact protected cluster-layer destroy command: %v", err, commandErr)
+				return "", fmt.Errorf("cannot construct the exact protected cluster-layer destroy command: %v", commandErr)
 			}
 			teardown = append(teardown, "destroy the protected cluster layer with `"+command.String()+"`")
 		}
 		if machineLayer {
 			command, commandErr := invocation.destroySelectedMachineLayerRetry()
 			if commandErr != nil {
-				return fmt.Errorf("%w; cannot construct the exact protected machine-layer destroy command: %v", err, commandErr)
+				return "", fmt.Errorf("cannot construct the exact protected machine-layer destroy command: %v", commandErr)
 			}
 			teardown = append(teardown, "destroy the protected machine layer with `"+command.String()+"`")
 		}
 		resume, commandErr := invocation.retry(retryIntent{mode: workflow.ApplyModeRebuild, requiredAuthorizations: []string{authorizeDataLoss}})
 		if commandErr != nil {
-			return fmt.Errorf("%w; %s; cannot construct the exact original-selection rebuild command: %v", err, strings.Join(teardown, " and "), commandErr)
+			return "", fmt.Errorf("cannot construct the exact original-selection rebuild command: %v", commandErr)
 		}
-		return fmt.Errorf("%w; %s, then resume exactly the original selected work with `%s`", err, strings.Join(teardown, " and "), resume.String())
+		return fmt.Sprintf("%s, then resume exactly the original selected work with `%s`", strings.Join(teardown, " and "), resume.String()), nil
 	default:
-		return fmt.Errorf("%w; typed remedy action %q has no CLI formatter, so bootwright refuses to suggest an unsafe command", err, request.Action)
+		return "", fmt.Errorf("typed remedy action %q has no CLI formatter, so bootwright refuses to suggest an unsafe command", request.Action)
 	}
+}
+
+func containerClusterReconcileCommand(request remedy.Request, invocation resolvedInvocation) (string, retryCommand, error) {
+	cluster, err := singleContainerClusterRemedyTarget(request)
+	if err != nil {
+		return "", retryCommand{}, fmt.Errorf("cannot construct the exact host-cluster reconcile sequence: %v", err)
+	}
+	command, err := invocation.reconcileContainerClusterRetry(cluster)
+	if err != nil {
+		return "", retryCommand{}, fmt.Errorf("cannot construct the exact host-cluster reconcile command: %v", err)
+	}
+	return cluster, command, nil
 }
 
 func protectedLayerRemedyTargets(request remedy.Request) (bool, bool, error) {

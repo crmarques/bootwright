@@ -137,7 +137,7 @@ func storageStretchDataSiteTiebreakerAdvisories(object string, cluster v1alpha1.
 			Object:      object,
 			Finding:     fmt.Sprintf("the tiebreaker mon stands in data site %q rather than a third site", site),
 			Impact:      "losing that data site takes its two replicas and the tiebreaker vote at once, so the surviving site cannot win the monitor election and the cluster stops serving; a cluster not already in stretch mode also cannot enter it in this shape, because Ceph refuses enable_stretch_mode when the tiebreaker shares a data site",
-			Remediation: fmt.Sprintf("this is the acknowledged emergency shape after `--authorize same-site-arbiter`; move the tiebreaker back with `bootwright storage-cluster replace-arbiter %s --new-arbiter-machine <machine outside %s>` once a third site is available", strings.TrimPrefix(object, v1alpha1.KindStorageCluster+"/"), strings.Join(stretch.DataSites, " and ")),
+			Remediation: fmt.Sprintf("this is the acknowledged emergency shape after `--authorize same-site-arbiter`; once a third site is available, choose a declared arbiter-capable Machine outside %s and run the storage-cluster replacement workflow for StorageCluster/%s with that exact machine", strings.Join(stretch.DataSites, " and "), strings.TrimPrefix(object, v1alpha1.KindStorageCluster+"/")),
 		}}
 	}
 	return nil

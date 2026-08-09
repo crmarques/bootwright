@@ -188,7 +188,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		if options.stageSelector {
 			if err := validateKubeVirtClusterSelection(state, runScope, flags.clusterScope, clustersDir); err != nil {
-				return failErr(1, err)
+				return failErr(1, applyInstallRemedialError(err, invocation))
 			}
 		}
 		if mode == workflow.ApplyModeRebuild && converge.ScopeSkipsStorageDeviceGate(runScope) && converge.OverrideStorageDeviceGateApplies(sel.Active, sel.WorkStorageClusters, sel.RenderState) {
@@ -289,7 +289,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope); err != nil {
+			if err := runApplyHostCheckWithInvocation(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir, ctx.RunsDir, hostTrustScope, secretScope, invocation); err != nil {
 				return err
 			}
 		}

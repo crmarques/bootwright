@@ -41,3 +41,14 @@ resolution, so context material uses the task runtime secret store and an
 explicit file source in source mode remains the operator-owned source path.
 Dry-run keeps the logical managed-host path and creates no plaintext runtime
 material.
+
+KubeVirt host readiness, missing captured kubeconfig, and runtime host-access
+failures carry the same typed host-`ContainerCluster` reconcile action. The
+backend message names only the child, host, durable path, and observed failure;
+it never assembles apply argv. For a real apply, `internal/cli` formats the
+exact cluster-stage host reconcile and then the unchanged original invocation,
+including context, selection, confirmation, preview/output, SSH identity,
+effects, and authorizations. For a standalone read-only preflight, there is no
+original apply selection: the CLI formats only the interactive host reconcile
+and tells the operator to rerun the preflight. Inferring a fleet-wide apply from
+that diagnostic would be a state change the operator did not request.
