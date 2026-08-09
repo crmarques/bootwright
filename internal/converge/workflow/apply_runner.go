@@ -110,14 +110,6 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		if recordErr := MarkClusterInstallTaskFailed(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
-		if remErr := RemoveApplyTaskConvergeSafety(runsDir, task); remErr != nil {
-			err = fmt.Errorf("%w; additionally failed to reset the task's converge record (it may still claim the previous inputs are applied): %v", err, remErr)
-		}
-		if task.Entry.Kind == ApplyTaskKindStorageCluster {
-			if remErr := RemoveStorageSubObjectsConvergeSafety(runsDir, task.State, strings.TrimPrefix(task.Entry.ID, "storage.")); remErr != nil {
-				err = fmt.Errorf("%w; additionally failed to reset storage sub-object converge records: %v", err, remErr)
-			}
-		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 	}
 	if result.Skipped && restorable {

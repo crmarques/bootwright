@@ -770,6 +770,26 @@ func TestDestroyOutcomeNilMeansEverythingSucceeded(t *testing.T) {
 	}
 }
 
+func TestDestroyOutcomeFullySucceededRequiresEveryAttemptedTask(t *testing.T) {
+	complete := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
+		{ID: "destroy.storage", Kind: DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph"}, Status: TaskStatusOK},
+		{ID: "destroy.machine", Kind: DestroyTaskKindMachineInfra, ResourceKeys: []string{"ceph"}, Status: TaskStatusOK},
+	}})
+	if !DestroyOutcomeFullySucceeded(complete) {
+		t.Fatal("an outcome derived from an all-OK ledger must prove full success")
+	}
+	incomplete := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
+		{ID: "destroy.storage", Kind: DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph"}, Status: TaskStatusOK},
+		{ID: "destroy.machine", Kind: DestroyTaskKindMachineInfra, ResourceKeys: []string{"ceph"}, Status: TaskStatusSkipped},
+	}})
+	if DestroyOutcomeFullySucceeded(incomplete) {
+		t.Fatal("a skipped attempted task must withhold full-success cleanup")
+	}
+	if DestroyOutcomeFullySucceeded(DestroyOutcome{DestroyTaskKindStorageCluster: true}) {
+		t.Fatal("a hand-built partial outcome with no attempted evidence must not authorize a full-context sweep")
+	}
+}
+
 func TestDestroyChainSetsForksForEveryStep(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {

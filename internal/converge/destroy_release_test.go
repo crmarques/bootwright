@@ -1,9 +1,11 @@
 package converge
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -172,6 +174,60 @@ func TestFailedMachineTeardownRecordsNoSubstrateRelease(t *testing.T) {
 	released, err := workflow.ReleasedSubstrateClusters(runsDir)
 	if err != nil || len(released) != 0 {
 		t.Fatalf("a destroy whose machine teardown did not succeed must not authorize a reinstall, got %v err=%v", released, err)
+	}
+}
+
+func TestSkippedMachineTeardownPreservesRecordsAndWritesNoRelease(t *testing.T) {
+	runsDir := t.TempDir()
+	clustersDir := t.TempDir()
+	st := bareMetalCephDestroyState()
+	tasks, err := workflow.PlanApplyTasksChecked(InfraScope.ApplyTarget(), st)
+	if err != nil {
+		t.Fatalf("plan apply records: %v", err)
+	}
+	var recorded workflow.ApplyTask
+	for _, task := range tasks {
+		if destroyKindForApplyTaskKind(task.Entry.Kind) == workflow.DestroyTaskKindMachineInfra {
+			recorded = task
+			break
+		}
+	}
+	if recorded.Entry.ID == "" {
+		t.Fatal("fixture planned no machine-infrastructure convergence record")
+	}
+	if err := workflow.MarkApplyTaskConvergeSafety(runsDir, "test", "prior-run", recorded, workflow.ConvergeSafetyStatusReconciled, time.Unix(1700000000, 0)); err != nil {
+		t.Fatalf("mark prior convergence record: %v", err)
+	}
+	recordPath := workflow.ConvergeSafetyRecordPath(runsDir, recorded.Entry.Kind+"/"+recorded.Entry.ID)
+	before, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("read prior convergence record: %v", err)
+	}
+	ledger := workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{{
+		ID:            "destroy.machine-infra.ceph-bm",
+		Kind:          workflow.DestroyTaskKindMachineInfra,
+		ResourceKeys:  []string{"ceph-bm", workflow.DestroyMachineResourceKeyPrefix + "ceph-0"},
+		Status:        workflow.TaskStatusSkipped,
+		SkippedReason: "no remote hosts matched task limit",
+	}}}
+	outcome := workflow.SucceededDestroyTaskKinds(ledger)
+	problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, st, nil, nil, nil, outcome, "destroy-run", false, false)
+	if len(problems) != 0 {
+		t.Fatalf("reset problems: %v", problems)
+	}
+	after, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("a skipped teardown must preserve prior convergence evidence: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("skipped teardown changed prior convergence evidence\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	released, err := workflow.ReleasedSubstrateClusters(runsDir)
+	if err != nil {
+		t.Fatalf("list releases: %v", err)
+	}
+	if len(released) != 0 {
+		t.Fatalf("skipped teardown must not authorize a reinstall, got releases %v", released)
 	}
 }
 

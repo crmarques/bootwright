@@ -194,7 +194,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 		}
 		resetClusters = append(resetClusters, name)
 	}
-	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
+	if DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && workflow.DestroyOutcomeFullySucceeded(succeededDestroyKinds) {
 		if err := workflow.RemoveAllConvergeSafetyRecords(runsDir); err != nil {
 			problems = append(problems, fmt.Errorf("remove remaining converge records: %w", err))
 		}
@@ -206,7 +206,7 @@ func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, contextName string, 
 				problems = append(problems, fmt.Errorf("purge history for cluster %s: %w", name, err))
 			}
 		}
-		if purgeProven && DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && succeededDestroyKinds == nil {
+		if purgeProven && DestroyIsFullScope(runScope) && storageWorkNames == nil && len(partial) == 0 && workflow.DestroyOutcomeFullySucceeded(succeededDestroyKinds) {
 			if err := purgeAllRunHistory(runsDir, destroyRunID); err != nil {
 				problems = append(problems, fmt.Errorf("purge run history: %w", err))
 			}

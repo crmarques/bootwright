@@ -356,6 +356,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease)
+			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, selection)
 			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath)
 			if gerr == nil && partialErr == nil && storagePlanned && skipUnreachable && !partial.Found {
 				partialErr = fmt.Errorf("the storage teardown ran with --authorize unreachable-nodes but produced no completion report; keeping the converge records of storage cluster(s) %s — re-run destroy to verify their teardown", strings.Join(storageScopeNames, ", "))
@@ -369,19 +370,22 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if gerr != nil {
 				printPartialStorageDestroyWarning(stdout, partial, partialErr)
-				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, workflow.SucceededDestroyTaskKinds(ledger), ledger.RunID, purgeHistory, skipUnreachable)
+				_ = printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable)
 				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 					return silentExit(1)
 				}
 				return failErr(1, gerr)
 			}
-			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, nil, ledger.RunID, purgeHistory, skipUnreachable)
+			resetErr := printDestroyRecordReset(stdout, sel, ctx.RunsDir, clustersDir, ctx.Name, runScope, plan, resetPartial, destroyOutcome, ledger.RunID, purgeHistory, skipUnreachable)
 			printPartialStorageDestroyWarning(stdout, partial, partialErr)
 			if resetErr != nil {
 				return failErr(1, resetErr)
 			}
 			if partialErr != nil {
 				return failErr(1, partialErr)
+			}
+			if skippedErr != nil {
+				return failErr(1, skippedErr)
 			}
 			renderResult = result
 		default:

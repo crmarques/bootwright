@@ -712,6 +712,23 @@ func SucceededDestroyTaskKinds(ledger RunLedger) DestroyOutcome {
 	return out
 }
 
+func DestroyOutcomeFullySucceeded(outcome DestroyOutcome) bool {
+	if outcome == nil {
+		return true
+	}
+	attempted := false
+	for key, reached := range outcome {
+		if !reached || !strings.HasPrefix(key, destroyOutcomeAttemptedPrefix) {
+			continue
+		}
+		attempted = true
+		if !outcome[strings.TrimPrefix(key, destroyOutcomeAttemptedPrefix)] {
+			return false
+		}
+	}
+	return attempted
+}
+
 func (o DestroyOutcome) Covers(kind, cluster string) bool {
 	if o == nil {
 		return true
