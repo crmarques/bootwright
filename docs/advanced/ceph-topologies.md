@@ -224,6 +224,18 @@ The drivegroup form mirrors the cephadm OSD service spec field for field; the
 [storage reference](../concepts/storage.md#osd-device-selection) carries the
 exact field table.
 
+!!! warning "Dynamic OSD filters are read-only gated"
+    Before a managed data, DB, or WAL filter becomes a persistent cephadm
+    service, Bootwright resolves it from complete device inventory and refuses
+    any unknown probe result. A matching dirty disk is also refused unless it is
+    inside the explicitly authorized unbounded auto-reclaim. `--mode rebuild`
+    and `--authorize data-loss` do not bypass a narrowing filter. Pin the refused
+    disk to `paths`/`pathSpecs`, then run `bootwright apply --clusters <cluster>
+    --reclaim-devices <path> --authorize data-loss,unowned-devices`. Only an
+    effectively unbounded managed data `all: true` selection with no `limit`
+    may use automatic reclaim; see
+    [Reclaiming OSD disks](operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
+
 A production drivegroup typically selects data disks by stable `model`/`vendor`
 (not `/dev` paths, which reorder across boots) and carves the BlueStore DB onto a
 shared NVMe, one slot per OSD:

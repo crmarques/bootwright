@@ -42,7 +42,7 @@ func filterReclaimDestructiveDescriptors(clusters []string) []string {
 	if len(clusters) == 0 {
 		return nil
 	}
-	return []string{"auto-reclaim dirty filter-OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
+	return []string{"auto-reclaim dirty unbounded all-devices OSD disks on Ceph cluster(s) " + strings.Join(clusters, ", ")}
 }
 
 func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode, objects []workflow.ObjectClassification, tasks []workflow.ApplyTask, plan *converge.WorkflowPlan, reclaimDevices string, reclaimClusters []string, releasedRecords []workflow.SubstrateReleaseRecord, clustersDir string, ocpReinstalls []string, allowDestroy bool) bool {
@@ -84,7 +84,7 @@ func emitApplyDataLossWarningsAndVars(stdout io.Writer, mode workflow.ApplyMode,
 		if allowDestroy {
 			if filterReclaim := filterReclaimAuthorizedClusters(plan.State, objects); len(filterReclaim) > 0 {
 				consumedDataLoss = true
-				cliout.NewContinuation(stdout).Warning("all-devices OSD reclaim", "authorizes automatic disk reclaim on Ceph cluster(s) "+strings.Join(filterReclaim, ", ")+": on a host whose OSDs are declared with data_devices.all=true, EVERY disk that is unavailable to ceph-volume, has NO mounted filesystem, and is NOT already an OSD of this cluster is WIPED (ceph orch device zap) before the OSD apply — IRREVERSIBLE, and NOT limited to disks that once held Ceph. Mounted/OS/system disks and this cluster's live OSDs are never touched. Do NOT use all=true on a host that also carries data to keep or runs a second Ceph cluster: an unmounted disk of a co-resident cluster is not distinguishable and would be wiped.")
+				cliout.NewContinuation(stdout).Warning("all-devices OSD reclaim", "authorizes automatic disk reclaim on Ceph cluster(s) "+strings.Join(filterReclaim, ", ")+": on a managed host whose OSD data selection is unbounded data_devices.all=true — no model/vendor/size/rotational predicate and no limit — EVERY disk that is unavailable to ceph-volume, has NO mounted filesystem, and is NOT already an OSD of this cluster is WIPED (ceph orch device zap) before the OSD apply. This is IRREVERSIBLE and is NOT limited to disks that once held Ceph. A narrowing filter never rides this authorization; it fails its emptiness gate and must be pinned to explicit paths before reclaim. Mounted/OS/system disks and this cluster's live OSDs are never touched. Do NOT use unbounded all=true on a host that also carries data to keep or runs a second Ceph cluster: an unmounted disk of a co-resident cluster is not distinguishable and would be wiped.")
 				converge.ApplyFilterReclaimAuthorizedExtraVar(plan, filterReclaim)
 			}
 		}
@@ -223,7 +223,7 @@ func resolveApplyReclaimDevices(stdout io.Writer, plan *converge.WorkflowPlan, a
 	}
 	resolved, err := converge.ResolveReclaimDevices(plan.State, clusters, reclaimDevices)
 	if err != nil {
-		return "", nil, failErr(2, err)
+		return "", nil, failErr(2, reclaimResolutionRefusal(err, &invocation))
 	}
 	if len(clusters) > 0 {
 		if unmatched, declared := converge.UnmatchedReclaimDevices(plan.State, clusters, resolved); len(unmatched) > 0 {

@@ -20,7 +20,7 @@ below.
 | [0004](0004-cross-cluster-substrate-dependencies.md) | Cross-Cluster Substrate Dependencies | |
 | [0005](0005-provisioning-playbooks.md) | Operator-Supplied Provisioning Playbooks | delivery revised by 0021; kind renamed by 0026 |
 | [0006](0006-no-prose-comments-knowledge-catalog.md) | Source Knowledge Lives in the Indexed Catalog, Not Comments | |
-| [0007](0007-apply-destroy-safety-model.md) | Apply/Destroy Safety Model | teardown ordering revised by 0023; gate surface revised by 0030; refined by 0031 |
+| [0007](0007-apply-destroy-safety-model.md) | Apply/Destroy Safety Model | teardown ordering revised by 0023; gate surface revised by 0030; refined by 0031, 0054 |
 | [0008](0008-ceph-declarative-cephadm-compat.md) | Declarative Ceph API on cephadm Native Concepts | |
 | [0009](0009-renderer-owns-listening-surface.md) | The Renderer Owns the Listening Surface and Dispatch | |
 | [0010](0010-cli-gate-and-flag-conventions.md) | CLI Gate and Flag Conventions | destructive-gate flags revised by 0030 |
@@ -43,11 +43,11 @@ below.
 | [0027](0027-bootwright-owns-the-login-it-installs.md) | Bootwright Owns the Login on the Machines It Installs | revises 0019, 0024; refined by 0033 |
 | [0028](0028-terminal-for-the-borrowed-identity.md) | A Terminal for the Borrowed Identity, Never for the Created One | extended by 0029 |
 | [0029](0029-answering-a-sudo-password-for-the-borrowed-identity.md) | Answering a `sudo` Password for the Borrowed Identity | extends 0028 |
-| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031; extended by 0032, 0034, 0038, 0040, 0042; refined by 0039 |
+| [0030](0030-one-intent-flag-and-named-authorizations.md) | One Intent Flag and Named Authorizations | revises 0007, 0010; refined by 0031, 0039, 0054; extended by 0032, 0034, 0038, 0040, 0042 |
 | [0031](0031-data-loss-follows-the-data-and-policy-is-not-drift.md) | Data-Loss Authorization Follows the Data, and Policy Is Not Drift | refines 0007, 0030 |
 | [0032](0032-tearing-down-input-a-newer-build-cannot-read.md) | Tearing Down Input a Newer Build Cannot Read | extends 0030 with the `stale-input` token |
 | [0033](0033-the-login-follows-the-scope-and-carries-its-credential.md) | The Login Follows the Command's Scope, and Carries Its Credential | refines 0019, 0024, 0027 |
-| [0034](0034-wiping-a-device-no-node-claims.md) | Wiping a Device No Node Claims | extends 0030 with the `unowned-devices` token |
+| [0034](0034-wiping-a-device-no-node-claims.md) | Wiping a Device No Node Claims | extends 0030 with the `unowned-devices` token; refined by 0054 |
 | [0035](0035-a-storage-node-answers-to-the-name-cephadm-registers.md) | A Storage Node Answers to the Name cephadm Registers | enforces 0017; repairs the `fqdn` override of 0025; revised by 0036 |
 | [0036](0036-bootwright-writes-the-name-a-storage-node-answers-to.md) | Bootwright Writes the Name a Storage Node Answers To | revises 0035 |
 | [0037](0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md) | A TPM Holds the Key, a Passphrase Holds the Machine | follows the enablement grammar of 0014 |
@@ -67,3 +67,4 @@ below.
 | [0051](0051-the-repository-an-ibm-fleet-already-subscribes-to.md) | The Repository an IBM Fleet Already Subscribes To | extends the distribution tail of 0015; ends the storage-phase purge of machine-declared repositories |
 | [0052](0052-the-port-a-scheme-arrives-on.md) | The Port a Scheme Arrives On | extends the declared scheme of 0049; separates the classic dashboard's TLS port from the gateway's |
 | [0053](0053-the-flight-plan-a-run-publishes.md) | The Flight Plan a Run Publishes | extends the wait split of 0022; makes the run-tree strata a lowered value, nests logs per cluster, narrows the OLM and playbook edges |
+| [0054](0054-a-filter-is-not-permission-to-wipe-a-device.md) | A Filter Is Not Permission to Wipe a Device | refines 0007, 0030, 0034; limits OSD auto-reclaim to an effective unbounded managed data selection |

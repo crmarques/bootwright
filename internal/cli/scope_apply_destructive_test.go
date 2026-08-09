@@ -23,6 +23,34 @@ func TestReclaimDestructiveDescriptors(t *testing.T) {
 	}
 }
 
+func TestFilterReclaimAuthorizationCoversOnlyUnboundedManagedAllDevices(t *testing.T) {
+	cluster := func(name string, osd *v1alpha1.StorageCephNodeOSD) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: name},
+			Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
+				Name:  name + "-node",
+				Roles: []string{v1alpha1.StorageCephRoleOSD},
+				OSD:   osd,
+			}}}}},
+		}
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{
+		cluster("unbounded", &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}}),
+		cluster("model", &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true, Model: "DATA"}}),
+		cluster("limited", &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true, Limit: 1}}),
+		cluster("unmanaged", &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}, Unmanaged: true}),
+	}}
+	objects := make([]workflow.ObjectClassification, 0, len(state.StorageClusters))
+	for _, storage := range state.StorageClusters {
+		objects = append(objects, workflow.ObjectClassification{Kind: workflow.ObjectKindStorageCluster, Label: "StorageCluster/" + storage.Metadata.Name})
+	}
+
+	got := filterReclaimAuthorizedClusters(state, objects)
+	if len(got) != 1 || got[0] != "unbounded" {
+		t.Fatalf("filterReclaimAuthorizedClusters = %v, want only unbounded; a narrowing or unmanaged selector must never inherit the all-disks wipe", got)
+	}
+}
+
 func TestWarnReclaimUnownedDevicesStatesBothReadings(t *testing.T) {
 	var buf bytes.Buffer
 	warnReclaimUnownedDevices(&buf, "/dev/nvme0n1")

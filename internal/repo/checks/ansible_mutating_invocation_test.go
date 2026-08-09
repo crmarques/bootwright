@@ -16,6 +16,7 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		converge.MutatingInvocationExtraVar,
 		converge.ApplyReconcileInvocationExtraVar,
 		converge.ApplyRebuildInvocationExtraVar,
+		converge.ApplyReclaimInvocationExtraVar,
 		converge.ApplyFullInvocationExtraVar,
 		converge.ApplyThroughBaseInvocationExtraVar,
 	}
@@ -32,8 +33,14 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		}
 	}
 	for _, command := range []string{"scope_apply_cmd.go", "scope_destroy_cmd.go"} {
-		if body := readRepoFile(t, "internal/cli/"+command); !strings.Contains(body, "appendMutatingInvocationExtraVars(&plan, invocation)") {
+		if body := readRepoFile(t, "internal/cli/"+command); !strings.Contains(body, "appendMutatingInvocationExtraVars(&plan, invocation,") {
 			t.Errorf("%s does not attach resolved invocation facts before Ansible execution", command)
+		}
+	}
+	gate := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_filter_gate.yml")
+	for _, want := range []string{converge.ApplyReclaimInvocationExtraVar, converge.ApplyReclaimDevicesExtraVar, converge.ApplyReclaimInvocationSentinel} {
+		if !strings.Contains(gate, want) {
+			t.Errorf("dynamic OSD filter gate does not consume registered runtime reclaim value %s", want)
 		}
 	}
 	root := filepath.Join(repoRoot(t), "ansible/collections/ansible_collections/bootwright/core/roles")
@@ -74,6 +81,8 @@ func mutatingInvocationConstantName(name string) string {
 		return "ApplyReconcileInvocationExtraVar"
 	case converge.ApplyRebuildInvocationExtraVar:
 		return "ApplyRebuildInvocationExtraVar"
+	case converge.ApplyReclaimInvocationExtraVar:
+		return "ApplyReclaimInvocationExtraVar"
 	case converge.ApplyFullInvocationExtraVar:
 		return "ApplyFullInvocationExtraVar"
 	case converge.ApplyThroughBaseInvocationExtraVar:

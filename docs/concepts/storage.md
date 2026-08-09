@@ -615,7 +615,7 @@ cephadm drivegroup device filter:
 | --- | --- | --- | --- |
 | `*.paths[]` | No | — | Literal device paths. |
 | `*.pathSpecs[]` | No | — | Expanded path form `{path, crushDeviceClass}` pinning a per-device CRUSH class; renders to the cephadm `paths: [{path, crush_device_class}]` mapping. |
-| `*.all` | No | `false` | Select all matching devices. |
+| `*.all` | No | `false` | Select all devices (`dataDevices` only). |
 | `*.model` | No | — | Device model filter (`model`). |
 | `*.vendor` | No | — | Device vendor filter (`vendor`). |
 | `*.rotational` | No | — | Rotational filter. |
@@ -625,9 +625,12 @@ cephadm drivegroup device filter:
 !!! note "Cross-field rules"
     - `paths`, `pathSpecs`, and `all` are **mutually exclusive** within one
       selector; set at most one. `pathSpecs[].path` is required.
+    - An explicit `paths`/`pathSpecs` form cannot combine with `model`, `vendor`,
+      `rotational`, or `size`. `all` is allowed only on `dataDevices` and cannot
+      combine with those filters. `limit` may cap any valid selector.
     - A selector must select something: set at least one of `paths`, `pathSpecs`,
-      `all`, `model`, `vendor`, `rotational`, `size`, or `limit`. `model`,
-      `vendor`, `rotational`, `size`, and `limit` only narrow the match.
+      `all`, `model`, `vendor`, `rotational`, or `size`. `limit` alone is not a
+      selector.
     - Address fleet disks by `model`/`vendor` rather than `/dev` paths, which can
       reorder across boots.
 
@@ -646,6 +649,27 @@ cephadm drivegroup device filter:
     filters mirror cephadm exactly (`model`, `vendor`, `rotational`, `size`,
     `limit`). Per-disk stable selection is expressed as a `/dev/disk/by-id` or
     `wwn` **path** in `paths`/`pathSpecs`, not as a filter.
+
+!!! warning "A dynamic filter is not permission to wipe a disk"
+    Before applying a managed OSD service, Bootwright resolves every dynamic
+    data, DB, and WAL selector against cephadm's device inventory. It refuses a
+    matching unmounted dirty disk unless that disk is inside the explicitly
+    authorized unbounded auto-reclaim below. Missing inventory or an unreadable
+    filter, live-OSD, mount, or signature fact always fails closed before the
+    persistent service is applied.
+
+    Neither `--mode rebuild` nor `--authorize data-loss` bypasses a narrowing
+    `model`/`vendor`/`rotational`/`size`/`limit` selection. Pin the refused disk
+    in `paths`/`pathSpecs`, then use `bootwright apply --clusters <cluster>
+    --reclaim-devices <path> --authorize data-loss,unowned-devices`.
+    The refusal renders that retry from the resolved invocation, preserving its
+    context, selection, mode, prior effects, dry-run/output/confirmation, and SSH
+    flags; it shell-quotes the validated runtime paths as one reclaim operand.
+    Automatic reclaim is reserved for a managed data selector that is effectively
+    unbounded: `all: true` with no `limit`. `all` cannot combine with narrowing
+    filters. A `limit` cannot waive the gate: the persistent service may select
+    a different matching disk later. See
+    [ADR 0054](https://github.com/crmarques/bootwright/blob/main/specs/adr/0054-a-filter-is-not-permission-to-wipe-a-device.md).
 
 !!! warning "`osd.tpm2` has host prerequisites the OSD spec cannot state"
     Sealing an OSD key is not a container operation: `ceph-volume` runs

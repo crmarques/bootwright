@@ -1,0 +1,328 @@
+---
+- name: Resolve hosts whose OSD devices are selected dynamically
+  ansible.builtin.set_fact:
+    bootwright_ceph_dynamic_osd_hosts: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('osdDeviceFilters', 'defined') | list }}
+    bootwright_ceph_filter_reclaim_authorized: >-
+      {{ bootwright_selected_storage_cluster.name
+         in (bootwright_ceph_filter_reclaim_clusters | default('') | split(',')
+             | map('trim') | reject('equalto', '') | list) }}
+    bootwright_ceph_dynamic_osd_inventory_probe: >-
+      {{ bootwright_ceph_osd_scan_device_ls.stdout | default('')
+         | bootwright.core.bootwright_json_list_probe }}
+
+- name: Gate dynamically selected OSD devices before applying their service specs
+  when: bootwright_ceph_dynamic_osd_hosts | default([]) | length > 0
+  block:
+    - name: Refuse dynamic OSD selection without complete device inventory
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_osd_scan_device_ls.rc | default(1) | int == 0
+          - bootwright_ceph_dynamic_osd_inventory_probe.valid
+          - >-
+            (bootwright_ceph_dynamic_osd_hosts | map(attribute='cephHostname') | list)
+            | difference(
+                bootwright_ceph_dynamic_osd_inventory_probe.value
+                | selectattr('devices', 'defined')
+                | rejectattr('devices', 'equalto', [])
+                | map(attribute='name') | list)
+            | length == 0
+        fail_msg: >-
+          Refusing to apply dynamic Ceph OSD device filters for
+          {{ bootwright_selected_storage_cluster.name }}: cephadm did not return a
+          complete device inventory for every filter-selected host, so Bootwright cannot
+          prove which disks the persistent OSD service could consume. No --mode or
+          --authorize value relaxes an unreadable device-selection gate. Restore cephadm
+          access to the missing host(s), verify `ceph orch device ls --format json
+          --refresh` lists their disks, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+        quiet: true
+
+    - name: Read live OSD metadata for the dynamic device gate
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --
+          - ceph
+          - osd
+          - metadata
+          - --format
+          - json
+      register: bootwright_ceph_dynamic_osd_metadata
+      changed_when: false
+      failed_when: false
+
+    - name: Parse live OSD metadata without trusting command output shape
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_metadata_probe: >-
+          {{ bootwright_ceph_dynamic_osd_metadata.stdout | default('')
+             | bootwright.core.bootwright_json_list_probe }}
+
+    - name: Refuse dynamic OSD selection without readable live OSD metadata
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_dynamic_osd_metadata.rc | default(1) | int == 0
+          - bootwright_ceph_dynamic_osd_metadata_probe.valid
+        fail_msg: >-
+          Refusing to apply dynamic Ceph OSD device filters for
+          {{ bootwright_selected_storage_cluster.name }}: `ceph osd metadata` did not
+          return readable JSON, so Bootwright cannot exclude this cluster's live OSDs
+          from the device-emptiness gate. No --mode or --authorize value turns an
+          unreadable live-OSD probe into proof. Restore cluster reachability, verify
+          `cephadm shell -- ceph osd metadata --format json`, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+        quiet: true
+
+    - name: Reset dynamic OSD filter classification
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_candidates: []
+        bootwright_ceph_dynamic_osd_unknown: []
+
+    - name: Classify unavailable devices against the authored OSD filters
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_candidates: >-
+          {{ bootwright_ceph_dynamic_osd_candidates
+             + (bootwright_ceph_dynamic_osd_classification.candidates
+                | map('combine', {
+                    'host': bootwright_ceph_dynamic_osd_host.cephHostname,
+                    'inventoryHost': bootwright_ceph_dynamic_osd_host.inventoryHost,
+                    'reclaimAll': bootwright_ceph_dynamic_osd_host.osdReclaimAll | default(false)
+                  }) | list) }}
+        bootwright_ceph_dynamic_osd_unknown: >-
+          {{ bootwright_ceph_dynamic_osd_unknown
+             + (bootwright_ceph_dynamic_osd_classification.unknown
+                | map('combine', {'host': bootwright_ceph_dynamic_osd_host.cephHostname})
+                | list) }}
+      loop: "{{ bootwright_ceph_dynamic_osd_hosts }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_host
+        label: "{{ bootwright_ceph_dynamic_osd_host.cephHostname }}"
+      vars:
+        bootwright_ceph_dynamic_osd_inventory: >-
+          {{ bootwright_ceph_dynamic_osd_inventory_probe.value
+             | selectattr('name', 'equalto', bootwright_ceph_dynamic_osd_host.cephHostname)
+             | map(attribute='devices', default=[]) | flatten | list }}
+        bootwright_ceph_dynamic_osd_live_paths: >-
+          {{ (bootwright_ceph_dynamic_osd_metadata_probe.value
+              | selectattr('hostname', 'defined')
+              | selectattr('hostname', 'equalto', bootwright_ceph_dynamic_osd_host.cephHostname)
+              | map(attribute='devices', default='') | map('default', '', true)
+              | join(',') | split(',') | map('trim') | reject('equalto', '')
+              | map('basename') | map('regex_replace', '^', '/dev/') | list) }}
+        bootwright_ceph_dynamic_osd_classification: >-
+          {{ bootwright_ceph_dynamic_osd_inventory
+             | bootwright.core.bootwright_ceph_osd_filter_candidates(
+                 bootwright_ceph_dynamic_osd_host.osdDeviceFilters,
+                 bootwright_ceph_dynamic_osd_live_paths) }}
+
+    - name: Refuse dynamic OSD filters that cannot be evaluated from host facts
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_dynamic_osd_unknown | length == 0
+        fail_msg: >-
+          Refusing to apply dynamic Ceph OSD device filters for
+          {{ bootwright_selected_storage_cluster.name }}: the filter verdict is unknown
+          for {{ bootwright_ceph_dynamic_osd_unknown | to_nice_json }}. A missing model,
+          vendor, rotational, size, path, or availability fact is not evidence that a
+          disk falls outside the authored filter. No --mode or --authorize value relaxes
+          this gate. Repair the host inventory or pin explicit data/db/wal device paths,
+          then re-run `{{ bootwright_mutating_invocation }}`.
+        quiet: true
+
+    - name: Probe dynamically selected unavailable devices for active mounts
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - --noheadings
+          - --output
+          - MOUNTPOINT
+          - "{{ bootwright_ceph_dynamic_osd_candidate.path }}"
+      register: bootwright_ceph_dynamic_osd_mounts
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+      delegate_to: "{{ bootwright_ceph_dynamic_osd_candidate.inventoryHost }}"
+      loop: "{{ bootwright_ceph_dynamic_osd_candidates }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_candidate
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_candidate.path }}
+
+    - name: Refuse a dynamic OSD candidate whose mount state is unreadable
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_dynamic_osd_mount.rc is defined
+          - bootwright_ceph_dynamic_osd_mount.rc | int == 0
+        fail_msg: >-
+          Refusing dynamic OSD candidate
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.path }}
+          on {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.host }}:
+          its mount-state probe did not complete successfully, so Bootwright cannot prove
+          it is safe even to classify. No --mode or --authorize value relaxes this gate.
+          Restore host access, verify `lsblk --noheadings --output MOUNTPOINT
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.path }}`,
+          then re-run `{{ bootwright_mutating_invocation }}`.
+        quiet: true
+      loop: "{{ bootwright_ceph_dynamic_osd_mounts.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_mount
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.path }}
+
+    - name: Reset unmounted dynamic OSD candidates
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_unmounted: []
+
+    - name: Resolve unmounted dynamic OSD candidates
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_unmounted: >-
+          {{ bootwright_ceph_dynamic_osd_unmounted
+             + ([bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate]
+                if ((bootwright_ceph_dynamic_osd_mount.rc | default(1) | int) == 0
+                    and (bootwright_ceph_dynamic_osd_mount.stdout | default('') | trim | length) == 0)
+                else []) }}
+      loop: "{{ bootwright_ceph_dynamic_osd_mounts.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_mount
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_mount.bootwright_ceph_dynamic_osd_candidate.path }}
+
+    - name: Probe unmounted dynamic OSD candidates for existing signatures
+      ansible.builtin.command:
+        argv:
+          - wipefs
+          - --no-act
+          - --noheadings
+          - "{{ bootwright_ceph_dynamic_osd_candidate.path }}"
+      register: bootwright_ceph_dynamic_osd_signatures
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+      delegate_to: "{{ bootwright_ceph_dynamic_osd_candidate.inventoryHost }}"
+      loop: "{{ bootwright_ceph_dynamic_osd_unmounted }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_candidate
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_candidate.path }}
+
+    - name: Reset narrowing-filter OSD reclaim paths
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_reclaim_paths: []
+
+    - name: Collect narrowing-filter OSD reclaim paths
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_reclaim_paths: >-
+          {{ bootwright_ceph_dynamic_osd_reclaim_paths
+             + [bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.path] }}
+      loop: "{{ bootwright_ceph_dynamic_osd_signatures.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_signature
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.path }}
+      when:
+        - bootwright_ceph_dynamic_osd_signature.rc is defined
+        - bootwright_ceph_dynamic_osd_signature.rc | int == 0
+        - bootwright_ceph_dynamic_osd_signature.stdout | default('') | trim | length > 0
+        - not (bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.reclaimAll | default(false) | bool)
+
+    - name: Probe the runtime OSD reclaim operand
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_reclaim_operand_probe: >-
+          {{ bootwright_apply_reclaim_devices | default([])
+             | bootwright.core.bootwright_reclaim_device_operand_probe(
+                 bootwright_ceph_dynamic_osd_reclaim_paths) }}
+      when: bootwright_ceph_dynamic_osd_reclaim_paths | length > 0
+
+    - name: Refuse an invalid runtime OSD reclaim operand
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_dynamic_osd_reclaim_operand_probe.valid
+        fail_msg: >-
+          Refusing to render the runtime OSD reclaim remedy:
+          {{ bootwright_ceph_dynamic_osd_reclaim_operand_probe.reason }}. The controller's
+          prior reclaim paths and the runtime-selected paths must form one nonempty,
+          comma-representable absolute /dev path list. No device was wiped and no service
+          spec was applied. Correct or exclude the reported desired/runtime path, then
+          retry `{{ bootwright_mutating_invocation }}`.
+        quiet: true
+      when: bootwright_ceph_dynamic_osd_reclaim_paths | length > 0
+
+    - name: Accept the validated runtime OSD reclaim operand
+      ansible.builtin.set_fact:
+        bootwright_ceph_dynamic_osd_reclaim_operand: >-
+          {{ bootwright_ceph_dynamic_osd_reclaim_operand_probe.value }}
+      when: bootwright_ceph_dynamic_osd_reclaim_paths | length > 0
+
+    - name: Refuse a malformed runtime OSD reclaim invocation template
+      ansible.builtin.assert:
+        that:
+          - >-
+            bootwright_apply_reclaim_invocation.count(
+              '__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__') == 1
+          - bootwright_ceph_dynamic_osd_reclaim_operand | default('') | length > 0
+        fail_msg: >-
+          Refusing to render the runtime OSD reclaim remedy: the controller did not
+          provide exactly one reclaim-device sentinel and a nonempty validated path
+          operand. No device was wiped and no service spec was applied.
+        quiet: true
+      when: bootwright_ceph_dynamic_osd_reclaim_paths | length > 0
+
+    - name: Enforce dynamic OSD device emptiness before any reclaim
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_dynamic_osd_signature.rc is defined
+          - bootwright_ceph_dynamic_osd_signature.rc | int == 0
+          - >-
+            (bootwright_ceph_dynamic_osd_signature.stdout | default('') | trim | length == 0)
+            or
+            ((bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.reclaimAll
+              | default(false) | bool)
+             and (bootwright_ceph_filter_reclaim_authorized | default(false) | bool))
+        fail_msg: >-
+          {% set candidate = bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate %}
+          Refusing dynamically selected OSD device {{ candidate.path }} on
+          {{ candidate.host }} for {{ candidate.roles | join('/') }}: the authored filter
+          selects this unmounted device, but
+          {% if bootwright_ceph_dynamic_osd_signature.rc is not defined
+                or (bootwright_ceph_dynamic_osd_signature.rc | int) != 0 %}
+          wipefs could not prove whether it is empty.
+          {% else %}
+          it carries data signatures
+          ({{ bootwright_ceph_dynamic_osd_signature.stdout | trim }}).
+          {% endif %}
+          {% if bootwright_ceph_dynamic_osd_signature.rc is not defined
+                or (bootwright_ceph_dynamic_osd_signature.rc | int) != 0 %}
+          Repair the unreadable probe and retry
+          `{{ bootwright_mutating_invocation }}`. No authorization token permits a wipe
+          after an unreadable probe.
+          {% elif candidate.reclaimAll | default(false) | bool %}
+          This host explicitly selects every device without a narrowing predicate. Re-run
+          `{{ bootwright_apply_rebuild_invocation }}` to auto-reclaim only unmounted,
+          non-live OSD candidates, or exclude this disk from desired state.
+          {% else %}
+          Neither `--mode rebuild` nor `--authorize data-loss` bypasses this gate: a
+          model/vendor/size/rotational/limit predicate is mutable host-state selection,
+          not explicit authorization to wipe this path. To reclaim it in-product, pin
+          every dirty narrowing-filter match in the corresponding explicit
+          paths/pathSpecs selector
+          ({{ bootwright_ceph_dynamic_osd_reclaim_paths | join(', ') }}), then run
+          `{{ bootwright_apply_reclaim_invocation
+              | replace('__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__',
+                        bootwright_ceph_dynamic_osd_reclaim_operand | quote) }}`.
+          Otherwise exclude it from the filter or clean it out of band, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+          {% endif %}
+        quiet: true
+      loop: "{{ bootwright_ceph_dynamic_osd_signatures.results | default([]) }}"
+      loop_control:
+        loop_var: bootwright_ceph_dynamic_osd_signature
+        label: >-
+          {{ bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.host }}
+          {{ bootwright_ceph_dynamic_osd_signature.bootwright_ceph_dynamic_osd_candidate.path }}

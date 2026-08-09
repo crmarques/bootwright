@@ -39,33 +39,12 @@ func DeclaredOSDCount(cluster v1alpha1.StorageCluster) (int, bool) {
 	return inspection.count, inspection.declaredCountKnown
 }
 
-func osdSelectionUsesAllDevices(selection *v1alpha1.StorageCephDeviceSelection) bool {
-	return selection != nil && selection.All
-}
-
 func OSDHostUsesAllDevices(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) bool {
 	if cluster.Spec.Ceph == nil || !NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
 		return false
 	}
-	if host.OSD != nil && osdSelectionUsesAllDevices(host.OSD.DataDevices) {
-		return true
-	}
-	name := host.Name
-	if name == "" {
-		name = CanonicalHostname(cluster, host.MachineRef.Name)
-	}
-	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
-		dg := cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
-		if !osdSelectionUsesAllDevices(dg.OSD.DataDevices) {
-			continue
-		}
-		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
-			if placed == name {
-				return true
-			}
-		}
-	}
-	return false
+	osd, ok := OSDForHost(cluster, host)
+	return ok && !osd.Unmanaged && osdSelectionUsesUnboundedAll(osd.DataDevices, osd.FilterLogic)
 }
 
 func ClusterHasAllDevicesOSDHost(cluster v1alpha1.StorageCluster) bool {
@@ -78,6 +57,71 @@ func ClusterHasAllDevicesOSDHost(cluster v1alpha1.StorageCluster) bool {
 		}
 	}
 	return false
+}
+
+func OSDForHost(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) (*v1alpha1.StorageCephNodeOSD, bool) {
+	if cluster.Spec.Ceph == nil || !NodeHasRole(host, v1alpha1.StorageCephRoleOSD) {
+		return nil, false
+	}
+	if host.OSD != nil {
+		return host.OSD, true
+	}
+	name := host.Name
+	if name == "" {
+		name = CanonicalHostname(cluster, host.MachineRef.Name)
+	}
+	for i := range cluster.Spec.Ceph.Topology.OSDDrivegroups {
+		dg := &cluster.Spec.Ceph.Topology.OSDDrivegroups[i]
+		for _, placed := range ResolvePlacement(cluster, dg.Placement, v1alpha1.StorageCephRoleOSD) {
+			if placed == name {
+				return &dg.OSD, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func DynamicOSDDeviceSelections(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) map[string]*v1alpha1.StorageCephDeviceSelection {
+	osd, ok := OSDForHost(cluster, host)
+	if !ok || osd.Unmanaged {
+		return nil
+	}
+	out := map[string]*v1alpha1.StorageCephDeviceSelection{}
+	for role, selection := range map[string]*v1alpha1.StorageCephDeviceSelection{
+		"data": osd.DataDevices,
+		"db":   osd.DBDevices,
+		"wal":  osd.WALDevices,
+	} {
+		if osdSelectionIsDynamic(selection) {
+			out[role] = selection
+		}
+	}
+	return out
+}
+
+func OSDFilterLogic(cluster v1alpha1.StorageCluster, host v1alpha1.StorageCephNode) string {
+	osd, ok := OSDForHost(cluster, host)
+	if !ok || osd.FilterLogic == "" {
+		return "AND"
+	}
+	return osd.FilterLogic
+}
+
+func osdSelectionUsesUnboundedAll(selection *v1alpha1.StorageCephDeviceSelection, filterLogic string) bool {
+	if selection == nil || !selection.All || selection.Limit > 0 {
+		return false
+	}
+	if filterLogic != "" && filterLogic != "AND" && filterLogic != "OR" {
+		return false
+	}
+	return selection.Model == "" && selection.Vendor == "" && selection.Rotational == nil && selection.Size == ""
+}
+
+func osdSelectionIsDynamic(selection *v1alpha1.StorageCephDeviceSelection) bool {
+	if selection == nil || len(selection.Paths) > 0 || len(selection.PathSpecs) > 0 {
+		return false
+	}
+	return selection.All || selection.Model != "" || selection.Vendor != "" || selection.Rotational != nil || selection.Size != "" || selection.Limit > 0
 }
 
 func inspectOSDReadiness(cluster v1alpha1.StorageCluster) osdReadinessInspection {

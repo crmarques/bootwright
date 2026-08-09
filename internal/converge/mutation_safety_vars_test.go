@@ -42,6 +42,7 @@ func TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", docsPath, err)
 	}
+	documentedClasses := mutationSafetyVarDocumentedClasses(string(docs))
 
 	for name := range goVars {
 		if mutationSafetyVarCandidate(name) {
@@ -60,7 +61,33 @@ func TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs(t *testing.T) {
 		if !strings.Contains(string(docs), "`"+name+"`") {
 			t.Errorf("registered mutation-control variable %s is absent from %s", name, docsPath)
 		}
+		if !documentedClasses[name][registered[name]] {
+			t.Errorf("registered mutation-control variable %s is class %s but %s does not list it in that class", name, registered[name], docsPath)
+		}
 	}
+}
+
+func mutationSafetyVarDocumentedClasses(docs string) map[string]map[mutationSafetyVarClass]bool {
+	out := map[string]map[mutationSafetyVarClass]bool{}
+	for _, line := range strings.Split(docs, "\n") {
+		columns := strings.Split(line, "|")
+		if len(columns) < 4 {
+			continue
+		}
+		class := mutationSafetyVarClass(strings.ToLower(strings.TrimSpace(columns[1])))
+		switch class {
+		case mutationSafetyVarIntent, mutationSafetyVarAuthorization, mutationSafetyVarScope, mutationSafetyVarExecution:
+		default:
+			continue
+		}
+		for _, name := range mutationSafetyVarPattern.FindAllString(columns[2], -1) {
+			if out[name] == nil {
+				out[name] = map[mutationSafetyVarClass]bool{}
+			}
+			out[name][class] = true
+		}
+	}
+	return out
 }
 
 func mutationSafetyVarNames(t *testing.T, root string, include func(string, fs.DirEntry) bool) map[string]bool {

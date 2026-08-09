@@ -85,6 +85,9 @@ func validateStorageCephOSDSpec(owner string, osd *v1alpha1.StorageCephNodeOSD) 
 			continue
 		}
 		errs = append(errs, validateStorageCephDeviceSelection(owner+"."+selection.field, selection.value)...)
+		if selection.field != "dataDevices" && selection.value.All {
+			errs = append(errs, owner+"."+selection.field+".all is allowed only for dataDevices")
+		}
 	}
 	switch osd.FilterLogic {
 	case "", "AND", "OR":
@@ -140,11 +143,15 @@ func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.Storag
 	if len(selection.PathSpecs) > 0 {
 		pathForms++
 	}
-	if pathForms > 0 && selection.All {
-		errs = append(errs, owner+" must not set both an explicit path list and all")
-	}
 	if pathForms > 1 {
 		errs = append(errs, owner+" must set only one of paths or pathSpecs")
+	}
+	dynamicFilter := selection.Model != "" || selection.Vendor != "" || selection.Rotational != nil || selection.Size != ""
+	if pathForms > 0 && (selection.All || dynamicFilter) {
+		errs = append(errs, owner+" explicit paths are mutually exclusive with all, model, vendor, rotational, and size")
+	}
+	if selection.All && dynamicFilter {
+		errs = append(errs, owner+" all is mutually exclusive with model, vendor, rotational, and size")
 	}
 	errs = append(errs, validateStorageDevicePaths(owner+".paths", selection.Paths)...)
 	pathSpecPaths := make([]string, 0, len(selection.PathSpecs))
@@ -156,10 +163,9 @@ func validateStorageCephDeviceSelection(owner string, selection *v1alpha1.Storag
 		pathSpecPaths = append(pathSpecPaths, p.Path)
 	}
 	errs = append(errs, validateStorageDevicePaths(owner+".pathSpecs", pathSpecPaths)...)
-	selectsSomething := pathForms > 0 || selection.All || selection.Model != "" ||
-		selection.Vendor != "" || selection.Rotational != nil || selection.Size != "" || selection.Limit != 0
+	selectsSomething := pathForms > 0 || selection.All || dynamicFilter
 	if !selectsSomething {
-		errs = append(errs, owner+" must select devices (paths, pathSpecs, all, model, vendor, rotational, size, or limit)")
+		errs = append(errs, owner+" must select devices (paths, pathSpecs, all, model, vendor, rotational, or size); limit only caps another selector")
 	}
 	errs = append(errs, validateStorageCephDeviceSize(owner+".size", selection.Size)...)
 	if selection.Limit < 0 {

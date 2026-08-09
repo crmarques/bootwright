@@ -1557,6 +1557,11 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   `AND` or `OR`; `tpm2: true` requires `encrypted: true`; `osdsPerDevice`,
   `dbSlots`, and `walSlots` must be non-negative; and `dataAllocateFraction`,
   when set, must be in `(0, 1]`.
+  Within a device selector, `paths` and `pathSpecs` are mutually exclusive, and
+  either explicit-path form is mutually exclusive with `all`, `model`,
+  `vendor`, `rotational`, and `size`. `all` is allowed only on `dataDevices`
+  and is mutually exclusive with `model`, `vendor`, `rotational`, and `size`.
+  `limit` may cap another valid selector but does not select a device by itself.
   `tpm2: true` additionally requires every node it covers — per-host or through
   a fleet drivegroup — to install the `tpm2-tss` libraries, because cephadm
   seals the key by running `systemd-cryptenroll` in the host's own mount
@@ -1570,6 +1575,31 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   OSD device consumption is explicit opt-in, so consuming all available
   devices is the authored `osd: {dataDevices: {all: true}}`, never an
   omission default.
+  Before applying a persistent managed OSD service whose data, DB, or WAL
+  selector is dynamic (it has no `paths`/`pathSpecs` and uses `all`, `model`,
+  `vendor`, `rotational`, or `size`, optionally capped by `limit`), `apply`
+  resolves that selector against complete cephadm device inventory and readable
+  live-OSD metadata.
+  Existing live OSDs and mounted devices are excluded. Missing host inventory,
+  an unknown filter attribute, or an unreadable live-OSD, mount, or signature
+  probe fails closed before the service is applied; an unmounted matching
+  device carrying a signature is refused unless it belongs to the explicitly
+  authorized unbounded auto-reclaim below. Neither `--mode rebuild` nor
+  `--authorize data-loss` bypasses a narrowing filter: the operator must pin the
+  refused device in `paths`/`pathSpecs`, then run the controller-rendered
+  exact-path reclaim from the refusal. That command preserves the resolved
+  invocation and prior reclaim selection, unions
+  `data-loss,unowned-devices`, and exposes exactly one sentinel occupying the
+  `--reclaim-devices` argv value. The role may replace only that sentinel with
+  one shell-quoted, comma-joined, nonempty list containing the preserved static
+  paths and validated runtime paths. An empty or unrepresentable path, or any
+  template with other than one sentinel, fails closed before command rendering.
+  Only an effectively unbounded managed data selector may auto-reclaim under
+  `--mode rebuild --authorize data-loss`: `all: true` with no `limit`.
+  Validation already makes `all` data-only and mutually exclusive with
+  `model`/`vendor`/`rotational`/`size`. A `limit` remains narrowing for the gate
+  because the persistent service may select another matching disk after
+  availability changes (ADR 0054).
   `spec.ceph.topology.osdDrivegroups[]` are fleet OSD specs ({`serviceID`,
   `placement`, `osd`}): one cephadm OSD service spanning the resolved osd-role
   hosts instead of one spec per host. A host is owned by exactly one OSD spec —
@@ -3312,6 +3342,12 @@ command. The rest are registered per command, on the verbs that reach machines.
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
+- Rebuild intent never waives OSD device selection. A managed dynamic data,
+  DB, or WAL selector is read-only gated before its persistent service is
+  applied, and unknown inventory or probe state fails closed in every mode.
+  `data-loss` may auto-reclaim only an effectively unbounded managed data
+  selector; a narrowing selector must be changed to an explicit path before
+  `--reclaim-devices` can name the disk (ADR 0054).
 - `--mode rebuild`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
   services, infra-component services, node-config apply, per-host `virtctl`
@@ -3354,9 +3390,19 @@ command. The rest are registered per command, on the verbs that reach machines.
   expands only to every statically declared OSD data, DB, and WAL path of the
   selected owned StorageClusters; it cannot be combined with another entry, and
   a filter-only drivegroup that declares no static path makes `all` refuse rather
-  than broadening to whatever disks happen to be visible. This is the recovery path for an
-  owned OSD disk whose on-node marker was lost (for example by a managed-OS
-  reinstall). It is irreversible and fail-closed: it wipes only a named device
+  than broadening to whatever disks happen to be visible. The converge layer
+  returns typed selection evidence and no runnable text; the CLI, which owns the
+  resolved invocation, renders the continuation. When every selected cluster
+  uses an effectively unbounded managed data selector, it removes the
+  incompatible `--reclaim-devices all`, changes only the mode to rebuild,
+  unions `data-loss`, and preserves context, selection, range, prior accepted
+  authorizations, dry-run/output/confirmation, and SSH flags. For a narrowing
+  or mixed narrowing/unbounded selection it
+  requires a static desired path and repeats the exact original invocation after
+  that edit. Mixing `all` with paths is a command-shape error with command-free
+  correction. This is the recovery path for an owned OSD disk whose on-node
+  marker was lost (for example by a managed-OS reinstall). It is irreversible
+  and fail-closed: it wipes only a named device
   that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a
   system disk, and is on a host whose OSD marker does not already record it; a
   path that matches no declared OSD device is rejected, and if no selected

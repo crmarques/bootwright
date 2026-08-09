@@ -3695,8 +3695,16 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	if until := fmt.Sprint(reclaimTasks[refreshIdx]["until"]); !strings.Contains(until, "bootwright_ceph_filter_device_ls.attempts") {
 		t.Errorf("%s must let the inventory poll terminate at its attempt budget: ansible marks an exhausted `until` failed regardless of `failed_when: false` (task_executor sets result['failed']=True after the retry loop), so without the escape an authorized reclaim aborts the play before the OSD spec is applied. got until=%v", reclaimPath, until)
 	}
-	if findAnsibleTaskIndex(reclaimTasks, "Report filter-OSD hosts whose device inventory never appeared") < 0 {
-		t.Errorf("%s must report the hosts whose inventory never arrived, so a partial reclaim is not silent", reclaimPath)
+	if findAnsibleTaskIndex(reclaimTasks, "Refuse all-devices reclaim without complete refreshed inventory") < 0 {
+		t.Errorf("%s must refuse when refreshed inventory is incomplete, so an authorized reclaim cannot become partial or fail open", reclaimPath)
+	}
+	if findAnsibleTaskIndex(reclaimTasks, "Refuse an automatic OSD reclaim whose zap failed") < 0 {
+		t.Errorf("%s must refuse a failed zap before applying the persistent OSD service", reclaimPath)
+	}
+	for _, want := range []string{"bootwright_json_list_probe", "Refuse all-devices reclaim without readable live OSD metadata", "bootwright_apply_rebuild_invocation", "data-loss"} {
+		if !strings.Contains(reclaim, want) {
+			t.Errorf("%s must retain fail-closed reclaim input/remedy element %q", reclaimPath, want)
+		}
 	}
 	zapIdx := findAnsibleTask(t, reclaimTasks, "Zap dirty filter-selected OSD devices")
 	refuseZapIdx := findAnsibleTask(t, reclaimTasks, "Refuse an automatic OSD reclaim whose zap failed")
@@ -3725,6 +3733,60 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	coreIdx := strings.Index(svc, "/mnt/core-services.yaml")
 	if reclaimIdx < 0 || coreIdx < 0 || reclaimIdx > coreIdx {
 		t.Error("service_specs.yml must include osd_reclaim.yml before the core-services (OSD) apply")
+	}
+}
+
+func TestStorageCephadmDynamicFilterDeviceGateFailsClosed(t *testing.T) {
+	gatePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_filter_gate.yml"
+	gate := readRepoFile(t, gatePath)
+	for _, want := range []string{
+		"osdDeviceFilters",
+		"bootwright_ceph_osd_filter_candidates",
+		"ceph osd metadata",
+		"ignore_unreachable: true",
+		"wipefs",
+		"--no-act",
+		"Neither `--mode rebuild` nor `--authorize data-loss` bypasses this gate",
+		"bootwright_apply_reclaim_invocation",
+		"bootwright_apply_reclaim_devices",
+		"bootwright_reclaim_device_operand_probe",
+		"__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__",
+	} {
+		if !strings.Contains(gate, want) {
+			t.Errorf("%s must retain dynamic filter safety element %q", gatePath, want)
+		}
+	}
+	for _, forbidden := range []string{"\n          - zap", "\n          - --all", "\n          - --force"} {
+		if strings.Contains(gate, forbidden) {
+			t.Errorf("%s must stay read-only and fail closed (found %q)", gatePath, forbidden)
+		}
+	}
+
+	tasks := readAnsibleTasks(t, gatePath)
+	gateBlockIdx := findAnsibleTask(t, tasks, "Gate dynamically selected OSD devices before applying their service specs")
+	tasks = nestedAnsibleTasks(t, tasks[gateBlockIdx], "block")
+	inventoryIdx := findAnsibleTask(t, tasks, "Refuse dynamic OSD selection without complete device inventory")
+	metadataIdx := findAnsibleTask(t, tasks, "Read live OSD metadata for the dynamic device gate")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify unavailable devices against the authored OSD filters")
+	mountIdx := findAnsibleTask(t, tasks, "Probe dynamically selected unavailable devices for active mounts")
+	signatureIdx := findAnsibleTask(t, tasks, "Probe unmounted dynamic OSD candidates for existing signatures")
+	operandIdx := findAnsibleTask(t, tasks, "Refuse an invalid runtime OSD reclaim operand")
+	templateIdx := findAnsibleTask(t, tasks, "Refuse a malformed runtime OSD reclaim invocation template")
+	refuseIdx := findAnsibleTask(t, tasks, "Enforce dynamic OSD device emptiness before any reclaim")
+	if !(inventoryIdx < metadataIdx && metadataIdx < classifyIdx && classifyIdx < mountIdx && mountIdx < signatureIdx && signatureIdx < operandIdx && operandIdx < templateIdx && templateIdx < refuseIdx) {
+		t.Fatalf("dynamic filter gate order must be inventory -> live OSD exclusion -> classify -> mount -> signature -> validated retry operand/template -> refusal, got %d %d %d %d %d %d %d %d", inventoryIdx, metadataIdx, classifyIdx, mountIdx, signatureIdx, operandIdx, templateIdx, refuseIdx)
+	}
+
+	servicePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/service_specs.yml"
+	service := readRepoFile(t, servicePath)
+	filterIdx := strings.Index(service, "osd_filter_gate.yml")
+	reclaimIdx := strings.Index(service, "osd_reclaim.yml")
+	applyIdx := strings.Index(service, "/mnt/core-services.yaml")
+	if filterIdx < 0 || reclaimIdx < 0 || applyIdx < 0 || !(filterIdx < reclaimIdx && reclaimIdx < applyIdx) {
+		t.Fatalf("%s must execute the read-only dynamic gate before auto-reclaim and the persistent OSD service apply", servicePath)
+	}
+	if !strings.Contains(service, "selectattr('osdDeviceFilters', 'defined')") {
+		t.Fatalf("%s must require device inventory for every dynamic-filter host", servicePath)
 	}
 }
 

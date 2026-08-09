@@ -7,8 +7,8 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func appendMutatingInvocationExtraVars(plan *converge.WorkflowPlan, invocation resolvedInvocation) error {
-	pairs, err := mutatingInvocationExtraVars(invocation)
+func appendMutatingInvocationExtraVars(plan *converge.WorkflowPlan, invocation resolvedInvocation, effectiveReclaimDevices string) error {
+	pairs, err := mutatingInvocationExtraVars(invocation, effectiveReclaimDevices)
 	if err != nil {
 		return err
 	}
@@ -16,12 +16,12 @@ func appendMutatingInvocationExtraVars(plan *converge.WorkflowPlan, invocation r
 	return nil
 }
 
-func mutatingInvocationExtraVars(invocation resolvedInvocation) ([]string, error) {
+func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaimDevices string) ([]string, error) {
 	current, err := invocation.retry(retryIntent{})
 	if err != nil {
 		return nil, err
 	}
-	values := map[string]string{
+	values := map[string]any{
 		converge.MutatingInvocationExtraVar: current.String(),
 	}
 	if invocation.verb == invocationApply {
@@ -50,8 +50,14 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation) ([]string, error
 		if err != nil {
 			return nil, err
 		}
+		reclaim, preservedDevices, err := invocation.applyRuntimeReclaimRetryTemplate(effectiveReclaimDevices)
+		if err != nil {
+			return nil, err
+		}
 		values[converge.ApplyReconcileInvocationExtraVar] = reconcile.String()
 		values[converge.ApplyRebuildInvocationExtraVar] = rebuild.String()
+		values[converge.ApplyReclaimInvocationExtraVar] = reclaim.String()
+		values[converge.ApplyReclaimDevicesExtraVar] = preservedDevices
 		values[converge.ApplyFullInvocationExtraVar] = full.String()
 		values[converge.ApplyThroughBaseInvocationExtraVar] = throughBase.String()
 	}

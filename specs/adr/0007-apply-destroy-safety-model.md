@@ -14,6 +14,10 @@ scopes the data-loss gate to what a run actually destroys and excludes
 controller-side authorization policy from recorded evidence; the model below is
 otherwise unchanged and still governs.
 
+Refined by
+[ADR 0054](0054-a-filter-is-not-permission-to-wipe-a-device.md): rebuild intent
+and data-loss authorization never substitute for explicit OSD device selection.
+
 ## Context
 
 Bootwright's converge loop mutates real infrastructure: it reimages machines,

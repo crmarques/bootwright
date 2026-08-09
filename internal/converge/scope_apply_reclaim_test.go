@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -150,10 +151,15 @@ func TestValidateReclaimDevicesFlagRejectsAllMixedWithPaths(t *testing.T) {
 	if err == nil {
 		t.Fatal("mixing the all keyword with explicit paths must be rejected before any run work")
 	}
-	for _, want := range []string{"bootwright apply --reclaim-devices all", "explicit device path"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("mixing error must contain %q, got %v", want, err)
-		}
+	var mixed *ReclaimDevicesMixedAllError
+	if !errors.As(err, &mixed) {
+		t.Fatalf("mixing error = %T, want ReclaimDevicesMixedAllError", err)
+	}
+	if !reflect.DeepEqual(mixed.Entries, []string{"all", "/dev/sdb"}) {
+		t.Fatalf("mixed entries = %v, want the exact parsed evidence", mixed.Entries)
+	}
+	if got := err.Error(); got == "" || strings.Contains(got, "bootwright apply") {
+		t.Fatalf("converge must return evidence-only guidance without assembling a runnable command, got %q", got)
 	}
 	for _, ok := range []string{"", "all", "/dev/sdb,/dev/sdc"} {
 		if err := ValidateReclaimDevicesFlag(ok); err != nil {
@@ -208,9 +214,14 @@ func TestResolveReclaimDevicesAllRefusesFilterOnlySelections(t *testing.T) {
 	if err == nil {
 		t.Fatal("an all:true selection names no static path, so --reclaim-devices all must refuse and steer to the rebuild reclaim")
 	}
-	for _, want := range []string{"no static OSD device path", "--mode rebuild --authorize data-loss"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("refusal must contain %q, got %v", want, err)
-		}
+	var none *ReclaimAllNoDeclaredDevicesError
+	if !errors.As(err, &none) {
+		t.Fatalf("resolve error = %T, want ReclaimAllNoDeclaredDevicesError", err)
+	}
+	if !reflect.DeepEqual(none.Clusters, []string{"ceph1"}) || !reflect.DeepEqual(none.EffectiveUnboundedClusters, []string{"ceph1"}) {
+		t.Fatalf("resolve evidence = %#v, want ceph1 as selected and effectively unbounded", none)
+	}
+	if strings.Contains(err.Error(), "bootwright apply") {
+		t.Fatalf("converge must not assemble a runnable retry, got %q", err)
 	}
 }

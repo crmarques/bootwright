@@ -111,8 +111,9 @@ proceeds only on `y`. For automation, pass `--authorize data-loss` alongside
 `--yes`; `--yes` on its own answers only the ordinary confirmation and **never**
 authorizes data loss, so a destructive rebuild under `--yes` without
 `--authorize data-loss` fails closed. The same token authorizes the two storage
-data-loss operations: the `all: true` OSD auto-reclaim that zaps dirty declared
-disks before an OSD apply, and an explicit `--reclaim-devices` run (below).
+data-loss operations: auto-reclaim for an effectively unbounded managed
+`dataDevices.all: true` selection, and an explicit `--reclaim-devices` run
+(below). A narrowing device filter never rides that authorization.
 `--authorize data-loss` warns that it had no effect on a run that plans no
 data-loss action.
 
@@ -564,10 +565,32 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
     The single word `all` stands in for every declared OSD device of the
     selected owned cluster(s) — `--reclaim-devices all` — so a whole-cluster
     reclaim needs no path list. It expands to exactly the statically declared
-    paths (`nodes[].devices`, `dataDevices.paths`, `pathSpecs`) and keeps every
+    paths (`nodes[].devices` and data/DB/WAL `paths`/`pathSpecs`) and keeps every
     per-device gate below; it cannot be combined with explicit paths, and on a
-    cluster whose OSDs are declared only with `dataDevices.all: true` it refuses
-    and points at the `--mode rebuild` reclaim instead.
+    cluster with no statically declared paths it refuses.
+
+    Dynamic data, DB, and WAL selectors are read-only gated before Bootwright
+    applies the persistent OSD service. If a `model`/`vendor`/`rotational`/
+    `size`/`limit` selector matches a dirty unmounted disk, neither `--mode
+    rebuild` nor `--authorize data-loss` bypasses the refusal. Pin that disk in
+    `paths`/`pathSpecs`, then reclaim the now-explicit path:
+
+    ```
+    bootwright apply --clusters ceph-storage --reclaim-devices /dev/disk/by-id/wwn-0x... --authorize data-loss,unowned-devices
+    ```
+
+    The actual refusal prints a controller-built version of that command. It
+    preserves the current context, selection, mode, prior reclaim paths and
+    authorizations, dry-run/output/confirmation, and SSH flags; the runtime path
+    is shell-quoted as one operand and cannot add flags.
+
+    The automatic alternative is available only for a managed data selector
+    that is effectively unbounded: `all: true` with no `limit`. Validation
+    forbids combining `all` with `model`/`vendor`/`rotational`/`size`. Run
+    `bootwright apply --clusters ceph-storage --mode rebuild --authorize
+    data-loss` to authorize that deliberately broad reclaim. A `limit` remains
+    gated against every dirty match because cephadm keeps the service and may
+    select a different matching disk later.
 
     Only a selected device that is a declared OSD device of an owned cluster, is
     **not mounted or a system disk**, and is on a host whose OSD marker does not

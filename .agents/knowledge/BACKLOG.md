@@ -28,32 +28,6 @@ learned; this file records what it still owes.
 
 ## Entries
 
-## B-002 — Narrowing-filter OSD reclaim bypasses the emptiness guard
-- Status: open
-- Area: ceph / osd-safety
-- Origin: OSD-install hardening (`--reclaim-devices`), narrowing-filter case
-- Problem: `all: true` OSD device sets auto-reclaim dirty disks under
-  `--authorize data-loss`, but a *narrowing* device filter (paths/model/size
-  selectors) still bypasses the disk-emptiness guard, so a filtered OSD apply can
-  proceed against non-empty disks without the same fail-closed check.
-- Exit: extend the emptiness/reclaim guard to cover narrowing filters, or
-  document a deliberate boundary; add a regression test alongside the existing
-  OSD device-safety pins.
-- Related: [ceph-osd-device-safety.md](ceph-osd-device-safety.md)
-
-## B-003 — `--mode rebuild` vs the OSD-device-empty install gate
-- Status: open
-- Area: ceph / apply-modes
-- Origin: Ceph apply-modes design (open OSD-device gate)
-- Problem: the interaction between `apply --mode rebuild` and the
-  OSD-device-empty install gate is unresolved — whether a drift-rebuild should
-  be allowed to proceed against a device the install-time gate would refuse is
-  still open.
-- Exit: decide and document the precedence of the drift-rebuild path over the
-  install-time device gate; encode it as a validator/preflight rule with a test.
-- Related: [ceph-override-structural-rebuild.md](ceph-override-structural-rebuild.md),
-  [ceph-osd-device-safety.md](ceph-osd-device-safety.md)
-
 ## B-005 — Kickstart merges bond and VLAN into one stanza, capping bond MTU
 - Status: open
 - Area: managed-os / networking / render

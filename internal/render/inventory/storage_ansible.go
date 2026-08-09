@@ -368,25 +368,3 @@ func storageRGWIngressTLSVars(state v1alpha1.State, cluster v1alpha1.StorageClus
 	}
 	return out
 }
-
-func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
-	var out []any
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-		host := map[string]any{
-			"hostname":      node.MachineRef.Name,
-			"cephHostname":  node.Name,
-			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
-			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
-			"devices":       cephrender.OSDGateDevicePaths(cluster, node),
-			"rootFSGiB":     topology.NodeRootFilesystemGiB(cluster, node),
-		}
-		if node.Site != "" {
-			host["site"] = node.Site
-		}
-		if topology.OSDHostUsesAllDevices(cluster, node) {
-			host["osdReclaimAll"] = true
-		}
-		out = append(out, host)
-	}
-	return out
-}

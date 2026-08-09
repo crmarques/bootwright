@@ -114,7 +114,7 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 			refusals = append(refusals, err)
 		}
 		if resolved, resolveErr := converge.ResolveReclaimDevices(planState, clusters, reclaimDevices); resolveErr != nil {
-			refusals = append(refusals, resolveErr)
+			refusals = append(refusals, reclaimResolutionRefusal(resolveErr, invocation))
 		} else if len(clusters) > 0 {
 			if unmatched, declared := converge.UnmatchedReclaimDevices(planState, clusters, resolved); len(unmatched) > 0 {
 				refusals = append(refusals, reclaimUnmatchedError(unmatched, clusters, declared))

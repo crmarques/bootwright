@@ -1,12 +1,15 @@
 # Ceph OSD device safety: markers, gates, reclaim, and the readiness poll
 
-**Constraint:** Every device gate covers only explicitly named block-device
-paths: the `devices` shorthand, the per-host drivegroup's explicit data/db/wal
-paths, and a covering fleet `osdDrivegroups[]` entry's explicit paths —
-deduplicated, shorthand first. Filter/`all: true` selections are resolved
-on-host by ceph-volume and are not statically enumerable, so a host authored
-purely by filter gets **no** install/destroy device gate; only ceph-volume's
-own refusal to consume non-empty devices backs it.
+**Constraint:** Device safety has two selection contracts. Explicit block-device
+paths — `devices`, per-host data/db/wal `paths`/`pathSpecs`, and covering fleet
+drivegroup paths — are deduplicated and pass through the marker, emptiness,
+reclaim, and destroy gates below. Managed dynamic data/db/wal selectors are not
+statically enumerable, so `apply` renders their actual filter fields and runs a
+read-only live-inventory gate before the persistent OSD service is applied.
+Unknown inventory or probe state fails closed. Destroy still cannot infer an
+arbitrary path from a filter; its filter-host cleanup is limited to devices
+whose Ceph signatures establish the teardown target under the separate destroy
+rules below.
 
 **Constraint:** Each apply stamps an on-node OSD ownership marker
 (`bootwright_ceph_osd_marker_path`) recording the exact devices Bootwright
@@ -206,56 +209,98 @@ health poll and refuses to record success while the cluster is unreachable or
 `HEALTH_ERR`; `HEALTH_WARN` remains acceptable because expected operational
 warnings do not make the desired topology unusable.
 
-**Constraint (all-devices OSD auto-reclaim):** A host authored by filter renders
-`devices: []`, so the Pass-1 static gate/reclaim/marker no-op for it and a
-reinstall onto disks carrying a prior Ceph signature fails at the readiness poll
-with zero OSDs. `apply --mode rebuild --authorize data-loss` closes that FOR `all: true`
-hosts ONLY: the CLI emits `bootwright_ceph_filter_reclaim_clusters` for in-scope
-clusters that have a host whose OSD selection is `data_devices.all=true`
-(`topology.ClusterHasAllDevicesOSDHost`, mirrored per host by the rendered
-`osdReclaimAll` flag) — never under `--mode rebuild` alone, `--yes` alone, or
-dry-run. Narrowing filters (`model`/`size`/`rotational`/`vendor`/`limit`) are
-DELIBERATELY excluded: the ansible layer only knows the boolean flag, not the
-predicate (which lives solely in `core-services.yaml`), so auto-zapping every
-unavailable disk on a narrowing-filter host would wipe disks the filter never
-targets; those hosts fall back to the readiness diagnostic + manual clean. On
-`all: true` every non-OS disk genuinely is a target, so wiping is in-scope.
-`osd_reclaim.yml` runs on the SEED in Pass 2, inserted in `service_specs.yml`
-BETWEEN the host-spec apply (which adds every host to the orchestrator) and the
-OSD (core-services) apply, so ceph resolves each host's devices for us (`ceph
-orch device ls --format json --refresh`, retried until every declared host
-reports inventory) and the zap lands before the OSD spec, on clean disks cephadm
-then consumes within the readiness wait.
+**Constraint (dynamic DeviceSelection validation is part of the wipe boundary):**
+The prior API accepted shapes cephadm rejects and the reclaim predicate read
+only the `all` boolean. `all: true` plus a narrowing filter or `limit`, and even
+an `unmanaged: true` service, could therefore be classified as permission to zap
+every unavailable disk before cephadm rejected or ignored the service. Desired
+validation now mirrors Ceph: `paths` and `pathSpecs` are mutually exclusive;
+either explicit form cannot combine with `all`/`model`/`vendor`/`rotational`/
+`size`; `all` is data-only and cannot combine with those filters; and `limit`
+only caps another selector. Runtime classification remains defensive, but
+ambiguous desired state never reaches it.
 
-**Constraint (auto-reclaim safety, all fail-closed):** The reclaim is skipped
-entirely unless BOTH `ceph orch device ls` and `ceph osd metadata` return rc 0 —
-without a trustworthy live-OSD list a raw (unmounted) bluestore OSD is
-indistinguishable from a dirty disk, so an unreadable input wipes nothing. A
-candidate is a device the host reports `available: false` whose path is excluded
-by NEITHER of two independent live-OSD gates: (1) the device's OWN `osd_ids`
-field from `ceph orch device ls` is non-empty (authoritative and
-path-format-agnostic — this is what protects a live OSD on a `/dev/mapper`,
-by-id, or by-path device, where basename reconstruction would silently fail
-open); (2) its kernel path is in the `/dev/<basename>` set rebuilt from `ceph osd
-metadata` (a secondary guard for any device the inventory does not mark). Each
-survivor is then mount-probed with `lsblk` DELEGATED to its owning host
-(`ignore_unreachable: true` so a transiently-unreachable node fails the probe and
-is skipped rather than aborting the `any_errors_fatal` play); a non-empty
-mountpoint/swap OR any probe failure excludes it (protects the OS/root disk,
-in-use data disks, and unreachable/failed probes — never a false zap). Survivors
-are wiped with `ceph orch device zap <host> <path> --force`. The role collects
-every zap result, then fails before applying the OSD service spec if any zap
-failed; the diagnostic names the host, device, action, external output, and
-the exact authorized rebuild command. Static-path hosts,
-non-`all:true` clusters, and unauthorized runs are never touched. KNOWN
-LIMITATION: a co-resident FOREIGN live Ceph cluster's OSDs are absent from THIS
-cluster's `osd_ids`/`ceph osd metadata` and, being raw bluestore, unmounted — so
-under `all: true` + `--mode rebuild --authorize data-loss` their disks would be zapped.
-`all: true` asserts every disk on the host belongs to this cluster; the CLI
-warning states this explicitly (do not use `all: true` on a host shared with
-another Ceph cluster or holding data to keep). The unreliable-diagnostic
-counterpart: the readiness-failure device dump now runs `ceph orch device ls
---wide --refresh` with a short retry so reject reasons are populated, not empty.
+**Constraint (the dynamic filter gate consumes rendered intent, not the service
+spec):** `storageHostsVars` renders `osdDeviceFilters` for every managed dynamic
+data, DB, and WAL selector, each with the role, effective `filterLogic`, and the
+authored `all`/`model`/`vendor`/`rotational`/`size`/`limit` fields. That value is
+the Go-to-Ansible contract. `osd_filter_gate.yml` runs on the seed after host
+admission, before optional auto-reclaim and before `/mnt/core-services.yaml` is
+applied; it never re-parses the persistent service spec and runs no destructive
+command.
+
+The gate requires complete `ceph orch device ls --format json --refresh`
+inventory for every dynamic host and readable `ceph osd metadata`. It excludes
+this cluster's live OSDs through inventory `osd_ids` and metadata-derived paths,
+then evaluates every `available: false` device against each role's filter.
+Missing availability, path, model, vendor, rotational, or size facts are
+`unknown`, never a non-match. The matcher uses Ceph's decimal size units,
+inclusive ranges, substring model/vendor matching, and the authored AND/OR
+logic. A candidate matched by more than one role is probed once and reports all
+roles.
+
+Every matching candidate is mount-probed on its owning host. A readable mounted
+device is not consumable by ceph-volume and is excluded; an unreachable host or
+unreadable mount verdict fails closed. An unmounted candidate is probed with
+read-only `wipefs --no-act --noheadings`; a failed probe or any signature refuses
+before the service apply unless an effectively unbounded selection is already
+authorized for the auto-reclaim step. Neither `--mode rebuild` nor `--authorize
+data-loss` bypasses the refusal for a narrowing selector. The in-product remedy
+is to pin the named disk in `paths`/`pathSpecs`, then run the exact controller-
+rendered reclaim invocation in the refusal. `bootwright_apply_reclaim_invocation`
+preserves context, selection, mode, prior effect flags, authorizations, dry-run,
+output, confirmation and SSH flags, unions `data-loss,unowned-devices`, and
+contains one sentinel as the entire reclaim operand. The role validates and
+comma-joins `bootwright_apply_reclaim_devices` with the runtime paths, quotes the
+whole value, asserts one sentinel, and replaces only it. Commas, newlines, NULs,
+relative paths, empty lists and sentinel collisions fail closed; shell metacharacters
+remain data in one argv value. This converts a host-derived match into explicit,
+reviewable wipe intent without letting a runtime path inject flags.
+
+`limit` is deliberately ignored when deciding whether a dirty match is possible.
+The cephadm service persists beyond the inventory snapshot and may select a
+different matching disk when availability changes; gating an arbitrary current
+first N would silently clear a future target.
+
+**Constraint (effective-unbounded auto-reclaim):** Automatic reclaim is limited
+to a managed data selector with `all: true` and no `limit`. Validation already
+makes `all` data-only and mutually exclusive with the narrowing filters.
+`unmanaged: true`, a limit, every model/vendor/rotational/size filter, every
+static selection, and every unauthorized run are excluded.
+`topology.OSDHostUsesAllDevices` is the
+shared effective-selection predicate: the CLI uses the cluster consequence to
+emit `bootwright_ceph_filter_reclaim_clusters`, the renderer mirrors it as
+`osdReclaimAll`, and the gate, warning, and reclaim therefore cannot disagree.
+It runs only under `apply --mode rebuild --authorize data-loss`, never under
+rebuild alone, `--yes` alone, or dry-run.
+
+`--reclaim-devices all` is not an alias for this dynamic behavior. When no
+static path exists, converge returns a typed evidence-only error. The CLI changes
+the exact invocation to rebuild and removes the incompatible reclaim flag only
+when every selected cluster is effectively unbounded; for a narrowing or mixed
+selection it requires a static desired path and repeats the original invocation
+after the edit. Mixing `all` and paths is rejected without constructing a
+command.
+
+The auto-reclaim still fails closed around live state. Both device inventory and
+OSD metadata must be readable before any zap. A candidate is
+`available: false`, has no inventory `osd_ids`, is absent from metadata-derived
+live-OSD paths, and has a successful delegated mount probe with no mountpoint or
+swap. Only then does `ceph orch device zap <host> <path> --force` run. The
+earlier read-only gate has already proved that candidate in scope. The result of
+every zap is asserted before the persistent OSD service: a non-zero result
+refuses with its rc/stdout/stderr and the exact controller-rendered retry. That
+retry preserves the operator's resolved context, selection, authorization,
+dry-run, and SSH flags while changing only the rebuild intent required to
+continue, instead of falling through to an impossible readiness wait.
+
+The known blast radius remains explicit: a co-resident foreign Ceph cluster's
+raw, unmounted OSD may be absent from this cluster's inventory and metadata. An
+effective unbounded `all` selection asserts every such disk belongs to this
+service, so the CLI warning forbids using it on a host that carries another Ceph
+cluster or data to keep. The readiness-failure device dump uses `ceph orch
+device ls --wide --refresh` with a short retry so rejection reasons are
+populated rather than empty.
 
 **Constraint (every `until:` in this role needs an attempt escape, even with
 `failed_when: false`):** ansible-core applies `failed_when` inside the retry

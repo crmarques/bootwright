@@ -41,9 +41,12 @@
       until: >-
         (
           bootwright_ceph_filter_device_ls.rc == 0
+          and (bootwright_ceph_filter_device_ls.stdout | default('')
+               | bootwright.core.bootwright_json_list_probe).valid
           and (bootwright_ceph_filter_host_names
                | difference(
-                   (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
+                   (bootwright_ceph_filter_device_ls.stdout | default('')
+                    | bootwright.core.bootwright_json_list_probe).value
                    | selectattr('devices', 'defined')
                    | rejectattr('devices', 'equalto', [])
                    | map(attribute='name') | list)) | length == 0
@@ -52,34 +55,36 @@
         ((bootwright_ceph_filter_device_ls.attempts | default(1) | int)
          >= (bootwright_ceph_filter_reclaim_retries | default(30) | int))
 
-    - name: Report filter-OSD hosts whose device inventory never appeared
-      ansible.builtin.debug:
-        msg: >-
-          Not auto-reclaiming on
-          {{ bootwright_ceph_filter_inventory_missing | join(', ') }}: cephadm
-          reported no device inventory for
-          {{ bootwright_ceph_filter_inventory_missing | length }} of
-          {{ bootwright_ceph_filter_host_names | length }} all-devices OSD host(s)
-          within {{ bootwright_ceph_filter_reclaim_retries | default(30) }} attempts, so a
-          dirty disk on them cannot be told apart from one cephadm has not scanned
-          yet. Failing open on the scan, not on the wipe — no device is zapped on
-          those hosts. They will surface at the OSD readiness check if their disks
-          are in fact unusable.
+    - name: Parse refreshed OSD device inventory without trusting output shape
+      ansible.builtin.set_fact:
+        bootwright_ceph_filter_device_probe: >-
+          {{ bootwright_ceph_filter_device_ls.stdout | default('')
+             | bootwright.core.bootwright_json_list_probe }}
+
+    - name: Refuse all-devices reclaim without complete refreshed inventory
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_filter_device_ls.rc | default(1) | int == 0
+          - bootwright_ceph_filter_device_probe.valid
+          - bootwright_ceph_filter_inventory_missing | length == 0
+        fail_msg: >-
+          Refusing authorized OSD auto-reclaim on
+          {{ bootwright_selected_storage_cluster.name }}: cephadm did not return a valid,
+          complete refreshed device inventory for
+          {{ bootwright_ceph_filter_inventory_missing | join(', ') }}. An unreadable
+          inventory is not proof that a disk is safe to wipe, so no device was zapped and
+          the persistent OSD service was not applied. Restore cephadm host access, verify
+          `ceph orch device ls --format json --refresh`, then re-run
+          `{{ bootwright_apply_rebuild_invocation }}`.
+        quiet: true
       vars:
         bootwright_ceph_filter_inventory_missing: >-
           {{ bootwright_ceph_filter_host_names
              | difference(
-                 (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
+                 bootwright_ceph_filter_device_probe.value
                  | selectattr('devices', 'defined')
                  | rejectattr('devices', 'equalto', [])
                  | map(attribute='name') | list) }}
-      when: >-
-        (bootwright_ceph_filter_host_names
-         | difference(
-             (bootwright_ceph_filter_device_ls.stdout | default('[]', true) | from_json)
-             | selectattr('devices', 'defined')
-             | rejectattr('devices', 'equalto', [])
-             | map(attribute='name') | list)) | length > 0
 
     - name: Collect live OSD device metadata for the reclaim safety gate
       ansible.builtin.command:
@@ -98,26 +103,34 @@
 
     - name: Resolve whether the filter-OSD reclaim safety inputs are trustworthy
       ansible.builtin.set_fact:
+        bootwright_ceph_filter_metadata_probe: >-
+          {{ bootwright_ceph_filter_osd_metadata.stdout | default('')
+             | bootwright.core.bootwright_json_list_probe }}
         bootwright_ceph_filter_reclaim_ready: >-
           {{ (bootwright_ceph_filter_device_ls.rc | default(1) | int) == 0
-             and (bootwright_ceph_filter_osd_metadata.rc | default(1) | int) == 0 }}
+             and bootwright_ceph_filter_device_probe.valid
+             and (bootwright_ceph_filter_osd_metadata.rc | default(1) | int) == 0
+             and (bootwright_ceph_filter_osd_metadata.stdout | default('')
+                  | bootwright.core.bootwright_json_list_probe).valid }}
 
-    - name: Skip filter-OSD reclaim when live OSDs cannot be enumerated
-      ansible.builtin.debug:
-        msg: >-
-          Skipping filter-OSD auto-reclaim on {{ bootwright_selected_storage_cluster.name }}:
-          the cluster device inventory (ceph orch device ls) or live OSD metadata
-          (ceph osd metadata) could not be read, so a dirty disk cannot be told apart
-          from a live OSD. Failing closed — no device is wiped. Re-run once the cluster
-          is reachable, or clean the disks manually.
-      when: not (bootwright_ceph_filter_reclaim_ready | default(false) | bool)
+    - name: Refuse all-devices reclaim without readable live OSD metadata
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_filter_reclaim_ready | default(false) | bool
+        fail_msg: >-
+          Refusing authorized OSD auto-reclaim on
+          {{ bootwright_selected_storage_cluster.name }}: `ceph osd metadata` did not
+          return a JSON list, so Bootwright cannot exclude this cluster's live OSDs.
+          No device was zapped and the persistent OSD service was not applied. Restore
+          cluster reachability, verify `cephadm shell -- ceph osd metadata --format
+          json`, then re-run `{{ bootwright_apply_rebuild_invocation }}`.
+        quiet: true
 
     - name: Reset the filter-OSD reclaim candidate accumulator
       ansible.builtin.set_fact:
         bootwright_ceph_filter_reclaim_candidates: []
 
     - name: Resolve dirty all-devices OSD reclaim candidates per host
-      when: bootwright_ceph_filter_reclaim_ready | default(false) | bool
       ansible.builtin.set_fact:
         bootwright_ceph_filter_reclaim_candidates: >-
           {{ bootwright_ceph_filter_reclaim_candidates
@@ -136,13 +149,13 @@
         label: "{{ bootwright_ceph_filter_host.cephHostname }}"
       vars:
         bootwright_ceph_filter_host_devices: >-
-          {{ (bootwright_ceph_filter_device_ls.stdout | default('[]') | from_json)
+          {{ bootwright_ceph_filter_device_probe.value
              | selectattr('name', 'defined')
              | selectattr('name', 'equalto', bootwright_ceph_filter_host.cephHostname)
              | map(attribute='devices', default=[]) | flatten
              | selectattr('path', 'defined') | list }}
         bootwright_ceph_filter_excluded_paths: >-
-          {{ ((bootwright_ceph_filter_osd_metadata.stdout | default('[]') | from_json)
+          {{ (bootwright_ceph_filter_metadata_probe.value
               | selectattr('hostname', 'defined')
               | selectattr('hostname', 'equalto', bootwright_ceph_filter_host.cephHostname)
               | map(attribute='devices', default='') | map('default', '', true)

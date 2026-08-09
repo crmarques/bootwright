@@ -49,6 +49,11 @@ and `degraded-quorum` tokens, and a third consuming verb,
 `--authorize` is keyed to a verb *set* from there on, not to the `apply`/`destroy`
 pair below.
 
+Refined by
+[ADR 0054](0054-a-filter-is-not-permission-to-wipe-a-device.md): `data-loss`
+accepts a known wipe consequence but never selects a disk or waives an unknown
+device probe.
+
 ## Context
 
 The destructive surface of `apply` and `destroy` had grown into nine

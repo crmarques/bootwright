@@ -19,7 +19,7 @@ what turns "forgot" into a red test.
 | a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed | `internal/repo/checks/shared_service_classification_test.go` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
-| a refusal | the object, the consequence in the kind's own vocabulary, and the literal `bootwright …` invocation **carrying the run's own scope and stage flags** and any required token | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
+| a refusal | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; converge errors remain typed evidence only | the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
 | an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
 
 Three failure shapes recur often enough to name:
@@ -388,12 +388,21 @@ see only part of a run and cannot recover its context, persistent SSH flags,
 selection axes, effect flags, or prior authorizations from a task-local cluster
 or machine. Real apply and destroy runs therefore receive the shell-quoted
 `bootwright_mutating_invocation` plus typed apply variants for reconcile,
-rebuild, full scope, and `--through base`. The role vars contract publishes the
+rebuild, full scope, `--through base`, and a runtime-reclaim template. That
+template contains one unmistakable sentinel as the entire
+`--reclaim-devices` value and separately carries the controller-resolved paths
+already selected. The role validates a nonempty comma-representable `/dev/`
+runtime path set, joins it with those preserved paths, shell-quotes the whole
+operand, asserts exactly one sentinel, and replaces only that value. A path with
+spaces, quotes, dollars, backticks, backslashes, or shell operators remains one
+argv value; commas, newlines, NULs, relative paths, and sentinel collisions fail
+closed. The role vars contract publishes the
 set and `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` rejects a role
 that prints a literal apply/destroy command or consumes an unregistered variant.
-When a role discovers an operand only at runtime, it names that one additive
-change against the resolved base; it does not widen or independently assemble
-the rest of the command.
+`TestRuntimeReclaimRetryTemplateRoundTripsHostilePathsAndEveryResolvedFlag`
+shell-parses the hostile-path substitution and proves both the exact operand and
+all resolved flags survive. A role never splices a verb or flag around a runtime
+value.
 
 **Every flag on a mutating verb is exercised by the matrix.**
 `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix` walks the registered

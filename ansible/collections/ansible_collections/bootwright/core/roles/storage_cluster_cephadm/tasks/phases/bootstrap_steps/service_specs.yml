@@ -111,6 +111,11 @@
              | selectattr('osdReclaimAll', 'defined')
              | selectattr('cephHostname', 'defined')
              | rejectattr('cephHostname', 'equalto', '')
+             | map(attribute='cephHostname') | list)
+          + (bootwright_selected_storage_cluster.hosts | default([])
+             | selectattr('osdDeviceFilters', 'defined')
+             | selectattr('cephHostname', 'defined')
+             | rejectattr('cephHostname', 'equalto', '')
              | map(attribute='cephHostname') | list))
          | unique | list }}
     bootwright_ceph_osd_scan_mode: >-
@@ -158,9 +163,12 @@
   until: >-
     (
       bootwright_ceph_osd_scan_device_ls.rc == 0
+      and (bootwright_ceph_osd_scan_device_ls.stdout | default('')
+           | bootwright.core.bootwright_json_list_probe).valid
       and (bootwright_ceph_declared_osd_hosts
            | difference(
-               (bootwright_ceph_osd_scan_device_ls.stdout | default('[]', true) | from_json)
+               (bootwright_ceph_osd_scan_device_ls.stdout | default('')
+                | bootwright.core.bootwright_json_list_probe).value
                | selectattr('devices', 'defined')
                | rejectattr('devices', 'equalto', [])
                | map(attribute='name') | list)) | length == 0
@@ -180,7 +188,8 @@
     bootwright_ceph_osd_scan_missing_hosts: >-
       {{ bootwright_ceph_declared_osd_hosts
          | reject('in',
-                  (bootwright_ceph_osd_scan_device_ls.stdout | default('[]', true) | from_json)
+                  (bootwright_ceph_osd_scan_device_ls.stdout | default('')
+                   | bootwright.core.bootwright_json_list_probe).value
                   | selectattr('devices', 'defined')
                   | rejectattr('devices', 'equalto', [])
                   | map(attribute='name') | list) | list }}
@@ -215,6 +224,9 @@
       {{ (bootwright_ceph_osd_scan_device_ls.stdout | default('') | trim)
       or ('(ceph orch device ls failed, rc=' ~ (bootwright_ceph_osd_scan_device_ls.rc | default('unknown')) ~ ')') }}
   when: bootwright_ceph_osd_scan_missing_hosts | default([]) | length > 0
+
+- name: Refuse dirty OSD devices selected through dynamic filters
+  ansible.builtin.include_tasks: osd_filter_gate.yml
 
 - name: Auto-reclaim dirty filter-selected OSD devices
   ansible.builtin.include_tasks: osd_reclaim.yml

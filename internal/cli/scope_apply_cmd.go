@@ -331,7 +331,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 		}
 		if !dryRun && usesAnsible {
-			if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+			if err := appendMutatingInvocationExtraVars(&plan, invocation, reclaimDevices); err != nil {
 				return failErr(1, err)
 			}
 		}

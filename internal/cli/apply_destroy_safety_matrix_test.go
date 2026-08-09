@@ -504,7 +504,23 @@ func safetyPreviewAuthorizationCases() []safetyCase {
 		name:    "apply/reclaim-devices all mixed with a path is a usage error",
 		args:    []string{"apply", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--reclaim-devices", "all,/dev/sdb", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictUsageError,
-		want:    []string{"--reclaim-devices lists all together", "bootwright apply --reclaim-devices all"},
+		want:    []string{"--reclaim-devices cannot combine all", "choose all alone or name only explicit paths"},
+	}, {
+		name:     "apply/preview: reclaim all on an unbounded selector prints the exact rebuild retry",
+		baseline: safetyBaselineVirtualCeph,
+		seed:     seedUnboundedAllDevicesApply,
+		args:     []string{"apply", "--through", "base", "--clusters", safetyVirtualCephCluster, "--reclaim-devices", "all", "--authorize", authorizeForeignDaemons + "," + authorizeDataLoss, "--dry-run", "--verbose", "--ask-become-pass=false"},
+		verdict:  verdictAccepted,
+		want:     []string{"matched no device", "effectively unbounded", "bootwright apply --mode rebuild --authorize foreign-daemons,data-loss", "--through base", "--clusters " + safetyVirtualCephCluster, "--dry-run", "--verbose", "--context matrix"},
+		deny:     []string{"--reclaim-devices all --"},
+	}, {
+		name:     "apply/runtime: reclaim all on an unbounded selector refuses before mutation with the exact rebuild retry",
+		baseline: safetyBaselineVirtualCeph,
+		seed:     seedUnboundedAllDevicesApply,
+		args:     []string{"apply", "--through", "base", "--clusters", safetyVirtualCephCluster, "--reclaim-devices", "all", "--authorize", authorizeForeignDaemons + "," + authorizeDataLoss, "--yes", "--ask-become-pass=false"},
+		verdict:  verdictUsageError,
+		want:     []string{"matched no device", "effectively unbounded", "bootwright apply --mode rebuild --authorize foreign-daemons,data-loss --yes", "--through base", "--clusters " + safetyVirtualCephCluster, "--context matrix"},
+		deny:     []string{"--reclaim-devices all --"},
 	}, {
 		name:    "apply/preview: host-decided apply tokens are disclosed as may be required",
 		args:    []string{"apply", "--stage", "base", "--clusters", safetyAdvancedCephCluster, "--dry-run", "--ask-become-pass=false"},
@@ -797,6 +813,10 @@ func safetyReplaceArbiterCases() []safetyCase {
 }
 
 func safetyStorageClusterInputPath(t *testing.T, ctx workspace.Context) string {
+	return safetyNamedStorageClusterInputPath(t, ctx, safetyAdvancedCephCluster)
+}
+
+func safetyNamedStorageClusterInputPath(t *testing.T, ctx workspace.Context, cluster string) string {
 	t.Helper()
 	files, err := desiredstate.LoadedInputFiles(ctx.InputPaths)
 	if err != nil {
@@ -808,12 +828,21 @@ func safetyStorageClusterInputPath(t *testing.T, ctx workspace.Context) string {
 			t.Fatalf("read %s: %v", file, err)
 		}
 		body := string(data)
-		if strings.Contains(body, "kind: "+v1alpha1.KindStorageCluster) && strings.Contains(body, "name: "+safetyAdvancedCephCluster) {
+		if strings.Contains(body, "kind: "+v1alpha1.KindStorageCluster) && strings.Contains(body, "name: "+cluster) {
 			return file
 		}
 	}
-	t.Fatalf("no %s input file declares %s", v1alpha1.KindStorageCluster, safetyAdvancedCephCluster)
+	t.Fatalf("no %s input file declares %s", v1alpha1.KindStorageCluster, cluster)
 	return ""
+}
+
+func seedUnboundedAllDevicesApply(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	path := safetyNamedStorageClusterInputPath(t, ctx, safetyVirtualCephCluster)
+	deviceBlock := "          devices:\n            - /dev/vdb\n            - /dev/vdc\n            - /dev/vdd\n"
+	allBlock := "          osd:\n            dataDevices:\n              all: true\n"
+	rewriteSafetyInput(t, path, [][2]string{{deviceBlock, allBlock}, {deviceBlock, allBlock}})
+	seedSuccessfulApply(t, ctx)
 }
 
 func rewriteSafetyInput(t *testing.T, path string, replacements [][2]string) {

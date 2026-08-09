@@ -11,6 +11,23 @@ import (
 
 const ReclaimDevicesAll = "all"
 
+type ReclaimDevicesMixedAllError struct {
+	Entries []string
+}
+
+func (e *ReclaimDevicesMixedAllError) Error() string {
+	return fmt.Sprintf("--reclaim-devices cannot combine %s with explicit device paths: choose %s alone or name only explicit paths", ReclaimDevicesAll, ReclaimDevicesAll)
+}
+
+type ReclaimAllNoDeclaredDevicesError struct {
+	Clusters                   []string
+	EffectiveUnboundedClusters []string
+}
+
+func (e *ReclaimAllNoDeclaredDevicesError) Error() string {
+	return fmt.Sprintf("--reclaim-devices %s matched no device: selected Ceph cluster(s) %s declare no static OSD device path", ReclaimDevicesAll, strings.Join(e.Clusters, ", "))
+}
+
 func SplitReclaimDevices(devices string) []string {
 	var out []string
 	for _, raw := range strings.Split(devices, ",") {
@@ -60,7 +77,7 @@ func ValidateReclaimDevicesFlag(devices string) error {
 	}
 	for _, entry := range entries {
 		if entry == ReclaimDevicesAll {
-			return fmt.Errorf("--reclaim-devices lists %s together with other entries: %s already selects every declared OSD device of the selected owned cluster(s), so run `bootwright apply --reclaim-devices %s` alone, or name only explicit device paths", ReclaimDevicesAll, ReclaimDevicesAll, ReclaimDevicesAll)
+			return &ReclaimDevicesMixedAllError{Entries: append([]string(nil), entries...)}
 		}
 	}
 	return nil
@@ -78,11 +95,10 @@ func ResolveReclaimDevices(state v1alpha1.State, owned []string, devices string)
 }
 
 func reclaimAllNoneDeclaredError(state v1alpha1.State, owned []string) error {
-	remedy := "declare the OSD devices with static paths (nodes[].devices, dataDevices.paths, or pathSpecs), re-apply, and then re-run `bootwright apply --reclaim-devices " + ReclaimDevicesAll + "`"
-	if clusters := allDevicesSelectionClusters(state, owned); len(clusters) > 0 {
-		remedy = "host(s) of cluster(s) " + strings.Join(clusters, ", ") + " declare their OSDs with data_devices.all=true, whose dirty disks are reclaimed by `bootwright apply --mode rebuild --authorize data-loss` instead"
+	return &ReclaimAllNoDeclaredDevicesError{
+		Clusters:                   append([]string(nil), owned...),
+		EffectiveUnboundedClusters: allDevicesSelectionClusters(state, owned),
 	}
-	return fmt.Errorf("--reclaim-devices %s matched no device: selected Ceph cluster(s) %s declare no static OSD device path; %s", ReclaimDevicesAll, strings.Join(owned, ", "), remedy)
 }
 
 func allDevicesSelectionClusters(state v1alpha1.State, owned []string) []string {

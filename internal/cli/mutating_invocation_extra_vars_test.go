@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 		},
 	}
 	plan := converge.WorkflowPlan{}
-	if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+	if err := appendMutatingInvocationExtraVars(&plan, invocation, "/dev/disk/by-id/osd one,/dev/sdc"); err != nil {
 		t.Fatal(err)
 	}
 	values := invocationExtraVarValues(t, plan)
@@ -37,26 +38,37 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 		converge.MutatingInvocationExtraVar,
 		converge.ApplyReconcileInvocationExtraVar,
 		converge.ApplyRebuildInvocationExtraVar,
+		converge.ApplyReclaimInvocationExtraVar,
 		converge.ApplyFullInvocationExtraVar,
 		converge.ApplyThroughBaseInvocationExtraVar,
 	} {
-		if values[name] == "" {
+		value, _ := values[name].(string)
+		if value == "" {
 			t.Fatalf("missing %s in %v", name, values)
 		}
 		for _, want := range []string{"--clusters cluster-a", "--context 'prod west'", "--ssh-id-file '/keys/operator id'", "--ssh-user 'admin user'", "--reclaim-devices '/dev/disk/by-id/osd one'", "--authorize", "unowned-devices"} {
-			if !strings.Contains(values[name], want) {
-				t.Fatalf("%s = %q, missing %q", name, values[name], want)
+			if name == converge.ApplyReclaimInvocationExtraVar && strings.Contains(want, "/dev/disk/by-id/osd one") {
+				want = converge.ApplyReclaimInvocationSentinel
+			}
+			if !strings.Contains(value, want) {
+				t.Fatalf("%s = %q, missing %q", name, value, want)
 			}
 		}
 	}
-	if strings.Contains(values[converge.ApplyFullInvocationExtraVar], "--stage") || strings.Contains(values[converge.ApplyFullInvocationExtraVar], "--through") {
+	full := values[converge.ApplyFullInvocationExtraVar].(string)
+	throughBase := values[converge.ApplyThroughBaseInvocationExtraVar].(string)
+	rebuild := values[converge.ApplyRebuildInvocationExtraVar].(string)
+	if strings.Contains(full, "--stage") || strings.Contains(full, "--through") {
 		t.Fatalf("full retry retained a stage range: %q", values[converge.ApplyFullInvocationExtraVar])
 	}
-	if !strings.Contains(values[converge.ApplyThroughBaseInvocationExtraVar], "--through base") || strings.Contains(values[converge.ApplyThroughBaseInvocationExtraVar], "--stage") {
+	if !strings.Contains(throughBase, "--through base") || strings.Contains(throughBase, "--stage") {
 		t.Fatalf("through-base retry = %q", values[converge.ApplyThroughBaseInvocationExtraVar])
 	}
-	if !strings.Contains(values[converge.ApplyRebuildInvocationExtraVar], "--mode rebuild") || !strings.Contains(values[converge.ApplyRebuildInvocationExtraVar], "data-loss") {
+	if !strings.Contains(rebuild, "--mode rebuild") || !strings.Contains(rebuild, "data-loss") {
 		t.Fatalf("rebuild retry = %q", values[converge.ApplyRebuildInvocationExtraVar])
+	}
+	if got := values[converge.ApplyReclaimDevicesExtraVar]; !reflect.DeepEqual(got, []any{"/dev/disk/by-id/osd one", "/dev/sdc"}) {
+		t.Fatalf("preserved reclaim devices = %#v", got)
 	}
 }
 
@@ -72,14 +84,14 @@ func TestMutatingInvocationExtraVarsExposeOnlyExactDestroyRetry(t *testing.T) {
 		},
 	}
 	plan := converge.WorkflowPlan{}
-	if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+	if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
 		t.Fatal(err)
 	}
 	values := invocationExtraVarValues(t, plan)
 	if len(values) != 1 {
 		t.Fatalf("destroy extra vars = %v", values)
 	}
-	got := values[converge.MutatingInvocationExtraVar]
+	got := values[converge.MutatingInvocationExtraVar].(string)
 	for _, want := range []string{"bootwright destroy", "--machines node-a", "--purge-history", "--authorize protected", "--context prod"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("destroy retry = %q, missing %q", got, want)
@@ -87,12 +99,27 @@ func TestMutatingInvocationExtraVarsExposeOnlyExactDestroyRetry(t *testing.T) {
 	}
 }
 
-func invocationExtraVarValues(t *testing.T, plan converge.WorkflowPlan) map[string]string {
+func TestMutatingInvocationExtraVarsEncodeNoPreservedReclaimPathsAsAList(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:  invocationApply,
+		flags: invocationFlags{mode: workflow.ApplyModeReconcile},
+	}
+	plan := converge.WorkflowPlan{}
+	if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
+		t.Fatal(err)
+	}
+	values := invocationExtraVarValues(t, plan)
+	if got := values[converge.ApplyReclaimDevicesExtraVar]; !reflect.DeepEqual(got, []any{}) {
+		t.Fatalf("preserved reclaim devices = %#v, want an empty JSON list rather than null", got)
+	}
+}
+
+func invocationExtraVarValues(t *testing.T, plan converge.WorkflowPlan) map[string]any {
 	t.Helper()
 	if len(plan.ExtraVarPairs) != 1 {
 		t.Fatalf("extra vars = %v", plan.ExtraVarPairs)
 	}
-	var values map[string]string
+	var values map[string]any
 	if err := json.Unmarshal([]byte(plan.ExtraVarPairs[0]), &values); err != nil {
 		t.Fatalf("decode extra vars: %v", err)
 	}

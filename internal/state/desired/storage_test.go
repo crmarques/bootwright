@@ -990,6 +990,51 @@ func TestStorageCephNodeOSDDeviceSelectionExplicit(t *testing.T) {
 			want: `must set only one of paths or pathSpecs`,
 		},
 		{
+			name: "paths-and-filter-mutually-exclusive",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/sdb"}, Model: "MZ7"},
+				}
+			},
+			want: `explicit paths are mutually exclusive with all, model, vendor, rotational, and size`,
+		},
+		{
+			name: "all-and-filter-mutually-exclusive",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true, Vendor: "ATA"},
+				}
+			},
+			want: `all is mutually exclusive with model, vendor, rotational, and size`,
+		},
+		{
+			name: "limit-needs-selector",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{Limit: 1},
+				}
+			},
+			want: `limit only caps another selector`,
+		},
+		{
+			name: "all-is-data-only",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephNodeOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+					DBDevices:   &v1alpha1.StorageCephDeviceSelection{All: true},
+				}
+			},
+			want: `.osd.dbDevices.all is allowed only for dataDevices`,
+		},
+		{
 			name: "size-range-rejects-dash-separator",
 			edit: func(state *v1alpha1.State) {
 				host := &state.StorageClusters[0].Spec.Ceph.Topology.Nodes[2]

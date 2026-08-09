@@ -22,6 +22,11 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 		return &v1alpha1.StorageCephNodeOSD{DataDevices: &s}
 	}
 	allHost := reclaimOSDHost("all-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{All: true}))
+	allModelHost := reclaimOSDHost("all-model-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{All: true, Model: "SAMSUNG"}))
+	allLimitHost := reclaimOSDHost("all-limit-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{All: true, Limit: 1}))
+	allORHost := reclaimOSDHost("all-or-host", []string{v1alpha1.StorageCephRoleOSD}, nil, &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}, FilterLogic: "OR"})
+	invalidAllORHost := reclaimOSDHost("invalid-all-or-host", []string{v1alpha1.StorageCephRoleOSD}, nil, &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true, Model: "SAMSUNG"}, FilterLogic: "OR"})
+	unmanagedAllHost := reclaimOSDHost("unmanaged-all-host", []string{v1alpha1.StorageCephRoleOSD}, nil, &v1alpha1.StorageCephNodeOSD{DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true}, Unmanaged: true})
 	rotationalHost := reclaimOSDHost("rot-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{Rotational: &truePtr}))
 	modelHost := reclaimOSDHost("model-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{Model: "SAMSUNG"}))
 	sizeHost := reclaimOSDHost("size-host", []string{v1alpha1.StorageCephRoleOSD}, nil, sel(v1alpha1.StorageCephDeviceSelection{Size: "100G:"}))
@@ -33,7 +38,7 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	cluster := v1alpha1.StorageCluster{}
 	cluster.Metadata.Name = "ceph"
 	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{
-		Nodes: []v1alpha1.StorageCephNode{allHost, rotationalHost, modelHost, sizeHost, pathHost, shorthandHost, nonOSDHost, drivegroupHost},
+		Nodes: []v1alpha1.StorageCephNode{allHost, allModelHost, allLimitHost, allORHost, invalidAllORHost, unmanagedAllHost, rotationalHost, modelHost, sizeHost, pathHost, shorthandHost, nonOSDHost, drivegroupHost},
 		OSDDrivegroups: []v1alpha1.StorageCephOSDDrivegroup{{
 			ServiceID: "fleet",
 			Placement: v1alpha1.StoragePlacement{Hosts: []string{"dg-host"}},
@@ -46,6 +51,11 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 		want bool
 	}{
 		{allHost, true},
+		{allModelHost, false},
+		{allLimitHost, false},
+		{allORHost, true},
+		{invalidAllORHost, false},
+		{unmanagedAllHost, false},
 		{rotationalHost, false},
 		{modelHost, false},
 		{sizeHost, false},
@@ -70,5 +80,25 @@ func TestOSDHostUsesAllDevicesCoversOnlyAllTrue(t *testing.T) {
 	}}
 	if ClusterHasAllDevicesOSDHost(narrowing) {
 		t.Error("ClusterHasAllDevicesOSDHost(narrowing/static only) = true, want false")
+	}
+}
+
+func TestDynamicOSDDeviceSelectionsCoverDataDBAndWAL(t *testing.T) {
+	rotational := false
+	host := reclaimOSDHost("filter-host", []string{v1alpha1.StorageCephRoleOSD}, nil, &v1alpha1.StorageCephNodeOSD{
+		DataDevices: &v1alpha1.StorageCephDeviceSelection{Model: "DATA"},
+		DBDevices:   &v1alpha1.StorageCephDeviceSelection{Rotational: &rotational},
+		WALDevices:  &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/disk/by-id/wal"}},
+		FilterLogic: "OR",
+	})
+	cluster := v1alpha1.StorageCluster{}
+	cluster.Spec.Ceph = &v1alpha1.StorageClusterCephSpec{Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{host}}}
+
+	filters := DynamicOSDDeviceSelections(cluster, host)
+	if len(filters) != 2 || filters["data"] == nil || filters["db"] == nil || filters["wal"] != nil {
+		t.Fatalf("DynamicOSDDeviceSelections = %#v, want dynamic data/db and no static WAL", filters)
+	}
+	if got := OSDFilterLogic(cluster, host); got != "OR" {
+		t.Fatalf("OSDFilterLogic = %q, want OR", got)
 	}
 }

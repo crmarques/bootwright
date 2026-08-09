@@ -8,6 +8,12 @@ Extends [ADR 0030](0030-one-intent-flag-and-named-authorizations.md) with one
 token and narrows the blanket "no token relaxes device data-safety" clause in
 `specs/state-model.md` to the half of it that has a self-service remedy.
 
+Refined by
+[ADR 0054](0054-a-filter-is-not-permission-to-wipe-a-device.md): only an
+effectively unbounded managed data selection may auto-reclaim; a narrowing
+dynamic selector must first become an explicit path before this ADR's reclaim
+can wipe it.
+
 ## Context
 
 Bootwright records the disks it provisioned as OSDs in an on-node marker at
@@ -125,11 +131,12 @@ distinction visible — the daemon-tree branch in the refusal, the `pvs`/`lvs`
 confirmation step, and a CLI warning stating both readings — and then defers to
 the operator, which is what an authorization token is for.
 
-`dataDevices.all: true` hosts are unaffected: their auto-reclaim already wipes
-every unavailable, unmounted, non-OSD disk under `--mode rebuild --authorize
-data-loss`, and it keys on availability rather than ownership. The new token
-closes the equivalent gap for statically named selections (`paths`/`pathSpecs`),
-which had no in-product path at all.
+An effectively unbounded managed `dataDevices.all: true` selection needs no
+`unowned-devices`: its auto-reclaim wipes every unavailable, unmounted,
+non-live-OSD disk under `--mode rebuild --authorize data-loss`, and keys on
+availability rather than ownership. A narrowing dynamic selection never rides
+that authorization; ADR 0054 requires the operator to pin an explicit path
+before using this ADR's `--reclaim-devices` path.
 
 ## Alternatives Rejected
 

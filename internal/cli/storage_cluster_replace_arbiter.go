@@ -171,7 +171,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return failErr(1, err)
 	}
-	remediationExtraVars, err := mutatingInvocationExtraVars(applyInvocation)
+	remediationExtraVars, err := mutatingInvocationExtraVars(applyInvocation, "")
 	if err != nil {
 		return failErr(1, err)
 	}

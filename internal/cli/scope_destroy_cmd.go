@@ -313,7 +313,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			reporter.BundleReady(bundle)
 		}
 		if !dryRun && !plan.NoRemoteWork {
-			if err := appendMutatingInvocationExtraVars(&plan, invocation); err != nil {
+			if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
 				return failErr(1, err)
 			}
 		}

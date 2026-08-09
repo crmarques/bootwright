@@ -564,8 +564,17 @@ bootwright_storage_clusters:
       - hostname: ceph-dc1-1
         inventoryHost: storage__ceph-stretch__ceph-dc1-1
         address: 192.168.133.31
-        devices:
-          - /dev/sdb
+        devices: []
+        osdDeviceFilters:
+          - role: data
+            filterLogic: AND
+            model: ST16000NM
+            rotational: true
+            limit: 8
+          - role: db
+            filterLogic: AND
+            vendor: NVME
+            size: "1T:"
     bootstrap:
       host: ceph-dc1-0
       monIP: 192.168.133.30
@@ -603,6 +612,23 @@ half of the `cephadm.clusterSSH.keyRef` pair that is the only key authorized for
 that account. The Machine key stays offered alongside it. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
+
+The three host-level OSD gate facts have distinct authority:
+
+- `devices` is the deduplicated set of statically named data, DB, and WAL paths.
+  It feeds the exact-path marker, emptiness, reclaim, and destroy gates; a purely
+  dynamic host renders an empty list.
+- `osdDeviceFilters` is present only for managed dynamic selectors and carries
+  one entry per dynamic `data`, `db`, or `wal` role, in that order. Each entry
+  holds the effective `filterLogic` and only its authored
+  `all`/`model`/`vendor`/`rotational`/`size`/`limit` fields. The storage role
+  resolves it against cephadm inventory in a read-only gate before optional
+  auto-reclaim and before applying the persistent OSD service; it does not
+  re-read the service-spec file to infer the selection.
+- `osdReclaimAll: true` is present only for an effectively unbounded managed
+  data selector: `all: true` with no `limit`. This fact classifies the host but
+  authorizes nothing by itself; automatic zap also requires the cluster in the
+  Go-rendered rebuild/data-loss authorization set.
 
 The storage role dispatches its repository preparation on the rendered
 `provider.name` (the distribution): the repository phase validates the node OS
@@ -778,6 +804,8 @@ operator-facing retry guidance instead of assembling a `bootwright apply` or
 | `bootwright_mutating_invocation` | Exact current apply or destroy invocation; use after the operator fixes a transient external failure |
 | `bootwright_apply_reconcile_invocation` | Exact selected apply invocation with `--mode reconcile` |
 | `bootwright_apply_rebuild_invocation` | Exact selected apply invocation with `--mode rebuild` and additive `--authorize data-loss` |
+| `bootwright_apply_reclaim_invocation` | Exact selected apply invocation with prior accepted authorizations retained, `data-loss,unowned-devices` unioned, and exactly one `__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__` value for `--reclaim-devices`; a role may replace only that value with one shell-quoted, comma-joined nonempty list of runtime-probed device paths |
+| `bootwright_apply_reclaim_devices` | Static reclaim paths already selected by the controller; the runtime reclaim remedy preserves these in the sentinel replacement operand |
 | `bootwright_apply_full_invocation` | Exact apply invocation with stage/range narrowing removed while retaining context and object selection |
 | `bootwright_apply_through_base_invocation` | Exact apply invocation changed to `--through base` while retaining context and object selection |
 
@@ -803,12 +831,13 @@ detects a newly rendered mutation-control name that was not registered.
 | Scope | `bootwright_destroy_cluster_scope`, `bootwright_destroy_machine_scope`, `bootwright_destroy_storage_scope`, `bootwright_destroy_container_cluster` | Exact cluster, machine, storage-cluster, or single-container-cluster work set for a destroy task |
 | Scope | `bootwright_infra_destroy_context_sweep`, `bootwright_infra_component_destroy_scope_records`, `bootwright_infra_component_service_scope` | Context-wide versus selected InfraComponent teardown bounds; absent scope never implies a wider selected teardown |
 | Scope | `bootwright_infra_component_apply_skip_records`, `bootwright_ceph_reconcilable_only_clusters` | Exact records or clusters the controller classified for a narrowed non-destructive path |
+| Scope | `bootwright_apply_reclaim_devices` | Static reclaim paths already selected by the controller; absence or an empty list widens no runtime reclaim scope |
 | Scope | `bootwright_task_cluster_name`, `bootwright_task_host_cluster_name`, `bootwright_task_machine_names`, `bootwright_task_managed_os_group_name`, `bootwright_task_provider_host_name`, `bootwright_task_storage_cluster_name` | Scheduler-selected task identity and work set |
 | Scope | `bootwright_agent_node_cluster_name`, `bootwright_agent_node_machine_name`, `bootwright_machine_task_cluster_name`, `bootwright_machine_task_machine_name`, `bootwright_machine_task_provider_host_name` | Per-pseudo-host task identity; roles select the named cluster, machine, and provider host rather than re-deriving scope |
 | Scope | `bootwright_arbiter_cluster_name`, `bootwright_arbiter_desired_node`, `bootwright_arbiter_live_node` | Replacement-arbiter cluster and old/new machine selection |
 | Execution | `bootwright_destroy_cluster_levels`, `bootwright_destroy_cluster_order`, `bootwright_machine_infra_records_only` | Controller-derived teardown barriers, compatibility order, and records-only cleanup mode |
 | Execution | `bootwright_install_wait_target`, `bootwright_task_storage_prereqs_only`, `bootwright_task_storage_skip_prereqs` | Exact task entrypoint inside a split apply workflow |
-| Execution | `bootwright_mutating_invocation`, `bootwright_apply_reconcile_invocation`, `bootwright_apply_rebuild_invocation`, `bootwright_apply_full_invocation`, `bootwright_apply_through_base_invocation` | Shell-quoted commands derived from the resolved CLI invocation; roles consume these exact variants and never rebuild operator remedies from task-local facts |
+| Execution | `bootwright_mutating_invocation`, `bootwright_apply_reconcile_invocation`, `bootwright_apply_rebuild_invocation`, `bootwright_apply_reclaim_invocation`, `bootwright_apply_full_invocation`, `bootwright_apply_through_base_invocation` | Shell-quoted commands derived from the resolved CLI invocation; roles consume these exact variants and never rebuild operator remedies from task-local facts |
 | Execution | `bootwright_arbiter_desired_addr`, `bootwright_arbiter_desired_mon`, `bootwright_arbiter_desired_site`, `bootwright_arbiter_failure_domain`, `bootwright_arbiter_live_mon`, `bootwright_arbiter_tiebreaker_mon` | Controller-resolved arbiter identities and topology facts |
 | Execution | `bootwright_arbiter_mon_hosts_during`, `bootwright_arbiter_mon_hosts_after`, `bootwright_arbiter_mon_locations`, `bootwright_arbiter_mon_locations_after` | JSON projections of the accepted during/after monitor topology |
 

@@ -17,6 +17,8 @@ type mutationSafetyVarContract struct {
 var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_apply_full_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_mode", Class: mutationSafetyVarIntent},
+	{Name: "bootwright_apply_reclaim_devices", Class: mutationSafetyVarScope},
+	{Name: "bootwright_apply_reclaim_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_rebuild_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_reconcile_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_through_base_invocation", Class: mutationSafetyVarExecution},
