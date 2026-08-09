@@ -50,6 +50,21 @@ post-lease stale sweep described above. A different private runtime parent
 must not be described as crash-reclaimed unless its owner supplies an
 equivalent sweep.
 
+**Git authentication has the same two-layer lifetime.** An SSH-backed
+`CustomPlaybook` decrypts its key into `runs/content/git/git-key-*/id` only for
+one `gitcontent.Fetch` call. `ResolveGitSources` invokes its cleanup explicitly
+after both success and failure, and a cleanup failure is itself returned because
+silently leaving the key is not a successful plan. HTTPS askpass directories
+share the `git-cred-*` prefix and the same crash-recovery rule. Every registered
+real mutator sweeps both prefixes immediately after it acquires the command
+lease, before it reads or changes desired/runtime state; placing the sweep in
+`AcquireCommandRunLease` closes it over future mutating verbs and lets destroy
+or context update clean residue from a killed apply. Read-only commands acquire
+no lease and therefore never turn inspection into cleanup. The sweep removes
+only those two temporary prefixes and preserves commit-keyed fetched content.
+`TestResolveGitSourcesRemovesSSHCredentialOnSuccessAndFailure` and
+`TestCommandLeaseSweepsGitCredentialResidueAndKeepsContent` pin both layers.
+
 **MkdirAll does not fix modes:** `ensureLocalDir`
 (`internal/render/filesystem.go`) must explicitly `Chmod` after `MkdirAll`:
 `MkdirAll` is a no-op on an existing directory and leaves its mode untouched,

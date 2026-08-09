@@ -2,6 +2,7 @@ package converge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func ResolveGitSources(ctx context.Context, state v1alpha1.State, contextName, s
 	}
 	roots := map[string]string{}
 	for _, req := range requests {
-		credential, err := gitCredential(store, declared, req.source, gitDir)
+		credential, cleanup, err := gitCredential(store, declared, req.source, gitDir)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", req.owner, err)
 		}
@@ -75,6 +76,13 @@ func ResolveGitSources(ctx context.Context, state v1alpha1.State, contextName, s
 			Subdir:     req.source.Subdir,
 			Credential: credential,
 		}, gitDir)
+		cleanupErr := cleanup()
+		if cleanupErr != nil {
+			if err != nil {
+				return nil, fmt.Errorf("%s: fetch failed: %v; remove temporary decrypted git credential: %w", req.owner, err, cleanupErr)
+			}
+			return nil, fmt.Errorf("%s: remove temporary decrypted git credential: %w", req.owner, cleanupErr)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", req.owner, err)
 		}
@@ -83,39 +91,41 @@ func ResolveGitSources(ctx context.Context, state v1alpha1.State, contextName, s
 	return roots, nil
 }
 
-func gitCredential(store *secret.ContextStore, declared map[string]v1alpha1.Secret, source v1alpha1.PlaybookGitSource, scratchDir string) (*gitcontent.Credential, error) {
+func gitCredential(store *secret.ContextStore, declared map[string]v1alpha1.Secret, source v1alpha1.PlaybookGitSource, scratchDir string) (*gitcontent.Credential, func() error, error) {
+	noCleanup := func() error { return nil }
 	if source.SecretRef == nil {
-		return nil, nil
+		return nil, noCleanup, nil
 	}
 	name := source.SecretRef.Name
 	object, ok := declared[name]
 	if !ok {
-		return nil, fmt.Errorf("secret %q is not declared", name)
+		return nil, noCleanup, fmt.Errorf("secret %q is not declared", name)
 	}
 	if object.Spec.Type == v1alpha1.SecretTypeSSHKeyPair {
 		private, err := store.Read(secret.MaterialKey{Name: name, Role: secret.MaterialSSHPrivate})
 		if err != nil {
-			return nil, fmt.Errorf("read ssh private key from secret %q: %w", name, err)
+			return nil, noCleanup, fmt.Errorf("read ssh private key from secret %q: %w", name, err)
 		}
 		keyDir, err := os.MkdirTemp(scratchDir, "git-key-")
 		if err != nil {
-			return nil, err
+			return nil, noCleanup, err
 		}
+		cleanup := func() error { return os.RemoveAll(keyDir) }
 		keyPath := filepath.Join(keyDir, "id")
 		if err := os.WriteFile(keyPath, private, 0o600); err != nil {
-			return nil, err
+			return nil, noCleanup, errors.Join(err, cleanup())
 		}
-		return &gitcontent.Credential{PrivateKeyPath: keyPath}, nil
+		return &gitcontent.Credential{PrivateKeyPath: keyPath}, cleanup, nil
 	}
 	password, err := store.Read(secret.MaterialKey{Name: name, Role: secret.MaterialPrimary})
 	if err != nil {
-		return nil, fmt.Errorf("read secret %q for git authentication: %w", name, err)
+		return nil, noCleanup, fmt.Errorf("read secret %q for git authentication: %w", name, err)
 	}
 	username := "bootwright"
 	if object.Spec.Source.Generated != nil && object.Spec.Source.Generated.Username != "" {
 		username = object.Spec.Source.Generated.Username
 	}
-	return &gitcontent.Credential{Username: username, Password: string(password)}, nil
+	return &gitcontent.Credential{Username: username, Password: string(password)}, noCleanup, nil
 }
 
 func GitSourceCacheDir(runsDir string) string {

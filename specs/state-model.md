@@ -2179,7 +2179,11 @@ Rules:
   than reaching the network. `secretRef` must name a `Secret` whose type matches
   the transport (`sshKeyPair` for `ssh`; `token` or `usernamePassword` for
   `https`); a local repository takes no secret. Authentication is explicit and is
-  never inherited from the operator's ssh-agent or git configuration. A branch
+  never inherited from the operator's ssh-agent or git configuration. Decrypted
+  SSH keys and HTTPS helpers exist only for the individual Git operation and are
+  removed on its success or failure; after acquiring the command lease, every
+  real mutator first removes matching residue left by an interrupted process.
+  Read-only previews never perform that crash cleanup. A branch
   `ref` is allowed, and because `run: onChange` digests the fetched content, the
   playbook re-runs whenever that branch advances. `source.git` is rejected on
   `ClusterAddon.spec.steps[]`, whose content ships with its add-on package.

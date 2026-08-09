@@ -43,6 +43,13 @@ func AcquireCommandRunLease(parent context.Context, runsDir, command string) (*C
 	if err := AcquireRunLease(runsDir, lease, now); err != nil {
 		return nil, err
 	}
+	if err := SweepGitCredentialResidue(runsDir); err != nil {
+		releaseErr := RemoveRunLeaseIfOwner(runsDir, runID)
+		if releaseErr != nil {
+			return nil, fmt.Errorf("%w; additionally failed to release the mutating run lease: %v", err, releaseErr)
+		}
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(parent)
 	stop, heartbeatErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
 	guard := &CommandRunLease{

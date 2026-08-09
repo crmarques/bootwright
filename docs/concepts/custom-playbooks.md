@@ -171,7 +171,10 @@ socket, and simply omit git-sourced playbooks from their view.
 `~/.gitconfig`. `secretRef` names a `Secret` whose type must match the
 transport: `sshKeyPair` for an `ssh` url, `token` or `usernamePassword` for an
 `https` url. Credentials reach `git` through a temporary `GIT_ASKPASS` helper or
-`GIT_SSH_COMMAND`, never on the command line. A local repository needs no
+`GIT_SSH_COMMAND`, never on the command line. Each temporary credential is
+removed immediately after that Git operation, on success or failure. A later
+real mutating command removes matching residue from a process that was killed
+before cleanup; previews do not change the cache. A local repository needs no
 secret.
 
 !!! tip "Air-gapped sites"
