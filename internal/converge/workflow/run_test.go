@@ -18,11 +18,12 @@ import (
 )
 
 type fakeRunner struct {
-	runCalled  bool
-	command    []string
-	runReturns error
-	lastSpec   ansible.RunSpec
-	onRun      func(ansible.RunSpec) error
+	runCalled            bool
+	command              []string
+	runReturns           error
+	lastSpec             ansible.RunSpec
+	onRun                func(ansible.RunSpec) error
+	skipInstallerVersion bool
 }
 
 type fakeReporter struct {
@@ -52,7 +53,59 @@ func (f *fakeRunner) Run(_ context.Context, spec ansible.RunSpec) error {
 			return err
 		}
 	}
-	return f.runReturns
+	if f.runReturns != nil {
+		return f.runReturns
+	}
+	if !f.skipInstallerVersion && (strings.HasSuffix(spec.Playbook, "task_container_cluster_create_agent_iso") || strings.HasSuffix(spec.Playbook, "task_container_cluster_create_agent_iso.yml")) {
+		if err := writeFakeAgentISOInstallerVersion(spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFakeAgentISOInstallerVersion(spec ansible.RunSpec) error {
+	var clustersDir, clusterName string
+	for _, pair := range spec.ExtraVarPairs {
+		key, value, found := strings.Cut(pair, "=")
+		if !found {
+			continue
+		}
+		switch key {
+		case "bootwright_clusters_dir":
+			clustersDir = value
+		case "bootwright_task_cluster_name":
+			clusterName = value
+		}
+	}
+	data, err := os.ReadFile(spec.ExtraVars)
+	if err != nil {
+		return err
+	}
+	var vars struct {
+		Clusters []struct {
+			Name         string `yaml:"name"`
+			Distribution struct {
+				Release struct {
+					Version string `yaml:"version"`
+				} `yaml:"release"`
+			} `yaml:"distribution"`
+		} `yaml:"bootwright_clusters"`
+	}
+	if err := yaml.Unmarshal(data, &vars); err != nil {
+		return err
+	}
+	for _, cluster := range vars.Clusters {
+		if cluster.Name != clusterName {
+			continue
+		}
+		path := ClusterInstallerVersionPath(clustersDir, clusterName)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return err
+		}
+		return os.WriteFile(path, []byte(cluster.Distribution.Release.Version+"\n"), 0o600)
+	}
+	return fmt.Errorf("cluster %q is missing from rendered test vars", clusterName)
 }
 
 func (f *fakeRunner) Command(spec ansible.RunSpec) []string {

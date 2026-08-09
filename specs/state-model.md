@@ -3210,11 +3210,29 @@ verbs that reach machines.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
   `iso-created` skips the ISO and resumes from node boot; `nodes-booted` and
-  `waiting` skip the ISO and boot and resume the install wait; `complete` is a
-  no-op. The `booting` phase fails closed — node-boot completion is uncertain, so
-  Bootwright refuses to reboot without `--mode rebuild` (which recreates the agent
-  ISO and reboots the nodes; no completed cluster is destroyed). An unrecognized
-  phase also fails closed.
+  `waiting-bootstrap` skip the ISO and boot and resume bootstrap wait;
+  `bootstrap-complete` and `waiting` additionally skip bootstrap wait and resume
+  install-complete wait; `complete` is a no-op. The bootstrap wait stamps both
+  its start and success phases. The `booting` phase fails closed — node-boot
+  completion is uncertain, so Bootwright refuses to reboot without `--mode
+  rebuild` (which recreates the agent ISO and reboots the nodes; no completed
+  cluster is destroyed). An unrecognized phase also fails closed.
+- Automatic post-boot resume is bounded by the original install record's
+  `StartedAt`, not by an attempt counter. A wait may be replanned only before the
+  three-hour resume ceiling; exactly at or after the deadline, or when the start
+  time is absent, apply refuses before any mutation and names the deliberately
+  scoped destroy-and-reapply sequence. A wait invocation already in progress may
+  finish; the ceiling prevents starting an unbounded new one on every apply.
+- ISO creation records the exact `openshift-install` version beside the install
+  state. Before node boot, a missing or desired-version-mismatched value refuses
+  before mutation and requires deliberate ISO regeneration. After nodes may have
+  booted, the wait path warns and finishes the already-started install rather
+  than stranding it; if the final install evidence still proves version skew,
+  the successful install record is retained but the run remains nonzero and
+  requires a future `--mode rebuild` with the data-loss authorization. An
+  installed cluster with missing or mismatched version evidence is likewise
+  drift, never a healthy skip. A declaration that pins only `release.image` and
+  no version is exempt because there is no declared version to compare.
 - A cluster whose availability cannot be probed is never treated as a rebuild
   candidate. When a `ContainerCluster` whose recorded install inputs match
   desired state cannot be probed at all — no reachable API, no usable

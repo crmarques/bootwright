@@ -912,45 +912,6 @@ learned; this file records what it still owes.
   and give it one behavior across scopes (previewable, token-or-not decided once);
   add the live existence check to the libvirt and vSphere substrates.
 
-## B-084 — A failed install wait leaves no bound on how many times it may resume
-- Status: open
-- Area: apply / cluster install
-- Origin: ocp-prd-02 terminal bootstrap failure (2026-08-09), deferred half
-- Problem: `ClusterInstallStatusFailed` is dead signal. `install_state.go` folds it
-  into the same switch arm as `ClusterInstallStatusInstalling`, and
-  `resumeClusterInstallTasks` branches on `Phase` alone, so a record that failed
-  resumes identically to one still in flight. `clusterInstallTaskStartPhase` also
-  omits `ApplyTaskKindBootstrapWait` (pinned by
-  `apply_bootstrap_wait_test.go:162-181`), so the task that actually failed never
-  reaches the record at all, and `ClusterInstallRecord` carries no attempt count.
-  A cluster whose install cannot converge is therefore re-watched for a full
-  budget on every apply, forever, with nothing in the record to say so.
-- Exit: not a terminal status — the state is not provably terminal when the wait
-  observes it. Bound it on elapsed time instead: `ClusterInstallRecord.StartedAt`
-  is written and never read, so refuse to re-plan a wait whose record has sat at
-  `Phase=nodes-booted` past a threshold, in the shape already used for the drift
-  refusal, naming the rebuild command. That requires wiring
-  `ApplyTaskKindBootstrapWait` into the record, which is a deliberate change to
-  the contract the pinned test encodes.
-
-## B-085 — The release-skew guard never runs on a resumed install
-- Status: open
-- Area: apply / cluster install
-- Origin: ocp-prd-02 terminal bootstrap failure (2026-08-09), adjacent finding
-- Problem: the guard that refuses an installer binary whose version does not match
-  the declared release lives in `stage/validate.yml` gated on
-  `action in ['run', 'create_iso']`, and `install_state.go` skips
-  `ApplyTaskKindClusterISO` on every resume from `nodesBooted`/`waiting` — the
-  shipped default whenever a wait failed. Every resumed apply therefore runs an
-  unchecked installer, and nothing verifies the release after the fact either:
-  every post-install probe reads ClusterVersion's `Available` condition, never
-  `.status.desired.version`. Observed live: four prd clusters declare 4.21.26 and
-  were built by installer 4.21.15.
-- Exit: extend the guard to the `wait_install` action as a loud warning rather than
-  a hard failure (failing there strands a cluster mid-install), and record which
-  installer version built the ISO in the install record so the skew is provable
-  after the fact.
-
 ## B-086 — No preflight proves the release payload is reachable from the nodes
 - Status: open
 - Area: preflight

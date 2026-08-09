@@ -1452,13 +1452,14 @@ func seedInstalledCluster(t *testing.T, ctx workspace.Context, cluster string) {
 	t.Helper()
 	now := time.Now().UTC()
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
-		Cluster:     cluster,
-		DesiredHash: "sha256:seeded",
-		HashSchema:  workflow.ConvergeHashSchema,
-		Status:      workflow.ClusterInstallStatusInstalled,
-		Phase:       workflow.ClusterInstallPhaseComplete,
-		UpdatedAt:   now,
-		InstalledAt: &now,
+		Cluster:          cluster,
+		DesiredHash:      "sha256:seeded",
+		HashSchema:       workflow.ConvergeHashSchema,
+		Status:           workflow.ClusterInstallStatusInstalled,
+		Phase:            workflow.ClusterInstallPhaseComplete,
+		InstallerVersion: safetyDeclaredInstallerVersion(t, ctx, cluster),
+		UpdatedAt:        now,
+		InstalledAt:      &now,
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord(%s): %v", cluster, err)
 	}
@@ -1477,18 +1478,33 @@ func seedMatchingInstalledCluster(t *testing.T, ctx workspace.Context, cluster s
 	}
 	now := time.Now().UTC()
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
-		Cluster:        cluster,
-		DesiredHash:    desiredHash,
-		StructuralHash: structuralHash,
-		HashSchema:     workflow.ConvergeHashSchema,
-		Status:         workflow.ClusterInstallStatusInstalled,
-		Phase:          workflow.ClusterInstallPhaseComplete,
-		UpdatedAt:      now,
-		InstalledAt:    &now,
+		Cluster:          cluster,
+		DesiredHash:      desiredHash,
+		StructuralHash:   structuralHash,
+		HashSchema:       workflow.ConvergeHashSchema,
+		Status:           workflow.ClusterInstallStatusInstalled,
+		Phase:            workflow.ClusterInstallPhaseComplete,
+		InstallerVersion: safetyDeclaredInstallerVersion(t, ctx, cluster),
+		UpdatedAt:        now,
+		InstalledAt:      &now,
 	}); err != nil {
 		t.Fatalf("save matching install record for %s: %v", cluster, err)
 	}
 	seedClusterKubeconfig(t, ctx.Name, ctx.ClustersDir, cluster)
+}
+
+func safetyDeclaredInstallerVersion(t *testing.T, ctx workspace.Context, cluster string) string {
+	t.Helper()
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state for installer version: %v", err)
+	}
+	for _, candidate := range state.ContainerClusters {
+		if candidate.Metadata.Name == cluster {
+			return candidate.Spec.Distribution.Release.Version
+		}
+	}
+	return ""
 }
 
 func seedKubeVirtReadyHost(t *testing.T, ctx workspace.Context, cluster string) {

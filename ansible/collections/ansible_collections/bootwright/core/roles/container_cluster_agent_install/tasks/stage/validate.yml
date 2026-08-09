@@ -43,6 +43,24 @@
       {{ ((bootwright_current_cluster.distribution | default({}, true)).get('release', {}).get('image', '') | default('', true)) | trim }}
   changed_when: false
 
+- name: Read recorded agent ISO installer version
+  ansible.builtin.slurp:
+    src: "{{ bootwright_install_local_work_dir }}/agent-iso-installer-version"
+  register: bootwright_agent_iso_installer_version_file
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when: bootwright_install_agent_action_effective in ['boot_machine', 'wait_install']
+
+- name: Resolve recorded agent ISO installer version
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_installer_version: >-
+      {{ (bootwright_agent_iso_installer_version_file.content | default('') | b64decode | trim)
+         if (bootwright_agent_iso_installer_version_file.content | default('') | length) > 0
+         else '' }}
+  changed_when: false
+  when: bootwright_install_agent_action_effective in ['boot_machine', 'wait_install']
+
 - name: Read installed openshift-install version
   ansible.builtin.command:
     argv:
@@ -124,24 +142,26 @@
 - name: Warn when the waited install was built by a mismatched installer binary
   ansible.builtin.debug:
     msg: >-
-      WARNING: installer binary
-      '{{ bootwright_openshift_install_path }}' reports version
-      {{ bootwright_openshift_install_version | default('<unreadable>', true) }}
-      while cluster {{ bootwright_current_cluster.name }} declares release
+      WARNING: the agent ISO for cluster {{ bootwright_current_cluster.name }}
+      records installer version
+      {{ bootwright_agent_iso_installer_version | default('<missing>', true) }} while
+      desired state declares release
       {{ bootwright_declared_release_version | default('<undeclared>', true) }}.
-      This action only waits on an install that is already running, so bootwright
-      will not refuse it and strand the cluster mid-install, but the cluster is
-      being built from the binary's release and no later stage reports the
-      difference. Re-run `bootwright bastion setup` with this cluster in scope,
-      then reinstall the cluster if the declared release is the one you need.
+      Nodes have already booted, so bootwright will finish the already-started
+      install rather than strand it. The completed run remains nonzero and retains
+      successful install evidence, with a deliberate future rebuild required to
+      make the installed release match desired state. The current wait command is
+      using '{{ bootwright_openshift_install_path }}' version
+      {{ bootwright_openshift_install_version | default('<unreadable>', true) }}.
   when:
     - bootwright_install_agent_action_effective == 'wait_install'
     - >-
       (bootwright_declared_release_image | default('', true) | length) == 0
       or (bootwright_declared_release_version | default('', true) | length) > 0
     - >-
-      (bootwright_openshift_install_version | default('', true))
+      (bootwright_agent_iso_installer_version | default('', true))
       != (bootwright_declared_release_version | default('', true))
+      or (bootwright_agent_iso_installer_version | default('', true) | length) == 0
       or (bootwright_declared_release_version | default('', true) | length) == 0
 
 - name: Warn that a pinned release image is not honoured on the install path
@@ -189,6 +209,30 @@
   when:
     - bootwright_install_agent_action_effective == 'boot_machine'
     - not bootwright_install_already_complete
+
+- name: Refuse node boot when agent ISO version provenance is unsafe
+  ansible.builtin.assert:
+    that:
+      - (bootwright_agent_iso_installer_version | default('', true) | length) > 0
+      - (bootwright_declared_release_version | default('', true) | length) > 0
+      - bootwright_agent_iso_installer_version == bootwright_declared_release_version
+    fail_msg: >-
+      Refusing to boot cluster {{ bootwright_current_cluster.name }} because its
+      agent ISO records installer version
+      {{ bootwright_agent_iso_installer_version | default('<missing>', true) }}
+      while desired state declares
+      {{ bootwright_declared_release_version | default('<undeclared>', true) }}.
+      No node was booted by this task. Deliberately regenerate this cluster's ISO
+      in the same Bootwright context and selected cluster scope before retrying
+      node boot.
+  when:
+    - bootwright_install_agent_action_effective == 'boot_machine'
+    - not bootwright_install_already_complete
+    - >-
+      not (
+        (bootwright_declared_release_image | default('', true) | length) > 0
+        and (bootwright_declared_release_version | default('', true) | length) == 0
+      )
 
 - name: Fail when generated agent ISO publish token is missing
   ansible.builtin.fail:

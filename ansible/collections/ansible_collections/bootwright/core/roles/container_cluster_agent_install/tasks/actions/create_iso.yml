@@ -63,6 +63,7 @@
       loop:
         - agent-iso.path
         - agent-iso-publish-token
+        - agent-iso-installer-version
       delegate_to: localhost
       become: false
       no_log: "{{ bootwright_no_log | default(true) | bool }}"
@@ -321,3 +322,11 @@
       delegate_to: localhost
       become: false
       when: (bootwright_agent_iso_local_path | default('') | length) > 0
+
+    - name: Record agent ISO installer version
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_local_work_dir }}/agent-iso-installer-version"
+        mode: "0600"
+        content: "{{ bootwright_openshift_install_version }}\n"
+      delegate_to: localhost
+      become: false

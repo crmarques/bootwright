@@ -1223,9 +1223,10 @@ func TestAgentInstallRefusesAnInstallerBinaryThatDoesNotMatchTheDeclaredRelease(
 	warnMsg := fmt.Sprint(warn["msg"])
 	for _, want := range []string{
 		"WARNING",
+		"bootwright_agent_iso_installer_version",
 		"bootwright_openshift_install_version",
 		"bootwright_declared_release_version",
-		"bootwright bastion setup",
+		"future rebuild",
 	} {
 		if !strings.Contains(warnMsg, want) {
 			t.Fatalf("the wait-path warning must name both versions and the command that repairs them (missing %q), got %q", want, warnMsg)

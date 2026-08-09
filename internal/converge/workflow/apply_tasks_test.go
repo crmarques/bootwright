@@ -648,15 +648,16 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	}
 	now := time.Now()
 	record := ClusterInstallRecord{
-		Cluster:     "sno-libvirt",
-		DesiredHash: hash,
-		HashSchema:  ConvergeHashSchema,
-		Status:      ClusterInstallStatusInstalled,
-		Phase:       ClusterInstallPhaseComplete,
-		RunID:       "previous-run",
-		StartedAt:   now.UTC(),
-		UpdatedAt:   now.UTC(),
-		InstalledAt: &now,
+		Cluster:          "sno-libvirt",
+		DesiredHash:      hash,
+		HashSchema:       ConvergeHashSchema,
+		Status:           ClusterInstallStatusInstalled,
+		Phase:            ClusterInstallPhaseComplete,
+		RunID:            "previous-run",
+		StartedAt:        now.UTC(),
+		UpdatedAt:        now.UTC(),
+		InstalledAt:      &now,
+		InstallerVersion: clusterInstallDeclaredVersion(state, "sno-libvirt"),
 	}
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
@@ -808,13 +809,15 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster:     "sno-libvirt",
-		DesiredHash: hash,
-		HashSchema:  ConvergeHashSchema,
-		Status:      ClusterInstallStatusInstalling,
-		Phase:       ClusterInstallPhaseNodesBooted,
-		RunID:       "previous-run",
-		UpdatedAt:   time.Now().UTC(),
+		Cluster:          "sno-libvirt",
+		DesiredHash:      hash,
+		HashSchema:       ConvergeHashSchema,
+		Status:           ClusterInstallStatusInstalling,
+		Phase:            ClusterInstallPhaseNodesBooted,
+		RunID:            "previous-run",
+		InstallerVersion: clusterInstallDeclaredVersion(state, "sno-libvirt"),
+		StartedAt:        time.Now().Add(-time.Hour).UTC(),
+		UpdatedAt:        time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}

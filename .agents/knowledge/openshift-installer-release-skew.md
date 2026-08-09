@@ -25,12 +25,19 @@ itself is not at fault — it is version-scoped and sha256-verified. The stale
 copy is whatever the last `bastion setup` laid down, commonly a lower version
 still declared by another context on the same controller.
 
-**Fix:** The agent install stage now reads `openshift-install version` and
-refuses when it does not match the cluster's declared release, naming the
-binary, both versions, and `bootwright bastion setup` as the repair. Re-run
-`bootwright bastion setup` with the cluster in scope after any release bump.
-A FIPS cluster needs the `openshift-install-fips` build, which is only laid down
-when the bastion was set up with a FIPS cluster in scope.
+**Fix:** The agent install stage reads `openshift-install version` and refuses
+before ISO creation when it does not match the cluster's declared release,
+naming the binary, both versions, and `bootwright bastion setup` as the repair.
+ISO creation also writes that version into controller runtime state and the
+cluster install record. Before boot, missing or skewed evidence requires ISO
+regeneration. A resumed post-boot wait warns and continues so it does not strand
+the cluster; after install-complete, Bootwright retains the successful evidence
+but exits nonzero with a typed future-rebuild remedy. An installed record with
+skew is never a healthy skip. Image-only release pins are exempt because the
+declaration supplies no version for comparison. Re-run `bootwright bastion
+setup` with the cluster in scope after any release bump. A FIPS cluster needs
+the `openshift-install-fips` build, which is only laid down when the bastion was
+set up with a FIPS cluster in scope.
 
 Pinned by `TestAgentInstallRefusesAnInstallerBinaryThatDoesNotMatchTheDeclaredRelease`
-in `internal/repo/checks/ansible_agent_install_test.go`.
+and the install lifecycle tests.

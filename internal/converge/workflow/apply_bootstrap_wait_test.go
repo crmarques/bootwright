@@ -170,11 +170,11 @@ func TestInstalledClusterSkipsBootstrapWaitTaskKind(t *testing.T) {
 	if !kinds[ApplyTaskKindBootstrapWait] {
 		t.Fatalf("allClusterInstallTaskKinds = %v, want the bootstrap wait", allClusterInstallTaskKinds())
 	}
-	if _, ok := clusterInstallTaskStartPhase(ApplyTaskKindBootstrapWait); ok {
-		t.Fatal("bootstrap wait must not move the cluster install record phase; only install-complete may mark a cluster installed")
+	if phase, ok := clusterInstallTaskStartPhase(ApplyTaskKindBootstrapWait); !ok || phase != ClusterInstallPhaseWaitingBootstrap {
+		t.Fatalf("bootstrap wait start phase = %q found=%v, want %q", phase, ok, ClusterInstallPhaseWaitingBootstrap)
 	}
-	if _, ok := clusterInstallTaskSuccessPhase(ApplyTaskKindBootstrapWait); ok {
-		t.Fatal("bootstrap wait must not mark the cluster install record complete")
+	if phase, ok := clusterInstallTaskSuccessPhase(ApplyTaskKindBootstrapWait); !ok || phase != ClusterInstallPhaseBootstrapComplete {
+		t.Fatalf("bootstrap wait success phase = %q found=%v, want %q", phase, ok, ClusterInstallPhaseBootstrapComplete)
 	}
 	if SubstrateReleaseClearKind(ApplyTaskKindBootstrapWait) {
 		t.Fatal("bootstrap wait must not consume a substrate release; install-complete owns that round trip")

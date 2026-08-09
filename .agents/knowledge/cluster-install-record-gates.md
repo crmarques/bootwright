@@ -89,3 +89,15 @@ alone — e.g. an interrupted run that only created the agent ISO
 same boot-proven set, unioned with released-substrate clusters (a destroyed
 cluster's rebuild legitimately faces its own old OS), feeds
 `bootwright_ocp_reinstall_clusters`, the occupancy-guard opt-out list.
+
+**Constraint (bounded resume and installer-version evidence):** ISO creation
+records the exact installer version and clears stale version evidence before a
+new create attempt. The bootstrap wait records both its running and completed
+phase. Post-boot retries use the original `StartedAt` and may start only inside
+the three-hour ceiling; a missing time or an expired ceiling is a pre-mutation
+refusal with typed, scoped destroy-and-reapply remedy data. A missing or
+mismatched installer version before boot requires ISO regeneration. Once nodes
+may have booted, Ansible warns and completes the in-flight install; the successful
+record remains durable, but the Go runner returns a typed nonzero future-rebuild
+error afterward so skew can never be stamped as healthy. An image-only release
+declaration has no comparable version and is deliberately exempt.

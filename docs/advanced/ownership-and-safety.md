@@ -106,8 +106,12 @@ the destructive kinds cross the destroy-protection boundary (below).
     comparisons — decide skip-vs-fail against live state.
     Cluster install reconcile reads the per-cluster install record, probes live
     cluster availability, skips completed installs, resumes only from known-safe
-    phases, and refuses to proceed when install state exists for different inputs
-    after node boot — unless you pass `--mode rebuild`.
+    phases for at most three hours from the original start, and refuses to
+    proceed when install state exists for different inputs after node boot —
+    unless you pass `--mode rebuild`. ISO creation records the installer version:
+    skew before boot requires regenerating the ISO; skew discovered after boot
+    finishes the in-flight install, retains its evidence, and leaves the run
+    nonzero until a deliberate future rebuild.
 
 The practical consequence: an interrupted `apply` is resumable, and a completed
 `apply` re-run is a near-no-op. You do not get a destructive surprise from simply

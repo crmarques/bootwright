@@ -1102,7 +1102,7 @@ there.
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |
-| `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint that install reconcile reads. |
+| `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint, exact installer version, original start time, and ISO/boot/bootstrap/install phase that bounded resume reads. |
 
 A run records a durable ledger entry plus a short-lived lease that marks the
 updating process; cluster install tasks additionally record per-cluster install

@@ -75,7 +75,8 @@ func TestOverrideReinstallInputDriftedClusters(t *testing.T) {
 	}
 	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete, UpdatedAt: now.UTC(),
+		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
+		InstallerVersion: clusterInstallDeclaredVersion(state, cluster), UpdatedAt: now.UTC(),
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}

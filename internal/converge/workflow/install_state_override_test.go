@@ -54,7 +54,8 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
 			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			UpdatedAt: now.UTC(),
+			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
+			UpdatedAt:        now.UTC(),
 		}); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
@@ -105,7 +106,8 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 			Cluster: cluster, DesiredHash: "sha256:stale", HashSchema: ConvergeHashSchema,
 			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			UpdatedAt: now.UTC(),
+			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
+			UpdatedAt:        now.UTC(),
 		}); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
@@ -126,7 +128,8 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
 			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			UpdatedAt: now.UTC(),
+			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
+			UpdatedAt:        now.UTC(),
 		}); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
@@ -200,7 +203,8 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
 			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			UpdatedAt: now.UTC(),
+			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
+			UpdatedAt:        now.UTC(),
 		}); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}

@@ -26,8 +26,10 @@ import (
 )
 
 const (
-	ClusterInstallRecordFileName = "install-record.json"
-	ClusterConnectionFileName    = "connection.json"
+	ClusterInstallRecordFileName    = "install-record.json"
+	ClusterConnectionFileName       = "connection.json"
+	ClusterInstallerVersionFileName = "agent-iso-installer-version"
+	ClusterInstallResumeCeiling     = 3 * time.Hour
 )
 
 type ClusterInstallStatus string
@@ -42,18 +44,23 @@ const (
 type ClusterInstallPhase string
 
 const (
-	ClusterInstallPhaseCreatingISO ClusterInstallPhase = "creating-iso"
-	ClusterInstallPhaseISOCreated  ClusterInstallPhase = "iso-created"
-	ClusterInstallPhaseBooting     ClusterInstallPhase = "booting"
-	ClusterInstallPhaseNodesBooted ClusterInstallPhase = "nodes-booted"
-	ClusterInstallPhaseWaiting     ClusterInstallPhase = "waiting"
-	ClusterInstallPhaseComplete    ClusterInstallPhase = "complete"
+	ClusterInstallPhaseCreatingISO       ClusterInstallPhase = "creating-iso"
+	ClusterInstallPhaseISOCreated        ClusterInstallPhase = "iso-created"
+	ClusterInstallPhaseBooting           ClusterInstallPhase = "booting"
+	ClusterInstallPhaseNodesBooted       ClusterInstallPhase = "nodes-booted"
+	ClusterInstallPhaseWaitingBootstrap  ClusterInstallPhase = "waiting-bootstrap"
+	ClusterInstallPhaseBootstrapComplete ClusterInstallPhase = "bootstrap-complete"
+	ClusterInstallPhaseWaiting           ClusterInstallPhase = "waiting"
+	ClusterInstallPhaseComplete          ClusterInstallPhase = "complete"
 )
 
 type ClusterInstallRemedyAction string
 
 const (
-	ClusterInstallRemedyReconcile ClusterInstallRemedyAction = "reconcile"
+	ClusterInstallRemedyReconcile         ClusterInstallRemedyAction = "reconcile"
+	ClusterInstallRemedyRegenerateISO     ClusterInstallRemedyAction = "regenerate-iso"
+	ClusterInstallRemedyDestroyAndReapply ClusterInstallRemedyAction = "destroy-and-reapply"
+	ClusterInstallRemedyFutureRebuild     ClusterInstallRemedyAction = "future-rebuild"
 )
 
 type ClusterInstallRemedy struct {
@@ -79,17 +86,72 @@ func (e *ClusterInstallStateError) ClusterInstallRemedy() ClusterInstallRemedy {
 	return e.Remedy
 }
 
+type ClusterInstallResumeExpiredError struct {
+	Cluster   string
+	Phase     ClusterInstallPhase
+	StartedAt time.Time
+	Deadline  time.Time
+}
+
+func (e *ClusterInstallResumeExpiredError) Error() string {
+	if e.StartedAt.IsZero() {
+		return fmt.Sprintf("ContainerCluster/%s has incomplete post-boot install state at phase %q with no recorded start time; bootwright cannot prove that another automatic wait is still inside the %s resume ceiling and refuses before any mutation", e.Cluster, e.Phase, ClusterInstallResumeCeiling)
+	}
+	return fmt.Sprintf("ContainerCluster/%s has incomplete post-boot install state at phase %q from %s; its automatic resume ceiling ended at %s after %s, so bootwright refuses another wait before any mutation", e.Cluster, e.Phase, e.StartedAt.UTC().Format(time.RFC3339), e.Deadline.UTC().Format(time.RFC3339), ClusterInstallResumeCeiling)
+}
+
+func (e *ClusterInstallResumeExpiredError) ClusterInstallRemedy() ClusterInstallRemedy {
+	return ClusterInstallRemedy{Action: ClusterInstallRemedyDestroyAndReapply, Cluster: e.Cluster}
+}
+
+type ClusterInstallVersionError struct {
+	Cluster            string
+	Phase              ClusterInstallPhase
+	InstallerVersion   string
+	DeclaredVersion    string
+	NodesMayHaveBooted bool
+	InstallCompleted   bool
+}
+
+func (e *ClusterInstallVersionError) Error() string {
+	recorded := strings.TrimSpace(e.InstallerVersion)
+	if recorded == "" {
+		recorded = "<missing>"
+	}
+	declared := strings.TrimSpace(e.DeclaredVersion)
+	if declared == "" {
+		declared = "<undeclared>"
+	}
+	switch {
+	case e.InstallCompleted:
+		return fmt.Sprintf("ContainerCluster/%s finished installing and its successful install evidence was retained, but the agent ISO installer version is %s while desired state declares %s; bootwright leaves this run nonzero so the release skew is not treated as normal and requires a deliberate future rebuild", e.Cluster, recorded, declared)
+	case e.NodesMayHaveBooted:
+		return fmt.Sprintf("ContainerCluster/%s is already past node boot at phase %q, but the agent ISO installer version is %s while desired state declares %s; bootwright will finish the already-started install before requiring a deliberate future rebuild", e.Cluster, e.Phase, recorded, declared)
+	default:
+		return fmt.Sprintf("ContainerCluster/%s has not booted any node, but its recorded agent ISO installer version is %s while desired state declares %s; bootwright refuses to boot and requires deliberate ISO regeneration", e.Cluster, recorded, declared)
+	}
+}
+
+func (e *ClusterInstallVersionError) ClusterInstallRemedy() ClusterInstallRemedy {
+	action := ClusterInstallRemedyRegenerateISO
+	if e.NodesMayHaveBooted || e.InstallCompleted {
+		action = ClusterInstallRemedyFutureRebuild
+	}
+	return ClusterInstallRemedy{Action: action, Cluster: e.Cluster}
+}
+
 type ClusterInstallRecord struct {
-	Cluster        string               `json:"cluster"`
-	DesiredHash    string               `json:"desiredHash"`
-	StructuralHash string               `json:"structuralHash,omitempty"`
-	HashSchema     int                  `json:"hashSchema,omitempty"`
-	Status         ClusterInstallStatus `json:"status"`
-	Phase          ClusterInstallPhase  `json:"phase"`
-	RunID          string               `json:"runId,omitempty"`
-	StartedAt      time.Time            `json:"startedAt,omitempty"`
-	UpdatedAt      time.Time            `json:"updatedAt"`
-	InstalledAt    *time.Time           `json:"installedAt,omitempty"`
+	Cluster          string               `json:"cluster"`
+	DesiredHash      string               `json:"desiredHash"`
+	StructuralHash   string               `json:"structuralHash,omitempty"`
+	HashSchema       int                  `json:"hashSchema,omitempty"`
+	Status           ClusterInstallStatus `json:"status"`
+	Phase            ClusterInstallPhase  `json:"phase"`
+	RunID            string               `json:"runId,omitempty"`
+	InstallerVersion string               `json:"installerVersion,omitempty"`
+	StartedAt        time.Time            `json:"startedAt,omitempty"`
+	UpdatedAt        time.Time            `json:"updatedAt"`
+	InstalledAt      *time.Time           `json:"installedAt,omitempty"`
 }
 
 type ClusterConnectionRecord struct {
@@ -158,6 +220,10 @@ func ClusterProviderStateDir(clustersDir, cluster string) string {
 
 func ClusterInstallRecordPath(clustersDir, cluster string) string {
 	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterInstallRecordFileName)
+}
+
+func ClusterInstallerVersionPath(clustersDir, cluster string) string {
+	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), "installer", ClusterInstallerVersionFileName)
 }
 
 func ClusterConnectionPath(clustersDir, cluster string) string {
@@ -238,6 +304,19 @@ func LoadClusterInstallRecord(clustersDir, cluster string) (ClusterInstallRecord
 	return record, true, nil
 }
 
+func LoadClusterInstallerVersion(clustersDir, cluster string) (string, error) {
+	path := ClusterInstallerVersionPath(clustersDir, cluster)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read agent ISO installer version %s: %w", path, err)
+	}
+	version := strings.TrimSpace(string(data))
+	if version == "" {
+		return "", fmt.Errorf("read agent ISO installer version %s: file is empty", path)
+	}
+	return version, nil
+}
+
 func SaveClusterInstallRecord(clustersDir string, record ClusterInstallRecord) error {
 	path := ClusterInstallRecordPath(clustersDir, record.Cluster)
 	data, err := json.MarshalIndent(record, "", "  ")
@@ -314,6 +393,12 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 				}
 				return out, installedMatching, fmt.Errorf("ContainerCluster/%s recorded install inputs differ from current desired inputs but its reinstall was not acknowledged when this apply was confirmed; re-run bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes to acknowledge the reinstall", name, name)
 			}
+			if versionErr := clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(state, name), true); versionErr != nil {
+				if acked[name] {
+					continue
+				}
+				return out, installedMatching, versionErr
+			}
 			var available bool
 			availErr := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
 				var err error
@@ -338,6 +423,12 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 			}
 			return out, installedMatching, fmt.Errorf("ContainerCluster/%s was Available=True when this apply was confirmed but does not report Available=True at execution; re-run bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes to acknowledge the reinstall", name, name)
 		}
+		declaredVersion := clusterInstallDeclaredVersion(state, name)
+		if record.Status != ClusterInstallStatusDestroyed && record.Phase == ClusterInstallPhaseISOCreated {
+			if versionErr := clusterInstallVersionMismatch(record, declaredVersion, false); versionErr != nil {
+				return out, installedMatching, versionErr
+			}
+		}
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
 			return out, installedMatching, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy --stage clusters --clusters %s --yes or bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes after resetting target machines", name, name, name)
 		}
@@ -361,6 +452,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 			if !available {
 				return out, installedMatching, fmt.Errorf("ContainerCluster/%s has an installed record but kubeconfig does not report Available=True; to keep its data, repair the cluster to Available=True and re-run apply, or rebuild it with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes", name, name)
 			}
+			if versionErr := clusterInstallVersionMismatch(record, declaredVersion, true); versionErr != nil {
+				return out, installedMatching, versionErr
+			}
 			if rebaseline {
 				if err := rebaselineClusterInstallRecord(clustersDir, &record, hash, structuralHash, now); err != nil {
 					return out, installedMatching, err
@@ -374,6 +468,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 			}
 			planned, err := resumeClusterInstallTasks(out, record, name, now)
 			if err != nil {
+				return out, installedMatching, err
+			}
+			if err := guardClusterInstallResumeCeiling(record, name, now); err != nil {
 				return out, installedMatching, err
 			}
 			out = planned
@@ -477,6 +574,10 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, runsDir,
 			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (recorded install inputs differ from current desired inputs — e.g. rotated secret material or changed install config; --mode rebuild reinstalls the cluster and wipes its node disks)", name)})
 			continue
 		}
+		if clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(state, name), true) != nil {
+			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (the recorded agent ISO installer version does not match the desired release; --mode rebuild reinstalls the cluster and wipes its node disks)", name)})
+			continue
+		}
 		var available bool
 		availErr := withMaterializedClusterKubeconfig(contextName, clustersDir, name, func(kubeconfigPath string) error {
 			var err error
@@ -531,7 +632,7 @@ func OverrideReinstallInputDriftedClusters(clustersDir, runsDir, contextName, se
 			continue
 		}
 		matches, _, matchErr := clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
-		if matchErr != nil || !matches {
+		if matchErr != nil || !matches || clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(state, name), true) != nil {
 			out = append(out, name)
 		}
 	}
@@ -602,12 +703,58 @@ func guardUnrecordedCluster(ctx context.Context, contextName, clustersDir, name 
 	return fmt.Errorf("ContainerCluster/%s has a reachable kubeconfig but no install record; bootwright cannot confirm it was installed from the current desired inputs and will not adopt it silently. Rebuild it from the desired state with bootwright apply --stage clusters --clusters %s --mode rebuild --authorize data-loss --yes, or restore clusters/%s/runtime/%s if the running cluster already matches", name, name, name, ClusterInstallRecordFileName)
 }
 
+func clusterInstallDeclaredVersion(state v1alpha1.State, name string) string {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == name {
+			return strings.TrimSpace(cluster.Spec.Distribution.Release.Version)
+		}
+	}
+	return ""
+}
+
+func clusterInstallVersionMismatch(record ClusterInstallRecord, declaredVersion string, complete bool) error {
+	installerVersion := strings.TrimSpace(record.InstallerVersion)
+	declaredVersion = strings.TrimSpace(declaredVersion)
+	if declaredVersion == "" || installerVersion == declaredVersion {
+		return nil
+	}
+	return &ClusterInstallVersionError{
+		Cluster:            record.Cluster,
+		Phase:              record.Phase,
+		InstallerVersion:   installerVersion,
+		DeclaredVersion:    declaredVersion,
+		NodesMayHaveBooted: clusterInstallPhaseMayHaveBooted(record.Phase),
+		InstallCompleted:   complete,
+	}
+}
+
+func guardClusterInstallResumeCeiling(record ClusterInstallRecord, name string, now time.Time) error {
+	if !clusterInstallPhaseMayHaveBooted(record.Phase) || record.Phase == ClusterInstallPhaseComplete {
+		return nil
+	}
+	if record.StartedAt.IsZero() {
+		return &ClusterInstallResumeExpiredError{Cluster: name, Phase: record.Phase}
+	}
+	deadline := record.StartedAt.UTC().Add(ClusterInstallResumeCeiling)
+	if now.UTC().Before(deadline) {
+		return nil
+	}
+	return &ClusterInstallResumeExpiredError{
+		Cluster:   name,
+		Phase:     record.Phase,
+		StartedAt: record.StartedAt.UTC(),
+		Deadline:  deadline,
+	}
+}
+
 func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, name string, now time.Time) ([]ApplyTask, error) {
 	switch record.Phase {
 	case ClusterInstallPhaseISOCreated:
 		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO}, "previous install already created the agent ISO; resuming from node boot"+publishedAgentISOAgeNote(record, name, now), now), nil
-	case ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaiting:
-		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot}, "previous install already booted nodes; resuming install wait", now), nil
+	case ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaitingBootstrap:
+		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot}, "previous install already booted nodes; resuming bootstrap wait", now), nil
+	case ClusterInstallPhaseBootstrapComplete, ClusterInstallPhaseWaiting:
+		return skipClusterInstallTasks(tasks, name, []string{ApplyTaskKindClusterISO, ApplyTaskKindNodeBoot, ApplyTaskKindBootstrapWait}, "previous install completed bootstrap; resuming install-complete wait", now), nil
 	case "", ClusterInstallPhaseCreatingISO:
 		return tasks, nil
 	case ClusterInstallPhaseBooting:
@@ -661,6 +808,9 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
 	record.InstalledAt = nil
+	if task.Entry.Kind == ApplyTaskKindClusterISO {
+		record.InstallerVersion = ""
+	}
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		return err
 	}
@@ -700,6 +850,13 @@ func MarkClusterInstallTaskSucceeded(clustersDir, runsDir, contextName, secretsD
 	record.RunID = runID
 	record.Phase = phase
 	record.UpdatedAt = now.UTC()
+	if task.Entry.Kind == ApplyTaskKindClusterISO {
+		installerVersion, err := LoadClusterInstallerVersion(clustersDir, task.Entry.Cluster)
+		if err != nil {
+			return err
+		}
+		record.InstallerVersion = installerVersion
+	}
 	if task.Entry.Kind == ApplyTaskKindInstallWait {
 		record.Status = ClusterInstallStatusInstalled
 		t := now.UTC()
@@ -745,12 +902,28 @@ func MarkClusterInstallTaskFailed(clustersDir, contextName, secretsDir, runID st
 	return SaveClusterInstallRecord(clustersDir, record)
 }
 
+func ClusterInstallPostSuccessError(clustersDir string, task ApplyTask) error {
+	if task.Entry.Kind != ApplyTaskKindInstallWait || task.Entry.Cluster == "" || !stateHasContainerCluster(task.State, task.Entry.Cluster) {
+		return nil
+	}
+	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("ContainerCluster/%s completed its install wait but its install record is missing", task.Entry.Cluster)
+	}
+	return clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(task.State, task.Entry.Cluster), true)
+}
+
 func clusterInstallTaskStartPhase(kind string) (ClusterInstallPhase, bool) {
 	switch kind {
 	case ApplyTaskKindClusterISO:
 		return ClusterInstallPhaseCreatingISO, true
 	case ApplyTaskKindNodeBoot:
 		return ClusterInstallPhaseBooting, true
+	case ApplyTaskKindBootstrapWait:
+		return ClusterInstallPhaseWaitingBootstrap, true
 	case ApplyTaskKindInstallWait:
 		return ClusterInstallPhaseWaiting, true
 	default:
@@ -764,6 +937,8 @@ func clusterInstallTaskSuccessPhase(kind string) (ClusterInstallPhase, bool) {
 		return ClusterInstallPhaseISOCreated, true
 	case ApplyTaskKindNodeBoot:
 		return ClusterInstallPhaseNodesBooted, true
+	case ApplyTaskKindBootstrapWait:
+		return ClusterInstallPhaseBootstrapComplete, true
 	case ApplyTaskKindInstallWait:
 		return ClusterInstallPhaseComplete, true
 	default:
@@ -773,7 +948,7 @@ func clusterInstallTaskSuccessPhase(kind string) (ClusterInstallPhase, bool) {
 
 func clusterInstallPhaseMayHaveBooted(phase ClusterInstallPhase) bool {
 	switch phase {
-	case ClusterInstallPhaseBooting, ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaiting, ClusterInstallPhaseComplete:
+	case ClusterInstallPhaseBooting, ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaitingBootstrap, ClusterInstallPhaseBootstrapComplete, ClusterInstallPhaseWaiting, ClusterInstallPhaseComplete:
 		return true
 	default:
 		return false

@@ -89,9 +89,9 @@ destroy.
   bootstrap-complete instead of install-complete. Operators can reach the
   cluster with `bootwright container-cluster kubeconfig` while the install finishes.
 - `bootstrapWait` is a distinct task kind, so an already-installed cluster
-  skips it before Ansible, a destroy removes its converge record, and it never
-  moves the cluster install record — only install-complete may mark a cluster
-  installed.
+  skips it before Ansible and a destroy removes its converge record. It records
+  `waiting-bootstrap` and `bootstrap-complete` so a retry resumes at the exact
+  wait boundary; only install-complete may mark a cluster installed.
 - On a fleet installed before this change the new activity has no
   converge-safety record, so the first `bootwright diff --recorded` reports it as
   missing under its own object key. The `ContainerCluster` object keeps its
@@ -106,5 +106,9 @@ destroy.
   treating one `bootstrap process timed out` as a failed install. The budget
   bounds when a new invocation may start, so each wait can overrun it by up to
   one 60-minute window.
+- Re-invocation is additionally bounded by the install record's original start
+  time. Bootwright refuses to plan another post-boot wait at or beyond three
+  hours, or when that start time is absent, instead of renewing the budget on
+  every apply forever.
 - The resume path is unvalidated without a hardware soak, tracked as B-041 in
   [`BACKLOG.md`](../../.agents/knowledge/BACKLOG.md).
