@@ -69,6 +69,18 @@ repo-local cache makes managed-root tests fail with `must not contain symlink`.
 Keep `GOTMPDIR`, `GOCACHE`, `GOMODCACHE`, and `STATE_DIR` on their direct
 disk-backed paths.
 
+**Go VCS stamping below a false parent repository:** Some restricted local
+environments expose an empty, read-only `/tmp/.git` directory. A linked Git
+worktree below `/tmp` has a `.git` file, which Go's VCS-root detector ignores;
+it then climbs to the parent `.git` directory, runs `git status` from `/tmp`,
+and fails with `error obtaining VCS status: exit status 128`. For checks in
+that environment, set `GOFLAGS=-buildvcs=false`: this disables only automatic
+build-info stamping while the compiler, tests, vet, and staticcheck still
+inspect the same sources. Keep the workaround local to the temporary
+worktree; CI and ordinary repositories must retain their normal environment,
+and Bootwright release metadata remains supplied by the Makefile's explicit
+linker flags.
+
 **CI gates:**
 
 - `checks.yml` runs the full suite on `v*` release tags (not just PRs/main
