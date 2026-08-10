@@ -1,81 +1,44 @@
 package converge
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-func writeStorageDestroyResult(t *testing.T, runsDir, runID, content string) string {
+func storageDestroyResultJSON(t *testing.T, cluster string, completed, skipped []string) string {
 	t.Helper()
-	runLog := filepath.Join(runsDir, "history", runID, "bootwright.log")
-	artifactDir := filepath.Join(runsDir, "history", runID, "tasks", workflow.DestroyStorageClustersTaskID, "artifacts")
-	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
-		t.Fatalf("mkdir artifacts: %v", err)
+	zero := 0
+	var nodes []workflow.StorageDestroyNodeResult
+	for _, node := range completed {
+		nodes = append(nodes, workflow.StorageDestroyNodeResult{
+			Name: node, Host: "storage__" + cluster + "__" + node, Outcome: "completed",
+			ProofVersion: "ceph-lvm-quiet-v2", ScanScope: "all-node-pvs", ScanDigest: strings.Repeat("0", 64),
+			ScannedRows: &zero, OwnedSurvivors: &zero, LVMScanRC: &zero, CompletionRC: &zero,
+		})
 	}
-	if err := os.WriteFile(filepath.Join(artifactDir, "storage-destroy-result.json"), []byte(content), 0o600); err != nil {
-		t.Fatalf("write result: %v", err)
+	for _, node := range skipped {
+		nodes = append(nodes, workflow.StorageDestroyNodeResult{
+			Name: node, Host: "storage__" + cluster + "__" + node, Outcome: "skipped",
+			AbsenceClass: "ssh-unreachable", Reason: node + ": connection timed out",
+		})
 	}
-	return runLog
-}
-
-func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
-	dir := t.TempDir()
-	ownershipDir := filepath.Join(dir, "ownership")
-	runsDir := filepath.Join(dir, "runs")
-
-	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
-		Kind:    string(ownership.KindStorageCluster),
-		Name:    "ceph-a",
-		Cluster: "ceph-a",
-	}); err != nil {
-		t.Fatalf("seed ownership record: %v", err)
-	}
-
-	runLog := writeStorageDestroyResult(t, runsDir, "destroy-20260101T000000Z",
-		`{"partialClusters":["ceph-a"],"skippedNodes":["ceph-02"],"skippedHosts":["storage__ceph-a__ceph-02"]}`)
-
-	partial, err := RecordPartialStorageDestroy(ownershipDir, "", runLog)
+	data, err := json.Marshal(workflow.StorageDestroyResult{
+		SchemaVersion: 1,
+		Clusters: []workflow.StorageDestroyClusterResult{{
+			Name:  cluster,
+			Nodes: nodes,
+		}},
+	})
 	if err != nil {
-		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+		t.Fatal(err)
 	}
-	if !partial.Found {
-		t.Fatal("result file must be reported as found")
-	}
-	if len(partial.Recorded) != 1 || partial.Recorded[0] != "ceph-a" {
-		t.Fatalf("recorded partial clusters = %v, want [ceph-a]", partial.Recorded)
-	}
-	if len(partial.Clusters) != 1 || partial.Clusters[0] != "ceph-a" {
-		t.Fatalf("all partial clusters = %v, want [ceph-a]", partial.Clusters)
-	}
-	if len(partial.Unrecorded) != 0 {
-		t.Fatalf("unrecorded partial clusters = %v, want none", partial.Unrecorded)
-	}
-
-	records, err := ownership.LoadContext(ownershipDir, "")
-	if err != nil {
-		t.Fatalf("load ownership: %v", err)
-	}
-	if len(records) != 1 {
-		t.Fatalf("ownership records = %d, want 1 (record must be kept, not removed)", len(records))
-	}
-	if got := records[0].Attributes[StorageDestroyStatusAttr]; got != StorageDestroyStatusPartial {
-		t.Fatalf("record destroyStatus = %q, want %q", got, StorageDestroyStatusPartial)
-	}
-	if got := records[0].Attributes[StorageDestroySkippedNodesAttr]; got != "ceph-02" {
-		t.Fatalf("record skipped nodes = %q, want ceph-02", got)
-	}
-
-	byName, err := PartiallyDestroyedStorageClusters(ownershipDir, "")
-	if err != nil {
-		t.Fatalf("PartiallyDestroyedStorageClusters: %v", err)
-	}
-	if byName["ceph-a"] != "ceph-02" {
-		t.Fatalf("partial map = %v, want ceph-a->ceph-02", byName)
-	}
+	return string(data)
 }
 
 func writeStorageDestroyTaskResult(t *testing.T, runsDir, runID, taskID, content string) string {
@@ -88,89 +51,196 @@ func writeStorageDestroyTaskResult(t *testing.T, runsDir, runID, taskID, content
 	if content == "" {
 		return runLog
 	}
-	if err := os.WriteFile(filepath.Join(artifactDir, "storage-destroy-result.json"), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(artifactDir, workflow.StorageDestroyResultFileName), []byte(content), 0o600); err != nil {
 		t.Fatalf("write result: %v", err)
 	}
 	return runLog
+}
+
+func writeStorageDestroyResult(t *testing.T, runsDir, runID, content string) string {
+	t.Helper()
+	return writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID, content)
+}
+
+func recordPartialStorageDestroy(ownershipDir, contextName, runLogPath string, expected map[string][]string, allowSkipped bool) (PartialStorageDestroy, error) {
+	seedHosts := map[string]string{}
+	for cluster, nodes := range expected {
+		if len(nodes) > 0 {
+			seedHosts[cluster] = "storage__" + cluster + "__" + nodes[0]
+		}
+	}
+	return RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath, expected, seedHosts, allowSkipped)
+}
+
+func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
+	dir := t.TempDir()
+	ownershipDir := filepath.Join(dir, "ownership")
+	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: "storage__ceph-a__ceph-02",
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__ceph-02"},
+	}); err != nil {
+		t.Fatalf("seed ownership record: %v", err)
+	}
+	runLog := writeStorageDestroyResult(t, filepath.Join(dir, "runs"), "destroy-20260101T000000Z",
+		storageDestroyResultJSON(t, "ceph-a", nil, []string{"ceph-02"}))
+
+	partial, err := recordPartialStorageDestroy(ownershipDir, "", runLog, map[string][]string{"ceph-a": {"ceph-02"}}, true)
+	if err != nil {
+		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+	}
+	if !partial.Found || strings.Join(partial.Recorded, ",") != "ceph-a" || strings.Join(partial.Clusters, ",") != "ceph-a" {
+		t.Fatalf("partial result = %+v", partial)
+	}
+	records, err := ownership.LoadContext(ownershipDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("ownership records = %d, want 1", len(records))
+	}
+	if got := records[0].Attributes[StorageDestroyStatusAttr]; got != StorageDestroyStatusPartial {
+		t.Fatalf("destroyStatus = %q, want %q", got, StorageDestroyStatusPartial)
+	}
+	if got := records[0].Attributes[StorageDestroySkippedNodesAttr]; got != "ceph-02" {
+		t.Fatalf("destroySkippedNodes = %q, want ceph-02", got)
+	}
+	byName, err := PartiallyDestroyedStorageClusters(ownershipDir, "")
+	if err != nil || byName["ceph-a"] != "ceph-02" {
+		t.Fatalf("partial map = %v, err = %v", byName, err)
+	}
 }
 
 func TestRecordPartialStorageDestroyCollectsEveryPerClusterTask(t *testing.T) {
 	dir := t.TempDir()
 	runsDir := filepath.Join(dir, "runs")
 	runID := "destroy-20260101T000000Z"
-
 	writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-a",
-		`{"partialClusters":["ceph-a"],"skippedNodes":["ceph-a1"],"skippedHosts":["storage__ceph-a__ceph-a1"]}`)
+		storageDestroyResultJSON(t, "ceph-a", nil, []string{"ceph-a1"}))
 	runLog := writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-b",
-		`{"partialClusters":["ceph-b"],"skippedNodes":["ceph-b1"],"skippedHosts":["storage__ceph-b__ceph-b1"]}`)
+		storageDestroyResultJSON(t, "ceph-b", nil, []string{"ceph-b1"}))
 
-	partial, err := RecordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog)
+	partial, err := recordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog,
+		map[string][]string{"ceph-a": {"ceph-a1"}, "ceph-b": {"ceph-b1"}}, true)
 	if err != nil {
 		t.Fatalf("RecordPartialStorageDestroy: %v", err)
 	}
-	if !partial.Found {
-		t.Fatal("every per-cluster teardown task reported, so the run has a complete report")
-	}
-	if len(partial.Clusters) != 2 || partial.Clusters[0] != "ceph-a" || partial.Clusters[1] != "ceph-b" {
-		t.Fatalf("partial clusters = %v; a per-cluster fan-out writes one report per task and every one of them must be read, or a cluster with unwiped nodes is silently treated as fully destroyed", partial.Clusters)
+	if !partial.Found || strings.Join(partial.Clusters, ",") != "ceph-a,ceph-b" {
+		t.Fatalf("partial result = %+v", partial)
 	}
 	if partial.Skipped != "ceph-a1,ceph-b1" {
-		t.Fatalf("skipped nodes = %q, want both clusters' skipped nodes", partial.Skipped)
+		t.Fatalf("skipped nodes = %q", partial.Skipped)
 	}
 }
 
-func TestRecordPartialStorageDestroyMissingPerClusterReportIsIncomplete(t *testing.T) {
+func TestRecordPartialStorageDestroyMissingPerClusterReportFailsClosed(t *testing.T) {
 	dir := t.TempDir()
 	runsDir := filepath.Join(dir, "runs")
 	runID := "destroy-20260101T000000Z"
-
 	writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-a",
-		`{"partialClusters":[],"skippedNodes":[],"skippedHosts":[]}`)
+		storageDestroyResultJSON(t, "ceph-a", []string{"ceph-a1"}, nil))
 	runLog := writeStorageDestroyTaskResult(t, runsDir, runID, workflow.DestroyStorageClustersTaskID+".ceph-b", "")
 
-	partial, err := RecordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog)
-	if err != nil {
-		t.Fatalf("RecordPartialStorageDestroy: %v", err)
-	}
-	if partial.Found {
-		t.Fatal("ceph-b's teardown task produced no completion report, so the run must not be reported as fully accounted for")
+	partial, err := recordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog,
+		map[string][]string{"ceph-a": {"ceph-a1"}, "ceph-b": {"ceph-b1"}}, false)
+	if err == nil || !strings.Contains(err.Error(), "no completion attestation") {
+		t.Fatalf("partial = %+v, error = %v", partial, err)
 	}
 }
 
-func TestRecordPartialStorageDestroyNoResultIsClean(t *testing.T) {
+func TestRecordPartialStorageDestroyNoExpectedStorageIsClean(t *testing.T) {
 	dir := t.TempDir()
 	runLog := filepath.Join(dir, "runs", "history", "destroy-x", "bootwright.log")
-	partial, err := RecordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog)
-	if err != nil {
-		t.Fatalf("missing result must be clean, got err %v", err)
+	partial, err := recordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog, nil, false)
+	if err != nil || partial.Found {
+		t.Fatalf("partial = %+v, error = %v", partial, err)
 	}
-	if partial.Found {
-		t.Fatal("missing result must report Found=false")
-	}
-	if len(partial.Recorded) != 0 || len(partial.Unrecorded) != 0 {
-		t.Fatalf("missing result must report no partial clusters, got %+v", partial)
+}
+
+func TestRecordPartialStorageDestroyMissingExpectedResultFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	runLog := filepath.Join(dir, "runs", "history", "destroy-x", "bootwright.log")
+	_, err := recordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog,
+		map[string][]string{"ceph-a": {"ceph-a1"}}, false)
+	if err == nil || !strings.Contains(err.Error(), "no completion attestation") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
 func TestRecordPartialStorageDestroyUnrecordedClusterIsReportedSeparately(t *testing.T) {
 	dir := t.TempDir()
-	ownershipDir := filepath.Join(dir, "ownership")
-	runsDir := filepath.Join(dir, "runs")
-
-	runLog := writeStorageDestroyResult(t, runsDir, "destroy-20260101T000000Z",
-		`{"partialClusters":["ceph-a"],"skippedNodes":["ceph-02"],"skippedHosts":["storage__ceph-a__ceph-02"]}`)
-
-	partial, err := RecordPartialStorageDestroy(ownershipDir, "", runLog)
+	runLog := writeStorageDestroyResult(t, filepath.Join(dir, "runs"), "destroy-20260101T000000Z",
+		storageDestroyResultJSON(t, "ceph-a", nil, []string{"ceph-02"}))
+	partial, err := recordPartialStorageDestroy(filepath.Join(dir, "ownership"), "", runLog,
+		map[string][]string{"ceph-a": {"ceph-02"}}, true)
 	if err != nil {
-		t.Fatalf("RecordPartialStorageDestroy: %v", err)
+		t.Fatal(err)
 	}
-	if len(partial.Recorded) != 0 {
-		t.Fatalf("no ownership record exists, recorded = %v, want none", partial.Recorded)
+	if len(partial.Recorded) != 0 || strings.Join(partial.Unrecorded, ",") != "ceph-a" {
+		t.Fatalf("partial result = %+v", partial)
 	}
-	if len(partial.Clusters) != 1 || partial.Clusters[0] != "ceph-a" {
-		t.Fatalf("all partial clusters = %v, want [ceph-a]", partial.Clusters)
+}
+
+func TestRecordPartialStorageDestroyNeverReleasesCompletedOwnership(t *testing.T) {
+	dir := t.TempDir()
+	ownershipDir := filepath.Join(dir, "ownership")
+	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: "storage__ceph-a__a1",
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__a1"},
+	}); err != nil {
+		t.Fatal(err)
 	}
-	if len(partial.Unrecorded) != 1 || partial.Unrecorded[0] != "ceph-a" {
-		t.Fatalf("unrecorded = %v, want [ceph-a]", partial.Unrecorded)
+	runLog := writeStorageDestroyResult(t, filepath.Join(dir, "runs"), "destroy-failed",
+		storageDestroyResultJSON(t, "ceph-a", []string{"a1"}, nil))
+	partial, err := recordPartialStorageDestroy(ownershipDir, "", runLog, map[string][]string{"ceph-a": {"a1"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !partial.Found || len(partial.Clusters) != 0 {
+		t.Fatalf("partial = %+v", partial)
+	}
+	if records, err := ownership.LoadContext(ownershipDir, ""); err != nil || len(records) != 1 {
+		t.Fatalf("post-run aggregation must not release completed ownership without the task-boundary finalizer, records=%v err=%v", records, err)
+	}
+}
+
+func TestRecordPartialStorageDestroyDoesNotReportAReferenceAsRecorded(t *testing.T) {
+	dir := t.TempDir()
+	ownershipDir := filepath.Join(dir, "ownership")
+	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Role: ownership.RoleReference,
+		Attributes: map[string]string{StorageDestroyStatusAttr: StorageDestroyStatusPartial, StorageDestroySkippedNodesAttr: "a1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runLog := writeStorageDestroyResult(t, filepath.Join(dir, "runs"), "destroy-partial",
+		storageDestroyResultJSON(t, "ceph-a", nil, []string{"a1"}))
+	partial, err := recordPartialStorageDestroy(ownershipDir, "ctx", runLog, map[string][]string{"ceph-a": {"a1"}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partial.Recorded) != 0 || strings.Join(partial.Unrecorded, ",") != "ceph-a" {
+		t.Fatalf("partial = %+v", partial)
+	}
+	if byName, err := PartiallyDestroyedStorageClusters(ownershipDir, "ctx"); err != nil || len(byName) != 0 {
+		t.Fatalf("reference-only status = %v err=%v", byName, err)
+	}
+}
+
+func TestRecordPartialStorageDestroyRefusesAForeignOwner(t *testing.T) {
+	dir := t.TempDir()
+	ownershipDir := filepath.Join(dir, "ownership")
+	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Owner: "foreign",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runLog := writeStorageDestroyResult(t, filepath.Join(dir, "runs"), "destroy-partial",
+		storageDestroyResultJSON(t, "ceph-a", nil, []string{"a1"}))
+	_, err := recordPartialStorageDestroy(ownershipDir, "ctx", runLog, map[string][]string{"ceph-a": {"a1"}}, true)
+	if err == nil || !strings.Contains(err.Error(), "contradicts") {
+		t.Fatalf("error = %v", err)
+	}
+	if records, loadErr := ownership.LoadContext(ownershipDir, "ctx"); loadErr != nil || len(records) != 1 {
+		t.Fatalf("foreign owner must remain, records=%v err=%v", records, loadErr)
 	}
 }

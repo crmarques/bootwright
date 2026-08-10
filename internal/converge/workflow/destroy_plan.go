@@ -233,13 +233,16 @@ func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destro
 		}
 		if cluster == "" || work.nameSet[cluster] {
 			out = appendUniqueStrings(out, work.stepIDsFor(cluster,
-				destroyStorageNodeAccessTaskID, destroyMachineRegistrationTaskID, DestroyStorageClustersTaskID)...)
+				destroyStorageNodeAccessTaskID, destroyMachineRegistrationTaskID)...)
 		}
 		if destroyOrdersInfraComponentsFirst(facts, placementFirst, cluster) {
 			out = appendUniqueString(out, destroyInfraComponentsTaskID)
 		}
 		return out
 	}, func(cluster string) []string {
+		if len(work.names) == 0 {
+			return nil
+		}
 		if cluster == "" {
 			return work.allIDs(DestroyStorageClustersTaskID)
 		}

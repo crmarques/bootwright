@@ -903,6 +903,42 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 	}
 }
 
+func TestRunDestroySkipsBeforePerTaskRender(t *testing.T) {
+	dir := t.TempDir()
+	renderDir := filepath.Join(dir, "task-rendered")
+	runner := &fakeRunner{}
+	reporter := &fakeReporter{}
+	result, err := Run(context.Background(), RunOptions{
+		State:                   minimalState(),
+		RenderDir:               renderDir,
+		RenderedDir:             filepath.Join(dir, "rendered"),
+		ClustersDir:             filepath.Join(dir, "clusters"),
+		RunsDir:                 filepath.Join(dir, "runs"),
+		SecretsDir:              filepath.Join(dir, "secrets"),
+		ManagedServicesDir:      filepath.Join(dir, "managed-services"),
+		ProviderStateDir:        filepath.Join(dir, "provider-state"),
+		OwnershipDir:            filepath.Join(dir, "ownership"),
+		BundleDir:               filepath.Join(dir, "bundle"),
+		Playbook:                "bootwright.core.task_machine_registration_deregister",
+		Limit:                   render.GroupProviderHosts + ":" + render.GroupInfraComponentHosts + ":" + render.GroupInfraHosts,
+		ArtifactsBaseName:       "machine-registration",
+		Label:                   "machine registration",
+		SkipNoHostsBeforeRender: true,
+	}, runner, reporter)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !result.Skipped || runner.runCalled {
+		t.Fatalf("result=%+v runner called=%t", result, runner.runCalled)
+	}
+	if _, err := os.Stat(renderDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("no-host destroy rendered task inputs before skipping: %v", err)
+	}
+	if reporter.skipLabel != "machine registration" || reporter.skipLimit == "" {
+		t.Fatalf("expected skip report, got label=%q limit=%q", reporter.skipLabel, reporter.skipLimit)
+	}
+}
+
 func TestLimitMatchesNoHostsTable(t *testing.T) {
 	state := minimalState()
 	tests := []struct {

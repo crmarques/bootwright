@@ -72,7 +72,95 @@ func stubAnsiblePlaybookOnPath() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	stub := "#!/bin/sh\nprintf '%s\\n' 'ansible-playbook is stubbed in the cli test package' >&2\nexit 0\n"
+	stub := `#!/bin/sh
+set -eu
+
+inventory=
+limit=
+playbook=
+storage_scope=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -i)
+      shift
+      inventory=$1
+      ;;
+    --limit)
+      shift
+      limit=$1
+      ;;
+    -e)
+      shift
+      case "$1" in
+        bootwright_destroy_storage_scope=*) storage_scope=${1#*=} ;;
+      esac
+      ;;
+    *task_storage_cluster_destroy*)
+      playbook=$1
+      ;;
+  esac
+  shift
+done
+if [ -n "$playbook" ] && [ "${BOOTWRIGHT_TEST_STORAGE_RESULT_MODE:-valid}" != missing ]; then
+  mkdir -p "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+  awk -v limit="$limit" -v scope="$storage_scope" '
+    function value(line) {
+      sub(/^[^:]+:[[:space:]]*/, "", line)
+      gsub(/^"|"$/, "", line)
+      return line
+    }
+    BEGIN {
+      count=split(scope, selected, ",")
+      for (i=1; i<=count; i++) scoped[selected[i]]=1
+    }
+    $0 == "        " limit ":" { in_group=1; next }
+    in_group && $0 == "            hosts:" { in_group_hosts=1; next }
+    in_group_hosts && match($0, /^                [^[:space:]][^:]*:/) {
+      host=$0
+      sub(/^                /, "", host)
+      sub(/:.*/, "", host)
+      allowed[host]=1
+      next
+    }
+    in_group_hosts && $0 !~ /^                / { in_group=0; in_group_hosts=0 }
+    $0 == "    hosts:" { in_hosts=1; next }
+    in_hosts && match($0, /^        [^[:space:]][^:]*:$/) {
+      host=$0
+      sub(/^        /, "", host)
+      sub(/:$/, "", host)
+      next
+    }
+    in_hosts && $0 ~ /^            bootwright_storage_cluster_name:/ { cluster[host]=value($0); next }
+    in_hosts && $0 ~ /^            bootwright_storage_node_name:/ { node[host]=value($0); next }
+    END {
+      for (host in cluster) {
+        if (limit != "" && !allowed[host]) continue
+        if (scope != "" && !scoped[cluster[host]]) continue
+        names[cluster[host]]=1
+        nodes[cluster[host] SUBSEP node[host]]=1
+        node_host[cluster[host] SUBSEP node[host]]=host
+      }
+      printf "{\"schemaVersion\":1,\"clusters\":["
+      cluster_sep=""
+      for (name in names) {
+        printf "%s{\"name\":\"%s\",\"nodes\":[", cluster_sep, name
+        node_sep=""
+        for (key in nodes) {
+          split(key, part, SUBSEP)
+          if (part[1] != name) continue
+          printf "%s{\"name\":\"%s\",\"host\":\"%s\",\"outcome\":\"completed\",\"proofVersion\":\"ceph-lvm-quiet-v2\",\"scanScope\":\"all-node-pvs\",\"scannedRows\":0,\"ownedSurvivors\":0,\"scanDigest\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"lvmScanRC\":0,\"completionRC\":0,\"absenceClass\":\"\",\"reason\":\"\"}", node_sep, part[2], node_host[key]
+          node_sep=","
+        }
+        printf "]}"
+        cluster_sep=","
+      }
+      printf "]}\n"
+    }
+  ' "$inventory" > "$BOOTWRIGHT_ANSIBLE_ARTIFACTS/storage-destroy-result.json"
+fi
+printf '%s\n' 'ansible-playbook is stubbed in the cli test package' >&2
+exit 0
+`
 	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(stub), 0o755); err != nil {
 		os.RemoveAll(dir)
 		return nil, err

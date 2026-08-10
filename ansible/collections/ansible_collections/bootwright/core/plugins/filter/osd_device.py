@@ -249,9 +249,71 @@ def bootwright_reclaim_device_operand_probe(preserved, runtime):
     return {"valid": True, "value": value, "reason": ""}
 
 
+def _lvm_sweep_string_list(value, label):
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise AnsibleFilterError(f"Ceph LVM sweep {label} must be a list of strings")
+    return value
+
+
+def bootwright_ceph_lvm_sweep_classify(rows, owned_fsid, preserved_fsids, device_envelope):
+    if not isinstance(rows, list):
+        raise AnsibleFilterError("Ceph LVM sweep rows must be a list")
+    if not isinstance(owned_fsid, str):
+        raise AnsibleFilterError("Ceph LVM sweep owned fsid must be a string")
+    preserved = set(_lvm_sweep_string_list(preserved_fsids, "preserved fsids"))
+    envelope = set(_lvm_sweep_string_list(device_envelope, "device envelope"))
+    normalized = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise AnsibleFilterError("Ceph LVM sweep row must be a mapping")
+        pv = row.get("pv")
+        fsid = row.get("fsid")
+        label = row.get("label")
+        if not isinstance(pv, str) or not pv:
+            raise AnsibleFilterError("Ceph LVM sweep row must carry a nonempty pv")
+        if not isinstance(fsid, str):
+            raise AnsibleFilterError("Ceph LVM sweep row must carry a string fsid")
+        if not isinstance(label, str) or not label:
+            raise AnsibleFilterError("Ceph LVM sweep row must carry a nonempty label")
+        normalized.append({"pv": pv, "fsid": fsid, "label": label})
+
+    preserved_pvs = {row["pv"] for row in normalized if row["fsid"] in preserved}
+    claimed_pvs = {
+        row["pv"]
+        for row in normalized
+        if (owned_fsid and row["fsid"] == owned_fsid) or row["pv"] in envelope
+    }
+    devices = []
+    device_labels = []
+    kept_labels = []
+    unclaimed_labels = []
+    for row in normalized:
+        pv = row["pv"]
+        label = row["label"]
+        if pv in preserved_pvs:
+            if label not in kept_labels:
+                kept_labels.append(label)
+            continue
+        if pv in claimed_pvs:
+            if pv not in devices:
+                devices.append(pv)
+            if label not in device_labels:
+                device_labels.append(label)
+            continue
+        if label not in unclaimed_labels:
+            unclaimed_labels.append(label)
+    return {
+        "devices": devices,
+        "deviceLabels": device_labels,
+        "keptLabels": kept_labels,
+        "unclaimedLabels": unclaimed_labels,
+    }
+
+
 class FilterModule:
     def filters(self):
         return {
+            "bootwright_ceph_lvm_sweep_classify": bootwright_ceph_lvm_sweep_classify,
             "bootwright_ceph_osd_filter_candidates": bootwright_ceph_osd_filter_candidates,
             "bootwright_json_list_probe": bootwright_json_list_probe,
             "bootwright_reclaim_device_operand": bootwright_reclaim_device_operand,

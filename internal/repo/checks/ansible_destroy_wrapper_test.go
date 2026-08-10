@@ -31,12 +31,26 @@ func destroyPlaybookFile(playbook string) string {
 }
 
 func TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph(t *testing.T) {
+	state := v1alpha1.State{
+		Machines: []v1alpha1.Machine{{Metadata: v1alpha1.Metadata{Name: "seed"}}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-a"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: "seed"}},
+					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{Name: "seed", MachineRef: v1alpha1.LocalObjectReference{Name: "seed"}}}},
+				},
+			},
+		}},
+	}
 	for _, tc := range []struct{ scope, path string }{
 		{"infra", "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy.yml"},
 		{"clusters", "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_destroy.yml"},
 	} {
 		t.Run(tc.scope, func(t *testing.T) {
-			tasks, err := workflow.PlanDestroyTasks(tc.scope, v1alpha1.State{}, "", nil, nil)
+			tasks, err := workflow.PlanDestroyTasks(tc.scope, state, "", nil, nil)
 			if err != nil {
 				t.Fatalf("plan %s destroy: %v", tc.scope, err)
 			}
@@ -51,7 +65,7 @@ func TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph(t *testing.T) {
 			}
 			for _, task := range tasks {
 				self := playbookOf[task.Entry.ID]
-				edges := append(append([]string(nil), task.Entry.Dependencies...), task.Entry.OrderingDependencies...)
+				edges := append(append(append([]string(nil), task.Entry.Dependencies...), task.Entry.SuccessDependencies...), task.Entry.OrderingDependencies...)
 				for _, dep := range edges {
 					other, ok := playbookOf[dep]
 					if !ok || other == self {

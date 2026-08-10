@@ -83,6 +83,7 @@ type destroyStorageFamily struct {
 	kind     string
 	label    string
 	playbook string
+	success  func(cluster string) []string
 	ordering func(cluster string) []string
 }
 
@@ -100,6 +101,9 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 	}
 	if !work.fan {
 		base.resourceKeys = work.names
+		if family.success != nil {
+			base.successDependencies = family.success("")
+		}
 		if family.ordering != nil {
 			base.orderingDependencies = family.ordering("")
 		}
@@ -114,6 +118,9 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 		step.limit = render.StorageClusterGroupName(cluster)
 		step.forksLimit = render.StorageClusterGroupName(cluster)
 		step.resourceKeys = destroyClusterResourceKeys(state, cluster)
+		if family.success != nil {
+			step.successDependencies = family.success(cluster)
+		}
 		if family.ordering != nil {
 			step.orderingDependencies = family.ordering(cluster)
 		}
@@ -196,7 +203,7 @@ func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, pla
 	return out
 }
 
-func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, ordering func(cluster string) []string, hard func(cluster string) []string) ([]destroyStep, error) {
+func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, ordering func(cluster string) []string, success func(cluster string) []string) ([]destroyStep, error) {
 	step := destroyStep{
 		id:       destroyMachineInfraTaskID,
 		kind:     DestroyTaskKindMachineInfra,
@@ -219,8 +226,8 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 		if ordering != nil {
 			step.orderingDependencies = ordering("")
 		}
-		if hard != nil {
-			step.dependencies = appendUniqueStrings(step.dependencies, hard("")...)
+		if success != nil {
+			step.successDependencies = appendUniqueStrings(step.successDependencies, success("")...)
 		}
 		return []destroyStep{step}, nil
 	}
@@ -240,8 +247,8 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 				fanned.dependencies = appendUniqueString(fanned.dependencies, facts.machineInfraID(guest))
 			}
 		}
-		if hard != nil {
-			fanned.dependencies = appendUniqueStrings(fanned.dependencies, hard(cluster)...)
+		if success != nil {
+			fanned.successDependencies = appendUniqueStrings(fanned.successDependencies, success(cluster)...)
 		}
 		sort.Strings(fanned.dependencies)
 		if ordering != nil {
@@ -314,8 +321,8 @@ func machineRegistrationFamily(work destroyStorageWork, afterStorage bool) destr
 		kind:     DestroyTaskKindMachineRegistration,
 		label:    "Machine registration",
 		playbook: roles.PlaybookTaskMachineRegistrationDeregister,
-		ordering: func(cluster string) []string {
-			if !afterStorage {
+		success: func(cluster string) []string {
+			if !afterStorage || len(work.names) == 0 {
 				return nil
 			}
 			return []string{work.stepID(DestroyStorageClustersTaskID, cluster)}
@@ -329,14 +336,19 @@ func storageNodeAccessFamily(work destroyStorageWork, afterRegistration bool, ex
 		kind:     DestroyTaskKindStorageNodeAccess,
 		label:    "Storage node access",
 		playbook: roles.PlaybookTaskStorageNodeAccessDestroy,
+		success: func(cluster string) []string {
+			if len(work.names) == 0 {
+				return nil
+			}
+			var out []string
+			out = append(out, work.stepID(DestroyStorageClustersTaskID, cluster))
+			if afterRegistration {
+				out = append(out, work.stepID(destroyMachineRegistrationTaskID, cluster))
+			}
+			return out
+		},
 		ordering: func(cluster string) []string {
 			var out []string
-			if afterRegistration {
-				out = append(out,
-					work.stepID(destroyMachineRegistrationTaskID, cluster),
-					work.stepID(DestroyStorageClustersTaskID, cluster),
-				)
-			}
 			if extra != nil {
 				out = appendUniqueStrings(out, extra(cluster)...)
 			}

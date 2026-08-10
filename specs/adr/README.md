@@ -36,7 +36,7 @@ below.
 | [0020](0020-cluster-captured-secrets-encrypted-at-rest.md) | Cluster-Captured Secrets Are Encrypted at Rest | |
 | [0021](0021-external-playbook-content.md) | External Playbook Content | revises 0005 |
 | [0022](0022-cluster-wait-bootstrap-boundary.md) | Cluster Install Wait Splits at the Bootstrap Boundary | |
-| [0023](0023-teardown-is-the-inverse-of-buildup.md) | Teardown Is the Inverse of Build-Up | revises 0007 |
+| [0023](0023-teardown-is-the-inverse-of-buildup.md) | Teardown Is the Inverse of Build-Up | revises 0007; managed-storage proof edges revised by 0058 |
 | [0024](0024-machine-access-union-and-cluster-owned-node-login.md) | Machine Access Is a Union, and a Ceph Cluster Owns Its Node Login | revises 0019; revised by 0027 |
 | [0025](0025-composed-names-are-labels-plus-explicit-overrides.md) | Composed Names Are Labels Plus Explicit Overrides | refines 0017; `fqdn` override repaired by 0035 |
 | [0026](0026-custom-playbook-kind-name.md) | The Operator-Supplied Playbook Kind Is `CustomPlaybook` | renames the kind of 0005, 0021 |
@@ -71,3 +71,4 @@ below.
 | [0055](0055-the-controller-resolves-before-the-machine-it-contacts.md) | The Controller Resolves Before the Machine It Contacts | refines 0017, 0018, 0023, 0046 |
 | [0056](0056-the-support-report-a-storage-node-can-produce.md) | The Support Report a Storage Node Can Produce | follows 0002 and 0007; gives storage support tooling the owned package lifecycle |
 | [0057](0057-the-dag-decides-how-many-clusters-fly.md) | The DAG Decides How Many Clusters Fly | extends 0053; follows the value-carrying flag convention of 0010 |
+| [0058](0058-storage-destroy-completion-is-positive-proof.md) | Storage Destroy Completion Is Positive Proof | revises managed-storage A2 and fail-closed edges of 0023; follows 0007 and 0039 |

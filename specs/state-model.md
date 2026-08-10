@@ -3424,6 +3424,23 @@ command. The rest are registered per command, on the verbs that reach machines.
   is not a skippable node: when it is unreachable Bootwright cannot prove the
   guest VM and DataVolumes absent, so destroy fails closed and retains their
   ownership and cluster runtime records even with the token.
+- A managed-storage destroy task succeeds only with a terminal, versioned
+  attestation covering exactly every selected topology node. Each reachable
+  node contributes its own whole-node Ceph LVM proof: bounded, stable final
+  snapshots; classification of the rows from that final scan rather than any
+  earlier device list; zero surviving volume groups owned by the cluster or
+  standing on its declared devices; and a same-host completion witness. A node
+  may contribute a skipped outcome only when `unreachable-nodes` was consumed
+  and machine-readable probe evidence positively classifies that node as
+  absent. Missing, duplicate, unknown, preliminary, malformed, or incomplete
+  node evidence fails the storage task before the run can report success.
+  Machine-registration cleanup, storage-node access revocation, and machine
+  substrate release require that successful proof; a failed or skipped storage
+  task cannot merely satisfy their ordering edge. Host ownership evidence is
+  released only after the terminal artifact is durable, and the controller
+  owner record is released only after the validated task status is durable.
+  Any failure retains the controller owner, convergence records, captured
+  secrets, and history needed by the exact destroy retry.
 ### Teardown safeguards, cleanup, and history
 
 - Destroying a KubeVirt host cluster while an installed nested cluster is left

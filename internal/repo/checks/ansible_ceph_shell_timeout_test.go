@@ -286,7 +286,7 @@ func validateCephSurfaceInclude(task map[string]any, context cephShellWalkContex
 			if entrypoint == "<nil>" {
 				entrypoint = ""
 			}
-			allowed := map[string]bool{"": true, "main.yml": true, "destroy.yml": true, "replace_arbiter.yml": true, "revoke_node_access.yml": true}
+			allowed := map[string]bool{"": true, "main.yml": true, "destroy.yml": true, "destroy_release.yml": true, "replace_arbiter.yml": true, "revoke_node_access.yml": true}
 			if !allowed[entrypoint] {
 				return fmt.Sprintf("Ceph role entrypoint %q is not registered with the runtime timeout contract", entrypoint)
 			}
@@ -733,7 +733,7 @@ func assertCephTimeoutRuntimeContract(t *testing.T, root string, classes map[str
 	if !strings.Contains(fmt.Sprint(assertion["fail_msg"]), "bootwright_mutating_invocation") {
 		t.Errorf("%s does not return the exact resolved retry invocation", path)
 	}
-	for _, entrypoint := range []string{"main.yml", "destroy.yml", "replace_arbiter.yml", "revoke_node_access.yml"} {
+	for _, entrypoint := range []string{"main.yml", "destroy.yml", "destroy_release.yml", "replace_arbiter.yml", "revoke_node_access.yml"} {
 		entryPath := filepath.Join(tasksDir, entrypoint)
 		entryData, err := os.ReadFile(entryPath)
 		if err != nil {

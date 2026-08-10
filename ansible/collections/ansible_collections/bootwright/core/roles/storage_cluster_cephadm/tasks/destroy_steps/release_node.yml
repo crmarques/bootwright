@@ -31,19 +31,17 @@
          | list }}
   changed_when: false
 
-- name: Remove managed Ceph local state
+- name: Remove managed Ceph local data
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
     - "{{ bootwright_ceph_remote_work_dir }}"
-    - /etc/ceph
     - /var/lib/ceph
     - /var/log/ceph
     - "{{ bootwright_ceph_ca_trust_anchor_path }}"
     - "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
     - "{{ bootwright_ceph_proxy_ca_anchor_path }}"
-    - "{{ bootwright_ceph_osd_marker_path }}"
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length == 0
 
 - name: Read Ceph configuration before scoped local state removal
@@ -65,17 +63,15 @@
     - (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
     - (bootwright_ceph_cleanup_conf | default({})).content is defined
 
-- name: Remove Bootwright-specific Ceph local state alongside a co-resident cluster
+- name: Remove Bootwright-specific Ceph local data alongside a co-resident cluster
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
     - "{{ bootwright_ceph_remote_work_dir }}"
-    - "{{ bootwright_ceph_ownership_marker_path }}"
     - "{{ bootwright_ceph_ca_trust_anchor_path }}"
     - "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
     - "{{ bootwright_ceph_proxy_ca_anchor_path }}"
-    - "{{ bootwright_ceph_osd_marker_path }}"
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
 
 - name: Remove owned Ceph fsid directories alongside a co-resident cluster
@@ -89,19 +85,6 @@
     - (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
     - bootwright_ceph_cleanup_owned_fsid | default('') | length > 0
 
-- name: Remove owned Ceph admin configuration alongside a co-resident cluster
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/ceph/ceph.conf
-    - /etc/ceph/ceph.client.admin.keyring
-    - /etc/ceph/ceph.pub
-  when:
-    - (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
-    - bootwright_ceph_cleanup_owned_fsid | default('') | length > 0
-    - bootwright_ceph_cleanup_conf_fsid | default('') == bootwright_ceph_cleanup_owned_fsid
-
 - name: Preserve co-resident Ceph cluster state on this host
   ansible.builtin.debug:
     msg: >-
@@ -112,58 +95,6 @@
       so only Bootwright's fsid-scoped state was removed and shared Ceph directories
       were kept intact.
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
-
-- name: Resolve storage nodes whose device wipe did not run
-  ansible.builtin.set_fact:
-    bootwright_ceph_destroy_unwiped_hosts: >-
-      {{ (bootwright_ceph_destroy_cluster_live_hosts
-          | rejectattr('bootwright_ceph_wipefs', 'defined')
-          | map(attribute='inventory_hostname') | list)
-         + (bootwright_ceph_destroy_cluster_live_hosts
-            | selectattr('bootwright_ceph_wipefs', 'defined')
-            | selectattr('bootwright_ceph_wipefs.unreachable', 'defined')
-            | selectattr('bootwright_ceph_wipefs.unreachable')
-            | map(attribute='inventory_hostname') | list) }}
-  vars:
-    bootwright_ceph_destroy_cluster_live_hosts: >-
-      {{ ansible_play_hosts_all
-         | map('extract', hostvars)
-         | selectattr('bootwright_storage_cluster_name', 'defined')
-         | selectattr('bootwright_storage_cluster_name', 'equalto', bootwright_selected_storage_cluster.name)
-         | selectattr('bootwright_storage_reachable_probe', 'defined')
-         | rejectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
-         | list }}
-  changed_when: false
-  when: inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
-
-- name: Remove storage cluster ownership record
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
-    apply:
-      delegate_to: localhost
-      become: false
-  vars:
-    bootwright_ownership_kind: storage-cluster
-    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
-  when:
-    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
-    - not (bootwright_storage_cluster_partial | default(false) | bool)
-    - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length == 0
-
-- name: Keep the storage cluster ownership record for nodes lost mid-teardown
-  ansible.builtin.debug:
-    msg: >-
-      Keeping the Bootwright ownership record for
-      {{ bootwright_selected_storage_cluster.name }}: storage node(s)
-      {{ bootwright_ceph_destroy_unwiped_hosts | join(', ') }} were reachable when this
-      teardown began but stopped answering before their declared OSD devices were wiped,
-      so their disks may still carry this cluster's data. The record preserves the
-      partial-destroy marker; re-run destroy once the node(s) answer again, or wipe them
-      manually, before reusing the hardware.
-  when:
-    - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
-    - (bootwright_ceph_destroy_unwiped_hosts | default([])) | length > 0
 
 - name: Remove Ceph package ownership records
   ansible.builtin.include_role:

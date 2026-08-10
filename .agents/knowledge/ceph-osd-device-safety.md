@@ -469,25 +469,34 @@ prove ownership of the cluster the residue still names (the operator exit is
 `--recover-ceph-ownership <cluster>=<fsid>`; observed on ceph-prd-01/srv4203 on
 2026-08-07 and again 2026-08-09).
 
-`lvm_sweep.yml` runs between `settle_gate.yml` and `release_node.yml` — after
-the settle gate proved no Ceph daemon outlived the teardown (taking LVM down
-under a live OSD is what the teardown refuses) and before any ownership evidence
-is released (a refusal must keep what a re-run reads). It scans the whole node
-once (`pvs -o pv_name,vg_name`, then `lvs -o lv_tags` per VG) and emits one JSON
-row per PV of every Ceph-signed VG — name matching `ceph-*`, or an LV carrying a
-`ceph.cluster_fsid=` tag — so the classification runs on filter chains rather
-than a regex (this project's Jinja has no comprehensions, and regex escaping
-differs between `>-` scalars and `msg=`). A scan that could not run is a hard
-refusal: it proves nothing, and nothing else covers the node. The rows are then
-split three ways: **taken down** when the VG carries this teardown's own cluster
-fsid or stands on a device this node declares (`vgchange -an` → `vgremove` →
-`pvremove` through the shared `lvm_teardown.yml`, then `wipefs --all --force`
-and the `bootwright_ceph_zap_tool_present`-gated `sgdisk --zap-all`);
-**preserved** when its fsid is one the settle gate resolved as a co-resident
-cluster this node still holds `/var/lib/ceph` state for, exactly what
-`release_node.yml` preserves; and **left untouched and named** otherwise — a
-`ceph-` prefix on an undeclared disk is not evidence of ownership, and destroy's
-contract is the devices a node declares. A re-scan then proves the taken-down
-set is gone and refuses the node's release when it is not. No `--authorize`
-token relaxes any of it: like the settle gate, it reports what the node holds
-now, not who owned it.
+The first sweep implementation still reproduced the incident because its final
+scan classified only rows whose PV appeared in the *initial* selected-device
+list. If that list was empty and cephadm recreated the five seed VGs between the
+two scans, the final `pvs` output contained them but the survivor filter selected
+nothing. The assert passed, `release_node.yml` erased the host and controller
+evidence, and Go treated the absence of skipped-node entries as completion. The
+source-shape test checked task ordering and variable names, so it pinned the
+broken predicate without executing the race.
+
+`lvm_sweep.yml` still runs after the settle barrier and before release, but its
+scanner now takes bounded, batched whole-node `pvs` and `lvs` snapshots rather
+than one `lvs` process per VG. Each sample reads both tables twice between
+ceph-volume process probes; the terminal proof needs three identical writer-free
+samples spanning at least two seconds. A writer or changed row set resets the
+window, and every subprocess shares the 30-second deadline. Both the initial
+sweep and terminal proof classify the rows they just read: **taken down** when
+the VG carries this teardown's fsid or stands on a declared device;
+**preserved** when it belongs to resolved co-resident state; and **left named but
+untouched** when neither fact proves ownership. The terminal survivor set is
+therefore independent of the initial device list and catches a VG first created
+during teardown. The exact five-NVMe seed fixture injects that late creation and
+must fail before ownership release.
+
+After every reachable node proves zero owned survivors, Ansible writes one
+versioned per-node attestation before releasing host evidence. Go requires an
+exact match to the selected topology and binds skipped outcomes to the consumed
+`unreachable-nodes` authorization before the scheduler may persist task success,
+release the controller owner, reset convergence state, purge history, or allow
+machine-registration, access, and substrate teardown to proceed. Missing or
+incomplete evidence is a failed task, never success inferred from silence. No
+`--authorize` token relaxes the scan or the attestation.

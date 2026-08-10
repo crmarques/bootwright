@@ -18,6 +18,8 @@ if "ansible.errors" not in sys.modules:
     errors_module.AnsibleFilterError = _AnsibleFilterError
     sys.modules["ansible.errors"] = errors_module
 
+AnsibleFilterError = sys.modules["ansible.errors"].AnsibleFilterError
+
 _FILTER_DIR = pathlib.Path(__file__).resolve().parents[4] / "plugins" / "filter"
 _spec = importlib.util.spec_from_file_location(
     "_bootwright_osd_device_filter",
@@ -28,6 +30,7 @@ _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
 bootwright_ceph_osd_filter_candidates = _module.bootwright_ceph_osd_filter_candidates
+bootwright_ceph_lvm_sweep_classify = _module.bootwright_ceph_lvm_sweep_classify
 bootwright_json_list_probe = _module.bootwright_json_list_probe
 bootwright_reclaim_device_operand = _module.bootwright_reclaim_device_operand
 bootwright_reclaim_device_operand_probe = _module.bootwright_reclaim_device_operand_probe
@@ -151,6 +154,7 @@ class OSDDeviceFilterCandidates(unittest.TestCase):
 class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
         registered = _module.FilterModule().filters()
+        self.assertIs(registered["bootwright_ceph_lvm_sweep_classify"], bootwright_ceph_lvm_sweep_classify)
         self.assertIs(registered["bootwright_ceph_osd_filter_candidates"], bootwright_ceph_osd_filter_candidates)
         self.assertIs(registered["bootwright_json_list_probe"], bootwright_json_list_probe)
         self.assertIs(registered["bootwright_reclaim_device_operand"], bootwright_reclaim_device_operand)
@@ -177,7 +181,7 @@ class FilterRegistration(unittest.TestCase):
             ([], ["/dev/__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__"]),
         ):
             with self.subTest(preserved=preserved, runtime=runtime):
-                with self.assertRaises(_AnsibleFilterError):
+                with self.assertRaises(AnsibleFilterError):
                     bootwright_reclaim_device_operand(preserved, runtime)
 
     def test_reclaim_operand_probe_returns_actionable_failure_evidence(self):
@@ -185,6 +189,43 @@ class FilterRegistration(unittest.TestCase):
         self.assertFalse(got["valid"])
         self.assertEqual(got["value"], "")
         self.assertIn("represented safely", got["reason"])
+
+
+class CephLVMSweepClassification(unittest.TestCase):
+    def test_classifies_owned_declared_preserved_and_unclaimed_rows(self):
+        got = bootwright_ceph_lvm_sweep_classify(
+            [
+                {"pv": "/dev/owned", "fsid": "owned", "label": "owned VG"},
+                {"pv": "/dev/declared", "fsid": "", "label": "declared VG"},
+                {"pv": "/dev/foreign", "fsid": "foreign", "label": "foreign VG"},
+                {"pv": "/dev/unknown", "fsid": "unknown", "label": "unknown VG"},
+            ],
+            "owned",
+            ["foreign"],
+            ["/dev/declared"],
+        )
+        self.assertEqual(got["devices"], ["/dev/owned", "/dev/declared"])
+        self.assertEqual(got["deviceLabels"], ["owned VG", "declared VG"])
+        self.assertEqual(got["keptLabels"], ["foreign VG"])
+        self.assertEqual(got["unclaimedLabels"], ["unknown VG"])
+
+    def test_fresh_rows_are_classified_without_an_initial_device_list(self):
+        initial = bootwright_ceph_lvm_sweep_classify([], "owned", [], ["/dev/nvme0n1"])
+        verified = bootwright_ceph_lvm_sweep_classify(
+            [{"pv": "/dev/nvme0n1", "fsid": "owned", "label": "fresh VG"}],
+            "owned",
+            [],
+            ["/dev/nvme0n1"],
+        )
+        self.assertEqual(initial["devices"], [])
+        self.assertEqual(verified["devices"], ["/dev/nvme0n1"])
+        self.assertEqual(verified["deviceLabels"], ["fresh VG"])
+
+    def test_malformed_probe_rows_fail_closed(self):
+        for rows in (None, ["not-a-row"], [{"pv": "", "fsid": "owned", "label": "bad"}]):
+            with self.subTest(rows=rows):
+                with self.assertRaises(AnsibleFilterError):
+                    bootwright_ceph_lvm_sweep_classify(rows, "owned", [], [])
 
 
 if __name__ == "__main__":

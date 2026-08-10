@@ -7,7 +7,9 @@ Accepted
 Supersedes the teardown-ordering section of
 [ADR 0007](0007-apply-destroy-safety-model.md). The safety model in ADR 0007 is
 otherwise unchanged; only the ordering rule and the set of fail-closed edges are
-restated here.
+restated here. The managed-storage clauses of A2 and the fail-closed edge set
+are revised by
+[ADR 0058](0058-storage-destroy-completion-is-positive-proof.md).
 
 ## Context
 
@@ -82,9 +84,15 @@ name-resolution service at T6; ContainerCluster teardown never changes it.
   already in scope.
 - **A2.** On-node work — Ceph wipe, RHSM deregistration, node-access revoke —
   precedes deletion of the substrate that hosts it. These steps have no apply
-  counterpart. The edges stay ordering-only, not fail-closed: a failed Ceph wipe
-  must not stop the deregister, and `substrateReleaseConfirmed` remains the
-  fail-closed mechanism, exactly as ADR 0007 chose.
+  counterpart. For selected managed storage, the Ceph task's positive
+  completion proof is fail-closed: registration cleanup, access revoke, and
+  deletion of that cluster's substrate require it; access revoke additionally
+  requires registration cleanup. A skipped task with selected work is not
+  proof. Other on-node ordering remains skip-tolerant, including the infra-only
+  and machine-scoped registration-to-substrate chain. A controller-side
+  substrate-release record cannot replace the managed-storage edges: it can
+  withhold future apply authorization but cannot undo a machine deletion or
+  restore a login the failed run already removed.
 - **A3.** Infra components outlive the machines they serve, except for their own
   placement closure. The managed name-resolution component serves the machine
   addresses teardown connects through, its controller split-DNS route remains
@@ -98,7 +106,16 @@ name-resolution service at T6; ContainerCluster teardown never changes it.
 
 ### Fail-closed edges
 
-Three edges are hard dependencies; every other edge is ordering-only.
+Four edge families are fail-closed; every other edge is ordering-only.
+
+- Managed-storage completion before that cluster's registration cleanup,
+  node-access revoke, and machine substrate; registration cleanup before that
+  cluster's node-access revoke. The storage task is successful only after its
+  exact per-node terminal attestation validates, so this edge protects the
+  evidence and access an incomplete destroy needs for retry. An authorized
+  partial attestation is still a successful storage result: its positively
+  absent nodes remain outside host-local cleanup and its retained ownership
+  marker withholds substrate-release authorization.
 
 - Guest machine infrastructure before its KubeVirt host's. The KubeVirt
   substrate role fails closed on an unreachable host API, so a failed guest

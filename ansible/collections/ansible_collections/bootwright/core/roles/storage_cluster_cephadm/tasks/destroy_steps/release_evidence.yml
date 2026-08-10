@@ -1,0 +1,31 @@
+---
+- name: Release managed Ceph host ownership evidence
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ceph
+    - "{{ bootwright_ceph_osd_marker_path }}"
+  when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length == 0
+
+- name: Release owned Ceph admin configuration alongside a co-resident cluster
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ceph/ceph.conf
+    - /etc/ceph/ceph.client.admin.keyring
+    - /etc/ceph/ceph.pub
+  when:
+    - (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
+    - bootwright_ceph_cleanup_owned_fsid | default('') | length > 0
+    - bootwright_ceph_cleanup_conf_fsid | default('') == bootwright_ceph_cleanup_owned_fsid
+
+- name: Release Bootwright Ceph ownership markers alongside a co-resident cluster
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_ceph_ownership_marker_path }}"
+    - "{{ bootwright_ceph_osd_marker_path }}"
+  when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0

@@ -122,13 +122,25 @@
           answers and refuses its identity is never skipped by that token.
       when: not (bootwright_destroy_skip_unreachable | default(false) | bool)
 
-    - name: Summarize storage hosts skipped as unreachable
+    - name: Prepare the storage destroy attestation before teardown
       vars:
-        bootwright_storage_skipped_entries: >-
+        bootwright_storage_attestation_entries: >-
           {{
             ansible_play_hosts_all
             | map('extract', hostvars)
             | selectattr('bootwright_storage_reachable_probe', 'defined')
+            | list
+          }}
+        bootwright_storage_preliminary_result: >-
+          {{
+            bootwright_storage_attestation_entries
+            | bootwright.core.bootwright_storage_destroy_attestation(
+                false,
+                bootwright_destroy_skip_unreachable | default(false) | bool)
+          }}
+        bootwright_storage_skipped_entries: >-
+          {{
+            bootwright_storage_attestation_entries
             | selectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
             | selectattr('bootwright_storage_reachable_probe.unreachable')
             | list
@@ -162,24 +174,15 @@
           delegate_to: localhost
           become: false
 
-        - name: Record skipped-node Ceph teardown state for the controller
+        - name: Record the preliminary Ceph teardown state for the controller
           ansible.builtin.copy:
             dest: "{{ bootwright_ansible_artifacts_dir }}/storage-destroy-result.json"
             content: >-
-              {{
-                {
-                  'partialClusters': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_cluster_name') | unique | list),
-                  'skippedNodes': (bootwright_storage_skipped_entries | map(attribute='bootwright_storage_node_name') | list),
-                  'skippedHosts': (bootwright_storage_skipped_entries | map(attribute='inventory_hostname') | list),
-                  'skippedNodeReasons': bootwright_storage_skipped_reasons
-                } | to_nice_json
-              }}
+              {{ bootwright_storage_preliminary_result | to_nice_json }}
             mode: "0600"
           delegate_to: localhost
           become: false
       run_once: true
-      when:
-        - bootwright_destroy_skip_unreachable | default(false) | bool
 
     - name: Stop tearing down unreachable storage hosts
       ansible.builtin.meta: end_host
@@ -253,74 +256,76 @@
         name: bootwright.core.storage_cluster_cephadm
         tasks_from: destroy.yml
 
-    - name: Audit storage nodes lost after their teardown began
+    - name: Record the terminal storage destroy attestation
       vars:
-        bootwright_storage_lost_entries: >-
-          {{
-            ansible_play_hosts_all
-            | map('extract', hostvars)
-            | selectattr('bootwright_storage_cluster_name', 'defined')
-            | rejectattr('bootwright_storage_cluster_name', 'equalto', '')
-            | selectattr('bootwright_storage_reachable_probe', 'defined')
-            | rejectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
-            | rejectattr('bootwright_ceph_destroy_completion.rc', 'defined')
-            | list
-          }}
-        bootwright_storage_lost_reasons: >-
-          {{
-            bootwright_storage_lost_entries
-            | map(attribute='bootwright_storage_node_name')
-            | map('regex_replace', '^(.*)$',
-                  '\1: connection lost during teardown after it began; its OSD devices may not be wiped')
-            | list
-          }}
-        bootwright_storage_skipped_entries: >-
+        bootwright_storage_attestation_entries: >-
           {{
             ansible_play_hosts_all
             | map('extract', hostvars)
             | selectattr('bootwright_storage_reachable_probe', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable')
             | list
+          }}
+        bootwright_storage_destroy_result: >-
+          {{
+            bootwright_storage_attestation_entries
+            | bootwright.core.bootwright_storage_destroy_attestation(
+                true,
+                bootwright_destroy_skip_unreachable | default(false) | bool)
+          }}
+        bootwright_storage_terminal_nodes: >-
+          {{
+            bootwright_storage_destroy_result.clusters
+            | map(attribute='nodes') | flatten | list
+          }}
+        bootwright_storage_incomplete_nodes: >-
+          {{
+            bootwright_storage_terminal_nodes
+            | rejectattr('outcome', 'in', ['completed', 'skipped'])
+            | map(attribute='name') | list
           }}
         bootwright_storage_skipped_reasons: >-
           {{
-            bootwright_storage_skipped_entries
-            | map(attribute='bootwright_storage_node_name')
-            | zip(bootwright_storage_skipped_entries
-                  | map(attribute='bootwright_storage_node_refusal', default='no connection diagnostic was recorded'))
-            | map('join', ': ') | list
+            bootwright_storage_terminal_nodes
+            | selectattr('outcome', 'equalto', 'skipped')
+            | map(attribute='reason') | list
           }}
       block:
-        - name: Warn about storage nodes lost mid-teardown
+        - name: Refuse a terminal storage result with unaccounted nodes
+          ansible.builtin.assert:
+            that:
+              - bootwright_storage_incomplete_nodes | length == 0
+            fail_msg: >-
+              Storage node(s) {{ bootwright_storage_incomplete_nodes | join(', ') }} reached
+              neither the final Ceph LVM proof and remote witness nor an authorized,
+              positively classified unreachable outcome. The controller will reject the
+              preliminary result and retain every storage recovery record. Fix the failed
+              node or connection and re-run the same destroy invocation.
+
+        - name: Warn about storage nodes skipped or lost during teardown
           ansible.builtin.debug:
             msg: >-
-              Storage node(s) lost mid-teardown:
-              {{ bootwright_storage_lost_entries | map(attribute='bootwright_storage_node_name') | join(', ') }}.
-              They answered when this teardown began and stopped answering before it finished,
-              so their OSD devices may NOT be wiped, their Ceph daemons may still be running
-              and local Ceph state may remain; storage cluster(s)
-              {{ bootwright_storage_lost_entries | map(attribute='bootwright_storage_cluster_name') | unique | list | join(', ') }}
-              are only partially destroyed. Re-run destroy once the node(s) answer again, or
-              wipe them manually, before reusing the hardware.
-          when: bootwright_storage_lost_entries | length > 0
+              Storage node(s) left outside the completed teardown proof:
+              {{ bootwright_storage_skipped_reasons | join('; ') }}. Their OSD devices may
+              NOT be wiped, their Ceph daemons may still be running and local Ceph state may
+              remain. The controller will keep the affected cluster ownership and history;
+              re-run destroy once the nodes answer again, or wipe them manually, before
+              reusing the hardware.
+          when: bootwright_storage_skipped_reasons | length > 0
 
         - name: Record the final Ceph teardown state for the controller
           ansible.builtin.copy:
             dest: "{{ bootwright_ansible_artifacts_dir }}/storage-destroy-result.json"
             content: >-
-              {{
-                {
-                  'partialClusters': ((bootwright_storage_skipped_entries + bootwright_storage_lost_entries) | map(attribute='bootwright_storage_cluster_name') | unique | list),
-                  'skippedNodes': ((bootwright_storage_skipped_entries + bootwright_storage_lost_entries) | map(attribute='bootwright_storage_node_name') | list),
-                  'skippedHosts': ((bootwright_storage_skipped_entries + bootwright_storage_lost_entries) | map(attribute='inventory_hostname') | list),
-                  'skippedNodeReasons': (bootwright_storage_skipped_reasons + bootwright_storage_lost_reasons)
-                } | to_nice_json
-              }}
+              {{ bootwright_storage_destroy_result | to_nice_json }}
             mode: "0600"
           delegate_to: localhost
           become: false
-          when: bootwright_storage_lost_entries | length > 0
       run_once: true
-      when:
-        - bootwright_destroy_skip_unreachable | default(false) | bool
+
+    - name: Release host ownership evidence after recording the terminal attestation
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm
+        tasks_from: destroy_release.yml
+        apply:
+          ignore_unreachable: false
+      ignore_unreachable: false

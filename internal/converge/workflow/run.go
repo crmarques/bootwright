@@ -79,6 +79,7 @@ type RunOptions struct {
 	ResolveRecovery            RunRecoveryResolver
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 	StreamAnsible              bool
+	SkipNoHostsBeforeRender    bool
 	addonStepResources         *addonStepResourcePool
 }
 
@@ -150,6 +151,16 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	ownershipRecords, err := loadOwnershipRecordsForRun(opts.Playbook, ownershipDir, opts.ContextName)
 	if err != nil {
 		return RunResult{}, err
+	}
+	if !opts.DryRun && opts.SkipNoHostsBeforeRender && strings.TrimSpace(opts.RenderDir) != "" && LimitMatchesNoHostsWithOwnershipRecords(opts.Limit, opts.State, ownershipRecords) {
+		label := opts.Label
+		if label == "" {
+			label = opts.Playbook
+		}
+		if reporter != nil {
+			reporter.SkipNoHosts(label, opts.Limit)
+		}
+		return RunResult{Skipped: true}, nil
 	}
 	renderDir := opts.RenderDir
 	if renderDir == "" {

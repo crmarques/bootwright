@@ -114,7 +114,12 @@ and context sweeps stay in a real-host cleanup play; only independent
 per-machine teardown is parallel. The planner includes both synthetic and real
 host groups in the task limit and sizes Ansible forks to the declared hosts. A
 host-reference cycle fails planning. The remaining independent steps keep
-ordering-only edges and continue after unrelated failures. Guarded by
+ordering-only edges and continue after unrelated failures. Managed-storage
+completion is the exception added by ADR 0058: registration, access revoke, and
+that cluster's machine substrate require the exact storage task attestation,
+and access revoke also requires successful registration. A failed or no-host
+storage task therefore retains the login and substrate its retry needs without
+blocking another cluster's branch. Guarded by
 TestPlanDestroyTasksInfraChain, TestPlanDestroyTasksAllChain, and
 TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra,
 TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost, and
@@ -164,23 +169,32 @@ prompt) undercounts and a recorded teardown runs unattended. Apply never
 consults ownership records. Guarded by
 TestPrepareScopedWorkflowDestroyCountsOwnershipRecords.
 
-**Partial-destroy bookkeeping ordering:** (1) `RecordPartialStorageDestroy`
-runs REGARDLESS of overall run outcome — the storage step's result file can be
-complete before an unrelated later task fails the run; (2) the partial set is
-resolved BEFORE `ResetConvergeRecordsAfterDestroy`, which is best-effort,
+**Storage completion and partial-destroy bookkeeping ordering:** each storage
+task writes a strict per-cluster, per-node terminal attestation and validates
+its exact selected topology before the scheduler may mark it `ok`. Completed
+nodes carry their own full-node LVM scan proof and remote witness; skipped nodes
+carry positive absence evidence and are accepted only when the task consumed
+`unreachable-nodes`. A missing task artifact, cluster, or node is failure, not
+an empty partial set. The scheduler persists `ok` before releasing a completed
+controller owner; failed tasks may conservatively stamp skipped-node markers but
+may never release completed ownership. `RecordPartialStorageDestroy` still runs
+regardless of overall run outcome — the storage step's result file can be
+complete before an unrelated later task fails the run — and resolves the
+partial set before `ResetConvergeRecordsAfterDestroy`, which is best-effort,
 mirrors `storageWorkNames`, resets storage sub-object records too
 (`cephadm rm-cluster --zap-osds` removed them all), and KEEPS records for
 partially-destroyed clusters so a later `apply --mode create` fails closed atop
 residual Ceph state instead of re-bootstrapping. Guarded by
-TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster. `status`
-surfaces the partial-destroy marker kept on the ownership record.
+TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster. Each cluster's
+marker names only its own skipped nodes, and `status` ignores reference or
+foreign records while surfacing the retained exact owner.
 
-**`--authorize unreachable-nodes` release authorization follows the completion report,
+**`--authorize unreachable-nodes` release authorization follows the attestation,
 not flag presence:** a successful managed-storage teardown always writes
-`storage-destroy-result.json`, including an empty skipped-node set when every
-topology node completed. `ResetConvergeRecordsAfterDestroy` may record a
+`storage-destroy-result.json`, with one terminal object for every selected
+topology node. `ResetConvergeRecordsAfterDestroy` may record a
 substrate release for a storage cluster only when that cluster is absent from
-the report's partial set and the storage destroy task succeeded. A partial
+the attestation's skipped set and the storage destroy task succeeded. A partial
 cluster stays in the reset exclusion set whether its ownership marker was
 successfully stamped or no controller owner record existed. An infra-only or
 machine-scoped destroy, a non-storage cluster, or a failed storage task still
@@ -228,10 +242,11 @@ carries its own `DestroyTaskKindStorageNodeAccess`, not
 the apply-side `nodeaccess.<cluster>` converge record once this dedicated step
 succeeds — a bare "Storage clusters" success no longer implies node access was
 reverted. Since ADR 0023 these three steps fan PER STORAGE CLUSTER, so the rule
-is "node access revoke is last FOR ITS OWN CLUSTER", not last globally: the
-edges are `storage-clusters.<S>` then `machine-registration.<S>` then
-`storage-node-access.<S>`, and they must never cross clusters, or one cluster's
-failure serialises an unrelated one. The shared-identity hazard is per node, and
+is "node access revoke is last FOR ITS OWN CLUSTER", not last globally. ADR
+0058 makes the same-cluster edges success-requiring: a missing storage proof
+blocks registration and access, and failed registration blocks access. They
+must never cross clusters, or one cluster's failure serialises an unrelated one.
+The shared-identity hazard is per node, and
 the inventory still renders one `ansible_user` per node per run. Desired-state
 validation forbids a Machine from being node-bound by two clusters before any
 host contact; when two managed storage clusters violate that rule with different

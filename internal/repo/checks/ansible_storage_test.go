@@ -1975,18 +1975,8 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 		t.Fatalf("ceph destroy rm-cluster must fail closed on error, got failed_when=%v", rm["failed_when"])
 	}
 
-	removeRecordIdx := findAnsibleTask(t, tasks, "Remove storage cluster ownership record")
-	removeRole, ok := tasks[removeRecordIdx]["ansible.builtin.include_role"].(map[string]any)
-	if !ok {
-		t.Fatalf("storage ownership removal must use include_role, got %v", tasks[removeRecordIdx])
-	}
-	removeApply, ok := removeRole["apply"].(map[string]any)
-	if !ok || removeApply["delegate_to"] != "localhost" || removeApply["become"] != false {
-		t.Fatalf("storage ownership removal must be controller-local without become, got %v", removeRole["apply"])
-	}
-	removeWhen := fmt.Sprint(tasks[removeRecordIdx]["when"])
-	if !strings.Contains(removeWhen, "bootwright_ceph_destroy_authority_host") || !strings.Contains(removeWhen, "bootwright_storage_cluster_partial") {
-		t.Fatalf("storage ownership removal must run once on the proven ownership authority host and preserve partial state, got %v", tasks[removeRecordIdx]["when"])
+	if strings.Contains(readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/release_node.yml"), "bootwright_ownership_kind: storage-cluster") {
+		t.Fatal("the remote role must leave the controller storage ownership record for exact-set attestation validation")
 	}
 
 	zap := tasks[findAnsibleTask(t, tasks, "Zap declared Ceph device partition tables")]
@@ -2119,10 +2109,10 @@ func TestStorageCephadmDestroySkipUnreachableGuards(t *testing.T) {
 		t.Fatalf("ownership-authority reachability guard must be a hard assert so any_errors_fatal aborts all hosts, got %v", tasks[authorityIdx])
 	}
 
-	destroyTasks := storageCephDestroyTasks(t)
-	removeIdx := findAnsibleTask(t, destroyTasks, "Remove storage cluster ownership record")
-	if got := fmt.Sprint(destroyTasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_storage_cluster_partial") {
-		t.Fatalf("storage cluster ownership-record removal must be gated on not-partial so a partial teardown keeps the record, got when=%v", destroyTasks[removeIdx]["when"])
+	preliminaryIdx := findAnsibleTask(t, tasks, "Prepare the storage destroy attestation before teardown")
+	terminalIdx := findAnsibleTask(t, tasks, "Record the terminal storage destroy attestation")
+	if !(preliminaryIdx < wipeIdx && wipeIdx < terminalIdx) {
+		t.Fatalf("the preliminary report must retain skipped-node evidence before ended hosts disappear, and the terminal report must overwrite it after every surviving node's witness (preliminary=%d wipe=%d terminal=%d)", preliminaryIdx, wipeIdx, terminalIdx)
 	}
 }
 
@@ -2563,13 +2553,15 @@ func TestStorageNodeAbsenceIsClassifiedOnceForEveryTeardown(t *testing.T) {
 func TestStorageCephadmDestroyReportsWhyEachSkippedNodeWasSkipped(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
-	summaryIdx := findAnsibleTask(t, tasks, "Summarize storage hosts skipped as unreachable")
+	summaryIdx := findAnsibleTask(t, tasks, "Prepare the storage destroy attestation before teardown")
 	block := fmt.Sprint(tasks[summaryIdx])
-	if !strings.Contains(block, "bootwright_storage_skipped_reasons") {
+	if !strings.Contains(block, "bootwright_storage_node_refusal") {
 		t.Fatalf("the skip summary must carry each node's refusal, not only its name: a skipped node with no recorded cause is what let a running node pass as absent, got %v", tasks[summaryIdx])
 	}
-	if !strings.Contains(block, "skippedNodeReasons") {
-		t.Errorf("the controller-side result must record the per-node refusal so the partial-destroy warning can print it, got %v", tasks[summaryIdx])
+	for _, want := range []string{"bootwright_storage_destroy_attestation", "storage-destroy-result.json"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("the preliminary controller result must retain %q so an all-unreachable topology has an exact report and any reachable node remains incomplete until the terminal proof, got %v", want, tasks[summaryIdx])
+		}
 	}
 }
 
@@ -2591,40 +2583,89 @@ func TestStorageCephadmDestroyAuditsNodesLostMidTeardown(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
 	roleIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
-	auditIdx := findAnsibleTask(t, tasks, "Audit storage nodes lost after their teardown began")
+	auditIdx := findAnsibleTask(t, tasks, "Record the terminal storage destroy attestation")
 	if auditIdx < roleIdx {
 		t.Fatalf("the mid-teardown audit must run after the destroy role, or the completion witness it reads has not run yet (role=%d audit=%d)", roleIdx, auditIdx)
 	}
 	audit := fmt.Sprint(tasks[auditIdx])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_completion",
-		"bootwright_storage_reachable_probe.unreachable",
+		"bootwright_storage_destroy_attestation",
+		"outcome",
+		"nodes",
 		"storage-destroy-result.json",
-		"connection lost during teardown",
 		"bootwright_destroy_skip_unreachable",
 	} {
 		if !strings.Contains(audit, want) {
 			t.Errorf("the audit must retain %q: with --authorize unreachable-nodes the play runs under ignore_unreachable, so a node that drops after the reachability probe has its device wipe silently skipped and only this audit records the partial destroy, got %v", want, tasks[auditIdx])
 		}
 	}
-}
-
-func TestStorageCephadmDestroyKeepsOwnershipRecordForUnwipedNodes(t *testing.T) {
-	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
-	tasks := readAnsibleTasks(t, base+"release_node.yml")
-	resolveIdx := findAnsibleTask(t, tasks, "Resolve storage nodes whose device wipe did not run")
-	removeIdx := findAnsibleTask(t, tasks, "Remove storage cluster ownership record")
-	if resolveIdx > removeIdx {
-		t.Fatalf("the unwiped-node resolution must precede the ownership-record removal it gates (resolve=%d remove=%d)", resolveIdx, removeIdx)
-	}
-	resolve := fmt.Sprint(tasks[resolveIdx])
-	for _, want := range []string{"bootwright_ceph_wipefs", "bootwright_storage_reachable_probe"} {
-		if !strings.Contains(resolve, want) {
-			t.Errorf("the unwiped-node resolution must read %q to tell a node that dropped before its wipe from one skipped at the probe, got %v", want, tasks[resolveIdx])
+	filter := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/plugins/filter/storage_destroy.py")
+	for _, want := range []string{"bootwright_ceph_destroy_completion", "bootwright_ceph_sweep_verify", "connection lost during teardown"} {
+		if !strings.Contains(filter, want) {
+			t.Errorf("the terminal attestation filter must retain %q, got:\n%s", want, filter)
 		}
 	}
-	if got := fmt.Sprint(tasks[removeIdx]["when"]); !strings.Contains(got, "bootwright_ceph_destroy_unwiped_hosts") {
-		t.Errorf("the ownership-record removal must be gated on every reachable node having wiped its devices: removing the record after a mid-teardown drop erases the only anchor the partial-destroy marker can be written to, got when=%v", tasks[removeIdx]["when"])
+}
+
+func TestStorageCephadmDestroyDefersControllerOwnershipReleaseUntilValidatedAttestation(t *testing.T) {
+	release := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/release_node.yml")
+	if strings.Contains(release, "Remove storage cluster ownership record") || strings.Contains(release, "bootwright_ownership_kind: storage-cluster") {
+		t.Fatalf("the remote role must not erase the controller's recovery anchor before the task runner validates exact topology coverage, got:\n%s", release)
+	}
+	runner := readRepoFile(t, "internal/converge/workflow/destroy_runner.go")
+	callPos := strings.Index(runner, "validateStorageDestroyTask(taskOpts, task)")
+	successPos := strings.Index(runner, "return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped")
+	validatePos := strings.Index(runner, "ValidateStorageDestroyResults")
+	reconcilePos := strings.Index(runner, "ReconcileStorageDestroyOwnership")
+	if callPos < 0 || validatePos < 0 || reconcilePos < validatePos {
+		t.Fatalf("a storage task must validate its terminal report and reconcile ownership before it returns success to the ledger (call=%d success=%d validate=%d reconcile=%d)", callPos, successPos, validatePos, reconcilePos)
+	}
+	scheduler := readRepoFile(t, "internal/converge/workflow/apply_scheduler.go")
+	durableOKPos := strings.Index(scheduler, "ledger.MarkOK(event.id")
+	if durableOKPos < 0 {
+		t.Fatal("the scheduler no longer records an OK task status")
+	}
+	durableTail := scheduler[durableOKPos:]
+	durableSavePos := strings.Index(durableTail, "saveLedger()")
+	finalizePos := strings.Index(durableTail, "event.finalize()")
+	if durableSavePos < 0 || finalizePos < 0 || durableSavePos > finalizePos {
+		t.Fatalf("completed ownership may be released only after the task's OK status is durably saved (mark=%d save=%d finalize=%d)", durableOKPos, durableSavePos, finalizePos)
+	}
+}
+
+func TestStorageCephadmDestroyReleasesHostEvidenceAfterLocalData(t *testing.T) {
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
+	dataTasks := readAnsibleTasks(t, base+"release_node.yml")
+	managedDataIdx := findAnsibleTask(t, dataTasks, "Remove managed Ceph local data")
+	sharedDataIdx := findAnsibleTask(t, dataTasks, "Remove Bootwright-specific Ceph local data alongside a co-resident cluster")
+	ownedDirsIdx := findAnsibleTask(t, dataTasks, "Remove owned Ceph fsid directories alongside a co-resident cluster")
+	packagesIdx := findAnsibleTask(t, dataTasks, "Remove Ceph package ownership records")
+	if !(managedDataIdx < packagesIdx && sharedDataIdx < ownedDirsIdx && ownedDirsIdx < packagesIdx) {
+		t.Fatalf("local data must be removed before package cleanup and the later evidence phase (managedData=%d sharedData=%d ownedDirs=%d packages=%d)", managedDataIdx, sharedDataIdx, ownedDirsIdx, packagesIdx)
+	}
+	for _, idx := range []int{managedDataIdx, sharedDataIdx, ownedDirsIdx} {
+		body := fmt.Sprint(dataTasks[idx])
+		for _, evidence := range []string{"/etc/ceph", "bootwright_ceph_ownership_marker_path", "bootwright_ceph_osd_marker_path"} {
+			if strings.Contains(body, evidence) {
+				t.Errorf("data-removal task %q must not erase host ownership evidence %q in the same loop: an item failure could otherwise leave data behind after the retry proof is gone, got %v", dataTasks[idx]["name"], evidence, dataTasks[idx])
+			}
+		}
+	}
+	evidenceTasks := readAnsibleTasks(t, base+"release_evidence.yml")
+	managedEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release managed Ceph host ownership evidence")
+	adminEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release owned Ceph admin configuration alongside a co-resident cluster")
+	markerEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release Bootwright Ceph ownership markers alongside a co-resident cluster")
+	for _, idx := range []int{managedEvidenceIdx, adminEvidenceIdx, markerEvidenceIdx} {
+		if strings.Contains(fmt.Sprint(evidenceTasks[idx]), "/var/lib/ceph") {
+			t.Errorf("host-evidence task %q must not mix data removal into its loop, got %v", evidenceTasks[idx]["name"], evidenceTasks[idx])
+		}
+	}
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	playTasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	attestationIdx := findAnsibleTask(t, playTasks, "Record the terminal storage destroy attestation")
+	releaseIdx := findAnsibleTask(t, playTasks, "Release host ownership evidence after recording the terminal attestation")
+	if attestationIdx >= releaseIdx {
+		t.Fatalf("the exact terminal artifact must be written before host evidence is released (attestation=%d release=%d)", attestationIdx, releaseIdx)
 	}
 }
 
@@ -2961,10 +3002,9 @@ func TestStorageCephadmDestroyVerifiesTheWipeBeforeReleasingTheNode(t *testing.T
 	verifyIdx := findAnsibleTask(t, tasks, "Re-read the declared Ceph device signatures after the wipe")
 	ranIdx := findAnsibleTask(t, tasks, "Refuse to release a storage node whose wipe verification did not run")
 	signedIdx := findAnsibleTask(t, tasks, "Refuse to release a storage node whose declared device is still signed")
-	stateIdx := findAnsibleTask(t, tasks, "Remove managed Ceph local state")
-	recordIdx := findAnsibleTask(t, tasks, "Remove storage cluster ownership record")
-	if !(wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < ranIdx && ranIdx < signedIdx && signedIdx < stateIdx && stateIdx < recordIdx) {
-		t.Fatalf("destroy must re-read every wiped device and refuse a surviving signature BEFORE it removes the OSD ownership marker and the cluster ownership record: a run that releases its ownership evidence over a disk it did not actually clear leaves a node the next apply refuses as foreign data (wipe=%d zap=%d verify=%d ran=%d signed=%d state=%d record=%d)", wipeIdx, zapIdx, verifyIdx, ranIdx, signedIdx, stateIdx, recordIdx)
+	stateIdx := findAnsibleTask(t, tasks, "Remove managed Ceph local data")
+	if !(wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < ranIdx && ranIdx < signedIdx && signedIdx < stateIdx) {
+		t.Fatalf("destroy must re-read every wiped device and refuse a surviving signature BEFORE it removes the local OSD ownership marker; the controller record remains until the terminal report is validated (wipe=%d zap=%d verify=%d ran=%d signed=%d state=%d)", wipeIdx, zapIdx, verifyIdx, ranIdx, signedIdx, stateIdx)
 	}
 	if got := fmt.Sprint(tasks[verifyIdx]["ansible.builtin.command"]); !strings.Contains(got, "--no-act") {
 		t.Errorf("the verification must read signatures without touching the device, got %v", tasks[verifyIdx]["ansible.builtin.command"])
@@ -3009,12 +3049,16 @@ func TestStorageCephadmDestroySettlesBeforeReleasingTheNode(t *testing.T) {
 	devicesIdx := findAnsibleTask(t, settle, "Resolve every device this teardown wiped on the storage node")
 	unitsIdx := findAnsibleTask(t, settle, "List the Ceph daemons still running on the storage node after every wipe")
 	probeIdx := findAnsibleTask(t, settle, "Refuse to release a storage node whose surviving-daemon probe did not run")
+	unclassifiedIdx := findAnsibleTask(t, settle, "Resolve Ceph units whose cluster identity cannot be classified")
 	daemonIdx := findAnsibleTask(t, settle, "Refuse to release a storage node a Ceph daemon outlived")
 	verifyIdx := findAnsibleTask(t, settle, "Re-read every wiped Ceph device once the cluster teardown settled")
 	ranIdx := findAnsibleTask(t, settle, "Refuse to release a storage node whose settled re-read did not run")
 	signedIdx := findAnsibleTask(t, settle, "Refuse to release a storage node whose wiped device was signed again")
-	if !(devicesIdx < unitsIdx && unitsIdx < probeIdx && probeIdx < daemonIdx && daemonIdx < verifyIdx && verifyIdx < ranIdx && ranIdx < signedIdx) {
-		t.Fatalf("the settle gate must resolve the wiped set, prove its daemon probe ran, refuse a surviving daemon, then re-read every device and refuse a signature (devices=%d units=%d probe=%d daemon=%d verify=%d ran=%d signed=%d)", devicesIdx, unitsIdx, probeIdx, daemonIdx, verifyIdx, ranIdx, signedIdx)
+	if !(devicesIdx < unitsIdx && unitsIdx < probeIdx && probeIdx < unclassifiedIdx && unclassifiedIdx < daemonIdx && daemonIdx < verifyIdx && verifyIdx < ranIdx && ranIdx < signedIdx) {
+		t.Fatalf("the settle gate must resolve the wiped set, prove its daemon probe ran, classify every surviving unit, refuse a survivor, then re-read every device and refuse a signature (devices=%d units=%d probe=%d unclassified=%d daemon=%d verify=%d ran=%d signed=%d)", devicesIdx, unitsIdx, probeIdx, unclassifiedIdx, daemonIdx, verifyIdx, ranIdx, signedIdx)
+	}
+	if got := fmt.Sprint(settle[unitsIdx]); !strings.Contains(got, "active,activating,deactivating") {
+		t.Errorf("the surviving-unit probe must include transitions that can still launch ceph-volume, got %v", settle[unitsIdx])
 	}
 
 	if got := fmt.Sprint(settle[devicesIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_present_devices") || !strings.Contains(got, "bootwright_ceph_filter_wiped_disks") {
@@ -3030,8 +3074,8 @@ func TestStorageCephadmDestroySettlesBeforeReleasingTheNode(t *testing.T) {
 	if got := fmt.Sprint(settle[ranIdx]["ansible.builtin.assert"]); !strings.Contains(got, "selectattr('rc', 'defined')") {
 		t.Errorf("a re-read result that carries no exit status is not a device this teardown read, so the completeness gate must count exit statuses, got %v", settle[ranIdx]["ansible.builtin.assert"])
 	}
-	if got := fmt.Sprint(settle[daemonIdx]["ansible.builtin.assert"]); !strings.Contains(got, "bootwright_ceph_settle_stray_fsids") {
-		t.Errorf("the daemon refusal must key on the fsids this teardown does NOT preserve, or a legitimate co-resident cluster fails every teardown of its neighbour, got %v", settle[daemonIdx]["ansible.builtin.assert"])
+	if got := fmt.Sprint(settle[daemonIdx]["ansible.builtin.assert"]); !strings.Contains(got, "bootwright_ceph_settle_stray_fsids") || !strings.Contains(got, "bootwright_ceph_settle_unclassified_units") {
+		t.Errorf("the daemon refusal must key on non-preserved fsids and unclassified units such as ceph-volume activations, got %v", settle[daemonIdx]["ansible.builtin.assert"])
 	}
 	ownedIdx := findAnsibleTask(t, settle, "Resolve the Ceph cluster this teardown owns on the storage node")
 	preservedIdx := findAnsibleTask(t, settle, "Resolve the co-resident Ceph clusters this teardown preserves")
@@ -3082,9 +3126,10 @@ func TestStorageCephadmDestroySweepsTheCephLVMTheDeviceWipeDidNotCover(t *testin
 	zapIdx := findAnsibleTask(t, sweep, "Zap the partition tables of the Ceph devices that outlived the wipe")
 	verifyIdx := findAnsibleTask(t, sweep, "Re-scan the storage node for Ceph LVM once the sweep finished")
 	verifyRanIdx := findAnsibleTask(t, sweep, "Refuse to release a storage node whose Ceph LVM re-scan did not run")
+	proofIdx := findAnsibleTask(t, sweep, "Resolve the final whole-node Ceph LVM proof")
 	survivorIdx := findAnsibleTask(t, sweep, "Refuse to release a storage node still carrying this cluster's Ceph LVM")
-	if !(scanIdx < scanRanIdx && scanRanIdx < rowsIdx && rowsIdx < classifyIdx && classifyIdx < teardownIdx && teardownIdx < wipeIdx && wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < verifyRanIdx && verifyRanIdx < survivorIdx) {
-		t.Fatalf("the sweep must scan the node, prove the scan ran, classify what it may take down, remove the LVM stack, wipe and zap the devices, then re-scan and refuse a survivor (scan=%d ran=%d rows=%d classify=%d teardown=%d wipe=%d zap=%d verify=%d verifyRan=%d survivor=%d)", scanIdx, scanRanIdx, rowsIdx, classifyIdx, teardownIdx, wipeIdx, zapIdx, verifyIdx, verifyRanIdx, survivorIdx)
+	if !(scanIdx < scanRanIdx && scanRanIdx < rowsIdx && rowsIdx < classifyIdx && classifyIdx < teardownIdx && teardownIdx < wipeIdx && wipeIdx < zapIdx && zapIdx < verifyIdx && verifyIdx < verifyRanIdx && verifyRanIdx < proofIdx && proofIdx < survivorIdx) {
+		t.Fatalf("the sweep must scan the node, prove the scan ran, classify what it may take down, remove the LVM stack, wipe and zap the devices, then re-scan and refuse a survivor (scan=%d ran=%d rows=%d classify=%d teardown=%d wipe=%d zap=%d verify=%d verifyRan=%d proof=%d survivor=%d)", scanIdx, scanRanIdx, rowsIdx, classifyIdx, teardownIdx, wipeIdx, zapIdx, verifyIdx, verifyRanIdx, proofIdx, survivorIdx)
 	}
 
 	body := readRepoFile(t, path)
@@ -3108,6 +3153,21 @@ func TestStorageCephadmDestroySweepsTheCephLVMTheDeviceWipeDidNotCover(t *testin
 	}
 	if !strings.Contains(body, "ensure_zap_tool.yml") {
 		t.Errorf("%s must reach the zap tool through ensure_zap_tool.yml: a node whose declared devices all probed absent never needed it earlier in the run, and the sweep is exactly the path that then finds disks to zap", path)
+	}
+	if got := fmt.Sprint(sweep[scanIdx]["ansible.builtin.script"]); !strings.Contains(got, "ceph_lvm_quiet_scan.sh 1 31 1 30 0") {
+		t.Errorf("the initial scan must wait only to the first writer-free sample before mutation, got %v", sweep[scanIdx])
+	}
+	if got := fmt.Sprint(sweep[verifyIdx]["ansible.builtin.script"]); !strings.Contains(got, "ceph_lvm_quiet_scan.sh 3 31 1 30 2") {
+		t.Errorf("the final proof must require three stable whole-node samples, got %v", sweep[verifyIdx])
+	}
+	if got := fmt.Sprint(sweep[proofIdx]); !strings.Contains(got, "bootwright_ceph_sweep_final_classification") || strings.Contains(got, "selectattr('pv', 'in', bootwright_ceph_sweep_devices") {
+		t.Errorf("the survivor gate must classify its own fresh rows instead of filtering through the initial device set, got %v", sweep[proofIdx])
+	}
+	quietScan := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/files/ceph_lvm_quiet_scan.sh")
+	for _, want := range []string{"required_samples", "quiet_seconds", "ceph_volume_writers", "pvs --noheadings", "lvs --noheadings", "first_rows", "stable_samples"} {
+		if !strings.Contains(quietScan, want) {
+			t.Errorf("the bounded quiet scanner must retain %q, got:\n%s", want, quietScan)
+		}
 	}
 	for _, idx := range []int{scanRanIdx, verifyRanIdx, survivorIdx} {
 		if _, ok := sweep[idx]["ansible.builtin.assert"]; !ok {

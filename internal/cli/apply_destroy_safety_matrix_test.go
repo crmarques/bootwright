@@ -192,6 +192,64 @@ func TestApplyDestroySafetyMatrix(t *testing.T) {
 	}
 }
 
+func TestDestroyMissingStorageAttestationFailsBeforeCompletion(t *testing.T) {
+	ctx := initSafetyBaselineContext(t, safetyBaselineAdvanced)
+	seedStorageOwnership(t, ctx, safetyAdvancedCephCluster)
+	seedRetiredKindInStoredInput(t, ctx)
+	seedSafetyWorkflowBundle(t)
+	t.Setenv("BOOTWRIGHT_TEST_STORAGE_RESULT_MODE", "missing")
+	stdout, stderr, code := runCLI(t,
+		"destroy", "--authorize", "stale-input,data-loss", "--purge-history", "--yes", "--ask-become-pass=false")
+	out := stdout + stderr
+	if code == 0 || !strings.Contains(out, "no completion attestation") {
+		t.Fatalf("missing attestation exit=%d output:\n%s", code, out)
+	}
+	if strings.Contains(out, "[OK] destroy: complete") {
+		t.Fatalf("missing attestation printed a successful destroy summary:\n%s", out)
+	}
+	ledger, found, err := workflow.LoadRunLedger(ctx.RunsDir)
+	if err != nil || !found {
+		t.Fatalf("load failed destroy ledger: found=%t err=%v", found, err)
+	}
+	storageFailed := false
+	blockedKinds := map[string]bool{}
+	machineInfraPlanned := false
+	controllerCleanupPlanned := false
+	controllerCleanupBlocked := false
+	for _, task := range ledger.Tasks {
+		if task.Kind == workflow.DestroyTaskKindStorageCluster && task.Status == workflow.TaskStatusFailed {
+			storageFailed = true
+		}
+		if slices.Contains(workflow.DestroyTaskClusterKeys(task), safetyAdvancedCephCluster) {
+			if task.Kind == workflow.DestroyTaskKindMachineInfra {
+				machineInfraPlanned = true
+			}
+			if task.Status == workflow.TaskStatusBlocked {
+				blockedKinds[task.Kind] = true
+			}
+		}
+		if task.Kind == workflow.DestroyTaskKindControllerNameResolution && strings.Contains(task.ID, "cleanup") {
+			controllerCleanupPlanned = true
+			controllerCleanupBlocked = task.Status == workflow.TaskStatusBlocked
+		}
+	}
+	if ledger.Status != workflow.RunStatusFailed || !storageFailed || !blockedKinds[workflow.DestroyTaskKindMachineRegistration] || !blockedKinds[workflow.DestroyTaskKindStorageNodeAccess] || (machineInfraPlanned && !blockedKinds[workflow.DestroyTaskKindMachineInfra]) || (controllerCleanupPlanned && !controllerCleanupBlocked) {
+		t.Fatalf("ledger = %+v", ledger)
+	}
+	records, err := ownership.LoadContext(ctx.OwnershipDir, ctx.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(records, func(record ownership.ResourceRecord) bool {
+		return record.Kind == string(ownership.KindStorageCluster) && record.Name == safetyAdvancedCephCluster && !record.IsReference()
+	}) {
+		t.Fatalf("missing attestation removed storage ownership: %+v", records)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.RunsDir, "history", ledger.RunID)); err != nil {
+		t.Fatalf("--purge-history removed failed storage evidence: %v", err)
+	}
+}
+
 func TestEveryRegisteredRemedyActionHasASafetyMatrixScenario(t *testing.T) {
 	seen := map[convergeremedy.Action]bool{}
 	for _, tc := range safetyMatrixCases() {

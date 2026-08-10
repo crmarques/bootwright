@@ -210,7 +210,7 @@ func TestPlanDestroyTasksMachineInfraNamesTheClustersItTearsDown(t *testing.T) {
 }
 
 func TestPlanDestroyTasksClustersChain(t *testing.T) {
-	tasks, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil, nil)
+	tasks, err := PlanDestroyTasks("clusters", destroyStorageFanOutState(map[string][]string{"ceph-a": {"a1"}}), "limit", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,6 +229,12 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.storage-node-access").Entry.Kind; got != DestroyTaskKindStorageNodeAccess {
 		t.Fatalf("storage node access revoke must carry its own distinct kind, got %q", got)
+	}
+	if got := destroyTaskByID(t, tasks, "destroy.storage-node-access").Entry.SuccessDependencies; !reflect.DeepEqual(got, []string{DestroyStorageClustersTaskID}) {
+		t.Fatalf("storage node access success deps = %v, want exact storage proof", got)
+	}
+	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.SuccessDependencies; slices.Contains(got, DestroyStorageClustersTaskID) {
+		t.Fatalf("cluster records are an independent ordering-only branch, success deps=%v", got)
 	}
 	for _, task := range tasks {
 		if len(task.Entry.Dependencies) != 0 {
@@ -287,13 +293,12 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		"destroy.controller-name-resolution-preflight": nil,
 		"destroy.cluster-runtime":                      nil,
 		"destroy.storage-clusters":                     nil,
-		"destroy.machine-registration":                 {"destroy.storage-clusters"},
-		"destroy.storage-node-access":                  {"destroy.machine-registration", "destroy.storage-clusters"},
+		"destroy.machine-registration":                 nil,
+		"destroy.storage-node-access":                  nil,
 		"destroy.machine-infra": {
 			"destroy.cluster-runtime",
 			"destroy.storage-node-access",
 			"destroy.machine-registration",
-			"destroy.storage-clusters",
 		},
 		"destroy.container-clusters": {"destroy.cluster-runtime", "destroy.storage-clusters"},
 		"destroy.infra-components": {
@@ -317,7 +322,6 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 			wantDependencies = []string{"destroy.machine-infra"}
 			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
 		case "destroy.machine-infra":
-			wantDependencies = []string{"destroy.storage-clusters"}
 			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
 		case "destroy.controller-name-resolution-cleanup":
 			wantDependencies = []string{
@@ -850,6 +854,10 @@ func destroyStorageFanOutState(clusters map[string][]string) v1alpha1.State {
 	seen := map[string]bool{}
 	for _, name := range names {
 		nodes := make([]v1alpha1.StorageCephNode, 0, len(clusters[name]))
+		bootstrapNode := ""
+		if len(clusters[name]) > 0 {
+			bootstrapNode = clusters[name][0]
+		}
 		for _, machine := range clusters[name] {
 			nodes = append(nodes, v1alpha1.StorageCephNode{
 				Name:       machine,
@@ -867,6 +875,7 @@ func destroyStorageFanOutState(clusters map[string][]string) v1alpha1.State {
 				Type:       v1alpha1.StorageClusterTypeCeph,
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm:  v1alpha1.StorageCephadmSpec{Bootstrap: v1alpha1.StorageCephadmBootstrap{Node: bootstrapNode}},
 					Topology: v1alpha1.StorageCephTopology{Nodes: nodes},
 				},
 			},
@@ -961,18 +970,16 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 		"destroy.cluster-runtime":                      nil,
 		"destroy.storage-clusters.ceph-a":              nil,
 		"destroy.storage-clusters.ceph-b":              nil,
-		"destroy.machine-registration.ceph-a":          {"destroy.storage-clusters.ceph-a"},
-		"destroy.machine-registration.ceph-b":          {"destroy.storage-clusters.ceph-b"},
-		"destroy.storage-node-access.ceph-a":           {"destroy.machine-registration.ceph-a", "destroy.storage-clusters.ceph-a"},
-		"destroy.storage-node-access.ceph-b":           {"destroy.machine-registration.ceph-b", "destroy.storage-clusters.ceph-b"},
+		"destroy.machine-registration.ceph-a":          nil,
+		"destroy.machine-registration.ceph-b":          nil,
+		"destroy.storage-node-access.ceph-a":           nil,
+		"destroy.storage-node-access.ceph-b":           nil,
 		"destroy.machine-infra": {
 			"destroy.cluster-runtime",
 			"destroy.storage-node-access.ceph-a",
 			"destroy.storage-node-access.ceph-b",
 			"destroy.machine-registration.ceph-a",
 			"destroy.machine-registration.ceph-b",
-			"destroy.storage-clusters.ceph-a",
-			"destroy.storage-clusters.ceph-b",
 		},
 		"destroy.container-clusters": {
 			"destroy.cluster-runtime",
@@ -991,9 +998,9 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 	})
 	for _, cluster := range []string{"ceph-a", "ceph-b"} {
 		other := map[string]string{"ceph-a": "ceph-b", "ceph-b": "ceph-a"}[cluster]
-		got := destroyTaskByID(t, tasks, "destroy.storage-node-access."+cluster).Entry.OrderingDependencies
+		got := destroyTaskByID(t, tasks, "destroy.storage-node-access."+cluster).Entry.SuccessDependencies
 		if slices.Contains(got, "destroy.machine-registration."+other) {
-			t.Fatalf("per-cluster storage edges must not cross clusters, or one cluster's failure serialises an unrelated one: %v", got)
+			t.Fatalf("per-cluster storage proof edges must not cross clusters, or one cluster's failure blocks an unrelated one: %v", got)
 		}
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
@@ -1277,12 +1284,20 @@ func TestPlanDestroyTasksBlocksMachineTeardownOnFailedStorageTeardown(t *testing
 	for _, cluster := range []string{"ceph-a", "ceph-b"} {
 		task := destroyTaskByID(t, tasks, "destroy.machine-infra."+cluster)
 		own := "destroy.storage-clusters." + cluster
-		if !slices.Contains(task.Entry.Dependencies, own) {
-			t.Errorf("%q releases the machines of storage cluster %q and must be hard-blocked by %q: an ordering-only edge lets a FAILED storage teardown release the machines anyway, deleting the arbiter VM and powering hosts off while the cluster still holds them, so the next destroy finds those nodes gone; got deps=%v", task.Entry.ID, cluster, own, task.Entry.Dependencies)
+		if !slices.Contains(task.Entry.SuccessDependencies, own) {
+			t.Errorf("%q releases the machines of storage cluster %q and must require successful proof from %q: a skip-tolerant or ordering-only edge lets an incomplete storage teardown release the machines anyway; got success deps=%v", task.Entry.ID, cluster, own, task.Entry.SuccessDependencies)
 		}
 		other := map[string]string{"ceph-a": "ceph-b", "ceph-b": "ceph-a"}[cluster]
-		if slices.Contains(task.Entry.Dependencies, "destroy.storage-clusters."+other) {
-			t.Errorf("%q must not be hard-serialised behind an unrelated cluster's storage teardown, got deps=%v", task.Entry.ID, task.Entry.Dependencies)
+		if slices.Contains(task.Entry.SuccessDependencies, "destroy.storage-clusters."+other) {
+			t.Errorf("%q must not be success-gated by an unrelated cluster's storage teardown, got success deps=%v", task.Entry.ID, task.Entry.SuccessDependencies)
+		}
+		registration := destroyTaskByID(t, tasks, "destroy.machine-registration."+cluster)
+		if !reflect.DeepEqual(registration.Entry.SuccessDependencies, []string{own, destroyControllerNameResolutionPreflightTaskID}) {
+			t.Errorf("%q success deps=%v, want its own storage proof and controller preflight", registration.Entry.ID, registration.Entry.SuccessDependencies)
+		}
+		access := destroyTaskByID(t, tasks, "destroy.storage-node-access."+cluster)
+		if !reflect.DeepEqual(access.Entry.SuccessDependencies, []string{own, registration.Entry.ID, destroyControllerNameResolutionPreflightTaskID}) {
+			t.Errorf("%q success deps=%v, want its own storage proof, registration, and controller preflight", access.Entry.ID, access.Entry.SuccessDependencies)
 		}
 	}
 
@@ -1291,8 +1306,20 @@ func TestPlanDestroyTasksBlocksMachineTeardownOnFailedStorageTeardown(t *testing
 		t.Fatal(err)
 	}
 	machineInfra := destroyTaskByID(t, collapsed, "destroy.machine-infra")
-	if !slices.Contains(machineInfra.Entry.Dependencies, DestroyStorageClustersTaskID) {
-		t.Errorf("the collapsed machine teardown covers the storage cluster's machines and must be hard-blocked by the storage teardown, got deps=%v", machineInfra.Entry.Dependencies)
+	if !slices.Contains(machineInfra.Entry.SuccessDependencies, DestroyStorageClustersTaskID) {
+		t.Errorf("the collapsed machine teardown covers the storage cluster's machines and must require successful storage proof, got success deps=%v", machineInfra.Entry.SuccessDependencies)
+	}
+	registration := destroyTaskByID(t, collapsed, destroyMachineRegistrationTaskID)
+	if !slices.Contains(registration.Entry.SuccessDependencies, DestroyStorageClustersTaskID) {
+		t.Errorf("collapsed registration can erase retry state without storage proof, success deps=%v", registration.Entry.SuccessDependencies)
+	}
+	access := destroyTaskByID(t, collapsed, destroyStorageNodeAccessTaskID)
+	if !slices.Contains(access.Entry.SuccessDependencies, DestroyStorageClustersTaskID) || !slices.Contains(access.Entry.SuccessDependencies, destroyMachineRegistrationTaskID) {
+		t.Errorf("collapsed access can revoke retry identity before storage and registration complete, success deps=%v", access.Entry.SuccessDependencies)
+	}
+	cleanup := destroyTaskByID(t, collapsed, destroyControllerNameResolutionCleanupTaskID)
+	if !slices.Contains(cleanup.Entry.SuccessDependencies, DestroyStorageClustersTaskID) {
+		t.Errorf("controller resolver cleanup can remove a route required by the storage retry, success deps=%v", cleanup.Entry.SuccessDependencies)
 	}
 }
 
