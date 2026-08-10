@@ -71,6 +71,16 @@ Bootwright never removes a package it did not install. Apply-time retry text
 consumes `bootwright_mutating_invocation`, while standalone preflight stays
 command-free and asks for the same preflight to be re-run.
 
+**Constraint:** `sos` is part of every managed Ceph provider's prerequisite
+set. Vendor readiness checks expect it and an incident must not depend on a new
+package transaction before support evidence can be collected. It reaches the
+node through `Provider.PrerequisitePackages` and the ownership-record apply
+path; `bootwright_ceph_default_prerequisite_packages` is the Ansible fallback,
+and `bootwright_ceph_managed_packages` is the matching destroy release list.
+All three must retain the bare package name. Package ownership keeps a
+pre-existing copy and removes only a Bootwright-installed copy with no remaining
+owner.
+
 **Constraint:** The only storage-node OS check is `ansible_os_family == 'RedHat'`
 (mirrored by a `family: rhel` validation error). That is a Bootwright capability
 statement — the subscription provider implements RHEL-family package sources only

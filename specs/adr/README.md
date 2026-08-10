@@ -68,3 +68,4 @@ below.
 | [0052](0052-the-port-a-scheme-arrives-on.md) | The Port a Scheme Arrives On | extends the declared scheme of 0049; separates the classic dashboard's TLS port from the gateway's |
 | [0053](0053-the-flight-plan-a-run-publishes.md) | The Flight Plan a Run Publishes | extends the wait split of 0022; makes the run-tree strata a lowered value, nests logs per cluster, narrows the OLM and playbook edges |
 | [0054](0054-a-filter-is-not-permission-to-wipe-a-device.md) | A Filter Is Not Permission to Wipe a Device | refines 0007, 0030, 0034; limits OSD auto-reclaim to an effective unbounded managed data selection |
+| [0056](0056-the-support-report-a-storage-node-can-produce.md) | The Support Report a Storage Node Can Produce | follows 0002 and 0007; gives storage support tooling the owned package lifecycle |

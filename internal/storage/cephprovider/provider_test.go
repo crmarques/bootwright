@@ -1,6 +1,7 @@
 package cephprovider
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -96,6 +97,17 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	}
 	if _, hasMirror := community["mirror"]; hasMirror {
 		t.Fatalf("community vars must omit mirror when unset: %#v", community)
+	}
+}
+
+func TestSelectOwnsStorageSupportReportPrerequisite(t *testing.T) {
+	provider := Select(v1alpha1.StorageCluster{}, nil, secret.Index{}, "/context/secrets")
+	if !slices.Contains(provider.PrerequisitePackages, "sos") {
+		t.Fatalf("storage prerequisites = %v, want sos", provider.PrerequisitePackages)
+	}
+	projected, ok := Vars(provider)["prerequisitePackages"].([]string)
+	if !ok || !slices.Contains(projected, "sos") {
+		t.Fatalf("projected storage prerequisites = %#v, want sos", Vars(provider)["prerequisitePackages"])
 	}
 }
 

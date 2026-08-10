@@ -135,6 +135,14 @@ func TestAnacondaPackagesCoverMkksisoOnRedHat(t *testing.T) {
 	assertContainsAll(t, packages, []string{"lorax"})
 }
 
+func TestCephPackagesOwnSupportReportToolAcrossApplyAndDestroy(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml"
+	prerequisites := readAnsibleStringListVar(t, path, "bootwright_ceph_default_prerequisite_packages")
+	managed := readAnsibleStringListVar(t, path, "bootwright_ceph_managed_packages")
+	assertContainsAll(t, prerequisites, []string{"sos"})
+	assertContainsAll(t, managed, []string{"sos"})
+}
+
 func readAnsibleStringListVar(t *testing.T, rel, name string) []string {
 	t.Helper()
 	var vars map[string]any

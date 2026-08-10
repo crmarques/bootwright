@@ -1320,6 +1320,11 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   only, so a Ceph node's `MachineInstallProfile` must declare `family: rhel`
   (validation error, re-asserted on the node at apply time as
   `ansible_os_family == 'RedHat'`). No OS *version* is examined anywhere.
+- The managed Ceph prerequisite set includes `sos`, so every selected storage
+  node can collect a support report without an incident-time package install.
+  Apply records whether the package predated Bootwright and which storage
+  clusters require it. Destroy releases only the selected cluster's requirement
+  and removes the package only when Bootwright installed it and no owner remains.
 - `spec.ceph.packageVersion` optionally pins the exact Ceph package build to
   install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp`. It
   names the `cephadm` build on each storage node and nothing else: the daemons

@@ -7,12 +7,14 @@ bootwright_ceph_default_prerequisite_packages:
   - lvm2
   - podman
   - chrony
+  - sos
 bootwright_ceph_managed_packages:
   - cephadm
   - firewalld
   - lvm2
   - podman
   - chrony
+  - sos
   - gdisk
 bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
 bootwright_ceph_rhsm_satellite_ca_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-satellite-ca.pem

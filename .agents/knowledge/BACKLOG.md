@@ -376,26 +376,6 @@ learned; this file records what it still owes.
   change with it. These are cephadm option names, not a vendor catalog.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
 
-## B-053 — `sos` is absent from Bootwright-installed storage nodes
-- Status: open
-- Area: storage / supportability
-- Origin: cephadm-ansible parity audit 2026-07-31
-- Severity: low
-- Problem: `sos` is in cephadm-ansible's `ceph_defaults_infra_pkgs`, and IBM's
-  own `playbooks/checks.yml` computes the missing-package set against that list,
-  so it reports "Required Packages Installed: FAIL" naming `sos` on a
-  Bootwright-built cluster. Bootwright's kickstart is `@^minimal-environment`
-  and `sos` is not in the CentOS Stream 9 BaseOS `core` group, so the node
-  genuinely lacks it where a vendor-prepped node has it. Not a functional
-  defect — `sos` installs from BaseOS on demand and the repos are configured by
-  then — but it is a visible divergence during a support case.
-- Exit: decide whether Bootwright owns support tooling on storage nodes. If yes,
-  add `sos` to `PrerequisitePackages`
-  (`internal/storage/cephprovider/provider.go`) and to both lists in
-  `roles/storage_cluster_cephadm/vars/os/RedHat.yml` so ownership records apply
-  and destroy does not strip a preexisting copy off a provided node.
-- Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
-
 ## B-069 — UX-review decisions still awaiting a product call
 - Status: open
 - Area: api / decisions

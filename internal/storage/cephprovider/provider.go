@@ -196,7 +196,7 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 	release, _ := ResolveRelease(distribution, cephRelease(cluster))
 	provider := Provider{
 		Distribution:         distribution,
-		PrerequisitePackages: []string{"firewalld", "lvm2", "podman", "chrony"},
+		PrerequisitePackages: []string{"firewalld", "lvm2", "podman", "chrony", "sos"},
 		CephadmPackage:       "cephadm",
 		RequiresRHSM:         def.requiresRHSM,
 		RequiresRegistry:     def.requiresRegistry,
