@@ -18,7 +18,7 @@
   changed_when: false
   when:
     - bootwright_ceph_provider.name | default('') == 'ibm'
-    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+    - bootwright_ceph_provider.ibm.callHome | default('') in ['enabled', 'disabled']
 
 - name: Resolve IBM Call Home manager module state
   ansible.builtin.set_fact:
@@ -28,7 +28,7 @@
           | default([])) }}
   when:
     - bootwright_ceph_provider.name | default('') == 'ibm'
-    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+    - bootwright_ceph_provider.ibm.callHome | default('') in ['enabled', 'disabled']
 
 - name: Enable IBM Call Home manager module
   ansible.builtin.command:
@@ -66,6 +66,25 @@
   when: bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
 
 - name: Disable IBM Call Home manager module
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mgr
+      - module
+      - disable
+      - call_home_agent
+  changed_when: true
+  when:
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'disabled'
+    - bootwright_ceph_ibm_call_home_enabled | default(false) | bool
+
+- name: Deny IBM Call Home enablement
   ansible.builtin.command:
     argv:
       - timeout

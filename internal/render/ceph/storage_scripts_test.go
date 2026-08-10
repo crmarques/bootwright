@@ -168,7 +168,13 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 				"bw_run ceph config set mgr mgr/cephadm/container_image_base cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
 				"bw_run ceph config set mgr mgr/cephadm/container_image_prometheus cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
 			},
-			wantCallHome: []string{`bw_run ceph orch deny call-home-enabled`},
+			wantCallHome: []string{
+				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
+				`ibm_call_home_enabled="$(jq -r '(.enabled_modules // []) | index("call_home_agent") != null' <<<"$ibm_call_home_modules")"`,
+				`if [[ "$ibm_call_home_enabled" == "true" ]]; then`,
+				`bw_run ceph mgr module disable call_home_agent`,
+				`bw_run ceph orch deny call-home-enabled`,
+			},
 		},
 		{
 			name:         "ibm enabled reconciles call home",
@@ -196,13 +202,15 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
 			wantLicense:  true,
 			wantCallHome: []string{
+				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
+				`ibm_call_home_enabled="$(jq -r '(.enabled_modules // []) | index("call_home_agent") != null' <<<"$ibm_call_home_modules")"`,
+				`if [[ "$ibm_call_home_enabled" == "true" ]]; then`,
+				`bw_run ceph mgr module disable call_home_agent`,
 				`bw_run ceph orch deny call-home-enabled`,
 			},
 			reject: []string{
-				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
 				`bw_run ceph mgr module enable call_home_agent`,
 				`bw_run ceph orch accept call-home-enabled`,
-				`if [[ "$ibm_call_home_enabled" == "true" ]]`,
 			},
 		},
 	}
@@ -287,10 +295,17 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 					t.Errorf("image pin %q rendered %d times, want 1; a sidecar pin hoisted into the pin stage must not also render as a generic config operation", want, got)
 				}
 			}
+			lastCallHome := -1
 			for _, want := range tc.wantCallHome {
-				if !strings.Contains(script, want) {
+				at := strings.Index(script, want)
+				if at < 0 {
 					t.Errorf("apply.sh missing Call Home reconcile %q:\n%s", want, script)
+					continue
 				}
+				if at <= lastCallHome {
+					t.Errorf("apply.sh Call Home reconcile %q is out of order:\n%s", want, script)
+				}
+				lastCallHome = at
 			}
 			for _, reject := range tc.reject {
 				if strings.Contains(script, reject) {

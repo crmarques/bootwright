@@ -187,6 +187,32 @@ enables the `call_home_agent` mgr module by default, so the StorageCluster must
 declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
 or denies it to turn the module off.
 
+**Symptom:** `ceph orch deny call-home-enabled` prints `Call home agent module
+disabled and health warning for call home enablement cleared`, but the client
+does not exit; the 300-second wrapper terminates it with rc 124.
+
+**Root cause:** IBM's `deny_call_home()` removes the
+`CALL_HOME_ENABLED_AUTOMATICALLY` warning, sends a nested `mgr module disable`
+monitor command for `call_home_agent`, clears
+`mgr/cephadm/call_home_needs_acceptance`, and then returns that exact text. The
+Ceph CLI prints its command response before shutting down its cluster handle,
+so the success-looking line and a later client timeout can coexist. The precise
+transport hang is not vendor-confirmed; unloading the module inside the active
+manager-targeted request is the inferred trigger. The timeout remains an unknown
+outcome under Bootwright's fail-closed command contract and stdout must never
+override rc 124 or 137.
+
+**Fix:** Inspect the module for both explicit intents. For disabled intent,
+first run the bounded, monitor-targeted `ceph mgr module disable
+call_home_agent` when it is active, then run the bounded `ceph orch deny
+call-home-enabled` so IBM still clears the warning and persists the denial. The
+nested disable is then idempotent instead of unloading a module inside that
+orchestrator request. The generated native apply script must keep the same
+order. Live diagnosis requires all three conditions: `call_home_agent` absent
+from `ceph mgr module ls`, `mgr/cephadm/call_home_needs_acceptance` false, and
+`CALL_HOME_ENABLED_AUTOMATICALLY` absent from `ceph health detail`; none is a
+reason to reinterpret a timed-out run as successful.
+
 **Constraint:** IBM Storage Ceph 9 uses IBM's four-component V.R.M.F product
 version. The trailing R.M.F retains the prior Ceph release, modification, and
 fix meaning, so IBM's equivalent of release 9.1 is `9.9.1.0`; the daemon
@@ -241,3 +267,5 @@ assumes a host-installed `ceph` or `radosgw-admin` binary.
 - IBM Storage Ceph 9.9.1.0 versioning scheme: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=whats-new-in-storage-ceph-991>
 - IBM Storage Ceph 9.9.1.0 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
 - IBM 9.9.1.0 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>
+- IBM 9.9.1.0 Call Home disable procedure: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=interface-disabling-call-home>
+- IBM Storage Ceph 9 source RPM: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/source/ceph-20.2.1-324.el9cp.src.rpm>
