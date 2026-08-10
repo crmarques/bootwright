@@ -329,11 +329,3 @@
           delegate_to: localhost
           become: false
       run_once: true
-
-    - name: Release host ownership evidence after recording the terminal attestation
-      ansible.builtin.include_role:
-        name: bootwright.core.storage_cluster_cephadm
-        tasks_from: destroy_release.yml
-        apply:
-          ignore_unreachable: false
-      when: bootwright_storage_node_terminal_completed | default(false) | bool

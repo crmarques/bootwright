@@ -16,7 +16,16 @@ func recordStorageDestroyCompletion(ownershipDir, contextName, runLogPath string
 	if err != nil {
 		return partial, fmt.Errorf("storage teardown completion could not be proved: %w; keeping the converge records, captured secrets and history of storage cluster(s) %s — re-run `%s` once every topology node can produce the terminal proof", err, strings.Join(storageScopeNames, ", "), retry.String())
 	}
+	if len(partial.Clusters) > 0 {
+		return partial, fmt.Errorf("storage teardown remains partial for cluster(s) %s; keeping their ownership, access, converge records, captured secrets and history — re-run `%s` once every topology node can produce the terminal proof", strings.Join(partial.Clusters, ", "), retry.String())
+	}
 	return partial, nil
+}
+
+func finalizeStorageDestroyCompletion(ownershipDir, contextName, runLogPath string, state v1alpha1.State, ledger workflow.RunLedger, skipUnreachable bool) error {
+	expectedNodes := workflow.StorageDestroyExpectedNodesForLedger(state, ledger)
+	expectedSeedHosts := workflow.StorageDestroyExpectedSeedHostsForLedger(state, ledger)
+	return converge.FinalizeStorageDestroyCompletion(ownershipDir, contextName, runLogPath, expectedNodes, expectedSeedHosts, skipUnreachable)
 }
 
 func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvocation) (workflow.DestroyOutcome, error) {

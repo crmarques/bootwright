@@ -175,9 +175,10 @@ its exact selected topology before the scheduler may mark it `ok`. Completed
 nodes carry their own full-node LVM scan proof and remote witness; skipped nodes
 carry positive absence evidence and are accepted only when the task consumed
 `unreachable-nodes`. A missing task artifact, cluster, or node is failure, not
-an empty partial set. The scheduler persists `ok` before releasing a completed
-controller owner; failed tasks may conservatively stamp skipped-node markers but
-may never release completed ownership. `RecordPartialStorageDestroy` still runs
+an empty partial set. A complete result binds its fsid to the exact controller
+owner and persists `proof-validated` before host release. Failed tasks may
+conservatively stamp skipped-node markers but may never release completed
+ownership. `RecordPartialStorageDestroy` still runs
 regardless of overall run outcome — the storage step's result file can be
 complete before an unrelated later task fails the run — and resolves the
 partial set before `ResetConvergeRecordsAfterDestroy`, which is best-effort,
@@ -188,6 +189,39 @@ residual Ceph state instead of re-bootstrapping. Guarded by
 TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster. Each cluster's
 marker names only its own skipped nodes, and `status` ignores reference or
 foreign records while surfacing the retained exact owner.
+
+An authorized skipped-node attestation is not storage-task success. The task
+fails after the partial marker and artifact are durable, so its registration,
+node-access, and substrate success dependencies remain blocked while unrelated
+fanned branches may finish. Post-run aggregation independently rejects a
+partial artifact even if a future producer or ledger path mistakenly reports
+the task successful.
+
+A complete proof first becomes `proof-validated` on the exact controller owner.
+The same worker then runs a release-only play, with independent storage workers
+remaining concurrent. Every node is bound to its manifest inventory host and
+must pass marker/config identity, target-fsid state, daemon, and fresh whole-node
+LVM checks. An exact all-host boundary separates validation from evidence
+deletion. Failure before that boundary clears `proof-validated` so retry repeats
+the destructive phase; failure after it keeps the proof and retries only the
+idempotent evidence commit. Successful commit writes a separate durable
+completion receipt in `reset-pending` before marking the owner
+`evidence-released` and reporting task success. A complete ownerless no-fsid
+absence proof runs the same release-only pass to consume its exact OSD marker
+but first writes its exact proof and topology as `release-pending`. That state
+replays only the release pass and advances to `reset-pending` after host evidence
+is gone. Reset advances the receipt to `completed` before
+post-run owner deletion. Either remote-complete state lets destroy finish
+controller bookkeeping without hosts whose access or substrate a successful
+dependency already removed; only `completed` permits a later apply. Before
+either storage-infrastructure or base storage apply runner mutates a host,
+`release-pending`, `reset-pending`, or an exact staged owner requires the original topology's
+destroy retry. A `proof-validated` owner without remote-completion receipt
+authority is retained with the stale proof cleared. Apply then durably changes
+a superseded `completed` receipt to `apply-started`. That state cannot prove destroy
+completion; it survives a crash or desired-topology change and forces fresh
+destructive proof. A new normal exact owner supersedes the older result, and
+successful release replaces it with a `completed` receipt.
 
 **`--authorize unreachable-nodes` release authorization follows the attestation,
 not flag presence:** a successful managed-storage teardown always writes

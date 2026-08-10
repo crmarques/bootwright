@@ -2,11 +2,8 @@
 - name: Validate the Ceph command timeout contract for ownership release
   ansible.builtin.import_tasks: timeout_contract.yml
 
-- name: Release validated Ceph host ownership evidence
-  ansible.builtin.import_tasks: destroy_steps/release_evidence.yml
+- name: Resolve Ceph ownership release context
+  ansible.builtin.import_tasks: destroy_steps/cleanup_context.yml
 
-- name: Confirm the storage node released its ownership evidence
-  ansible.builtin.command:
-    argv:
-      - "true"
-  changed_when: false
+- name: Revalidate Ceph absence and live ownership evidence
+  ansible.builtin.import_tasks: destroy_steps/release_validate.yml

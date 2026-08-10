@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +150,42 @@ func TestFailedStorageApplyPreservesPriorSubObjectRecords(t *testing.T) {
 	}
 	if string(after) != string(before) {
 		t.Fatalf("failed storage apply changed its prior successful subobject record\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestStorageApplyInvalidatesCompletedDestroyReplayBeforeEveryMutatingPlay(t *testing.T) {
+	for _, kind := range []string{ApplyTaskKindStorageInfra, ApplyTaskKindStorageCluster} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			runsDir := filepath.Join(dir, "runs")
+			opts := schedulerRunOptions(dir)
+			opts.OwnershipDir = filepath.Join(dir, "ownership")
+			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+			if err := writeStorageDestroyCompletionReceipt(opts.OwnershipDir, StorageDestroyCompletionReceipt{
+				APIVersion: storageDestroyCompletionAPIVersion,
+				State:      "unknown",
+				Cluster:    "ceph-a",
+				SeedHost:   "storage__ceph-a__a1",
+				Result:     result,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			task := ApplyTask{
+				Entry:    TaskLedgerEntry{ID: "storage.ceph-a", Kind: kind, Label: "storage ceph-a", Cluster: "ceph-a"},
+				Playbook: "storage-apply",
+				State:    opts.State,
+			}
+			runner := &recordingApplyRunner{}
+			got := runOneApplyTask(context.Background(), io.Discard, io.Discard, runsDir, "apply-test", opts, task, func(io.Writer, io.Writer) ansible.Runner {
+				return runner
+			})
+			if got.err == nil || !strings.Contains(got.err.Error(), "invalid state") {
+				t.Fatalf("storage apply lifecycle error = %v", got.err)
+			}
+			if calls, _ := runner.snapshot(); len(calls) != 0 {
+				t.Fatalf("storage runner called before lifecycle transition: %v", calls)
+			}
+		})
 	}
 }
 

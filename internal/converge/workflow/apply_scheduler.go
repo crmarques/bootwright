@@ -313,22 +313,6 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			ledger.MarkSkipped(event.id, reason, time.Now())
 		} else {
 			ledger.MarkOK(event.id, time.Now())
-			if event.finalize != nil {
-				if err := saveLedger(); err != nil {
-					ledger.MarkFailed(event.id, conciseApplyTaskFailure(err), time.Now())
-					if fatalErr == nil {
-						fatalErr = err
-						cancel()
-					}
-				} else if err := event.finalize(); err != nil {
-					failure := conciseApplyTaskFailure(err)
-					ledger.MarkFailed(event.id, failure, time.Now())
-					if firstTaskErr == nil {
-						firstTaskErr = fmt.Errorf("%s completion finalizer failed: %w", taskByID[event.id].Entry.Label, err)
-						ledger.Recovery = failureRunRecoveryPlan(opts, ledger.Recovery, firstTaskErr)
-					}
-				}
-			}
 		}
 		saveErr := saveLedger()
 		if saveErr != nil && fatalErr == nil {

@@ -78,7 +78,10 @@ set -eu
 inventory=
 limit=
 playbook=
+release_playbook=
 storage_scope=
+ownership_dir=
+release_validation_path=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -i)
@@ -93,7 +96,12 @@ while [ "$#" -gt 0 ]; do
       shift
       case "$1" in
         bootwright_destroy_storage_scope=*) storage_scope=${1#*=} ;;
+        bootwright_ownership_dir=*) ownership_dir=${1#*=} ;;
+        bootwright_storage_destroy_release_validation_path=*) release_validation_path=${1#*=} ;;
       esac
+      ;;
+    *task_storage_cluster_destroy_release*)
+      release_playbook=$1
       ;;
     *task_storage_cluster_destroy*)
       playbook=$1
@@ -101,13 +109,30 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+if [ -n "$release_playbook" ]; then
+  mkdir -p "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+  printf 'validated\n' > "$release_validation_path"
+fi
 if [ -n "$playbook" ] && [ "${BOOTWRIGHT_TEST_STORAGE_RESULT_MODE:-valid}" != missing ]; then
   mkdir -p "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
-  awk -v limit="$limit" -v scope="$storage_scope" '
+  awk -v limit="$limit" -v scope="$storage_scope" -v ownership="$ownership_dir" '
     function value(line) {
       sub(/^[^:]+:[[:space:]]*/, "", line)
       gsub(/^"|"$/, "", line)
       return line
+    }
+    function owner_fsid(name, path, line, found) {
+      path=ownership "/resources/storage-cluster/" name ".json"
+      found=""
+      while ((getline line < path) > 0) {
+        if (line ~ /"fsid"[[:space:]]*:/) {
+          found=line
+          sub(/^.*"fsid"[[:space:]]*:[[:space:]]*"/, "", found)
+          sub(/".*$/, "", found)
+        }
+      }
+      close(path)
+      return found
     }
     BEGIN {
       count=split(scope, selected, ",")
@@ -143,7 +168,7 @@ if [ -n "$playbook" ] && [ "${BOOTWRIGHT_TEST_STORAGE_RESULT_MODE:-valid}" != mi
       printf "{\"schemaVersion\":1,\"clusters\":["
       cluster_sep=""
       for (name in names) {
-        printf "%s{\"name\":\"%s\",\"nodes\":[", cluster_sep, name
+        printf "%s{\"name\":\"%s\",\"fsid\":\"%s\",\"nodes\":[", cluster_sep, name, owner_fsid(name)
         node_sep=""
         for (key in nodes) {
           split(key, part, SUBSEP)

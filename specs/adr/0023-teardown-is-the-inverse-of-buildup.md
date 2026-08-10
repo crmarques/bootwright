@@ -113,9 +113,11 @@ Four edge families are fail-closed; every other edge is ordering-only.
   cluster's node-access revoke. The storage task is successful only after its
   exact per-node terminal attestation validates, so this edge protects the
   evidence and access an incomplete destroy needs for retry. An authorized
-  partial attestation is still a successful storage result: its positively
-  absent nodes remain outside host-local cleanup and its retained ownership
-  marker withholds substrate-release authorization.
+  partial attestation is retained evidence but is not a successful storage
+  result: its positively absent nodes remain outside host-local cleanup, its
+  retained ownership marker withholds substrate-release authorization, and the
+  branch keeps the registration, access, and substrate required by an exact
+  retry.
 
 - Guest machine infrastructure before its KubeVirt host's. The KubeVirt
   substrate role fails closed on an unreachable host API, so a failed guest

@@ -492,11 +492,35 @@ therefore independent of the initial device list and catches a VG first created
 during teardown. The exact five-NVMe seed fixture injects that late creation and
 must fail before ownership release.
 
-After every reachable node proves zero owned survivors, Ansible writes one
-versioned per-node attestation before releasing host evidence. Go requires an
-exact match to the selected topology and binds skipped outcomes to the consumed
-`unreachable-nodes` authorization before the scheduler may persist task success,
-release the controller owner, reset convergence state, purge history, or allow
-machine-registration, access, and substrate teardown to proceed. Missing or
-incomplete evidence is a failed task, never success inferred from silence. No
-`--authorize` token relaxes the scan or the attestation.
+After every reachable node proves zero owned survivors, the destructive play
+writes one versioned per-node attestation and returns without releasing host
+evidence. Go requires an exact match to the selected topology, binds the
+destroyed fsid to the exact controller owner, and durably stages the proof as
+`proof-validated`. A release-only phase in that worker then rechecks every exact
+node-to-host mapping, target fsid directory, active Ceph unit, marker/config
+identity, and a fresh whole-node LVM quiet scan before an all-host validation
+boundary. It never reruns cluster, device, or LVM teardown. Failure before the
+boundary clears the staged proof so the next destroy repeats destructive
+cleanup; failure after the boundary retains it and retries only idempotent
+evidence deletion. After every host finishes, Go writes a separate durable
+completion receipt in `reset-pending`, marks the owner `evidence-released`,
+and only then reports the storage task successful. A complete ownerless
+no-fsid absence proof runs the same release-only pass to consume its exact OSD
+marker, but first persists its exact proof and topology as `release-pending`.
+That state replays only evidence release and advances to `reset-pending` after
+the hosts commit. Post-run reset advances the receipt to
+`completed` before exact owner deletion. Either remote-complete state closes
+destroy replay after host access or substrate is gone, while only `completed`
+permits a later apply. Before either storage-infrastructure or base storage
+apply runner mutates a host, `release-pending`, `reset-pending`, or an exact staged owner requires
+the original topology's destroy retry. A `proof-validated` owner without
+remote-completion receipt authority is retained but has the stale proof cleared.
+Apply then durably changes a superseded `completed` receipt to `apply-started`.
+That non-authorizing state
+survives crashes and topology changes but forces fresh destructive proof; a new
+normal exact owner supersedes the old result and successful release writes the
+next `completed` receipt. Skipped outcomes remain bound to the consumed
+`unreachable-nodes` authorization, release no host evidence, and make the
+storage task non-success. Missing or incomplete evidence is failure, never
+success inferred from silence. No `--authorize` token relaxes the scan or the
+attestation.

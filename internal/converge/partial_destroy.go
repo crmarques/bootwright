@@ -131,6 +131,28 @@ func RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath string, e
 	return out, nil
 }
 
+func FinalizeStorageDestroyCompletion(ownershipDir, contextName, runLogPath string, expected map[string][]string, expectedSeedHosts map[string]string, allowSkipped bool) error {
+	results, _, err := readStorageDestroyResults(runLogPath, expected, allowSkipped)
+	if err != nil {
+		return err
+	}
+	if partial := partialStorageDestroyResultNames(results); len(partial) > 0 {
+		return fmt.Errorf("storage teardown remains partial for %s", strings.Join(partial, ", "))
+	}
+	return workflow.ReconcileStorageDestroyOwnership(ownershipDir, contextName, results, expectedSeedHosts)
+}
+
+func partialStorageDestroyResultNames(results map[string]workflow.StorageDestroyClusterResult) []string {
+	var out []string
+	for name, result := range results {
+		if len(result.SkippedNodes()) > 0 {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func PartiallyDestroyedStorageClusters(ownershipDir, contextName string) (map[string]string, error) {
 	records, err := ownership.LoadContext(ownershipDir, contextName)
 	if err != nil {

@@ -28,6 +28,22 @@ func TestAtomicWriteFile(t *testing.T) {
 	}
 }
 
+func TestWriteFileEnsuringDirCreatesNestedDurablePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "one", "two", "data")
+	if err := WriteFileEnsuringDir(path, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "hello" {
+		t.Fatalf("nested file = %q, %v", got, err)
+	}
+	for _, path := range []string{filepath.Join(dir, "one"), filepath.Join(dir, "one", "two")} {
+		if info, err := os.Stat(path); err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
+			t.Fatalf("directory %s = %+v, %v", path, info, err)
+		}
+	}
+}
+
 func TestWriteNewFileRejectsExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data")
@@ -36,6 +52,23 @@ func TestWriteNewFileRejectsExisting(t *testing.T) {
 	}
 	if err := WriteNewFile(path, []byte("new"), 0o600); err == nil {
 		t.Error("WriteNewFile should fail when the target exists")
+	}
+}
+
+func TestRemoveFileDurable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data")
+	if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveFileDurable(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("removed file stat error = %v", err)
+	}
+	if err := RemoveFileDurable(path); err != nil {
+		t.Fatalf("repeated removal: %v", err)
 	}
 }
 

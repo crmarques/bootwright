@@ -2067,7 +2067,7 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 		t.Fatalf("storage destroy plays = %d, want 1", len(plays))
 	}
 	if got := plays[0]["strategy"]; got != "linear" {
-		t.Fatalf("storage destroy play strategy = %v, want linear so cross-host settle, attestation, and evidence-release barriers cannot be bypassed by ANSIBLE_STRATEGY", got)
+		t.Fatalf("storage destroy play strategy = %v, want linear so cross-host settle and attestation barriers cannot be bypassed by ANSIBLE_STRATEGY", got)
 	}
 	if got := plays[0]["any_errors_fatal"]; got != true {
 		t.Fatalf("storage destroy play must run any_errors_fatal so a seed ownership refusal aborts before any node wipes devices, got %v", got)
@@ -2594,7 +2594,7 @@ func TestStorageCephadmDestroyAuditsNodesLostMidTeardown(t *testing.T) {
 	completion := fmt.Sprint(tasks[completionIdx])
 	for _, want := range []string{"bootwright_storage_destroy_attestation", "outcome", "completed", "bootwright_storage_node_terminal_completed"} {
 		if !strings.Contains(completion, want) {
-			t.Errorf("the host-evidence release predicate must derive from the same terminal attestation classifier and retain %q, got %v", want, tasks[completionIdx])
+			t.Errorf("the per-node terminal predicate must derive from the same terminal attestation classifier and retain %q, got %v", want, tasks[completionIdx])
 		}
 	}
 	audit := fmt.Sprint(tasks[auditIdx])
@@ -2623,23 +2623,25 @@ func TestStorageCephadmDestroyDefersControllerOwnershipReleaseUntilValidatedAtte
 		t.Fatalf("the remote role must not erase the controller's recovery anchor before the task runner validates exact topology coverage, got:\n%s", release)
 	}
 	runner := readRepoFile(t, "internal/converge/workflow/destroy_runner.go")
-	callPos := strings.Index(runner, "validateStorageDestroyTask(taskOpts, task)")
-	successPos := strings.Index(runner, "return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped")
 	validatePos := strings.Index(runner, "ValidateStorageDestroyResults")
-	reconcilePos := strings.Index(runner, "ReconcileStorageDestroyOwnership")
-	if callPos < 0 || validatePos < 0 || reconcilePos < validatePos {
-		t.Fatalf("a storage task must validate its terminal report and reconcile ownership before it returns success to the ledger (call=%d success=%d validate=%d reconcile=%d)", callPos, successPos, validatePos, reconcilePos)
+	stagePos := strings.Index(runner, "PrepareStorageDestroyOwnershipRelease")
+	releasePos := -1
+	workerSuccessPos := -1
+	if stagePos >= 0 {
+		releasePos = strings.Index(runner[stagePos:], "finalizeStorageDestroyTask")
+		workerSuccessPos = strings.LastIndex(runner[stagePos:], "return applyTaskResult{id: task.Entry.ID}")
 	}
-	scheduler := readRepoFile(t, "internal/converge/workflow/apply_scheduler.go")
-	durableOKPos := strings.Index(scheduler, "ledger.MarkOK(event.id")
-	if durableOKPos < 0 {
-		t.Fatal("the scheduler no longer records an OK task status")
+	if validatePos < 0 || stagePos < validatePos || releasePos < 0 || workerSuccessPos < 0 || releasePos > workerSuccessPos {
+		t.Fatalf("a storage worker must validate its terminal report, durably stage it, finish the release-only phase, then report task success (validate=%d stage=%d release=%d success=%d)", validatePos, stagePos, releasePos, workerSuccessPos)
 	}
-	durableTail := scheduler[durableOKPos:]
-	durableSavePos := strings.Index(durableTail, "saveLedger()")
-	finalizePos := strings.Index(durableTail, "event.finalize()")
-	if durableSavePos < 0 || finalizePos < 0 || durableSavePos > finalizePos {
-		t.Fatalf("completed ownership may be released only after the task's OK status is durably saved (mark=%d save=%d finalize=%d)", durableOKPos, durableSavePos, finalizePos)
+	for _, want := range []string{"StorageDestroyReleaseValidationFileName", "ResetStorageDestroyOwnershipProof", "MarkStorageDestroyOwnershipReleased"} {
+		if !strings.Contains(runner, want) {
+			t.Errorf("the release worker must retain %q so validation failure retries destructive proof while a completed evidence phase becomes replayable, got:\n%s", want, runner)
+		}
+	}
+	storageResult := readRepoFile(t, "internal/converge/workflow/storage_destroy_result.go")
+	if !strings.Contains(storageResult, "storageDestroyStatusProofValidated") || !strings.Contains(storageResult, "writeStorageDestroyCompletionReceipt") {
+		t.Fatalf("the controller must persist a replayable proof before release and a durable receipt afterward, got:\n%s", storageResult)
 	}
 }
 
@@ -2665,20 +2667,87 @@ func TestStorageCephadmDestroyReleasesHostEvidenceAfterLocalData(t *testing.T) {
 	managedEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release managed Ceph host ownership evidence")
 	adminEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release owned Ceph admin configuration alongside a co-resident cluster")
 	markerEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release Bootwright Ceph ownership markers alongside a co-resident cluster")
-	for _, idx := range []int{managedEvidenceIdx, adminEvidenceIdx, markerEvidenceIdx} {
+	ownerlessEvidenceIdx := findAnsibleTask(t, evidenceTasks, "Release ownerless Bootwright OSD ownership evidence")
+	for _, idx := range []int{managedEvidenceIdx, adminEvidenceIdx, markerEvidenceIdx, ownerlessEvidenceIdx} {
 		if strings.Contains(fmt.Sprint(evidenceTasks[idx]), "/var/lib/ceph") {
 			t.Errorf("host-evidence task %q must not mix data removal into its loop, got %v", evidenceTasks[idx]["name"], evidenceTasks[idx])
 		}
 	}
-	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
-	playTasks := nestedAnsibleTasks(t, plays[0], "tasks")
-	attestationIdx := findAnsibleTask(t, playTasks, "Record the terminal storage destroy attestation")
-	releaseIdx := findAnsibleTask(t, playTasks, "Release host ownership evidence after recording the terminal attestation")
-	if attestationIdx >= releaseIdx {
-		t.Fatalf("the exact terminal artifact must be written before host evidence is released (attestation=%d release=%d)", attestationIdx, releaseIdx)
+	proofPlay := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	if strings.Contains(proofPlay, "destroy_release.yml") || strings.Contains(proofPlay, "release_evidence.yml") {
+		t.Fatalf("the destructive proof play must return before host evidence release so Go can validate and stage its artifact, got:\n%s", proofPlay)
 	}
-	if got := fmt.Sprint(playTasks[releaseIdx]["when"]); !strings.Contains(got, "bootwright_storage_node_terminal_completed") {
-		t.Fatalf("host evidence release must require this node's completed terminal proof so a transiently unreachable completion witness cannot lose retry evidence, got when=%v", playTasks[releaseIdx]["when"])
+	releasePlay := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy_release.yml")
+	releasePlays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy_release.yml")
+	if len(releasePlays) != 1 {
+		t.Fatalf("storage destroy release plays = %d, want 1", len(releasePlays))
+	}
+	if got := releasePlays[0]["strategy"]; got != "linear" {
+		t.Fatalf("storage destroy release strategy = %v, want linear so every host crosses validation before any host releases evidence", got)
+	}
+	if got := releasePlays[0]["any_errors_fatal"]; got != true {
+		t.Fatalf("storage destroy release must run any_errors_fatal so a validation refusal prevents evidence release on every host, got %v", got)
+	}
+	for _, want := range []string{
+		"bootwright_storage_destroy_release_manifest_path",
+		"bootwright_storage_destroy_release_validation_path",
+		"bootwright_selected_storage_cluster",
+		"bootwright_storage_destroy_release_cluster.fsid",
+		"bootwright_storage_destroy_release_cluster.nodes[",
+		"bootwright_storage_node_name",
+		"bootwright_storage_destroy_release_actual_nodes",
+		"bootwright_storage_destroy_release_actual_hosts",
+		"bootwright_storage_destroy_release_expected_nodes",
+		"bootwright_storage_destroy_release_expected_hosts",
+		"destroy_release.yml",
+		"destroy_release_commit.yml",
+	} {
+		if !strings.Contains(releasePlay, want) {
+			t.Errorf("the release-only play must consume %q, got:\n%s", want, releasePlay)
+		}
+	}
+	if !strings.Contains(releasePlay, "fsid | default('') == ''") {
+		t.Errorf("the release-only play must admit a positive ownerless no-fsid proof so prereqs-only OSD markers are consumed before destroy succeeds, got:\n%s", releasePlay)
+	}
+	cleanupContext := readRepoFile(t, base+"cleanup_context.yml")
+	if !strings.Contains(cleanupContext, "bootwright_ceph_cleanup_owned_fsid | default('') == ''") {
+		t.Errorf("the release context must preserve the ownerless no-fsid evidence path, got:\n%s", cleanupContext)
+	}
+	ownerlessEvidence := fmt.Sprint(evidenceTasks[ownerlessEvidenceIdx])
+	if !strings.Contains(ownerlessEvidence, "bootwright_ceph_osd_marker_path") || strings.Contains(ownerlessEvidence, "/etc/ceph") {
+		t.Errorf("the ownerless no-fsid release may consume only the exact Bootwright OSD marker, got %v", evidenceTasks[ownerlessEvidenceIdx])
+	}
+	if got := fmt.Sprint(evidenceTasks[managedEvidenceIdx]["when"]); !strings.Contains(got, "bootwright_ceph_cleanup_owned_fsid") || !strings.Contains(got, "length > 0") {
+		t.Errorf("recursive /etc/ceph release must require a nonempty controller-validated fsid, got when=%v", evidenceTasks[managedEvidenceIdx]["when"])
+	}
+	if got := fmt.Sprint(evidenceTasks[ownerlessEvidenceIdx]["when"]); !strings.Contains(got, "bootwright_ceph_cleanup_owned_fsid") || !strings.Contains(got, "length == 0") {
+		t.Errorf("the marker-only release must be limited to the positive ownerless no-fsid proof, got when=%v", evidenceTasks[ownerlessEvidenceIdx]["when"])
+	}
+	validationPos := strings.Index(releasePlay, "bootwright_storage_destroy_release_validation_path")
+	commitPos := strings.Index(releasePlay, "tasks_from: destroy_release_commit.yml")
+	if validationPos < 0 || commitPos < validationPos {
+		t.Fatalf("the release play must record the all-host validation boundary before deleting evidence (validation=%d commit=%d)", validationPos, commitPos)
+	}
+	releaseValidation := readRepoFile(t, base+"release_validate.yml")
+	for _, want := range []string{
+		"ansible.builtin.stat",
+		"bootwright_ceph_release_marker_stat.stat.exists",
+		"bootwright_ceph_cleanup_conf_stat.stat.exists",
+		"bootwright_ceph_cleanup_host_fsids",
+		"bootwright_ceph_release_unclassified_units",
+		"ceph_lvm_quiet_scan.sh",
+		"bootwright_ceph_lvm_sweep_classify",
+		"or not (bootwright_ceph_release_marker_stat.stat.exists",
+		"or not (bootwright_ceph_cleanup_conf_stat.stat.exists",
+	} {
+		if !strings.Contains(releaseValidation, want) {
+			t.Errorf("the fresh release boundary must retain %q before removing evidence, got:\n%s", want, releaseValidation)
+		}
+	}
+	for _, forbidden := range []string{"tasks_from: destroy.yml", "lvm_sweep.yml", "wipe_and_cleanup.yml", "cluster_gate.yml"} {
+		if strings.Contains(releasePlay, forbidden) {
+			t.Errorf("the release-only play must not contain destructive Ceph work %q, got:\n%s", forbidden, releasePlay)
+		}
 	}
 }
 

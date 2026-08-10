@@ -32,6 +32,7 @@ func storageDestroyResultJSON(t *testing.T, cluster string, completed, skipped [
 		SchemaVersion: 1,
 		Clusters: []workflow.StorageDestroyClusterResult{{
 			Name:  cluster,
+			FSID:  storageDestroyTestFSID(cluster),
 			Nodes: nodes,
 		}},
 	})
@@ -39,6 +40,17 @@ func storageDestroyResultJSON(t *testing.T, cluster string, completed, skipped [
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func storageDestroyTestFSID(cluster string) string {
+	switch cluster {
+	case "ceph-a":
+		return "11111111-1111-1111-1111-111111111111"
+	case "ceph-b":
+		return "22222222-2222-2222-2222-222222222222"
+	default:
+		return "33333333-3333-3333-3333-333333333333"
+	}
 }
 
 func writeStorageDestroyTaskResult(t *testing.T, runsDir, runID, taskID, content string) string {
@@ -77,7 +89,7 @@ func TestRecordPartialStorageDestroyStampsOwnershipRecord(t *testing.T) {
 	ownershipDir := filepath.Join(dir, "ownership")
 	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
 		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: "storage__ceph-a__ceph-02",
-		Attributes: map[string]string{"seedHost": "storage__ceph-a__ceph-02"},
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__ceph-02", "fsid": "11111111-1111-1111-1111-111111111111"},
 	}); err != nil {
 		t.Fatalf("seed ownership record: %v", err)
 	}
@@ -185,7 +197,7 @@ func TestRecordPartialStorageDestroyNeverReleasesCompletedOwnership(t *testing.T
 	ownershipDir := filepath.Join(dir, "ownership")
 	if err := ownership.SaveResource(ownershipDir, ownership.ResourceRecord{
 		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: "storage__ceph-a__a1",
-		Attributes: map[string]string{"seedHost": "storage__ceph-a__a1"},
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__a1", "fsid": "11111111-1111-1111-1111-111111111111"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -193,13 +205,23 @@ func TestRecordPartialStorageDestroyNeverReleasesCompletedOwnership(t *testing.T
 		storageDestroyResultJSON(t, "ceph-a", []string{"a1"}, nil))
 	partial, err := recordPartialStorageDestroy(ownershipDir, "", runLog, map[string][]string{"ceph-a": {"a1"}}, false)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("post-run aggregation: %v", err)
 	}
 	if !partial.Found || len(partial.Clusters) != 0 {
 		t.Fatalf("partial = %+v", partial)
 	}
 	if records, err := ownership.LoadContext(ownershipDir, ""); err != nil || len(records) != 1 {
 		t.Fatalf("post-run aggregation must not release completed ownership without the task-boundary finalizer, records=%v err=%v", records, err)
+	}
+	if err := FinalizeStorageDestroyCompletion(
+		ownershipDir,
+		"",
+		runLog,
+		map[string][]string{"ceph-a": {"a1"}},
+		map[string]string{"ceph-a": "storage__ceph-a__a1"},
+		false,
+	); err == nil || !strings.Contains(err.Error(), "not fully released") {
+		t.Fatalf("pre-release finalization error = %v", err)
 	}
 }
 

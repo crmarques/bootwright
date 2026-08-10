@@ -1,0 +1,198 @@
+---
+- name: Inspect the live Bootwright Ceph ownership marker before release
+  ansible.builtin.stat:
+    path: "{{ bootwright_ceph_ownership_marker_path }}"
+    follow: false
+  register: bootwright_ceph_release_marker_stat
+  changed_when: false
+
+- name: Read the live Bootwright Ceph ownership marker before release
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_ownership_marker_path }}"
+  register: bootwright_ceph_release_marker
+  changed_when: false
+  when: bootwright_ceph_release_marker_stat.stat.exists | default(false) | bool
+
+- name: Decode the live Bootwright Ceph ownership marker before release
+  ansible.builtin.set_fact:
+    bootwright_ceph_release_marker_doc: >-
+      {{ bootwright_ceph_release_marker.content | b64decode | from_json }}
+  changed_when: false
+  when: (bootwright_ceph_release_marker | default({})).content is defined
+
+- name: Inspect the live Bootwright OSD ownership marker before release
+  ansible.builtin.stat:
+    path: "{{ bootwright_ceph_osd_marker_path }}"
+    follow: false
+  register: bootwright_ceph_release_osd_marker_stat
+  changed_when: false
+
+- name: Read the live Bootwright OSD ownership marker before release
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_osd_marker_path }}"
+  register: bootwright_ceph_release_osd_marker
+  changed_when: false
+  when: bootwright_ceph_release_osd_marker_stat.stat.exists | default(false) | bool
+
+- name: Decode the live Bootwright OSD ownership marker before release
+  ansible.builtin.set_fact:
+    bootwright_ceph_release_osd_marker_doc: >-
+      {{ bootwright_ceph_release_osd_marker.content | b64decode | from_json }}
+  changed_when: false
+  when: (bootwright_ceph_release_osd_marker | default({})).content is defined
+
+- name: Refuse to release changed Ceph ownership evidence
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_ceph_cleanup_owned_fsid | length > 0
+        or not (bootwright_ceph_release_marker_stat.stat.exists | default(false) | bool)
+      - >-
+        bootwright_ceph_cleanup_owned_fsid | length > 0
+        or not (bootwright_ceph_cleanup_conf_stat.stat.exists | default(false) | bool)
+      - >-
+        not (bootwright_ceph_release_marker_stat.stat.exists | default(false) | bool)
+        or (
+          (bootwright_ceph_release_marker | default({})).content is defined
+          and
+          bootwright_ceph_release_marker_doc.manager | default('') == 'bootwright'
+          and bootwright_ceph_release_marker_doc.cluster | default('')
+              == bootwright_selected_storage_cluster.name
+          and bootwright_ceph_release_marker_doc.fsid | default('')
+              == bootwright_ceph_cleanup_owned_fsid
+        )
+      - >-
+        not (bootwright_ceph_release_osd_marker_stat.stat.exists | default(false) | bool)
+        or (
+          (bootwright_ceph_release_osd_marker | default({})).content is defined
+          and
+          bootwright_ceph_release_osd_marker_doc.manager | default('') == 'bootwright'
+          and bootwright_ceph_release_osd_marker_doc.cluster | default('')
+              == bootwright_selected_storage_cluster.name
+          and bootwright_ceph_release_osd_marker_doc.node | default('')
+              == bootwright_current_storage_host.hostname
+          and (bootwright_ceph_release_osd_marker_doc.devices | default([]) | sort)
+              == (bootwright_current_storage_host.devices | default([]) | sort)
+        )
+      - >-
+        not (bootwright_ceph_cleanup_conf_stat.stat.exists | default(false) | bool)
+        or (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
+        or (
+          (bootwright_ceph_cleanup_conf | default({})).content is defined
+          and bootwright_ceph_cleanup_conf_fsid | default('')
+              == bootwright_ceph_cleanup_owned_fsid
+        )
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: the live marker or configuration no
+      longer matches the controller receipt for
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_ceph_cleanup_owned_fsid }}.
+      A later lifecycle or foreign cluster may now own this host; no authorization token
+      permits a stale destroy receipt to erase that evidence.
+
+- name: Refuse ownership release while target Ceph state remains
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_ceph_cleanup_owned_fsid
+        not in (bootwright_ceph_cleanup_host_fsids | default([]))
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: /var/lib/ceph still contains state
+      for target fsid {{ bootwright_ceph_cleanup_owned_fsid }}. The controller completion
+      receipt remains non-authorizing and the storage branch stays failed for an exact retry.
+
+- name: List live Ceph daemons before ownership release
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      systemctl list-units --no-legend --no-pager --plain
+      --state=active,activating,deactivating 'ceph-*@*.service' | awk '{print $1}'
+    executable: /bin/bash
+  register: bootwright_ceph_release_units
+  changed_when: false
+  failed_when: false
+
+- name: Refuse ownership release when the daemon probe did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_release_units.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: the live Ceph daemon probe exited
+      {{ bootwright_ceph_release_units.rc | default('without running') }}
+      ({{ bootwright_ceph_release_units.stderr | default('no diagnostic was recorded') | trim }}).
+
+- name: Resolve Ceph cluster daemons still live before ownership release
+  ansible.builtin.set_fact:
+    bootwright_ceph_release_running_fsids: >-
+      {{ bootwright_ceph_release_units.stdout_lines | default([])
+         | map('trim') | reject('equalto', '')
+         | map('regex_search',
+               '^ceph-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})@',
+               '\1')
+         | reject('none') | flatten | map('trim') | reject('equalto', '') | unique | list }}
+    bootwright_ceph_release_unclassified_units: >-
+      {{ bootwright_ceph_release_units.stdout_lines | default([])
+         | map('trim') | reject('equalto', '')
+         | reject('match',
+                  '^ceph-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@')
+         | list }}
+  changed_when: false
+
+- name: Refuse to release ownership while unpreserved Ceph daemons remain live
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_ceph_release_running_fsids
+         | difference(bootwright_ceph_cleanup_foreign_fsids | default([]))) | length == 0
+      - bootwright_ceph_release_unclassified_units | length == 0
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: unpreserved or unclassified Ceph
+      daemon unit(s) {{ bootwright_ceph_release_units.stdout_lines | default([])
+      | map('trim') | reject('equalto', '') | join(', ') }} are live after the terminal
+      proof. The completion receipt is retained for an exact retry.
+
+- name: Re-scan the storage node before ownership release
+  ansible.builtin.script:
+    cmd: ceph_lvm_quiet_scan.sh 3 31 1 30 2
+  register: bootwright_ceph_release_lvm_scan
+  changed_when: false
+  failed_when: false
+
+- name: Refuse ownership release when the final LVM scan did not run
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_release_lvm_scan.rc | default(1) | int) == 0
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: the fresh whole-node LVM scan exited
+      {{ bootwright_ceph_release_lvm_scan.rc | default('without running') }}
+      ({{ bootwright_ceph_release_lvm_scan.stderr | default('no diagnostic was recorded') | trim }}).
+
+- name: Classify the fresh Ceph LVM rows before ownership release
+  vars:
+    bootwright_ceph_release_lvm_rows: >-
+      {{ bootwright_ceph_release_lvm_scan.stdout_lines | default([]) | map('trim')
+         | reject('equalto', '') | map('from_json') | list }}
+    bootwright_ceph_release_lvm_classification: >-
+      {{ bootwright_ceph_release_lvm_rows
+         | bootwright.core.bootwright_ceph_lvm_sweep_classify(
+             bootwright_ceph_cleanup_owned_fsid,
+             bootwright_ceph_cleanup_foreign_fsids | default([]),
+             bootwright_current_storage_host.devices | default([])) }}
+  ansible.builtin.set_fact:
+    bootwright_ceph_release_lvm_survivors: >-
+      {{ bootwright_ceph_release_lvm_classification.deviceLabels }}
+  changed_when: false
+
+- name: Refuse to release ownership for recreated Ceph LVM
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_release_lvm_survivors | length == 0
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on
+      {{ bootwright_current_storage_host.hostname }}: the fresh release-boundary scan found
+      {{ bootwright_ceph_release_lvm_survivors | join('; ') }}. The controller completion
+      receipt remains non-authorizing and the storage branch stays failed for an exact retry.

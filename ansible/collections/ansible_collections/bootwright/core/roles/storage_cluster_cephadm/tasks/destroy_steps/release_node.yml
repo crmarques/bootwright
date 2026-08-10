@@ -1,35 +1,6 @@
 ---
-- name: Resolve owned Ceph fsid for local state removal
-  ansible.builtin.set_fact:
-    bootwright_ceph_cleanup_owned_fsid: >-
-      {{ bootwright_ceph_destroy_fsid | default('') | trim
-         if inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
-         else hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid
-              | default('') | trim }}
-  changed_when: false
-
-- name: Scan for co-resident Ceph cluster directories before local state removal
-  ansible.builtin.find:
-    paths: /var/lib/ceph
-    file_type: directory
-  register: bootwright_ceph_cleanup_fsid_dirs
-
-- name: Classify remaining Ceph fsid directories on this host
-  ansible.builtin.set_fact:
-    bootwright_ceph_cleanup_host_fsids: >-
-      {{ bootwright_ceph_cleanup_fsid_dirs.files | default([])
-         | map(attribute='path') | map('basename')
-         | select('match', '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
-         | list }}
-  changed_when: false
-
-- name: Resolve foreign Ceph fsids to preserve on this host
-  ansible.builtin.set_fact:
-    bootwright_ceph_cleanup_foreign_fsids: >-
-      {{ bootwright_ceph_cleanup_host_fsids | default([])
-         | reject('equalto', bootwright_ceph_cleanup_owned_fsid | default(''))
-         | list }}
-  changed_when: false
+- name: Resolve Ceph local cleanup context
+  ansible.builtin.import_tasks: cleanup_context.yml
 
 - name: Remove managed Ceph local data
   ansible.builtin.file:
@@ -43,25 +14,6 @@
     - "{{ bootwright_ceph_rhsm_satellite_ca_anchor_path }}"
     - "{{ bootwright_ceph_proxy_ca_anchor_path }}"
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length == 0
-
-- name: Read Ceph configuration before scoped local state removal
-  ansible.builtin.slurp:
-    src: /etc/ceph/ceph.conf
-  register: bootwright_ceph_cleanup_conf
-  changed_when: false
-  failed_when: false
-  when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
-
-- name: Resolve Ceph configuration fsid for scoped local state removal
-  ansible.builtin.set_fact:
-    bootwright_ceph_cleanup_conf_fsid: >-
-      {{ (bootwright_ceph_cleanup_conf.content | b64decode
-          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
-          | default([], true) | first | default('')) | trim }}
-  changed_when: false
-  when:
-    - (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
-    - (bootwright_ceph_cleanup_conf | default({})).content is defined
 
 - name: Remove Bootwright-specific Ceph local data alongside a co-resident cluster
   ansible.builtin.file:

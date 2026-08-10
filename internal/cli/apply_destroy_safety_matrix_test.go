@@ -2746,7 +2746,10 @@ func seedStorageOwnership(t *testing.T, ctx workspace.Context, cluster string) {
 		}
 		seedHost := render.StorageSeedHostName(candidate)
 		record.Host = seedHost
-		record.Attributes = map[string]string{"seedHost": seedHost}
+		record.Attributes = map[string]string{
+			"seedHost": seedHost,
+			"fsid":     "2088ddee-875b-11f1-9b98-303ea72d7724",
+		}
 		break
 	}
 	if err := ownership.SaveResource(ctx.OwnershipDir, record); err != nil {

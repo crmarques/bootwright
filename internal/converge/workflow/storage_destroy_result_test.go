@@ -10,6 +10,10 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
+const storageDestroyTestFSIDA = "11111111-1111-1111-1111-111111111111"
+
+const storageDestroyTestFSIDB = "22222222-2222-2222-2222-222222222222"
+
 func storageDestroyResult(name string, completed, skipped []string) StorageDestroyResult {
 	zero := 0
 	nodes := make([]StorageDestroyNodeResult, 0, len(completed)+len(skipped))
@@ -29,7 +33,11 @@ func storageDestroyResult(name string, completed, skipped []string) StorageDestr
 	return StorageDestroyResult{
 		SchemaVersion: 1,
 		Clusters: []StorageDestroyClusterResult{{
-			Name:  name,
+			Name: name,
+			FSID: map[string]string{
+				"ceph-a": storageDestroyTestFSIDA,
+				"ceph-b": storageDestroyTestFSIDB,
+			}[name],
 			Nodes: nodes,
 		}},
 	}
@@ -70,6 +78,21 @@ func TestValidateStorageDestroyResultsRequiresExactPositiveCoverage(t *testing.T
 	}
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{valid}, expected, false); err == nil || !strings.Contains(err.Error(), "unreachable-nodes authorization") {
 		t.Fatalf("unauthorized skipped result error = %v", err)
+	}
+	allSkipped := storageDestroyResult("ceph-a", nil, []string{"a1", "a2"})
+	allSkipped.Clusters[0].FSID = ""
+	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{allSkipped}, expected, true); err != nil {
+		t.Fatalf("an authorized all-unreachable result does not need a destructive fsid: %v", err)
+	}
+	completedWithoutFSID := storageDestroyResult("ceph-a", []string{"a1", "a2"}, nil)
+	completedWithoutFSID.Clusters[0].FSID = ""
+	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{completedWithoutFSID}, expected, false); err != nil {
+		t.Fatalf("a complete clean-node proof may represent a never-provisioned no-op: %v", err)
+	}
+	invalidFSID := storageDestroyResult("ceph-a", []string{"a1", "a2"}, nil)
+	invalidFSID.Clusters[0].FSID = "not-a-uuid"
+	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{invalidFSID}, expected, false); err == nil || !strings.Contains(err.Error(), "invalid fsid") {
+		t.Fatalf("invalid fsid error = %v", err)
 	}
 	whitespace := storageDestroyResult("ceph-a", []string{"a1", "a2"}, nil)
 	whitespace.Clusters[0].Nodes[0].Name = " a1"
@@ -191,9 +214,10 @@ func TestReconcileStorageDestroyOwnershipKeepsClusterLocalPartialEvidence(t *tes
 	dir := filepath.Join(t.TempDir(), "ownership")
 	for _, name := range []string{"ceph-a", "ceph-b"} {
 		seed := map[string]string{"ceph-a": "storage__ceph-a__a1", "ceph-b": "storage__ceph-b__b1"}[name]
+		fsid := map[string]string{"ceph-a": storageDestroyTestFSIDA, "ceph-b": storageDestroyTestFSIDB}[name]
 		if err := ownership.SaveResource(dir, ownership.ResourceRecord{
 			Kind: string(ownership.KindStorageCluster), Name: name, Cluster: name, Host: seed,
-			Attributes: map[string]string{"seedHost": seed},
+			Attributes: map[string]string{"seedHost": seed, "fsid": fsid},
 		}); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
 		}
@@ -202,10 +226,21 @@ func TestReconcileStorageDestroyOwnershipKeepsClusterLocalPartialEvidence(t *tes
 		"ceph-a": storageDestroyResult("ceph-a", nil, []string{"a1"}).Clusters[0],
 		"ceph-b": storageDestroyResult("ceph-b", []string{"b1"}, nil).Clusters[0],
 	}
-	if err := ReconcileStorageDestroyOwnership(dir, "", results, map[string]string{
+	seeds := map[string]string{
 		"ceph-a": "storage__ceph-a__a1",
 		"ceph-b": "storage__ceph-b__b1",
-	}); err != nil {
+	}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if len(manifest.Clusters) != 1 || manifest.Clusters["ceph-b"].FSID != storageDestroyTestFSIDB {
+		t.Fatalf("release manifest = %+v, want only ceph-b", manifest)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, manifest); err != nil {
+		t.Fatalf("mark released: %v", err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	records, err := ownership.LoadContext(dir, "")
@@ -223,11 +258,599 @@ func TestReconcileStorageDestroyOwnershipKeepsClusterLocalPartialEvidence(t *tes
 	}
 }
 
+func TestStorageDestroyReleaseStateReplaysAfterInterruption(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	expected := map[string][]string{"ceph-a": {"a1"}}
+	seeds := map[string]string{"ceph-a": seed}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := RecoverStorageDestroyResults(dir, "", expected, seeds)
+	if err != nil || len(recovered) != 1 {
+		t.Fatalf("recover release-pending proof = %v, err = %v", recovered, err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", recovered, seeds); err == nil || !strings.Contains(err.Error(), "not fully released") {
+		t.Fatalf("pre-release reconciliation error = %v", err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", recovered, seeds, manifest); err != nil {
+		t.Fatal(err)
+	}
+	pendingReconcile, err := PrepareStorageDestroyOwnershipRelease(dir, "", recovered, seeds)
+	if err != nil || len(pendingReconcile.Clusters) != 0 {
+		t.Fatalf("evidence-released owner replay manifest=%+v err=%v, want controller-only reconciliation", pendingReconcile, err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", recovered, seeds); err != nil {
+		t.Fatal(err)
+	}
+	if records, err := ownership.LoadContext(dir, ""); err != nil || len(records) != 0 {
+		t.Fatalf("completed owner cleanup records=%v err=%v", records, err)
+	}
+	recovered, err = RecoverStorageDestroyResults(dir, "", expected, seeds)
+	if err != nil || len(recovered) != 1 {
+		t.Fatalf("recover receipt after owner cleanup = %v, err = %v", recovered, err)
+	}
+	replayed, err := PrepareStorageDestroyOwnershipRelease(dir, "", recovered, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replayed.Clusters) != 0 {
+		t.Fatalf("receipt retry manifest = %+v, want controller-only completion replay", replayed)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", recovered, seeds); err != nil {
+		t.Fatalf("reconcile ownerless receipt replay: %v", err)
+	}
+}
+
+func TestStorageDestroyReceiptPromotesProofValidatedCrashState(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	expected := map[string][]string{"ceph-a": {"a1"}}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": result.FSID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateResetPending,
+		Cluster:    "ceph-a",
+		SeedHost:   seed,
+		Result:     result,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := RecoverStorageDestroyResults(dir, "", expected, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", recovered, seeds)
+	if err != nil || len(manifest.Clusters) != 0 {
+		t.Fatalf("receipt-backed crash replay manifest=%+v err=%v", manifest, err)
+	}
+	records, err := ownership.LoadContext(dir, "")
+	if err != nil || len(records) != 1 || records[0].Attributes[storageDestroyStatusAttr] != storageDestroyStatusEvidenceReleased {
+		t.Fatalf("recovered owner records=%v err=%v", records, err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", recovered, seeds); err != nil {
+		t.Fatal(err)
+	}
+	if records, err := ownership.LoadContext(dir, ""); err != nil || len(records) != 0 {
+		t.Fatalf("final owner records=%v err=%v", records, err)
+	}
+	receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateCompleted {
+		t.Fatalf("final crash receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+}
+
+func TestStorageApplyLifecycleRefusesPendingCompletedOwner(t *testing.T) {
+	for _, status := range []string{storageDestroyStatusProofValidated, storageDestroyStatusEvidenceReleased} {
+		t.Run(status, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "ownership")
+			seed := "storage__ceph-a__a1"
+			seeds := map[string]string{"ceph-a": seed}
+			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+			results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+			if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+				Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+				Attributes: map[string]string{"seedHost": seed, "fsid": result.FSID},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expectedReceiptState := storageDestroyCompletionStateCompleted
+			if status == storageDestroyStatusEvidenceReleased {
+				if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, manifest); err != nil {
+					t.Fatal(err)
+				}
+				expectedReceiptState = storageDestroyCompletionStateResetPending
+			} else if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+				APIVersion: storageDestroyCompletionAPIVersion,
+				State:      storageDestroyCompletionStateCompleted,
+				Cluster:    "ceph-a",
+				SeedHost:   seed,
+				Result:     result,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err == nil || !strings.Contains(err.Error(), "storage topology before apply") {
+				t.Fatalf("pending completion apply error = %v", err)
+			}
+			receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+			if err != nil || !found || receipt.State != expectedReceiptState {
+				t.Fatalf("apply lifecycle receipt=%+v found=%t err=%v", receipt, found, err)
+			}
+			if records, err := ownership.LoadContext(dir, ""); err != nil || len(records) != 1 || records[0].Attributes[storageDestroyStatusAttr] != status {
+				t.Fatalf("pending owner must be retained before reset, records=%v err=%v", records, err)
+			}
+		})
+	}
+}
+
+func TestStorageApplyLifecycleRefusesResetPendingBeforeOwnerMutation(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	receiptResult := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateResetPending,
+		Cluster:    "ceph-a",
+		SeedHost:   seed,
+		Result:     receiptResult,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ownerResult := receiptResult
+	ownerResult.FSID = storageDestroyTestFSIDB
+	proof, err := encodeStorageDestroyClusterProof(ownerResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{
+			"seedHost": seed, "fsid": ownerResult.FSID,
+			storageDestroyStatusAttr: storageDestroyStatusProofValidated,
+			storageDestroyProofAttr:  proof,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	records, err := ownership.LoadContext(dir, "")
+	if err != nil || len(records) != 1 {
+		t.Fatalf("load owner before apply: records=%v err=%v", records, err)
+	}
+	path, err := ownership.ResourcePath(dir, records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err == nil || !strings.Contains(err.Error(), "pending release or controller reset") {
+		t.Fatalf("reset-pending apply error = %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("reset-pending refusal mutated the contradictory owner\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestStorageApplyLifecycleTransitionsOwnerlessCompletedReceipt(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	manifest := StorageDestroyReleaseManifest{SchemaVersion: 1, Clusters: map[string]StorageDestroyReleaseCluster{
+		"ceph-a": {FSID: result.FSID, Nodes: map[string]string{"a1": seed}},
+	}}
+	if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateCompleted,
+		Cluster:    "ceph-a",
+		SeedHost:   seed,
+		Result:     result,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err != nil {
+		t.Fatal(err)
+	}
+	receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateApplyStarted {
+		t.Fatalf("apply lifecycle receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err != nil {
+		t.Fatalf("apply lifecycle retry: %v", err)
+	}
+	recovered, err := RecoverStorageDestroyResults(
+		dir,
+		"",
+		map[string][]string{"ceph-a": {"new-node"}},
+		map[string]string{"ceph-a": "storage__ceph-a__new-node"},
+	)
+	if err != nil || len(recovered) != 0 {
+		t.Fatalf("apply-started receipt must force fresh destroy proof after a topology change: recovered=%v err=%v", recovered, err)
+	}
+	if _, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds); err == nil || !strings.Contains(err.Error(), "cannot authorize destroy completion") {
+		t.Fatalf("prepare accepted apply-started receipt: %v", err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, manifest); err == nil || !strings.Contains(err.Error(), "cannot authorize destroy completion") {
+		t.Fatalf("mark accepted apply-started receipt: %v", err)
+	}
+}
+
+func TestStorageApplyLifecycleRefusesContradictoryReceipt(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	receipt := StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateCompleted,
+		Context:    "other",
+		Cluster:    "ceph-a",
+		SeedHost:   "storage__ceph-a__a1",
+		Result:     result,
+	}
+	if err := writeStorageDestroyCompletionReceipt(dir, receipt); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "ctx", "ceph-a"); err == nil || !strings.Contains(err.Error(), "contradicts") {
+		t.Fatalf("context contradiction error = %v", err)
+	}
+	receipt.Context = "ctx"
+	receipt.State = "unknown"
+	if err := writeStorageDestroyCompletionReceipt(dir, receipt); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "ctx", "ceph-a"); err == nil || !strings.Contains(err.Error(), "invalid state") {
+		t.Fatalf("unknown state error = %v", err)
+	}
+}
+
+func TestStorageApplyLifecycleInvalidatesStaleProofBeforeMutation(t *testing.T) {
+	for _, receiptState := range []string{"", storageDestroyCompletionStateApplyStarted} {
+		t.Run(receiptState, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "ownership")
+			seed := "storage__ceph-a__a1"
+			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+			if receiptState != "" {
+				if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+					APIVersion: storageDestroyCompletionAPIVersion,
+					State:      receiptState,
+					Cluster:    "ceph-a",
+					SeedHost:   seed,
+					Result:     result,
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			proof, err := encodeStorageDestroyClusterProof(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+				Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+				Attributes: map[string]string{
+					"seedHost": seed, "fsid": result.FSID,
+					storageDestroyStatusAttr: storageDestroyStatusProofValidated,
+					storageDestroyProofAttr:  proof,
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err != nil {
+				t.Fatal(err)
+			}
+			records, err := ownership.LoadContext(dir, "")
+			if err != nil || len(records) != 1 {
+				t.Fatalf("stale proof owner records=%v err=%v", records, err)
+			}
+			if records[0].Attributes[storageDestroyStatusAttr] != "" || records[0].Attributes[storageDestroyProofAttr] != "" {
+				t.Fatalf("stale proof survived apply boundary: %+v", records[0].Attributes)
+			}
+		})
+	}
+}
+
+func TestStorageDestroyCompletionReceiptIsSupersededByANewOwnerLifecycle(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	expected := map[string][]string{"ceph-a": {"a1"}}
+	oldResult := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": oldResult.FSID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	oldResults := map[string]StorageDestroyClusterResult{"ceph-a": oldResult}
+	oldManifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", oldResults, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", oldResults, seeds, oldManifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", oldResults, seeds); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err != nil {
+		t.Fatal(err)
+	}
+	newResult := oldResult
+	newResult.FSID = storageDestroyTestFSIDB
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": newResult.FSID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if recovered, err := RecoverStorageDestroyResults(dir, "", expected, seeds); err != nil || len(recovered) != 0 {
+		t.Fatalf("a normal new owner must supersede the old receipt before destructive proof: recovered=%v err=%v", recovered, err)
+	}
+	newResults := map[string]StorageDestroyClusterResult{"ceph-a": newResult}
+	newManifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", newResults, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newManifest.Clusters["ceph-a"].FSID != storageDestroyTestFSIDB {
+		t.Fatalf("new lifecycle manifest = %+v", newManifest)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", newResults, seeds, newManifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", newResults, seeds); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := RecoverStorageDestroyResults(dir, "", expected, seeds)
+	if err != nil || recovered["ceph-a"].FSID != storageDestroyTestFSIDB {
+		t.Fatalf("new lifecycle receipt = %+v, err=%v", recovered, err)
+	}
+}
+
+func TestPrepareStorageDestroyReleaseDistinguishesNoOpOwnerAndReceipt(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	priorResult := result
+	if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateApplyStarted,
+		Cluster:    "ceph-a",
+		SeedHost:   seed,
+		Result:     priorResult,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result.FSID = ""
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil || len(manifest.Clusters) != 1 || manifest.Clusters["ceph-a"].FSID != "" {
+		t.Fatalf("clean no-owner no-op release manifest=%+v err=%v", manifest, err)
+	}
+	receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateReleasePending || receipt.Result.FSID != "" {
+		t.Fatalf("clean no-op release-pending receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err == nil || !strings.Contains(err.Error(), "pending release or controller reset") {
+		t.Fatalf("apply accepted clean no-op before evidence release: %v", err)
+	}
+	recovered, err := RecoverStorageDestroyResults(dir, "", map[string][]string{"ceph-a": {"a1"}}, seeds)
+	if err != nil || recovered["ceph-a"].FSID != "" {
+		t.Fatalf("recover clean no-op before evidence release=%+v err=%v", recovered, err)
+	}
+	manifest, err = PrepareStorageDestroyOwnershipRelease(dir, "", recovered, seeds)
+	if err != nil || len(manifest.Clusters) != 1 || manifest.Clusters["ceph-a"].FSID != "" {
+		t.Fatalf("replay clean no-op release manifest=%+v err=%v", manifest, err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, manifest); err != nil {
+		t.Fatalf("mark clean no-op evidence released: %v", err)
+	}
+	receipt, found, err = readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateResetPending || receipt.Result.FSID != "" {
+		t.Fatalf("clean no-op reset-pending receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+	if err := BeginStorageApplyLifecycle(dir, "", "ceph-a"); err == nil || !strings.Contains(err.Error(), "pending release or controller reset") {
+		t.Fatalf("apply accepted clean no-op before controller reset: %v", err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err != nil {
+		t.Fatalf("reconcile clean no-op: %v", err)
+	}
+	receipt, found, err = readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateCompleted {
+		t.Fatalf("clean no-op finalized receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+	recovered, err = RecoverStorageDestroyResults(dir, "", map[string][]string{"ceph-a": {"a1"}}, seeds)
+	if err != nil || recovered["ceph-a"].FSID != "" {
+		t.Fatalf("recover clean no-op receipt=%+v err=%v", recovered, err)
+	}
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds); err == nil || !strings.Contains(err.Error(), "clean no-op") {
+		t.Fatalf("clean proof with owner error = %v", err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	result.FSID = storageDestroyTestFSIDA
+	results["ceph-a"] = result
+	if _, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds); err == nil || !strings.Contains(err.Error(), "no exact controller owner or completion receipt") {
+		t.Fatalf("fsid-bound proof without owner or receipt error = %v", err)
+	}
+}
+
+func TestReconcileStorageDestroyNoOpRequiresCompletedReceipt(t *testing.T) {
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	result.FSID = ""
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	for _, state := range []string{"", storageDestroyCompletionStateApplyStarted, storageDestroyCompletionStateReleasePending} {
+		t.Run(state, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "ownership")
+			if state != "" {
+				if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+					APIVersion: storageDestroyCompletionAPIVersion,
+					State:      state,
+					Cluster:    "ceph-a",
+					SeedHost:   seed,
+					Result:     result,
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err == nil {
+				t.Fatal("clean no-op reconciled without a completed receipt")
+			}
+		})
+	}
+	dir := filepath.Join(t.TempDir(), "ownership")
+	if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+		APIVersion: storageDestroyCompletionAPIVersion,
+		State:      storageDestroyCompletionStateResetPending,
+		Cluster:    "ceph-a",
+		SeedHost:   seed,
+		Result:     result,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err != nil {
+		t.Fatalf("reset-pending clean no-op reconciliation: %v", err)
+	}
+	receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateCompleted {
+		t.Fatalf("final clean no-op receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+}
+
+func TestRecoverStorageDestroyRefusesUnknownOwnerStatus(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{
+			"seedHost":               seed,
+			"fsid":                   storageDestroyTestFSIDA,
+			storageDestroyStatusAttr: "unknown",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := RecoverStorageDestroyResults(
+		dir,
+		"",
+		map[string][]string{"ceph-a": {"a1"}},
+		map[string]string{"ceph-a": seed},
+	)
+	if err == nil || !strings.Contains(err.Error(), "unknown destroy status") {
+		t.Fatalf("unknown owner status error = %v", err)
+	}
+}
+
+func TestResetStorageDestroyProofMakesValidationFailureDestructiveOnRetry(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	expected := map[string][]string{"ceph-a": {"a1"}}
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ResetStorageDestroyOwnershipProof(dir, "", results, seeds, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if recovered, err := RecoverStorageDestroyResults(dir, "", expected, seeds); err != nil || len(recovered) != 0 {
+		t.Fatalf("release validation failure must rerun destructive proof: recovered=%v err=%v", recovered, err)
+	}
+	records, err := ownership.LoadContext(dir, "")
+	if err != nil || len(records) != 1 {
+		t.Fatalf("owner records=%v err=%v", records, err)
+	}
+	if records[0].Attributes[storageDestroyStatusAttr] != "" || records[0].Attributes[storageDestroyProofAttr] != "" {
+		t.Fatalf("reset owner attributes = %+v", records[0].Attributes)
+	}
+}
+
+func TestReconcileStorageDestroyOwnershipPrevalidatesEveryClusterBeforeRemoval(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seeds := map[string]string{
+		"ceph-a": "storage__ceph-a__a1",
+		"ceph-b": "storage__ceph-b__b1",
+	}
+	results := map[string]StorageDestroyClusterResult{
+		"ceph-a": storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0],
+		"ceph-b": storageDestroyResult("ceph-b", []string{"b1"}, nil).Clusters[0],
+	}
+	for _, name := range []string{"ceph-a", "ceph-b"} {
+		if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+			Kind: string(ownership.KindStorageCluster), Name: name, Cluster: name, Host: seeds[name],
+			Attributes: map[string]string{"seedHost": seeds[name], "fsid": results[name].FSID},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, StorageDestroyReleaseManifest{
+		SchemaVersion: 1,
+		Clusters:      map[string]StorageDestroyReleaseCluster{"ceph-a": manifest.Clusters["ceph-a"]},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err == nil || !strings.Contains(err.Error(), "ceph-b") {
+		t.Fatalf("mixed release reconciliation error = %v", err)
+	}
+	if records, err := ownership.LoadContext(dir, ""); err != nil || len(records) != 2 {
+		t.Fatalf("prevalidation must retain both owners, records=%v err=%v", records, err)
+	}
+}
+
 func TestReconcileStorageDestroyOwnershipTargetsOnlyTheExactOwner(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ownership")
 	owner := ownership.ResourceRecord{
 		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Host: "storage__ceph-a__a1",
-		Attributes: map[string]string{"seedHost": "storage__ceph-a__a1"},
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__a1", "fsid": storageDestroyTestFSIDA},
 	}
 	reference := ownership.ResourceRecord{
 		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Role: ownership.RoleReference,
@@ -238,7 +861,16 @@ func TestReconcileStorageDestroyOwnershipTargetsOnlyTheExactOwner(t *testing.T) 
 		}
 	}
 	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
-	if err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": "storage__ceph-a__a1"}); err != nil {
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	seeds := map[string]string{"ceph-a": "storage__ceph-a__a1"}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "ctx", results, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "ctx", results, seeds, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "ctx", results, seeds); err != nil {
 		t.Fatal(err)
 	}
 	records, err := ownership.LoadContext(dir, "ctx")
@@ -283,7 +915,7 @@ func TestReconcileStorageDestroyOwnershipRequiresTheSelectedSeed(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "ownership")
 			if err := ownership.SaveResource(dir, ownership.ResourceRecord{
 				Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Host: test.host,
-				Attributes: map[string]string{"seedHost": test.seedHost},
+				Attributes: map[string]string{"seedHost": test.seedHost, "fsid": storageDestroyTestFSIDA},
 			}); err != nil {
 				t.Fatal(err)
 			}

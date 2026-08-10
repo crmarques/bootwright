@@ -135,6 +135,11 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
+	if task.Entry.Kind == ApplyTaskKindStorageInfra || task.Entry.Kind == ApplyTaskKindStorageCluster {
+		if err := BeginStorageApplyLifecycle(opts.OwnershipDir, opts.ContextName, task.Entry.Cluster); err != nil {
+			return applyTaskResult{id: task.Entry.ID, err: err}
+		}
+	}
 	result, err := Run(runCtx, taskOpts, runner, nil)
 	now = time.Now()
 	if err != nil {

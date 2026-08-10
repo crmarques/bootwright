@@ -1,0 +1,108 @@
+---
+- name: Resolve fixed Ceph ownership evidence paths
+  ansible.builtin.set_fact:
+    bootwright_ceph_ownership_marker_path: /etc/ceph/.bootwright-owned
+    bootwright_ceph_osd_marker_path: /etc/bootwright/ceph-osd-devices.json
+  changed_when: false
+
+- name: Accept the controller-validated Ceph fsid for ownership release
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_owned_fsid: "{{ bootwright_ceph_cleanup_owned_fsid_input | trim }}"
+  changed_when: false
+  when: bootwright_ceph_cleanup_owned_fsid_input is defined
+
+- name: Resolve this release host in the selected storage topology
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_host_matches: >-
+      {{ bootwright_selected_storage_cluster.hosts | default([])
+         | selectattr('inventoryHost', 'equalto', inventory_hostname) | list }}
+  changed_when: false
+  when: bootwright_ceph_cleanup_owned_fsid_input is defined
+
+- name: Require one exact storage topology host for ownership release
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_cleanup_host_matches | length == 1
+    fail_msg: >-
+      Refusing to release Ceph ownership evidence on {{ inventory_hostname }}: the
+      controller receipt does not resolve this inventory host exactly once in storage
+      cluster {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+  when: bootwright_ceph_cleanup_owned_fsid_input is defined
+
+- name: Select this release host from the storage topology
+  ansible.builtin.set_fact:
+    bootwright_current_storage_host: "{{ bootwright_ceph_cleanup_host_matches | first }}"
+  changed_when: false
+  when: bootwright_ceph_cleanup_owned_fsid_input is defined
+
+- name: Resolve owned Ceph fsid from the active teardown authority
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_owned_fsid: >-
+      {{ bootwright_ceph_destroy_fsid | default('') | trim
+         if inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
+         else hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid
+              | default('') | trim }}
+  changed_when: false
+  when: bootwright_ceph_cleanup_owned_fsid_input is not defined
+
+- name: Require an exact Ceph fsid for local cleanup
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_ceph_cleanup_owned_fsid | default('') == ''
+        or bootwright_ceph_cleanup_owned_fsid
+           is match('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    fail_msg: >-
+      Refusing to remove local Ceph state or ownership evidence on
+      {{ bootwright_storage_node_name | default(inventory_hostname) }}: the controller did
+      not supply either the exact fsid or the positive ownerless-absence proof that
+      authorizes this evidence release. Re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`;
+      no authorization token relaxes this identity check.
+  when: bootwright_ceph_cleanup_owned_fsid_input is defined
+
+- name: Scan for co-resident Ceph cluster directories before local cleanup
+  ansible.builtin.find:
+    paths: /var/lib/ceph
+    file_type: directory
+  register: bootwright_ceph_cleanup_fsid_dirs
+
+- name: Classify remaining Ceph fsid directories on this host
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_host_fsids: >-
+      {{ bootwright_ceph_cleanup_fsid_dirs.files | default([])
+         | map(attribute='path') | map('basename')
+         | select('match', '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+         | list }}
+  changed_when: false
+
+- name: Resolve foreign Ceph fsids to preserve on this host
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_foreign_fsids: >-
+      {{ bootwright_ceph_cleanup_host_fsids | default([])
+         | reject('equalto', bootwright_ceph_cleanup_owned_fsid)
+         | list }}
+  changed_when: false
+
+- name: Inspect Ceph configuration before scoped local cleanup
+  ansible.builtin.stat:
+    path: /etc/ceph/ceph.conf
+    follow: false
+  register: bootwright_ceph_cleanup_conf_stat
+  changed_when: false
+
+- name: Read Ceph configuration before scoped local cleanup
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_cleanup_conf
+  changed_when: false
+  when: bootwright_ceph_cleanup_conf_stat.stat.exists | default(false) | bool
+
+- name: Resolve Ceph configuration fsid for scoped local cleanup
+  ansible.builtin.set_fact:
+    bootwright_ceph_cleanup_conf_fsid: >-
+      {{ (bootwright_ceph_cleanup_conf.content | b64decode
+          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+          | default([], true) | first | default('')) | trim }}
+  changed_when: false
+  when: (bootwright_ceph_cleanup_conf | default({})).content is defined

@@ -44,14 +44,47 @@ classification plus its diagnostic. Preliminary, missing, malformed,
 duplicate, unknown, and incomplete evidence is failure.
 
 The task boundary validates the exact selected topology before returning
-success. The scheduler persists that success before releasing the exact
-controller owner; partial results retain or stamp the owner when one exists and
-remain in the convergence-reset exclusion even when none exists. Host evidence
-is released only after the terminal artifact is written. Registration cleanup,
-node-access revoke, and machine substrate for a selected storage cluster require
-that cluster's successful storage task; node-access revoke also requires its
-registration cleanup. Independent clusters and unrelated graph branches retain
-ADR 0023's ordering-only concurrency.
+success. A complete result binds the destroyed fsid to the exact controller
+owner and durably stages the proof there as `proof-validated`; a partial result
+retains or stamps the owner when one exists and remains in the convergence-reset
+exclusion even when none exists. A partial attestation is retained bookkeeping,
+not task success; it fails that storage branch after stamping the available
+evidence. A complete ownerless no-fsid proof instead writes an exact
+`release-pending` receipt before remote evidence release. That state may replay
+only the release pass; it proves neither remote completion nor controller reset.
+
+The same storage worker then runs a release-only pass. Every manifest node is
+bound to its exact inventory host. Before deleting evidence, every host rechecks
+the target fsid directory, active Ceph units, ownership marker and configuration,
+and a fresh whole-node LVM quiet scan; a controller boundary asserts exact host
+coverage. Failure before that boundary invalidates `proof-validated`, so the
+next retry repeats destructive teardown. Failure after the boundary retains the
+staged proof and retries only the idempotent evidence commit.
+
+After every host releases its evidence, the controller writes or advances a
+separate, fsync-durable receipt to `reset-pending`, marks any remaining exact owner
+`evidence-released`, and only then lets the worker report success. The same
+release-only pass also consumes exact Bootwright host markers for a
+complete ownerless no-fsid absence attestation before that worker may succeed.
+Both `reset-pending` and `completed` make destroy replay controller-only.
+Post-run cleanup first durably resets converge, secret, substrate-release, and
+requested history state, then advances every receipt to `completed` before
+removing the exact `evidence-released` owner.
+
+Before either storage-infrastructure or base storage apply can mutate a host,
+`release-pending`, `reset-pending`, or an exact staged owner refuses apply and requires the
+original completed topology to finish its destroy reset. A `proof-validated`
+owner without remote-completion receipt authority is retained but has the stale
+proof durably invalidated. Apply then changes any superseded `completed`
+receipt to `apply-started` before remote mutation. That non-authorizing state
+survives crashes and desired-topology changes but forces the next destroy to run
+fresh destructive proof; a normal exact owner for the new lifecycle supersedes
+the older result, and successful release starts the receipt cycle again.
+Registration cleanup, node-access revoke, and machine
+substrate for a selected storage cluster require that cluster's successful
+storage task; node-access revoke also requires its registration cleanup.
+Independent clusters and unrelated graph branches retain ADR 0023's
+ordering-only concurrency.
 
 ## Consequences
 
@@ -63,6 +96,14 @@ ADR 0023's ordering-only concurrency.
 - Missing proof retains ownership, convergence records, captured secrets, and
   history. A retry uses the same identity instead of requiring ownership
   recovery because a prior false success erased it.
+- Failure or interruption after proof validation cannot repeat cluster removal
+  or strand a half-released host. The staged owner proof or ownerless
+  `release-pending` receipt replays the release phase, and the remote-completion
+  receipt replays controller cleanup after
+  host access or substrate is legitimately gone.
+- Authorized unreachable nodes remain an explicit partial result and never
+  satisfy the success dependencies that protect registration, access, and
+  substrate needed by an exact retry.
 - Healthy hosts pay a short quiet window, in parallel. Batched table reads
   remove the old per-VG `lvs` process fan-out, and every probe shares one bounded
   deadline.

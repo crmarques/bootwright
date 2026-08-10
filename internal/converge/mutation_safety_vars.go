@@ -67,6 +67,8 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_destroy_skip_orphan_sweep", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_skip_unreachable", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_storage_scope", Class: mutationSafetyVarScope},
+	{Name: "bootwright_storage_destroy_release_manifest_path", Class: mutationSafetyVarScope},
+	{Name: "bootwright_storage_destroy_release_validation_path", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_infra_component_apply_skip_records", Class: mutationSafetyVarScope},
 	{Name: "bootwright_infra_component_destroy_scope_records", Class: mutationSafetyVarScope},
 	{Name: "bootwright_infra_component_reclaim_records", Class: mutationSafetyVarAuthorization},

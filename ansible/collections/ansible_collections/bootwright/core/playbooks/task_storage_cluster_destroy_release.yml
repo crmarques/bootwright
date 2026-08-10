@@ -1,0 +1,148 @@
+---
+- name: Release positively validated Ceph ownership evidence
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  strategy: linear
+  any_errors_fatal: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_storage_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  pre_tasks:
+    - name: Read the controller-validated storage release manifest
+      ansible.builtin.include_vars:
+        file: "{{ bootwright_storage_destroy_release_manifest_path }}"
+        name: bootwright_storage_destroy_release_manifest
+
+    - name: Validate the storage release manifest envelope
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_storage_destroy_release_manifest.schemaVersion | default(0) | int == 1
+          - bootwright_storage_destroy_release_manifest.clusters | default({}) is mapping
+        fail_msg: >-
+          Refusing to release Ceph host ownership evidence: the controller did not supply a
+          versioned release manifest after validating the exact per-node terminal proof.
+
+    - name: Select this host's validated storage release
+      ansible.builtin.set_fact:
+        bootwright_storage_destroy_release_cluster: >-
+          {{ bootwright_storage_destroy_release_manifest.clusters[
+               bootwright_storage_cluster_name | default('')] | default({}) }}
+      changed_when: false
+
+    - name: End clusters outside the validated storage release
+      ansible.builtin.meta: end_host
+      when:
+        - >-
+          bootwright_storage_cluster_name | default('')
+          not in bootwright_storage_destroy_release_manifest.clusters
+
+    - name: Validate this host's exact storage release
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_storage_destroy_release_cluster is mapping
+          - >-
+            bootwright_storage_destroy_release_cluster.fsid | default('') == ''
+            or bootwright_storage_destroy_release_cluster.fsid
+               is match('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+          - bootwright_storage_destroy_release_cluster.nodes | default({}) is mapping
+          - >-
+            bootwright_storage_node_name | default('')
+            in bootwright_storage_destroy_release_cluster.nodes | default({})
+          - >-
+            bootwright_storage_destroy_release_cluster.nodes[
+              bootwright_storage_node_name | default('')] | default('')
+            == inventory_hostname
+        fail_msg: >-
+          Refusing to release Ceph host ownership evidence on
+          {{ bootwright_storage_node_name | default(inventory_hostname) }}: the
+          controller release manifest does not bind this exact cluster, node, and fsid.
+      when: >-
+        bootwright_storage_cluster_name | default('')
+        in bootwright_storage_destroy_release_manifest.clusters
+
+    - name: Select storage node ownership-release connection
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_node_access
+        tasks_from: select_connection.yml
+      when: bootwright_node_access is defined
+
+  tasks:
+    - name: Revalidate Ceph ownership evidence on the storage node
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm
+        tasks_from: destroy_release.yml
+      vars:
+        bootwright_ceph_cleanup_owned_fsid_input: >-
+          {{ bootwright_storage_destroy_release_cluster.fsid | default('') }}
+
+    - name: Record this host's completed release-boundary validation
+      ansible.builtin.set_fact:
+        bootwright_storage_destroy_release_validated: true
+      changed_when: false
+
+    - name: Require exact host coverage at the release boundary
+      vars:
+        bootwright_storage_destroy_release_validated_hosts: >-
+          {{ ansible_play_hosts_all
+             | map('extract', hostvars)
+             | selectattr('bootwright_storage_destroy_release_validated', 'defined')
+             | selectattr('bootwright_storage_destroy_release_validated', 'equalto', true)
+             | selectattr('bootwright_storage_cluster_name', 'equalto', item.key)
+             | list }}
+        bootwright_storage_destroy_release_actual_nodes: >-
+          {{ bootwright_storage_destroy_release_validated_hosts
+             | map(attribute='bootwright_storage_node_name') | list | sort }}
+        bootwright_storage_destroy_release_actual_hosts: >-
+          {{ bootwright_storage_destroy_release_validated_hosts
+             | map(attribute='inventory_hostname') | list | sort }}
+        bootwright_storage_destroy_release_expected_nodes: >-
+          {{ item.value.nodes | default({}) | dict2items
+             | map(attribute='key') | list | sort }}
+        bootwright_storage_destroy_release_expected_hosts: >-
+          {{ item.value.nodes | default({}) | dict2items
+             | map(attribute='value') | list | sort }}
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bootwright_storage_destroy_release_actual_nodes
+            == bootwright_storage_destroy_release_expected_nodes
+          - >-
+            bootwright_storage_destroy_release_actual_hosts
+            == bootwright_storage_destroy_release_expected_hosts
+        fail_msg: >-
+          Refusing to release Ceph ownership evidence: the validated hosts for storage
+          cluster {{ item.key }} do not exactly match the controller manifest. Expected
+          nodes {{ bootwright_storage_destroy_release_expected_nodes }} on
+          {{ bootwright_storage_destroy_release_expected_hosts }}, but validated
+          {{ bootwright_storage_destroy_release_actual_nodes }} on
+          {{ bootwright_storage_destroy_release_actual_hosts }}.
+      loop: "{{ bootwright_storage_destroy_release_manifest.clusters | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      run_once: true
+
+    - name: Record the completed release-boundary validation on the controller
+      ansible.builtin.copy:
+        dest: "{{ bootwright_storage_destroy_release_validation_path }}"
+        content: "validated\n"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Release revalidated Ceph ownership evidence on the storage node
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm
+        tasks_from: destroy_release_commit.yml

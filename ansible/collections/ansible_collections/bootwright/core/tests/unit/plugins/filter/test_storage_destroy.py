@@ -40,6 +40,10 @@ def _entry(cluster, node, unreachable=False, proof=None, completion=None):
         entry["bootwright_ceph_sweep_verify"] = {"rc": proof, "stdout": ""}
         entry["bootwright_ceph_sweep_verify_rows"] = []
         entry["bootwright_ceph_sweep_survivors"] = []
+        entry["bootwright_ceph_settle_owned_fsid"] = {
+            "ceph-a": "11111111-1111-1111-1111-111111111111",
+            "ceph-b": "22222222-2222-2222-2222-222222222222",
+        }[cluster]
     if completion is not None:
         entry["bootwright_ceph_destroy_completion"] = {"rc": completion}
     return entry
@@ -58,6 +62,7 @@ class StorageDestroyAttestation(unittest.TestCase):
         )
         self.assertEqual(got["schemaVersion"], 1)
         self.assertEqual([item["name"] for item in got["clusters"]], ["ceph-a", "ceph-b"])
+        self.assertEqual(got["clusters"][0]["fsid"], "11111111-1111-1111-1111-111111111111")
         self.assertEqual([item["name"] for item in got["clusters"][0]["nodes"]], ["a1", "a2"])
         self.assertEqual([item["outcome"] for item in got["clusters"][0]["nodes"]], ["completed", "skipped"])
         self.assertEqual(got["clusters"][0]["nodes"][0]["scanScope"], "all-node-pvs")
@@ -96,6 +101,20 @@ class StorageDestroyAttestation(unittest.TestCase):
         entry["bootwright_ceph_sweep_verify"]["rc"] = "0"
         with self.assertRaises(AnsibleFilterError):
             _MODULE.bootwright_storage_destroy_attestation([entry], True, False)
+
+    def test_terminal_completed_nodes_allow_noop_but_require_consistent_fsid(self):
+        missing = _entry("ceph-a", "a1", proof=0, completion=0)
+        del missing["bootwright_ceph_settle_owned_fsid"]
+        got = _MODULE.bootwright_storage_destroy_attestation([missing], True, False)
+        self.assertEqual(got["clusters"][0]["fsid"], "")
+        self.assertEqual(got["clusters"][0]["nodes"][0]["outcome"], "completed")
+        mismatched = [
+            _entry("ceph-a", "a1", proof=0, completion=0),
+            _entry("ceph-a", "a2", proof=0, completion=0),
+        ]
+        mismatched[1]["bootwright_ceph_settle_owned_fsid"] = "22222222-2222-2222-2222-222222222222"
+        with self.assertRaises(AnsibleFilterError):
+            _MODULE.bootwright_storage_destroy_attestation(mismatched, True, False)
 
     def test_filter_is_registered(self):
         self.assertIs(

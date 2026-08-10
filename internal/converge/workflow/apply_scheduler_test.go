@@ -201,6 +201,74 @@ func TestRunPreparedDestroyTaskGraphAllowsCleanupAfterEmptyTaskSkips(t *testing.
 	}
 }
 
+func TestStorageDestroyWorkersReleaseIndependentClustersConcurrently(t *testing.T) {
+	dir := t.TempDir()
+	entered := map[string]chan struct{}{"storage-a": make(chan struct{}), "storage-b": make(chan struct{})}
+	release := map[string]chan struct{}{"storage-a": make(chan struct{}), "storage-b": make(chan struct{})}
+	dependentRan := map[string]chan struct{}{"dependent-a": make(chan struct{}), "dependent-b": make(chan struct{})}
+	prepared := PreparedApplyTaskGraph{
+		RunID:     "destroy-storage-release-concurrency",
+		StartedAt: time.Now().UTC(),
+		Limits:    ConcurrencyLimits{Parallelism: 2},
+		Tasks: []ApplyTask{
+			{Entry: TaskLedgerEntry{ID: "storage-a", Kind: DestroyTaskKindStorageCluster, Label: "storage a"}},
+			{Entry: TaskLedgerEntry{ID: "storage-b", Kind: DestroyTaskKindStorageCluster, Label: "storage b"}},
+			{Entry: TaskLedgerEntry{ID: "dependent-a", Label: "dependent a", SuccessDependencies: []string{"storage-a"}}},
+			{Entry: TaskLedgerEntry{ID: "dependent-b", Label: "dependent b", SuccessDependencies: []string{"storage-b"}}},
+		},
+	}
+	executor := func(ctx context.Context, _, _ io.Writer, _, _ string, _ RunOptions, task ApplyTask, _ ApplyTaskRunnerFactory) applyTaskResult {
+		if gate, found := entered[task.Entry.ID]; found {
+			close(gate)
+			select {
+			case <-release[task.Entry.ID]:
+				return applyTaskResult{id: task.Entry.ID}
+			case <-ctx.Done():
+				return applyTaskResult{id: task.Entry.ID, err: ctx.Err()}
+			}
+		}
+		close(dependentRan[task.Entry.ID])
+		return applyTaskResult{id: task.Entry.ID}
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := runPreparedTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir), ApplyTarget{Name: "all"}, "", prepared, nil, nil, executor)
+		done <- err
+	}()
+	for _, id := range []string{"storage-a", "storage-b"} {
+		select {
+		case <-entered[id]:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s did not enter its release phase", id)
+		}
+	}
+	select {
+	case <-dependentRan["dependent-a"]:
+		t.Fatal("dependent-a ran before storage-a release completed")
+	default:
+	}
+	close(release["storage-a"])
+	select {
+	case <-dependentRan["dependent-a"]:
+	case <-time.After(10 * time.Second):
+		t.Fatal("dependent-a did not run after storage-a release completed")
+	}
+	select {
+	case <-dependentRan["dependent-b"]:
+		t.Fatal("dependent-b ran before storage-b release completed")
+	default:
+	}
+	close(release["storage-b"])
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("destroy graph did not finish")
+	}
+}
+
 func TestRunApplyTaskGraphRefusesStaleAgentISOBeforeRunnerOrLedger(t *testing.T) {
 	dir := t.TempDir()
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")

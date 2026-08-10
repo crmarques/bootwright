@@ -19,16 +19,10 @@ import (
 
 func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
-		flags         scopeCommonFlags
-		dryRun        bool
-		askBecomePass bool
-		yes           bool
-		authorizeFlag []string
-		cephRecovery  string
-		purgeHistory  bool
-		verbose       bool
-		stage         string
-		machinesScope string
+		flags                                             scopeCommonFlags
+		dryRun, askBecomePass, yes, purgeHistory, verbose bool
+		authorizeFlag                                     []string
+		cephRecovery, stage, machinesScope                string
 	)
 	labels := resolveScopeDestroyLabels(scope, options)
 	commandLabel := labels.commandLabel
@@ -375,6 +369,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			if skippedErr != nil {
 				return failErr(1, skippedErr)
+			}
+			if err := finalizeStorageDestroyCompletion(ctx.OwnershipDir, ctx.Name, runLogPath, plan.State, ledger, skipUnreachable); err != nil {
+				return failErr(1, fmt.Errorf("finalize storage teardown completion: %w", err))
 			}
 			renderResult = result
 		default:

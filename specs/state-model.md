@@ -3432,15 +3432,44 @@ command. The rest are registered per command, on the verbs that reach machines.
   standing on its declared devices; and a same-host completion witness. A node
   may contribute a skipped outcome only when `unreachable-nodes` was consumed
   and machine-readable probe evidence positively classifies that node as
-  absent. Missing, duplicate, unknown, preliminary, malformed, or incomplete
-  node evidence fails the storage task before the run can report success.
+  absent. Any skipped outcome makes the storage branch partial and non-success
+  after its evidence is retained; authorization permits accurate bookkeeping,
+  not release of the access or substrate needed for retry. Missing, duplicate,
+  unknown, preliminary, malformed, or incomplete node evidence fails the
+  storage task before the run can report success.
   Machine-registration cleanup, storage-node access revocation, and machine
   substrate release require that successful proof; a failed or skipped storage
-  task cannot merely satisfy their ordering edge. Host ownership evidence is
-  released only after the terminal artifact is durable, and the controller
-  owner record is released only after the validated task status is durable.
-  Any failure retains the controller owner, convergence records, captured
-  secrets, and history needed by the exact destroy retry.
+  task cannot merely satisfy their ordering edge. A complete proof carries the
+  destroyed fsid and is durably staged on the exact controller owner before the
+  release-only pass begins. That pass revalidates the exact node-to-host set,
+  target fsid state, active units, marker/config identity, and a fresh bounded
+  whole-node LVM scan before recording an all-host boundary and removing host
+  evidence. Failure before the boundary invalidates the staged proof so retry
+  repeats destructive teardown; failure after it keeps the proof so retry
+  repeats only the idempotent evidence commit. After every selected host
+  releases evidence, the controller writes a separate fsync-durable completion
+  receipt in `reset-pending`, marks an exact remaining owner
+  `evidence-released`, and only then may the storage task return success. A
+  complete ownerless no-fsid absence attestation runs the same release-only pass
+  to consume exact Bootwright host markers. Before that pass it durably records
+  the exact proof and topology as `release-pending`, which can replay only the
+  release pass; successful release advances it to `reset-pending`. Both
+  `reset-pending` and `completed` authorize controller-only destroy replay.
+  Converge, secret, substrate-release, and history reset completes before the
+  receipt advances to `completed` and before the exact `evidence-released`
+  owner is removed.
+
+  Before either storage-infrastructure or base storage apply runner may mutate a
+  host, `release-pending`, `reset-pending`, or an exact staged owner makes apply refuse and requires
+  the original completed topology to finish its destroy reset. A
+  `proof-validated` owner without remote-completion receipt authority is
+  retained but has the stale proof durably invalidated. Apply then changes a
+  superseded `completed` receipt to `apply-started`. That state is not
+  destroy-completion authority: it survives a crash or desired-topology change
+  and forces fresh destructive proof. A normal exact owner for the new lifecycle
+  supersedes the older result, and successful release starts the receipt cycle
+  again. Any earlier failure retains the controller owner and other evidence
+  needed by the exact destroy retry.
 ### Teardown safeguards, cleanup, and history
 
 - Destroying a KubeVirt host cluster while an installed nested cluster is left

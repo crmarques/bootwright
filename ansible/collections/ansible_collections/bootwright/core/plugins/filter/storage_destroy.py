@@ -1,4 +1,5 @@
 import hashlib
+import re
 from collections.abc import Mapping
 
 from ansible.errors import AnsibleFilterError
@@ -6,6 +7,7 @@ from ansible.errors import AnsibleFilterError
 
 _PROOF = "ceph-lvm-quiet-v2"
 _SCAN_SCOPE = "all-node-pvs"
+_FSID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 def _required_string(entry, key):
@@ -94,9 +96,20 @@ def bootwright_storage_destroy_attestation(entries, terminal, allow_unreachable)
             cluster,
             {
                 "name": cluster,
+                "fsid": "",
                 "nodes": [],
             },
         )
+        fsid = entry.get("bootwright_ceph_settle_owned_fsid", "")
+        if not isinstance(fsid, str):
+            raise AnsibleFilterError("storage destroy attestation fsid must be a string")
+        fsid = fsid.strip()
+        if fsid:
+            if not _FSID.fullmatch(fsid):
+                raise AnsibleFilterError("storage destroy attestation fsid must be a UUID")
+            if result["fsid"] and result["fsid"] != fsid:
+                raise AnsibleFilterError("storage destroy attestation nodes disagree on fsid")
+            result["fsid"] = fsid
         node_result = _node_result(node, host)
         unreachable = probe.get("unreachable", False)
         if not isinstance(unreachable, bool):

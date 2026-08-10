@@ -166,7 +166,6 @@ type applyTaskResult struct {
 	skippedReason string
 	failure       string
 	err           error
-	finalize      func() error
 }
 
 type ApplyReporter interface {
