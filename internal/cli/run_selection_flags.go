@@ -33,20 +33,21 @@ const (
 )
 
 type invocationFlags struct {
-	mode                 workflow.ApplyMode
-	selection            runSelection
-	reclaimDevices       string
-	recoverCephOwnership string
-	purgeHistory         bool
-	authorizations       []string
-	dryRun               bool
-	output               string
-	yes                  bool
-	askBecomePass        bool
-	trustOnFirstUse      bool
-	verbose              bool
-	clusterName          string
-	newArbiterMachine    string
+	mode                      workflow.ApplyMode
+	selection                 runSelection
+	reclaimDevices            string
+	recoverCephOwnership      string
+	purgeHistory              bool
+	authorizations            []string
+	dryRun                    bool
+	output                    string
+	yes                       bool
+	askBecomePass             bool
+	trustOnFirstUse           bool
+	verbose                   bool
+	clusterInstallParallelism int
+	clusterName               string
+	newArbiterMachine         string
 }
 
 type resolvedInvocation struct {
@@ -164,6 +165,7 @@ func (i resolvedInvocation) destroyClustersRetry(clusters []string) (retryComman
 	next.flags.mode = ""
 	next.flags.selection = runSelection{clusters: strings.Join(clusters, ",")}
 	next.flags.reclaimDevices = ""
+	next.flags.clusterInstallParallelism = 0
 	next.flags.recoverCephOwnership = ""
 	next.flags.purgeHistory = false
 	next.flags.trustOnFirstUse = false
@@ -182,6 +184,7 @@ func (i resolvedInvocation) destroyMachinesRetry(machines []string, requiredAuth
 	next.flags.mode = ""
 	next.flags.selection = runSelection{machines: strings.Join(machines, ",")}
 	next.flags.reclaimDevices = ""
+	next.flags.clusterInstallParallelism = 0
 	next.flags.recoverCephOwnership = ""
 	next.flags.purgeHistory = false
 	next.flags.trustOnFirstUse = false
@@ -243,6 +246,7 @@ func (i resolvedInvocation) destroySelectedLayerRetry(stage string, requiredAuth
 	next.flags.selection.stage = stage
 	next.flags.selection.through = ""
 	next.flags.reclaimDevices = ""
+	next.flags.clusterInstallParallelism = 0
 	next.flags.recoverCephOwnership = ""
 	next.flags.purgeHistory = false
 	next.flags.trustOnFirstUse = false
@@ -262,6 +266,9 @@ func (i resolvedInvocation) clusterLifecycleRetry(verb invocationVerb, cluster, 
 	next.flags.mode = mode
 	next.flags.selection = runSelection{stage: stage, clusters: cluster}
 	next.flags.reclaimDevices = ""
+	if verb != invocationApply {
+		next.flags.clusterInstallParallelism = 0
+	}
 	next.flags.recoverCephOwnership = ""
 	next.flags.purgeHistory = false
 	next.flags.clusterName = ""
@@ -280,6 +287,7 @@ func (i resolvedInvocation) replaceArbiterRetry(cluster string) (retryCommand, e
 	next.flags.mode = ""
 	next.flags.selection = runSelection{}
 	next.flags.reclaimDevices = ""
+	next.flags.clusterInstallParallelism = 0
 	next.flags.recoverCephOwnership = ""
 	next.flags.purgeHistory = false
 	next.flags.trustOnFirstUse = false
@@ -321,6 +329,9 @@ func (i resolvedInvocation) args() []string {
 	}
 	if i.verb == invocationApply {
 		args = append(args, "--mode", string(i.flags.mode))
+		if i.flags.clusterInstallParallelism > 0 {
+			args = append(args, "--cluster-install-parallelism", fmt.Sprintf("%d", i.flags.clusterInstallParallelism))
+		}
 	}
 	if len(i.flags.authorizations) > 0 {
 		args = append(args, "--authorize", strings.Join(i.flags.authorizations, ","))

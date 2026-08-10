@@ -20,7 +20,7 @@ func TestPlanHidesMutationOnlyFlags(t *testing.T) {
 			t.Fatalf("plan --help must hide mutation/execution-only flag %q", name)
 		}
 	}
-	for _, name := range []string{"mode", "authorize", "clusters"} {
+	for _, name := range []string{"mode", "authorize", "clusters", "cluster-install-parallelism"} {
 		flag := plan.Flags().Lookup(name)
 		if flag == nil || flag.Hidden {
 			t.Fatalf("plan should keep %q visible", name)
@@ -29,6 +29,10 @@ func TestPlanHidesMutationOnlyFlags(t *testing.T) {
 	apply := newApplyCmd(nil, io.Discard, io.Discard)
 	if flag := apply.Flags().Lookup("reclaim-devices"); flag == nil || flag.Hidden {
 		t.Fatal("apply must keep --reclaim-devices visible")
+	}
+	destroy := newDestroyCmd(nil, io.Discard, io.Discard)
+	if flag := destroy.Flags().Lookup("cluster-install-parallelism"); flag != nil {
+		t.Fatal("destroy must not accept --cluster-install-parallelism because its graph has no install chain")
 	}
 }
 

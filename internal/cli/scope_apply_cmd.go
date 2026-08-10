@@ -20,18 +20,19 @@ import (
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
-		flags           scopeCommonFlags
-		dryRun          = options.defaultPlan
-		askBecomePass   bool
-		yes             bool
-		trustOnFirstUse bool
-		verbose         bool
-		modeFlag        string
-		authorizeFlag   []string
-		stage           string
-		through         string
-		reclaimDevices  string
-		machinesScope   string
+		flags                     scopeCommonFlags
+		dryRun                    = options.defaultPlan
+		askBecomePass             bool
+		yes                       bool
+		trustOnFirstUse           bool
+		verbose                   bool
+		modeFlag                  string
+		clusterInstallParallelism int
+		authorizeFlag             []string
+		stage                     string
+		through                   string
+		reclaimDevices            string
+		machinesScope             string
 	)
 	labels := resolveScopeApplyLabels(scope, options)
 	commandLabel, action := labels.commandLabel, labels.action
@@ -56,6 +57,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	}
 	addVerboseFlag(cmd, &verbose)
 	addModeFlag(cmd, &modeFlag, action)
+	addClusterInstallParallelismFlag(cmd, &clusterInstallParallelism)
 	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbApply)
 	if usesAnsible {
 		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply, or the single word "+converge.ReclaimDevicesAll+" to select every declared OSD device of the selected owned cluster(s) (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a selected device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
@@ -94,6 +96,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
 		runContext := c.Context()
+		if c.Flags().Changed("cluster-install-parallelism") && clusterInstallParallelism < 1 {
+			return failErr(2, errors.New("--cluster-install-parallelism must be a positive integer"))
+		}
 		mode, auth, err := resolveScopeApplyIntent(flags.output, options.defaultPlan, dryRun, modeFlag, authorizeFlag)
 		if err != nil {
 			return err
@@ -140,18 +145,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err != nil {
 			return failErr(1, err)
 		}
-		invocation, err := newResolvedInvocation(invocationApply, ctx.Name, invocationFlags{
-			mode:            mode,
-			selection:       selection,
-			reclaimDevices:  reclaimDevices,
-			authorizations:  auth.all(),
-			dryRun:          dryRun,
-			output:          flags.output,
-			yes:             yes,
-			askBecomePass:   askBecomePass,
-			trustOnFirstUse: trustOnFirstUse,
-			verbose:         verbose,
-		})
+		invocation, err := newScopeApplyInvocation(ctx.Name, mode, selection, reclaimDevices, auth.all(), dryRun, flags.output, yes, askBecomePass, trustOnFirstUse, verbose, clusterInstallParallelism)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -208,7 +202,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runContext, runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runContext, runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{ParallelismClusters: clusterInstallParallelism}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, applyInstallRemedialError(err, invocation))
 		}

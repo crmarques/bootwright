@@ -15,9 +15,8 @@ const (
 )
 
 const (
-	DefaultParallelismPerHost  = 4
-	DefaultParallelismRedfish  = 8
-	DefaultParallelismClusters = 1
+	DefaultParallelismPerHost = 4
+	DefaultParallelismRedfish = 8
 
 	minDefaultParallelism = 8
 	maxDefaultParallelism = 32
@@ -55,7 +54,7 @@ func resolveClusterInstallLimit(requested, auto int) int {
 	if auto < 1 {
 		return 0
 	}
-	return boundedLimit(requested, DefaultParallelismClusters, auto, 1)
+	return boundedLimit(requested, auto, auto, 1)
 }
 
 func clusterInstallAutoParallelism(entries []TaskLedgerEntry) int {

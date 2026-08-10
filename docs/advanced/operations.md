@@ -1072,40 +1072,45 @@ play.
 
 ## Tuning apply and destroy concurrency
 
-Independent tasks run in parallel under four caps. Each has a default and an
-environment-variable escape hatch:
+Independent tasks run in parallel under four caps. Each has an environment
+variable; the cluster-install cap also has an invocation flag:
 
-| Environment variable | Caps | Default |
-| --- | --- | --- |
-| `BOOTWRIGHT_APPLY_PARALLELISM` | Tasks in flight across the whole run | `NumCPU × 2`, clamped to the range 8–32 |
-| `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST` | Tasks in flight against any single host (hypervisor, bastion, vCenter) | 4 |
-| `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | Concurrent Redfish/BMC operations | 8 |
-| `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` | Clusters *installing* at once — the ISO, node boot, bootstrap wait and install wait of one cluster count as that one cluster, however many tasks they are | 1 |
+| Environment variable | Flag | Caps | Default |
+| --- | --- | --- | --- |
+| `BOOTWRIGHT_APPLY_PARALLELISM` | — | Tasks in flight across the whole run | `NumCPU × 2`, clamped to the range 8–32 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST` | — | Tasks in flight against any single host (hypervisor, bastion, vCenter) | 4 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | — | Concurrent Redfish/BMC operations | 8 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` | `--cluster-install-parallelism` | ContainerClusters *installing* at once — the ISO, node boot, bootstrap wait and install wait of one cluster count as that one cluster, however many tasks they are | Every install chain in the selected graph |
 
 Despite the `APPLY` in the names, `destroy` plans its task graph under the same
 four caps — a teardown installs nothing, so the cluster cap simply never binds
 there.
 
-The cluster cap is the one to know about, because its default of 1 **serialises
-cluster installs**: a run declaring three `ContainerCluster`s boots and installs
-them one after another rather than all at once. That is deliberate: two clusters
-installing together pull their release payload down the same registry or mirror
-path, and one slow path is enough to time both of them out. Everything outside
-those four task kinds (fabric, infrastructure, machines, add-ons, storage) still
-runs at whatever the other three caps allow, and a cluster that has started
-installing is no longer held by this cap for the rest of its install — the cap
-only decides how many clusters are in that state at a time. A cluster whose
-chain parks on another cluster — a KubeVirt-hosted cluster that has built its
-ISO but cannot provision machines until its host cluster finishes installing —
-gives the slot back while it waits, so the host or any third cluster can
-install in the meantime, and it does not take the slot in the first place while
-a cluster whose chain can run to completion still wants one. Raise the cap when
-the estate has the registry bandwidth and BMC headroom to install several
-clusters side by side:
+By default the cluster cap is non-binding: every ContainerCluster install chain
+in the selected dependency graph may enter it. Two independent bare-metal OCP
+roots therefore install side by side, while Ceph machine and storage work runs
+under the other budgets because storage never consumes a cluster-install slot.
+Authored graph dependencies still apply — a hosted cluster cannot provision its
+machines before its host cluster and required add-ons are ready.
+
+Narrow the cap when a shared registry, mirror, proxy, or BMC path lacks headroom.
+The flag is convenient for one run:
 
 ```text
-BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=3 bootwright apply --yes
+bootwright apply --cluster-install-parallelism 1 --yes
 ```
+
+The environment variable expresses the same standing estate policy:
+
+```text
+BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=1 bootwright apply --yes
+```
+
+When a cap is scarce, a cluster whose chain parks on another cluster — for
+example a KubeVirt-hosted cluster waiting for its host OCP cluster — gives its
+slot back. It also does not take a free slot ahead of a chain that can run to
+completion. This preference is inactive when the resolved cap can admit every
+chain.
 
 A cluster held back by it shows in `status --timings` as
 `blocked … on cluster install budget`, and the live run tree marks its phase
@@ -1132,22 +1137,25 @@ fourth segment whenever the run installs at least one cluster:
   ID: apply-20260807T101500.000000000Z
   Target: clusters
   Tasks: 24
-  Parallelism: tasks 16, per host 4, Redfish 8, cluster installs 1
+  Parallelism: tasks 16, per host 4, Redfish 8, cluster installs 2
   Run log: /var/lib/bootwright/contexts/prd/runs/history/apply-20260807T101500.000000000Z/bootwright.log
 ```
 
 A run that installs no cluster omits that segment, and `status --timings` reports
 the first three caps only.
 
-These are environment variables and not flags by design: the parallelism CLI
-flags were removed deliberately, because concurrency is a property of the
-machine and estate you run from, not of an individual invocation. Keep the value
-in your shell profile or CI job, not in the command you paste into a runbook.
+The global, per-host, and Redfish values remain environment-only estate policy.
+Cluster installs additionally accept `--cluster-install-parallelism` because a
+single high-contention invocation may need a narrower cap. A positive flag wins
+the environment variable; a valid positive environment value wins the
+graph-derived default. The flag is available on `apply` and `plan`, and an
+explicit flag is retained in exact apply retry commands.
 
 A requested value is clamped down to what the task graph can actually use — ask
 for 64 in a run that has 9 tasks and you get 9 — and raised to the floor a single
-task needs to be dispatchable at all. A value that is not a positive integer is
-ignored and the default applies. `status --timings` prints what the run really
+task needs to be dispatchable at all. A cluster-install flag that is not a
+positive integer is a usage error; an invalid environment value is ignored and
+the graph-derived default applies. `status --timings` prints what the run really
 used, and prints `unbounded` for a cap that never constrained the graph — a cap
 reported that way is not the thing making the run slow.
 

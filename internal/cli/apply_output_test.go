@@ -24,14 +24,14 @@ func TestApplyRunStartPrintsTheLimitTheRunResolved(t *testing.T) {
 		{Entry: workflow.TaskLedgerEntry{ID: "iso.ocp-prd-02", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso ocp-prd-02", Cluster: "ocp-prd-02"}},
 	}
 	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
-	if limits.ParallelismClusters != workflow.DefaultParallelismClusters {
-		t.Fatalf("resolved cluster install limit = %d, want the %d default persisted on the ledger", limits.ParallelismClusters, workflow.DefaultParallelismClusters)
+	if limits.ParallelismClusters != 2 {
+		t.Fatalf("resolved cluster install limit = %d, want both install chains persisted on the ledger", limits.ParallelismClusters)
 	}
 	ledger := workflow.NewRunLedger("apply-limits", "clusters", "", limits, workflow.TaskLedgerEntries(tasks), time.Now())
 	var stdout strings.Builder
 	t.Setenv(workflow.ParallelismClustersEnvVar, "8")
 	printApplyRunStart(&stdout, "test", t.TempDir(), ledger)
-	if !strings.Contains(stdout.String(), "cluster installs 1") {
+	if !strings.Contains(stdout.String(), "cluster installs 2") {
 		t.Fatalf("run header = %q; it must report the limit the run resolved, not the one the printing shell asks for", stdout.String())
 	}
 }

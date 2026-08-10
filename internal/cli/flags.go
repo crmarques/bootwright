@@ -88,15 +88,16 @@ const (
 	flagOutputUsage       = "output format (text|json)"
 	flagOutputDryRunUsage = "output format (text|json); json requires --dry-run"
 
-	flagDryRunUsage                = "render artifacts and print the plan; change nothing remote"
-	flagAskBecomePassUsage         = "prompt for the Ansible become password (default: false as root, true otherwise)"
-	flagTrustOnFirstUseUsage       = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
-	flagContextUsage               = "context to operate in (default: current context)"
-	flagSSHIDFileUsage             = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
-	flagSSHUserUsage               = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected unless --ssh-user-for-provisioned widens it, and apply/plan/destroy refuse when no selected machine uses that arm; on rsh and exec it reaches any account, and one Bootwright already holds a credential for is opened with that credential rather than with the credential of the account it replaced"
-	flagSSHAskSudoPasswordUsage    = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; when bootwright already prompted that same account for its local sudo password to reach its own state directory, that answer is reused and you are not asked twice; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
-	flagSSHUserForProvisionedUsage = "widen --ssh-user to every machine in the run, including the ones Bootwright installed and reaches as \"" + v1alpha1.BootwrightSSHUser + "\"; requires --ssh-user, and the named account must exist with sudo on those machines too, because the managed-OS ownership probe authenticates as whatever account is in force"
-	flagVerboseUsage               = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
+	flagDryRunUsage                    = "render artifacts and print the plan; change nothing remote"
+	flagClusterInstallParallelismUsage = "maximum ContainerCluster install chains in flight; must be positive; default: every chain allowed by the selected dependency graph"
+	flagAskBecomePassUsage             = "prompt for the Ansible become password (default: false as root, true otherwise)"
+	flagTrustOnFirstUseUsage           = "prompt to record an unknown SSH host key after showing its fingerprint (interactive runs only; never under --dry-run, --yes, or --output json)"
+	flagContextUsage                   = "context to operate in (default: current context)"
+	flagSSHIDFileUsage                 = "SSH private key to offer first when reaching machines (for example ~/.ssh/id_ed25519); the declared spec.access.ssh credentials are still offered when it is not accepted"
+	flagSSHUserUsage                   = "account to log in as on machines that declare spec.access.ssh.auth.operatorIdentity — the machines you already administer; a login Bootwright created or one you named a Secret for is unaffected unless --ssh-user-for-provisioned widens it, and apply/plan/destroy refuse when no selected machine uses that arm; on rsh and exec it reaches any account, and one Bootwright already holds a credential for is opened with that credential rather than with the credential of the account it replaced"
+	flagSSHAskSudoPasswordUsage        = "prompt once, before the run starts, for the sudo password of the account --ssh-user names, and answer sudo with it on the machines that account reaches; when bootwright already prompted that same account for its local sudo password to reach its own state directory, that answer is reused and you are not asked twice; the password is held in memory for the run only and is never written to the context secret store, the rendered inventory, or the run log"
+	flagSSHUserForProvisionedUsage     = "widen --ssh-user to every machine in the run, including the ones Bootwright installed and reaches as \"" + v1alpha1.BootwrightSSHUser + "\"; requires --ssh-user, and the named account must exist with sudo on those machines too, because the managed-OS ownership probe authenticates as whatever account is in force"
+	flagVerboseUsage                   = "print full Ansible task output, including values normally hidden as \"censored due to no_log\" (secrets, BMC/registry/RHSM/proxy credentials, tokens, generated Ceph keys); WARNING: these are written to the terminal AND the run log"
 )
 
 func validateOutputFormat(value string) error {
@@ -125,6 +126,10 @@ func addYesFlag(cmd *cobra.Command, p *bool, action string) {
 func addModeFlag(cmd *cobra.Command, p *string, action string) {
 	cmd.Flags().StringVar(p, "mode", string(workflow.ApplyModeReconcile), "intent of this "+action+" ("+strings.Join(workflow.ApplyModeNames(), "|")+"): create asserts a greenfield run and fails if any selected object already exists; reconcile creates what is missing, skips what matches, and fails closed on drift; rebuild authorizes Bootwright-owned destructive rebuilds of drifted owned objects (a rebuild that destroys data additionally needs --authorize "+authorizeDataLoss+")")
 	registerFlagCompletion(cmd, "mode", workflow.ApplyModeNames())
+}
+
+func addClusterInstallParallelismFlag(cmd *cobra.Command, p *int) {
+	cmd.Flags().IntVar(p, "cluster-install-parallelism", 0, flagClusterInstallParallelismUsage)
 }
 
 func parseApplyMode(value string) (workflow.ApplyMode, error) {

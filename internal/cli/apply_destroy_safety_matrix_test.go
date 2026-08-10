@@ -644,6 +644,16 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 
 func safetyFlagCoherenceCases() []safetyCase {
 	return []safetyCase{{
+		name:    "apply/cluster install parallelism is part of the mutating flag matrix",
+		args:    []string{"apply", "--cluster-install-parallelism", "1", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"\"parallelismClusters\": 1"},
+	}, {
+		name:    "apply/cluster install parallelism must be positive",
+		args:    []string{"apply", "--cluster-install-parallelism", "0", "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictUsageError,
+		want:    []string{"--cluster-install-parallelism must be a positive integer"},
+	}, {
 		name:    "apply/persistent context and SSH identity controls are part of the mutating flag matrix",
 		args:    []string{"apply", "--context", "matrix", "--ssh-user", "operator", "--ssh-user-for-provisioned", "--ssh-ask-sudo-password=false", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,

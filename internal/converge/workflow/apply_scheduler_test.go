@@ -503,7 +503,25 @@ func TestTaskClusterInstallAdmissionCountsClustersNotTasks(t *testing.T) {
 	}
 }
 
-func TestRunApplyTaskGraphInstallsOneClusterAtATime(t *testing.T) {
+func TestClusterInstallSlotAdmissionOnlyParksAChildWhenCapacityIsScarce(t *testing.T) {
+	ledger := NewRunLedger("apply-test", "clusters", "", ConcurrencyLimits{}, []TaskLedgerEntry{
+		{ID: "iso.child", Kind: ApplyTaskKindClusterISO, Cluster: "child"},
+		{ID: "boot.child", Kind: ApplyTaskKindNodeBoot, Cluster: "child", Dependencies: []string{"iso.child", "wait.parent"}},
+		{ID: "iso.parent", Kind: ApplyTaskKindClusterISO, Cluster: "parent"},
+		{ID: "wait.parent", Kind: ApplyTaskKindInstallWait, Cluster: "parent", Dependencies: []string{"iso.parent"}},
+	}, time.Now())
+
+	auto := clusterInstallSlotAdmission(ledger, 2)
+	if !auto["child"] || !auto["parent"] {
+		t.Fatalf("admission with capacity for both chains = %v, want parent and child; the child ISO has no parent dependency", auto)
+	}
+	capped := clusterInstallSlotAdmission(ledger, 1)
+	if capped["child"] || !capped["parent"] {
+		t.Fatalf("admission with one slot = %v, want only the unparked parent chain", capped)
+	}
+}
+
+func TestRunApplyTaskGraphHonorsOneClusterInstallCap(t *testing.T) {
 	dir := t.TempDir()
 	state := minimalState()
 	runner := &recordingApplyRunner{delay: 25 * time.Millisecond}
@@ -524,7 +542,7 @@ func TestRunApplyTaskGraphInstallsOneClusterAtATime(t *testing.T) {
 	}
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 		ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-		ConcurrencyLimits{Parallelism: 2}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		ConcurrencyLimits{Parallelism: 2, ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
@@ -545,6 +563,45 @@ func TestRunApplyTaskGraphInstallsOneClusterAtATime(t *testing.T) {
 	}
 	if blocked == "" {
 		t.Fatal("the cluster install budget held a task back, so it must be attributed on that task")
+	}
+}
+
+func TestRunApplyTaskGraphStartsIndependentContainerAndStorageWorkTogetherByDefault(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := newGatedPlaybookRunner("iso.ocp-a", "iso.ocp-b", "osinstall.ceph")
+	tasks := []ApplyTask{
+		{
+			Entry:    TaskLedgerEntry{ID: "iso.ocp-a", Kind: ApplyTaskKindClusterISO, Label: "iso ocp-a", Cluster: "ocp-a", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook: "iso.ocp-a",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "iso.ocp-b", Kind: ApplyTaskKindClusterISO, Label: "iso ocp-b", Cluster: "ocp-b", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook: "iso.ocp-b",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "osinstall.ceph", Kind: ApplyTaskKindManagedMachineOS, Label: "managed OS ceph machines", Cluster: "ceph", ClusterKind: ApplyClusterKindStorage, Status: TaskStatusPending},
+			Playbook: "osinstall.ceph",
+			State:    state,
+		},
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
+			ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseMachines, ApplyPhaseDeps}}, "", tasks,
+			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- err
+	}()
+	runner.awaitStart(t, "iso.ocp-a")
+	runner.awaitStart(t, "iso.ocp-b")
+	runner.awaitStart(t, "osinstall.ceph")
+	runner.releasePlaybook("iso.ocp-a")
+	runner.releasePlaybook("iso.ocp-b")
+	runner.releasePlaybook("osinstall.ceph")
+	if err := <-done; err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
 }
 
@@ -574,7 +631,7 @@ func TestRunApplyTaskGraphHoldsTheClusterInstallSlotForTheWholeChain(t *testing.
 	go func() {
 		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 			ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+			ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 		done <- err
 	}()
 	runner.awaitStart(t, "iso.ocp-a")
@@ -635,7 +692,7 @@ func TestRunApplyTaskGraphHoldsTheClusterInstallSlotWhileMachinesProvision(t *te
 	go func() {
 		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 			ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+			ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 		done <- err
 	}()
 	runner.awaitStart(t, "iso.ocp-a")
@@ -708,7 +765,7 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotToTheClusterItWaitsOn(t *te
 	}
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 		ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-		ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 	if err != nil {
 		t.Fatalf("a KubeVirt-hosted cluster whose boot waits on its host cluster's install must not hold the only cluster install slot against that host cluster: %v", err)
 	}
@@ -806,7 +863,7 @@ func TestRunApplyTaskGraphGivesTheInstallSlotToAnUnparkedChainFirst(t *testing.T
 	go func() {
 		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 			ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+			ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 		done <- err
 	}()
 	runner.awaitStart(t, "iso.metal")
@@ -869,7 +926,7 @@ func TestRunApplyTaskGraphAdmitsAParkedChainWhenNoUnparkedChainRemains(t *testin
 	}
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 		ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-		ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
@@ -904,7 +961,7 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotWhenTheChainFails(t *testin
 	}
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 		ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseBase}}, "", tasks,
-		ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		ConcurrencyLimits{ParallelismClusters: 1}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
 	if err == nil {
 		t.Fatal("RunApplyTaskGraph must report the failed cluster install")
 	}

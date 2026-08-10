@@ -39,14 +39,15 @@ func TestRetryCommandPreservesResolvedInvocationAndAddsOnlyTheRequiredIntent(t *
 	})
 
 	invocation, err := newResolvedInvocation(invocationApply, "matrix", invocationFlags{
-		mode:            workflow.ApplyModeReconcile,
-		selection:       runSelection{stage: "deps", through: "base", clusters: "dc1-ocp,ceph-storage"},
-		reclaimDevices:  "all",
-		authorizations:  []string{authorizeForeignDaemons},
-		yes:             true,
-		askBecomePass:   false,
-		trustOnFirstUse: false,
-		verbose:         true,
+		mode:                      workflow.ApplyModeReconcile,
+		selection:                 runSelection{stage: "deps", through: "base", clusters: "dc1-ocp,ceph-storage"},
+		reclaimDevices:            "all",
+		authorizations:            []string{authorizeForeignDaemons},
+		yes:                       true,
+		askBecomePass:             false,
+		trustOnFirstUse:           false,
+		verbose:                   true,
+		clusterInstallParallelism: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +59,7 @@ func TestRetryCommandPreservesResolvedInvocationAndAddsOnlyTheRequiredIntent(t *
 	want := []string{
 		"bootwright", "apply",
 		"--mode", "rebuild",
+		"--cluster-install-parallelism", "2",
 		"--authorize", "foreign-daemons,data-loss",
 		"--yes",
 		"--stage", "deps",
@@ -82,6 +84,7 @@ func TestRetryCommandPreservesResolvedInvocationAndAddsOnlyTheRequiredIntent(t *
 
 	assertRetryParses(t, command, func(cmd *cobra.Command) {
 		assertParsedFlag(t, cmd, "mode", "rebuild")
+		assertParsedFlag(t, cmd, "cluster-install-parallelism", "2")
 		assertParsedFlag(t, cmd, "stage", "deps")
 		assertParsedFlag(t, cmd, "through", "base")
 		assertParsedFlag(t, cmd, "clusters", "dc1-ocp,ceph-storage")
@@ -619,16 +622,17 @@ func TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder(t *testing.T) {
 	applyCluster := rootFields
 	applyCluster.verb = invocationApply
 	applyCluster.flags = invocationFlags{
-		mode:            workflow.ApplyModeRebuild,
-		selection:       runSelection{stage: "deps", through: "base", clusters: "ocp"},
-		reclaimDevices:  "/dev/sdb",
-		authorizations:  []string{authorizeDataLoss},
-		dryRun:          true,
-		output:          outputJSON,
-		yes:             true,
-		askBecomePass:   true,
-		trustOnFirstUse: false,
-		verbose:         true,
+		mode:                      workflow.ApplyModeRebuild,
+		selection:                 runSelection{stage: "deps", through: "base", clusters: "ocp"},
+		reclaimDevices:            "/dev/sdb",
+		authorizations:            []string{authorizeDataLoss},
+		dryRun:                    true,
+		output:                    outputJSON,
+		yes:                       true,
+		askBecomePass:             true,
+		trustOnFirstUse:           false,
+		verbose:                   true,
+		clusterInstallParallelism: 2,
 	}
 	applyMachine := applyCluster
 	applyMachine.flags.selection = runSelection{stage: "machines", machines: "worker-1"}

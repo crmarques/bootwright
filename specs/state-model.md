@@ -2584,6 +2584,7 @@ verbs' material and encryption semantics are delegated to `security.md`
 Subsections: [Diagnostics and refusals](#diagnostics-and-refusals) ·
 [Machine-readable output](#machine-readable-output) ·
 [Global flags](#global-flags) ·
+[Apply concurrency](#apply-concurrency) ·
 [Contexts, runs, and read-only posture](#contexts-runs-and-read-only-posture) ·
 [Selection and stages](#selection-and-stages) · [Destroy](#destroy) ·
 [Authorizations](#authorizations) ·
@@ -2873,6 +2874,28 @@ command. The rest are registered per command, on the verbs that reach machines.
   escape hatch specified in `security.md`.
 - `--ask-become-pass` prompts for the Ansible become password (default: false
   when running as root, true otherwise).
+
+### Apply concurrency
+
+- `apply` and `plan` accept `--cluster-install-parallelism <positive N>`. It
+  caps concurrent ContainerCluster install chains for that invocation; zero,
+  negative, and non-integer flag values are usage errors. `destroy` does not
+  accept the flag because a destroy graph has no install chain.
+- The effective cluster-install limit resolves in this order:
+  `--cluster-install-parallelism`,
+  `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS`, then the number of distinct
+  ContainerCluster install chains in the selected graph. Thus the default adds
+  no ordering beyond the dependency DAG: independent ContainerCluster roots
+  can install together, and independent StorageCluster work can run beside
+  them. A requested limit is clamped to the number of chains the graph contains;
+  a graph with no ContainerCluster install task records no cluster limit.
+- One chain comprises its agent-ISO, node-boot, bootstrap-wait, and install-wait
+  tasks. Managed-OS and StorageCluster tasks, including Ceph work, do not consume
+  this limit. Resource locks and the global, per-host, and Redfish budgets still
+  apply independently.
+- The resolved integer is persisted in the run ledger. Resuming that run uses
+  the persisted value even if the environment changes, and an exact retry of an
+  explicit apply invocation preserves `--cluster-install-parallelism`.
 
 ### Contexts, runs, and read-only posture
 

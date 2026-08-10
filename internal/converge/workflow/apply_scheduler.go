@@ -208,7 +208,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	for completed < len(tasks) {
 		startedAny := false
 		releaseIdleClusterInstalls(ledger, tasks, started, heldClusterInstalls)
-		slotAdmission := clusterInstallSlotAdmission(ledger)
+		slotAdmission := clusterInstallSlotAdmission(ledger, clusterInstallLimit)
 		for _, task := range tasks {
 			if fatalErr != nil || ctx.Err() != nil {
 				break
@@ -537,7 +537,7 @@ func taskClusterInstallAvailable(task ApplyTask, held map[string]int, limit int,
 	return len(held) < limit
 }
 
-func clusterInstallSlotAdmission(ledger RunLedger) map[string]bool {
+func clusterInstallSlotAdmission(ledger RunLedger, limit int) map[string]bool {
 	candidates := map[string]bool{}
 	unparked := map[string]bool{}
 	for _, task := range ledger.Tasks {
@@ -549,6 +549,9 @@ func clusterInstallSlotAdmission(ledger RunLedger) map[string]bool {
 		if !clusterInstallChainParked(ledger, cluster) {
 			unparked[cluster] = true
 		}
+	}
+	if len(candidates) <= limit {
+		return candidates
 	}
 	if len(unparked) > 0 {
 		return unparked

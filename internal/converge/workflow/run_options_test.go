@@ -166,6 +166,10 @@ func TestResolveApplyConcurrencyLimitsPersistsTheClusterInstallLimit(t *testing.
 	if got := ResolveApplyConcurrencyLimits(limits, tasks); got != limits {
 		t.Fatalf("a resumed run resolved %+v, want the limits the run recorded: %+v; a shell asking for another limit must not silently change a run in flight", got, limits)
 	}
+	explicit := ResolveApplyConcurrencyLimits(ConcurrencyLimits{ParallelismClusters: 1}, tasks)
+	if explicit.ParallelismClusters != 1 {
+		t.Fatalf("cluster install limit = %d, want the caller-supplied 1 to win over the environment override", explicit.ParallelismClusters)
+	}
 	if got := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, clusterInstallTasks()); got.ParallelismClusters != 0 {
 		t.Fatalf("a run that installs no cluster recorded a cluster install limit of %d, want none", got.ParallelismClusters)
 	}
@@ -175,10 +179,10 @@ func resolvedClusterInstallLimit(tasks []ApplyTask) int {
 	return ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks).ParallelismClusters
 }
 
-func TestResolveApplyClusterInstallLimitInstallsOneClusterAtATime(t *testing.T) {
+func TestResolveApplyClusterInstallLimitDefaultsToEveryInstallChain(t *testing.T) {
 	t.Setenv(ParallelismClustersEnvVar, "")
-	if got := resolvedClusterInstallLimit(clusterInstallTasks("ocp-a", "ocp-b")); got != DefaultParallelismClusters {
-		t.Fatalf("cluster install limit = %d, want the %d default that keeps two clusters off one registry path at once", got, DefaultParallelismClusters)
+	if got := resolvedClusterInstallLimit(clusterInstallTasks("ocp-a", "ocp-b")); got != 2 {
+		t.Fatalf("cluster install limit = %d, want both independent install chains admitted by default", got)
 	}
 	if got := resolvedClusterInstallLimit(clusterInstallTasks()); got != 0 {
 		t.Fatalf("a run that installs no cluster reported a limit of %d, want none", got)
@@ -200,8 +204,8 @@ func TestResolveApplyClusterInstallLimitReadsItsEnvironmentOverride(t *testing.T
 	}
 	for _, raw := range []string{"", "  ", "0", "-2", "many"} {
 		t.Setenv(ParallelismClustersEnvVar, raw)
-		if got := resolvedClusterInstallLimit(tasks); got != DefaultParallelismClusters {
-			t.Fatalf("%s=%q resolved the cluster install limit to %d, want the %d default", ParallelismClustersEnvVar, raw, got, DefaultParallelismClusters)
+		if got := resolvedClusterInstallLimit(tasks); got != 3 {
+			t.Fatalf("%s=%q resolved the cluster install limit to %d, want all 3 install chains", ParallelismClustersEnvVar, raw, got)
 		}
 	}
 }

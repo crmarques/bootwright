@@ -4628,13 +4628,14 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 }
 
 func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
+	t.Setenv(workflow.ParallelismClustersEnvVar, "")
 	setTestHomeAndRoot(t)
 	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	stdout, stderr, code := runCLI(t, "context", "init", "--name", "mixed", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,dc2-metal-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
 	if code != 0 {
 		t.Fatalf("apply mixed clusters dry-run json exited %d, stderr=%q", code, stderr)
 	}
@@ -4649,15 +4650,30 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	for _, task := range report.ApplyPlan.Tasks {
 		gotIDs = append(gotIDs, task.ID)
 	}
-	for _, want := range []string{"storageinfra.ceph-storage", "storage.ceph-storage", "iso.dc1-metal-ocp", "wait.dc1-metal-ocp"} {
+	for _, want := range []string{"storageinfra.ceph-storage", "storage.ceph-storage", "iso.dc1-metal-ocp", "wait.dc1-metal-ocp", "iso.dc2-metal-ocp", "wait.dc2-metal-ocp"} {
 		if !slices.Contains(gotIDs, want) {
 			t.Fatalf("mixed apply task IDs missing %s: %v", want, gotIDs)
 		}
 	}
-	for _, reject := range []string{"iso.dc2-metal-ocp"} {
+	for _, reject := range []string{"iso.dc1-child-ocp", "iso.dc2-child-ocp"} {
 		if slices.Contains(gotIDs, reject) {
 			t.Fatalf("mixed apply task IDs unexpectedly include %s: %v", reject, gotIDs)
 		}
+	}
+	if got := report.ApplyPlan.Limits.ParallelismClusters; got != 2 {
+		t.Fatalf("default cluster install parallelism = %d, want both selected ContainerCluster install chains", got)
+	}
+
+	t.Setenv(workflow.ParallelismClustersEnvVar, "2")
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,dc2-metal-ocp,ceph-storage", "--cluster-install-parallelism", "1", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply mixed clusters with explicit parallelism exited %d, stderr=%q", code, stderr)
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode apply dry-run json with explicit parallelism: %v\n%s", err, stdout)
+	}
+	if got := report.ApplyPlan.Limits.ParallelismClusters; got != 1 {
+		t.Fatalf("explicit cluster install parallelism = %d, want flag value 1 to override environment value 2", got)
 	}
 }
 

@@ -1,8 +1,14 @@
 # The cluster-install slot: what it bounds and who may hold it
 
-`BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` (default 1) bounds how many clusters are
-*installing* at once. `clusterInstallKey` decides membership: the agent-ISO,
-node-boot, bootstrap-wait and install-wait tasks of one cluster count as that one
+The default cluster-install capacity equals the number of distinct install
+chains in the selected graph, so it adds no ordering to the authored DAG.
+`--cluster-install-parallelism <positive N>` narrows it for one `apply` or
+`plan`; `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` supplies the standing override,
+with flag > environment > graph-derived default precedence. The resolved value
+is clamped to graph demand and persisted in the run ledger.
+
+`clusterInstallKey` decides membership: the agent-ISO, node-boot,
+bootstrap-wait and install-wait tasks of one ContainerCluster count as that one
 cluster, however many tasks they are. Storage clusters are deliberately outside
 it — a Ceph install pulls no release payload, so `storage.<name>` never competes
 for the slot and must never be added to that switch.
@@ -10,19 +16,19 @@ for the slot and must never be added to that switch.
 **Why the ISO build is inside the slot:** it is not decoration. `openshift-install
 agent create image` pulls the release payload for the declared version, which is
 the same registry/mirror path the boot and install waits then hammer. Two clusters
-building ISOs at once is exactly the contention the cap exists to prevent, so
-removing `ApplyTaskKindClusterISO` from `clusterInstallKey` would defeat the cap
-rather than fix a queueing complaint.
+building ISOs at once is exactly the contention a narrowed cap exists to
+prevent, so removing `ApplyTaskKindClusterISO` from `clusterInstallKey` would
+defeat the cap rather than fix a queueing complaint.
 
-**Constraint (a parked chain must not take the slot ahead of a chain that can
-finish):** admission is a two-step decision, not first-come-first-served over task
-order. A KubeVirt-hosted cluster's ISO task depends only on fabric, so it is ready
-at t=0 — while the rest of its chain cannot run until its host OCP cluster
-installs and its add-ons apply, potentially hours later. Task iteration order is
-plan order, and `hub-*` sorts before `ocp-*`, so the naive rule handed the only
-slot to hosted clusters that could not use it: both hub ISOs built first, and the
-bare-metal cluster whose install everything else waits on sat at
-`waiting for a cluster install slot` until they finished.
+**Constraint (when capacity is scarce, a parked chain must not take the slot
+ahead of a chain that can finish):** admission is a two-step decision, not
+first-come-first-served over task order. A KubeVirt-hosted cluster's ISO task
+depends only on fabric, so it is ready at t=0 — while the rest of its chain
+cannot run until its host OCP cluster installs and its add-ons apply, potentially
+hours later. Under an explicit cap of 1, task iteration order once handed that
+slot to hosted clusters that could not use it: both hub ISOs built first, and
+the bare-metal cluster whose install everything else waits on sat at `waiting
+for a cluster install slot` until they finished.
 
 `clusterInstallSlotAdmission` closes that: a cluster whose remaining install chain
 transitively waits on a task belonging to *another* cluster is **parked**, and
@@ -31,6 +37,8 @@ When every remaining chain is parked the set opens up again, so a run whose only
 work is hosted clusters still makes progress. This composes with — and does not
 replace — `releaseIdleClusterInstalls`, which hands the slot *back* when a holder
 parks mid-chain; admission stops it being taken in the first place.
+When the resolved capacity fits every remaining chain, admission returns every
+candidate and the DAG alone decides which tasks are runnable.
 
 **Constraint (the Redfish budget is granted partially, never all-or-nothing):**
 `ParallelismRedfish` (default 8) bounds concurrent BMC operations across the run.
