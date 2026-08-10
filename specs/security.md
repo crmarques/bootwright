@@ -398,6 +398,13 @@ authored control (`state-model.md`, Machine section):
 - **BMC → artifact server** (the virtual-media fetch of the agent ISO) is
   governed by `spec.hardware.management.bmc.virtualMedia.tls`.
 
+For a bare-metal OpenShift node selected for root-disk encryption, the
+controller also performs a bounded, read-only GET of the exact Redfish
+ComputerSystem before any BMC mutation. It uses the same controller-to-BMC TLS
+and credential settings, keeps the credentialed response under redact-by-default
+`no_log`, and exposes only normalized TPM type, state, and health evidence in a
+refusal. Missing or unreadable evidence never authorizes boot.
+
 The artifact server presents a self-signed certificate the BMC cannot trust
 without distributing a CA to every BMC, so the fetch leg needs deliberate
 handling:

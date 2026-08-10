@@ -35,7 +35,7 @@ func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vMediaPort 
 }
 
 func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
-	return machineBootVarsForMedia(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint, ci.Machines)
+	return machineBootVarsForMedia(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName), ci.Agent.RedfishVirtualMedia.ArtifactServerEndpoint, ci.Machines, containerClusterMachineRequiresTPM2(state, clusterName, m.Name))
 }
 
 func sshReadinessVars() map[string]any {
@@ -49,10 +49,10 @@ func sshReadinessVars() map[string]any {
 }
 
 func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef) map[string]any {
-	return machineBootVarsForMedia(state, ci, m, clusterName, isoBasename, redfishVirtualMedia, nil)
+	return machineBootVarsForMedia(state, ci, m, clusterName, isoBasename, redfishVirtualMedia, nil, false)
 }
 
-func machineBootVarsForMedia(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, sharing []v1alpha1.InstallMachine) map[string]any {
+func machineBootVarsForMedia(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, sharing []v1alpha1.InstallMachine, requireTPM2 bool) map[string]any {
 	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
@@ -81,7 +81,7 @@ func machineBootVarsForMedia(state v1alpha1.State, ci v1alpha1.ClusterInstall, m
 		if server.Spec.Hardware.Management.BMC.Address == "" {
 			return nil
 		}
-		return baremetalBootVars(state, redfishVirtualMedia, server, isoBasename)
+		return baremetalBootVars(state, redfishVirtualMedia, server, isoBasename, requireTPM2)
 	}
 	return nil
 }
@@ -224,7 +224,7 @@ func vsphereMediaElection(state v1alpha1.State, sharing []v1alpha1.InstallMachin
 	return stageElected, uploadElected
 }
 
-func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, server v1alpha1.Machine, isoBasename string) map[string]any {
+func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.ArtifactServerEndpointRef, server v1alpha1.Machine, isoBasename string, requireTPM2 bool) map[string]any {
 	bmc := server.Spec.Hardware.Management.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
 	stageHost, stagePath, fetchURL, fetchBase := baremetalAgentISOTarget(state, redfishVirtualMedia, isoBasename)
@@ -236,6 +236,9 @@ func baremetalBootVars(state v1alpha1.State, redfishVirtualMedia v1alpha1.Artifa
 		"credentialsRef": bmc.CredentialsRef.Name,
 		"validateCerts":  bmc.TLS.VerifyEnabled(),
 		"setBootSource":  true,
+	}
+	if requireTPM2 {
+		redfish["requireTPM2"] = true
 	}
 	if vm := bmc.VirtualMedia; vm != nil && vm.TLS != nil {
 		certificate := map[string]any{

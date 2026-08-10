@@ -354,6 +354,86 @@ func TestBareMetalBootDoesNotProjectMediaBackend(t *testing.T) {
 	if _, ok := redfish["vmediaColdInitRetry"]; ok {
 		t.Fatalf("bare-metal redfish unexpectedly has vmediaColdInitRetry: %v", redfish)
 	}
+	if _, ok := redfish["requireTPM2"]; ok {
+		t.Fatalf("bare-metal redfish unexpectedly requires TPM 2.0 without cluster disk encryption: %v", redfish)
+	}
+}
+
+func TestBareMetalDiskEncryptionProjectsTPM2ProofOnlyForSelectedPools(t *testing.T) {
+	cases := []struct {
+		name      string
+		thirdRole string
+		roles     []string
+		required  map[string]bool
+	}{
+		{
+			name:      "all declared pools",
+			thirdRole: v1alpha1.NodeRoleWorker,
+			required: map[string]bool{
+				"rack1-srv1": true,
+				"rack1-srv2": true,
+				"rack1-srv3": true,
+			},
+		},
+		{
+			name:      "master pool only",
+			thirdRole: v1alpha1.NodeRoleWorker,
+			roles:     []string{v1alpha1.NodeRoleMaster},
+			required: map[string]bool{
+				"rack1-srv1": true,
+				"rack1-srv2": true,
+				"rack1-srv3": false,
+			},
+		},
+		{
+			name:      "infra role folds into worker pool",
+			thirdRole: v1alpha1.NodeRoleInfra,
+			roles:     []string{v1alpha1.NodeRoleInfra},
+			required: map[string]bool{
+				"rack1-srv1": false,
+				"rack1-srv2": false,
+				"rack1-srv3": true,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+			state.ContainerClusters[0].Spec.Nodes[2].Role = tc.thirdRole
+			state.ContainerClusters[0].Spec.Security.DiskEncryption = &v1alpha1.ContainerClusterDiskEncryption{
+				Unlock: v1alpha1.DiskEncryptionUnlock{TPM2: &v1alpha1.DiskEncryptionTPM2{}},
+				Roles:  tc.roles,
+			}
+			cluster := Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+			for name, want := range tc.required {
+				redfish := machineComponentByName(t, cluster, name)["boot"].(map[string]any)["redfish"].(map[string]any)
+				got := redfish["requireTPM2"] == true
+				if got != want {
+					t.Fatalf("machine %s requireTPM2 = %v, want %v: %v", name, got, want, redfish)
+				}
+			}
+		})
+	}
+}
+
+func TestVirtualDiskEncryptionDoesNotProjectBareMetalTPM2Proof(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.ContainerClusters[0].Spec.Security.DiskEncryption = &v1alpha1.ContainerClusterDiskEncryption{
+		Unlock: v1alpha1.DiskEncryptionUnlock{TPM2: &v1alpha1.DiskEncryptionTPM2{}},
+	}
+	state.InfraProviders[0].Spec.Libvirt.MachineProfiles[0].TPM = &v1alpha1.MachineProfileTPM{}
+	cluster := Vars(state)["bootwright_clusters"].([]any)[0].(map[string]any)
+	redfish := firstMachineComponent(t, cluster)["boot"].(map[string]any)["redfish"].(map[string]any)
+	if _, ok := redfish["requireTPM2"]; ok {
+		t.Fatalf("libvirt Redfish unexpectedly carries the bare-metal TPM proof: %v", redfish)
+	}
 }
 
 func TestRendererUsesContainerClusterNameWhenInfraNameDiffers(t *testing.T) {

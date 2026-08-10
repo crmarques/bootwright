@@ -250,15 +250,17 @@ No cipher option is rendered. OpenShift 4.18 dropped the
 `cryptsetup`'s default `aes-xts-plain64` is what current releases expect with or
 without `security.fips.enabled`.
 
-!!! warning "A node without a TPM installs, then strands itself"
-    Nothing preflights the TPM on this path. A node whose firmware exposes none
-    passes every check, has RHCOS written to its disk, and then fails in the
-    initramfs on first boot — `clevis luks bind` errors, `ignition-disks.service`
-    fails, and systemd drops to `emergency.target`. It never registers, so the
-    installer only reports a host that never joined; the real message is on the
-    serial or BMC console. Enable TPM 2.0 in firmware on every selected node
-    first — on many vendors it is off by default — and clear stale TPM keys from
-    a previous OS, which can wedge the deployment on their own.
+!!! warning "Bare-metal TPM evidence must be readable before boot"
+    On every selected bare-metal node, preflight and apply read the exact Redfish
+    ComputerSystem and require a `TrustedModules` entry reporting
+    `InterfaceType=TPM2_0`, `Status.State=Enabled`, and `Status.Health=OK`. A
+    missing property, unknown status, unhealthy or disabled TPM, HTTP failure,
+    or BMC that cannot publish this inventory refuses before virtual media or
+    power changes. Enable TPM 2.0 in firmware and resolve any reported health
+    problem first. Clearing a TPM can make an existing TPM-bound disk
+    unrecoverable; do it only after independently confirming its data is
+    disposable. Libvirt and KubeVirt nodes are checked statically through their
+    machine profile's `tpm` declaration; vSphere TPM use remains unsupported.
 
 !!! note "Day 1 only"
     `storage.luks` runs in the initramfs of the first boot after RHCOS is

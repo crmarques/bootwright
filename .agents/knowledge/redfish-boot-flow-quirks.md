@@ -10,6 +10,17 @@ the same BMC with the same credentials/TLS/timeout, supplied once by a
 method/url/headers/body. `no_log` and `status_code` stay per-task — they are
 task keywords, not module args.
 
+**Encrypted bare-metal TPM proof precedes every mutation:** only those machines
+carry `boot.redfish.requireTPM2`. After system discovery, the role GETs the exact
+ComputerSystem and passes its JSON through
+`bootwright_redfish_tpm2_evidence`; a separate assert requires HTTP 200 plus an
+enabled, healthy `TPM2_0` TrustedModule. Keeping `failed_when: false` on the
+credential-redacted probe is intentional only because the immediately following
+normalization and assert surface HTTP/transport failure as sanitized evidence.
+The include must stay ahead of the power gate, virtual-media preparation, MAC
+validation, and boot sequence. Cleanup-media actions do not install or write a
+node and do not consume this boot-only proof.
+
 **Tail-recursive retries; never `until` on a no_log task:** a looped
 `include_tasks` enqueues every iteration up front, so a first-attempt success
 still prints every inner task as skipped for each spare loop item. And `until`

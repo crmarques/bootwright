@@ -316,6 +316,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := nestedAnsibleTasks(t, mainFileTasks[outerBlockIdx], "block")
 	validateActionIdx := findAnsibleTask(t, mainTasks, "Validate selected Redfish boot action")
 	systemIdx := findAnsibleTask(t, mainTasks, "Resolve Redfish system")
+	tpmIdx := findAnsibleTask(t, mainTasks, "Prove required TPM 2.0 before Redfish mutation")
+	powerGateIdx := findAnsibleTask(t, mainTasks, "Require a powered-off machine before installer boot")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
 	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
 	bootSequenceIdx := findAnsibleTask(t, mainTasks, "Boot node from Redfish virtual media")
@@ -324,8 +326,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	powerIdx := findAnsibleTask(t, bootSequenceTasks, "Power node from virtual media")
 	postIdx := findAnsibleTask(t, bootSequenceTasks, "Set post-boot Redfish boot device")
 	restoreIdx := findAnsibleTask(t, bootSequenceAlways, "Restore Redfish certificate verification settings")
-	if !(validateActionIdx < systemIdx && systemIdx < prepareIdx && prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx) {
-		t.Fatalf("boot_redfish imports must resolve the system, run media_prepare, and boot sequence in order")
+	if !(validateActionIdx < systemIdx && systemIdx < tpmIdx && tpmIdx < powerGateIdx && powerGateIdx < prepareIdx && prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx) {
+		t.Fatalf("boot_redfish imports must prove TPM 2.0 before power validation, media preparation, MAC validation, and boot")
 	}
 	if !(powerIdx < postIdx) {
 		t.Fatalf("boot_redfish boot sequence must run power before post_boot")
@@ -349,6 +351,14 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	for _, want := range []string{
 		"bootwright_vmedia_action_effective == 'boot'",
+		"bootwright_component.boot.redfish.requireTPM2 | default(false) | bool",
+	} {
+		if !stringListContains(mainTasks[tpmIdx]["when"], want) {
+			t.Fatalf("boot_redfish TPM proof when missing %q: %v", want, mainTasks[tpmIdx]["when"])
+		}
+	}
+	for _, want := range []string{
+		"bootwright_vmedia_action_effective == 'boot'",
 		"bootwright_component.boot.redfish.setBootSource | default(true) | bool",
 		"(bootwright_component.interfaces | default([]) | length) > 0",
 	} {
@@ -363,6 +373,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "boot/post_boot.yml")
 	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "media/restore_certificate_verification.yml")
 	assertIncludeTasksFile(t, mainTasks[systemIdx], "stage/system.yml")
+	assertIncludeTasksFile(t, mainTasks[tpmIdx], "validation/tpm2.yml")
 	if len(bootSequenceAlways) != 1 {
 		t.Fatalf("boot_redfish boot sequence always block should only restore Redfish certificate settings, got %d tasks", len(bootSequenceAlways))
 	}
@@ -378,6 +389,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	restoreTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/restore_certificate_verification.yml")
 	discoverSystemIdx := findAnsibleTask(t, systemTasks, "Discover Redfish System ID")
 	resolveSystemIdx := findAnsibleTask(t, systemTasks, "Resolve effective Redfish System ID")
+	confirmSystemIdx := findAnsibleTask(t, systemTasks, "Confirm a Redfish ComputerSystem was resolved")
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
 	probeMediaIdx := findAnsibleTask(t, prepareTasks, "Probe Redfish VirtualMedia members")
@@ -471,8 +483,20 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	restoreSecurityPreconditionIdx := findAnsibleTask(t, restoreTasks, "Resolve Redfish manager SecurityService restore PATCH precondition")
 	restoreSecurityIdx := findAnsibleTask(t, restoreTasks, "Restore Redfish HTTPS transfer certificate verification")
 
-	if !(discoverSystemIdx < resolveSystemIdx) {
-		t.Fatalf("boot_redfish must discover Redfish system ID before media and power actions")
+	if !(discoverSystemIdx < resolveSystemIdx && resolveSystemIdx < confirmSystemIdx) {
+		t.Fatalf("boot_redfish must discover, resolve, and confirm the Redfish system ID before media and power actions")
+	}
+	if got := fmt.Sprint(systemTasks[resolveSystemIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_redfish_system_id") {
+		t.Fatalf("boot_redfish system discovery must use the shared fail-closed resolver, got %s", got)
+	}
+	confirmSystem := fmt.Sprint(systemTasks[confirmSystemIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"bootwright_component.name", "/redfish/v1/Systems/<id>", "bootwright_redfish_system_id", "bootwright_mutating_invocation", "repeat the operation"} {
+		if !strings.Contains(confirmSystem, want) {
+			t.Fatalf("boot_redfish unresolved-system refusal missing %q: %s", want, confirmSystem)
+		}
+	}
+	if strings.Contains(confirmSystem, "bootwright apply") {
+		t.Fatalf("boot_redfish unresolved-system refusal must not assemble argv: %s", confirmSystem)
 	}
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
@@ -1222,6 +1246,76 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 		if !strings.Contains(defaults, want) {
 			t.Fatalf("boot_redfish defaults missing %q", want)
 		}
+	}
+}
+
+func TestBootRedfishTPM2ProofSurfacesProbeFailureBeforeMutation(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/tpm2.yml")
+	probeIdx := findAnsibleTask(t, tasks, "Probe Redfish ComputerSystem TPM 2.0 inventory")
+	evaluateIdx := findAnsibleTask(t, tasks, "Evaluate Redfish TPM 2.0 evidence")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse encrypted installer boot without proven TPM 2.0")
+	if !(probeIdx < evaluateIdx && evaluateIdx < refuseIdx) {
+		t.Fatalf("TPM probe failure must be normalized and refused explicitly, got indexes probe=%d evaluate=%d refuse=%d", probeIdx, evaluateIdx, refuseIdx)
+	}
+	probe := tasks[probeIdx]
+	uri, ok := probe["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("TPM probe is not an uri task: %v", probe)
+	}
+	for _, want := range []string{"/redfish/v1/Systems/", "bootwright_redfish_system_id", "bootwright_component.boot.redfish.baseUrl"} {
+		if !strings.Contains(fmt.Sprint(uri["url"]), want) {
+			t.Fatalf("TPM probe URL missing %q: %v", want, uri["url"])
+		}
+	}
+	if got := fmt.Sprint(uri["method"]); got != "GET" {
+		t.Fatalf("TPM proof must remain read-only, got method=%s", got)
+	}
+	if got := fmt.Sprint(uri["return_content"]); got != "true" {
+		t.Fatalf("TPM proof must read ComputerSystem inventory, got return_content=%s", got)
+	}
+	if got := fmt.Sprint(uri["status_code"]); got != "[200]" {
+		t.Fatalf("TPM proof must require HTTP 200, got status_code=%s", got)
+	}
+	if got := fmt.Sprint(probe["failed_when"]); got != "false" {
+		t.Fatalf("TPM request must flow into the explicit evidence refusal on transport or HTTP failure, got failed_when=%s", got)
+	}
+	assertRedactsByDefault(t, fmt.Sprint(probe["name"]), probe["no_log"])
+	if got := fmt.Sprint(probe["no_log"]); !strings.Contains(got, "bootwright_redfish_cred_path") {
+		t.Fatalf("TPM probe no_log must be credential-gated, got %v", probe["no_log"])
+	}
+	evaluate := fmt.Sprint(tasks[evaluateIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(evaluate, "bootwright_redfish_tpm2_evidence") {
+		t.Fatalf("TPM response must pass through the sanitized evidence filter: %s", evaluate)
+	}
+	assertion, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("TPM refusal is not an assert task: %v", tasks[refuseIdx])
+	}
+	conditions := fmt.Sprint(assertion["that"])
+	for _, want := range []string{"status", "200", "bootwright_redfish_tpm2_evidence.proven"} {
+		if !strings.Contains(conditions, want) {
+			t.Fatalf("TPM refusal condition missing %q: %s", want, conditions)
+		}
+	}
+	message := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{
+		"bootwright_component.name",
+		"bootwright_redfish_system_id",
+		"HTTP status",
+		"evidence:",
+		"observed:",
+		"InterfaceType=TPM2_0",
+		"Status.State=Enabled",
+		"Status.Health=OK",
+		"bootwright_mutating_invocation",
+		"repeat the operation",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("TPM refusal missing %q: %s", want, message)
+		}
+	}
+	if strings.Contains(message, "bootwright apply") {
+		t.Fatalf("TPM refusal must consume the controller-built invocation instead of assembling argv: %s", message)
 	}
 }
 

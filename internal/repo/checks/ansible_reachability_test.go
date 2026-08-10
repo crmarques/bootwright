@@ -59,6 +59,9 @@ func TestReachabilityBMCProbeNamesItsBMCAndStaysRedacted(t *testing.T) {
 	if got := fmt.Sprint(uri["status_code"]); got != "200" {
 		t.Fatalf("the BMC probe must require status 200, got %v", uri["status_code"])
 	}
+	if got := fmt.Sprint(uri["return_content"]); got != "true" {
+		t.Fatalf("the BMC probe must retain the Systems collection needed to resolve a TPM target, got return_content=%s", got)
+	}
 	assertRedactsByDefault(t, fmt.Sprint(probe["name"]), probe["no_log"])
 	if got := fmt.Sprint(probe["no_log"]); !strings.Contains(got, "bootwright_validate_bmc_credential") {
 		t.Fatalf("the BMC probe no_log must stay gated on the resolved credential, got no_log=%v", probe["no_log"])
@@ -68,6 +71,90 @@ func TestReachabilityBMCProbeNamesItsBMCAndStaysRedacted(t *testing.T) {
 		t.Fatalf("the per-BMC credential selection must precede the probe")
 	}
 	assertRedactsByDefault(t, fmt.Sprint(tasks[selectIdx]["name"]), tasks[selectIdx]["no_log"])
+}
+
+func TestReachabilityTPM2ProofTargetsTheExactSystemAndFailsClosed(t *testing.T) {
+	tasks := readAnsibleTasks(t, reachabilityRoleTasks+"/bmc.yml")
+	collectionIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Probe Redfish /Systems")
+	resolveIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Resolve TPM target system")
+	requireTargetIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Require a resolvable TPM target system")
+	probeIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Probe ComputerSystem TPM 2.0 inventory")
+	evaluateIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Evaluate TPM 2.0 evidence")
+	confirmIdx := findAnsibleTask(t, tasks, "[bmc {{ bootwright_validate_machine.name }}] Confirm required TPM 2.0")
+	if !(collectionIdx < resolveIdx && resolveIdx < requireTargetIdx && requireTargetIdx < probeIdx && probeIdx < evaluateIdx && evaluateIdx < confirmIdx) {
+		t.Fatalf("external TPM proof must resolve and probe one exact ComputerSystem before confirming evidence")
+	}
+	resolve := fmt.Sprint(tasks[resolveIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(resolve, "bootwright_redfish_system_id") {
+		t.Fatalf("external TPM target must use the shared fail-closed system resolver: %s", resolve)
+	}
+	requireTarget := fmt.Sprint(tasks[requireTargetIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"@odata.id", "machine", "/redfish/v1/Systems/<id>", "bootwright_mutating_invocation", "repeat the operation"} {
+		if !strings.Contains(requireTarget, want) {
+			t.Fatalf("unresolved TPM target refusal missing %q: %s", want, requireTarget)
+		}
+	}
+	if strings.Contains(requireTarget, "bootwright apply") {
+		t.Fatalf("unresolved TPM target refusal must not assemble argv: %s", requireTarget)
+	}
+	probe := tasks[probeIdx]
+	uri, ok := probe["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("external TPM probe is not an uri task: %v", probe)
+	}
+	for _, want := range []string{"/redfish/v1/Systems/", "bootwright_validate_bmc_system_id", "bootwright_validate_machine.boot.redfish.baseUrl"} {
+		if !strings.Contains(fmt.Sprint(uri["url"]), want) {
+			t.Fatalf("external TPM probe URL missing %q: %v", want, uri["url"])
+		}
+	}
+	if got := fmt.Sprint(uri["method"]); got != "GET" {
+		t.Fatalf("external TPM proof must remain read-only, got method=%s", got)
+	}
+	if got := fmt.Sprint(uri["return_content"]); got != "true" {
+		t.Fatalf("external TPM proof must read ComputerSystem inventory, got return_content=%s", got)
+	}
+	if got := fmt.Sprint(uri["status_code"]); got != "[200]" {
+		t.Fatalf("external TPM proof must require HTTP 200, got status_code=%s", got)
+	}
+	if got := fmt.Sprint(uri["timeout"]); !strings.Contains(got, "bootwright_external_validate_bmc_timeout") {
+		t.Fatalf("external TPM proof must stay time-bounded, got timeout=%s", got)
+	}
+	if got := fmt.Sprint(probe["failed_when"]); got != "false" {
+		t.Fatalf("external TPM HTTP failure must reach the explicit refusal, got failed_when=%s", got)
+	}
+	assertRedactsByDefault(t, fmt.Sprint(probe["name"]), probe["no_log"])
+	if got := fmt.Sprint(probe["no_log"]); !strings.Contains(got, "bootwright_validate_bmc_credential") {
+		t.Fatalf("external TPM probe no_log must be credential-gated, got %v", probe["no_log"])
+	}
+	for _, idx := range []int{requireTargetIdx, resolveIdx, probeIdx, evaluateIdx, confirmIdx} {
+		when := fmt.Sprint(tasks[idx]["when"])
+		if !strings.Contains(when, "boot.redfish.requireTPM2") {
+			t.Fatalf("external TPM task %q must be gated by the rendered requirement, got when=%s", tasks[idx]["name"], when)
+		}
+	}
+	evaluate := fmt.Sprint(tasks[evaluateIdx]["ansible.builtin.set_fact"])
+	if !strings.Contains(evaluate, "bootwright_redfish_tpm2_evidence") {
+		t.Fatalf("external TPM response must pass through the sanitized evidence filter: %s", evaluate)
+	}
+	assertion, ok := tasks[confirmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("external TPM confirmation is not an assert task: %v", tasks[confirmIdx])
+	}
+	conditions := fmt.Sprint(assertion["that"])
+	for _, want := range []string{"status", "200", "bootwright_validate_bmc_tpm2_evidence.proven"} {
+		if !strings.Contains(conditions, want) {
+			t.Fatalf("external TPM refusal condition missing %q: %s", want, conditions)
+		}
+	}
+	message := fmt.Sprint(assertion["fail_msg"])
+	for _, want := range []string{"bootwright_validate_machine.name", "bootwright_validate_bmc_system_id", "HTTP status", "evidence:", "observed:", "Status.Health=OK", "bootwright_mutating_invocation", "repeat the operation"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("external TPM refusal missing %q: %s", want, message)
+		}
+	}
+	if strings.Contains(message, "bootwright apply") {
+		t.Fatalf("external TPM refusal must not assemble argv: %s", message)
+	}
 }
 
 func TestReachabilityCredentialLoadStaysRedacted(t *testing.T) {

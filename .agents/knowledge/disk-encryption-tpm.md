@@ -104,22 +104,43 @@ knob — the LUKS default `aes-xts-plain64` is FIPS-acceptable.
   installer-generated names like `99-<role>-fips`, `99-<role>-ssh`, or
   `99-<role>-generated-registries`.
 
-### The missing preflight
+### The Redfish preflight closes the extra-manifest gap
 
 `AgentClusterInstall.spec.diskEncryption` has an assisted-service host validation
 (`disk-encryption-requirements-satisfied`) that refuses a TPM-less host before
 any disk is touched. The extra-manifest route does **not**: that validation
 short-circuits on `!common.IsConfigured(c.cluster.DiskEncryption)`, and
-`cluster.DiskEncryption` is never inferred from an extra manifest. So a TPM-less
-node passes every check, has RHCOS written to it, and then fails in the
-initramfs: `clevis luks bind` errors, `ignition-disks.service` fails, systemd
-drops to `emergency.target`. The node never registers, so the installer only
-shows a host that never joined — the real message is on the serial/BMC console.
-Recovery is fix-the-BIOS-and-reinstall.
+`cluster.DiskEncryption` is never inferred from an extra manifest. Bootwright
+therefore closes the gap outside assisted-service. The renderer adds
+`boot.redfish.requireTPM2: true` only to bare-metal machines whose node role
+maps to a selected encrypted machine config pool. The standalone external
+preflight and the granular boot role then GET that machine's exact
+`/redfish/v1/Systems/<id>` resource. The boot-role gate runs immediately after
+system resolution, before the power-state gate, media preparation, MAC probes,
+or any media/power mutation.
 
-Also documented upstream: leftover TPM keys from a previous OS can wedge the
-deployment, so reset the TPM in the BIOS before booting the ISO, and TPM 2.0 is
-off by default in the firmware of most Dell systems.
+The DMTF ComputerSystem schema defines `TrustedModules[].InterfaceType` and the
+`TPM2_0` enum; its referenced Resource status defines `State=Enabled` as capable
+of operating and `Health=OK` as normal. The filter accepts only a single entry
+that reports all three facts together: `InterfaceType=TPM2_0`,
+`Status.State=Enabled`, and `Status.Health=OK`. It normalizes and bounds the
+displayed evidence. HTTP failure, an absent/empty/malformed `TrustedModules`, a
+TPM 1.2 entry, missing status, `HealthRollup` without direct `Health`, or any
+disabled/unhealthy/unknown value fails closed.
+
+`TrustedModules` was introduced in ComputerSystem v1.1 and deprecated in v1.19
+in favour of `Links.TrustedComponents`. It is optional in both eras. That makes
+it suitable for positive proof, not for inference: an implementation that omits
+it cannot pass encrypted bare-metal boot, even if an OEM field or a linked
+resource might imply a TPM. Following those newer links would be another API
+and compatibility decision; silently accepting absence would recreate the disk
+write gap. There is no bypass.
+
+Old TPM state can still wedge enrollment even after this presence/health check.
+Clearing a TPM may destroy the only key for an existing encrypted disk, so the
+refusal does not prescribe a clear. Firmware enablement, health repair, and BMC
+inventory correction are safe external remedies; a clear remains an operator
+recovery decision after independently proving old data is disposable.
 
 ## Ceph `osd.tpm2` needs `tpm2-tss`, which a minimal install omits
 

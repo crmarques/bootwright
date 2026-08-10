@@ -8,24 +8,42 @@
   when: (bootwright_component.boot.redfish.systemId | default('') | length) == 0
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
 
+- name: Resolve effective Redfish System ID
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_id: >-
+      {{
+        bootwright_component.boot.redfish.systemId | default('')
+        | bootwright.core.bootwright_redfish_system_id(
+          (bootwright_redfish_systems_list | default({})).get('json', {})
+        )
+      }}
+  changed_when: false
+
+- name: Confirm a Redfish ComputerSystem was resolved
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_system_id | length) > 0
+    fail_msg: >-
+      machine {{ bootwright_component.name | default(inventory_hostname) }} has
+      no resolvable Redfish ComputerSystem: boot.redfish.systemId is unset and
+      /redfish/v1/Systems did not expose a first member with @odata.id. Correct
+      the BMC collection or point the Machine BMC address at the intended
+      /redfish/v1/Systems/<id> resource, verify it out of band, and then
+      {{
+        ('re-run `' ~ bootwright_mutating_invocation ~ '`.')
+        if (bootwright_mutating_invocation | default('') | length) > 0
+        else 'repeat the operation.'
+      }}
+    quiet: true
+
 - name: Warn when the BMC exposes multiple systems and none was selected
   ansible.builtin.debug:
     msg: >-
       WARNING: Redfish BMC exposes
       {{ bootwright_redfish_systems_list.json.Members | length }} ComputerSystems
       but boot.redfish.systemId is unset; defaulting to the first member
-      '{{ (bootwright_redfish_systems_list.json.Members | first)['@odata.id'] | basename }}'.
+      '{{ bootwright_redfish_system_id }}'.
       Set boot.redfish.systemId explicitly to target the intended system.
   when:
     - (bootwright_component.boot.redfish.systemId | default('') | length) == 0
     - (bootwright_redfish_systems_list.json.Members | default([]) | length) > 1
-
-- name: Resolve effective Redfish System ID
-  ansible.builtin.set_fact:
-    bootwright_redfish_system_id: >-
-      {{
-        bootwright_component.boot.redfish.systemId
-        if (bootwright_component.boot.redfish.systemId | default('') | length) > 0
-        else (bootwright_redfish_systems_list.json.Members | first)['@odata.id'] | basename
-      }}
-  changed_when: false

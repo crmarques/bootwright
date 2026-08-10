@@ -28,6 +28,12 @@
     - name: Resolve Redfish system
       ansible.builtin.import_tasks: stage/system.yml
 
+    - name: Prove required TPM 2.0 before Redfish mutation
+      ansible.builtin.import_tasks: validation/tpm2.yml
+      when:
+        - bootwright_vmedia_action_effective == 'boot'
+        - bootwright_component.boot.redfish.requireTPM2 | default(false) | bool
+
     - name: Require a powered-off machine before installer boot
       ansible.builtin.import_tasks: validation/power.yml
       when:

@@ -49,6 +49,19 @@ and trailing `/Systems/<id>` before projection (the suffix becomes the rendered
 `systemId`), so no task parses BMC URLs. Failure here is fatal: the play aborts
 before any infra convergence runs.
 
+**Encrypted-node TPM proof:** when a bare-metal node's role belongs to a machine
+config pool selected by `ContainerCluster.spec.security.diskEncryption`, the
+renderer adds `boot.redfish.requireTPM2: true`. External preflight and the boot
+role GET the resolved `/redfish/v1/Systems/<id>` and accept only one
+`TrustedModules` entry reporting `InterfaceType=TPM2_0`,
+`Status.State=Enabled`, and `Status.Health=OK`. The boot role performs this proof
+after read-only system discovery and before its power-state validation, media
+preparation, MAC validation, and every boot/media/power mutation. Missing,
+unreadable, malformed, disabled, unhealthy, and unknown evidence all refuse;
+there is no authorization token or task-local bypass. The registered response
+is credential-redacted, while a shared filter emits bounded, non-secret evidence
+for the refusal.
+
 **Bare-metal substrate is record-keeping only:** `machine_substrate_baremetal`
 performs no provisioning work on any provider machine — it records the
 per-cluster manifest and validates the BMC `credentialsRef` exists locally.

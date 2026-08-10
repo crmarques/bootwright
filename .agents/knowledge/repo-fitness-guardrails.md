@@ -39,8 +39,10 @@ root.go, scope_print.go, shell_env.go). It scans raw file text, so even a
 comment containing `fmt.Fprintln(` in a non-allowlisted file trips it.
 
 **File-size budgets are floors at observed maxima:** `CLI_FILE_LINE_LIMIT=400`
-(internal/cli thin handlers; init.go ~391 is the floor — domain logic belongs
-in internal/converge/workflow/), `WORKFLOW_FILE_LINE_LIMIT=1000`,
+covers the top-level production files in `internal/cli`, renderer families,
+scaffold, converge, secrets, trust, preflight, status, cluster access, proxy,
+and become (thin CLI handlers and concern-specific implementation files;
+domain logic belongs in its owning package), `WORKFLOW_FILE_LINE_LIMIT=1000`,
 `VALIDATOR_FILE_LINE_LIMIT=900` (internal/state/desired and
 internal/state/graph — split by kind when crossed), `API_FILE_LINE_LIMIT=600`
 (api/v1alpha1 — a crossing file means a kind's types should split into their

@@ -145,6 +145,23 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	return out
 }
 
+func containerClusterMachineRequiresTPM2(state v1alpha1.State, clusterName, machineName string) bool {
+	ocp, ok := stateview.ContainerCluster(state, clusterName)
+	if !ok || ocp.Spec.Security.DiskEncryption == nil || ocp.Spec.Security.DiskEncryption.Unlock.TPM2 == nil {
+		return false
+	}
+	selected := map[string]bool{}
+	for _, pool := range v1alpha1.ContainerClusterDiskEncryptionPools(ocp) {
+		selected[pool] = true
+	}
+	for _, node := range ocp.Spec.Nodes {
+		if node.MachineRef.Name == machineName {
+			return selected[v1alpha1.MachineConfigPoolForRole(node.Role)]
+		}
+	}
+	return false
+}
+
 func managedMachineRootDevice(machine v1alpha1.Machine) string {
 	if machine.Spec.OS.Install.RootDeviceHints == nil {
 		return ""

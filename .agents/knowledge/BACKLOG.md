@@ -467,30 +467,6 @@ learned; this file records what it still owes.
   and destroy does not strip a preexisting copy off a provided node.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
 
-## B-057 — Nothing preflights a TPM before an OpenShift node is written to
-- Status: open
-- Area: openshift / disk-encryption
-- Origin: ADR 0037
-- Severity: medium
-- Problem: `ContainerCluster.spec.security.diskEncryption` renders a
-  `MachineConfig` extra manifest. assisted-service's
-  `disk-encryption-requirements-satisfied` host validation short-circuits unless
-  the cluster record itself declares disk encryption, and it never infers that
-  from an extra manifest. A node whose firmware exposes no TPM 2.0 therefore
-  passes every check, has RHCOS written to its disk, and only then fails in the
-  initramfs — `clevis luks bind` errors, `ignition-disks.service` fails, systemd
-  drops to `emergency.target`, and the node never registers. The installer
-  reports a host that never joined; the cause is visible only on the serial or
-  BMC console. The Anaconda path has a `%pre` gate that refuses before any disk
-  is touched; this path has nothing equivalent.
-- Exit: probe the TPM out of band before the install writes — the BMC already
-  answers Redfish for these machines, so a `Systems/<id>` TrustedModules /
-  inventory read at preflight could refuse the run — or revisit
-  `AgentClusterInstall.spec.diskEncryption` if the ZTP `cluster-manifests` flow
-  ever becomes compatible with the `install-config.yaml` renderer.
-- Related: [disk-encryption-tpm.md](disk-encryption-tpm.md),
-  [0037](../../specs/adr/0037-a-tpm-holds-the-key-a-passphrase-holds-the-machine.md)
-
 ## B-069 — UX-review decisions still awaiting a product call
 - Status: open
 - Area: api / decisions

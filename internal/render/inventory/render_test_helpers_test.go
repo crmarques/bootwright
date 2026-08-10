@@ -13,6 +13,22 @@ func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any 
 	return componentByKind(t, cluster, v1alpha1.ServiceKindMachines)
 }
 
+func machineComponentByName(t *testing.T, cluster map[string]any, name string) map[string]any {
+	t.Helper()
+	comps, ok := cluster["components"].([]any)
+	if !ok {
+		t.Fatalf("cluster has no components: %v", cluster)
+	}
+	for _, raw := range comps {
+		component := raw.(map[string]any)
+		if component["kind"] == v1alpha1.ServiceKindMachines && component["name"] == name {
+			return component
+		}
+	}
+	t.Fatalf("no machine component %s in cluster: %v", name, cluster)
+	return nil
+}
+
 func machineByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.Machine {
 	t.Helper()
 	for _, machine := range state.Machines {

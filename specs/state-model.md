@@ -801,7 +801,8 @@ Rules:
 - A machine that references a profile with `diskEncryption`, and whose substrate
   is a virtual `InfraProvider`, must select a `machineProfiles[]` entry that
   declares `tpm`. A bare-metal machine is exempt: its TPM is a firmware fact
-  Bootwright cannot read before the install writes to disk.
+  rather than desired substrate state; the Anaconda installer instead checks
+  local TPM device nodes in `%pre`, before it writes the target disk.
 - A `Machine` with `os.provided: false` and managed OS install must set
   `spec.os.installProfileRef`.
 
@@ -1131,6 +1132,15 @@ Rules:
 - `roles[]` intersects with the roles `spec.nodes` declares. A selection that
   resolves to no pool is rejected rather than writing a `MachineConfig` no node
   would consume.
+- Each selected bare-metal node must prove TPM 2.0 through its exact Redfish
+  ComputerSystem before installer boot. The renderer projects the requirement
+  only onto nodes in selected machine config pools; the external preflight and
+  the boot role accept only a `TrustedModules` entry whose `InterfaceType` is
+  `TPM2_0`, `Status.State` is `Enabled`, and `Status.Health` is `OK`. A failed
+  read or absent, malformed, empty, unknown, disabled, or unhealthy inventory
+  fails closed. On the installer-boot path this read runs before power-state
+  validation, virtual-media preparation, MAC validation, and every media or
+  power mutation. There is no authorization bypass for missing evidence.
 - `unlock.tpm2.pcrIds` and `pcrBank` are rejected on a `ContainerCluster`:
   Ignition seals with an empty TPM policy and the agent-based installer exposes
   no way to pass one, so the fields would be silently inert.

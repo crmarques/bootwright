@@ -18,6 +18,8 @@ bootwright_vmedia_action_descriptors = _module.bootwright_vmedia_action_descript
 bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
 bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
 bootwright_redfish_power_on_reset_type = _module.bootwright_redfish_power_on_reset_type
+bootwright_redfish_system_id = _module.bootwright_redfish_system_id
+bootwright_redfish_tpm2_evidence = _module.bootwright_redfish_tpm2_evidence
 bootwright_redfish_url = _module.bootwright_redfish_url
 bootwright_redfish_vmedia_attached = _module.bootwright_redfish_vmedia_attached
 bootwright_redfish_vmm_control_actions = _module.bootwright_redfish_vmm_control_actions
@@ -258,6 +260,31 @@ class RedfishURL(unittest.TestCase):
         self.assertEqual(bootwright_redfish_url("", "https://bmc.example"), "")
 
 
+class RedfishSystemID(unittest.TestCase):
+    def test_preserves_the_renderer_selected_system(self):
+        self.assertEqual(
+            bootwright_redfish_system_id(
+                "System.Embedded.1",
+                {"Members": [{"@odata.id": "/redfish/v1/Systems/ignored"}]},
+            ),
+            "System.Embedded.1",
+        )
+
+    def test_resolves_the_first_collection_member(self):
+        self.assertEqual(
+            bootwright_redfish_system_id(
+                "",
+                {"Members": [{"@odata.id": "/redfish/v1/Systems/System.Embedded.1/"}]},
+            ),
+            "System.Embedded.1",
+        )
+
+    def test_rejects_missing_or_malformed_collection_evidence(self):
+        for collection in ({}, {"Members": []}, {"Members": [None]}, {"Members": [{}]}):
+            with self.subTest(collection=collection):
+                self.assertEqual(bootwright_redfish_system_id("", collection), "")
+
+
 class RedfishVirtualMediaAttached(unittest.TestCase):
     def test_accepts_exact_image_match(self):
         resource = {
@@ -393,13 +420,86 @@ class RedfishMACInventory(unittest.TestCase):
         self.assertEqual(got["observed"], [])
 
 
+class RedfishTPM2Evidence(unittest.TestCase):
+    def test_accepts_an_enabled_healthy_tpm_2_0_module(self):
+        got = bootwright_redfish_tpm2_evidence(
+            {
+                "TrustedModules": [
+                    {
+                        "FirmwareVersion": "5.63",
+                        "InterfaceType": "TPM1_2",
+                        "Status": {"State": "Enabled", "Health": "OK"},
+                    },
+                    {
+                        "FirmwareVersion": "7.2.1",
+                        "InterfaceType": "TPM2_0",
+                        "Status": {"State": "Enabled", "Health": "OK"},
+                    },
+                ]
+            }
+        )
+
+        self.assertTrue(got["proven"])
+        self.assertEqual(got["trustedModuleCount"], 2)
+        self.assertEqual(got["tpm20Count"], 1)
+        self.assertEqual(got["readyCount"], 1)
+        self.assertIn("InterfaceType=TPM2_0, State=Enabled, Health=OK", got["observed"][1])
+
+    def test_rejects_absent_empty_and_malformed_inventory(self):
+        cases = [
+            ({}, "not reported"),
+            ({"TrustedModules": None}, "not an array"),
+            ({"TrustedModules": []}, "empty"),
+            ({"TrustedModules": ["TPM2_0"]}, "no module reports"),
+        ]
+
+        for resource, reason in cases:
+            with self.subTest(resource=resource):
+                got = bootwright_redfish_tpm2_evidence(resource)
+                self.assertFalse(got["proven"])
+                self.assertIn(reason, got["reason"])
+
+    def test_rejects_unknown_disabled_or_unhealthy_tpm_2_0(self):
+        cases = [
+            {"InterfaceType": "TPM2_0"},
+            {"InterfaceType": "TPM2_0", "Status": {"State": "Disabled", "Health": "OK"}},
+            {"InterfaceType": "TPM2_0", "Status": {"State": "Enabled", "Health": "Warning"}},
+            {"InterfaceType": "TPM2_0", "Status": {"State": "Enabled", "HealthRollup": "OK"}},
+            {"InterfaceType": "TPM1_2", "Status": {"State": "Enabled", "Health": "OK"}},
+        ]
+
+        for module in cases:
+            with self.subTest(module=module):
+                got = bootwright_redfish_tpm2_evidence({"TrustedModules": [module]})
+                self.assertFalse(got["proven"])
+                self.assertEqual(got["readyCount"], 0)
+
+    def test_bounds_and_sanitizes_reported_evidence(self):
+        modules = [
+            {
+                "InterfaceType": "vendor\nvalue",
+                "Status": {"State": "state value", "Health": "?" * 80},
+            }
+            for _ in range(20)
+        ]
+
+        got = bootwright_redfish_tpm2_evidence({"TrustedModules": modules})
+
+        self.assertEqual(got["trustedModuleCount"], 20)
+        self.assertEqual(len(got["observed"]), 16)
+        self.assertNotIn("\n", got["observed"][0])
+        self.assertLessEqual(len(got["observed"][0]), 180)
+
+
 class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
         registered = _module.FilterModule().filters()
         self.assertIn("bootwright_vmedia_action_descriptors", registered)
         self.assertIn("bootwright_redfish_mac_validation", registered)
+        self.assertIn("bootwright_redfish_system_id", registered)
         self.assertIn("bootwright_redfish_url", registered)
         self.assertIn("bootwright_redfish_vmedia_attached", registered)
+        self.assertIn("bootwright_redfish_tpm2_evidence", registered)
         self.assertIn("bootwright_redfish_vmm_control_actions", registered)
         self.assertIs(
             registered["bootwright_vmedia_action_descriptors"],
@@ -409,10 +509,18 @@ class FilterRegistration(unittest.TestCase):
             registered["bootwright_redfish_mac_validation"],
             bootwright_redfish_mac_validation,
         )
+        self.assertIs(
+            registered["bootwright_redfish_system_id"],
+            bootwright_redfish_system_id,
+        )
         self.assertIs(registered["bootwright_redfish_url"], bootwright_redfish_url)
         self.assertIs(
             registered["bootwright_redfish_vmedia_attached"],
             bootwright_redfish_vmedia_attached,
+        )
+        self.assertIs(
+            registered["bootwright_redfish_tpm2_evidence"],
+            bootwright_redfish_tpm2_evidence,
         )
         self.assertIs(
             registered["bootwright_redfish_vmm_control_actions"],

@@ -36,6 +36,17 @@ pins that `from.name` bare-metal machines carry no `bmcEmulated` block.
 `bmcRole` keeps the substrate distinction only for the provider-host
 `bmc_<role>` converger that stands up the endpoint.
 
+**TPM proof is selected-pool intent, not a substrate guess.** For a
+`ContainerCluster` with disk encryption, the renderer maps each node role to
+its machine config pool (`infra` folds into `worker`) and adds
+`boot.redfish.requireTPM2: true` only to selected bare-metal machine components.
+Libvirt and KubeVirt keep their desired-state `machineProfiles[].tpm` validation
+and receive no Redfish runtime requirement; vSphere rejects TPM declarations.
+Managed-OS boot uses `machineBootVarsWithISO` and never inherits the container
+cluster flag accidentally. The external BMC preflight selects the new proof from
+the rendered fact rather than re-reading API state, and the substrate-blind
+Redfish boot role consumes the same fact.
+
 **Emulated-BMC ports are renderer-owned.** The renderer is the single source of
 truth for the emulated BMC's listen port, vmedia port, and bind address;
 `boot.agentIso.fetchUrl` must use the same vmedia port the `bmc_emulated` role

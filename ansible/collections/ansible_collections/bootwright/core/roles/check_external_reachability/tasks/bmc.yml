@@ -15,7 +15,7 @@
   ansible.builtin.uri:
     url: "{{ bootwright_validate_machine.boot.redfish.baseUrl }}/redfish/v1/Systems"
     method: GET
-    return_content: false
+    return_content: true
     validate_certs: "{{ bootwright_validate_machine.boot.redfish.validateCerts }}"
     force_basic_auth: "{{ (bootwright_validate_bmc_credential | length) > 0 }}"
     url_username: "{{ bootwright_validate_bmc_credential.username | default(omit) }}"
@@ -25,3 +25,87 @@
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_credential | length) > 0) }}"
   register: bootwright_validate_bmc_probe
   changed_when: false
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Resolve TPM target system"
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_system_id: >-
+      {{
+        bootwright_validate_machine.boot.redfish.systemId | default('')
+        | bootwright.core.bootwright_redfish_system_id(
+          bootwright_validate_bmc_probe.json | default({})
+        )
+      }}
+  changed_when: false
+  when: bootwright_validate_machine.boot.redfish.requireTPM2 | default(false) | bool
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Require a resolvable TPM target system"
+  ansible.builtin.assert:
+    that:
+      - (bootwright_validate_bmc_system_id | length) > 0
+    fail_msg: >-
+      machine {{ bootwright_validate_machine.name }} requires TPM 2.0 proof, but
+      Redfish /redfish/v1/Systems did not expose a first member with @odata.id
+      and the machine BMC address does not select a system. Correct the BMC
+      collection or point the Machine BMC address at the intended
+      /redfish/v1/Systems/<id> resource, verify it out of band, and then
+      {{
+        ('re-run `' ~ bootwright_mutating_invocation ~ '`.')
+        if (bootwright_mutating_invocation | default('') | length) > 0
+        else 'repeat the operation.'
+      }}
+    quiet: true
+  when: bootwright_validate_machine.boot.redfish.requireTPM2 | default(false) | bool
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Probe ComputerSystem TPM 2.0 inventory"
+  ansible.builtin.uri:
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_validate_bmc_system_id) | bootwright.core.bootwright_redfish_url(bootwright_validate_machine.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+    validate_certs: "{{ bootwright_validate_machine.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_validate_bmc_credential | length) > 0 }}"
+    url_username: "{{ bootwright_validate_bmc_credential.username | default(omit) }}"
+    url_password: "{{ bootwright_validate_bmc_credential.password | default(omit) }}"
+    timeout: "{{ bootwright_external_validate_bmc_timeout }}"
+    status_code: [200]
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_validate_bmc_credential | length) > 0) }}"
+  register: bootwright_validate_bmc_tpm2_probe
+  failed_when: false
+  changed_when: false
+  when: bootwright_validate_machine.boot.redfish.requireTPM2 | default(false) | bool
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Evaluate TPM 2.0 evidence"
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_tpm2_evidence: >-
+      {{
+        (bootwright_validate_bmc_tpm2_probe.json | default({}))
+        | bootwright.core.bootwright_redfish_tpm2_evidence
+      }}
+  changed_when: false
+  when: bootwright_validate_machine.boot.redfish.requireTPM2 | default(false) | bool
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Confirm required TPM 2.0"
+  ansible.builtin.assert:
+    that:
+      - (bootwright_validate_bmc_tpm2_probe.status | default(0) | int) == 200
+      - bootwright_validate_bmc_tpm2_evidence.proven | default(false) | bool
+    fail_msg: >-
+      machine {{ bootwright_validate_machine.name }} requires encrypted root,
+      but Redfish ComputerSystem
+      /redfish/v1/Systems/{{ bootwright_validate_bmc_system_id }} did not prove
+      an enabled, healthy TPM 2.0 (HTTP status
+      {{ bootwright_validate_bmc_tpm2_probe.status | default('unreachable') }};
+      evidence:
+      {{ bootwright_validate_bmc_tpm2_evidence.reason | default('unavailable') }};
+      observed:
+      {{ bootwright_validate_bmc_tpm2_evidence.observed | default([]) | join('; ') | default('<none>', true) }}).
+      Enable an installed TPM 2.0 in firmware, resolve any TPM health fault, or
+      configure the BMC to publish a TrustedModules entry with
+      InterfaceType=TPM2_0, Status.State=Enabled, and Status.Health=OK, verify
+      the corrected evidence out of band, and then
+      {{
+        ('re-run `' ~ bootwright_mutating_invocation ~ '`.')
+        if (bootwright_mutating_invocation | default('') | length) > 0
+        else 'repeat the operation.'
+      }}
+    quiet: true
+  when: bootwright_validate_machine.boot.redfish.requireTPM2 | default(false) | bool

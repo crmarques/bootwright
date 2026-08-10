@@ -85,9 +85,9 @@ Bootwright writes `99-bootwright-<pool>-disk-encryption` `MachineConfig` objects
 into `openshift/`. `AgentClusterInstall.spec.diskEncryption` was rejected because
 adopting it means abandoning the `install-config.yaml` + `agent-config.yaml`
 contract that the renderer, the golden tests, the owned-field registry and every
-platform mode are built on — for one feature. Its preflight is a real loss and is
-documented as such: on this route a TPM-less node installs, then fails in the
-initramfs and drops to `emergency.target` without ever registering.
+platform mode are built on — for one feature. Its assisted-service preflight is
+not available on this route, so Bootwright performs its own substrate-specific
+proof before booting the installer.
 
 ### A virtual machine must be given a TPM, and be refused without one
 
@@ -99,8 +99,20 @@ key provider and EFI firmware Bootwright does not configure.
 
 Validation refuses disk encryption on a machine whose substrate is a virtual
 provider and whose profile declares no `tpm`. Bare metal is exempt — the TPM is a
-firmware fact Bootwright cannot read before the install writes to disk — so that
-case is a documented operator prerequisite, not a gate.
+firmware fact rather than desired state — but is not trusted blindly. For every
+bare-metal node whose machine config pool is selected for encryption, both the
+external preflight and the Redfish boot role read the exact ComputerSystem and
+require at least one `TrustedModules` entry with `InterfaceType: TPM2_0`,
+`Status.State: Enabled`, and `Status.Health: OK`. A failed read, an absent or
+malformed property, an empty array, and unknown, disabled, or unhealthy status
+all fail closed.
+
+`TrustedModules` is optional in the Redfish ComputerSystem schema and deprecated
+in v1.19 in favour of linked TrustedComponent resources. Its presence still has
+portable, standards-defined semantics; its absence has none. Bootwright therefore
+accepts only the positive proof and does not infer success from an OEM field or
+add a bypass. The boot-role read occurs after resolving the system and before the
+existing power-state validation, virtual-media preparation, or any power change.
 
 ### Ceph OSD sealing is a separate control with its own prerequisite
 
@@ -123,7 +135,12 @@ profile to install `tpm2-tss` or to enable `diskEncryption`, which installs it.
   profile.
 - A `tang` unlock arm, a `threshold`, or PCR binding on RHCOS can be added
   without moving any existing field.
-- Bootwright cannot promise a TPM exists on bare metal. The failure is loud on
-  the Anaconda path — a `%pre` gate refuses before any disk is touched — and
-  silent-until-first-boot on the OpenShift path, which no available mechanism in
-  the chosen route can fix.
+- Bare-metal OpenShift encryption requires a BMC that exposes positive
+  ComputerSystem `TrustedModules` evidence. A standards-compliant BMC that omits
+  the optional property cannot pass this gate until its firmware or inventory
+  configuration is corrected; that operational refusal is preferable to writing
+  RHCOS and discovering the missing TPM in the initramfs.
+- The Anaconda path retains its local `%pre` gate because the installer can read
+  the target's device nodes directly. Redfish evidence closes the OpenShift
+  pre-boot gap but does not prove that clearing the TPM is safe or that an old
+  TPM key cannot interfere with enrollment.

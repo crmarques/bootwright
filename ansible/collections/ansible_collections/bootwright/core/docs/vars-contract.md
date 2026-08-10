@@ -149,7 +149,10 @@ bootwright_clusters:
           isoStaging: { datastore, folder }  # defaults applied by the renderer
           template: rhcos-template      # optional clone source; absent = blank create
         boot:
-          redfish: {}         # bare-metal artifactCertificate additionally carries
+          redfish: {}         # selected encrypted bare-metal nodes additionally carry
+                              # requireTPM2: true; the preflight and boot role prove
+                              # exact ComputerSystem TrustedModules evidence
+                              # before any Redfish mutation. artifactCertificate carries
                               # host/port (the artifact endpoint origin) so the
                               # certificate import never re-parses fetchUrl
           agentIso: {}        # HTTP-fetched media carries transferProtocol

@@ -14,6 +14,14 @@ authenticated `/redfish/v1/Systems` probe is detailed in
 baremetal-first-install-safety.md) and external HTTP proxies (Bootwright
 reaches the public registry / mirror through them).
 
+For a bare-metal OpenShift node whose rendered
+`boot.redfish.requireTPM2` is true, the BMC check additionally resolves the
+same exact ComputerSystem the boot role will use and performs one bounded GET
+of it. Only normalized `TrustedModules` TPM 2.0 type, state, and health evidence
+is surfaced. The credentialed response remains under redact-by-default
+`no_log`, and a transport/HTTP failure flows into the explicit evidence
+assertion rather than being swallowed by the probe's `failed_when: false`.
+
 **Proxy probe is TCP-only, https first.** `tasks/proxy.yml` picks the https
 proxy URL first (matching the order `machine_proxy/facts.yml` uses for
 `bootwright_proxy_primary`), falls back to http, and verifies TCP
@@ -42,8 +50,10 @@ container-cluster-ansible-flow.md).
 
 **Fail-closed.** Every probe registers its result and the role fails the play
 if any single check fails; the operator fixes the underlying issue and
-re-runs. Tunables (timeouts) live in the role's `defaults/main.yml` so a
-field run can override them without editing the role.
+re-runs. A required TPM also fails on an unresolvable target system,
+absent/malformed inventory, or anything other than positive
+enabled-and-healthy TPM 2.0 evidence. Tunables (timeouts) live in the role's
+`defaults/main.yml` so a field run can override them without editing the role.
 
 **Flat includes, credentials loaded once, but one probe task per BMC.**
 `tasks/main.yml` computes the cluster components, the BMC target list, and the

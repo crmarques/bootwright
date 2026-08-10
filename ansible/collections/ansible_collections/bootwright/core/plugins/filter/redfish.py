@@ -22,6 +22,21 @@ def bootwright_redfish_url(ref, base_url):
     return base_text + "/" + ref_text
 
 
+def bootwright_redfish_system_id(configured, collection=None):
+    configured_text = _string(configured).strip()
+    if configured_text:
+        return configured_text
+    if not isinstance(collection, dict):
+        return ""
+    members = collection.get("Members")
+    if not isinstance(members, list) or not members or not isinstance(members[0], dict):
+        return ""
+    ref = _string(members[0].get("@odata.id")).strip().rstrip("/")
+    if not ref:
+        return ""
+    return ref.rsplit("/", 1)[-1]
+
+
 def bootwright_vmedia_action_descriptors(resource, action_name):
     descriptors = []
     for path, source, vendor, action in _iter_action_objects(resource, action_name):
@@ -138,6 +153,64 @@ def bootwright_redfish_mac_validation(declared_interfaces, redfish_results):
         "observed": observed,
         "missing": missing,
     }
+
+
+def bootwright_redfish_tpm2_evidence(resource):
+    if not isinstance(resource, dict) or "TrustedModules" not in resource:
+        return _tpm2_evidence(False, "TrustedModules is not reported", [], 0, 0)
+    modules = resource.get("TrustedModules")
+    if not isinstance(modules, list):
+        return _tpm2_evidence(False, "TrustedModules is not an array", [], 0, 0)
+
+    observed = []
+    tpm20_count = 0
+    ready_count = 0
+    for index, module in enumerate(modules):
+        if not isinstance(module, dict):
+            observed.append(f"[{index}] malformed module entry")
+            continue
+        interface_type = _evidence_value(module.get("InterfaceType"))
+        status = module.get("Status")
+        if not isinstance(status, dict):
+            status = {}
+        state = _evidence_value(status.get("State"))
+        health = _evidence_value(status.get("Health"))
+        observed.append(
+            f"[{index}] InterfaceType={interface_type}, State={state}, Health={health}"
+        )
+        if interface_type != "TPM2_0":
+            continue
+        tpm20_count += 1
+        if state == "Enabled" and health == "OK":
+            ready_count += 1
+
+    if ready_count > 0:
+        reason = "a TPM2_0 module is enabled and healthy"
+    elif not modules:
+        reason = "TrustedModules is empty"
+    elif tpm20_count == 0:
+        reason = "no module reports InterfaceType=TPM2_0"
+    else:
+        reason = "no TPM2_0 module reports State=Enabled and Health=OK"
+    return _tpm2_evidence(ready_count > 0, reason, observed, tpm20_count, ready_count)
+
+
+def _tpm2_evidence(proven, reason, observed, tpm20_count, ready_count):
+    return {
+        "proven": proven,
+        "reason": reason,
+        "observed": observed[:16],
+        "trustedModuleCount": len(observed),
+        "tpm20Count": tpm20_count,
+        "readyCount": ready_count,
+    }
+
+
+def _evidence_value(value):
+    text = _string(value).strip()
+    if not text:
+        return "<not reported>"
+    return re.sub(r"[^A-Za-z0-9_.:-]", "?", text)[:64]
 
 
 def _action_info_accepts_vmm_control(action_info):
@@ -308,8 +381,10 @@ class FilterModule:
         return {
             "bootwright_vmedia_action_descriptors": bootwright_vmedia_action_descriptors,
             "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
+            "bootwright_redfish_system_id": bootwright_redfish_system_id,
             "bootwright_redfish_url": bootwright_redfish_url,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,
             "bootwright_redfish_power_on_reset_type": bootwright_redfish_power_on_reset_type,
+            "bootwright_redfish_tpm2_evidence": bootwright_redfish_tpm2_evidence,
             "bootwright_redfish_vmm_control_actions": bootwright_redfish_vmm_control_actions,
         }

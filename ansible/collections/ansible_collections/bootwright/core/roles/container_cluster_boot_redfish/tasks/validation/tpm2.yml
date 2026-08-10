@@ -1,0 +1,49 @@
+---
+- name: Probe Redfish ComputerSystem TPM 2.0 inventory
+  ansible.builtin.uri:
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+    status_code: [200]
+  register: bootwright_redfish_tpm2_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_redfish_cred_path | length) > 0) }}"
+
+- name: Evaluate Redfish TPM 2.0 evidence
+  ansible.builtin.set_fact:
+    bootwright_redfish_tpm2_evidence: >-
+      {{
+        (bootwright_redfish_tpm2_probe.json | default({}))
+        | bootwright.core.bootwright_redfish_tpm2_evidence
+      }}
+  changed_when: false
+
+- name: Refuse encrypted installer boot without proven TPM 2.0
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_tpm2_probe.status | default(0) | int) == 200
+      - bootwright_redfish_tpm2_evidence.proven | default(false) | bool
+    fail_msg: >-
+      refusing encrypted installer boot for machine
+      {{ bootwright_component.name | default(inventory_hostname) }} in cluster
+      {{ bootwright_current_cluster.name | default('<unknown>') }}: Redfish
+      ComputerSystem /redfish/v1/Systems/{{ bootwright_redfish_system_id }} did
+      not prove an enabled, healthy TPM 2.0 (HTTP status
+      {{ bootwright_redfish_tpm2_probe.status | default('unreachable') }};
+      evidence: {{ bootwright_redfish_tpm2_evidence.reason | default('unavailable') }};
+      observed:
+      {{ bootwright_redfish_tpm2_evidence.observed | default([]) | join('; ') | default('<none>', true) }}).
+      Bootwright requires a TrustedModules entry with InterfaceType=TPM2_0,
+      Status.State=Enabled, and Status.Health=OK before any virtual-media or
+      power mutation because the selected MachineConfig encrypts this node's
+      root disk during first boot. Enable an installed TPM 2.0 in firmware,
+      resolve any TPM health fault, or configure the BMC to publish this
+      standards-defined inventory, verify the corrected evidence out of band,
+      and then
+      {{
+        ('re-run `' ~ bootwright_mutating_invocation ~ '`.')
+        if (bootwright_mutating_invocation | default('') | length) > 0
+        else 'repeat the operation.'
+      }}
+    quiet: true
