@@ -914,10 +914,46 @@ func TestPlanDestroyTasksNeverFansOutOntoAnUnrenderedInventoryGroup(t *testing.T
 	if storage.Limit != render.GroupStorageHosts {
 		t.Fatalf("storage teardown limit = %q; only one cluster renders an inventory group, and ansible aborts the whole run when --limit names a group the inventory never emitted", storage.Limit)
 	}
+	if !reflect.DeepEqual(storage.Entry.ResourceKeys, []string{"ceph-a"}) {
+		t.Fatalf("storage teardown completion keys = %v, want only managed cluster ceph-a", storage.Entry.ResourceKeys)
+	}
+	for _, id := range []string{destroyMachineRegistrationTaskID, destroyStorageNodeAccessTaskID, destroyMachineInfraTaskID, destroyControllerNameResolutionCleanupTaskID} {
+		task := destroyTaskByID(t, tasks, id)
+		if !slices.Contains(task.Entry.SuccessDependencies, DestroyStorageClustersTaskID) {
+			t.Errorf("managed storage in the collapsed task must keep the positive-proof edge from %s, got %v", id, task.Entry.SuccessDependencies)
+		}
+	}
 	for _, task := range tasks {
 		if strings.HasPrefix(task.Entry.ID, DestroyStorageClustersTaskID+".") {
 			t.Fatalf("task %q limits itself to %q, but external storage clusters have no rendered host group", task.Entry.ID, task.Limit)
 		}
+	}
+}
+
+func TestPlanDestroyTasksDoesNotRequireManagedStorageProofFromExternalCluster(t *testing.T) {
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-external"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Type:       v1alpha1.StorageClusterTypeCeph,
+			Management: v1alpha1.StorageClusterManagementExternal,
+		},
+	}}}
+	for _, scope := range []string{"clusters", "all"} {
+		t.Run(scope, func(t *testing.T) {
+			tasks, err := PlanDestroyTasks(scope, state, "", nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			storage := destroyTaskByID(t, tasks, DestroyStorageClustersTaskID)
+			if len(storage.Entry.ResourceKeys) != 0 {
+				t.Fatalf("external storage task completion keys = %v, want none", storage.Entry.ResourceKeys)
+			}
+			for _, task := range tasks {
+				if slices.Contains(task.Entry.SuccessDependencies, DestroyStorageClustersTaskID) {
+					t.Errorf("task %s requires success from an external storage no-host task: %v", task.Entry.ID, task.Entry.SuccessDependencies)
+				}
+			}
+		})
 	}
 }
 

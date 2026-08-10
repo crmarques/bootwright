@@ -10,14 +10,16 @@ import (
 )
 
 type destroyStorageWork struct {
-	names   []string
-	nameSet map[string]bool
-	fan     bool
-	present bool
+	names        []string
+	nameSet      map[string]bool
+	proofNames   []string
+	proofNameSet map[string]bool
+	fan          bool
+	present      bool
 }
 
 func destroyStorageWorkFor(state v1alpha1.State, storageWorkNames []string) destroyStorageWork {
-	work := destroyStorageWork{present: true, nameSet: map[string]bool{}}
+	work := destroyStorageWork{present: true, nameSet: map[string]bool{}, proofNameSet: map[string]bool{}}
 	if storageWorkNames != nil {
 		if len(storageWorkNames) == 0 {
 			work.present = false
@@ -33,6 +35,15 @@ func destroyStorageWorkFor(state v1alpha1.State, storageWorkNames []string) dest
 	for _, name := range work.names {
 		work.nameSet[name] = true
 	}
+	for _, cluster := range state.StorageClusters {
+		name := cluster.Metadata.Name
+		if !work.nameSet[name] || !v1alpha1.StorageClusterManaged(cluster) {
+			continue
+		}
+		work.proofNames = append(work.proofNames, name)
+		work.proofNameSet[name] = true
+	}
+	sort.Strings(work.proofNames)
 	if len(work.names) > 1 {
 		grouped := destroyStorageInventoryGroupClusters(state)
 		work.fan = true
@@ -78,6 +89,26 @@ func (w destroyStorageWork) stepIDsFor(cluster string, bases ...string) []string
 	return out
 }
 
+func (w destroyStorageWork) proofIDs(base, cluster string) []string {
+	if cluster != "" {
+		if !w.proofNameSet[cluster] {
+			return nil
+		}
+		return []string{w.stepID(base, cluster)}
+	}
+	if len(w.proofNames) == 0 {
+		return nil
+	}
+	if !w.fan {
+		return []string{base}
+	}
+	out := make([]string, 0, len(w.proofNames))
+	for _, name := range w.proofNames {
+		out = append(out, base+"."+name)
+	}
+	return out
+}
+
 type destroyStorageFamily struct {
 	base     string
 	kind     string
@@ -100,7 +131,7 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 		forksLimit: render.GroupStorageHosts,
 	}
 	if !work.fan {
-		base.resourceKeys = work.names
+		base.resourceKeys = work.proofNames
 		if family.success != nil {
 			base.successDependencies = family.success("")
 		}
@@ -117,7 +148,9 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 		step.label = family.label + " " + cluster
 		step.limit = render.StorageClusterGroupName(cluster)
 		step.forksLimit = render.StorageClusterGroupName(cluster)
-		step.resourceKeys = destroyClusterResourceKeys(state, cluster)
+		if work.proofNameSet[cluster] {
+			step.resourceKeys = destroyClusterResourceKeys(state, cluster)
+		}
 		if family.success != nil {
 			step.successDependencies = family.success(cluster)
 		}
@@ -322,10 +355,10 @@ func machineRegistrationFamily(work destroyStorageWork, afterStorage bool) destr
 		label:    "Machine registration",
 		playbook: roles.PlaybookTaskMachineRegistrationDeregister,
 		success: func(cluster string) []string {
-			if !afterStorage || len(work.names) == 0 {
+			if !afterStorage {
 				return nil
 			}
-			return []string{work.stepID(DestroyStorageClustersTaskID, cluster)}
+			return work.proofIDs(DestroyStorageClustersTaskID, cluster)
 		},
 	}
 }
@@ -337,13 +370,12 @@ func storageNodeAccessFamily(work destroyStorageWork, afterRegistration bool, ex
 		label:    "Storage node access",
 		playbook: roles.PlaybookTaskStorageNodeAccessDestroy,
 		success: func(cluster string) []string {
-			if len(work.names) == 0 {
+			out := work.proofIDs(DestroyStorageClustersTaskID, cluster)
+			if len(out) == 0 {
 				return nil
 			}
-			var out []string
-			out = append(out, work.stepID(DestroyStorageClustersTaskID, cluster))
 			if afterRegistration {
-				out = append(out, work.stepID(destroyMachineRegistrationTaskID, cluster))
+				out = append(out, work.proofIDs(destroyMachineRegistrationTaskID, cluster)...)
 			}
 			return out
 		},

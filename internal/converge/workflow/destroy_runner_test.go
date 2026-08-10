@@ -121,7 +121,7 @@ func TestStorageDestroyTaskDoesNotFinalizeBeforeExactAttestationValidation(t *te
 	if err := os.MkdirAll(opts.ArtifactsRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	report := storageDestroyResult("ceph-a", []string{"a1"}, []string{"a1"}, nil)
+	report := storageDestroyResult("ceph-a", []string{"a1"}, nil)
 	data, err := json.Marshal(report)
 	if err != nil {
 		t.Fatal(err)

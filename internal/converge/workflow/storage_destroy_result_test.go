@@ -10,8 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/ownership"
 )
 
-func storageDestroyResult(name string, expected, completed, skipped []string) StorageDestroyResult {
-	_ = expected
+func storageDestroyResult(name string, completed, skipped []string) StorageDestroyResult {
 	zero := 0
 	nodes := make([]StorageDestroyNodeResult, 0, len(completed)+len(skipped))
 	for _, node := range completed {
@@ -38,7 +37,7 @@ func storageDestroyResult(name string, expected, completed, skipped []string) St
 
 func TestValidateStorageDestroyResultsRequiresExactPositiveCoverage(t *testing.T) {
 	expected := map[string][]string{"ceph-a": {"a1", "a2"}}
-	valid := storageDestroyResult("ceph-a", []string{"a1", "a2"}, []string{"a1"}, []string{"a2"})
+	valid := storageDestroyResult("ceph-a", []string{"a1"}, []string{"a2"})
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{valid}, expected, true); err != nil {
 		t.Fatalf("valid result: %v", err)
 	}
@@ -49,11 +48,11 @@ func TestValidateStorageDestroyResultsRequiresExactPositiveCoverage(t *testing.T
 		want   string
 	}{
 		{name: "empty", result: StorageDestroyResult{}, want: "schemaVersion"},
-		{name: "wrong cluster", result: storageDestroyResult("ceph-b", []string{"a1", "a2"}, []string{"a1", "a2"}, nil), want: "unexpected cluster"},
-		{name: "missing expected node", result: storageDestroyResult("ceph-a", nil, []string{"a1"}, nil), want: "missing: a2"},
-		{name: "unknown completed node", result: storageDestroyResult("ceph-a", []string{"a1", "a2"}, []string{"a1", "a3"}, []string{"a2"}), want: "unexpected: a3"},
-		{name: "duplicate node", result: storageDestroyResult("ceph-a", []string{"a1", "a2"}, []string{"a1", "a1"}, []string{"a2"}), want: "duplicate a1"},
-		{name: "conflicting outcomes", result: storageDestroyResult("ceph-a", nil, []string{"a1", "a2"}, []string{"a2"}), want: "duplicate a2"},
+		{name: "wrong cluster", result: storageDestroyResult("ceph-b", []string{"a1", "a2"}, nil), want: "unexpected cluster"},
+		{name: "missing expected node", result: storageDestroyResult("ceph-a", []string{"a1"}, nil), want: "missing: a2"},
+		{name: "unknown completed node", result: storageDestroyResult("ceph-a", []string{"a1", "a3"}, []string{"a2"}), want: "unexpected: a3"},
+		{name: "duplicate node", result: storageDestroyResult("ceph-a", []string{"a1", "a1"}, []string{"a2"}), want: "duplicate a1"},
+		{name: "conflicting outcomes", result: storageDestroyResult("ceph-a", []string{"a1", "a2"}, []string{"a2"}), want: "duplicate a2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,7 +63,7 @@ func TestValidateStorageDestroyResultsRequiresExactPositiveCoverage(t *testing.T
 		})
 	}
 
-	incomplete := storageDestroyResult("ceph-a", nil, []string{"a1"}, []string{"a2"})
+	incomplete := storageDestroyResult("ceph-a", []string{"a1"}, []string{"a2"})
 	incomplete.Clusters[0].Nodes[0].Outcome = "incomplete"
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{incomplete}, expected, true); err == nil || !strings.Contains(err.Error(), "is not terminal") {
 		t.Fatalf("incomplete result error = %v", err)
@@ -72,7 +71,7 @@ func TestValidateStorageDestroyResultsRequiresExactPositiveCoverage(t *testing.T
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{valid}, expected, false); err == nil || !strings.Contains(err.Error(), "unreachable-nodes authorization") {
 		t.Fatalf("unauthorized skipped result error = %v", err)
 	}
-	whitespace := storageDestroyResult("ceph-a", nil, []string{"a1", "a2"}, nil)
+	whitespace := storageDestroyResult("ceph-a", []string{"a1", "a2"}, nil)
 	whitespace.Clusters[0].Nodes[0].Name = " a1"
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{whitespace}, expected, false); err == nil || !strings.Contains(err.Error(), "not canonical") {
 		t.Fatalf("whitespace identity error = %v", err)
@@ -96,7 +95,7 @@ func TestValidateStorageDestroyResultsBindsProofToEachNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := storageDestroyResult("ceph-a", nil, []string{"a1", "a2"}, nil)
+			result := storageDestroyResult("ceph-a", []string{"a1", "a2"}, nil)
 			tt.edit(&result.Clusters[0].Nodes[1])
 			_, err := ValidateStorageDestroyResults([]StorageDestroyResult{result}, expected, false)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -135,7 +134,7 @@ func TestReadStorageDestroyResultIsStrict(t *testing.T) {
 
 func TestValidateStorageDestroyResultsRequiresEveryClusterExactlyOnce(t *testing.T) {
 	expected := map[string][]string{"ceph-a": {"a1"}, "ceph-b": {"b1"}}
-	a := storageDestroyResult("ceph-a", []string{"a1"}, []string{"a1"}, nil)
+	a := storageDestroyResult("ceph-a", []string{"a1"}, nil)
 	if _, err := ValidateStorageDestroyResults([]StorageDestroyResult{a}, expected, false); err == nil || !strings.Contains(err.Error(), "missing cluster ceph-b") {
 		t.Fatalf("missing report error = %v", err)
 	}
@@ -200,8 +199,8 @@ func TestReconcileStorageDestroyOwnershipKeepsClusterLocalPartialEvidence(t *tes
 		}
 	}
 	results := map[string]StorageDestroyClusterResult{
-		"ceph-a": storageDestroyResult("ceph-a", []string{"a1"}, nil, []string{"a1"}).Clusters[0],
-		"ceph-b": storageDestroyResult("ceph-b", []string{"b1"}, []string{"b1"}, nil).Clusters[0],
+		"ceph-a": storageDestroyResult("ceph-a", nil, []string{"a1"}).Clusters[0],
+		"ceph-b": storageDestroyResult("ceph-b", []string{"b1"}, nil).Clusters[0],
 	}
 	if err := ReconcileStorageDestroyOwnership(dir, "", results, map[string]string{
 		"ceph-a": "storage__ceph-a__a1",
@@ -238,7 +237,7 @@ func TestReconcileStorageDestroyOwnershipTargetsOnlyTheExactOwner(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	result := storageDestroyResult("ceph-a", nil, []string{"a1"}, nil).Clusters[0]
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
 	if err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": "storage__ceph-a__a1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +257,7 @@ func TestReconcileStorageDestroyOwnershipRefusesAContradictoryOwner(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	result := storageDestroyResult("ceph-a", nil, []string{"a1"}, nil).Clusters[0]
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
 	err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": "storage__ceph-a__a1"})
 	if err == nil || !strings.Contains(err.Error(), "contradicts") {
 		t.Fatalf("error = %v", err)
@@ -288,7 +287,7 @@ func TestReconcileStorageDestroyOwnershipRequiresTheSelectedSeed(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			result := storageDestroyResult("ceph-a", nil, []string{"a1"}, nil).Clusters[0]
+			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
 			err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": test.expected})
 			if err == nil || !strings.Contains(err.Error(), "contradicts") {
 				t.Fatalf("error = %v", err)

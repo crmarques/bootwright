@@ -65,10 +65,8 @@ type StorageDestroyResult struct {
 
 func StorageDestroyExpectedNodes(state v1alpha1.State, storageNames []string) map[string][]string {
 	selected := map[string]bool{}
-	if storageNames != nil {
-		for _, name := range storageNames {
-			selected[name] = true
-		}
+	for _, name := range storageNames {
+		selected[name] = true
 	}
 	out := map[string][]string{}
 	for _, cluster := range state.StorageClusters {
@@ -90,10 +88,8 @@ func StorageDestroyExpectedNodes(state v1alpha1.State, storageNames []string) ma
 
 func StorageDestroyExpectedSeedHosts(state v1alpha1.State, storageNames []string) map[string]string {
 	selected := map[string]bool{}
-	if storageNames != nil {
-		for _, name := range storageNames {
-			selected[name] = true
-		}
+	for _, name := range storageNames {
+		selected[name] = true
 	}
 	out := map[string]string{}
 	for _, cluster := range state.StorageClusters {

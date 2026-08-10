@@ -240,16 +240,7 @@ func fullDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destro
 		}
 		return out
 	}, func(cluster string) []string {
-		if len(work.names) == 0 {
-			return nil
-		}
-		if cluster == "" {
-			return work.allIDs(DestroyStorageClustersTaskID)
-		}
-		if work.nameSet[cluster] {
-			return []string{work.stepID(DestroyStorageClustersTaskID, cluster)}
-		}
-		return nil
+		return work.proofIDs(DestroyStorageClustersTaskID, cluster)
 	})
 	if err != nil {
 		return nil, err
