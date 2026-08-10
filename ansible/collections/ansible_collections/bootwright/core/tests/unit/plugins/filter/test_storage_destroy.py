@@ -83,6 +83,7 @@ class StorageDestroyAttestation(unittest.TestCase):
         self.assertEqual(authorized["clusters"][0]["nodes"][0]["outcome"], "skipped")
         self.assertEqual(authorized["clusters"][0]["nodes"][0]["absenceClass"], "connection-lost")
         self.assertEqual(refused["clusters"][0]["nodes"][0]["outcome"], "incomplete")
+        self.assertNotEqual(authorized["clusters"][0]["nodes"][0]["outcome"], "completed")
 
     def test_initial_unreachable_node_is_not_skipped_without_authorization(self):
         got = _MODULE.bootwright_storage_destroy_attestation(

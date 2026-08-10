@@ -2066,6 +2066,9 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 	if len(plays) != 1 {
 		t.Fatalf("storage destroy plays = %d, want 1", len(plays))
 	}
+	if got := plays[0]["strategy"]; got != "linear" {
+		t.Fatalf("storage destroy play strategy = %v, want linear so cross-host settle, attestation, and evidence-release barriers cannot be bypassed by ANSIBLE_STRATEGY", got)
+	}
 	if got := plays[0]["any_errors_fatal"]; got != true {
 		t.Fatalf("storage destroy play must run any_errors_fatal so a seed ownership refusal aborts before any node wipes devices, got %v", got)
 	}
@@ -2583,9 +2586,16 @@ func TestStorageCephadmDestroyAuditsNodesLostMidTeardown(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
 	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
 	roleIdx := findAnsibleTask(t, tasks, "Destroy Ceph storage cluster")
+	completionIdx := findAnsibleTask(t, tasks, "Classify this storage node terminal completion proof")
 	auditIdx := findAnsibleTask(t, tasks, "Record the terminal storage destroy attestation")
-	if auditIdx < roleIdx {
-		t.Fatalf("the mid-teardown audit must run after the destroy role, or the completion witness it reads has not run yet (role=%d audit=%d)", roleIdx, auditIdx)
+	if !(roleIdx < completionIdx && completionIdx < auditIdx) {
+		t.Fatalf("the per-node terminal predicate and whole-play audit must run after the destroy role, or the completion witness they read has not run yet (role=%d completion=%d audit=%d)", roleIdx, completionIdx, auditIdx)
+	}
+	completion := fmt.Sprint(tasks[completionIdx])
+	for _, want := range []string{"bootwright_storage_destroy_attestation", "outcome", "completed", "bootwright_storage_node_terminal_completed"} {
+		if !strings.Contains(completion, want) {
+			t.Errorf("the host-evidence release predicate must derive from the same terminal attestation classifier and retain %q, got %v", want, tasks[completionIdx])
+		}
 	}
 	audit := fmt.Sprint(tasks[auditIdx])
 	for _, want := range []string{
@@ -2666,6 +2676,9 @@ func TestStorageCephadmDestroyReleasesHostEvidenceAfterLocalData(t *testing.T) {
 	releaseIdx := findAnsibleTask(t, playTasks, "Release host ownership evidence after recording the terminal attestation")
 	if attestationIdx >= releaseIdx {
 		t.Fatalf("the exact terminal artifact must be written before host evidence is released (attestation=%d release=%d)", attestationIdx, releaseIdx)
+	}
+	if got := fmt.Sprint(playTasks[releaseIdx]["when"]); !strings.Contains(got, "bootwright_storage_node_terminal_completed") {
+		t.Fatalf("host evidence release must require this node's completed terminal proof so a transiently unreachable completion witness cannot lose retry evidence, got when=%v", playTasks[releaseIdx]["when"])
 	}
 }
 

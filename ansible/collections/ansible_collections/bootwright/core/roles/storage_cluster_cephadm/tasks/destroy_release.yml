@@ -9,5 +9,4 @@
   ansible.builtin.command:
     argv:
       - "true"
-  register: bootwright_ceph_destroy_release_completion
   changed_when: false

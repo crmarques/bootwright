@@ -1,6 +1,7 @@
 ---
 - name: Destroy managed Ceph storage
   hosts: bootwright_storage_hosts
+  strategy: linear
   gather_facts: false
   become: true
   ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
@@ -235,26 +236,33 @@
           only for hosts the run proves absent; it skips those hosts but cannot replace ownership
           proof. There is no record-only destructive escape.
 
-    - name: Flag storage clusters left partial by unreachable nodes
-      ansible.builtin.set_fact:
-        bootwright_storage_cluster_partial: >-
-          {{
-            ansible_play_hosts_all
-            | map('extract', hostvars)
-            | selectattr('bootwright_storage_cluster_name', 'defined')
-            | selectattr('bootwright_storage_cluster_name', 'equalto', bootwright_storage_cluster_name)
-            | selectattr('bootwright_storage_reachable_probe', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable', 'defined')
-            | selectattr('bootwright_storage_reachable_probe.unreachable')
-            | list | length > 0
-          }}
-      changed_when: false
-      when: bootwright_destroy_skip_unreachable | default(false) | bool
-
     - name: Destroy Ceph storage cluster
       ansible.builtin.include_role:
         name: bootwright.core.storage_cluster_cephadm
         tasks_from: destroy.yml
+
+    - name: Classify this storage node terminal completion proof
+      vars:
+        bootwright_storage_node_terminal_attestation: >-
+          {{
+            [hostvars[inventory_hostname]]
+            | bootwright.core.bootwright_storage_destroy_attestation(
+                true,
+                bootwright_destroy_skip_unreachable | default(false) | bool)
+          }}
+        bootwright_storage_node_terminal_nodes: >-
+          {{
+            bootwright_storage_node_terminal_attestation.clusters
+            | map(attribute='nodes') | flatten | list
+          }}
+      ansible.builtin.set_fact:
+        bootwright_storage_node_terminal_completed: >-
+          {{
+            (bootwright_storage_node_terminal_nodes | length == 1)
+            and (bootwright_storage_node_terminal_nodes
+                 | selectattr('outcome', 'equalto', 'completed') | list | length == 1)
+          }}
+      changed_when: false
 
     - name: Record the terminal storage destroy attestation
       vars:
@@ -328,4 +336,4 @@
         tasks_from: destroy_release.yml
         apply:
           ignore_unreachable: false
-      ignore_unreachable: false
+      when: bootwright_storage_node_terminal_completed | default(false) | bool
