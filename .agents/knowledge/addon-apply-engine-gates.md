@@ -18,6 +18,16 @@ even after someone deletes the add-on's resources with `oc`. `Apply` therefore
 falls through and re-applies every run for checkless add-ons (`oc apply` is
 idempotent). Pinned by `TestApplyReAppliesChecklessAddonDespiteReadyRecord`.
 
+**Omission is not uninstall intent:** a missing binding, add-on/profile
+reference, or optional input schedules no add-on task and never causes an
+`oc delete`. The local record proves what a prior apply attempted; it cannot
+prove exclusive ownership of shared OLM or step resources. Remove exact live
+resources out of band while the declaration still identifies them, verify the
+removal, and only then edit desired state. Any future in-product removal path
+must be a separately targeted state-changing operation and enter the
+apply/destroy safety matrix; it cannot be inferred by diffing record contents
+against an omission.
+
 **Short-circuit blockers:** Three things disable the already-ready pre-check:
 
 - zero readiness checks (above);

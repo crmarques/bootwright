@@ -58,6 +58,18 @@ polling primitive owns cancellation precedence, periodic compact progress, and
 the separately capped read-only diagnosis pass, so adding another gate cannot
 silently add another full timeout.
 
+**Removal is never inferred from omission.** Removing a binding, a selected
+add-on/profile reference, or an optional input can make previously applied
+objects disappear from the compiled task graph, but it does not authorize an
+OLM uninstall or `oc delete`. Bootwright intentionally has no add-on prune path:
+its local record is convergence evidence, not sufficient ownership proof for
+shared namespaces, OperatorGroups, CatalogSources, input effects, or arbitrary
+step resources. The operator removes the exact live resources out of band while
+the declaration still identifies them, verifies that removal, and only then
+edits desired state. A future in-product uninstaller must be an explicit
+state-changing operation with a target, preview, authorization classification,
+and safety-matrix coverage; it may not turn absence into consent.
+
 That CSV gate establishes only the CRDs the subscribed operator itself owns. A
 meta-operator whose CSV succeeds and *then* creates Subscriptions for the
 operators that own the interesting kinds — Data Foundation's `odf-operator`

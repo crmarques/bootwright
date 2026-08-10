@@ -561,6 +561,15 @@ authored YAML cannot override.
 A binding must include at least one `profileRefs` or `addonRefs` entry. Use
 separate bindings for separate clusters.
 
+!!! warning "Remove live add-on resources before deleting the binding"
+    Deleting a binding, add-on/profile reference, or optional input does not
+    uninstall anything. `apply` deliberately has no prune mode, and its local
+    add-on record cannot prove exclusive ownership of shared namespaces,
+    OperatorGroups, CatalogSources, input effects, or arbitrary step resources.
+    Follow the explicit OLM/`oc` procedure in
+    [Operations and recovery](../advanced/operations.md#removing-declared-objects),
+    verify the exact live resources are gone, and only then edit desired state.
+
 !!! note "Input values are scalar"
     Each `addonConfigs[].inputs[].name` must match an `accepts.inputs[].name`
     on the referenced add-on, or the binding is rejected. The supplied `value`

@@ -531,12 +531,34 @@ What a deletion means depends on the kind:
 | --- | --- | --- |
 | A whole `ContainerCluster` / `StorageCluster`, `Machine`, `InfraProvider`, or `InfraComponent` | The live resource keeps running; `diff` and `destroy --dry-run` list it under **"Owned but no longer declared"**. | `destroy --clusters <name>` (or a full `destroy`) *before* deleting the file. Destroy is ownership-record driven for the kinds whose control plane it can reach from the provider or infra host it already contacts — `libvirt-domain`, `libvirt-network`, `managed-os-install`, `bmc-emulator`, `infra-component` — and those it reclaims even after the declaration is gone. For `kubevirt-machine`, `vsphere-machine`, `vsphere-vmedia`, `controller-name-resolver`, and `storage-cluster` it cannot: re-declare the object under its original names first. |
 | A `ContainerCluster.spec.nodes[]` entry (node scale-in) | The next apply classifies the installed cluster as drift and fails closed; `--mode rebuild` reinstalls the whole cluster rather than removing one node. | Not a day-2 operation today: remove the node out of band with `oc`, and expect the cluster to report drift. |
-| A `ClusterAddonBinding` or one bound add-on | The live operator/manifests keep running and are **not** orphan-tracked (add-ons carry no ownership record). | Uninstall out of band with OLM/`oc`, then delete the binding. |
-| A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the `ceph`/`cephadm` CLI. |
+| A `ClusterAddonBinding`, one bound add-on, or an input that materialized resources | The live operator, manifests, effects, and step resources keep running and are **not** orphan-listed. The local add-on record is convergence evidence, not exclusive ownership proof. | While the declaration still identifies the target, remove the exact resources out of band with OLM/`oc` as described below; verify removal, then delete the declaration. |
+| A `spec.ceph.config` key or `mgrModules[]` entry | Additive-only: the live value remains configured and is not orphan-listed. | Run `cephadm shell -- ceph config rm <who> <option>` or `cephadm shell -- ceph mgr module disable <module>`; verify success, then delete the declaration. |
+| A `StoragePool` / `StorageFilesystem` / `StorageObjectGateway` / `StorageNFSExport` / `services[]` entry | Additive-only: the live Ceph object keeps running and is not orphan-listed (below object granularity). | Remove it on the cluster with the object-specific `ceph`/`cephadm` drain/removal command, verify success, then delete the declaration. |
 | A `topology.osdDrivegroups[]` / `devices[]` device path that still hosts an OSD | `apply` **fails closed** — cephadm never auto-removes an OSD, so dropping the device would orphan a running one (see the OSD-growth tip above). | Drain it first — `cephadm shell -- ceph orch osd rm <id>` — then remove the path. |
 
 Removal always crosses the destroy authorization boundary or goes out of band;
 `apply` alone never prunes.
+
+First delete every declared custom resource, manifest-set object, and
+step-applied object by its exact kind/name/namespace, in the product's supported
+uninstall order, and wait for its finalizers to finish. Then, for an OLM add-on,
+inspect the declared namespace and Subscription while the binding still exists.
+Record the installed CSV, delete the Subscription, then delete that exact CSV:
+
+```text
+oc --kubeconfig <cluster-kubeconfig> --namespace <namespace> get subscription.operators.coreos.com/<subscription> --output jsonpath='{.status.installedCSV}{"\n"}'
+oc --kubeconfig <cluster-kubeconfig> --namespace <namespace> delete subscription.operators.coreos.com/<subscription>
+oc --kubeconfig <cluster-kubeconfig> --namespace <namespace> delete clusterserviceversion.operators.coreos.com/<installed-csv>
+```
+
+Delete an add-on CatalogSource by its exact declared name only when no other
+Subscription uses it. Treat the Namespace, OperatorGroup, and any other shared
+object the same way: prove it is exclusive before deleting it. A
+`globalPullSecretMerge` effect is also additive; remove only the exact registry
+auth entry through the cluster's supported pull-secret workflow, never the
+whole shared pull secret, and only after proving no workload still needs it. If
+any removal fails, keep the binding so the next operator can still derive the
+intended target; omission is not a retry mechanism.
 
 ## Managed-OS reinstall and owned-Ceph rebuild
 

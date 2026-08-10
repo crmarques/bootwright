@@ -47,6 +47,15 @@ new profile.
 `always:` block even when the `pool rm` failed, so a half-finished rebuild
 never leaves the cluster permissive; the failure surfaces via the assert.
 
+**Constraint:** omission never renders a removal operation. For one config key
+or mgr module, the supported sequence is the native command first
+(`cephadm shell -- ceph config rm <who> <option>` or
+`cephadm shell -- ceph mgr module disable <module>`), successful live
+verification, then deletion from desired state. A future renderer must not
+derive `rm` or `disable` from an absent entry; an in-product remover needs an
+explicit target and the same authorization/preview/matrix treatment as every
+other state-changing operation.
+
 **Constraint:** An erasure-coded pool's create must say `erasure <profile>` —
 without it Ceph **silently creates a replicated pool**. The profile must exist
 before the create. `size`/`min_size` derive from k+m on EC pools and the CRUSH

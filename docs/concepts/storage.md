@@ -35,6 +35,17 @@ field-table convention every table below follows.
     still-declared pools whose structural identity changed. See
     [Operations and recovery](../advanced/operations.md) for removal patterns.
 
+    For one config key or mgr module, remove the live value first and only then
+    edit YAML:
+
+    ```text
+    cephadm shell -- ceph config rm <who> <option>
+    cephadm shell -- ceph mgr module disable <module>
+    ```
+
+    Keep the declaration when either command fails. Bootwright has no granular
+    `destroy` target for these values, and omission never proves removal.
+
 A minimal managed cluster and its OSS distribution. A managed cluster always
 owns an orchestration account, so `cephadm.clusterSSH.keyRef` and the
 `sshKeyPair` `Secret` it names are part of the minimum — see

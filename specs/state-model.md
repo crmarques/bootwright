@@ -1267,6 +1267,14 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   identity changed, never prunes. This is the Ceph instance of the product-wide
   additive-apply rule in the [CLI Contract](#cli-contract): removal crosses the
   `destroy` authorization boundary or is performed out of band.
+- Removing one declared Ceph configuration key or mgr module remains an
+  explicit native-cluster operation, not a desired-state omission and not a
+  granular `destroy` scope. The operator removes the live value first with
+  `cephadm shell -- ceph config rm <who> <option>` or
+  `cephadm shell -- ceph mgr module disable <module>`, proves that command
+  succeeded, and only then deletes the declaration. A failed native removal
+  leaves the declaration in desired state so the next `apply` continues to
+  converge it rather than implying it was removed.
 - Every selected node in a managed Ceph cluster must pass a live package-mode
   daemon residue gate during storage preflight and again immediately before
   apply's first storage mutation. The package-fact probe fails closed when it
@@ -2156,6 +2164,13 @@ Rules:
   supplied.
 - Input values for `resourceRef` inputs must name a loaded object of that kind;
   values for `secretRef` inputs must resolve to a declared `Secret`.
+- Removing a binding, an add-on/profile reference, or an optional input that
+  previously materialized a resource is not uninstall intent. `apply` does not
+  prune the operator, manifests, input effects, or step resources that cease to
+  be selected. The operator must identify and remove those exact live resources
+  out of band before deleting the declaration. Shared namespaces,
+  OperatorGroups, CatalogSources, and input effects may be removed only after
+  proving no other add-on or workload consumes them.
 
 ## Native add-on catalog store
 

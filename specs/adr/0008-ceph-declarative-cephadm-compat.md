@@ -81,6 +81,16 @@ Destructive operations are gated, never implicit:
 - The `--mode rebuild` rebuild path is deliberately NOT generated into the
   native-CLI bundle; it is Bootwright-only.
 
+Removal of an individual configuration key or mgr module stays on the native
+operator surface. The operator first runs
+`cephadm shell -- ceph config rm <who> <option>` or
+`cephadm shell -- ceph mgr module disable <module>`, verifies the live removal,
+and then deletes the declaration. Desired-state omission is not consent, and a
+granular key/module remover does not belong inside whole-object `destroy`.
+Adding such a Bootwright operation in the future requires its own explicit
+target, preview, authorization classification, and apply/destroy safety-matrix
+case; it cannot be inferred from an absent map or list entry.
+
 ## Consequences
 
 - Operators and vendor docs translate directly: every rendered object is the

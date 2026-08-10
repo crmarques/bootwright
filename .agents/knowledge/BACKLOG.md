@@ -112,26 +112,6 @@ learned; this file records what it still owes.
   preflight WARN.
 - Related: ADR 0017; internal/preflight/name_resolution.go
 
-## B-019 — No teardown path for a removed ClusterAddon binding
-- Status: open
-- Area: addons / lifecycle
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: removing a `ClusterAddonBinding` entry (or the whole binding) from
-  desired state is a silent no-op on `apply` — the add-on's OLM install
-  (CatalogSource/Namespace/OperatorGroup/Subscription/CSV), any
-  `customResources`, and step-applied manifests (e.g. the Data Foundation
-  `rook-ceph-external-cluster-details` Secret, `ocs-external-storagecluster`
-  StorageCluster CR) all remain live and Bootwright-unmanaged.
-  `internal/addons/oc/execute.go` has no delete verb at all, and
-  `Record.ObservedResources` is written but never read back to compute a diff
-  against the current desired set.
-- Exit: implement (or consciously decline) an uninstall/reconcile path that
-  tears down previously-applied add-on resources when a binding or
-  addonConfig entry is removed, mirroring how a `ContainerCluster` destroy
-  already retires add-on state as a side effect of removing the whole cluster.
-- Related: internal/addons/oc/execute.go, internal/addons/records/records.go,
-  internal/converge/workflow/apply_plan.go
-
 ## B-024 — fusion-data-foundation has no end-to-end example or test coverage
 - Status: open
 - Area: addons / examples / tests
@@ -291,22 +271,6 @@ learned; this file records what it still owes.
 - Exit: give each remaining value an enforcement site, or retire it — removal
   from `v1alpha1` is an API break and needs its own ADR.
 - Related: [api-normalize-bookkeeping.md](api-normalize-bookkeeping.md)
-
-## B-044 — No removal path for `spec.ceph.config` entries and `mgrModules[]`
-- Status: open
-- Area: ceph / apply-modes
-- Origin: definitions review 2026-07-28 (hedge removed from specs/state-model.md)
-- Severity: low
-- Problem: storage convergence is additive-only across `spec.ceph.config` and
-  `mgrModules[]` (`specs/state-model.md`): deleting an entry from desired state
-  leaves it set on the cluster and no apply removes it. That is an instance of
-  the product-wide "deleting YAML never deletes live state" invariant, but unlike
-  a machine or a cluster there is no `destroy` scope that retires an individual
-  config key or mgr module either, so the only removal is out of band.
-- Exit: decide whether a scoped removal belongs to `destroy` at all (it crosses
-  the destroy-authorization boundary ADR 0007 owns) or stays out of band, and
-  record the answer where the additive-only rule is stated.
-- Related: [ceph-override-structural-rebuild.md](ceph-override-structural-rebuild.md)
 
 ## B-045 — `access.rootLogin: revoke` is Ceph-only because no other executor exists
 - Status: open
