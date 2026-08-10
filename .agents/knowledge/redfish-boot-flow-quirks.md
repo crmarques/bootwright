@@ -70,6 +70,18 @@ and none was selected; pin the system by appending `/redfish/v1/Systems/<id>`
 to the machine's BMC address (the renderer strips the suffix into the rendered
 `boot.redfish.systemId`). First member remains the conventional default.
 
+**Physical live-ISO readiness is later than `PowerState=On`:** the BMC power
+proof completes before firmware POST, virtual-media reads, static network
+activation, and sshd. Redfish therefore allows 1800 seconds for TCP/22, matching
+the vSphere and KubeVirt live-ISO paths; its original 600-second default was too
+short for production physical POST. Per-node Ansible hosts wait concurrently,
+so the larger budget raises the slowest-node ceiling rather than multiplying by
+the machine count. This TCP gate runs before any key check or SSH authentication.
+If it expires, inspect the server console, virtual media and boot order, then the
+declared MAC/IP mapping. Do not bypass the readiness gate or move the subsequent
+disk boot override ahead of it: positive live-ISO proof prevents firmware from
+returning to an old disk boot during POST.
+
 **Emulated BMC service provisioning (provider_service_bmc_emulated):**
 
 - sushy-tools is installed with the pip module and an explicit `version:`; a

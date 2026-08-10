@@ -353,6 +353,64 @@ func TestSupportSSHReadinessAuthProbeUsesCallerDuringInternalSudo(t *testing.T) 
 	}
 }
 
+func TestRedfishSSHReadinessUsesPhysicalBootBudget(t *testing.T) {
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/defaults/main.yml")
+	if !strings.Contains(defaults, "\nbootwright_node_ready_timeout_seconds: 1800\n") {
+		t.Fatalf("Redfish live ISO SSH readiness must allow 1800 seconds for physical POST and virtual-media reads")
+	}
+
+	postTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
+	includeIdx := findAnsibleTask(t, postTasks, "Wait for node SSH readiness")
+	includeVars, ok := postTasks[includeIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("Redfish SSH readiness include has no vars: %v", postTasks[includeIdx])
+	}
+	if got := includeVars["bootwright_ssh_ready_port_timeout_seconds"]; got != "{{ bootwright_node_ready_timeout_seconds }}" {
+		t.Fatalf("Redfish SSH readiness timeout = %v, want bootwright_node_ready_timeout_seconds", got)
+	}
+
+	probeTasks := supportSSHReadinessProbeTasks(t)
+	waitIdx := findAnsibleTask(t, probeTasks, "Wait for node SSH to confirm live ISO boot complete")
+	confirmIdx := findAnsibleTask(t, probeTasks, "Confirm node SSH became reachable after live ISO boot")
+	keyCheckIdx := findAnsibleTask(t, probeTasks, "Check node SSH auth probe key")
+	if !(waitIdx < confirmIdx && confirmIdx < keyCheckIdx) {
+		t.Fatalf("SSH readiness must confirm TCP reachability before checking the auth key")
+	}
+
+	wait, ok := probeTasks[waitIdx]["ansible.builtin.wait_for"].(map[string]any)
+	if !ok {
+		t.Fatalf("SSH readiness port task is not wait_for: %v", probeTasks[waitIdx])
+	}
+	if got := wait["timeout"]; got != "{{ bootwright_ssh_ready_port_timeout_seconds | int }}" {
+		t.Fatalf("SSH readiness wait timeout = %v, want bootwright_ssh_ready_port_timeout_seconds", got)
+	}
+	if got := probeTasks[waitIdx]["register"]; got != "bootwright_ssh_ready_port_wait" {
+		t.Fatalf("SSH readiness wait register = %v, want bootwright_ssh_ready_port_wait", got)
+	}
+	if got := probeTasks[waitIdx]["failed_when"]; got != false {
+		t.Fatalf("SSH readiness wait must defer failure to the explicit diagnostic, got failed_when=%v", got)
+	}
+
+	confirm, ok := probeTasks[confirmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("SSH readiness confirmation is not assert: %v", probeTasks[confirmIdx])
+	}
+	if !stringListContains(confirm["that"], "(bootwright_ssh_ready_port_wait.msg | default('') | length) == 0") {
+		t.Fatalf("SSH readiness confirmation must distinguish a successful wait by the absence of a module error: %v", confirm["that"])
+	}
+	failMsg := fmt.Sprint(confirm["fail_msg"])
+	for _, want := range []string{
+		"bootwright_ssh_ready_node_name",
+		"bootwright_ssh_ready_address",
+		"bootwright_ssh_ready_port_timeout_seconds",
+		"bootwright_ssh_ready_reject_hint",
+	} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("SSH readiness timeout diagnostic missing %q: %s", want, failMsg)
+		}
+	}
+}
+
 func supportSSHReadinessProbeTasks(t *testing.T) []map[string]any {
 	t.Helper()
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/support_ssh_readiness/tasks/main.yml")

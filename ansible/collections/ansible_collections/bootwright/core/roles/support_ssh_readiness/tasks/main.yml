@@ -49,6 +49,22 @@
         host: "{{ bootwright_ssh_ready_address }}"
         port: "{{ bootwright_ssh_ready_port_effective | int }}"
         timeout: "{{ bootwright_ssh_ready_port_timeout_seconds | int }}"
+      register: bootwright_ssh_ready_port_wait
+      changed_when: false
+      failed_when: false
+      when: (bootwright_ssh_ready_address | length) > 0
+
+    - name: Confirm node SSH became reachable after live ISO boot
+      ansible.builtin.assert:
+        that:
+          - (bootwright_ssh_ready_port_wait.msg | default('') | length) == 0
+        fail_msg: >-
+          Node {{ bootwright_ssh_ready_node_name }} at {{ bootwright_ssh_ready_address }}
+          did not answer TCP/{{ bootwright_ssh_ready_port_effective | int }} within
+          {{ bootwright_ssh_ready_port_timeout_seconds | int }} seconds while waiting
+          for the live ISO boot to complete.
+          {{ bootwright_ssh_ready_port_wait.msg | default('The live ISO did not become reachable.') }}
+          {{ bootwright_ssh_ready_reject_hint }}
       when: (bootwright_ssh_ready_address | length) > 0
 
     - name: Check node SSH auth probe key

@@ -15,10 +15,11 @@
     bootwright_ssh_ready_auth_retries: "{{ bootwright_node_ready_ssh_auth_retries }}"
     bootwright_ssh_ready_auth_delay_seconds: "{{ bootwright_node_ready_ssh_auth_delay_seconds }}"
     bootwright_ssh_ready_reject_hint: >-
-      This usually means the IP is an old or wrong boot, the BMC booted disk
-      instead of the generated agent ISO, or the declared MAC/IP mapping points
-      at another host. Check Redfish virtual media, boot order, and
-      InfraProvider baremetal.interfaces for {{ bootwright_component.name }}.
+      This usually means physical POST or virtual-media reads are still in
+      progress, the BMC did not boot the generated agent ISO, or the declared
+      MAC/IP mapping points at another host. Check the server console, Redfish
+      virtual media and boot order, and InfraProvider baremetal.interfaces for
+      {{ bootwright_component.name }}.
 
 - name: Resolve subsequent disk boot override need
   ansible.builtin.set_fact:
