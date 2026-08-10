@@ -23,6 +23,21 @@ agent-ISO DataVolume during boot, and `none` is a no-op. Adding a
 media-bearing boot backend means adding a registry entry, never a new branch
 in this play.
 
+**Constraint (cluster nodes always receive an installer-provided OS):** Every
+Machine referenced by `ContainerCluster.spec.nodes` must set
+`spec.os.provided: false`; the agent installer writes RHCOS to that node. The
+desired-state validator rejects a provided-OS binding before planning, and the
+shared `boot_machine.yml` action independently asserts `osManaged: true` and
+`osProvided: false` before dispatching any provider boot role. Both projected
+values fail closed when absent, so a renderer regression or a future boot
+driver cannot turn an incomplete component into permission to overwrite an
+operator-provided OS. A powered-off check is not a substitute because a
+provided-OS machine can be safely powered off while its disk remains foreign
+to the installer. The closure is pinned by
+`TestValidateNodesRejectsProvidedOSMachines`,
+`TestContainerClusterRejectsProvidedOSNode`, and
+`TestInstallAgentRefusesProvidedOSNodeBeforeBootDriverDispatch`.
+
 **Constraint (FIPS clusters need the FIPS installer binary):** The stock
 `openshift-install` refuses to build a FIPS cluster's agent ISO with
 `use the FIPS-capable installer binary for RHEL 9`. The agent-install role

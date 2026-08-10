@@ -253,8 +253,13 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok {
 			errs = append(errs, fmt.Sprintf("%s.machineRef %q does not match any Machine", prefix, node.MachineRef.Name))
-		} else if !machineHasCapability(machine, v1alpha1.MachineCapabilityOpenShiftNode) {
-			errs = append(errs, fmt.Sprintf("%s.machineRef %q lacks capability %q", prefix, node.MachineRef.Name, v1alpha1.MachineCapabilityOpenShiftNode))
+		} else {
+			if !machineHasCapability(machine, v1alpha1.MachineCapabilityOpenShiftNode) {
+				errs = append(errs, fmt.Sprintf("%s.machineRef %q lacks capability %q", prefix, node.MachineRef.Name, v1alpha1.MachineCapabilityOpenShiftNode))
+			}
+			if v1alpha1.MachineOSProvided(machine) {
+				errs = append(errs, fmt.Sprintf("%s.machineRef %q references Machine/%s spec.os.provided=true; booting the OpenShift agent installer would overwrite that operator-provided OS, so set Machine/%s spec.os.provided=false or remove this node binding", prefix, node.MachineRef.Name, machine.Metadata.Name, machine.Metadata.Name))
+			}
 		}
 	}
 	if master == 0 {

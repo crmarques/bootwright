@@ -9,7 +9,10 @@ import (
 func ocpNodeMachine(name string) v1alpha1.Machine {
 	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: name},
-		Spec:     v1alpha1.MachineSpec{Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode}},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode},
+			OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
+		},
 	}
 }
 
@@ -40,6 +43,30 @@ func TestValidateNodesRejectsUnknownRole(t *testing.T) {
 	ocp.Spec.Nodes[2].Role = "edge"
 	if errs := validateNodes(ocp, machines); !containsSubstring(errs, "must be master, worker, or infra") {
 		t.Fatalf("expected role error, got: %v", errs)
+	}
+}
+
+func TestValidateNodesRejectsProvidedOSMachines(t *testing.T) {
+	cases := []struct {
+		index   int
+		machine string
+		want    string
+	}{
+		{index: 0, machine: "m1", want: `ContainerCluster/hub spec.nodes[0].machineRef "m1" references Machine/m1 spec.os.provided=true; booting the OpenShift agent installer would overwrite that operator-provided OS, so set Machine/m1 spec.os.provided=false or remove this node binding`},
+		{index: 1, machine: "w1", want: `ContainerCluster/hub spec.nodes[1].machineRef "w1" references Machine/w1 spec.os.provided=true; booting the OpenShift agent installer would overwrite that operator-provided OS, so set Machine/w1 spec.os.provided=false or remove this node binding`},
+		{index: 2, machine: "i1", want: `ContainerCluster/hub spec.nodes[2].machineRef "i1" references Machine/i1 spec.os.provided=true; booting the OpenShift agent installer would overwrite that operator-provided OS, so set Machine/i1 spec.os.provided=false or remove this node binding`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.machine, func(t *testing.T) {
+			ocp, machines := infraValidationCluster()
+			machine := machines[tc.machine]
+			machine.Spec.OS.Provided = v1alpha1.BoolPtr(true)
+			machines[tc.machine] = machine
+			errs := validateNodes(ocp, machines)
+			if len(errs) != 1 || errs[0] != tc.want {
+				t.Fatalf("validateNodes error = %v, want [%s]", errs, tc.want)
+			}
+		})
 	}
 }
 

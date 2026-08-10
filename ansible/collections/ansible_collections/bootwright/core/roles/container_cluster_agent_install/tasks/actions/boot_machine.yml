@@ -47,6 +47,21 @@
         bootwright_selected_component: "{{ bootwright_boot_components | first }}"
       changed_when: false
 
+    - name: Refuse installer boot for a provided-OS ContainerCluster node
+      ansible.builtin.assert:
+        that:
+          - bootwright_selected_component.osManaged | default(false) | bool
+          - not (bootwright_selected_component.osProvided | default(true) | bool)
+        fail_msg: >-
+          ContainerCluster/{{ bootwright_current_cluster.name }} spec.nodes references
+          Machine/{{ bootwright_selected_component.name }} with spec.os.provided=true.
+          The OpenShift agent installer writes RHCOS to the node disk; refusing
+          before provider boot dispatch so Bootwright cannot overwrite an
+          operator-provided OS. Set Machine/{{ bootwright_selected_component.name }}
+          spec.os.provided=false or remove that Machine from
+          ContainerCluster/{{ bootwright_current_cluster.name }} spec.nodes,
+          validate desired state, then re-run `{{ bootwright_mutating_invocation }}`.
+
     - name: Resolve selected machine agent ISO target
       ansible.builtin.set_fact:
         bootwright_selected_component: >-

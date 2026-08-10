@@ -604,6 +604,21 @@ func TestDefaultedNodeSSHKeyPairRefErrorSaysDefaulted(t *testing.T) {
 	}
 }
 
+func TestContainerClusterRejectsProvidedOSNode(t *testing.T) {
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    provided: false", "    provided: true", 1)
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected provided-OS node error")
+	}
+	want := `ContainerCluster/sno spec.nodes[0].machineRef "srv1" references Machine/srv1 spec.os.provided=true; booting the OpenShift agent installer would overwrite that operator-provided OS, so set Machine/srv1 spec.os.provided=false or remove this node binding`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
 func TestSchemaRefactorValidation(t *testing.T) {
 	cases := []struct {
 		name          string

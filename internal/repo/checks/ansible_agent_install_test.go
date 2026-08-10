@@ -282,6 +282,49 @@ func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
 	}
 }
 
+func TestInstallAgentRefusesProvidedOSNodeBeforeBootDriverDispatch(t *testing.T) {
+	top := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/boot_machine.yml")
+	tasks := nestedAnsibleTasks(t, top[findAnsibleTask(t, top, "Boot selected machine when install is not already complete")], "block")
+	selected := findAnsibleTask(t, tasks, "Set selected machine component")
+	refuse := findAnsibleTask(t, tasks, "Refuse installer boot for a provided-OS ContainerCluster node")
+	dispatch := findAnsibleTask(t, tasks, "Boot selected machine via its substrate-specific driver")
+	if !(selected < refuse && refuse < dispatch) {
+		t.Fatalf("provided-OS refusal must run after component resolution and before every boot driver, got selected=%d refuse=%d dispatch=%d", selected, refuse, dispatch)
+	}
+	if _, ok := tasks[refuse]["when"]; ok {
+		t.Fatalf("provided-OS refusal must have no provider or mode escape, got when=%v", tasks[refuse]["when"])
+	}
+	assertBody, ok := tasks[refuse]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("provided-OS refusal must be an ansible.builtin.assert, got %v", tasks[refuse])
+	}
+	for _, want := range []string{
+		"bootwright_selected_component.osManaged | default(false) | bool",
+		"not (bootwright_selected_component.osProvided | default(true) | bool)",
+	} {
+		if !stringListContains(assertBody["that"], want) {
+			t.Fatalf("provided-OS refusal must fail closed on rendered OS mode %q, got %v", want, assertBody["that"])
+		}
+	}
+	message := fmt.Sprint(assertBody["fail_msg"])
+	for _, want := range []string{
+		"ContainerCluster/",
+		"Machine/",
+		"spec.os.provided=true",
+		"spec.os.provided=false",
+		"overwrite",
+		"before provider boot dispatch",
+		"bootwright_mutating_invocation",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("provided-OS refusal message must contain %q, got %q", want, message)
+		}
+	}
+	if strings.Contains(message, "bootwright apply") {
+		t.Fatalf("provided-OS refusal must consume the resolved invocation instead of constructing one, got %q", message)
+	}
+}
+
 func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
 	for _, rel := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/cleanup_target.yml",
