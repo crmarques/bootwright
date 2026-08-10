@@ -32,7 +32,7 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	runner := runnerFactory(stdout, stderr)
 	result, err := Run(ctx, taskOpts, runner, nil)
 	if err != nil {
-		failure := conciseApplyTaskFailure(err.Error())
+		failure := conciseApplyTaskFailure(err)
 		logPath := TaskLogPath(runsDir, runID, task.Entry)
 		return applyTaskResult{
 			id:      task.Entry.ID,

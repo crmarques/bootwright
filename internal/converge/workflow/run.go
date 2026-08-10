@@ -319,7 +319,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 				ledger.Finish(RunStatusOK, finished)
 			} else {
 				ledger.Recovery = failureRunRecoveryPlan(opts, ledger.Recovery, runErr)
-				ledger.MarkFailed(lease.RunID, conciseApplyTaskFailure(runErr.Error()), finished)
+				ledger.MarkFailed(lease.RunID, conciseApplyTaskFailure(runErr), finished)
 				status := RunStatusFailed
 				if ctx.Err() != nil {
 					status = RunStatusCancelled

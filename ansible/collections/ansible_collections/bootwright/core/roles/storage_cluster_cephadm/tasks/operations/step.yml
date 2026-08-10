@@ -5,6 +5,9 @@
     - name: Run the staged batch of rendered Ceph operations
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_operation_batch_timeout_seconds }}"
           - cephadm
           - shell
           - --mount
@@ -14,7 +17,7 @@
           - "/mnt/{{ bootwright_ceph_step.batch }}"
       register: bootwright_ceph_batch_run
       changed_when: true
-      failed_when: false
+      failed_when: bootwright_ceph_batch_run.rc | default(0) | int in [124, 137]
 
     - name: Require every operation in the batch to have applied
       ansible.builtin.assert:

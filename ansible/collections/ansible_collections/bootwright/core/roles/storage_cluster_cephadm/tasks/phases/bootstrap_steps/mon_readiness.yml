@@ -12,8 +12,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -24,11 +24,11 @@
       - json
   register: bootwright_ceph_mon_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_dump.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_mon_readiness_retries | default(60) | int }}"
   delay: "{{ bootwright_ceph_mon_readiness_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_mon_dump.rc | default(0) | int in [124, 137]) or (
       (((bootwright_ceph_mon_dump.rc | default(1) | int) == 0
            or ((bootwright_ceph_mon_dump.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
            or ((bootwright_ceph_mon_dump.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
@@ -68,6 +68,9 @@
 - name: Collect the declared Ceph mon service when mons did not join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -80,7 +83,7 @@
       - yaml
   register: bootwright_ceph_mon_service_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_service_ls.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_declared_mon_daemons | length > 0
     - not (bootwright_ceph_mons_ready | default(false) | bool)
@@ -88,6 +91,9 @@
 - name: Collect Ceph mon daemon placement when mons did not join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -100,7 +106,7 @@
       - yaml
   register: bootwright_ceph_mon_daemon_ps
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_daemon_ps.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_declared_mon_daemons | length > 0
     - not (bootwright_ceph_mons_ready | default(false) | bool)
@@ -108,6 +114,9 @@
 - name: Collect Ceph orchestrator host status when mons did not join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -119,7 +128,7 @@
       - yaml
   register: bootwright_ceph_mon_host_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_host_ls.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_declared_mon_daemons | length > 0
     - not (bootwright_ceph_mons_ready | default(false) | bool)
@@ -127,6 +136,9 @@
 - name: Collect the configured Ceph public network when mons did not join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -137,7 +149,7 @@
       - json
   register: bootwright_ceph_mon_config_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_config_dump.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_declared_mon_daemons | length > 0
     - not (bootwright_ceph_mons_ready | default(false) | bool)
@@ -145,6 +157,9 @@
 - name: Collect recent cephadm events when mons did not join the monmap
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -155,7 +170,7 @@
       - cephadm
   register: bootwright_ceph_mon_cephadm_log
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_cephadm_log.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_declared_mon_daemons | length > 0
     - not (bootwright_ceph_mons_ready | default(false) | bool)

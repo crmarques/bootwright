@@ -2,6 +2,9 @@
 - name: Read the Ceph cluster configuration carrying the daemon container image
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -12,7 +15,7 @@
       - json
   register: bootwright_ceph_image_config_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_image_config_dump.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_bootstrap_image | default('') | length > 0
 
 - name: Resolve the current Ceph daemon container image
@@ -27,6 +30,9 @@
 - name: Pin the Ceph daemon container image
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -45,6 +51,9 @@
 - name: Read current cephadm container image base
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -55,12 +64,15 @@
       - mgr/cephadm/container_image_base
   register: bootwright_ceph_image_base_current
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_image_base_current.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_image_base | default('') | length > 0
 
 - name: Pin cephadm container image base to the distribution registry
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -79,6 +91,9 @@
 - name: Read current cephadm sidecar container images
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -90,13 +105,18 @@
   loop: "{{ bootwright_selected_storage_cluster.ceph.sidecarImagePins | default({}) | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+    break_when:
+      - bootwright_ceph_sidecar_image_current.rc | default(0) | int in [124, 137]
   register: bootwright_ceph_sidecar_image_current
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_sidecar_image_current.rc | default(0) | int in [124, 137]
 
 - name: Pin cephadm sidecar container images before the monitoring stack deploys
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -106,8 +126,11 @@
       - mgr
       - "{{ item.item.key }}"
       - "{{ item.item.value }}"
+  register: bootwright_ceph_sidecar_image_set
   loop: "{{ bootwright_ceph_sidecar_image_current.results | default([]) }}"
   loop_control:
     label: "{{ item.item.key }}"
+    break_when:
+      - bootwright_ceph_sidecar_image_set.rc | default(0) | int in [124, 137]
   changed_when: true
   when: (item.stdout | default('') | trim) != item.item.value

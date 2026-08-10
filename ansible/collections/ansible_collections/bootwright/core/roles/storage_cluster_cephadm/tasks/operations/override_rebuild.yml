@@ -2,6 +2,9 @@
 - name: Inspect existing Ceph pools for structural override rebuild
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -14,7 +17,7 @@
       - json
   register: bootwright_ceph_pool_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_pool_detail.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
     - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
@@ -86,6 +89,9 @@
     - name: Allow Ceph pool deletion for override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -99,6 +105,9 @@
     - name: Destroy structurally drifted Ceph pool for override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_removal_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -111,11 +120,14 @@
           - --yes-i-really-really-mean-it
       register: bootwright_ceph_op_pool_rm
       changed_when: true
-      failed_when: false
+      failed_when: bootwright_ceph_op_pool_rm.rc | default(0) | int in [124, 137]
   always:
     - name: Re-disable Ceph pool deletion after override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -144,6 +156,9 @@
 - name: Inspect existing CephFS for structural override rebuild
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -154,7 +169,7 @@
       - json
   register: bootwright_ceph_fs_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_fs_detail.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
@@ -172,6 +187,9 @@
 - name: Inspect existing CephFS detail for default-data-pool override rebuild
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -183,7 +201,7 @@
       - json
   register: bootwright_ceph_fs_get_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_fs_get_detail.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
@@ -191,6 +209,9 @@
 - name: Inspect Ceph pools for CephFS default-data-pool resolution
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -203,7 +224,7 @@
       - json
   register: bootwright_ceph_fs_pool_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_fs_pool_detail.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_op_idempotency_kind == 'cephfs'
     - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
@@ -285,6 +306,9 @@
     - name: Fail drifted CephFS before override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_removal_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -292,11 +316,15 @@
           - fs
           - fail
           - "{{ bootwright_ceph_op_idempotency_name }}"
+      register: bootwright_ceph_op_fs_fail
       changed_when: true
-      failed_when: false
+      failed_when: bootwright_ceph_op_fs_fail.rc | default(0) | int in [124, 137]
     - name: Destroy structurally drifted CephFS for override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_removal_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -312,6 +340,9 @@
 - name: Inspect existing Ceph erasure-code profile for structural override rebuild
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -324,7 +355,7 @@
       - json
   register: bootwright_ceph_ec_profile_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_ec_profile_detail.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_op_idempotency_kind == 'ec-profile'
     - (bootwright_apply_mode | default('reconcile')) == 'rebuild'
@@ -396,6 +427,9 @@
     - name: Allow Ceph pool deletion for erasure-code profile override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -409,6 +443,9 @@
     - name: Destroy pool using structurally drifted erasure-code profile
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_removal_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -421,11 +458,14 @@
           - --yes-i-really-really-mean-it
       register: bootwright_ceph_op_ec_pool_rm
       changed_when: true
-      failed_when: false
+      failed_when: bootwright_ceph_op_ec_pool_rm.rc | default(0) | int in [124, 137]
   always:
     - name: Re-disable Ceph pool deletion after erasure-code profile override rebuild
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -454,6 +494,9 @@
 - name: Delete structurally drifted erasure-code profile for override rebuild
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_removal_timeout_seconds }}"
       - cephadm
       - shell
       - --

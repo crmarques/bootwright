@@ -31,8 +31,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -43,7 +43,7 @@
       - cephadm
   register: bootwright_ceph_override_orch_disable
   changed_when: bootwright_ceph_override_orch_disable.rc == 0
-  failed_when: false
+  failed_when: bootwright_ceph_override_orch_disable.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - >-

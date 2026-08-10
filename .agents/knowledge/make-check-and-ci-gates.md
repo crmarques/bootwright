@@ -60,6 +60,15 @@ world-predictable path in shared /var/tmp: the shared path breaks multi-user
 hosts (whoever creates it first owns it) and is squattable; the state dir is
 per-checkout and cleaned by `make clean`.
 
+**Short disk-backed `TMPDIR`:** The SSH control-path tests create their
+`XDG_RUNTIME_DIR` below `TMPDIR` and enforce Linux's short AF_UNIX path budget.
+A deeply nested repo cache is disk-backed but makes those tests return an empty
+control path and fail with `stdout missing ANSIBLE_SSH_CONTROL_PATH_DIR`. Use a
+private, real `/var/tmp/bwct-<run>` directory as `TMPDIR`; a symlink to the
+repo-local cache makes managed-root tests fail with `must not contain symlink`.
+Keep `GOTMPDIR`, `GOCACHE`, `GOMODCACHE`, and `STATE_DIR` on their direct
+disk-backed paths.
+
 **CI gates:**
 
 - `checks.yml` runs the full suite on `v*` release tags (not just PRs/main

@@ -21,7 +21,7 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	if result.err == nil {
 		return result
 	}
-	failure := conciseApplyTaskFailure(result.err.Error())
+	failure := conciseApplyTaskFailure(result.err)
 	logPath := TaskLogPath(runsDir, runID, task.Entry)
 	taskErr := &applyTaskFailureError{message: fmt.Sprintf("%s failed: %s (log: %s)", task.Entry.Label, failure, logPath), cause: result.err}
 	if logErr := ensureApplyTaskFailureLog(logPath, failure); logErr != nil {

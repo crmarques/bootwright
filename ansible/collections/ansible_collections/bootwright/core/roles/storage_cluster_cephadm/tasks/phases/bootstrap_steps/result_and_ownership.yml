@@ -3,8 +3,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -14,11 +14,11 @@
       - json
   register: bootwright_ceph_final_health
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_final_health.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_health_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_health_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_final_health.rc | default(0) | int in [124, 137]) or (
       (((bootwright_ceph_final_health.rc | default(1) | int) == 0
            or ((bootwright_ceph_final_health.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
            or ((bootwright_ceph_final_health.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))

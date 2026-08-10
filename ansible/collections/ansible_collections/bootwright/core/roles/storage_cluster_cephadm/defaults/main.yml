@@ -1,0 +1,9 @@
+---
+bootwright_ceph_probe_timeout_seconds: 120
+bootwright_ceph_inventory_probe_timeout_seconds: 300
+bootwright_ceph_config_timeout_seconds: 300
+bootwright_ceph_orchestration_timeout_seconds: 600
+bootwright_ceph_removal_timeout_seconds: 1800
+bootwright_ceph_tool_timeout_seconds: 300
+bootwright_ceph_operation_batch_timeout_seconds: 1800
+bootwright_ceph_timeout_kill_after_seconds: 15

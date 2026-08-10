@@ -30,17 +30,34 @@
            if (bootwright_arbiter_allow_same_site | default(false) | bool) else [])
       }}
   vars:
-    bootwright_ceph_shell_prefix: [cephadm, shell, --]
+    bootwright_ceph_shell_prefix:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
   register: bootwright_arbiter_set_new
   changed_when: bootwright_arbiter_set_new.rc | default(1) | int == 0
-  failed_when: false
+  failed_when: bootwright_arbiter_set_new.rc | default(0) | int in [124, 137]
 
 - name: Read the monmap back after the tiebreaker switch
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - dump
+      - --format
+      - json
   register: bootwright_arbiter_switched_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_switched_dump.rc | default(0) | int in [124, 137]
 
 - name: Assert the replacement arbiter is now the stretch tiebreaker
   vars:

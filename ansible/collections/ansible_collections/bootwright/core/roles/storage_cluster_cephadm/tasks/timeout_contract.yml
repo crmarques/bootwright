@@ -1,0 +1,23 @@
+---
+- name: Require finite Ceph command timeout classes
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_probe_timeout_seconds | int > 0
+      - bootwright_ceph_inventory_probe_timeout_seconds | int > 0
+      - bootwright_ceph_config_timeout_seconds | int > 0
+      - bootwright_ceph_orchestration_timeout_seconds | int > 0
+      - bootwright_ceph_removal_timeout_seconds | int > 0
+      - bootwright_ceph_tool_timeout_seconds | int > 0
+      - bootwright_ceph_operation_batch_timeout_seconds | int > 0
+      - bootwright_ceph_operation_batch_timeout_seconds | int <= 1800
+      - bootwright_ceph_timeout_kill_after_seconds | int > 0
+      - bootwright_ceph_timeout_kill_after_seconds | int <= 60
+    fail_msg: >-
+      The managed Ceph role resolved an invalid command-timeout contract. Every
+      timeout class must be positive, the staged-operation batch must stay at or
+      below its fixed 1800-second safety ceiling, and TERM-to-KILL escalation must
+      stay between 1 and 60 seconds. Restore the built-in role timeout values and
+      retry {{ bootwright_mutating_invocation | default('the same Bootwright invocation') }}.
+      Bootwright refuses before starting a cephadm shell command because a zero
+      timeout or kill escalation can wait forever.
+    quiet: true

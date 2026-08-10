@@ -1,18 +1,39 @@
 ---
 - name: Reconcile cephadm registry login for credential rotation
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - shell
-      - --mount
-      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
-      - --
-      - ceph
-      - cephadm
-      - registry-login
-      - -i
-      - /mnt/registry-login.json
-  register: bootwright_ceph_registry_login
-  changed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  block:
+    - name: Submit the cephadm registry login
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - ceph
+          - cephadm
+          - registry-login
+          - -i
+          - /mnt/registry-login.json
+      register: bootwright_ceph_registry_login
+      changed_when: false
+      failed_when: bootwright_ceph_registry_login.rc | default(0) | int != 0
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  rescue:
+    - name: Relay a registry login timeout without exposing protected output
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/ceph_command_timeout.yml"
+      vars:
+        bootwright_ceph_timeout_task: Submit the cephadm registry login
+        bootwright_ceph_timeout_seconds: "{{ bootwright_ceph_config_timeout_seconds }}"
+        bootwright_ceph_timeout_exit_code: "{{ ansible_failed_result.rc }}"
+        bootwright_ceph_timeout_state_changing: true
+      when: ansible_failed_result.rc | default(0) | int in [124, 137]
+
+    - name: Refuse to continue after the protected registry login failed
+      ansible.builtin.fail:
+        msg: >-
+          The protected cephadm registry login failed with rc
+          {{ ansible_failed_result.rc | default('<none>') }}.
   when: bootwright_ceph_registry_credentials is defined

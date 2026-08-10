@@ -296,8 +296,10 @@ func TestManagedCephCommandsUseCephadmShell(t *testing.T) {
 		t.Fatalf("no argv block was inspected across %d managed Ceph task files: the scanner no longer matches the tasks it guards", len(paths))
 	}
 	execute := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/execute.yml")
-	if !strings.Contains(execute, "['cephadm', 'shell', '--'] + bootwright_ceph_op_command") {
-		t.Fatalf("rendered Ceph operations must run inside cephadm shell")
+	for _, want := range []string{"'timeout'", "bootwright_ceph_timeout_kill_after_seconds", "bootwright_ceph_orchestration_timeout_seconds", "'cephadm', 'shell', '--'", "+ bootwright_ceph_op_command"} {
+		if !strings.Contains(execute, want) {
+			t.Fatalf("rendered Ceph operations must run inside a bounded cephadm shell, missing %q", want)
+		}
 	}
 	for path, mountedPaths := range map[string][]string{
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/step.yml": {
@@ -341,9 +343,10 @@ func TestStorageOperationBatchesNeverReplaceTheOverridePath(t *testing.T) {
 	if got := fmt.Sprint(probe["ansible.builtin.command"]); !strings.Contains(got, "command -v python3") {
 		t.Fatalf("the batch path must preflight the interpreter its guards need, got %v", probe["ansible.builtin.command"])
 	}
-	if probe["failed_when"] != false || probe["changed_when"] != false {
-		t.Fatalf("the interpreter preflight must be a read-only probe, got changed_when=%v failed_when=%v", probe["changed_when"], probe["failed_when"])
+	if probe["changed_when"] != false {
+		t.Fatalf("the interpreter preflight must be a read-only probe, got changed_when=%v", probe["changed_when"])
 	}
+	assertCephProbeTimeoutOnlyFailure(t, probe, "bootwright_ceph_batch_probe", "the interpreter preflight")
 	decide := support[findAnsibleTask(t, support, "Decide whether the rendered Ceph operations run one container per phase")]
 	facts, ok := decide["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -405,9 +408,7 @@ func TestStorageOperationBatchesNeverReplaceTheOverridePath(t *testing.T) {
 	}
 	inner := nestedAnsibleTasks(t, batch, "block")
 	run := inner[findAnsibleTask(t, inner, "Run the staged batch of rendered Ceph operations")]
-	if run["failed_when"] != false {
-		t.Fatalf("the batch must be evaluated by the assertion that names the failing operation, got failed_when=%v", run["failed_when"])
-	}
+	assertCephMutationTimeoutOnlyFailure(t, run, "bootwright_ceph_batch_run", "the rendered operation batch")
 	assertion, ok := inner[findAnsibleTask(t, inner, "Require every operation in the batch to have applied")]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("the batch must fail closed through an assertion")
@@ -762,8 +763,10 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if strings.Count(globalUntil, "bootwright_ceph_osd_expected_count") < 2 {
 		t.Fatalf("global OSD readiness must enforce expectedCount for exact and dynamic selections, got %v", globalUntil)
 	}
-	if strings.Contains(globalUntil, "bootwright_ceph_osd_stat.rc") {
-		t.Fatalf("global OSD readiness must judge the sampled stdout, not the sampler's exit status: a cephadm shell teardown timeout on the final poll must not fail a cluster whose OSDs are all in, got %v", globalUntil)
+	for _, want := range []string{"bootwright_ceph_osd_stat.rc", "124", "137"} {
+		if !strings.Contains(globalUntil, want) {
+			t.Fatalf("global OSD readiness must stop retrying on a finite command timeout so rc 124/137 fails closed before the sampled stdout is trusted, missing %q in %v", want, globalUntil)
+		}
 	}
 	readyFacts, ok := tasks[evaluateIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -815,9 +818,10 @@ func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	if got := fmt.Sprint(perHost["when"]); !strings.Contains(got, "bootwright_ceph_osd_dynamic_hosts") || !strings.Contains(got, "bootwright_ceph_osd_ready") {
 		t.Fatalf("dynamic-host OSD readiness must skip empty host sets and a failed global gate, got when=%v", perHost["when"])
 	}
-	if perHost["changed_when"] != false || perHost["failed_when"] != false {
-		t.Fatalf("dynamic-host OSD readiness must be a read-only retry probe, got changed_when=%v failed_when=%v", perHost["changed_when"], perHost["failed_when"])
+	if perHost["changed_when"] != false {
+		t.Fatalf("dynamic-host OSD readiness must be a read-only retry probe, got changed_when=%v", perHost["changed_when"])
 	}
+	assertCephProbeTimeoutOnlyFailure(t, perHost, "bootwright_ceph_osd_host_tree", "dynamic-host OSD readiness")
 
 	perHostEval, ok := tasks[perHostEvaluateIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -1352,9 +1356,7 @@ func TestStorageCephadmSpecApplyRefusesNonZeroExit(t *testing.T) {
 	tasks := readAnsibleTasks(t, path)
 
 	apply := tasks[findAnsibleTask(t, tasks, "Apply Ceph host, mon, and mgr specs")]
-	if got := fmt.Sprint(apply["failed_when"]); got != "false" {
-		t.Fatalf("the spec apply must defer failure to the assert so its diagnostic is reachable, got failed_when=%v", apply["failed_when"])
-	}
+	assertCephMutationTimeoutOnlyFailure(t, apply, "bootwright_ceph_host_spec_apply", "the bootstrap spec apply")
 
 	body, ok := tasks[findAnsibleTask(t, tasks, "Refuse a bootstrap spec cephadm reported an error for")]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -1398,12 +1400,13 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 func TestStorageCephadmReconcilesRegistryLogin(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 	idx := findAnsibleTask(t, tasks, "Reconcile cephadm registry login for credential rotation")
-	step := tasks[idx]
+	outer := tasks[idx]
+	step := cephCommandTask(t, outer, "registry login")
 	if got := fmt.Sprint(step["ansible.builtin.command"]); !strings.Contains(got, "registry-login") || !strings.Contains(got, "bootwright_ceph_remote_work_dir") || !strings.Contains(got, "/mnt/registry-login.json") {
 		t.Fatalf("registry login must mount its staged JSON into cephadm shell, got %v", step["ansible.builtin.command"])
 	}
-	if got := fmt.Sprint(step["when"]); !strings.Contains(got, "bootwright_ceph_registry_credentials is defined") {
-		t.Fatalf("registry login must be gated on resolved credentials, got when=%v", step["when"])
+	if got := fmt.Sprint(outer["when"]); !strings.Contains(got, "bootwright_ceph_registry_credentials is defined") {
+		t.Fatalf("registry login must be gated on resolved credentials, got when=%v", outer["when"])
 	}
 	assertRedactsByDefault(t, "registry login", step["no_log"])
 	pinIdx := findAnsibleTask(t, tasks, "Pin cephadm container image base to the distribution registry")
@@ -2882,9 +2885,7 @@ func TestStorageCephadmDestroyStopsTheOrchestratorBeforeAnyRemoval(t *testing.T)
 			t.Errorf("the orchestrator stop must be a bounded `cephadm shell -- ceph mgr module disable cephadm`, missing %q in %v", want, tasks[disableIdx]["ansible.builtin.command"])
 		}
 	}
-	if got := fmt.Sprint(tasks[disableIdx]["failed_when"]); got != "false" {
-		t.Errorf("the stop must not fail the run itself; its result is what the refusal reads to name why the module is still enabled, got failed_when=%v", tasks[disableIdx]["failed_when"])
-	}
+	assertCephMutationTimeoutOnlyFailure(t, tasks[disableIdx], "bootwright_ceph_destroy_orch_disable", "the orchestrator stop")
 	for _, idx := range []int{disableIdx, refuseIdx} {
 		when := fmt.Sprint(tasks[idx]["when"])
 		if !strings.Contains(when, "bootwright_ceph_destroy_fsid") {
@@ -3739,13 +3740,16 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 
 	operationTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/execute.yml")
-	run := operationTasks[findAnsibleTask(t, operationTasks, "Run Ceph operation")]
+	run := cephCommandTask(t, operationTasks[findAnsibleTask(t, operationTasks, "Run Ceph operation")], "Run Ceph operation")
 	command, ok := run["ansible.builtin.command"].(map[string]any)
 	if !ok {
 		t.Fatalf("Run Ceph operation has no command body")
 	}
-	if got := command["argv"]; got != "{{ ['cephadm', 'shell', '--'] + bootwright_ceph_op_command }}" {
-		t.Fatalf("Run Ceph operation must consume rendered argv inside cephadm shell, got %v", got)
+	argv := fmt.Sprint(command["argv"])
+	for _, want := range []string{"'timeout'", "bootwright_ceph_timeout_kill_after_seconds", "bootwright_ceph_orchestration_timeout_seconds", "'cephadm', 'shell', '--'", "bootwright_ceph_op_command"} {
+		if !strings.Contains(argv, want) {
+			t.Fatalf("Run Ceph operation must consume rendered argv inside a bounded cephadm shell, missing %q in %v", want, command["argv"])
+		}
 	}
 	if _, ok := run["changed_when"]; !ok {
 		t.Fatalf("Run Ceph operation must declare changed_when")
@@ -3936,8 +3940,9 @@ func TestStorageCephadmAllDevicesReclaimSafetyGates(t *testing.T) {
 	if zapIdx >= refuseZapIdx {
 		t.Fatalf("%s must inspect every zap result before the reclaim block can return to the OSD spec apply (zap=%d refusal=%d)", reclaimPath, zapIdx, refuseZapIdx)
 	}
-	if reclaimTasks[zapIdx]["failed_when"] != false {
-		t.Fatalf("%s must collect every per-device zap result for the actionable failure summary, got failed_when=%v", reclaimPath, reclaimTasks[zapIdx]["failed_when"])
+	assertCephMutationTimeoutOnlyFailure(t, reclaimTasks[zapIdx], "bootwright_ceph_filter_zap", "the per-device zap loop")
+	if got := fmt.Sprint(reclaimTasks[zapIdx]["loop_control"]); !strings.Contains(got, "break_when") || !strings.Contains(got, "124") || !strings.Contains(got, "137") {
+		t.Fatalf("%s must stop the zap loop on an unknown timeout outcome before changing another device, got loop_control=%v", reclaimPath, reclaimTasks[zapIdx]["loop_control"])
 	}
 	refuseZap, ok := reclaimTasks[refuseZapIdx]["ansible.builtin.fail"].(map[string]any)
 	if !ok {
@@ -4319,9 +4324,10 @@ func TestStorageCephGatesTheDeviceScanBeforeTheOSDSpecApply(t *testing.T) {
 			t.Fatalf("the device-scan gate argv missing %q: %v", want, argv)
 		}
 	}
-	if wait["changed_when"] != false || wait["failed_when"] != false {
-		t.Fatalf("the device-scan gate must be a read-only retry probe, got changed_when=%v failed_when=%v", wait["changed_when"], wait["failed_when"])
+	if wait["changed_when"] != false {
+		t.Fatalf("the device-scan gate must be a read-only retry probe, got changed_when=%v", wait["changed_when"])
 	}
+	assertCephProbeTimeoutOnlyFailure(t, wait, "bootwright_ceph_osd_scan_device_ls", "the device-scan gate")
 	if got := fmt.Sprint(wait["retries"]); !strings.Contains(got, "bootwright_ceph_osd_scan_attempts") {
 		t.Errorf("the device-scan poll must take its retry count from the derived budget, got retries=%v", got)
 	}
@@ -4457,7 +4463,7 @@ func TestStorageCephRGWIngressTLSAppliesOneMultiDocumentSpec(t *testing.T) {
 		t.Fatalf("RGW ingress TLS spec file carries a cert and key, so it must stay 0600, got %v", got)
 	}
 	assertCephSpecFileIsMultiDocument(t, "RGW ingress TLS", "bootwright_ceph_rgw_ingress_tls_specs", copyBody["content"])
-	apply := tasks[applyIdx]
+	apply := cephCommandTask(t, tasks[applyIdx], "RGW ingress TLS apply")
 	if _, ok := apply["loop"]; ok {
 		t.Fatalf("RGW ingress TLS must run one ceph orch apply, got loop=%v", apply["loop"])
 	}
@@ -4478,12 +4484,34 @@ func assertCephSpecFileIsMultiDocument(t *testing.T, label, fact string, content
 	}
 }
 
+func cephCommandTask(t *testing.T, task map[string]any, label string) map[string]any {
+	t.Helper()
+	if _, ok := task["ansible.builtin.command"].(map[string]any); ok {
+		return task
+	}
+	if _, ok := task["block"].([]any); !ok {
+		t.Fatalf("%s has neither a command nor a protected command block: %v", label, task)
+	}
+	var found map[string]any
+	for _, candidate := range nestedAnsibleTasks(t, task, "block") {
+		if _, ok := candidate["ansible.builtin.command"].(map[string]any); !ok {
+			continue
+		}
+		if found != nil {
+			t.Fatalf("%s has more than one command in its protected block", label)
+		}
+		found = candidate
+	}
+	if found == nil {
+		t.Fatalf("%s protected block has no command", label)
+	}
+	return found
+}
+
 func assertCephSpecApplyIsVerified(t *testing.T, tasks []map[string]any, refusal string, applyIdx int, register string) {
 	t.Helper()
-	apply := tasks[applyIdx]
-	if apply["failed_when"] != false {
-		t.Fatalf("%q must read what cephadm said rather than trust the exit code, so the apply itself must not fail the run, got failed_when=%v", refusal, apply["failed_when"])
-	}
+	apply := cephCommandTask(t, tasks[applyIdx], refusal)
+	assertCephMutationTimeoutOnlyFailure(t, apply, register, refusal)
 	if fmt.Sprint(apply["register"]) != register {
 		t.Fatalf("%q reads %s, so the apply must register it, got register=%v", refusal, register, apply["register"])
 	}
@@ -4522,6 +4550,22 @@ func assertCephSpecApplyIsVerified(t *testing.T, tasks []map[string]any, refusal
 	}
 }
 
+func assertCephMutationTimeoutOnlyFailure(t *testing.T, task map[string]any, register, label string) {
+	t.Helper()
+	want := register + ".rc | default(0) | int in [124, 137]"
+	if got := fmt.Sprint(task["failed_when"]); got != want {
+		t.Fatalf("%s must defer ordinary command errors to its tailored refusal but propagate timeout rc 124/137 to the runner, got failed_when=%v, want %q", label, task["failed_when"], want)
+	}
+}
+
+func assertCephProbeTimeoutOnlyFailure(t *testing.T, task map[string]any, register, label string) {
+	t.Helper()
+	want := register + ".rc | default(0) | int in [124, 137]"
+	if got := fmt.Sprint(task["failed_when"]); got != want {
+		t.Fatalf("%s must tolerate ordinary probe absence but propagate timeout rc 124/137 to the runner, got failed_when=%v, want %q", label, task["failed_when"], want)
+	}
+}
+
 func TestStorageManagementSpecAppliesOneMultiDocumentSpec(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/management_services.yml"
 	tasks := readAnsibleTasks(t, path)
@@ -4541,7 +4585,7 @@ func TestStorageManagementSpecAppliesOneMultiDocumentSpec(t *testing.T) {
 	}
 	assertCephSpecFileIsMultiDocument(t, "the management service spec", "bootwright_ceph_management_specs", copyBody["content"])
 	applyIdx := findAnsibleTask(t, tasks, "Apply management service spec")
-	apply := tasks[applyIdx]
+	apply := cephCommandTask(t, tasks[applyIdx], "management service spec apply")
 	if got := fmt.Sprint(apply["until"]); !strings.Contains(got, "attempts") {
 		t.Fatalf("a retried apply that no longer fails on its own must let its attempts run out, or the refusal that reads it never runs, got until=%v", apply["until"])
 	}
@@ -4812,9 +4856,10 @@ func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
 	if got := fmt.Sprint(tasks[probeIdx]["ansible.builtin.command"]); !strings.Contains(got, "versions") {
 		t.Fatalf("the release gate must read the daemon versions the mgr actually runs, not the client in the shell image, got %v", tasks[probeIdx]["ansible.builtin.command"])
 	}
-	if tasks[probeIdx]["changed_when"] != false || tasks[probeIdx]["failed_when"] != false {
-		t.Fatalf("the version probe must be a read-only tolerated absence, got %v", tasks[probeIdx])
+	if tasks[probeIdx]["changed_when"] != false {
+		t.Fatalf("the version probe must be read-only, got %v", tasks[probeIdx])
 	}
+	assertCephProbeTimeoutOnlyFailure(t, tasks[probeIdx], "bootwright_ceph_daemon_versions", "the daemon version probe")
 	if got := fmt.Sprint(tasks[majorIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, ".mgr") || !strings.Contains(got, "min") {
 		t.Fatalf("the gate must take the LOWEST major among the mgr daemons; a half-upgraded cluster still has a mgr that refuses the document, got %v", tasks[majorIdx]["ansible.builtin.set_fact"])
 	}
@@ -4832,7 +4877,7 @@ func TestStorageManagementSpecGatesTheCephRelease(t *testing.T) {
 	if got := fmt.Sprint(refuse["fail_msg"]); !strings.Contains(got, "spec.ceph.release") {
 		t.Fatalf("the refusal must name the field the operator has to change, got fail_msg=%v", refuse["fail_msg"])
 	}
-	apply := tasks[findAnsibleTask(t, tasks, "Apply management service spec")]
+	apply := cephCommandTask(t, tasks[findAnsibleTask(t, tasks, "Apply management service spec")], "management service spec apply")
 	until := fmt.Sprint(apply["until"])
 	for _, want := range []string{"unexpected keyword argument", "not an \\(JSON or YAML\\) object", "SpecValidationError"} {
 		if !strings.Contains(until, want) {

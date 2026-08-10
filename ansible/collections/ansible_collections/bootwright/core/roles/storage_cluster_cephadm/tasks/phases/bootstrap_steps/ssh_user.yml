@@ -2,6 +2,9 @@
 - name: Read the live cephadm SSH user
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -10,7 +13,7 @@
       - get-user
   register: bootwright_ceph_live_ssh_user
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_live_ssh_user.rc | default(0) | int in [124, 137]
 
 - name: Resolve the live cephadm SSH user
   ansible.builtin.set_fact:
@@ -35,6 +38,9 @@
 - name: Set the cephadm SSH user
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --

@@ -15,6 +15,9 @@
 - name: Apply the mon spec that drops the arbiter that was replaced
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --mount
@@ -27,7 +30,7 @@
       - /mnt/mon-after.yaml
   register: bootwright_arbiter_mon_spec_after
   changed_when: true
-  failed_when: false
+  failed_when: bootwright_arbiter_mon_spec_after.rc | default(0) | int in [124, 137]
 
 - name: Refuse a final mon spec cephadm reported an error for
   ansible.builtin.assert:
@@ -49,8 +52,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_removal_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -62,28 +65,50 @@
       - --force
   register: bootwright_arbiter_daemon_rm
   changed_when: bootwright_arbiter_daemon_rm.rc | default(1) | int == 0
-  failed_when: false
+  failed_when: bootwright_arbiter_daemon_rm.rc | default(0) | int in [124, 137]
   retries: 12
   delay: 10
   until: >-
     bootwright_arbiter_daemon_rm.rc | default(1) | int == 0
+    or (bootwright_arbiter_daemon_rm.rc | default(0) | int in [124, 137])
     or (bootwright_arbiter_daemon_rm.stderr | default('') is search('Unable to find|does not exist|not found'))
     or ((bootwright_arbiter_daemon_rm.attempts | default(1) | int) >= 12)
   when: (bootwright_arbiter_live_mon | default('') | length) > 0
 
 - name: Read the monmap after retiring the replaced arbiter daemon
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, mon, dump, --format, json]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - dump
+      - --format
+      - json
   register: bootwright_arbiter_retire_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_retire_dump.rc | default(0) | int in [124, 137]
 
 - name: Remove a replaced arbiter mon the monmap still carries
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, mon, rm, "{{ bootwright_arbiter_live_mon }}"]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_removal_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - rm
+      - "{{ bootwright_arbiter_live_mon }}"
   register: bootwright_arbiter_mon_rm
   changed_when: bootwright_arbiter_mon_rm.rc | default(1) | int == 0
-  failed_when: false
+  failed_when: bootwright_arbiter_mon_rm.rc | default(0) | int in [124, 137]
   when: >-
     bootwright_arbiter_live_mon in
     ((bootwright_arbiter_retire_dump.stdout | default('{}', true) | from_json).mons
@@ -91,10 +116,22 @@
 
 - name: Read the orchestrator's view of the replaced arbiter host
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, orch, host, ls, --format, json]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - ls
+      - --format
+      - json
   register: bootwright_arbiter_retire_hosts
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_retire_hosts.rc | default(0) | int in [124, 137]
   when: (bootwright_arbiter_live_node | default('') | length) > 0
 
 - name: Resolve whether the orchestrator reports the replaced arbiter host offline
@@ -161,10 +198,21 @@
 
 - name: Drain the remaining daemons of the replaced arbiter host
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, orch, host, drain, "{{ bootwright_arbiter_live_node }}"]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_removal_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - drain
+      - "{{ bootwright_arbiter_live_node }}"
   register: bootwright_arbiter_host_drain
   changed_when: bootwright_arbiter_host_drain.rc | default(1) | int == 0
-  failed_when: false
+  failed_when: bootwright_arbiter_host_drain.rc | default(0) | int in [124, 137]
   when:
     - (bootwright_arbiter_live_node | default('') | length) > 0
     - not (bootwright_arbiter_retire_offline | default(false) | bool)
@@ -173,17 +221,21 @@
   ansible.builtin.command:
     argv: >-
       {{
-        ['cephadm', 'shell', '--', 'ceph', 'orch', 'host', 'rm', bootwright_arbiter_live_node]
+        ['timeout',
+         '--kill-after=' ~ (bootwright_ceph_timeout_kill_after_seconds | string),
+         bootwright_ceph_removal_timeout_seconds | string,
+         'cephadm', 'shell', '--', 'ceph', 'orch', 'host', 'rm', bootwright_arbiter_live_node]
         + (['--offline', '--force']
            if (bootwright_arbiter_retire_offline | default(false) | bool) else [])
       }}
   register: bootwright_arbiter_host_rm
   changed_when: bootwright_arbiter_host_rm.rc | default(1) | int == 0
-  failed_when: false
+  failed_when: bootwright_arbiter_host_rm.rc | default(0) | int in [124, 137]
   retries: 12
   delay: 10
   until: >-
     bootwright_arbiter_host_rm.rc | default(1) | int == 0
+    or (bootwright_arbiter_host_rm.rc | default(0) | int in [124, 137])
     or (bootwright_arbiter_host_rm.stderr | default('') is search('Unknown host|does not exist|not found'))
     or ((bootwright_arbiter_host_rm.attempts | default(1) | int) >= 12)
   when: (bootwright_arbiter_live_node | default('') | length) > 0

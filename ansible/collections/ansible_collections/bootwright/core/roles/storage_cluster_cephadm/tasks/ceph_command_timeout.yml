@@ -1,0 +1,12 @@
+---
+- name: Report a Ceph command safety timeout
+  ansible.builtin.fail:
+    msg: >-
+      BOOTWRIGHT_CEPH_COMMAND_TIMEOUT={{
+        {
+          'task': bootwright_ceph_timeout_task,
+          'timeout_seconds': bootwright_ceph_timeout_seconds | int,
+          'exit_code': bootwright_ceph_timeout_exit_code | int,
+          'state_changing': bootwright_ceph_timeout_state_changing | bool
+        } | to_json
+      }}

@@ -1,8 +1,11 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/converge/ansible"
 )
 
 func blockedApplyTaskReason(ledger RunLedger, task TaskLedgerEntry) string {
@@ -23,7 +26,20 @@ func blockedApplyTaskReason(ledger RunLedger, task TaskLedgerEntry) string {
 	return "apply task graph could not make progress"
 }
 
-func conciseApplyTaskFailure(message string) string {
+func conciseApplyTaskFailure(value any) string {
+	message := ""
+	switch typed := value.(type) {
+	case error:
+		var timeoutErr *ansible.CephCommandTimeoutError
+		if errors.As(typed, &timeoutErr) {
+			return timeoutErr.OperatorMessage()
+		}
+		message = typed.Error()
+	case string:
+		message = typed
+	default:
+		message = fmt.Sprint(typed)
+	}
 	lines := strings.Split(message, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

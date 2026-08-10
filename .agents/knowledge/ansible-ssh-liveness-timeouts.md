@@ -85,7 +85,9 @@ fast. Wrap such probes in `timeout <n>` (see
 `phases/bootstrap_steps/apply_mode.yml` and
 `destroy_steps/cluster_gate.yml`) and, where the probe can only ever answer
 when local cluster state exists, gate it on that state as well so the common
-case does not pay for the container at all.
+case does not pay for the container at all. The same bound is required for
+single-shot mutations and tool calls: any `cephadm shell` can stall in image
+resolution or cluster connection before its child command makes progress.
 
 A bare `podman run` is the same class and fires on the FIRST apply, not only
 on a second destroy: the container-runtime gate proves the pinned Ceph image
@@ -105,7 +107,38 @@ SIGKILL. `TestAnsibleBoundsCommandsThatCanHangForever` in
 `internal/repo/checks` enforces both for every `podman run` and every
 `cephadm rm-cluster` argv in the collection.
 
-The bound turns an invisible stall into `rc=124`. Every one of these tasks
-tolerates its own failure and reports the rc in a diagnostic, so name 124
-there as a timeout rather than a refusal — the two have different remedies and
-identical exit paths.
+The managed Ceph role classifies every `cephadm shell` argv instead of applying
+one blanket ceiling:
+
+| Class | Default | Examples |
+| --- | ---: | --- |
+| probe | 120s | health, monmap, config and idempotency reads |
+| inventory probe | 300s | `ceph orch device ls --refresh` |
+| configuration mutation | 300s | config/config-key writes, registry and SSH setup |
+| orchestration | 600s | spec apply, redeploy, reconfigure, host enrollment |
+| removal | 1800s | pool, filesystem, profile, daemon, host and device removal |
+| tool round-trip | 300s | `crushtool` and interpreter probes inside the container |
+| operation batch | 1800s | one staged batch under a fixed finite ceiling |
+
+All classes use a 15s kill escalation. The role defaults live in
+`roles/storage_cluster_cephadm/defaults/main.yml`; the vars contract owns their
+meaning. The role rejects non-positive classes before its first command, caps a
+batch at 1800s, and constrains kill escalation to 1–60s so an Ansible-precedence
+override cannot disable the wrapper.
+`TestAnsibleBoundsEveryCephadmShellCommand` recursively walks tasks, blocks,
+loops, and playbooks; rejects free-form, unclassified, or unbounded argv; and
+follows role/task include boundaries and enclosing `no_log`, `ignore_errors`,
+and rescue controls as well as task-local failure, retry, and loop controls that
+could hide rc 124/137. A `no_log` command must use the shared fail-closed relay;
+it emits only the task name, bound, exit code, and read/write classification,
+never protected command output. The command-count floor keeps a scanner
+regression from silently shrinking coverage.
+
+The bound turns an invisible stall into rc 124, or rc 137 when the kill
+escalation is surfaced. Every task fails immediately on either code; a loop or
+retry stops before its next mutation or observation. Ordinary probe absence
+may still reach a later evidence gate, but a timed-out probe cannot and never
+infers a mutating remedy. For a state-changing timeout the runner extracts the
+exact resolved `bootwright_mutating_invocation` fact for its retry message; it
+never rebuilds a command from task names or treats the timeout as success,
+absence, ownership, or authorization evidence.

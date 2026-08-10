@@ -18,6 +18,9 @@
     - name: Refresh cephadm device inventory for the OSD coverage report
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_inventory_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -30,11 +33,11 @@
           - --refresh
       register: bootwright_ceph_coverage_device_ls
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_coverage_device_ls.rc | default(0) | int in [124, 137]
       retries: "{{ bootwright_ceph_coverage_retries | default(6) | int }}"
       delay: "{{ bootwright_ceph_coverage_delay | default(10) | int }}"
       until: >-
-        (
+        (bootwright_ceph_coverage_device_ls.rc | default(0) | int in [124, 137]) or (
           bootwright_ceph_coverage_device_ls.rc == 0
           and (bootwright_ceph_coverage_host_names
                | difference(
@@ -50,6 +53,9 @@
     - name: Collect live OSD device metadata for the OSD coverage report
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -60,7 +66,7 @@
           - json
       register: bootwright_ceph_coverage_osd_metadata
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_coverage_osd_metadata.rc | default(0) | int in [124, 137]
 
     - name: Resolve whether the OSD coverage inputs are trustworthy
       ansible.builtin.set_fact:

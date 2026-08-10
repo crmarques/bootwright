@@ -550,6 +550,40 @@ rendered file paths, scheduling, ledgers, and final Data Foundation attachment
 records. The storage role owns remote host mutation and `cephadm`, `ceph`, and
 `radosgw-admin` command execution.
 
+Every `cephadm shell` argv uses one finite role-default timeout class plus a
+15-second TERM-to-KILL escalation. The classes are deliberately separate so a
+fast health probe does not set the ceiling for an honest filesystem removal or
+multi-operation batch:
+
+| Fact | Default seconds | Command class |
+| --- | ---: | --- |
+| `bootwright_ceph_probe_timeout_seconds` | 120 | Read-only cluster, config, monmap, service, and idempotency probes |
+| `bootwright_ceph_inventory_probe_timeout_seconds` | 300 | Device inventory and refresh probes |
+| `bootwright_ceph_config_timeout_seconds` | 300 | Configuration database, config-key, manager-module, registry-login, and cephadm SSH mutations |
+| `bootwright_ceph_orchestration_timeout_seconds` | 600 | Service/spec apply, redeploy, reconfigure, host enrollment, and one rendered operation |
+| `bootwright_ceph_removal_timeout_seconds` | 1800 | Pool, filesystem, profile, daemon, host, and device-zap removal |
+| `bootwright_ceph_tool_timeout_seconds` | 300 | Container-local interpreter and `crushtool` round-trips |
+| `bootwright_ceph_operation_batch_timeout_seconds` | 1800 | One staged batch, with a fixed ceiling rather than an operation-count multiplier |
+| `bootwright_ceph_timeout_kill_after_seconds` | 15 | Grace period after TERM before `timeout` sends KILL |
+
+The role refuses before its first `cephadm shell` command if any class is zero
+or negative. The staged-batch value cannot exceed 1800 seconds, and kill
+escalation must stay between 1 and 60 seconds; these hard bounds prevent an
+Ansible-precedence override from turning the wrapper back into an unbounded
+command.
+
+Readiness gates that need a shorter sample keep their 20-, 60-, or 90-second
+cap by taking the minimum of that cap and the probe default. An rc 124 or 137
+from any class remains a failed Ansible result: an ordinary read-only miss may
+still feed a later evidence gate, but a timed-out read is not evidence. A retry
+or loop stops before another attempt or item. A task whose `no_log` protects
+command output uses the shared relay to expose only its task name, timeout,
+exit code, and read/write classification. The runner reports an unknown
+state-changing outcome with the exact CLI-rendered
+`bootwright_mutating_invocation`; a read-only diagnostic never infers a
+mutating command. `failed_when`, `ignore_errors`, rescue, retry, or loop
+aggregation must not consume either timeout code.
+
 ```yaml
 bootwright_storage_clusters:
   - name: ceph-stretch

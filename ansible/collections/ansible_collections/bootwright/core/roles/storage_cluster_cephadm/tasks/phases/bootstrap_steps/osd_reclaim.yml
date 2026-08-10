@@ -23,6 +23,9 @@
     - name: Refresh cephadm device inventory for filter-OSD hosts
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_inventory_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -35,11 +38,11 @@
           - --refresh
       register: bootwright_ceph_filter_device_ls
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_filter_device_ls.rc | default(0) | int in [124, 137]
       retries: "{{ bootwright_ceph_filter_reclaim_retries | default(30) | int }}"
       delay: "{{ bootwright_ceph_filter_reclaim_delay | default(10) | int }}"
       until: >-
-        (
+        (bootwright_ceph_filter_device_ls.rc | default(0) | int in [124, 137]) or (
           bootwright_ceph_filter_device_ls.rc == 0
           and (bootwright_ceph_filter_device_ls.stdout | default('')
                | bootwright.core.bootwright_json_list_probe).valid
@@ -89,6 +92,9 @@
     - name: Collect live OSD device metadata for the reclaim safety gate
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -99,7 +105,7 @@
           - json
       register: bootwright_ceph_filter_osd_metadata
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_filter_osd_metadata.rc | default(0) | int in [124, 137]
 
     - name: Resolve whether the filter-OSD reclaim safety inputs are trustworthy
       ansible.builtin.set_fact:
@@ -218,6 +224,9 @@
     - name: Zap dirty filter-selected OSD devices
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_removal_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -230,11 +239,13 @@
           - --force
       register: bootwright_ceph_filter_zap
       changed_when: bootwright_ceph_filter_zap.rc == 0
-      failed_when: false
+      failed_when: bootwright_ceph_filter_zap.rc | default(0) | int in [124, 137]
       loop: "{{ bootwright_ceph_filter_reclaim_final | default([]) }}"
       loop_control:
         loop_var: bootwright_ceph_filter_candidate
         label: "{{ bootwright_ceph_filter_candidate.host }} {{ bootwright_ceph_filter_candidate.path }}"
+        break_when:
+          - bootwright_ceph_filter_zap.rc | default(0) | int in [124, 137]
 
     - name: Refuse an automatic OSD reclaim whose zap failed
       ansible.builtin.fail:

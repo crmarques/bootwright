@@ -4,7 +4,23 @@
   gather_facts: false
   become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
+  vars:
+    bootwright_ceph_probe_timeout_seconds: 120
+    bootwright_ceph_timeout_kill_after_seconds: 15
   tasks:
+    - name: Require a finite Ceph health probe timeout
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_probe_timeout_seconds | int > 0
+          - bootwright_ceph_timeout_kill_after_seconds | int > 0
+          - bootwright_ceph_timeout_kill_after_seconds | int <= 60
+        fail_msg: >-
+          The Ceph health check resolved an invalid command timeout. Restore its
+          built-in positive probe timeout and 1-to-60-second kill escalation,
+          then repeat the original check. No state-changing command is inferred
+          from this read-only refusal.
+        quiet: true
+
     - name: End non-seed storage hosts
       ansible.builtin.meta: end_host
       when: bootwright_storage_seed_host_name | default('') != inventory_hostname
@@ -12,6 +28,9 @@
     - name: Probe Ceph OSD stat
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -22,11 +41,14 @@
           - json
       register: bootwright_ceph_health_osd_stat
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_health_osd_stat.rc | default(0) | int in [124, 137]
 
     - name: Probe Ceph cluster health
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -36,7 +58,7 @@
           - json
       register: bootwright_ceph_health_status
       changed_when: false
-      failed_when: false
+      failed_when: bootwright_ceph_health_status.rc | default(0) | int in [124, 137]
 
     - name: Ensure controller-side health result directory
       ansible.builtin.file:

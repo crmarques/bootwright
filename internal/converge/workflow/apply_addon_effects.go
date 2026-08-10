@@ -44,7 +44,7 @@ func (e *addonEffectExecutor) Run(ctx context.Context) error {
 				return &extensionoc.EffectError{
 					Effect: v1alpha1.ClusterAddonInputEffectGlobalPullSecretMerge,
 					Input:  input.Name,
-					Detail: conciseApplyTaskFailure(err.Error()),
+					Detail: conciseApplyTaskFailure(err),
 				}
 			}
 		}

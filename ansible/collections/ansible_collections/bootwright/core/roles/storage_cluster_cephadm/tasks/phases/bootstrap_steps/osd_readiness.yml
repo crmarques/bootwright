@@ -46,8 +46,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -58,11 +58,11 @@
       - json
   register: bootwright_ceph_osd_stat
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_stat.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_osd_readiness_attempts | int }}"
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_osd_stat.rc | default(0) | int in [124, 137]) or (
       (bootwright_ceph_osd_readiness_mode == 'exact'
        and (bootwright_ceph_osd_stat.stdout | default('', true)
             | regex_search('"num_in_osds"\s*:\s*([0-9]+)', '\1')
@@ -115,8 +115,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -127,11 +127,11 @@
       - json
   register: bootwright_ceph_osd_host_tree
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_host_tree.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_osd_readiness_attempts | int }}"
   delay: "{{ bootwright_ceph_osd_readiness_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_osd_host_tree.rc | default(0) | int in [124, 137]) or (
       ((bootwright_ceph_osd_host_tree.rc | default(1) | int) == 0
        or ((bootwright_ceph_osd_host_tree.stdout | default('', true) | regex_search('\}\s*$')) is not none))
       and (
@@ -198,8 +198,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_inventory_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -211,11 +211,11 @@
       - --refresh
   register: bootwright_ceph_osd_device_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_device_ls.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_osd_device_ls_retries | default(6) | int }}"
   delay: "{{ bootwright_ceph_osd_device_ls_delay | default(5) | int }}"
   until: >-
-    (
+    (bootwright_ceph_osd_device_ls.rc | default(0) | int in [124, 137]) or (
       bootwright_ceph_osd_device_ls.rc == 0
       and (bootwright_ceph_osd_device_ls.stdout | default('') | trim | length > 0)
     )
@@ -235,8 +235,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_inventory_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -248,7 +248,7 @@
       - json
   register: bootwright_ceph_osd_device_json
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_device_json.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - >-
@@ -262,8 +262,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -276,7 +276,7 @@
       - yaml
   register: bootwright_ceph_osd_service_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_service_ls.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - >-
@@ -290,8 +290,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -303,7 +303,7 @@
       - yaml
   register: bootwright_ceph_osd_host_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_host_ls.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - >-
@@ -317,8 +317,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -329,7 +329,7 @@
       - yaml
   register: bootwright_ceph_osd_daemon_ps
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_daemon_ps.rc | default(0) | int in [124, 137]
   when:
     - bootwright_ceph_osd_readiness_mode != 'skip'
     - >-
@@ -759,8 +759,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -770,7 +770,7 @@
       - json
   register: bootwright_ceph_health_probe
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_health_probe.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_osd_readiness_mode != 'skip'
 
 - name: Record observed OSD readiness for the storage result

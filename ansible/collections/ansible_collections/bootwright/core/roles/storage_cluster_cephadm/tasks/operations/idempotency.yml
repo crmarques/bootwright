@@ -2,6 +2,9 @@
 - name: Check existing Ceph pool
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -13,7 +16,7 @@
       - json
   register: bootwright_ceph_pool_list
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_pool_list.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'ceph-pool'
 
 - name: Skip existing Ceph pool operation
@@ -26,6 +29,9 @@
 - name: Check existing CephFS
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -36,7 +42,7 @@
       - json
   register: bootwright_ceph_fs_list
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_fs_list.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'cephfs'
 
 - name: Skip existing CephFS operation
@@ -49,6 +55,9 @@
 - name: Check existing CRUSH rule
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -61,7 +70,7 @@
       - json
   register: bootwright_ceph_crush_rules
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_crush_rules.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind in ['crush-rule', 'stretch-crush-rule']
 
 - name: Skip existing CRUSH rule operation
@@ -87,6 +96,9 @@
     - name: Export current CRUSH map
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
           - cephadm
           - shell
           - --mount
@@ -102,6 +114,9 @@
     - name: Decompile current CRUSH map
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_tool_timeout_seconds }}"
           - cephadm
           - shell
           - --mount
@@ -132,6 +147,9 @@
     - name: Compile CRUSH map with stretch rule
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_tool_timeout_seconds }}"
           - cephadm
           - shell
           - --mount
@@ -147,6 +165,9 @@
     - name: Install CRUSH map with stretch rule
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --mount
@@ -166,6 +187,9 @@
 - name: List live Ceph pools for the stretch internal-pool reconcile
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -178,7 +202,7 @@
       - json
   register: bootwright_ceph_stretch_pool_detail
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_stretch_pool_detail.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'stretch-internal-pools'
 
 - name: Place Ceph internal pools on the stretch placement
@@ -208,6 +232,9 @@
     - name: Set the stretch CRUSH rule on Ceph internal pools
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -218,14 +245,20 @@
           - "{{ bootwright_ceph_stretch_internal_pool }}"
           - crush_rule
           - "{{ bootwright_ceph_op.structural.ruleName }}"
+      register: bootwright_ceph_stretch_crush_rule_set
       loop: "{{ bootwright_ceph_stretch_internal_pools }}"
       loop_control:
         loop_var: bootwright_ceph_stretch_internal_pool
+        break_when:
+          - bootwright_ceph_stretch_crush_rule_set.rc | default(0) | int in [124, 137]
       changed_when: true
 
     - name: Set the stretch replica size on Ceph internal pools
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -236,14 +269,20 @@
           - "{{ bootwright_ceph_stretch_internal_pool }}"
           - size
           - "{{ bootwright_ceph_op.structural.size }}"
+      register: bootwright_ceph_stretch_size_set
       loop: "{{ bootwright_ceph_stretch_internal_pools }}"
       loop_control:
         loop_var: bootwright_ceph_stretch_internal_pool
+        break_when:
+          - bootwright_ceph_stretch_size_set.rc | default(0) | int in [124, 137]
       changed_when: true
 
     - name: Set the stretch minimum replica size on Ceph internal pools
       ansible.builtin.command:
         argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_config_timeout_seconds }}"
           - cephadm
           - shell
           - --
@@ -254,9 +293,12 @@
           - "{{ bootwright_ceph_stretch_internal_pool }}"
           - min_size
           - "{{ bootwright_ceph_op.structural.minSize }}"
+      register: bootwright_ceph_stretch_min_size_set
       loop: "{{ bootwright_ceph_stretch_internal_pools }}"
       loop_control:
         loop_var: bootwright_ceph_stretch_internal_pool
+        break_when:
+          - bootwright_ceph_stretch_min_size_set.rc | default(0) | int in [124, 137]
       changed_when: true
 
     - name: Mark the stretch internal-pool operation as handled
@@ -266,6 +308,9 @@
 - name: Check existing erasure-code profile
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -277,7 +322,7 @@
       - json
   register: bootwright_ceph_ec_profiles
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_ec_profiles.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'ec-profile'
 
 - name: Skip existing erasure-code profile operation
@@ -290,6 +335,9 @@
 - name: Check current stretch mode
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -300,7 +348,7 @@
       - json
   register: bootwright_ceph_mon_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mon_dump.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'stretch-mode'
 
 - name: Skip enabled stretch mode operation
@@ -313,6 +361,9 @@
 - name: Check enabled mgr modules
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -324,7 +375,7 @@
       - json
   register: bootwright_ceph_mgr_modules
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mgr_modules.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'mgr-module'
 
 - name: Skip enabled mgr module operation
@@ -343,6 +394,9 @@
 - name: Check existing RGW realm
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -353,7 +407,7 @@
       - json
   register: bootwright_ceph_rgw_realms
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_rgw_realms.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'rgw-realm'
 
 - name: Skip existing RGW realm operation
@@ -366,6 +420,9 @@
 - name: Check existing RGW zonegroup
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -376,7 +433,7 @@
       - json
   register: bootwright_ceph_rgw_zonegroups
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_rgw_zonegroups.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'rgw-zonegroup'
 
 - name: Skip existing RGW zonegroup operation
@@ -389,6 +446,9 @@
 - name: Check existing RGW zone
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -399,7 +459,7 @@
       - json
   register: bootwright_ceph_rgw_zones
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_rgw_zones.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_op_idempotency_kind == 'rgw-zone'
 
 - name: Skip existing RGW zone operation
@@ -410,20 +470,40 @@
     - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_rgw_zones.stdout | default('') | trim | default('{}', true)) | from_json).zones | default([])
 
 - name: Check existing RGW user
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - shell
-      - --
-      - radosgw-admin
-      - user
-      - info
-      - --uid
-      - "{{ bootwright_ceph_op_idempotency_name }}"
-  register: bootwright_ceph_rgw_user_info
-  changed_when: false
-  failed_when: false
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
+  block:
+    - name: Probe the existing RGW user
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
+          - cephadm
+          - shell
+          - --
+          - radosgw-admin
+          - user
+          - info
+          - --uid
+          - "{{ bootwright_ceph_op_idempotency_name }}"
+      register: bootwright_ceph_rgw_user_info
+      changed_when: false
+      failed_when: bootwright_ceph_rgw_user_info.rc | default(0) | int in [124, 137]
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
+  rescue:
+    - name: Relay an RGW user probe timeout without exposing protected output
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/ceph_command_timeout.yml"
+      vars:
+        bootwright_ceph_timeout_task: Probe the existing RGW user
+        bootwright_ceph_timeout_seconds: "{{ bootwright_ceph_probe_timeout_seconds }}"
+        bootwright_ceph_timeout_exit_code: "{{ ansible_failed_result.rc }}"
+        bootwright_ceph_timeout_state_changing: false
+      when: ansible_failed_result.rc | default(0) | int in [124, 137]
+
+    - name: Refuse to continue after the protected RGW user probe failed
+      ansible.builtin.fail:
+        msg: >-
+          The protected RGW user probe failed unexpectedly with rc
+          {{ ansible_failed_result.rc | default('<none>') }}.
   when:
     - bootwright_ceph_op_idempotency_kind == 'rgw-user'
     - bootwright_ceph_op_idempotency_name | length > 0

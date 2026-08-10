@@ -2,6 +2,9 @@
 - name: Read the Ceph cluster configuration currently in force
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -12,7 +15,7 @@
       - json
   register: bootwright_ceph_network_config_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_network_config_dump.rc | default(0) | int in [124, 137]
   when: >-
     (bootwright_ceph_public_network_declared | length > 0)
     or (bootwright_ceph_cluster_network_declared | length > 0)
@@ -34,6 +37,9 @@
 - name: Reconcile the Ceph public network before any daemon placement is scheduled
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -52,6 +58,9 @@
 - name: Reconcile the Ceph cluster network before any daemon placement is scheduled
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --

@@ -3,8 +3,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -15,11 +15,11 @@
       - json
   register: bootwright_ceph_service_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_service_ls.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_service_readiness_retries | default(90) | int }}"
   delay: "{{ bootwright_ceph_service_readiness_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_service_ls.rc | default(0) | int in [124, 137]) or (
       (((bootwright_ceph_service_ls.rc | default(1) | int) == 0
            or ((bootwright_ceph_service_ls.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
            or ((bootwright_ceph_service_ls.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
@@ -87,6 +87,9 @@
 - name: Collect Ceph daemon placement when declared services did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -97,12 +100,15 @@
       - yaml
   register: bootwright_ceph_service_daemon_ps
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_service_daemon_ps.rc | default(0) | int in [124, 137]
   when: not (bootwright_ceph_services_ready | default(false) | bool)
 
 - name: Collect recent cephadm events when declared services did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -113,12 +119,15 @@
       - cephadm
   register: bootwright_ceph_service_cephadm_log
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_service_cephadm_log.rc | default(0) | int in [124, 137]
   when: not (bootwright_ceph_services_ready | default(false) | bool)
 
 - name: Collect Ceph daemon states as JSON when declared services did not become ready
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -129,7 +138,7 @@
       - json
   register: bootwright_ceph_service_daemon_ps_json
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_service_daemon_ps_json.rc | default(0) | int in [124, 137]
   when: not (bootwright_ceph_services_ready | default(false) | bool)
 
 - name: Resolve the daemons cephadm reports outside the running state

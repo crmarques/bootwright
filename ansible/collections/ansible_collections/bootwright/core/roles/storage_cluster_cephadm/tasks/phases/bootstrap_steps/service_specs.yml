@@ -2,6 +2,9 @@
 - name: Configure cephadm SSH trust
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --mount
@@ -21,6 +24,9 @@
 - name: Apply Ceph host, mon, and mgr specs
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --mount
@@ -33,7 +39,7 @@
       - /mnt/bootstrap-spec.yaml
   register: bootwright_ceph_host_spec_apply
   changed_when: true
-  failed_when: false
+  failed_when: bootwright_ceph_host_spec_apply.rc | default(0) | int in [124, 137]
 
 - name: Refuse a bootstrap spec cephadm reported an error for
   ansible.builtin.assert:
@@ -59,6 +65,9 @@
 - name: Read back the orchestrator hosts cephadm accepted
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -70,7 +79,7 @@
       - json
   register: bootwright_ceph_orch_hosts
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_orch_hosts.rc | default(0) | int in [124, 137]
 
 - name: Refuse a declared mon host cephadm does not know
   ansible.builtin.assert:
@@ -143,8 +152,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_inventory_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -157,11 +166,11 @@
       - --refresh
   register: bootwright_ceph_osd_scan_device_ls
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_osd_scan_device_ls.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_osd_scan_attempts | int }}"
   delay: "{{ bootwright_ceph_osd_scan_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_osd_scan_device_ls.rc | default(0) | int in [124, 137]) or (
       bootwright_ceph_osd_scan_device_ls.rc == 0
       and (bootwright_ceph_osd_scan_device_ls.stdout | default('')
            | bootwright.core.bootwright_json_list_probe).valid
@@ -234,6 +243,9 @@
 - name: Apply Ceph OSD service spec
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --mount
@@ -246,7 +258,7 @@
       - /mnt/core-services.yaml
   register: bootwright_ceph_core_services_apply
   changed_when: true
-  failed_when: false
+  failed_when: bootwright_ceph_core_services_apply.rc | default(0) | int in [124, 137]
 
 - name: Refuse a core service spec cephadm reported an error for
   ansible.builtin.assert:

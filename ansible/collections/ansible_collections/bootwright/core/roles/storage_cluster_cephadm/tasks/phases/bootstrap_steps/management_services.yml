@@ -2,6 +2,9 @@
 - name: Read the Ceph release the daemons run
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -11,7 +14,7 @@
       - json
   register: bootwright_ceph_daemon_versions
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_daemon_versions.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_management.hosts is defined
 
 - name: Resolve the lowest Ceph major release running a manager daemon
@@ -117,6 +120,9 @@
 - name: Read the Ceph configuration database for the dashboard settings
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -127,7 +133,7 @@
       - json
   register: bootwright_ceph_config_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_config_dump.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_management.hosts is defined
 
 - name: Resolve the live Ceph dashboard SSL and HTTP port settings
@@ -158,6 +164,9 @@
 - name: Disable Ceph dashboard SSL so it stops occupying the mgmt-gateway port
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -176,6 +185,9 @@
 - name: Move the Ceph dashboard off its default HTTP port to avoid colliding with RGW or other daemons
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -204,6 +216,9 @@
 - name: Check which endpoint the Ceph dashboard currently serves
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -214,7 +229,7 @@
       - json
   register: bootwright_ceph_mgr_services_current
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mgr_services_current.rc | default(0) | int in [124, 137]
   when: bootwright_ceph_management.hosts is defined
 
 - name: Record the dashboard endpoint the managers currently serve
@@ -245,6 +260,9 @@
 - name: Capture the Ceph fsid that scopes the manager systemd units
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -259,6 +277,9 @@
 - name: Capture Ceph manager daemon identities before restart
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -318,8 +339,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -332,11 +353,11 @@
       - json
   register: bootwright_ceph_mgr_after_restart
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_mgr_after_restart.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_mgr_after_restart.rc | default(0) | int in [124, 137]) or (
       (((bootwright_ceph_mgr_after_restart.rc | default(1) | int) == 0
            or ((bootwright_ceph_mgr_after_restart.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
            or ((bootwright_ceph_mgr_after_restart.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
@@ -435,34 +456,52 @@
     and (bootwright_ceph_mgr_restart_required | default(false) | bool)
 
 - name: Apply management service spec
-  ansible.builtin.command:
-    argv:
-      - timeout
-      - --kill-after=10
-      - "120"
-      - cephadm
-      - shell
-      - --mount
-      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
-      - --
-      - ceph
-      - orch
-      - apply
-      - -i
-      - /mnt/management-services.yaml
-  register: bootwright_ceph_management_apply
-  changed_when: true
-  failed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
-  retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
-  delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
-  until: >-
-    bootwright_ceph_management_apply.rc == 0
-    or (((bootwright_ceph_management_apply.stdout | default(''))
-         ~ (bootwright_ceph_management_apply.stderr | default('')))
-        is search('unexpected keyword argument|not an \(JSON or YAML\) object|SpecValidationError'))
-    or ((bootwright_ceph_management_apply.attempts | default(1) | int)
-        >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
+  block:
+    - name: Submit the management service spec
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - ceph
+          - orch
+          - apply
+          - -i
+          - /mnt/management-services.yaml
+      register: bootwright_ceph_management_apply
+      changed_when: true
+      failed_when: bootwright_ceph_management_apply.rc | default(0) | int in [124, 137]
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
+      retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
+      delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
+      until: >-
+        bootwright_ceph_management_apply.rc == 0
+        or (bootwright_ceph_management_apply.rc | default(0) | int in [124, 137])
+        or (((bootwright_ceph_management_apply.stdout | default(''))
+             ~ (bootwright_ceph_management_apply.stderr | default('')))
+            is search('unexpected keyword argument|not an \(JSON or YAML\) object|SpecValidationError'))
+        or ((bootwright_ceph_management_apply.attempts | default(1) | int)
+            >= (bootwright_ceph_mgr_restart_retries | default(30) | int))
+  rescue:
+    - name: Relay a management spec timeout without exposing protected output
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/ceph_command_timeout.yml"
+      vars:
+        bootwright_ceph_timeout_task: Submit the management service spec
+        bootwright_ceph_timeout_seconds: "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+        bootwright_ceph_timeout_exit_code: "{{ ansible_failed_result.rc }}"
+        bootwright_ceph_timeout_state_changing: true
+      when: ansible_failed_result.rc | default(0) | int in [124, 137]
+
+    - name: Refuse to continue after the protected management spec command failed
+      ansible.builtin.fail:
+        msg: >-
+          The protected management spec command failed unexpectedly with rc
+          {{ ansible_failed_result.rc | default('<none>') }}.
   when: bootwright_ceph_management.hosts is defined
 
 - name: Refuse a management service spec cephadm reported an error for
@@ -495,8 +534,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=10
-      - "120"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -506,11 +545,11 @@
       - mgr/cephadm/spec.mgmt-gateway
   register: bootwright_ceph_management_persisted
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_management_persisted.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_ceph_mgr_restart_retries | default(30) | int }}"
   delay: "{{ bootwright_ceph_mgr_restart_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_ceph_management_persisted.rc | default(0) | int in [124, 137]) or (
       (((bootwright_ceph_management_persisted.rc | default(1) | int) == 0
            or ((bootwright_ceph_management_persisted.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
            or ((bootwright_ceph_management_persisted.stdout | default('', true) | regex_search('[\}\]]\\s*$')) is not none))
@@ -525,6 +564,9 @@
 - name: Re-persist the ssl switch the cephadm spec store serialized away
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -556,6 +598,9 @@
 - name: Read back the persisted management gateway spec after the repair
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -565,7 +610,7 @@
       - mgr/cephadm/spec.mgmt-gateway
   register: bootwright_ceph_management_persisted_verify
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_management_persisted_verify.rc | default(0) | int in [124, 137]
   when: >-
     bootwright_ceph_management.hosts is defined
     and (bootwright_ceph_management.sslDisabled | default(false) | bool)

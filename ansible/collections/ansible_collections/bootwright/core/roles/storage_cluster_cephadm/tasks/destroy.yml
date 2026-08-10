@@ -1,4 +1,7 @@
 ---
+- name: Validate the Ceph command timeout contract
+  ansible.builtin.import_tasks: timeout_contract.yml
+
 - name: Resolve Ceph destroy context
   ansible.builtin.import_tasks: destroy_steps/context.yml
 

@@ -83,7 +83,7 @@ func (e *addonStepExecutor) Run(ctx context.Context, lifecycle string) ([]string
 		if err == nil {
 			continue
 		}
-		detail := conciseApplyTaskFailure(err.Error())
+		detail := conciseApplyTaskFailure(err)
 		if recordErr := extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
 			Lifecycle: lifecycle,
 			Status:    extensionrecords.RecordStatusFailed,

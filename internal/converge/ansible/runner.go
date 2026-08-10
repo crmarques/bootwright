@@ -226,6 +226,22 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	}
 	env = appendExtraEnv(env, spec.ExtraEnv)
 	err := RunLoggedCommand(ctx, command, env, outputLogPath, r.Stdout, r.Stderr, spec.UseControllingTTY)
+	if err != nil {
+		if evidence, ok := cephCommandTimeoutFromLog(outputLogPath); ok {
+			timeoutErr := &CephCommandTimeoutError{
+				Err:            err,
+				Task:           evidence.task,
+				Host:           evidence.host,
+				TimeoutSeconds: evidence.timeoutSeconds,
+				ExitCode:       evidence.exitCode,
+				StateChanging:  evidence.stateChanging,
+			}
+			if timeoutErr.StateChanging {
+				timeoutErr.Invocation = exactMutatingInvocation(spec.ExtraVarPairs)
+			}
+			return timeoutErr
+		}
+	}
 	if err != nil && spec.ClassifyUnreachable && runResultIsUnreachable(filepath.Join(spec.ArtifactsDir, RunResultName)) {
 		return &UnreachableError{Err: err}
 	}

@@ -41,8 +41,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "60"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ [bootwright_ceph_probe_timeout_seconds | int, 60] | min }}"
       - cephadm
       - shell
       - --
@@ -50,7 +50,7 @@
       - fsid
   register: bootwright_ceph_fsid
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_fsid.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
     - bootwright_ceph_destroy_local_state | default(false) | bool
@@ -294,8 +294,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "90"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ [bootwright_ceph_probe_timeout_seconds | int, 90] | min }}"
       - cephadm
       - shell
       - --
@@ -304,7 +304,7 @@
       - status
   register: bootwright_ceph_status_probe
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_status_probe.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
@@ -314,8 +314,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -327,7 +327,7 @@
       - cephadm
   register: bootwright_ceph_destroy_orch_disable
   changed_when: bootwright_ceph_destroy_orch_disable.rc == 0
-  failed_when: false
+  failed_when: bootwright_ceph_destroy_orch_disable.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname == bootwright_ceph_destroy_authority_host | default('')
     - bootwright_ceph_destroy_owned | default(false) | bool
@@ -672,8 +672,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "90"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ [bootwright_ceph_probe_timeout_seconds | int, 90] | min }}"
       - cephadm
       - shell
       - --fsid
@@ -684,7 +684,7 @@
       - status
   register: bootwright_ceph_resumed_probe
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_ceph_resumed_probe.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
     - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool
@@ -694,8 +694,8 @@
   ansible.builtin.command:
     argv:
       - timeout
-      - --kill-after=15
-      - "300"
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_config_timeout_seconds }}"
       - cephadm
       - shell
       - --fsid
@@ -709,7 +709,7 @@
       - cephadm
   register: bootwright_ceph_resumed_orch_disable
   changed_when: bootwright_ceph_resumed_orch_disable.rc == 0
-  failed_when: false
+  failed_when: bootwright_ceph_resumed_orch_disable.rc | default(0) | int in [124, 137]
   when:
     - inventory_hostname != bootwright_ceph_destroy_authority_host | default('')
     - hostvars[bootwright_ceph_destroy_authority_host].bootwright_ceph_destroy_fsid_adopted | default(false) | bool

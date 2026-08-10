@@ -48,22 +48,42 @@
   when: bootwright_ceph_rgw_ingress_tls_specs | length > 0
 
 - name: Apply RGW ingress TLS certificate spec
-  ansible.builtin.command:
-    argv:
-      - cephadm
-      - shell
-      - --mount
-      - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
-      - --
-      - ceph
-      - orch
-      - apply
-      - -i
-      - /mnt/rgw-ingress-tls.yaml
-  register: bootwright_ceph_rgw_ingress_tls_apply
-  changed_when: true
-  failed_when: false
-  no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  block:
+    - name: Submit the RGW ingress TLS certificate spec
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - ceph
+          - orch
+          - apply
+          - -i
+          - /mnt/rgw-ingress-tls.yaml
+      register: bootwright_ceph_rgw_ingress_tls_apply
+      changed_when: true
+      failed_when: bootwright_ceph_rgw_ingress_tls_apply.rc | default(0) | int in [124, 137]
+      no_log: "{{ bootwright_no_log | default(true) | bool }}"
+  rescue:
+    - name: Relay an RGW ingress TLS spec timeout without exposing protected output
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/ceph_command_timeout.yml"
+      vars:
+        bootwright_ceph_timeout_task: Submit the RGW ingress TLS certificate spec
+        bootwright_ceph_timeout_seconds: "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+        bootwright_ceph_timeout_exit_code: "{{ ansible_failed_result.rc }}"
+        bootwright_ceph_timeout_state_changing: true
+      when: ansible_failed_result.rc | default(0) | int in [124, 137]
+
+    - name: Refuse to continue after the protected RGW ingress TLS command failed
+      ansible.builtin.fail:
+        msg: >-
+          The protected RGW ingress TLS command failed unexpectedly with rc
+          {{ ansible_failed_result.rc | default('<none>') }}.
   when: bootwright_ceph_rgw_ingress_tls_specs | length > 0
 
 - name: Refuse an RGW ingress TLS spec cephadm reported an error for

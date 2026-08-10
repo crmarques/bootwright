@@ -8,14 +8,29 @@
 
 - name: Read the orchestrator hosts before enrolling the replacement arbiter
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, orch, host, ls, --format, json]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - host
+      - ls
+      - --format
+      - json
   register: bootwright_arbiter_orch_hosts
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_orch_hosts.rc | default(0) | int in [124, 137]
 
 - name: Enrol the replacement arbiter host in the orchestrator
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --
@@ -49,6 +64,9 @@
 - name: Apply the mon spec that carries both arbiters
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --mount
@@ -61,7 +79,7 @@
       - /mnt/mon-during.yaml
   register: bootwright_arbiter_mon_spec_during
   changed_when: true
-  failed_when: false
+  failed_when: bootwright_arbiter_mon_spec_during.rc | default(0) | int in [124, 137]
 
 - name: Refuse a mon spec cephadm reported an error for
   ansible.builtin.assert:
@@ -84,14 +102,25 @@
 
 - name: Wait for the replacement arbiter mon to join the monmap in quorum
   ansible.builtin.command:
-    argv: [timeout, --kill-after=10, "120", cephadm, shell, --, ceph, mon, dump, --format, json]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - mon
+      - dump
+      - --format
+      - json
   register: bootwright_arbiter_join_dump
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_join_dump.rc | default(0) | int in [124, 137]
   retries: "{{ bootwright_arbiter_readiness_retries | default(60) | int }}"
   delay: "{{ bootwright_arbiter_readiness_delay | default(10) | int }}"
   until: >-
-    (
+    (bootwright_arbiter_join_dump.rc | default(0) | int in [124, 137]) or (
       ((bootwright_arbiter_join_dump.rc | default(1) | int) == 0
        or ((bootwright_arbiter_join_dump.stdout | default('', true) | regex_search('\}\\s*$')) is not none))
       and bootwright_arbiter_desired_mon in
@@ -106,10 +135,21 @@
 
 - name: Collect cephadm events when the replacement arbiter mon did not join
   ansible.builtin.command:
-    argv: [cephadm, shell, --, ceph, log, last, "100", cephadm]
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - log
+      - last
+      - "100"
+      - cephadm
   register: bootwright_arbiter_join_log
   changed_when: false
-  failed_when: false
+  failed_when: bootwright_arbiter_join_log.rc | default(0) | int in [124, 137]
   when: >-
     bootwright_arbiter_desired_mon not in
     ((bootwright_arbiter_join_dump.stdout | default('{}', true) | from_json).mons

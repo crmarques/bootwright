@@ -2684,6 +2684,24 @@ known by the CLI, such as a dirty device path, may be named as the one additive
 flag change to the exact resolved base invocation; it never justifies printing
 an independently assembled or wider command.
 
+Every remote `cephadm shell` command is bounded by an operation-specific finite
+timeout with a TERM-to-KILL escalation. Read-only probes, inventory refreshes,
+configuration mutations, orchestration applies, pool/filesystem/device
+removals, container-local tool round-trips, and staged operation batches are
+separate classes; one blanket probe-sized ceiling is not valid for the longer
+operations. A zero or negative class is refused before the first command; a
+staged batch has a fixed 1800-second maximum, and TERM-to-KILL escalation stays
+between 1 and 60 seconds, so Ansible precedence cannot disable termination. A
+timeout exit (rc 124 or 137) is an unknown outcome, never evidence of absence,
+ownership, authorization, or successful mutation. Every timeout fails before
+another retry, loop item, or state change; ordinary non-timeout probe failure
+may still feed a later evidence gate. A mutating timeout reports the exact
+CLI-resolved invocation to retry after the named external condition is fixed.
+A read-only timeout reports no state-changing command. A task whose output is
+protected by `no_log` relays only non-secret timeout metadata. Task failure
+controls, loops, retries, and rescue paths must not hide either timeout code
+from the runner.
+
 A remedy that keeps the same verb keeps a literal `--authorize all`. A remedy
 that changes verbs never carries that literal across the boundary: it expands
 `all` to the explicit tokens accepted by the source verb, retains only the

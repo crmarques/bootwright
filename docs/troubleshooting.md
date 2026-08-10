@@ -468,6 +468,36 @@ to match. Deleting the record file alone would strand the live resource.
     `diff` — remove them on the cluster directly (`oc delete`), or destroy the
     whole `ContainerCluster` to reclaim everything at once.
 
+## A Ceph command reaches its safety timeout
+
+A bounded Ceph task now fails with a diagnostic like:
+
+```text
+Ceph state-changing command "Apply Ceph OSD service spec" on storage-0 exceeded
+its 600-second safety timeout and was terminated (rc 124). The outcome is
+unknown; Bootwright did not treat the timeout as evidence that the cluster is
+absent, safe to change, or successfully changed. ... retry the exact resolved
+invocation: `bootwright apply ...`.
+```
+
+Read the task log named beside the failure before retrying. A registry pull,
+unreachable monitor, lost quorum, slow removal, or unhealthy host can all keep
+`cephadm shell` alive; rc 124 means the finite bound expired, while rc 137 means
+the child also needed the KILL escalation. A task carrying credentials or key
+material deliberately relays only its name, timeout, exit code, and whether it
+changes state, so its log may contain no Ceph stderr. Neither code is an
+ownership or authorization refusal, so adding `--authorize` flags is not a
+remedy.
+
+For a state-changing task, fix the condition the log names and copy the exact
+`bootwright ...` invocation printed by the failure. It preserves this run's
+context, selection, stage/range, mode, credentials, effects, and accepted
+authorizations. Bootwright treats the prior outcome as unknown and re-enters
+the idempotency and safety gates; do not substitute a broader command. A
+read-only probe timeout deliberately prints no state-changing retry command:
+repair reachability or cluster health and repeat the original read-only
+operation.
+
 ## A Ceph apply ends with zero OSDs
 
 The apply bootstraps the cluster, brings up every monitor, manager and

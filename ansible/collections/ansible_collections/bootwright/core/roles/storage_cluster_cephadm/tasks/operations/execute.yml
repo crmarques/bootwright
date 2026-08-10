@@ -1,11 +1,37 @@
 ---
 - name: Run Ceph operation
-  ansible.builtin.command:
-    argv: "{{ ['cephadm', 'shell', '--'] + bootwright_ceph_op_command }}"
-    stdin: "{{ (bootwright_ceph_op_stdin | default('') | length > 0) | ternary(bootwright_ceph_op_stdin, omit) }}"
-  register: bootwright_ceph_op_run
-  changed_when: true
-  no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
+  block:
+    - name: Execute Ceph operation
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['timeout',
+             '--kill-after=' ~ (bootwright_ceph_timeout_kill_after_seconds | string),
+             bootwright_ceph_orchestration_timeout_seconds | string,
+             'cephadm', 'shell', '--']
+            + bootwright_ceph_op_command
+          }}
+        stdin: "{{ (bootwright_ceph_op_stdin | default('') | length > 0) | ternary(bootwright_ceph_op_stdin, omit) }}"
+      register: bootwright_ceph_op_run
+      changed_when: true
+      failed_when: bootwright_ceph_op_run.rc | default(0) | int != 0
+      no_log: "{{ (bootwright_no_log | default(true) | bool) and (bootwright_ceph_op_no_log | bool) }}"
+  rescue:
+    - name: Relay a Ceph operation timeout without exposing protected input
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/ceph_command_timeout.yml"
+      vars:
+        bootwright_ceph_timeout_task: Execute Ceph operation
+        bootwright_ceph_timeout_seconds: "{{ bootwright_ceph_orchestration_timeout_seconds }}"
+        bootwright_ceph_timeout_exit_code: "{{ ansible_failed_result.rc }}"
+        bootwright_ceph_timeout_state_changing: true
+      when: ansible_failed_result.rc | default(0) | int in [124, 137]
+
+    - name: Refuse to continue after a protected Ceph operation failed
+      ansible.builtin.fail:
+        msg: >-
+          Ceph operation failed with rc {{ ansible_failed_result.rc | default('<none>') }}.
+          Its protected input and output remain redacted; inspect the Ansible artifact log
+          after confirming that it is safe to expose them.
   when:
     - not bootwright_ceph_op_skip | bool
     - bootwright_ceph_op_command | length > 0

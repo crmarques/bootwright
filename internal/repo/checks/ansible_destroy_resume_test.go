@@ -94,9 +94,7 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 	if !(refuseIdx < probeIdx && probeIdx < disableIdx && disableIdx < orchRefuseIdx && orchRefuseIdx < reportIdx && reportIdx < nonSeedRmIdx) {
 		t.Fatalf("a resumed removal must stop the orchestrator from a surviving host before any host removes the cluster (refuse=%d probe=%d disable=%d orchRefuse=%d report=%d rm=%d)", refuseIdx, probeIdx, disableIdx, orchRefuseIdx, reportIdx, nonSeedRmIdx)
 	}
-	if got := fmt.Sprint(tasks[disableIdx]["failed_when"]); got != "false" {
-		t.Errorf("the resumed orchestrator stop must not fail the run itself; its result is what the refusal reads, got failed_when=%v", tasks[disableIdx]["failed_when"])
-	}
+	assertCephMutationTimeoutOnlyFailure(t, tasks[disableIdx], "bootwright_ceph_resumed_orch_disable", "the resumed orchestrator stop")
 	probeCmd := fmt.Sprint(tasks[probeIdx]["ansible.builtin.command"])
 	for _, want := range []string{"status", "--connect-timeout"} {
 		if !strings.Contains(probeCmd, want) {

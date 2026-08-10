@@ -27,6 +27,9 @@
 - name: Rewrite the management gateway daemons from the settled spec
   ansible.builtin.command:
     argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_orchestration_timeout_seconds }}"
       - cephadm
       - shell
       - --

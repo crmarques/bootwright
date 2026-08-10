@@ -1,8 +1,11 @@
 package workflow
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/converge/ansible"
 )
 
 func TestConciseApplyTaskFailurePrefersFailureLine(t *testing.T) {
@@ -38,5 +41,25 @@ func TestMiddleEllipsisKeepsBothEnds(t *testing.T) {
 	}
 	if got := middleEllipsis("short reason", 180); got != "short reason" {
 		t.Fatalf("short value must pass through unchanged: %q", got)
+	}
+}
+
+func TestConciseApplyTaskFailurePreservesExactCephTimeoutRetry(t *testing.T) {
+	const invocation = "bootwright apply --context nprd --clusters storage-a --stage storage --yes"
+	err := &ansible.CephCommandTimeoutError{
+		Err:            errors.New("run ansible-playbook exited with error"),
+		Task:           "Apply Ceph OSD service spec",
+		Host:           "storage-0",
+		TimeoutSeconds: "600",
+		ExitCode:       124,
+		Invocation:     invocation,
+		StateChanging:  true,
+	}
+	got := conciseApplyTaskFailure(err)
+	if !strings.Contains(got, "outcome is unknown") || !strings.Contains(got, "`"+invocation+"`") {
+		t.Fatalf("timeout failure lost its classification or exact retry: %q", got)
+	}
+	if strings.Contains(got, "ansible-playbook exited") {
+		t.Fatalf("timeout failure exposed only the generic runner error: %q", got)
 	}
 }
