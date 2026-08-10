@@ -455,32 +455,6 @@ learned; this file records what it still owes.
   build-on-promotion behaviour where candidates are declared.
 - Related: [ceph-arbiter-replacement.md](ceph-arbiter-replacement.md)
 
-## B-077 — The IBM subscription preflight queries every enabled repository, once per package
-- Status: open
-- Area: ceph / packaging
-- Origin: ceph-prd-01 preflight failure on a single node and package (2026-08-05)
-- Problem: `providers/ibm.yml` probes with one bare `dnf repoquery` per package
-  (`cephadm`, plus `ibm-storage-ceph-license`), each of which loads **all**
-  enabled repositories. Two consequences. (1) Cost: a licensed fleet issues
-  nodes × 2 concurrent metadata reads where nodes × 1 would do, against the
-  Satellite, in the densest burst of the storage apply; with the short
-  `metadata_expire` a Satellite writes into `redhat.repo`, each is a live
-  fetch. (2) Diagnosis: the probe's verdict depends on repositories the spec
-  never declared — an unrelated stale repository fails it — and, where
-  `skip_if_unavailable=True` (which `machine_base` writes into
-  `/etc/dnf/dnf.conf`) *is* honored, an unreadable **declared** Ceph repository
-  returns rc 0 with no build lines, so the second assert reports the
-  content-view message ("the repositories answered but publish nothing") for
-  what is really a reachability fault. The 2026-08-05 run showed the opposite
-  branch — rc 1, the repository not skipped — so both behaviors are live in the
-  fleet and the message can be wrong in one of them.
-- Exit: run one `repoquery` for all probed packages, scoped to the declared
-  repositories (`--disablerepo='*' --enablerepo=<repository.redhatRepos>` with
-  `skip_if_unavailable` forced off), attributing builds per package by the
-  `%{name}` field the `--qf` already emits. Unreadable-vs-publishes-nothing then
-  means the same thing on every node, and the preflight converges on the
-  repositories ADR 0051 says it proves.
-
 ## B-086 — No preflight proves the release payload is reachable from the nodes
 - Status: open
 - Area: preflight

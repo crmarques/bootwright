@@ -1391,6 +1391,13 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   registry access and license acceptance come from that entitlement; the RHEL
   BaseOS/AppStream repos cephadm needs come from the `redhat-rhel` subscription
   the nodes register with (profile `subscription` or cluster `osSubscriptionRef`).
+  With `spec.ceph.ibm.packages.source: subscription`, the non-empty
+  `subscriptionRepos` list is the authoritative package-source declaration.
+  Before installing, one probe disables every undeclared repository, enables
+  the rendered provider repository set, refuses to skip an unavailable declared
+  repository, and queries every required IBM package together. Repository
+  unreadability, missing package content, and a missing pinned `cephadm` build
+  are distinct fail-closed states, each reported with its exact retry.
   Neither must mix with upstream Ceph packages
   or images. IBM license acceptance
   is passed non-interactively to `cephadm bootstrap`. Because acceptance enables

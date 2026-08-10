@@ -50,22 +50,27 @@ public-internet package dependency and no override.
   `repository.ibmRepoURL`; the role's existing empty-URL gate then skips the
   fetch. The phase removes a vendor `.repo` file an earlier apply installed,
   so flipped fleets stop pointing dnf metadata refreshes at the public CDN.
-  The list must be non-empty, and a `dnf repoquery` preflight — after the
-  removal, so it cannot pass against stale public-repo metadata — proves the
-  enabled repositories serve the pinned `cephadm` build and
-  `ibm-storage-ceph-license`, failing with a content-view-shaped message
-  before anything installs.
+  The list must be non-empty, and one `dnf repoquery` preflight — after the
+  removal, so it cannot pass against stale public-repo metadata — disables
+  every undeclared repository, enables only the rendered provider repository
+  set, forces `skip_if_unavailable=False` globally and for each declared id,
+  and queries `cephadm` plus `ibm-storage-ceph-license` together. It proves the
+  declared repositories are readable and serve both packages before anything
+  installs.
 
 The preflight queries bare package names rather than the pinned spec, and has
-dnf print every spec form it would itself accept for each available build. Two
-asserts then read that output: one separating an unreadable repository from one
-that publishes nothing under the name, and one testing the pin against the
-emitted spec set. Querying the pinned spec directly would have collapsed both
-failures into a single empty result — a repository that is unreachable, one
-that carries no Ceph content, and one that is merely a z-stream behind the pin
-are three different problems with three different remedies, and an operator
-cannot tell them apart from silence. The pin assert reports the builds that
-*are* published, so the remedy is in the message rather than a round trip.
+dnf attribute every emitted line to its package while printing every spec form
+it would itself accept for each available build. One command means both package
+verdicts share one repository read. Separate asserts then distinguish a command
+failure from a readable repository set that publishes no build of a particular
+package, before a final assert tests the pin against the emitted `cephadm` spec
+set. Querying the pinned spec directly would have collapsed those failures into
+a single empty result — a declared repository that is unreachable, one that
+carries no Ceph content, and one that is merely a z-stream behind the pin are
+three different problems with three different remedies. The command-failure
+message prints the exact node-side argv and every apply refusal carries the
+controller-resolved invocation, while the pin assert reports the builds that
+*are* published.
 
 It fails the apply even when every node already carries the pinned build. A
 pinned `dnf install` short-circuits on an already-installed package without
@@ -108,6 +113,9 @@ values edit, one storage apply, no rebuild pressure.
 - The preflight trusts dnf metadata freshness; a content view republished
   since the node's last refresh can need `dnf clean metadata`, which the
   failure message names.
+- An unrelated enabled repository cannot fail this preflight, and a declared
+  repository cannot be silently skipped. A failed read and missing package
+  content therefore retain distinct, stable operator remedies.
 - A provided arbiter on an isolated network now needs Satellite reachability
   for the enable and the preflight, like every other storage node.
 - `subscriptionRepos` ids are opaque Satellite labels; validation is

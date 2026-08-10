@@ -112,8 +112,9 @@ repository), set `spec.ceph.ibm.packages.source: subscription` and name the
 repository ids in `spec.ceph.ibm.packages.subscriptionRepos`. The Ceph deps
 phase then enables those repositories alongside BaseOS/AppStream, never fetches
 the public `.repo` file, and removes one an earlier vendor-sourced apply left
-behind; a preflight proves the declared repositories serve the pinned `cephadm`
-build and the `ibm-storage-ceph-license` package before anything installs. The
+behind. One preflight disables every undeclared repository, makes an unavailable
+declared repository a hard error, and queries the pinned `cephadm` source plus
+the `ibm-storage-ceph-license` package together before anything installs. The
 storage phase also preserves every repository the node's
 `MachineInstallProfile` `customizations.repositories.subscription.enable[]`
 declares — machine-declared repositories survive the Ceph phase's repository

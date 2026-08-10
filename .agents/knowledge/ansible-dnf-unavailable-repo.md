@@ -25,48 +25,38 @@ original caller's PATH inside internal sudo re-exec. It should only fall back
 to `dnf install -y python3.12` when no suitable caller/root-visible Python is
 available.
 
-## The Ceph subscription preflight reads the same repositories twice
+## The Ceph subscription preflight isolates the declared repositories
 
-**Symptom:** `storage_cluster_cephadm : Require the declared subscription
-repositories to serve the IBM Ceph packages` fails on **one** node for **one**
-of the probed packages, while that same node's other probe — same task, same
-repositories, a second earlier — passed, and every other node passed both:
+**Symptom:** the IBM Ceph subscription preflight reports either that its one
+declared-repository query failed or that the successful query returned no build
+of one required package:
 
 ```text
-dnf could not query the enabled repositories for package ibm-storage-ceph-license
+dnf could not query only the declared repositories
 Failed to download metadata for repo '<satellite-ceph-repo>': Cannot download repomd.xml
 ```
 
-**Reading it:** the probe (`providers/ibm.yml`) runs one `dnf repoquery` per
-probed package — `cephadm`, plus `ibm-storage-ceph-license` on a licensed
-distribution — and dnf loads *every* enabled repository for either query. The
-two invocations differ only in time, and neither subscription attachment nor
-content-view promotion can change between them. A pass followed by a failure a
-second later on the same node therefore proves a **transient repository read**,
-and rules out the entitlement, reachability and content-view causes the failure
-message lists. Chase those only when *every* attempt failed.
+**Reading it:** `providers/ibm.yml` issues one `dnf repoquery` for `cephadm` and,
+on the licensed distribution, `ibm-storage-ceph-license`. It passes
+`--disablerepo=*`, then enables only rendered `repository.redhatRepos`, and
+forces `skip_if_unavailable=False` globally and for every declared repository.
+The output includes the package name on every build, pin, and accepted-spec
+line, so one successful metadata read yields independent content verdicts.
 
-Why the second invocation went back to the network at all: dnf re-downloads
-`repomd.xml` as soon as the cached metadata is expired, and Satellite-generated
-`/etc/yum.repos.d/redhat.repo` stanzas often carry a very short
-`metadata_expire`, which makes every dnf invocation a live fetch. Check the
-node's own stanza before assuming a cache was in play. The preflight is the
-densest burst of metadata fetches in a storage apply — nodes × probed packages,
-all concurrent — so it is where a Satellite or capsule under load shows up
-first.
+An rc failure is therefore a read, subscription, proxy, trust, or GPG problem
+in a repository the desired state requires; an unrelated enabled repository
+cannot cause it. Rc 0 followed by a package-content refusal means every declared
+repository answered but none published that package. A later pin refusal means
+the repositories publish `cephadm`, but not the exact desired build. Keep those
+three diagnoses separate.
 
-Note also that `machine_base` writes `skip_if_unavailable=True` into
-`/etc/dnf/dnf.conf`, and this `repoquery` still exited 1 rather than skipping
-the repository. Do not assume the preflight is immune to a single unreadable
-enabled repository: whichever repository dnf names in the error fails the
-probe, Ceph-related or not.
-
-**Fix:** the probe retries — 3 attempts 10 s apart
+**Fix:** the one query retries 3 attempts 10 s apart
 (`bootwright_ceph_subscription_probe_retries` /
 `bootwright_ceph_subscription_probe_delay`), carrying the `attempts >= retries`
 escape every `until:` in this collection needs, because an exhausted `until`
 sets `failed` even under `failed_when: false`. The failure message reports how
-many attempts failed, so a blip and a standing fault are no longer the same
-text. Retrying cannot fix a standing fault; on the node that failed, triage it
-with `dnf repolist --enabled`, `dnf clean metadata`, a repeat of the probe's
-own `repoquery`, and `subscription-manager repos --list-enabled`.
+many attempts failed and prints the exact node-side argv. Retry cannot repair a
+standing fault: run that argv, inspect `subscription-manager repos
+--list-enabled`, fix the named declared repository or content view, use `dnf
+clean metadata` after a republish, then run the exact controller invocation the
+refusal prints.
