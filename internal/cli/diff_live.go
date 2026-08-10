@@ -25,6 +25,7 @@ type liveDiffReport struct {
 	InSync         bool                          `json:"inSync"`
 	Storage        []liveStorageDiff             `json:"storage,omitempty"`
 	Container      []liveContainerDiff           `json:"container,omitempty"`
+	AddonCSVs      []liveAddonCSVComparison      `json:"addonCSVs,omitempty"`
 	Infrastructure []liveInfraResource           `json:"infrastructure,omitempty"`
 	Absent         []string                      `json:"absent,omitempty"`
 	Undeclared     []workflow.UndeclaredResource `json:"undeclared,omitempty"`
@@ -84,6 +85,7 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
 	containers := probeContainerClusters(ctx, state, cf.ctx.Name, clustersDir, cf.ctx.RunsDir, offline.Roots)
+	live.AddonCSVs = probeLiveAddonCSVs(ctx, state, cf.ctx.Name, clustersDir, cf.ctx.RunsDir, liveAddonCSVSelection(offline.AddonCSVs, offline.Roots))
 	for index, root := range offline.Roots {
 		switch root.Kind {
 		case workflow.ApplyClusterKindStorage:
@@ -233,7 +235,7 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 	p := cliout.New(stdout)
 	p.Command("diff")
 	p.Section("Desired vs real (live)")
-	if live.InSync && len(live.Storage) == 0 && len(live.Container) == 0 && len(live.Absent) == 0 && len(live.Infrastructure) == 0 {
+	if live.InSync && len(live.Storage) == 0 && len(live.Container) == 0 && len(live.AddonCSVs) == 0 && len(live.Absent) == 0 && len(live.Infrastructure) == 0 {
 		p.Status(cliout.StatusOK, "scope", "no selected resources to check")
 	} else if live.InSync {
 		p.Status(cliout.StatusOK, "state", "desired state matches the live clusters")
@@ -267,6 +269,7 @@ func printLiveDiff(stdout io.Writer, live liveDiffReport) {
 			p.Status(cliout.StatusFail, label, "reachable but "+container.Note)
 		}
 	}
+	printLiveAddonCSVs(p, live.AddonCSVs)
 
 	for _, absent := range live.Absent {
 		p.Status(cliout.StatusWarn, absent, "absent (never applied)")

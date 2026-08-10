@@ -3,6 +3,7 @@ package records
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestHasFailedStep(t *testing.T) {
@@ -53,5 +54,27 @@ func TestStepObservedDigestsRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Steps["attach"].ObservedDigests, want.Steps["attach"].ObservedDigests) {
 		t.Fatalf("observed digests = %v, want %v", got.Steps["attach"].ObservedDigests, want.Steps["attach"].ObservedDigests)
+	}
+}
+
+func TestCSVObservationsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	observedAt := time.Date(2026, 8, 10, 15, 30, 0, 0, time.UTC)
+	want := Record{
+		Cluster: "ocp", Extension: "data-foundation", Status: RecordStatusReady, Phase: RecordPhaseComplete,
+		CSVObservations: []CSVObservation{{
+			Namespace: "openshift-storage", Subscription: "odf-operator",
+			InstalledCSV: "odf-operator.v4.21.4", Version: "4.21.4", ObservedAt: observedAt,
+		}},
+	}
+	if err := SaveRecord(dir, want); err != nil {
+		t.Fatalf("SaveRecord: %v", err)
+	}
+	got, found, err := LoadRecord(dir, want.Cluster, want.Extension)
+	if err != nil {
+		t.Fatalf("LoadRecord: %v", err)
+	}
+	if !found || !reflect.DeepEqual(got.CSVObservations, want.CSVObservations) {
+		t.Fatalf("CSV observations = %+v, found=%t, want %+v", got.CSVObservations, found, want.CSVObservations)
 	}
 }

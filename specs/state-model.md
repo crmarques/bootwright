@@ -2007,9 +2007,12 @@ Rules:
   `olm.subscription` requires `name`, `package`, `channel`, and `source`;
   `sourceNamespace` defaults to `openshift-marketplace` and `installPlanApproval`
   defaults to `Automatic` (both normalize-materialized; `installPlanApproval`
-  accepts `Automatic` or `Manual`), and optional `startingCSV` pins the initial
-  CSV. Each `olm.customResources[]` entry requires `apiVersion`, `kind`, and
-  `metadata.name`; `metadata.namespace` is optional (omitted for cluster-scoped
+  accepts `Automatic` or `Manual`), and optional `startingCSV` pins only the
+  initial CSV. `Automatic` deliberately lets OLM approve resolution within the
+  authored channel; `Manual` is authorable when the operator must approve each
+  InstallPlan out of band. Neither approval mode authors the resolved CSV
+  version. Each `olm.customResources[]` entry requires `apiVersion`, `kind`,
+  and `metadata.name`; `metadata.namespace` is optional (omitted for cluster-scoped
   resources). Apply installs the shipped CatalogSource first (waiting for its
   registry to report a READY connection), then the
   namespace/OperatorGroup/Subscription, waits for the operator's CSV to reach
@@ -2041,6 +2044,21 @@ Rules:
   `csvSucceeded` (requires `namespace`, `subscription`), `condition` (requires
   `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
+- A final `Ready` add-on record MUST carry one `csvObservations[]` entry, in
+  declared-check order, for every `csvSucceeded` readiness check. Each entry
+  records the check's `namespace` and `subscription`, the Subscription's
+  `status.installedCSV`, that CSV's OLM spec.version as `version`, and the UTC
+  `observedAt`; incomplete evidence cannot be persisted with the final Ready
+  transition. A path that would skip an already-ready Apply or Wait MUST
+  re-observe every declared CSV and persist the complete refreshed observations
+  before reporting the skip. Failure to observe or save them fails the skip.
+  The next such attempt upgrades a legacy Ready record without complete
+  observations through the same refresh before it may skip.
+- CSV observations are audit evidence, not authored intent. Their values are
+  excluded from the desired hash, apply-mode classification, convergence safety,
+  and state-change-authorization decisions. Requiring complete evidence
+  may fail a Ready transition or skip, but a resolved-version change is not
+  desired-state drift when the declaration pins only a channel.
 - `spec.accepts.inputs[]` declare binding-scoped scalar inputs. Each input has a
   `name`, an optional `required` marker (when `true`, every binding of the add-on
   must supply the input), exactly one of `resourceRef.kind` (a known Bootwright
@@ -3805,6 +3823,9 @@ command. The rest are registered per command, on the verbs that reach machines.
     a `--yes` or interactive confirm; an inline `<version>` is asserted against
     the registered one, not a selector. It refuses a directory the store did not
     register. Existing contexts keep their snapshotted copy.
+- `bootwright status` reports each stored Ready CSV observation under its add-on:
+  namespace, Subscription, installed CSV, CSV spec.version, and observation
+  time. It reads the record and does not refresh the observation.
 - `bootwright diff` compares the selected desired state against the live clusters
   and prints the differences as a git-style diff (`-` desired, `+` real). For each
   managed Ceph `StorageCluster` it discovers live state read-only on the seed —
@@ -3825,7 +3846,11 @@ command. The rest are registered per command, on the verbs that reach machines.
   cluster but not declared is reported as `real-only` (an `--adopt` candidate), not
   a deletion. `diff` accepts `--stage`, `--clusters`, and `--output` like the other
   selection commands and rejects `--mode rebuild` (it neither mutates cluster state nor
-  suppresses its report).
+  suppresses its report). For each selected add-on `csvSucceeded` identity, live
+  diff also compares the recorded observation with the current installed CSV and
+  version. `match`, `changed`, `unrecorded`, and `unavailable` are advisory
+  evidence: because desired state does not pin the resolved version, these CSV
+  states alone do not change `inSync` or exit `3`.
 - In **both** modes, `diff` also reports `undeclared` ("Owned but no longer
   declared") resources: Bootwright ownership records — at `Machine`, cluster,
   `InfraProvider`, and `InfraComponent` granularity — that correlate to no
@@ -3837,9 +3862,12 @@ command. The rest are registered per command, on the verbs that reach machines.
 - `bootwright diff --recorded` skips all cluster contact and instead produces the
   fast offline desired-vs-recorded report for automation. It compares desired
   state against the convergence-safety evidence recorded by the last apply only;
-  it does not probe live hosts, BMCs, or clusters, so a change made out of band
-  after a matching apply (a wiped disk, an undefined VM, a deleted namespace) is
-  invisible to `--recorded` but is exactly what the default live `diff` surfaces.
+  it also surfaces each stored CSV observation (or that no observation was
+  recorded) as audit evidence, without treating the observed version as desired
+  state. It does not probe live hosts, BMCs, or clusters, so a change made out
+  of band after a matching apply (a wiped disk, an undefined VM, a deleted
+  namespace) is invisible to `--recorded` but is exactly what the default live
+  `diff` surfaces.
   - **Classification vocabulary.** It classifies each selected resource against
     the durable convergence-safety evidence recorded by the last apply: `missing`
     (no completed apply recorded), `match` (applied with the current desired

@@ -265,6 +265,10 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 				}
 			}
 			p.Status(status, "add-on "+extension.Name, detail)
+			for _, observation := range extension.CSVObservations {
+				p.Status(cliout.StatusInfo, "CSV "+observation.Namespace+"/"+observation.Subscription,
+					observation.InstalledCSV+" version="+observation.Version+" observed="+observation.ObservedAt.Format(time.RFC3339))
+			}
 		}
 	}
 	orphanPartial := make([]string, 0, len(partialStorage))

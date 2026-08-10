@@ -220,6 +220,14 @@ install.
     is valid and leaves `openshift-marketplace` and `Automatic`. Run
     `bootwright render effective` to see the injected values.
 
+!!! note "Choose the approval workflow deliberately"
+    `Automatic` is the deliberate default: OLM may approve a newer CSV resolved
+    within the authored channel without a separate Bootwright action. Set
+    `installPlanApproval: Manual` when each InstallPlan needs out-of-band
+    approval; Bootwright waits for that approval and never approves it. Neither
+    choice pins the resolved version, and `startingCSV` pins only the initial
+    resolution.
+
 !!! note "Custom resources need an identity"
     Each `olm.customResources[]` entry must set `apiVersion`, `kind`, and
     `metadata.name`. `metadata.namespace` is optional: set it for namespaced
@@ -332,6 +340,20 @@ Each readiness check must set exactly one arm:
 | `csvSucceeded` | `namespace`, `subscription` |
 | `condition` | `apiVersion`, `kind`, `name`, `condition.type`, `condition.status` |
 | `resourceExists` | `apiVersion`, `kind`, `name` |
+
+For every `csvSucceeded` check, a final Ready record stores the namespace,
+Subscription, installed CSV name, CSV spec.version, and observation time.
+Already-ready skips re-observe and persist this evidence before they report a
+skip; if the refresh cannot be observed or saved, the skip fails. The next such
+run upgrades an older Ready record without this evidence in the same way.
+
+Use `bootwright status` to see the stored observation; use
+`bootwright diff --recorded` to include it in the offline report; and use live
+`bootwright diff` to compare it with the current CSV. Live `changed`, `unrecorded`, or
+`unavailable` CSV evidence is advisory: an otherwise in-sync report remains in
+sync and does not exit `3`, because the add-on declaration selects a channel
+rather than a resolved version. The observations are audit evidence; they do
+not affect the desired hash, apply mode, or convergence-safety gates.
 
 ### Steps
 

@@ -192,7 +192,7 @@ func (r *callRecordingRunner) Run(_ context.Context, _ string, args []string, in
 		case strings.Contains(joined, "subscription"):
 			return []byte(`{"status":{"installedCSV":"ready-operator.v1"}}`), nil
 		case strings.Contains(joined, "clusterserviceversion"):
-			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+			return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`), nil
 		default:
 			return []byte(`{"metadata":{"name":"installed"}}`), nil
 		}

@@ -208,7 +208,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 
 | Topic | File |
 | --- | --- |
-| How the add-on engine's already-ready short-circuit, OLM catalog/CSV gates, typed gate-timeout errors, quiet poll runner, and stage-scoped preflight gates behave and why. | [addon-apply-engine-gates.md](addon-apply-engine-gates.md) |
+| How the add-on engine's already-ready short-circuit, fail-closed Ready CSV evidence refresh, audit-only recorded/live CSV reporting, OLM catalog/CSV gates, typed gate-timeout errors, quiet poll runner, and stage-scoped preflight gates behave and why. | [addon-apply-engine-gates.md](addon-apply-engine-gates.md) |
 | Why the Data Foundation external-cluster attach breaks in two independent ways: a meta-operator CSV that establishes no CRD, and an IBM Storage Ceph 20.2.1 cephx key type the bundled Data Foundation client cannot parse. | [data-foundation-external-attach.md](data-foundation-external-attach.md) |
 | IBM Fusion Data Foundation's catalog registry pod requires an explicit restricted security context; the typed CatalogSource pod-config field and native add-on pin prevent the CatalogSource readiness gate from blocking the Subscription. | [fusion-catalog-security-context.md](fusion-catalog-security-context.md) |
 | provides/requires capabilities are an open token vocabulary with three reserved planner names (kubevirt, dataFoundation, nmstate); ordering is a stable per-binding Kahn topo sort where unsatisfied requirements impose no edge. | [addon-capability-ordering.md](addon-capability-ordering.md) |

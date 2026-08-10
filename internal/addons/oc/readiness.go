@@ -9,27 +9,43 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 )
+
+type ReadinessResult struct {
+	Ready           bool
+	Detail          string
+	CSVObservations []extensionrecords.CSVObservation
+}
 
 func WaitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, pollInterval time.Duration, progress io.Writer) (string, error) {
 	budget, err := newWaitBudget(extension.Spec.Readiness.Timeout, time.Time{})
 	if err != nil {
 		return "", err
 	}
-	return waitReady(ctx, runner, kubeconfig, extension, budget, pollInterval, progress)
+	result, err := waitReadiness(ctx, runner, kubeconfig, extension, budget, pollInterval, progress)
+	return result.Detail, err
 }
 
-func waitReady(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, budget waitBudget, pollInterval time.Duration, progress io.Writer) (string, error) {
+func waitReadiness(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, budget waitBudget, pollInterval time.Duration, progress io.Writer) (ReadinessResult, error) {
 	if len(extension.Spec.Readiness.Checks) == 0 {
-		return "no readiness checks declared", nil
+		return ReadinessResult{Ready: true, Detail: "no readiness checks declared"}, nil
 	}
-	return pollUntilReady(ctx, budget, pollInterval, progress, true,
+	var result ReadinessResult
+	last, err := pollUntilReady(ctx, budget, pollInterval, progress, true,
 		func(checkCtx context.Context) (bool, string, error) {
-			return Ready(checkCtx, runner, kubeconfig, extension)
+			var checkErr error
+			result, checkErr = ObserveReadiness(checkCtx, runner, kubeconfig, extension)
+			return result.Ready, result.Detail, checkErr
 		},
 		func(diagnosisCtx context.Context, last string, tracker *waitProgress) (string, error) {
 			return readinessTimeout(diagnosisCtx, runner, kubeconfig, extension, budget.timeout, last, tracker)
 		})
+	result.Detail = last
+	if err != nil {
+		result.Ready = false
+	}
+	return result, err
 }
 
 func readinessTimeout(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon, timeout time.Duration, lastObserved string, tracker *waitProgress) (string, error) {
@@ -52,24 +68,41 @@ func readinessTimeout(ctx context.Context, runner OCRunner, kubeconfig string, e
 const readinessFanout = 4
 
 type readinessOutcome struct {
-	ready  bool
-	detail string
-	err    error
+	ready          bool
+	detail         string
+	csvObservation *extensionrecords.CSVObservation
+	err            error
 }
 
 func Ready(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon) (bool, string, error) {
+	result, err := ObserveReadiness(ctx, runner, kubeconfig, extension)
+	return result.Ready, result.Detail, err
+}
+
+func ObserveReadiness(ctx context.Context, runner OCRunner, kubeconfig string, extension v1alpha1.ClusterAddon) (ReadinessResult, error) {
 	outcomes := readinessOutcomes(ctx, runner, kubeconfig, extension.Spec.Readiness.Checks)
+	result := ReadinessResult{Ready: true}
+	for _, outcome := range outcomes {
+		if outcome.csvObservation != nil {
+			result.CSVObservations = append(result.CSVObservations, *outcome.csvObservation)
+		}
+	}
 	var observed []string
 	for _, outcome := range outcomes {
 		if outcome.err != nil {
-			return false, strings.Join(append(observed, outcome.detail), "; "), outcome.err
+			result.Ready = false
+			result.Detail = strings.Join(append(observed, outcome.detail), "; ")
+			return result, outcome.err
 		}
 		observed = append(observed, outcome.detail)
 		if !outcome.ready {
-			return false, strings.Join(observed, "; "), nil
+			result.Ready = false
+			result.Detail = strings.Join(observed, "; ")
+			return result, nil
 		}
 	}
-	return true, strings.Join(observed, "; "), nil
+	result.Detail = strings.Join(observed, "; ")
+	return result, nil
 }
 
 func readinessOutcomes(ctx context.Context, runner OCRunner, kubeconfig string, checks []v1alpha1.ClusterAddonReadinessCheck) []readinessOutcome {
@@ -78,8 +111,7 @@ func readinessOutcomes(ctx context.Context, runner OCRunner, kubeconfig string, 
 		return outcomes
 	}
 	if len(checks) == 1 {
-		ready, detail, err := checkReady(ctx, runner, kubeconfig, checks[0])
-		outcomes[0] = readinessOutcome{ready: ready, detail: detail, err: err}
+		outcomes[0] = checkReady(ctx, runner, kubeconfig, checks[0])
 		return outcomes
 	}
 	slots := make(chan struct{}, readinessFanout)
@@ -90,53 +122,70 @@ func readinessOutcomes(ctx context.Context, runner OCRunner, kubeconfig string, 
 			defer wg.Done()
 			slots <- struct{}{}
 			defer func() { <-slots }()
-			ready, detail, err := checkReady(ctx, runner, kubeconfig, checks[index])
-			outcomes[index] = readinessOutcome{ready: ready, detail: detail, err: err}
+			outcomes[index] = checkReady(ctx, runner, kubeconfig, checks[index])
 		}(i)
 	}
 	wg.Wait()
 	return outcomes
 }
 
-func checkReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) (bool, string, error) {
+func checkReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonReadinessCheck) readinessOutcome {
 	switch {
 	case check.CSVSucceeded != nil:
-		return csvSucceeded(ctx, runner, kubeconfig, check.CSVSucceeded.Namespace, check.CSVSucceeded.Subscription)
+		ready, detail, observation, err := observeCSV(ctx, runner, kubeconfig, check.CSVSucceeded.Namespace, check.CSVSucceeded.Subscription)
+		return readinessOutcome{ready: ready, detail: detail, csvObservation: observation, err: err}
 	case check.Condition != nil:
-		return conditionReady(ctx, runner, kubeconfig, *check.Condition)
+		ready, detail, err := conditionReady(ctx, runner, kubeconfig, *check.Condition)
+		return readinessOutcome{ready: ready, detail: detail, err: err}
 	case check.ResourceExists != nil:
 		exists := check.ResourceExists
 		resource := resourceArg(exists.APIVersion, exists.Kind) + "/" + exists.Name
 		_, err := getResource(ctx, runner, kubeconfig, exists.APIVersion, exists.Kind, exists.Namespace, exists.Name)
 		if err != nil {
-			return false, resource + " NotFound", nil
+			return readinessOutcome{detail: resource + " NotFound"}
 		}
-		return true, resource + " Exists", nil
+		return readinessOutcome{ready: true, detail: resource + " Exists"}
 	default:
-		return false, "", fmt.Errorf("readiness check must set exactly one arm")
+		return readinessOutcome{err: fmt.Errorf("readiness check must set exactly one arm")}
 	}
 }
 
 func csvSucceeded(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string) (bool, string, error) {
+	ready, detail, _, err := observeCSV(ctx, runner, kubeconfig, namespace, subscription)
+	return ready, detail, err
+}
+
+func observeCSV(ctx context.Context, runner OCRunner, kubeconfig, namespace, subscription string) (bool, string, *extensionrecords.CSVObservation, error) {
 	subscriptionResource := "subscription.operators.coreos.com/" + subscription
 	sub, err := getNamedResource(ctx, runner, kubeconfig, "subscription.operators.coreos.com", namespace, subscription)
 	if err != nil {
-		return false, subscriptionResource + " Unavailable", nil
+		return false, subscriptionResource + " Unavailable", nil, nil
 	}
 	csv := nestedString(sub, "status", "installedCSV")
 	if csv == "" {
-		return false, subscriptionResource + " Pending", nil
+		return false, subscriptionResource + " Pending", nil, nil
 	}
 	csvResource := "clusterserviceversion.operators.coreos.com/" + csv
 	csvObj, err := getNamedResource(ctx, runner, kubeconfig, "clusterserviceversion.operators.coreos.com", namespace, csv)
 	if err != nil {
-		return false, csvResource + " Unavailable", nil
+		return false, csvResource + " Unavailable", nil, nil
 	}
 	phase := nestedString(csvObj, "status", "phase")
 	if phase != "Succeeded" {
-		return false, csvResource + " " + orUnknown(phase), nil
+		return false, csvResource + " " + orUnknown(phase), nil, nil
 	}
-	return true, csvResource + " Succeeded", nil
+	version := strings.TrimSpace(nestedString(csvObj, "spec", "version"))
+	if version == "" {
+		return false, csvResource + " Succeeded (spec.version unavailable)", nil, nil
+	}
+	observation := &extensionrecords.CSVObservation{
+		Namespace:    namespace,
+		Subscription: subscription,
+		InstalledCSV: csv,
+		Version:      version,
+		ObservedAt:   time.Now().UTC(),
+	}
+	return true, csvResource + " Succeeded", observation, nil
 }
 
 func conditionReady(ctx context.Context, runner OCRunner, kubeconfig string, check v1alpha1.ClusterAddonConditionReadiness) (bool, string, error) {

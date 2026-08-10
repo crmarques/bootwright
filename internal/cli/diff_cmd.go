@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -103,7 +104,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		report, err := status.StateCheck(state, clusterScope, scope.Name, scope.ApplyTarget(), cf.ctx.RunsDir, cf.ctx.OwnershipDir, cf.ctx.Name)
+		report, err := status.StateCheck(state, clusterScope, scope.Name, scope.ApplyTarget(), cf.ctx.ClustersDir, cf.ctx.RunsDir, cf.ctx.OwnershipDir, cf.ctx.Name)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -177,8 +178,26 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 			}
 		}
 	}
+	printRecordedAddonCSVs(p, report.AddonCSVs)
 	printStateCheckOrphans(p, report.Undeclared)
 	printStateCheckLoadWarnings(p, report.LoadWarnings)
+}
+
+func printRecordedAddonCSVs(p *cliout.Printer, reports []workflow.AddonCSVReport) {
+	if len(reports) == 0 {
+		return
+	}
+	p.Section("Add-on CSV observations")
+	for _, report := range reports {
+		label := report.Cluster + "/" + report.Addon + " CSV " + report.Namespace + "/" + report.Subscription
+		if report.Recorded == nil {
+			p.Status(cliout.StatusInfo, label, report.Note)
+			continue
+		}
+		observation := report.Recorded
+		detail := observation.InstalledCSV + " version=" + observation.Version + " observed=" + observation.ObservedAt.Format(time.RFC3339)
+		p.Status(cliout.StatusInfo, label, detail)
+	}
 }
 
 func stateCheckResourceDetail(resource workflow.StateCheckResource) string {

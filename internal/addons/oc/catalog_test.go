@@ -78,7 +78,7 @@ func (r *catalogPhasedRunner) Run(_ context.Context, _ string, args []string, in
 			if r.csvPending {
 				phase = "Installing"
 			}
-			return []byte(`{"status":{"phase":"` + phase + `"}}`), nil
+			return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"` + phase + `"}}`), nil
 		case strings.Contains(joined, "subscription"):
 			r.events = append(r.events, "get:subscription")
 			return []byte(`{"status":{"installedCSV":"cat-op.v1"}}`), nil

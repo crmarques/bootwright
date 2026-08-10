@@ -291,7 +291,7 @@ func TestReadinessChecks(t *testing.T) {
 					{out: `{"status":{"installedCSV":"hco.v1"}}`},
 				},
 				"get clusterserviceversion.operators.coreos.com hco.v1 -o json -n openshift-cnv": {
-					{out: `{"status":{"phase":"Succeeded"}}`},
+					{out: `{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`},
 				},
 			},
 			want: "clusterserviceversion.operators.coreos.com/hco.v1 Succeeded",

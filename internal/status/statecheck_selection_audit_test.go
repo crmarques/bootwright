@@ -17,7 +17,7 @@ func TestStateCheckStageAddonsRejectsStorageClusterLikeApply(t *testing.T) {
 	runsDir := t.TempDir()
 	ownershipDir := t.TempDir()
 
-	_, err := StateCheck(state, "ceph1", "add-ons", workflow.ApplyTarget{PhaseNames: []string{"add-ons"}}, runsDir, ownershipDir, "ctx")
+	_, err := StateCheck(state, "ceph1", "add-ons", workflow.ApplyTarget{PhaseNames: []string{"add-ons"}}, t.TempDir(), runsDir, ownershipDir, "ctx")
 	if err == nil {
 		t.Fatalf("state-check --stage add-ons --clusters ceph1 must be rejected like apply")
 	}
@@ -35,7 +35,7 @@ func TestStateCheckClusterRootTargetAcceptsStorageCluster(t *testing.T) {
 	runsDir := t.TempDir()
 	ownershipDir := t.TempDir()
 
-	_, err := StateCheck(state, "ceph1", "all", workflow.ApplyTarget{PhaseNames: []string{"fabric", "machines", "deps", "base", "add-ons"}}, runsDir, ownershipDir, "ctx")
+	_, err := StateCheck(state, "ceph1", "all", workflow.ApplyTarget{PhaseNames: []string{"fabric", "machines", "deps", "base", "add-ons"}}, t.TempDir(), runsDir, ownershipDir, "ctx")
 	if err != nil && strings.Contains(err.Error(), "unknown cluster") {
 		t.Fatalf("a cluster-root target must accept the StorageCluster name, got %v", err)
 	}

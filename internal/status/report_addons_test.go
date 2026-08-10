@@ -31,6 +31,11 @@ func TestBuildAddonsSurfacesLastObservedForFailedRecord(t *testing.T) {
 		Phase:        extensionrecords.RecordPhaseApplying,
 		UpdatedAt:    time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
 		LastObserved: `step "attach-external-storage" (postOperatorReady) failed: boom`,
+		CSVObservations: []extensionrecords.CSVObservation{{
+			Namespace: "openshift-storage", Subscription: "odf-operator",
+			InstalledCSV: "odf-operator.v4.21.3", Version: "4.21.3",
+			ObservedAt: time.Date(2026, 7, 22, 23, 59, 0, 0, time.UTC),
+		}},
 	}
 	if err := extensionrecords.SaveRecord(dir, record); err != nil {
 		t.Fatalf("SaveRecord: %v", err)
@@ -46,5 +51,8 @@ func TestBuildAddonsSurfacesLastObservedForFailedRecord(t *testing.T) {
 	}
 	if got[0].LastObserved != record.LastObserved {
 		t.Fatalf("Extension.LastObserved = %q, want %q", got[0].LastObserved, record.LastObserved)
+	}
+	if len(got[0].CSVObservations) != 1 || got[0].CSVObservations[0].InstalledCSV != "odf-operator.v4.21.3" {
+		t.Fatalf("Extension.CSVObservations = %+v", got[0].CSVObservations)
 	}
 }

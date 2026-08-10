@@ -18,6 +18,29 @@ even after someone deletes the add-on's resources with `oc`. `Apply` therefore
 falls through and re-applies every run for checkless add-ons (`oc apply` is
 idempotent). Pinned by `TestApplyReAppliesChecklessAddonDespiteReadyRecord`.
 
+**CSV evidence closes the Ready transition:** `ObserveReadiness` returns one
+structured observation per declared `csvSucceeded` check, in check order:
+namespace, Subscription, `status.installedCSV`, the installed CSV's
+OLM spec.version, and `observedAt`. A final Ready record is not saved unless that
+set is complete. Both Apply's converged pre-check and Wait's Ready shortcut
+re-observe and save the full set before reporting a skip; a save failure fails
+the skip. The next skip attempt therefore upgrades a legacy Ready record with
+no observations, rather than trusting it indefinitely. Pinned by
+`TestObserveReadinessReturnsCSVObservationsInDeclaredOrder`,
+`TestCSVObservationIsPersistedOnlyWithFinalReady`,
+`TestReadySkipRefreshesLegacyCSVRecord`, and
+`TestReadySkipRefusesWhenCSVRefreshCannotBeSaved`.
+
+**Resolved CSVs are audit evidence, not desired state:** the observation is
+excluded from `render.DesiredHash`, apply-mode and convergence-safety
+classification, and mutation authorization. `status` and recorded diff surface
+the stored evidence; live diff compares it with OLM as `match`, `changed`,
+`unrecorded`, or `unavailable`. The last three remain advisory and do not alter
+an otherwise-true `inSync` or exit `3`, because the declaration authors a
+channel, not the resolved version. `installPlanApproval: Automatic` remains the
+deliberate default, while `Manual` stays authorable for out-of-band InstallPlan
+approval; neither turns the observed CSV into a desired pin.
+
 **Omission is not uninstall intent:** a missing binding, add-on/profile
 reference, or optional input schedules no add-on task and never causes an
 `oc delete`. The local record proves what a prior apply attempted; it cannot

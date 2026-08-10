@@ -65,6 +65,7 @@ type RunConfig struct {
 	Steps        StepRunner
 	Effects      EffectRunner
 	Progress     io.Writer
+	recordWriter func(string, extensionrecords.Record) error
 }
 
 func (c RunConfig) readRunner(fallback OCRunner) OCRunner {
@@ -86,6 +87,13 @@ func (c RunConfig) runEffects(ctx context.Context) error {
 		return nil
 	}
 	return c.Effects.Run(ctx)
+}
+
+func (c RunConfig) saveRecord(record extensionrecords.Record) error {
+	if c.recordWriter != nil {
+		return c.recordWriter(c.ClustersDir, record)
+	}
+	return extensionrecords.SaveRecord(c.ClustersDir, record)
 }
 
 func hasActiveGlobalPullSecretMergeEffect(plan extensionplan.ExtensionPlan) bool {
@@ -127,11 +135,14 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		return TaskResult{}, err
 	}
-	converged, convergedRecord, err := convergedApplyRecord(ctx, runner, cfg, plan, hash)
+	converged, convergedRecord, readiness, err := convergedApplyRecord(ctx, runner, cfg, plan, hash)
 	if err != nil {
 		return TaskResult{}, err
 	}
 	if converged && !steps.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
+		if err := refreshReadyCSVObservations(cfg, plan.Extension, &convergedRecord, readiness.CSVObservations); err != nil {
+			return TaskResult{}, err
+		}
 		return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 	}
 	now := time.Now().UTC()
@@ -148,7 +159,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if converged {
 		record.ObservedResources = convergedRecord.ObservedResources
 	}
-	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
+	if err := cfg.saveRecord(record); err != nil {
 		return TaskResult{}, err
 	}
 	var observed []string
@@ -179,7 +190,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		default:
 			record.LastObserved = applyFailureSummary(failedID)
 		}
-		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+		if saveErr := cfg.saveRecord(record); saveErr != nil {
 			err = errors.Join(err, saveErr)
 		}
 		return TaskResult{}, err
@@ -187,7 +198,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	record.Status = extensionrecords.RecordStatusWaiting
 	record.Phase = extensionrecords.RecordPhaseApplied
 	record.AppliedAt = &now
-	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
+	if err := cfg.saveRecord(record); err != nil {
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil
@@ -213,13 +224,16 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		stepsReady(record, plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) &&
 		!steps.HasAlwaysAt(plan.Extension, v1alpha1.ClusterAddonStepFollowsReady) {
 		probeCtx, cancel := context.WithDeadline(ctx, budget.deadline)
-		ready, _, probeErr := Ready(probeCtx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
+		readiness, probeErr := ObserveReadiness(probeCtx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
 		probeExpired := !time.Now().Before(budget.deadline)
 		cancel()
 		if ctx.Err() != nil {
 			return TaskResult{}, ctx.Err()
 		}
-		if probeErr == nil && ready && !probeExpired {
+		if probeErr == nil && readiness.Ready && !probeExpired && completeCSVObservations(plan.Extension, readiness.CSVObservations) {
+			if err := refreshReadyCSVObservations(cfg, plan.Extension, &record, readiness.CSVObservations); err != nil {
+				return TaskResult{}, err
+			}
 			return TaskResult{Skipped: true, Reason: "add-on already ready for desired inputs"}, nil
 		}
 	}
@@ -235,15 +249,25 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	record.Status = extensionrecords.RecordStatusWaiting
 	record.Phase = extensionrecords.RecordPhaseWaiting
 	record.UpdatedAt = time.Now().UTC()
-	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
+	record.CSVObservations = nil
+	if err := cfg.saveRecord(record); err != nil {
 		return TaskResult{}, err
 	}
-	last, err := waitReady(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension, budget, cfg.PollInterval, cfg.Progress)
+	readiness, err := waitReadiness(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension, budget, cfg.PollInterval, cfg.Progress)
 	record.UpdatedAt = time.Now().UTC()
-	record.LastObserved = last
+	record.LastObserved = readiness.Detail
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
-		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+		if saveErr := cfg.saveRecord(record); saveErr != nil {
+			err = errors.Join(err, saveErr)
+		}
+		return TaskResult{}, err
+	}
+	if !completeCSVObservations(plan.Extension, readiness.CSVObservations) {
+		err = fmt.Errorf("ClusterAddon/%s readiness probe returned incomplete CSV evidence", plan.Name)
+		record.Status = extensionrecords.RecordStatusFailed
+		record.LastObserved = err.Error()
+		if saveErr := cfg.saveRecord(record); saveErr != nil {
 			err = errors.Join(err, saveErr)
 		}
 		return TaskResult{}, err
@@ -256,36 +280,71 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 		if errors.As(err, &stepErr) {
 			record.LastObserved = stepErr.summary()
 		}
-		if saveErr := extensionrecords.SaveRecord(cfg.ClustersDir, record); saveErr != nil {
+		if saveErr := cfg.saveRecord(record); saveErr != nil {
 			err = errors.Join(err, saveErr)
 		}
 		return TaskResult{}, err
 	}
 	record.Status = extensionrecords.RecordStatusReady
 	record.Phase = extensionrecords.RecordPhaseComplete
-	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
+	record.CSVObservations = readiness.CSVObservations
+	if err := cfg.saveRecord(record); err != nil {
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil
 }
 
-func convergedApplyRecord(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan, hash string) (bool, extensionrecords.Record, error) {
+func convergedApplyRecord(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionplan.ExtensionPlan, hash string) (bool, extensionrecords.Record, ReadinessResult, error) {
 	if len(plan.Extension.Spec.Readiness.Checks) == 0 || hasActiveGlobalPullSecretMergeEffect(plan) {
-		return false, extensionrecords.Record{}, nil
+		return false, extensionrecords.Record{}, ReadinessResult{}, nil
 	}
-	ready, _, err := Ready(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
-	if err != nil || !ready {
-		return false, extensionrecords.Record{}, nil
+	readiness, err := ObserveReadiness(ctx, cfg.readRunner(runner), cfg.Kubeconfig, plan.Extension)
+	if err != nil || !readiness.Ready || !completeCSVObservations(plan.Extension, readiness.CSVObservations) {
+		return false, extensionrecords.Record{}, ReadinessResult{}, nil
 	}
 	record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 	if err != nil {
-		return false, extensionrecords.Record{}, err
+		return false, extensionrecords.Record{}, ReadinessResult{}, err
 	}
 	if !found || !completeReadyRecord(record, hash) ||
 		!stepsReady(record, plan.Extension, v1alpha1.ClusterAddonStepGateApply, v1alpha1.ClusterAddonStepFollowsOperatorReady) {
-		return false, extensionrecords.Record{}, nil
+		return false, extensionrecords.Record{}, ReadinessResult{}, nil
 	}
-	return true, record, nil
+	return true, record, readiness, nil
+}
+
+func completeCSVObservations(extension v1alpha1.ClusterAddon, observations []extensionrecords.CSVObservation) bool {
+	index := 0
+	for _, check := range extension.Spec.Readiness.Checks {
+		if check.CSVSucceeded == nil {
+			continue
+		}
+		if index >= len(observations) {
+			return false
+		}
+		observation := observations[index]
+		if observation.Namespace != check.CSVSucceeded.Namespace ||
+			observation.Subscription != check.CSVSucceeded.Subscription ||
+			strings.TrimSpace(observation.InstalledCSV) == "" ||
+			strings.TrimSpace(observation.Version) == "" ||
+			observation.ObservedAt.IsZero() {
+			return false
+		}
+		index++
+	}
+	return index == len(observations)
+}
+
+func refreshReadyCSVObservations(cfg RunConfig, extension v1alpha1.ClusterAddon, record *extensionrecords.Record, observations []extensionrecords.CSVObservation) error {
+	if !completeCSVObservations(extension, observations) {
+		return fmt.Errorf("ClusterAddon/%s readiness probe returned incomplete CSV evidence", extension.Metadata.Name)
+	}
+	if len(observations) == 0 {
+		return nil
+	}
+	record.CSVObservations = append([]extensionrecords.CSVObservation(nil), observations...)
+	record.UpdatedAt = time.Now().UTC()
+	return cfg.saveRecord(*record)
 }
 
 func applyConvergedSteps(ctx context.Context, cfg RunConfig, plan extensionplan.ExtensionPlan, observed []string) ([]string, error) {

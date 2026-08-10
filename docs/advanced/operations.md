@@ -712,11 +712,19 @@ Bootwright ownership markers, so they apply only to resources Bootwright owns.
 cluster read-only on the seed (hosts, services and placements, OSDs, CRUSH rules,
 pools and replication, config, mgr modules, and health) and prints a git-style
 diff of desired-vs-real, and runs a shallow `ClusterVersion` reachability check
-for each container cluster. It exits `3` when anything differs.
+for each container cluster. It exits `3` when desired state differs or a
+verdict-bearing probe cannot prove sync.
 
 ```
 bootwright diff --clusters ceph-storage
 ```
+
+For add-ons with `csvSucceeded` readiness checks, `status` shows the installed
+CSV name/version captured in the Ready record, `diff --recorded` shows that
+stored evidence offline, and live `diff` compares it with OLM. A CSV that is
+changed, unrecorded, or temporarily unavailable is an advisory rather than
+desired-state drift: the declaration selects an OLM channel, not the resolved
+version, so this observation alone does not change `inSync` or exit `3`.
 
 To fold the live state back into desired-state YAML — so a re-apply reproduces
 the cluster as it actually runs — add `--adopt`. It edits declared objects in

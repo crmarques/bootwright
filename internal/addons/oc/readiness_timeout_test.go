@@ -26,7 +26,7 @@ func (r *externalStorageRunner) Run(_ context.Context, _ string, args []string, 
 		}
 		return []byte(`{"status":{"installedCSV":"odf-operator.v4.21.9"}}`), nil
 	case strings.Contains(joined, "clusterserviceversion"):
-		return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+		return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`), nil
 	case strings.Contains(joined, "storagecluster"):
 		return []byte(`{"status":{"phase":"Progressing","conditions":[
 			{"type":"VersionMismatch","status":"False","reason":"VersionMatched","message":"Version check successful"},
@@ -155,7 +155,7 @@ func (stalledStorageClusterRunner) Run(_ context.Context, _ string, args []strin
 	case strings.Contains(joined, "subscription"):
 		return []byte(`{"status":{"installedCSV":"odf-operator.v4.21.9"}}`), nil
 	case strings.Contains(joined, "clusterserviceversion"):
-		return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+		return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`), nil
 	case strings.Contains(joined, "storagecluster"):
 		return []byte(`{"status":{"phase":"Progressing","conditions":[
 			{"type":"ReconcileComplete","status":"True","reason":"ReconcileCompleted","message":"Reconcile completed successfully","lastHeartbeatTime":"2026-08-07T10:23:34Z"},

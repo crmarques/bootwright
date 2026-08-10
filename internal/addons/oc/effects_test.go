@@ -148,7 +148,7 @@ func (r *orderNotingRunner) Run(_ context.Context, _ string, args []string, inpu
 		switch {
 		case strings.Contains(joined, "clusterserviceversion"):
 			*r.order = append(*r.order, "get:csv")
-			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+			return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`), nil
 		case strings.Contains(joined, "subscription"):
 			*r.order = append(*r.order, "get:subscription")
 			return []byte(`{"status":{"installedCSV":"ent-op.v1"}}`), nil

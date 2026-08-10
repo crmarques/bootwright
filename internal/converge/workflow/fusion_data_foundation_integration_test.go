@@ -75,7 +75,7 @@ func (r *fusionOCRunner) Run(_ context.Context, _ string, args []string, input [
 			return []byte(`{"status":{"installedCSV":"odf-operator.v4.21.0"}}`), nil
 		case "clusterserviceversion.operators.coreos.com":
 			r.events.add("get:CSV")
-			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+			return []byte(`{"spec":{"version":"4.21.0"},"status":{"phase":"Succeeded"}}`), nil
 		case "storagecluster.ocs.openshift.io":
 			r.events.add("get:StorageCluster")
 			return []byte(`{"status":{"phase":"Ready","conditions":[{"type":"Available","status":"True"}]}}`), nil
@@ -301,6 +301,11 @@ func applyFusionPlan(t *testing.T, plan extensionplan.ExtensionPlan) {
 	record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 	if err != nil || !found || record.Status != extensionrecords.RecordStatusReady || record.Phase != extensionrecords.RecordPhaseComplete {
 		t.Fatalf("ready record = %+v found=%v err=%v", record, found, err)
+	}
+	if len(record.CSVObservations) != 1 || record.CSVObservations[0].Namespace != "openshift-storage" ||
+		record.CSVObservations[0].Subscription != "odf-operator" || record.CSVObservations[0].InstalledCSV != "odf-operator.v4.21.0" ||
+		record.CSVObservations[0].Version != "4.21.0" || record.CSVObservations[0].ObservedAt.IsZero() {
+		t.Fatalf("ready record CSV evidence = %+v", record.CSVObservations)
 	}
 	got := events.snapshot()
 	assertFusionEventOrder(t, got, "effect:ibm-entitlement", "apply:CatalogSource")

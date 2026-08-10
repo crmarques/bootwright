@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 )
 
 type StateCheckResource struct {
@@ -34,8 +35,18 @@ type StateCheckRoot struct {
 type StateCheckReport struct {
 	Roots        []StateCheckRoot     `json:"roots"`
 	InSync       bool                 `json:"inSync"`
+	AddonCSVs    []AddonCSVReport     `json:"addonCSVs,omitempty"`
 	Undeclared   []UndeclaredResource `json:"undeclared,omitempty"`
 	LoadWarnings []string             `json:"loadWarnings,omitempty"`
+}
+
+type AddonCSVReport struct {
+	Cluster      string                           `json:"cluster"`
+	Addon        string                           `json:"addon"`
+	Namespace    string                           `json:"namespace"`
+	Subscription string                           `json:"subscription"`
+	Recorded     *extensionrecords.CSVObservation `json:"recorded,omitempty"`
+	Note         string                           `json:"note,omitempty"`
 }
 
 func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, runsDir string) (StateCheckReport, error) {

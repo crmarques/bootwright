@@ -76,21 +76,6 @@ learned; this file records what it still owes.
   from `docs/advanced/examples.md`.
 - Related: [openshift-vsphere-agent-boot.md](openshift-vsphere-agent-boot.md)
 
-## B-025 — No observed-CSV-version record for Automatic-approval OLM add-ons
-- Status: open
-- Area: addons / supply-chain
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: both Data Foundation catalog entries default `installPlanApproval`
-  to `Automatic` against an actively-polled catalogSource, and the addon
-  Record tracks only a channel-based DesiredHash, never the resolved CSV
-  name/version actually installed — an unattended operator upgrade within the
-  subscribed channel is invisible to `status`/`diff`.
-- Exit: record the resolved CSV name/version into the addon Record on
-  successful apply and surface it via `status`/`diff`; separately decide
-  whether either catalog entry should default to `installPlanApproval:
-  Manual`.
-- Related: internal/addons/records/records.go, internal/addons/oc/execute.go
-
 ## B-028 — fusion-data-foundation catalogSource image pin unverified against the live IBM registry
 - Status: open
 - Area: addons / supply-chain

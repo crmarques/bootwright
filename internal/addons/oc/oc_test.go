@@ -132,7 +132,7 @@ esac
 `,
 		shellQuote(`{"status":{"installedCSV":"ready-operator.v1.0.0"}}`),
 		shellQuote("Warning: deprecated apiVersion\n"),
-		shellQuote(`{"status":{"phase":"Succeeded"}}`),
+		shellQuote(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`),
 		shellQuote("Warning: deprecated apiVersion\n"),
 	)
 	return CommandRunner{Command: writeScript(t, script), Stdout: io.Discard, Stderr: io.Discard}
@@ -232,6 +232,69 @@ func TestReadyReportsLowestIndexBlockerRegardlessOfCompletionOrder(t *testing.T)
 	want := "Namespace/a Exists; Namespace/b NotFound"
 	if observed != want {
 		t.Fatalf("observed = %q, want %q (the lowest-index failing check is the blocker and later checks stay unreported)", observed, want)
+	}
+}
+
+type csvEvidenceRunner struct {
+	delays         map[string]time.Duration
+	omitCSVVersion bool
+}
+
+func (r csvEvidenceRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	if len(args) < 3 || args[0] != "get" {
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+	name := args[2]
+	switch args[1] {
+	case "subscription.operators.coreos.com":
+		return []byte(`{"status":{"installedCSV":"` + name + `.v1"}}`), nil
+	case "clusterserviceversion.operators.coreos.com":
+		if delay := r.delays[name]; delay > 0 {
+			time.Sleep(delay)
+		}
+		if r.omitCSVVersion {
+			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+		}
+		return []byte(`{"spec":{"version":"1.2.3"},"status":{"phase":"Succeeded"}}`), nil
+	default:
+		return []byte(`{"metadata":{"name":"` + name + `"}}`), nil
+	}
+}
+
+func TestObserveReadinessReturnsCSVObservationsInDeclaredOrder(t *testing.T) {
+	extension := v1alpha1.ClusterAddon{
+		Spec: v1alpha1.ClusterAddonSpec{Readiness: v1alpha1.ClusterAddonReadiness{Checks: []v1alpha1.ClusterAddonReadinessCheck{
+			{CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "ns-b", Subscription: "operator-b"}},
+			{ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{APIVersion: "v1", Kind: "Namespace", Name: "installed"}},
+			{CSVSucceeded: &v1alpha1.ClusterAddonCSVReadiness{Namespace: "ns-a", Subscription: "operator-a"}},
+		}}},
+	}
+	runner := csvEvidenceRunner{delays: map[string]time.Duration{"operator-b.v1": 20 * time.Millisecond}}
+
+	result, err := ObserveReadiness(context.Background(), runner, "/tmp/kubeconfig", extension)
+	if err != nil || !result.Ready {
+		t.Fatalf("ObserveReadiness = %+v, err=%v", result, err)
+	}
+	if len(result.CSVObservations) != 2 {
+		t.Fatalf("CSV observations = %+v, want two", result.CSVObservations)
+	}
+	if got := []string{result.CSVObservations[0].Subscription, result.CSVObservations[1].Subscription}; !reflect.DeepEqual(got, []string{"operator-b", "operator-a"}) {
+		t.Fatalf("CSV observation order = %v, want declaration order", got)
+	}
+	for _, observation := range result.CSVObservations {
+		if observation.InstalledCSV == "" || observation.Version != "1.2.3" || observation.ObservedAt.IsZero() {
+			t.Fatalf("incomplete CSV observation: %+v", observation)
+		}
+	}
+}
+
+func TestObserveReadinessRequiresCSVSpecVersion(t *testing.T) {
+	ready, detail, observation, err := observeCSV(context.Background(), csvEvidenceRunner{omitCSVVersion: true}, "/tmp/kubeconfig", "operators", "operator")
+	if err != nil {
+		t.Fatalf("observeCSV: %v", err)
+	}
+	if ready || observation != nil || !strings.Contains(detail, "spec.version unavailable") {
+		t.Fatalf("observeCSV = ready=%v detail=%q observation=%+v", ready, detail, observation)
 	}
 }
 
@@ -349,6 +412,70 @@ func TestWaitSkipsReadyExtensionRecord(t *testing.T) {
 	}
 	if runner.getCalls == 0 {
 		t.Fatal("readiness was not checked")
+	}
+}
+
+func TestReadySkipRefreshesLegacyCSVRecord(t *testing.T) {
+	operations := map[string]func(context.Context, OCRunner, RunConfig, extensionplan.ExtensionPlan) (TaskResult, error){
+		"apply": Apply,
+		"wait":  Wait,
+	}
+	for name, operation := range operations {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			plan := gatedOLMPlan("30m")
+			writeReadyExtensionRecord(t, dir, plan)
+			kubeconfig := filepath.Join(dir, "kubeconfig")
+			if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+				t.Fatalf("write kubeconfig: %v", err)
+			}
+			runner := &phasedCSVRunner{succeedAfter: 1}
+
+			result, err := operation(context.Background(), runner, RunConfig{
+				ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),
+			}, plan)
+			if err != nil || !result.Skipped {
+				t.Fatalf("%s result=%+v err=%v", name, result, err)
+			}
+			record, found, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+			if err != nil || !found {
+				t.Fatalf("LoadRecord: found=%v err=%v", found, err)
+			}
+			if len(record.CSVObservations) != 1 || record.CSVObservations[0].Version != "1.0.0" || record.CSVObservations[0].ObservedAt.IsZero() {
+				t.Fatalf("refreshed CSV observations = %+v", record.CSVObservations)
+			}
+		})
+	}
+}
+
+func TestReadySkipRefusesWhenCSVRefreshCannotBeSaved(t *testing.T) {
+	operations := map[string]func(context.Context, OCRunner, RunConfig, extensionplan.ExtensionPlan) (TaskResult, error){
+		"apply": Apply,
+		"wait":  Wait,
+	}
+	for name, operation := range operations {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			plan := gatedOLMPlan("30m")
+			writeReadyExtensionRecord(t, dir, plan)
+			kubeconfig := filepath.Join(dir, "kubeconfig")
+			if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+				t.Fatalf("write kubeconfig: %v", err)
+			}
+			runner := &phasedCSVRunner{succeedAfter: 1}
+			result, err := operation(context.Background(), runner, RunConfig{
+				ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run", StartedAt: time.Now(),
+				recordWriter: func(string, extensionrecords.Record) error {
+					return errors.New("forced CSV refresh write failure")
+				},
+			}, plan)
+			if err == nil || !strings.Contains(err.Error(), "forced CSV refresh write failure") {
+				t.Fatalf("%s error = %v, want refresh save failure", name, err)
+			}
+			if result.Skipped {
+				t.Fatalf("%s reported a ready skip despite refresh save failure: %+v", name, result)
+			}
+		})
 	}
 }
 
@@ -477,7 +604,7 @@ func (r *sequencingRunner) Run(_ context.Context, _ string, args []string, input
 			return []byte(`{"status":{"installedCSV":"csv-op.v1"}}`), nil
 		case strings.Contains(joined, "clusterserviceversion"):
 			r.events = append(r.events, "get:csv")
-			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+			return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"Succeeded"}}`), nil
 		default:
 			r.events = append(r.events, "get:other")
 			return []byte(`{"metadata":{"name":"x"}}`), nil
@@ -571,7 +698,7 @@ func (r *phasedCSVRunner) Run(_ context.Context, _ string, args []string, input 
 			if r.succeedAfter > 0 && r.csvReads >= r.succeedAfter {
 				phase = "Succeeded"
 			}
-			return []byte(`{"status":{"phase":"` + phase + `"}}`), nil
+			return []byte(`{"spec":{"version":"1.0.0"},"status":{"phase":"` + phase + `"}}`), nil
 		default:
 			r.events = append(r.events, "get:other")
 			return []byte(`{"metadata":{"name":"x"}}`), nil
@@ -610,6 +737,40 @@ func TestApplyOLMGatePollsUntilCSVSucceeds(t *testing.T) {
 	}
 	if csvBeforeCR < 2 {
 		t.Fatalf("gate did not poll while CSV pending (csv reads before CR=%d); events=%v", csvBeforeCR, runner.events)
+	}
+}
+
+func TestCSVObservationIsPersistedOnlyWithFinalReady(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	plan := gatedOLMPlan("30m")
+	runner := &phasedCSVRunner{succeedAfter: 1}
+	cfg := RunConfig{
+		ClustersDir: dir, Kubeconfig: kubeconfig, RunID: "run",
+		StartedAt: time.Now(), PollInterval: time.Millisecond,
+	}
+	if _, err := Apply(context.Background(), runner, cfg, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	record, found, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil || !found {
+		t.Fatalf("LoadRecord after Apply: found=%v err=%v", found, err)
+	}
+	if record.Status != extensionrecords.RecordStatusWaiting || len(record.CSVObservations) != 0 {
+		t.Fatalf("post-Apply record = %+v, want waiting without CSV evidence", record)
+	}
+	if _, err := Wait(context.Background(), runner, cfg, plan); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	record, found, err = extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil || !found {
+		t.Fatalf("LoadRecord after Wait: found=%v err=%v", found, err)
+	}
+	if record.Status != extensionrecords.RecordStatusReady || len(record.CSVObservations) != 1 || record.CSVObservations[0].InstalledCSV != "csv-op.v1" || record.CSVObservations[0].Version != "1.0.0" {
+		t.Fatalf("final ready record CSV evidence = %+v", record)
 	}
 }
 

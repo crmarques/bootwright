@@ -43,7 +43,16 @@ type Record struct {
 	AppliedAt         *time.Time            `json:"appliedAt,omitempty"`
 	ObservedResources []string              `json:"observedResources,omitempty"`
 	LastObserved      string                `json:"lastObserved,omitempty"`
+	CSVObservations   []CSVObservation      `json:"csvObservations,omitempty"`
 	Steps             map[string]StepRecord `json:"steps,omitempty"`
+}
+
+type CSVObservation struct {
+	Namespace    string    `json:"namespace"`
+	Subscription string    `json:"subscription"`
+	InstalledCSV string    `json:"installedCSV"`
+	Version      string    `json:"version"`
+	ObservedAt   time.Time `json:"observedAt"`
 }
 
 type StepRecord struct {
