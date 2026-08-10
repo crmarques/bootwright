@@ -76,22 +76,6 @@ learned; this file records what it still owes.
   from `docs/advanced/examples.md`.
 - Related: [openshift-vsphere-agent-boot.md](openshift-vsphere-agent-boot.md)
 
-## B-024 — fusion-data-foundation has no end-to-end example or test coverage
-- Status: open
-- Area: addons / examples / tests
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: every shipped example and workflow/render-level test binds only
-  `openshift-data-foundation`; `fusion-data-foundation`'s distinguishing
-  content (its shipped catalogSource, the `ibm-entitlement`
-  globalPullSecretMerge input) is proven to load and normalize
-  (internal/state/desired/load_store_addons_test.go) but never proven to plan
-  or render correctly through the real task-graph/OLM-resource pipeline.
-- Exit: add an example (or extend an existing one) that binds
-  fusion-data-foundation, and extend the plan/render test coverage to cover it
-  alongside openshift-data-foundation.
-- Related: internal/converge/workflow/apply_tasks_test.go,
-  internal/addons/render/render_test.go, examples/
-
 ## B-025 — No observed-CSV-version record for Automatic-approval OLM add-ons
 - Status: open
 - Area: addons / supply-chain
@@ -122,20 +106,6 @@ learned; this file records what it still owes.
   optionally support an add-on-declared expected checksum later.
 - Related: add-ons/openshift-data-foundation/4.21/playbooks/export-external-details.yaml,
   internal/addons/records/records.go
-
-## B-027 — No shipped example demonstrates register-then-bind for the native add-on catalog
-- Status: open
-- Area: addons / examples
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: `bootwright add-ons add` plus binding by `addonRef` against the
-  machine-local store is the documented recommended onboarding path, but every
-  Data Foundation-bound example instead hand-copies the catalog add-on
-  directory in as an authored `ClusterAddon`, so the resolver's store fallback
-  (internal/state/desired/load_store_addons.go) is unit-tested but never
-  exercised at the example/e2e level.
-- Exit: add (or convert) one example to use `add-ons add` plus a bare
-  `addonRef` binding instead of a copied `ClusterAddon` directory.
-- Related: internal/state/desired/load_store_addons.go, docs/concepts/add-ons.md
 
 ## B-028 — fusion-data-foundation catalogSource image pin unverified against the live IBM registry
 - Status: open
