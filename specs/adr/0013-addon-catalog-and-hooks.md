@@ -33,7 +33,11 @@ binding `addonRef` that no authored `ClusterAddon` matches falls back to the
 store; `context init`/`update` snapshot each referenced store add-on into the
 context input tree under `add-ons/_store/<name>`, so contexts stay
 self-contained across store deletes and upgrades. An authored add-on with the
-same name always wins.
+same name always wins. `Environment.spec.resources` does not have to name that
+generated directory: the loader implicitly selects only the exact
+`add-ons/_store/<name>/add-on.yaml` descriptor whose regular-file provenance
+marker and sole `ClusterAddon` identity both name `<name>`. Other files and
+unmarked lookalikes remain subject to the authored allow-list.
 
 **OLM readiness gating.** A shipped `olm.catalogSource` is applied before the
 operator-install set and gated on

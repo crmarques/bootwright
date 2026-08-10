@@ -109,6 +109,62 @@ func TestLoadResolvesRegisteredNativeAddons(t *testing.T) {
 	}
 }
 
+func TestLoadUsesMarkedContextSnapshotOutsideEnvironmentResources(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(workspace.SetRootDirForTest(root))
+	release, err := nativecatalog.Resolve("openshift-data-foundation", "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	storeDir, err := nativecatalog.Install(release)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	input := storeAddonFixture(t, "openshift-data-foundation")
+	snapshotDir := filepath.Join(input, "add-ons", "_store", "openshift-data-foundation")
+	copyFixtureTree(t, storeDir, snapshotDir)
+	if err := os.RemoveAll(storeDir); err != nil {
+		t.Fatalf("remove machine-local store copy: %v", err)
+	}
+	environmentPath := filepath.Join(input, "environment.yaml")
+	environment, err := os.ReadFile(environmentPath)
+	if err != nil {
+		t.Fatalf("read Environment: %v", err)
+	}
+	resources := `spec:
+  resources:
+    - secrets.yaml
+    - infra
+    - clusters
+    - add-ons/child-network-dc1.yaml
+    - add-ons/child-network-dc2.yaml
+    - add-ons/openshift-virtualization.yaml
+`
+	environment = []byte(strings.Replace(string(environment), "spec:\n", resources, 1))
+	if err := os.WriteFile(environmentPath, environment, 0o600); err != nil {
+		t.Fatalf("write Environment resources: %v", err)
+	}
+
+	state, exclusions, err := LoadNormalizeValidateWithExclusions([]string{input})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidateWithExclusions: %v", err)
+	}
+	var sourcePath string
+	for _, addon := range state.ClusterAddons {
+		if addon.Metadata.Name == "openshift-data-foundation" {
+			sourcePath = addon.SourcePath
+		}
+	}
+	if sourcePath != filepath.Join(snapshotDir, "add-on.yaml") {
+		t.Fatalf("snapshot SourcePath = %q, want %q", sourcePath, filepath.Join(snapshotDir, "add-on.yaml"))
+	}
+	for _, exclusion := range exclusions.Resources {
+		if strings.HasPrefix(exclusion.Path, "add-ons/_store/") {
+			t.Fatalf("generated snapshot reported as excluded: %+v", exclusion)
+		}
+	}
+}
+
 func TestLoadWithoutStoreKeepsUnresolvedReferenceError(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(workspace.SetRootDirForTest(root))

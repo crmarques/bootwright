@@ -342,6 +342,11 @@ Beyond the per-field rules above, the validator enforces:
   and match a loaded `ContainerCluster` / `StorageCluster`.
 - `spec.resources[]`, when set, must list at least one non-empty path that is
   relative to the Environment file and stays within its directory.
+- A native add-on that `context init` or `context update` generated under
+  `add-ons/_store/<name>` remains loadable without adding that generated path
+  to `spec.resources[]`; its provenance marker limits this exception to the
+  single matching `ClusterAddon` descriptor. Authored or malformed lookalikes
+  stay excluded.
 - At most one `spec.infraComponents.registries[]` entry may set `default: true`;
   a fleet with exactly one registry uses it as the default without the flag.
 - Each `spec.registries.imageDigestSources[]` entry requires `source` and at

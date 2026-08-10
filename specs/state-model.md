@@ -112,6 +112,14 @@ Rules:
   every discovered YAML file.
 - A listed file is loaded as a complete YAML file. A listed directory is walked
   deterministically for YAML files.
+- A context-generated native add-on snapshot is a dependency artifact, not an
+  authored selection. When `add-ons/_store/<name>/add-on.yaml` is beside the
+  `Environment`, carries exactly one `ClusterAddon/<name>`, and its sibling
+  `.bootwright-addon` regular-file marker names `<name>`, that descriptor is
+  loaded even when `resources[]` omits it. No other file under `_store` gains
+  this exception. An absent, non-regular, mismatched, or ambiguous marker keeps
+  the descriptor under the normal allow-list, so an authored lookalike cannot
+  bypass `resources[]`.
 - `validate` reports every discovered YAML file under the context input
   directory that `resources[]` excludes, naming the file and the authored
   objects it contains — a warning, not an error, because narrowing is
@@ -124,7 +132,8 @@ Rules:
   add — the file's own relative path when it sits beside the `Environment`,
   because `resources[]` rejects `"."` and advice that fails validation is not
   advice.
-- Every referenced Bootwright resource must also be selected.
+- Every referenced Bootwright resource must also be selected, except for the
+  marker-proven native add-on snapshot descriptor above.
 - `containerClusters[]` and `storageClusters[]`, when set, are the effective
   fleet selection lists for render, apply, status, destroy, and check flows.
   Loaded clusters outside the selection are excluded before validation runs;

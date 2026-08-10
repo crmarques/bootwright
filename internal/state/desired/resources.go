@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
+	"github.com/crmarques/bootwright/internal/addons/nativecatalog"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -70,8 +71,50 @@ func selectResourceFilesCollecting(files []string, skipped *[]error) ([]string, 
 		selected[path] = true
 		out = append(out, path)
 	}
+	for _, file := range implicitAddonSnapshotFiles(files, env) {
+		if selected[file] {
+			continue
+		}
+		selected[file] = true
+		out = append(out, file)
+	}
 	sort.Strings(out)
 	return out, env, true, nil
+}
+
+func implicitAddonSnapshotFiles(files []string, env v1alpha1.Environment) []string {
+	var out []string
+	root := filepath.Dir(env.SourcePath)
+	for _, file := range files {
+		relative, err := filepath.Rel(root, file)
+		if err != nil {
+			continue
+		}
+		parts := strings.Split(filepath.ToSlash(relative), "/")
+		if len(parts) != 4 || parts[0] != "add-ons" || parts[1] != "_store" || parts[3] != "add-on.yaml" {
+			continue
+		}
+		name := parts[2]
+		if nativecatalog.ValidateStoreName(name) != nil {
+			continue
+		}
+		markerPath := filepath.Join(filepath.Dir(file), nativecatalog.MarkerName)
+		info, err := os.Lstat(markerPath)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		marker, found, err := nativecatalog.ReadMarker(filepath.Dir(file))
+		if err != nil || !found || marker.Name != name {
+			continue
+		}
+		keys := scanResourceKeys(file)
+		if len(keys) != 1 || keys[0] != (resourceKey{kind: v1alpha1.KindClusterAddon, name: name}) {
+			continue
+		}
+		out = append(out, file)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref, path string) ([]string, error) {

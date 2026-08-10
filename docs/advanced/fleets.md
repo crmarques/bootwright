@@ -44,8 +44,11 @@ spec:
 ```
 
 `spec.resources[]` is for *narrowing* a shared tree; a tree whose whole content
-is intended should omit it — an authored file the list excludes is silently not
-loaded.
+is intended should omit it. An authored file the list excludes is not loaded,
+and `bootwright validate` reports it. The generated native add-on descriptor at
+`add-ons/_store/<name>/add-on.yaml` is the narrow exception: a matching
+`.bootwright-addon` marker proves it is a context dependency snapshot, so it is
+loaded without making operators add generated paths to this authored list.
 
 That maps onto the canonical nested layout: shared, non-cluster objects under
 `infra/` (providers, network configs, shared-service `InfraComponent`s, and any

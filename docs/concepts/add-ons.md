@@ -636,7 +636,10 @@ snapshot each referenced registered add-on into the context input (under
 re-registering a store add-on never changes an existing context. An authored
 add-on with the same name always wins over the registered one. Referencing a
 catalog name that is neither authored nor registered fails validation with the
-register remedy in the finding.
+register remedy in the finding. A generated snapshot's marked `add-on.yaml` is
+loaded even when `Environment.spec.resources[]` omits `_store`; only that one
+matching descriptor receives the exception, so an unmarked authored lookalike
+does not bypass the resource allow-list.
 
 !!! warning "Upgrading Bootwright does not refresh a registered add-on"
     The catalog is embedded in the binary, but it reaches a run through two

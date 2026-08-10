@@ -132,26 +132,6 @@ learned; this file records what it still owes.
 - Related: internal/addons/oc/execute.go, internal/addons/records/records.go,
   internal/converge/workflow/apply_plan.go
 
-## B-021 — Environment.spec.resources can permanently deadlock once add-ons/_store is populated
-- Status: open
-- Area: state / validation
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: `Environment.spec.resources` narrows the loaded file set, but
-  `validateSelectedResourceReferences` scans the full unfiltered discovered
-  file tree (including `add-ons/_store/<name>` snapshots baked in by `context
-  init`/`update`) and rejects any reference the filter excluded. A context
-  whose `spec.resources` lists specific sub-paths (rather than the whole
-  `add-ons` directory) becomes permanently unable to validate/apply once a
-  store-resolved add-on is bound and snapshotted, with an undocumented,
-  non-obvious workaround (list the whole parent directory instead of
-  sub-paths).
-- Exit: decide the right behavior — either auto-include
-  `add-ons/_store/**` snapshots in the reference-inventory scan regardless of
-  `spec.resources`, or document the workaround explicitly and add a
-  validation hint that names it.
-- Related: internal/state/desired/resources.go, internal/state/desired/load.go,
-  internal/workspace/input.go
-
 ## B-022 — readiness.timeout is reused as a full budget by up to three sequential add-on gates
 - Status: open
 - Area: addons / oc

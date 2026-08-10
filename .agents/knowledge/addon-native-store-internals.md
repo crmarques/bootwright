@@ -37,7 +37,14 @@ input tree. `workspace.ReplaceInputDirWithAddons` copies them under
 all-or-nothing swap — the context stays self-contained even if the store
 entry is later deleted or upgraded. Add-on names come from validated
 ClusterAddon `metadata.name` and must be plain path segments (no separators,
-no leading dot).
+no leading dot). `Environment.spec.resources` is an authored-file allow-list,
+but this generated dependency must not disappear from its own context. The
+loader therefore auto-selects only the exact
+`add-ons/_store/<name>/add-on.yaml` whose sibling marker is a regular file,
+whose marker name is `<name>`, and whose only Bootwright object is
+`ClusterAddon/<name>`. The supporting manifests remain path-addressed content;
+other Bootwright YAML, unmarked directories, mismatched identities, and
+multi-object descriptors receive no exception.
 
 **Trap: the catalog reaches a run through two copies, and upgrading refreshes
 neither.** The embedded catalog (`add-ons/embed.go`) is compiled into the
