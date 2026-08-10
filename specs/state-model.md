@@ -1988,7 +1988,17 @@ Rules:
   resolved per binding), and add-ons are applied after the add-ons providing their
   required capabilities (a per-binding stable topological order). Unsatisfied
   requirements and `requires`/`provides` cycles are rejected.
-- `spec.readiness.timeout` is a Go duration. Each
+- `spec.readiness.timeout` is one overall Go-duration budget for an add-on task,
+  beginning before its apply phase. The shipped-CatalogSource gate, operator CSV
+  gate, every `steps[].requires[]` poll, and final readiness checks share its
+  absolute deadline across Apply and Wait; no later gate restarts the duration.
+  Time spent applying resources or running steps therefore leaves only the
+  remainder for later readiness gates. Parent cancellation wins over a budget
+  timeout. After expiry Bootwright may spend at most 30 seconds collecting
+  read-only diagnostics before that gate returns; timeout handling itself does
+  not mutate. The executor parses the duration before writing an add-on record
+  or reaching the cluster, even when called without the normal desired-state
+  validator. Each
   `spec.readiness.checks[]` entry is a presence union with exactly one of
   `csvSucceeded` (requires `namespace`, `subscription`), `condition` (requires
   `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
@@ -2033,9 +2043,10 @@ Rules:
   - `steps[].requires[]` declare API objects the step's own content depends on,
     each entry taking the same presence union as `spec.readiness.checks[]`
     (`csvSucceeded`, `condition`, `resourceExists`). Bootwright polls them before
-    the step runs, bounded by `spec.readiness.timeout`, and fails the step
-    without running its playbook or applying its manifests when they never
-    appear. A lifecycle anchor is not a substitute: `follows: operatorReady`
+    the step runs, bounded by the remaining shared `spec.readiness.timeout`,
+    and fails the step without running its playbook or applying its manifests
+    when they never appear. A lifecycle anchor is not a substitute:
+    `follows: operatorReady`
     proves only that the add-on's own Subscription reached `Succeeded`, which
     says nothing about CRDs owned by operators OLM installs as its dependencies,
     so a step whose manifests carry such a kind MUST declare it here.

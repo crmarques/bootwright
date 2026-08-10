@@ -10,54 +10,33 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func WaitStepRequirements(ctx context.Context, runner OCRunner, kubeconfig, addon, step string, checks []v1alpha1.ClusterAddonReadinessCheck, timeoutStr string, pollInterval time.Duration, progress io.Writer) error {
+func WaitStepRequirements(ctx context.Context, runner OCRunner, kubeconfig, addon, step string, checks []v1alpha1.ClusterAddonReadinessCheck, timeoutStr string, startedAt time.Time, pollInterval time.Duration, progress io.Writer) error {
 	if len(checks) == 0 {
 		return nil
 	}
-	timeout, err := parsePositiveDuration(timeoutStr)
+	budget, err := newWaitBudget(timeoutStr, startedAt)
 	if err != nil {
 		return err
 	}
-	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if pollInterval <= 0 {
-		pollInterval = WaitInterval(timeout)
-	}
-	tracker := startWaitProgress(progress)
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-	var last string
-	for {
-		pending, detail, err := unsatisfiedChecks(ctx, runner, kubeconfig, checks)
-		if err != nil {
-			return err
-		}
-		if len(pending) == 0 {
-			tracker.done(detail)
-			return nil
-		}
-		if detail != "" {
-			last = detail
-		}
-		tracker.observe(currentObservation(last))
-		select {
-		case <-ctx.Done():
-			if parent.Err() != nil {
-				return parent.Err()
+	pending := append([]v1alpha1.ClusterAddonReadinessCheck(nil), checks...)
+	_, err = pollUntilReady(ctx, budget, pollInterval, progress, false,
+		func(checkCtx context.Context) (bool, string, error) {
+			observedPending, detail, checkErr := unsatisfiedChecks(checkCtx, runner, kubeconfig, checks)
+			if checkErr == nil {
+				pending = observedPending
 			}
-			diagCtx, diagCancel := context.WithTimeout(parent, diagnosisBudget)
+			return len(observedPending) == 0, detail, checkErr
+		},
+		func(diagnosisCtx context.Context, last string, tracker *waitProgress) (string, error) {
 			tracker.line(fmt.Sprintf("diagnosing why step %s of ClusterAddon/%s is still waiting for the API its manifests need:", step, addon))
-			cause := diagnoseChecks(diagCtx, runner, kubeconfig, pending, tracker)
-			diagCancel()
-			return stepRequirementTimeout(step, pending, timeout, last, cause)
-		case <-ticker.C:
-		}
-	}
+			cause := diagnoseChecks(diagnosisCtx, runner, kubeconfig, pending, tracker)
+			return last, stepRequirementTimeout(step, pending, budget.timeout, last, cause)
+		})
+	return err
 }
 
 func stepRequirementTimeout(step string, pending []v1alpha1.ClusterAddonReadinessCheck, timeout time.Duration, lastObserved, cause string) error {
-	base := fmt.Sprintf("step %s requires %s, which did not appear within %s", step, describeChecks(pending), timeout)
+	base := fmt.Sprintf("step %s requires %s, which did not appear before the %s overall readiness budget expired", step, describeChecks(pending), timeout)
 	if strings.TrimSpace(cause) != "" {
 		return fmt.Errorf("%s: %s", base, cause)
 	}

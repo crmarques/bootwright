@@ -365,7 +365,7 @@ func TestReadinessTimeoutReportsLastObservedState(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected readiness timeout")
 	}
-	if !strings.Contains(err.Error(), "readiness timed out after 3ms") {
+	if !strings.Contains(err.Error(), "exhausted its 3ms overall readiness budget") {
 		t.Fatalf("timeout error = %v", err)
 	}
 	if !strings.Contains(last, "ConfigMap/missing NotFound") {

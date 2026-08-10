@@ -2,6 +2,7 @@ package oc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -351,6 +352,43 @@ func TestWaitSkipsReadyExtensionRecord(t *testing.T) {
 	}
 }
 
+type deadlineIgnoringReadyRunner struct {
+	calls int
+}
+
+func (r *deadlineIgnoringReadyRunner) Run(ctx context.Context, _ string, _ []string, _ []byte) ([]byte, error) {
+	r.calls++
+	if r.calls == 1 {
+		<-ctx.Done()
+		return []byte(`{"metadata":{"name":"installed"}}`), nil
+	}
+	return nil, errors.New("not found")
+}
+
+func TestWaitDoesNotAcceptReadyProbeAfterOverallDeadline(t *testing.T) {
+	dir := t.TempDir()
+	plan := readyExtensionPlan()
+	plan.Extension.Spec.Readiness.Timeout = "20ms"
+	writeReadyExtensionRecord(t, dir, plan)
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+
+	result, err := Wait(context.Background(), &deadlineIgnoringReadyRunner{}, RunConfig{
+		ClustersDir: dir,
+		Kubeconfig:  kubeconfig,
+		RunID:       "run",
+		StartedAt:   time.Now(),
+	}, plan)
+	if err == nil || !strings.Contains(err.Error(), "exhausted its 20ms overall readiness budget") {
+		t.Fatalf("Wait result=%+v error=%v, want the shared deadline refusal", result, err)
+	}
+	if result.Skipped {
+		t.Fatalf("Wait accepted a ready result observed after its deadline: %+v", result)
+	}
+}
+
 func TestApplyOLMWaitsForCSVBeforeCustomResources(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "kubeconfig")
@@ -608,6 +646,75 @@ func TestApplyOLMGateTimeoutRecordsGateFailureNotApplyFailure(t *testing.T) {
 	}
 	if !foundSub {
 		t.Fatalf("the applied Subscription should be in ObservedResources: %v", record.ObservedResources)
+	}
+}
+
+func TestApplyAndWaitShareOneReadinessDeadline(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	plan := gatedOLMPlan("300ms")
+	plan.Extension.Spec.Readiness.Checks = append(plan.Extension.Spec.Readiness.Checks,
+		v1alpha1.ClusterAddonReadinessCheck{Condition: &v1alpha1.ClusterAddonConditionReadiness{
+			APIVersion: "example.io/v1",
+			Kind:       "Example",
+			Name:       "pending",
+			Condition:  v1alpha1.ClusterAddonConditionRequirement{Type: "Ready", Status: "True"},
+		}})
+	runner := &phasedCSVRunner{succeedAfter: 1}
+	cfg := RunConfig{
+		ClustersDir:  dir,
+		Kubeconfig:   kubeconfig,
+		RunID:        "run",
+		StartedAt:    time.Now().Add(-240 * time.Millisecond),
+		PollInterval: 5 * time.Millisecond,
+	}
+	started := time.Now()
+	if _, err := Apply(context.Background(), runner, cfg, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	_, err := Wait(context.Background(), runner, cfg, plan)
+	elapsed := time.Since(started)
+	if err == nil || !strings.Contains(err.Error(), "exhausted its 300ms overall readiness budget") {
+		t.Fatalf("Wait error = %v, want the declared overall readiness timeout", err)
+	}
+	if elapsed >= 200*time.Millisecond {
+		t.Fatalf("Apply+Wait used a fresh timeout instead of the remaining task budget: elapsed=%s", elapsed)
+	}
+}
+
+func TestInvalidReadinessTimeoutFailsBeforeRecordsOrClusterMutation(t *testing.T) {
+	operations := map[string]func(context.Context, OCRunner, RunConfig, extensionplan.ExtensionPlan) (TaskResult, error){
+		"apply": Apply,
+		"wait":  Wait,
+	}
+	for name, operation := range operations {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			kubeconfig := filepath.Join(dir, "kubeconfig")
+			if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+				t.Fatalf("write kubeconfig: %v", err)
+			}
+			plan := gatedOLMPlan("not-a-duration")
+			runner := &phasedCSVRunner{succeedAfter: 1}
+			_, err := operation(context.Background(), runner, RunConfig{
+				ClustersDir: dir,
+				Kubeconfig:  kubeconfig,
+				RunID:       "run",
+				StartedAt:   time.Now(),
+			}, plan)
+			if err == nil || !strings.Contains(err.Error(), "invalid duration") {
+				t.Fatalf("%s error = %v, want invalid duration", name, err)
+			}
+			if len(runner.events) != 0 {
+				t.Fatalf("%s reached the cluster before validating its timeout: %v", name, runner.events)
+			}
+			if _, found, loadErr := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name); loadErr != nil || found {
+				t.Fatalf("%s wrote a record before validating its timeout: found=%v err=%v", name, found, loadErr)
+			}
+		})
 	}
 }
 

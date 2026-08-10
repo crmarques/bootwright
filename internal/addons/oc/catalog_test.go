@@ -50,6 +50,7 @@ type catalogPhasedRunner struct {
 	events       []string
 	catalogReads int
 	readyAfter   int
+	csvPending   bool
 }
 
 func (r *catalogPhasedRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
@@ -73,7 +74,11 @@ func (r *catalogPhasedRunner) Run(_ context.Context, _ string, args []string, in
 			return []byte(`{"status":{"connectionState":{"lastObservedState":"` + state + `"}}}`), nil
 		case strings.Contains(joined, "clusterserviceversion"):
 			r.events = append(r.events, "get:csv")
-			return []byte(`{"status":{"phase":"Succeeded"}}`), nil
+			phase := "Succeeded"
+			if r.csvPending {
+				phase = "Installing"
+			}
+			return []byte(`{"status":{"phase":"` + phase + `"}}`), nil
 		case strings.Contains(joined, "subscription"):
 			r.events = append(r.events, "get:subscription")
 			return []byte(`{"status":{"installedCSV":"cat-op.v1"}}`), nil
@@ -151,5 +156,28 @@ func TestApplyOLMCatalogGateTimeoutRecordsGateFailureNotApplyFailure(t *testing.
 	}
 	if !appliedCatalog {
 		t.Fatalf("the applied CatalogSource should be in ObservedResources: %v", record.ObservedResources)
+	}
+}
+
+func TestCatalogAndCSVGatesShareOneReadinessDeadline(t *testing.T) {
+	dir := t.TempDir()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	runner := &catalogPhasedRunner{readyAfter: 1, csvPending: true}
+	started := time.Now()
+	_, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir:  dir,
+		Kubeconfig:   kubeconfig,
+		RunID:        "run",
+		StartedAt:    started.Add(-240 * time.Millisecond),
+		PollInterval: 5 * time.Millisecond,
+	}, cataloguedOLMPlan("300ms"))
+	if err == nil || !strings.Contains(err.Error(), "operator CSV") || !strings.Contains(err.Error(), "300ms overall readiness budget") {
+		t.Fatalf("Apply error = %v, want the CSV gate to exhaust the shared budget", err)
+	}
+	if elapsed := time.Since(started); elapsed >= 200*time.Millisecond {
+		t.Fatalf("CSV gate restarted the timeout after the catalog gate: %s", elapsed)
 	}
 }

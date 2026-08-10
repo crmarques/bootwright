@@ -50,6 +50,14 @@ then applies, and the engine waits for the operator's CSV to reach
 `csvGateError`) and never recorded as failed applies of the already-applied
 resources.
 
+`spec.readiness.timeout` is one task deadline, not a timeout multiplier. It
+starts before add-on apply; the CatalogSource, CSV, step-requirement, and final
+readiness polls all consume the same deadline across Apply and Wait. Resource
+apply and step execution consume wall-clock time without resetting it. A single
+polling primitive owns cancellation precedence, periodic compact progress, and
+the separately capped read-only diagnosis pass, so adding another gate cannot
+silently add another full timeout.
+
 That CSV gate establishes only the CRDs the subscribed operator itself owns. A
 meta-operator whose CSV succeeds and *then* creates Subscriptions for the
 operators that own the interesting kinds — Data Foundation's `odf-operator`

@@ -70,6 +70,19 @@ persist); the applied resource still lands in `Record.ObservedResources`.
 Pinned by `TestApplyOLMGateTimeoutRecordsGateFailureNotApplyFailure` and
 `TestApplyOLMCatalogGateTimeoutRecordsGateFailureNotApplyFailure`.
 
+**The timeout is a task deadline, not a per-gate allowance:** the workflow
+captures one `StartedAt` before constructing the engine and step executor.
+`newWaitBudget` derives one absolute deadline from it; the CatalogSource, CSV,
+step-requirement, and final readiness polls all use that same instant across
+Apply and Wait. Resource applies and step execution consume wall time and never
+restart the budget. `pollUntilReady` is the package's only ticker loop; it owns
+parent-cancellation precedence, retryable read errors, compact progress, and a
+separate 30-second diagnosis context. Step-requirement shape errors opt out of
+read-error retry and remain immediate. Invalid durations are parsed before a
+record write or cluster call, and future-dated `StartedAt` values are clamped so
+they cannot widen the budget. `TestCoreReadinessPollLoopsStayCentralized` keeps
+new gates on this path.
+
 **Quiet poll output:** Readiness polls, the idempotency pre-check, and the OLM
 gates run through a quiet read runner that writes neither raw `oc get` commands
 nor their JSON responses to the task log or console. Active waits append only

@@ -105,6 +105,7 @@ func TestApplyStepErrorRecordsStepSummary(t *testing.T) {
 		Spec: v1alpha1.ClusterAddonSpec{
 			Type:        v1alpha1.ClusterAddonTypeManifestSet,
 			ManifestSet: &v1alpha1.ClusterAddonManifestSet{},
+			Readiness:   v1alpha1.ClusterAddonReadiness{Timeout: "30m"},
 			Steps:       []v1alpha1.ClusterAddonStep{{Name: "prep", Gates: v1alpha1.ClusterAddonStepGateApply}},
 		},
 	}
@@ -143,6 +144,7 @@ func TestApplyRecordsStepObservedResources(t *testing.T) {
 		Spec: v1alpha1.ClusterAddonSpec{
 			Type:        v1alpha1.ClusterAddonTypeManifestSet,
 			ManifestSet: &v1alpha1.ClusterAddonManifestSet{},
+			Readiness:   v1alpha1.ClusterAddonReadiness{Timeout: "30m"},
 			Steps:       []v1alpha1.ClusterAddonStep{{Name: "attach", Gates: v1alpha1.ClusterAddonStepGateApply}},
 		},
 	}

@@ -45,7 +45,7 @@ func TestWaitStepRequirementsPollsUntilTheAPIIsEstablished(t *testing.T) {
 	runner := &crdPhasedRunner{establishAfter: 3}
 	var progress bytes.Buffer
 	err := WaitStepRequirements(context.Background(), runner, "/tmp/kubeconfig", "fusion-data-foundation", "attach-external-storage",
-		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "30m", time.Millisecond, &progress)
+		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "30m", time.Time{}, time.Millisecond, &progress)
 	if err != nil {
 		t.Fatalf("WaitStepRequirements: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestWaitStepRequirementsPollsUntilTheAPIIsEstablished(t *testing.T) {
 
 func TestWaitStepRequirementsReturnsImmediatelyWithoutChecks(t *testing.T) {
 	runner := &crdPhasedRunner{establishAfter: 0}
-	if err := WaitStepRequirements(context.Background(), runner, "/tmp/kubeconfig", "addon", "step", nil, "30m", time.Millisecond, nil); err != nil {
+	if err := WaitStepRequirements(context.Background(), runner, "/tmp/kubeconfig", "addon", "step", nil, "30m", time.Time{}, time.Millisecond, nil); err != nil {
 		t.Fatalf("WaitStepRequirements: %v", err)
 	}
 	if runner.reads != 0 {
@@ -71,14 +71,14 @@ func TestWaitStepRequirementsTimeoutNamesTheMissingAPI(t *testing.T) {
 	runner := &crdPhasedRunner{establishAfter: 0}
 	var progress bytes.Buffer
 	err := WaitStepRequirements(context.Background(), runner, "/tmp/kubeconfig", "fusion-data-foundation", "attach-external-storage",
-		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "40ms", time.Millisecond, &progress)
+		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "40ms", time.Time{}, time.Millisecond, &progress)
 	if err == nil {
 		t.Fatal("expected a timeout error")
 	}
 	for _, want := range []string{
 		"step attach-external-storage requires",
 		"customresourcedefinition.apiextensions.k8s.io/storageclusters.ocs.openshift.io Established=True",
-		"did not appear within",
+		"did not appear before the 40ms overall readiness budget expired",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("timeout error %q does not mention %q", err.Error(), want)
@@ -91,9 +91,22 @@ func TestWaitStepRequirementsHonoursParentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := WaitStepRequirements(ctx, runner, "/tmp/kubeconfig", "addon", "step",
-		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "30m", time.Millisecond, nil)
+		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "30m", time.Time{}, time.Millisecond, nil)
 	if err == nil || !strings.Contains(err.Error(), context.Canceled.Error()) {
 		t.Fatalf("expected the parent cancellation to surface, got %v", err)
+	}
+}
+
+func TestWaitStepRequirementsUsesRemainingAddonBudget(t *testing.T) {
+	runner := &crdPhasedRunner{establishAfter: 0}
+	started := time.Now()
+	err := WaitStepRequirements(context.Background(), runner, "/tmp/kubeconfig", "addon", "step",
+		[]v1alpha1.ClusterAddonReadinessCheck{crdEstablishedCheck()}, "300ms", started.Add(-240*time.Millisecond), 5*time.Millisecond, nil)
+	if err == nil {
+		t.Fatal("expected a timeout error")
+	}
+	if elapsed := time.Since(started); elapsed >= 200*time.Millisecond {
+		t.Fatalf("step requirement restarted the whole timeout instead of using the remaining add-on budget: %s", elapsed)
 	}
 }
 

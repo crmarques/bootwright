@@ -33,7 +33,11 @@ func TestCSVGateTimeoutSurfacesImagePullFailure(t *testing.T) {
 		pods: `{"items":[{"metadata":{"name":"odf-console-abc"},"status":{"containerStatuses":[{"image":"` + image + `","state":{"waiting":{"reason":"ImagePullBackOff","message":"Back-off pulling image: Requesting bearer token: received unexpected HTTP status: 400 Bad Request"}}}]}}]}`,
 	}
 	var log strings.Builder
-	err := waitCSVSucceeded(context.Background(), runner, "/tmp/kubeconfig", "openshift-storage", "odf-operator", "30ms", time.Millisecond, &log)
+	budget, err := newWaitBudget("30ms", time.Time{})
+	if err != nil {
+		t.Fatalf("newWaitBudget: %v", err)
+	}
+	err = waitCSVSucceeded(context.Background(), runner, "/tmp/kubeconfig", "openshift-storage", "odf-operator", budget, time.Millisecond, &log)
 	if err == nil {
 		t.Fatal("expected CSV gate timeout")
 	}

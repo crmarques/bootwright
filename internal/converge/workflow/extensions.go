@@ -26,6 +26,7 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	progress := io.MultiWriter(stdout, &lockedApplyWriter{mu: &sync.Mutex{}, w: progressLog})
 	var result extensionoc.TaskResult
 	err = withMaterializedClusterKubeconfig(opts.ContextName, opts.ClustersDir, task.Entry.Cluster, func(kubeconfig string) error {
+		startedAt := time.Now()
 		runner := extensionoc.CommandRunner{
 			LogPath: logPath,
 			Stdout:  stdout,
@@ -36,11 +37,11 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 			ClustersDir:  opts.ClustersDir,
 			Kubeconfig:   kubeconfig,
 			RunID:        runID,
-			StartedAt:    time.Now(),
+			StartedAt:    startedAt,
 			PollInterval: 0,
 			ReadRunner:   readRunner,
 			Progress:     progress,
-			Steps:        newAddonStepExecutor(stdout, stderr, runsDir, runID, kubeconfig, opts, task, runnerFactory),
+			Steps:        newAddonStepExecutor(stdout, stderr, runsDir, runID, kubeconfig, startedAt, opts, task, runnerFactory),
 			Effects:      newAddonEffectExecutor(stdout, stderr, runsDir, runID, opts, task),
 		}
 		switch task.Entry.Kind {

@@ -38,6 +38,7 @@ type addonStepExecutor struct {
 	readRunner     extensionoc.OCRunner
 	runnerFactory  ApplyTaskRunnerFactory
 	stepResources  *addonStepResourcePool
+	startedAt      time.Time
 	binding        v1alpha1.ClusterAddonBinding
 	inputs         []v1alpha1.ClusterAddonBindingInput
 }
@@ -49,7 +50,7 @@ type extensionPlanView struct {
 	Policy  addons.ClusterAddonPolicy
 }
 
-func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonStepExecutor {
+func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig string, startedAt time.Time, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) *addonStepExecutor {
 	plan := extensionPlanView{Name: task.Extension.Name, Cluster: task.Extension.Cluster, Addon: task.Extension.Extension, Policy: task.Extension.Policy}
 	binding, inputs := addonBindingInputs(task.State, task.Extension.Binding, plan.Name)
 	logPath := TaskLogPath(runsDir, runID, task.Entry)
@@ -68,6 +69,7 @@ func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig s
 		readRunner:    extensionoc.CommandRunner{},
 		runnerFactory: runnerFactory,
 		stepResources: opts.addonStepResources,
+		startedAt:     startedAt,
 		binding:       binding,
 		inputs:        inputs,
 	}
@@ -111,7 +113,7 @@ func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAd
 	if err != nil {
 		return nil, fmt.Errorf("ClusterAddon/%s step %s cannot prove the target of its mutating playbook: %w; fix the step target before applying again", e.plan.Name, step.Name, err)
 	}
-	if err := extensionoc.WaitStepRequirements(ctx, e.readRunner, e.kubeconfig, e.plan.Name, step.Name, step.Requires, e.plan.Addon.Spec.Readiness.Timeout, 0, e.stdout); err != nil {
+	if err := extensionoc.WaitStepRequirements(ctx, e.readRunner, e.kubeconfig, e.plan.Name, step.Name, step.Requires, e.plan.Addon.Spec.Readiness.Timeout, e.startedAt, 0, e.stdout); err != nil {
 		return nil, err
 	}
 	resourceKeys := make([]string, 0, len(storageTargets))
