@@ -135,14 +135,32 @@ func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 		return adviceCephCluster(name, distribution, "",
 			[]string{"mon", "mgr", "osd"}, []string{"mon", "mgr", "osd"}, []string{"mon", "osd"})
 	}
+	option := func(name string) string {
+		return "mgr/cephadm/container_image_" + name
+	}
+	requireSidecarOptions := func(state v1alpha1.State, want, absent []string) {
+		t.Helper()
+		got := findingsWith(StorageAdvisories(state), "sidecar images")
+		if len(got) != 1 {
+			t.Fatalf("sidecar advisory = %+v, want one", got)
+		}
+		for _, name := range want {
+			if !strings.Contains(got[0].Finding, option(name)) || !strings.Contains(got[0].Remediation, option(name)) {
+				t.Fatalf("sidecar advisory must report and remedy %q, got %+v", option(name), got[0])
+			}
+		}
+		for _, name := range absent {
+			if strings.Contains(got[0].Finding, option(name)) || strings.Contains(got[0].Remediation, option(name)) {
+				t.Fatalf("sidecar advisory must not report already-pinned or undeclared %q, got %+v", option(name), got[0])
+			}
+		}
+	}
 	disconnectedEnv := v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{
 		Registries: &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{URL: "mirror.test:5000"}},
 	}}
 
 	ibm := adviceState(healthy("ibm", v1alpha1.StorageCephDistributionIBM))
-	if got := findingsWith(StorageAdvisories(ibm), "sidecar"); len(got) != 1 {
-		t.Fatalf("ibm cluster must flag unpinned sidecars, got %+v", StorageAdvisories(ibm))
-	}
+	requireSidecarOptions(ibm, []string{"prometheus", "grafana", "alertmanager", "node_exporter"}, []string{"haproxy", "keepalived", "nginx", "oauth2_proxy"})
 
 	ossConnected := adviceState(healthy("oss", v1alpha1.StorageCephDistributionOSS))
 	if got := findingsWith(StorageAdvisories(ossConnected), "sidecar"); len(got) != 0 {
@@ -150,21 +168,77 @@ func TestStorageAdvisoriesFlagUnpinnedSidecarImages(t *testing.T) {
 	}
 	ossDisconnected := adviceState(healthy("oss", v1alpha1.StorageCephDistributionOSS))
 	ossDisconnected.Environments = []v1alpha1.Environment{disconnectedEnv}
-	if got := findingsWith(StorageAdvisories(ossDisconnected), "sidecar"); len(got) != 1 {
-		t.Fatalf("disconnected oss cluster must flag sidecars, got %+v", StorageAdvisories(ossDisconnected))
-	}
+	requireSidecarOptions(ossDisconnected, []string{"prometheus", "grafana", "alertmanager", "node_exporter"}, nil)
 
 	pinned := healthy("ibm-pinned", v1alpha1.StorageCephDistributionIBM)
-	pinned.Spec.Ceph.Config = map[string]map[string]string{"mgr": {"mgr/cephadm/container_image_prometheus": "mirror.test:5000/prometheus:v2"}}
-	if got := findingsWith(StorageAdvisories(adviceState(pinned)), "sidecar"); len(got) != 0 {
-		t.Fatalf("a cluster pinning sidecar images must be silent, got %+v", got)
-	}
+	pinned.Spec.Ceph.Config = map[string]map[string]string{"mgr": {
+		option("prometheus"): "mirror.test:5000/prometheus:v2",
+		option("grafana"):    " ",
+	}}
+	requireSidecarOptions(adviceState(pinned), []string{"grafana", "alertmanager", "node_exporter"}, []string{"prometheus"})
 
 	noMon := healthy("ibm-nomon", v1alpha1.StorageCephDistributionIBM)
 	disabled := false
 	noMon.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
 	if got := findingsWith(StorageAdvisories(adviceState(noMon)), "sidecar"); len(got) != 0 {
 		t.Fatalf("monitoring-disabled cluster must not flag sidecars, got %+v", got)
+	}
+	unboundIngress := adviceState(noMon)
+	unboundIngress.StorageObjectGateways = []v1alpha1.StorageObjectGateway{{
+		Spec: v1alpha1.StorageObjectGatewaySpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "other"},
+			Ceph:              v1alpha1.StorageObjectGatewayCephSpec{Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip"}}},
+		},
+	}}
+	if got := findingsWith(StorageAdvisories(unboundIngress), "sidecar"); len(got) != 0 {
+		t.Fatalf("an ingress bound to another cluster must not require this cluster's sidecars, got %+v", got)
+	}
+
+	ingress := healthy("ibm-ingress", v1alpha1.StorageCephDistributionIBM)
+	ingress.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
+	ingressState := adviceState(ingress)
+	ingressState.StorageObjectGateways = []v1alpha1.StorageObjectGateway{{
+		Spec: v1alpha1.StorageObjectGatewaySpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: ingress.Metadata.Name},
+			Ceph:              v1alpha1.StorageObjectGatewayCephSpec{Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip"}}},
+		},
+	}}
+	requireSidecarOptions(ingressState, []string{"haproxy", "keepalived"}, []string{"prometheus", "grafana", "alertmanager", "node_exporter", "nginx", "oauth2_proxy"})
+
+	exportIngress := healthy("ibm-export-ingress", v1alpha1.StorageCephDistributionIBM)
+	exportIngress.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
+	exportState := adviceState(exportIngress)
+	exportState.StorageNFSExports = []v1alpha1.StorageNFSExport{{
+		Spec: v1alpha1.StorageNFSExportSpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: exportIngress.Metadata.Name},
+			Ceph:              v1alpha1.StorageNFSExportCephSpec{Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip"}}},
+		},
+	}}
+	requireSidecarOptions(exportState, []string{"haproxy", "keepalived"}, []string{"prometheus", "grafana", "alertmanager", "node_exporter", "nginx", "oauth2_proxy"})
+
+	management := healthy("ibm-management", v1alpha1.StorageCephDistributionIBM)
+	management.Spec.Ceph.Monitoring = &v1alpha1.StorageCephMonitoring{Enabled: &disabled}
+	management.Spec.Ceph.MgmtGateway = &v1alpha1.StorageCephMgmtGateway{OAuth2Proxy: &v1alpha1.StorageCephOAuth2Proxy{}}
+	requireSidecarOptions(adviceState(management), []string{"nginx", "keepalived", "oauth2_proxy"}, []string{"prometheus", "grafana", "alertmanager", "node_exporter", "haproxy"})
+
+	combined := management
+	combinedState := adviceState(combined)
+	combinedState.StorageObjectGateways = []v1alpha1.StorageObjectGateway{{
+		Spec: v1alpha1.StorageObjectGatewaySpec{
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: combined.Metadata.Name},
+			Ceph:              v1alpha1.StorageObjectGatewayCephSpec{Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "vip"}}},
+		},
+	}}
+	combined.Spec.Ceph.Config = map[string]map[string]string{"mgr": {
+		option("haproxy"):      "mirror.test:5000/haproxy:v2",
+		option("nginx"):        "mirror.test:5000/nginx:v1",
+		option("oauth2_proxy"): "mirror.test:5000/oauth2-proxy:v7",
+	}}
+	combinedState.StorageClusters = []v1alpha1.StorageCluster{combined}
+	requireSidecarOptions(combinedState, []string{"keepalived"}, []string{"haproxy", "nginx", "oauth2_proxy"})
+	got := findingsWith(StorageAdvisories(combinedState), "sidecar images")
+	if strings.Count(got[0].Finding, option("keepalived")) != 1 || strings.Count(got[0].Remediation, option("keepalived")) != 1 {
+		t.Fatalf("shared ingress/management keepalived requirement must be reported once, got %+v", got[0])
 	}
 }
 

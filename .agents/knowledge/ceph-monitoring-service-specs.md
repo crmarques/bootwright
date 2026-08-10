@@ -33,6 +33,17 @@ HAProxy frontend is rendered (the gateway, not HAProxy, reverse-proxies the
 dashboard and monitoring UIs). `enable_auth` renders only when authored so an
 unset spec keeps cephadm's default (off).
 
+**Constraint:** The sidecar-image advisory is a read-only, feature-derived
+preflight for IBM and disconnected clusters. Monitoring requires
+`container_image_{prometheus,grafana,alertmanager,node_exporter}` only while it
+is enabled. An RGW or NFS ingress requires `container_image_{haproxy,keepalived}`.
+A declared management gateway requires `container_image_{nginx,keepalived}` and
+also `container_image_oauth2_proxy` when its OAuth2 proxy is declared. It reports
+every missing `mgr/cephadm/container_image_*` option, including an empty one, in
+one finding and its remedy; an unrelated pin cannot silence another required
+sidecar. The management gateway's `keepalive_only` ingress is deliberately not
+an HAProxy requirement.
+
 **Root cause:** cephadm's classic mgr dashboard module keeps its own HTTPS
 listener (`mgr/dashboard/ssl_server_port`, default `8443`) bound on every mon
 host via the mgr container's host-network port mapping. Ceph does not disable

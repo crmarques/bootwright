@@ -24,6 +24,23 @@ const (
 	estateSiteGroup        = "Estate sites"
 )
 
+var (
+	monitoringSidecarImageOptions = []string{
+		"mgr/cephadm/container_image_prometheus",
+		"mgr/cephadm/container_image_grafana",
+		"mgr/cephadm/container_image_alertmanager",
+		"mgr/cephadm/container_image_node_exporter",
+	}
+	ingressSidecarImageOptions = []string{
+		"mgr/cephadm/container_image_haproxy",
+		"mgr/cephadm/container_image_keepalived",
+	}
+	managementGatewaySidecarImageOptions = []string{
+		"mgr/cephadm/container_image_nginx",
+		"mgr/cephadm/container_image_keepalived",
+	}
+)
+
 type StorageAdvisory struct {
 	Severity    AdvisorySeverity `json:"severity"`
 	Group       string           `json:"group"`
@@ -45,7 +62,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 		out = append(out, storageManagerAdvisories(object, cluster)...)
 		out = append(out, storageGrafanaCredentialAdvisories(object, cluster)...)
 		out = append(out, storageImageAdvisories(object, cluster)...)
-		out = append(out, storageSidecarImageAdvisories(object, cluster, disconnected)...)
+		out = append(out, storageSidecarImageAdvisories(object, state, cluster, disconnected)...)
 		out = append(out, storageRootFilesystemAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchPoolAdvisories(object, state, cluster)...)
 		out = append(out, storageStretchTiebreakerAdvisories(object, cluster)...)
@@ -169,28 +186,77 @@ func environmentIsDisconnected(state v1alpha1.State) bool {
 	return registries.Mirror != nil || len(registries.ImageDigestSources) > 0
 }
 
-func storageSidecarImageAdvisories(object string, cluster v1alpha1.StorageCluster, disconnected bool) []StorageAdvisory {
+func storageSidecarImageAdvisories(object string, state v1alpha1.State, cluster v1alpha1.StorageCluster, disconnected bool) []StorageAdvisory {
 	ceph := cluster.Spec.Ceph
-	monitoring := ceph.Monitoring
-	monitoringEnabled := monitoring == nil || monitoring.Enabled == nil || *monitoring.Enabled
-	if !monitoringEnabled {
-		return nil
-	}
 	vendorMismatch := ceph.Distribution == v1alpha1.StorageCephDistributionIBM
 	if !disconnected && !vendorMismatch {
 		return nil
 	}
-	if len(v1alpha1.StorageCephSidecarImagePins(ceph)) > 0 {
+	required := storageSidecarImageOptions(state, cluster)
+	if len(required) == 0 {
+		return nil
+	}
+	pins := v1alpha1.StorageCephSidecarImagePins(ceph)
+	var missing []string
+	for _, option := range required {
+		if strings.TrimSpace(pins[option]) == "" {
+			missing = append(missing, option)
+		}
+	}
+	if len(missing) == 0 {
 		return nil
 	}
 	return []StorageAdvisory{{
 		Severity:    SeverityWarn,
 		Group:       cephBestPracticeGroup,
 		Object:      object,
-		Finding:     "monitoring/ingress sidecar images are not pinned to the entitled registry or mirror",
-		Impact:      "cephadm pulls prometheus/grafana/alertmanager/node-exporter/haproxy/keepalived from upstream defaults this cluster cannot reach; the monitoring stack and every HA VIP fail to deploy",
-		Remediation: "pin mgr/cephadm/container_image_{prometheus,grafana,alertmanager,node_exporter,haproxy,keepalived} under spec.ceph.config[mgr] to the mirror/entitled registry references",
+		Finding:     "declared monitoring, ingress, or management-gateway sidecar images are not pinned: " + strings.Join(missing, ", "),
+		Impact:      "cephadm pulls these declared sidecars from compiled-in upstream defaults that this disconnected or IBM cluster may not reach, preventing their monitoring, ingress, or management-gateway services from deploying",
+		Remediation: "set each missing mgr/cephadm/container_image_* option under spec.ceph.config[mgr] to a pullable mirror or entitled registry reference: " + strings.Join(missing, ", "),
 	}}
+}
+
+func storageSidecarImageOptions(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
+	var required []string
+	seen := map[string]bool{}
+	add := func(options ...string) {
+		for _, option := range options {
+			if seen[option] {
+				continue
+			}
+			seen[option] = true
+			required = append(required, option)
+		}
+	}
+	if topology.MonitoringEnabled(cluster) {
+		add(monitoringSidecarImageOptions...)
+	}
+	if storageClusterHasGatewayOrExportIngress(state, cluster.Metadata.Name) {
+		add(ingressSidecarImageOptions...)
+	}
+	mgmtGateway := cluster.Spec.Ceph.MgmtGateway
+	if mgmtGateway == nil {
+		return required
+	}
+	add(managementGatewaySidecarImageOptions...)
+	if mgmtGateway.OAuth2Proxy != nil {
+		add("mgr/cephadm/container_image_oauth2_proxy")
+	}
+	return required
+}
+
+func storageClusterHasGatewayOrExportIngress(state v1alpha1.State, clusterName string) bool {
+	for _, gateway := range state.StorageObjectGateways {
+		if gateway.Spec.StorageClusterRef.Name == clusterName && len(gateway.Spec.Ceph.Ingresses) > 0 {
+			return true
+		}
+	}
+	for _, export := range state.StorageNFSExports {
+		if export.Spec.StorageClusterRef.Name == clusterName && len(export.Spec.Ceph.Ingresses) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {

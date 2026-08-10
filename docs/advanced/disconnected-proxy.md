@@ -485,14 +485,16 @@ install-time registration *is* the package source. See
     next `apply` — day-2 daemon pulls authenticate from the manager store, not
     from a node-level `podman login`, so no manual re-login is needed.
 
-### Pinning the Ceph monitoring and ingress sidecar images
+### Pinning the Ceph monitoring, ingress, and management-gateway sidecars
 
 `spec.ceph.image` pins only the Ceph **daemon** image. cephadm pulls its
 monitoring and ingress sidecars (Prometheus, Grafana, Alertmanager,
-node-exporter, HAProxy, keepalived) from compiled-in **upstream** defaults that a
+node-exporter, HAProxy, keepalived) and management-gateway sidecars (nginx and,
+when SSO is enabled, oauth2-proxy) from compiled-in **upstream** defaults that a
 disconnected estate cannot reach — and an IBM cluster's defaults point at
 `registry.redhat.io`, which an IBM (`cp.icr.io`) entitlement cannot pull. Pin
-each sidecar to your mirror or entitled registry under `spec.ceph.config[mgr]`:
+each sidecar your declared services need to your mirror or entitled registry under
+`spec.ceph.config[mgr]`:
 
 ```yaml
 spec:
@@ -505,7 +507,15 @@ spec:
         mgr/cephadm/container_image_node_exporter: mirror.example.test:5000/prometheus/node-exporter:v1.7.0
         mgr/cephadm/container_image_haproxy: mirror.example.test:5000/library/haproxy:2.8
         mgr/cephadm/container_image_keepalived: mirror.example.test:5000/library/keepalived:2.2.8
+        mgr/cephadm/container_image_nginx: mirror.example.test:5000/library/nginx:1.27
+        mgr/cephadm/container_image_oauth2_proxy: mirror.example.test:5000/oauth2-proxy/oauth2-proxy:v7.7.1
 ```
+
+The monitoring four are needed only while monitoring is enabled. HAProxy and
+keepalived are needed by RGW or NFS ingresses. A management gateway uses nginx
+and keepalived (its `keepalive_only` ingress has no HAProxy frontend), and adds
+oauth2-proxy only when `mgmtGateway.oauth2Proxy` is declared. Omit options for
+services the desired state does not deploy.
 
 These pins reach the cluster by two routes, both before anything pulls them.
 Every `mgr` section key is seeded into the ceph.conf handed to `cephadm bootstrap
@@ -517,10 +527,11 @@ pass `--skip-monitoring-stack` to work around this: a cluster that declares no
 monitoring roles and no `monitoring` block renders no monitoring specs at all, so
 skipping the stack would silently leave it with no monitoring.
 
-`bootwright validate` raises a non-blocking advisory when monitoring is enabled
-on a disconnected (mirror/`imageDigestSources`) or IBM cluster that has not
-pinned these, so the gap is caught at author time rather than as a stalled
-deploy.
+`bootwright validate` raises a non-blocking advisory on a disconnected
+(mirror/`imageDigestSources`) or IBM cluster for every required option that is
+still unpinned. The finding and remediation list the exact missing keys, so one
+pin never hides the rest and a monitoring-disabled ingress estate is still caught
+at author time rather than as a stalled deploy.
 
 ## Host trust for disconnected labs
 

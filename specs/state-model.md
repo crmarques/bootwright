@@ -1527,6 +1527,12 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   service spec: `port`, `networks[]` (CIDRs the daemon binds), and (prometheus
   only) `retentionTime`/`retentionSize` as `retention_time`/`retention_size`. An
   authored service must resolve to at least one host.
+- On an IBM or disconnected managed cluster, `validate` reports a non-blocking
+  advisory for every unpinned sidecar image the declared services need:
+  monitoring needs Prometheus, Grafana, Alertmanager, and node-exporter; RGW or
+  NFS ingress needs HAProxy and keepalived; and a management gateway needs nginx
+  and keepalived, plus oauth2-proxy when it is declared. The advisory names the
+  exact missing `spec.ceph.config[mgr]` options and is not an apply mutation.
 - `spec.ceph.mgmtGateway`, when set, publishes the cephadm mgmt-gateway (the HA
   front door to the Ceph dashboard/Grafana). `ingress` is required; `dnsLabel`
   is the leftmost label only, never an FQDN, and the published name is always

@@ -318,28 +318,6 @@ learned; this file records what it still owes.
 - Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md),
   B-044
 
-## B-051 — The sidecar-image advisory misses ingress-only and partially-pinned clusters
-- Status: open
-- Area: storage / ceph
-- Origin: IBM Ceph `:latest` investigation 2026-07-31
-- Severity: low
-- Problem: `storageSidecarImageAdvisories`
-  (`internal/state/advice/storage.go`) returns early when monitoring is
-  disabled, yet its own impact text names haproxy and keepalived — which come
-  from ingress, and ingress renders independently of monitoring, so a
-  monitoring-disabled cluster with an RGW or management-gateway ingress is
-  silently unadvised. It also short-circuits on the first pin found, so pinning
-  one of the six silences the other five, and it names none of the
-  mgmt-gateway sidecars (`container_image_nginx`,
-  `container_image_oauth2_proxy`).
-- Exit: split the gate so the monitoring half keys on monitoring and the
-  ingress half on any bound gateway/export ingress or a declared management
-  gateway; compare against the missing subset rather than a non-empty check;
-  extend the remediation for mgmt-gateway estates. The two guard tests in
-  `internal/state/advice/storage_test.go` that lock the current behaviour must
-  change with it. These are cephadm option names, not a vendor catalog.
-- Related: [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
-
 ## B-069 — UX-review decisions still awaiting a product call
 - Status: open
 - Area: api / decisions
