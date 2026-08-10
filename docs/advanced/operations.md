@@ -49,9 +49,9 @@ nothing else; the `accepted by` column is normative:
 | `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) | `destroy`, `storage-cluster replace-arbiter` |
 | `same-site-arbiter` | promoting a mon to stretch tiebreaker while another mon already sits in its site — the emergency fallback when the third site is gone | `storage-cluster replace-arbiter` |
 | `degraded-quorum` | moving a stretch tiebreaker while declared mons are outside quorum | `storage-cluster replace-arbiter` |
-| `unreadable-records` | proceeding when ownership records cannot be read | `destroy` |
+| `unreadable-records` | proceeding when ownership records cannot be read, leaving them standing and disabling record-only/context-wide orphan sweeps rather than inferring deletion from missing evidence | `destroy` |
 | `shared-infra` | storage-consumer conflicts and exact infra-component Kind+Name+Host identities owned/referenced by another context or hidden by unreadable evidence; it never authorizes apply adoption | `destroy` |
-| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents | `destroy` |
+| `stale-input` | planning a teardown from input whose documents no longer decode or validate against this build, skipping exactly those documents and disabling record-only/context-wide orphan sweeps so their resources remain standing | `destroy` |
 
 An unknown token is a usage error listing the tokens the command accepts. So is
 a token the command has no gate for — the `accepted by` column above is the
@@ -1160,7 +1160,7 @@ there.
 
 | Path under `…/contexts/<context>/` | Holds |
 | --- | --- |
-| `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger (including exact resolved mutating invocation argv), and the short-lived local lease for the updating process. |
+| `runs/` | Apply and destroy logs in restrictive modes, the durable run ledger (including immutable invocation audit argv and typed CLI-resolved recovery steps), and the short-lived local lease for the updating process. |
 | `runs/history/<run-id>/bootwright.log` | The shared apply flow log: shared-stage tool output plus one `<cluster> apply initiated … / finished successfully \| failed` marker per cluster that points at its split-out log. |
 | `runs/history/<run-id>/clusters/<cluster>/cluster.log` | One cluster's apply flow log, split out of the shared log so each cluster's output reads on its own and the shared log stays a legible index. |
 | `runs/history/<run-id>/clusters/<cluster>/steps/<task-id>/` | One step's Ansible output log for that cluster, plus `task-profile.jsonl` when `BOOTWRIGHT_ANSIBLE_PROFILE` was set for the run. |
@@ -1173,12 +1173,14 @@ there.
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |
 | `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint, exact installer version, original start time, and ISO/boot/bootstrap/install phase that bounded resume reads. |
 
-A real apply or destroy records its exact resolved invocation argv in the
-durable ledger, so a failed-run status hint can preserve context, scope, intent,
-effect flags, SSH overrides, authorizations, and the original confirmation
-choice without reconstructing or widening them. Status quotes that argv for the
-shell and never invents `--yes`; an older ledger without it yields command-free
-guidance. The short-lived lease marks the updating process; cluster install
+A real apply or destroy records its exact resolved invocation argv as immutable
+audit evidence and separately stores a typed, ordered recovery plan. The plan is
+updated before each task starts and when a typed task failure names a more exact
+recovery, so partial `create`, prerequisite repair, stale, and cancelled cases do
+not blindly replay a command that cannot progress. Status validates and quotes
+only those recorded recovery steps; it never reconstructs a command, widens the
+selection, or invents `--yes`. An older or malformed ledger without a valid plan
+yields command-free guidance. The short-lived lease marks the updating process; cluster install
 tasks additionally record per-cluster install state. The lease is per context
 and spans input read, safety gates, remote work,
 and final evidence cleanup. Input-mutating `context update`, `diff --adopt`, and

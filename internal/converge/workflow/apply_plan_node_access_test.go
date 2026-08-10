@@ -43,9 +43,9 @@ func TestPlanStorageNodeAccessBetweenOSInstallAndRegistration(t *testing.T) {
 	if task.Limit != render.StorageClusterGroupName("ceph-ibm") {
 		t.Fatalf("node access limit = %q, want the storage cluster group", task.Limit)
 	}
-	assertTaskDeps(t, tasks, "nodeaccess.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm")
-	assertTaskDeps(t, tasks, "registration.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm", "nodeaccess.ceph-ibm")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-ibm", "provider.bastion", "infra-component.bastion", "osinstall.ceph-ibm", "nodeaccess.ceph-ibm", "registration.ceph-ibm")
+	assertTaskDeps(t, tasks, "nodeaccess.ceph-ibm", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "osinstall.ceph-ibm")
+	assertTaskDeps(t, tasks, "registration.ceph-ibm", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "osinstall.ceph-ibm", "nodeaccess.ceph-ibm")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-ibm", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "osinstall.ceph-ibm", "nodeaccess.ceph-ibm", "registration.ceph-ibm")
 }
 
 func TestPlanStorageNodeAccessAbsentForARootOrchestrationAccount(t *testing.T) {

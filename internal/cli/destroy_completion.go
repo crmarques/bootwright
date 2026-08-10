@@ -11,7 +11,7 @@ func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvoca
 	outcome := workflow.SucceededDestroyTaskKinds(ledger)
 	var skipped []string
 	for _, task := range ledger.Tasks {
-		if task.Status != workflow.TaskStatusSkipped || !workflow.IsDestroyTaskKind(task.Kind) || !destroyTaskNeedsCompletionProof(task) {
+		if task.Status != workflow.TaskStatusSkipped || !workflow.IsDestroyTaskKind(task.Kind) || !workflow.DestroyTaskNeedsCompletionProof(task) {
 			continue
 		}
 		label := task.Label
@@ -32,8 +32,4 @@ func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvoca
 		return outcome, err
 	}
 	return outcome, fmt.Errorf("destroy could not prove completion of required selected teardown task(s): %s; their convergence/install records and substrate-release authorization were kept, so the next apply cannot mistake skipped work for destroyed state. Restore the selected hosts to the generated inventory or correct the desired-state selection, then re-run `%s`", strings.Join(skipped, ", "), retry.String())
-}
-
-func destroyTaskNeedsCompletionProof(task workflow.TaskLedgerEntry) bool {
-	return len(workflow.DestroyTaskClusterKeys(task)) > 0 || len(workflow.DestroyTaskMachineKeys(task)) > 0 || task.Cluster != "" || task.Node != "" || len(task.Nodes) > 0
 }

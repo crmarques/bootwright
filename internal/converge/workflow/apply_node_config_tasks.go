@@ -8,13 +8,13 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool) error {
+func planNodeConfigActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, machineServiceTaskIDs []string) error {
 	for _, ocp := range state.ContainerClusters {
 		if !clusterNeedsNodeConfig(ocp) {
 			continue
 		}
 		cluster := ocp.Metadata.Name
-		deps := []string{}
+		deps := append([]string(nil), machineServiceTaskIDs...)
 		if installPhasePlanned {
 			deps = append(deps, "wait."+cluster)
 		}

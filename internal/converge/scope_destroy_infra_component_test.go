@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,5 +33,21 @@ func TestApplyDestroyScopeExtraVarsContextSweepLeavesInfraComponentsUngated(t *t
 
 	if val, ok := infraComponentScopeVar(plan); ok {
 		t.Fatalf("a context sweep tears down every recorded component, so it must not emit the allowlist; got %q in %v", val, plan.ExtraVarPairs)
+	}
+}
+
+func TestApplyDestroyStaleInputDisablesRecordOnlySweeps(t *testing.T) {
+	plan := WorkflowPlan{}
+	ApplyDestroyScopeExtraVars(&plan, true, "", nil, nil, false, false, false, false)
+	ApplyDestroyEvidenceDegradedExtraVar(&plan, true)
+
+	for _, pair := range plan.ExtraVarPairs {
+		if pair == InfraDestroyContextSweepExtraVar+"=true" {
+			t.Fatalf("stale-input destroy must not sweep context records: %v", plan.ExtraVarPairs)
+		}
+	}
+	want := DestroySkipOrphanSweepExtraVar + "=true"
+	if !slices.Contains(plan.ExtraVarPairs, want) {
+		t.Fatalf("stale-input destroy must publish the fail-closed sweep suppression %q: %v", want, plan.ExtraVarPairs)
 	}
 }

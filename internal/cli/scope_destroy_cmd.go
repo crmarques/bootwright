@@ -162,12 +162,17 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		playbook := runScope.DestroyPlaybook
 		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		sharedMutation, err := prepareDestroySharedServiceMutation(runContext, ctx.Name, state, sel, runScope, artifactServerOnly, dryRun, ownershipRecords, auth, invocation)
+		evidenceDegraded := staleInputReached || unreadableRecordsReached
+		sharedMutation, err := prepareDestroySharedServiceMutation(runContext, ctx.Name, state, sel, runScope, artifactServerOnly, dryRun, evidenceDegraded, ownershipRecords, auth, invocation)
 		sharedServiceLease, runContext = sharedMutation.lease, sharedMutation.runContext
 		sharedInfraReached = sharedInfraReached || sharedMutation.reached
 		componentDecision := sharedMutation.decision
 		if err != nil {
 			return failErr(1, err)
+		}
+		var sharedServiceForecast error
+		if dryRun && sharedMutation.refusal != nil {
+			sharedServiceForecast = applyInstallRemedialError(sharedMutation.refusal, invocation)
 		}
 		var plan converge.WorkflowPlan
 		if artifactServerOnly {
@@ -197,6 +202,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			return failErr(1, err)
 		}
 		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, sel.MachineScopeNames(), forceUnowned, forceUnownedNetworks, skipUnreachable, destroyAuthorizesUnownedDevices(auth, runScope))
+		converge.ApplyDestroyEvidenceDegradedExtraVar(&plan, staleInputReached || unreadableRecordsReached)
 		if err := converge.ApplyDestroyCephOwnershipRecoveryExtraVar(&plan, confirmedCephFSIDs); err != nil {
 			return failErr(1, err)
 		}
@@ -229,7 +235,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			unreadableRecordDir: ctx.OwnershipDir,
 		})
 		if flags.output == outputJSON {
-			disclosure := destroyDryRunDisclosure(destroySafety, inputSkipped, ownershipSkipped, componentDecision, auth, purgeHistory && !plan.NoRemoteWork)
+			disclosure := destroyDryRunDisclosure(destroySafety, inputSkipped, ownershipSkipped, componentDecision, sharedServiceForecast, auth, purgeHistory && !plan.NoRemoteWork)
 			return runDestroyDryRunJSON(c, stdout, cf, flags, runScope, plan, playbook, artifactsBaseName, artifactServerOnly, converge.DestroyDryRunSafetyReport(destroySafety, authorizedProtected), requiredAuth, disclosure)
 		}
 		if !dryRun && destroySafety.RequiresAuthorization {
@@ -255,6 +261,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
 		printInfraComponentDestroyBlocks(stdout, componentDecision, auth.has(authorizeSharedInfra))
+		if sharedServiceForecast != nil {
+			printApplyGateRefusals(stdout, []string{sharedServiceForecast.Error()})
+		}
 		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
 		dataLossPlanned := dataLossReached && !dryRun
 		allowDestroy := auth.has(authorizeDataLoss)

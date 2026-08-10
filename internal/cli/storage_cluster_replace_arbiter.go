@@ -338,6 +338,9 @@ func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 		return failErr(1, err)
 	}
 	runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, becomePasswordFile, false, "replace-arbiter prepare "+clusterName, workflow.ApplyModeReconcile, false, applyInvocation.args())
+	if err := configureApplyRunRecovery(&runOpts, applyInvocation); err != nil {
+		return failErr(1, err)
+	}
 	runOpts.RunLease = runLease
 	_, _, ledger, err := converge.ExecuteApply(cmdCtx, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, clusterName, plan, tasks, limits, true, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 	if err != nil {

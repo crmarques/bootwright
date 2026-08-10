@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -39,6 +40,7 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 		converge.ApplyReconcileInvocationExtraVar,
 		converge.ApplyRebuildInvocationExtraVar,
 		converge.ApplyReclaimInvocationExtraVar,
+		converge.ApplyControllerDNSInvocationExtraVar,
 		converge.ApplyFullInvocationExtraVar,
 		converge.ApplyThroughBaseInvocationExtraVar,
 	} {
@@ -69,6 +71,109 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 	}
 	if got := values[converge.ApplyReclaimDevicesExtraVar]; !reflect.DeepEqual(got, []any{"/dev/disk/by-id/osd one", "/dev/sdc"}) {
 		t.Fatalf("preserved reclaim devices = %#v", got)
+	}
+}
+
+func TestControllerNameResolutionRetryPrependsOnlyRequiredFabric(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		mode        workflow.ApplyMode
+		selection   runSelection
+		wantStage   string
+		wantThrough string
+		wantMode    workflow.ApplyMode
+	}{
+		{name: "machines partial create", mode: workflow.ApplyModeCreate, selection: runSelection{stage: converge.PhaseMachines, machines: "node-a"}, wantStage: converge.PhaseFabric, wantThrough: converge.PhaseMachines, wantMode: workflow.ApplyModeReconcile},
+		{name: "machines through base rebuild", mode: workflow.ApplyModeRebuild, selection: runSelection{stage: converge.PhaseMachines, through: converge.PhaseBase, clusters: "cluster-a"}, wantStage: converge.PhaseFabric, wantThrough: converge.PhaseBase, wantMode: workflow.ApplyModeRebuild},
+		{name: "infra family reconcile", mode: workflow.ApplyModeReconcile, selection: runSelection{stage: "infra", machines: "node-a"}, wantStage: "infra", wantMode: workflow.ApplyModeReconcile},
+		{name: "full graph create", mode: workflow.ApplyModeCreate, selection: runSelection{clusters: "cluster-a"}, wantMode: workflow.ApplyModeReconcile},
+		{name: "cluster family create", mode: workflow.ApplyModeCreate, selection: runSelection{stage: "clusters", clusters: "cluster-a"}, wantStage: converge.PhaseFabric, wantThrough: converge.PhaseAddons, wantMode: workflow.ApplyModeReconcile},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := resolvedInvocation{
+				verb:        invocationApply,
+				contextName: "prod west",
+				flags: invocationFlags{
+					mode:           tc.mode,
+					selection:      tc.selection,
+					authorizations: []string{authorizeUnownedDevices},
+					yes:            true,
+				},
+			}
+			plan := converge.WorkflowPlan{}
+			if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
+				t.Fatal(err)
+			}
+			values := invocationExtraVarValues(t, plan)
+			got := values[converge.ApplyControllerDNSInvocationExtraVar].(string)
+			for _, want := range []string{"--mode " + string(tc.wantMode), "--authorize unowned-devices", "--context 'prod west'"} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("controller DNS retry = %q, missing %q", got, want)
+				}
+			}
+			if tc.wantStage != "" && !strings.Contains(got, "--stage "+tc.wantStage) {
+				t.Fatalf("controller DNS retry = %q, missing stage %q", got, tc.wantStage)
+			}
+			if tc.wantThrough != "" && !strings.Contains(got, "--through "+tc.wantThrough) {
+				t.Fatalf("controller DNS retry = %q, missing through %q", got, tc.wantThrough)
+			}
+			if tc.selection.machines != "" && !strings.Contains(got, "--machines "+tc.selection.machines) {
+				t.Fatalf("controller DNS retry = %q, lost machines %q", got, tc.selection.machines)
+			}
+			if tc.selection.clusters != "" && !strings.Contains(got, "--clusters "+tc.selection.clusters) {
+				t.Fatalf("controller DNS retry = %q, lost clusters %q", got, tc.selection.clusters)
+			}
+			if tc.wantThrough != converge.PhaseAddons && strings.Contains(got, "--through add-ons") {
+				t.Fatalf("controller DNS retry widened beyond the original range: %q", got)
+			}
+		})
+	}
+}
+
+func TestControllerNameResolutionTaskInvocationFactsMatchTypedRecovery(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode:      workflow.ApplyModeCreate,
+			selection: runSelection{stage: converge.PhaseDeps, clusters: "cluster-a"},
+		},
+	}
+	for _, tc := range []struct {
+		name       string
+		action     remedy.Action
+		wantRepair bool
+	}{
+		{name: "selected mutation", action: remedy.ActionResumeControllerDNSMutation},
+		{name: "later proof", action: remedy.ActionReconcileSharedServiceThenRetrySameSelection, wantRepair: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := []workflow.ApplyTask{{
+				Entry: workflow.TaskLedgerEntry{ID: "controller-name-resolution.demo", Kind: workflow.ApplyTaskKindControllerNameResolution},
+				FailureRemedy: remedy.Request{
+					Action:  tc.action,
+					Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "cluster-a"}},
+				},
+			}}
+			if err := appendControllerNameResolutionInvocationExtraVars(tasks, invocation); err != nil {
+				t.Fatal(err)
+			}
+			var values map[string]any
+			if len(tasks[0].ExtraVarPairs) != 1 {
+				t.Fatalf("task extra vars = %v", tasks[0].ExtraVarPairs)
+			}
+			if err := json.Unmarshal([]byte(tasks[0].ExtraVarPairs[0]), &values); err != nil {
+				t.Fatal(err)
+			}
+			if values[converge.ApplyControllerDNSInvocationExtraVar] == "" {
+				t.Fatalf("task recovery facts lost exact controller retry: %v", values)
+			}
+			_, hasRepair := values[converge.ApplyControllerDNSRepairInvocationExtraVar]
+			_, hasResume := values[converge.ApplyControllerDNSResumeInvocationExtraVar]
+			if hasRepair != tc.wantRepair || hasResume != tc.wantRepair {
+				t.Fatalf("task recovery facts = %v, want repair/resume=%v", values, tc.wantRepair)
+			}
+		})
 	}
 }
 

@@ -682,12 +682,16 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
-	if calls != 0 {
-		t.Fatalf("runner factory calls = %d, want 0", calls)
+	if calls != 1 {
+		t.Fatalf("runner factory calls = %d, want one live controller-DNS proof while every installed-cluster task skips", calls)
 	}
 	for _, task := range ledger.Tasks {
-		if task.Status != TaskStatusSkipped {
-			t.Fatalf("task %s status = %s, want skipped", task.ID, task.Status)
+		want := TaskStatusSkipped
+		if task.Kind == ApplyTaskKindControllerNameResolution {
+			want = TaskStatusOK
+		}
+		if task.Status != want {
+			t.Fatalf("task %s status = %s, want %s", task.ID, task.Status, want)
 		}
 	}
 	if len(checker.contents) != 1 {
@@ -839,8 +843,8 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
-	if calls != 2 {
-		t.Fatalf("runner factory calls = %d, want 2", calls)
+	if calls != 3 {
+		t.Fatalf("runner factory calls = %d, want controller-DNS proof plus both install waits", calls)
 	}
 	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_container_cluster_wait_agent_install") {
 		t.Fatalf("playbook = %q, want wait-agent-install.yml", runner.lastSpec.Playbook)
@@ -1128,10 +1132,10 @@ func TestPlanApplyISOWaitsForFabricNotVirtualMachines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskDeps(t, tasks, "iso.sno-libvirt", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
-	assertTaskDeps(t, tasks, "infrafinalize.sno-libvirt.bastion", "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
+	assertTaskDeps(t, tasks, "iso.sno-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "infraprepare.sno-libvirt.bastion")
+	assertTaskDeps(t, tasks, "infrafinalize.sno-libvirt.bastion", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "infraprepare.sno-libvirt.bastion")
 	assertTaskResourceKeys(t, tasks, "infrafinalize.sno-libvirt.bastion", "host:bastion:mutating")
-	assertTaskDeps(t, tasks, "boot.sno-libvirt", "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
+	assertTaskDeps(t, tasks, "boot.sno-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
 	assertNoTaskPath(t, tasks, "iso.sno-libvirt", "infra.sno-libvirt.master-0")
 	assertNoTaskPath(t, tasks, "infrafinalize.sno-libvirt.bastion", "infra.sno-libvirt.master-0")
 }
@@ -1186,16 +1190,16 @@ func TestPlanApplyBaseOnlyDropsISODependencyForSurgicalRerun(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked base-only: %v", err)
 	}
 	assertTaskMissing(t, baseOnly, "iso.sno-libvirt")
-	assertTaskDeps(t, baseOnly, "boot.sno-libvirt")
-	assertTaskDeps(t, baseOnly, "wait-bootstrap.sno-libvirt", "boot.sno-libvirt")
-	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "wait-bootstrap.sno-libvirt")
+	assertTaskDeps(t, baseOnly, "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	assertTaskDeps(t, baseOnly, "wait-bootstrap.sno-libvirt", "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	assertTaskDeps(t, baseOnly, "wait.sno-libvirt", "wait-bootstrap.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
 
 	depsBase, err := PlanApplyTasksChecked(ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked deps+base: %v", err)
 	}
 	assertTaskPresent(t, depsBase, "iso.sno-libvirt")
-	assertTaskDeps(t, depsBase, "boot.sno-libvirt", "iso.sno-libvirt")
+	assertTaskDeps(t, depsBase, "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution", "iso.sno-libvirt")
 }
 
 func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
@@ -1417,10 +1421,10 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion")
+	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion", "controller-name-resolution.InfraComponent.lab-dns")
 	assertTaskPresent(t, tasks, "infra-component.bastion")
 	task := assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
-	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osprepare.ceph-libvirt.bastion")
+	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "osprepare.ceph-libvirt.bastion")
 	if task.Limit != render.ManagedOSGroupName("ceph-libvirt") {
 		t.Fatalf("managed OS limit = %q, want %q", task.Limit, render.ManagedOSGroupName("ceph-libvirt"))
 	}
@@ -1436,8 +1440,8 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-0")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-1")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-2")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osinstall.ceph-libvirt", "nodeaccess.ceph-libvirt")
-	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "storageinfra.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "osinstall.ceph-libvirt", "nodeaccess.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "storageinfra.ceph-libvirt")
 }
 
 func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {

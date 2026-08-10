@@ -15,6 +15,9 @@ type mutationSafetyVarContract struct {
 }
 
 var mutationSafetyVars = []mutationSafetyVarContract{
+	{Name: "bootwright_apply_controller_dns_invocation", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_apply_controller_dns_repair_invocation", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_apply_controller_dns_resume_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_full_invocation", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_apply_mode", Class: mutationSafetyVarIntent},
 	{Name: "bootwright_apply_reclaim_devices", Class: mutationSafetyVarScope},
@@ -51,6 +54,9 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_ceph_reclaim_devices", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_ceph_reconcilable_only_clusters", Class: mutationSafetyVarScope},
 	{Name: "bootwright_ceph_subobject_rebuild_authorized", Class: mutationSafetyVarAuthorization},
+	{Name: "bootwright_controller_name_resolution_automatic_mutation", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_controller_name_resolution_destroy_targets", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_controller_name_resolution_mutation_selected", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_destroy_authorize_unowned_networks", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_authorize_unowned_vms", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_cluster_levels", Class: mutationSafetyVarExecution},
@@ -58,6 +64,7 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_destroy_cluster_scope", Class: mutationSafetyVarScope},
 	{Name: "bootwright_destroy_container_cluster", Class: mutationSafetyVarScope},
 	{Name: "bootwright_destroy_machine_scope", Class: mutationSafetyVarScope},
+	{Name: "bootwright_destroy_skip_orphan_sweep", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_skip_unreachable", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_destroy_storage_scope", Class: mutationSafetyVarScope},
 	{Name: "bootwright_infra_component_apply_skip_records", Class: mutationSafetyVarScope},

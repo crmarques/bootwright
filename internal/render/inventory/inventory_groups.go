@@ -14,12 +14,13 @@ func HostGroupCountsWithOwnershipRecords(state v1alpha1.State, records []ownersh
 	storageHostGroups := storageClusterHostSets(state)
 	machineTaskHostSet, machineTaskGroups := machineTaskHostSets(state)
 	recorded := ownershipInventory(records)
+	controllerHosts := mergeHostSets(ocpReferencedHosts(state), recorded.ControllerHosts)
 	out := map[string]int{
 		GroupInfraHosts:          len(mergeHostSets(infraReferencedHosts(state), recorded.InfraHosts)),
 		GroupProviderHosts:       len(mergeHostSets(providerReferencedHosts(state), recorded.ProviderHosts)),
 		GroupInfraComponentHosts: len(mergeHostSets(infraComponentReferencedHosts(state), recorded.InfraComponentHosts)),
 		GroupBootHosts:           len(bootReferencedHosts(state)),
-		GroupControllerHosts:     len(ocpReferencedHosts(state)),
+		GroupControllerHosts:     len(controllerHosts),
 		GroupOCPHosts:            len(ocpReferencedHosts(state)),
 		GroupAgentNodeHosts:      len(agentNodeHostSet),
 		GroupMachineTaskHosts:    len(machineTaskHostSet),
@@ -47,12 +48,13 @@ func HostGroupMembersWithOwnershipRecords(state v1alpha1.State, records []owners
 	storageHostGroups := storageClusterHostSets(state)
 	machineTaskHostSet, machineTaskGroups := machineTaskHostSets(state)
 	recorded := ownershipInventory(records)
+	controllerHosts := mergeHostSets(ocpReferencedHosts(state), recorded.ControllerHosts)
 	out := map[string][]string{
 		GroupInfraHosts:          sortedHostSet(mergeHostSets(infraReferencedHosts(state), recorded.InfraHosts)),
 		GroupProviderHosts:       sortedHostSet(mergeHostSets(providerReferencedHosts(state), recorded.ProviderHosts)),
 		GroupInfraComponentHosts: sortedHostSet(mergeHostSets(infraComponentReferencedHosts(state), recorded.InfraComponentHosts)),
 		GroupBootHosts:           sortedHostSet(bootReferencedHosts(state)),
-		GroupControllerHosts:     ocpHosts,
+		GroupControllerHosts:     sortedHostSet(controllerHosts),
 		GroupOCPHosts:            ocpHosts,
 		GroupAgentNodeHosts:      sortedHostSet(agentNodeHostSet),
 		GroupMachineTaskHosts:    sortedHostSet(machineTaskHostSet),

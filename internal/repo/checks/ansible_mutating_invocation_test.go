@@ -17,6 +17,9 @@ func TestAnsibleMutatingRemediesUseResolvedInvocationFacts(t *testing.T) {
 		converge.ApplyReconcileInvocationExtraVar,
 		converge.ApplyRebuildInvocationExtraVar,
 		converge.ApplyReclaimInvocationExtraVar,
+		converge.ApplyControllerDNSInvocationExtraVar,
+		converge.ApplyControllerDNSRepairInvocationExtraVar,
+		converge.ApplyControllerDNSResumeInvocationExtraVar,
 		converge.ApplyFullInvocationExtraVar,
 		converge.ApplyThroughBaseInvocationExtraVar,
 		converge.ArbiterDegradedInvocationExtraVar,
@@ -105,6 +108,12 @@ func mutatingInvocationConstantName(name string) string {
 		return "ApplyRebuildInvocationExtraVar"
 	case converge.ApplyReclaimInvocationExtraVar:
 		return "ApplyReclaimInvocationExtraVar"
+	case converge.ApplyControllerDNSInvocationExtraVar:
+		return "ApplyControllerDNSInvocationExtraVar"
+	case converge.ApplyControllerDNSRepairInvocationExtraVar:
+		return "ApplyControllerDNSRepairInvocationExtraVar"
+	case converge.ApplyControllerDNSResumeInvocationExtraVar:
+		return "ApplyControllerDNSResumeInvocationExtraVar"
 	case converge.ApplyFullInvocationExtraVar:
 		return "ApplyFullInvocationExtraVar"
 	case converge.ApplyThroughBaseInvocationExtraVar:

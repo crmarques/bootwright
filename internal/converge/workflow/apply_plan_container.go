@@ -224,7 +224,7 @@ func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State
 	return out, nil
 }
 
-func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, hostVirtctlReadiness map[string][]CapabilityRef) error {
+func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, includeContainer bool, hostVirtctlReadiness map[string][]CapabilityRef, machineServiceTaskIDs []string) error {
 	if !(phaseSet[ApplyPhaseDeps] && includeContainer) {
 		return nil
 	}
@@ -241,9 +241,10 @@ func planHostVirtctlActivities(graph *ActivityGraph, state v1alpha1.State, phase
 			extraVars = append(extraVars, "bootwright_virtctl_mirror_base="+virtctlMirror)
 		}
 		if err := graph.Add(Activity{
-			ID:       virtctlID,
-			Requires: hostVirtctlReadiness[host],
-			Provides: []CapabilityRef{virtctlProvisionedCapability(host)},
+			ID:                   virtctlID,
+			Requires:             hostVirtctlReadiness[host],
+			Provides:             []CapabilityRef{virtctlProvisionedCapability(host)},
+			ExplicitDependencies: append([]string(nil), machineServiceTaskIDs...),
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           virtctlID,
@@ -313,7 +314,8 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 						bootRequires = appendUniqueCapability(bootRequires, virtctlProvisionedCapability(host))
 					}
 				}
-				bootDeps := appendUniqueStrings(append([]string(nil), isoDeps...), infraDepsByCluster[name]...)
+				bootDeps := appendUniqueStrings(append([]string(nil), machineServiceTaskIDs...), isoDeps...)
+				bootDeps = appendUniqueStrings(bootDeps, infraDepsByCluster[name]...)
 				if err := graph.Add(Activity{
 					ID:                   bootTaskID,
 					Requires:             bootRequires,
@@ -344,7 +346,8 @@ func planContainerInstallActivities(graph *ActivityGraph, state v1alpha1.State, 
 			if bootTaskID != "" {
 				waitDeps = append(waitDeps, bootTaskID)
 			} else {
-				waitDeps = append(waitDeps, isoDeps...)
+				waitDeps = appendUniqueStrings(waitDeps, machineServiceTaskIDs...)
+				waitDeps = appendUniqueStrings(waitDeps, isoDeps...)
 			}
 			bootstrapID := containerBootstrapWaitTaskID(name)
 			if err := graph.Add(Activity{

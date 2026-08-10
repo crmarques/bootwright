@@ -70,10 +70,15 @@
 
 - name: Open DNS port on host firewall
   ansible.posix.firewalld:
-    port: "53/udp"
+    port: "{{ item }}"
     state: enabled
     permanent: true
     immediate: true
+  loop:
+    - 53/tcp
+    - 53/udp
+  loop_control:
+    label: "{{ item }}"
   when: bootwright_firewalld_available | default(false)
 
 - name: Record DNS service ownership
@@ -94,4 +99,5 @@
       attributes:
         componentKind: nameResolution
         container: "{{ bootwright_dnsmasq_container_name }}"
-        port: "53/udp"
+        port: 53/tcp
+        udpPort: 53/udp

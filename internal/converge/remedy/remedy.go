@@ -4,6 +4,9 @@ type Action string
 
 const (
 	ActionRetrySameInvocation                             Action = "retry-same-invocation"
+	ActionApplyAllConsumers                               Action = "apply-all-consumers"
+	ActionResumeControllerDNSMutation                     Action = "resume-controller-dns-mutation"
+	ActionReconcileSharedServiceThenRetrySameSelection    Action = "reconcile-shared-service-then-retry-same-selection"
 	ActionReconcileSameSelection                          Action = "reconcile-same-selection"
 	ActionReconcileContainerClusterThenRetrySameSelection Action = "reconcile-container-cluster-then-retry-same-selection"
 	ActionRebuildSameSelection                            Action = "rebuild-same-selection"
@@ -17,6 +20,7 @@ type TargetRole string
 
 const (
 	TargetRoleContainerCluster TargetRole = "container-cluster"
+	TargetRoleClusterRoot      TargetRole = "cluster-root"
 	TargetRoleMachineLayer     TargetRole = "machine-layer"
 	TargetRoleClusterLayer     TargetRole = "cluster-layer"
 )
@@ -38,6 +42,9 @@ type Error interface {
 
 var registeredActions = []Action{
 	ActionRetrySameInvocation,
+	ActionApplyAllConsumers,
+	ActionResumeControllerDNSMutation,
+	ActionReconcileSharedServiceThenRetrySameSelection,
 	ActionReconcileSameSelection,
 	ActionReconcileContainerClusterThenRetrySameSelection,
 	ActionRebuildSameSelection,

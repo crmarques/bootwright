@@ -7,16 +7,14 @@ import (
 
 func blockedApplyTaskReason(ledger RunLedger, task TaskLedgerEntry) string {
 	unresolved := []string{}
-	for _, dep := range task.Dependencies {
-		depTask, ok := ledger.Task(dep)
+	for _, dependency := range taskDependencyRefs(task) {
+		depTask, ok := ledger.Task(dependency.id)
 		if !ok {
-			unresolved = append(unresolved, dep+" (missing)")
+			unresolved = append(unresolved, dependency.id+" (missing)")
 			continue
 		}
-		switch depTask.Status {
-		case TaskStatusOK, TaskStatusSkipped:
-		default:
-			unresolved = append(unresolved, fmt.Sprintf("%s (%s)", dep, depTask.Status))
+		if !taskDependencySatisfied(depTask.Status, dependency.policy) {
+			unresolved = append(unresolved, fmt.Sprintf("%s (%s)", dependency.id, depTask.Status))
 		}
 	}
 	if len(unresolved) > 0 {

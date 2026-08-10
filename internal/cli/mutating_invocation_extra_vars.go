@@ -2,8 +2,10 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -13,6 +15,42 @@ func appendMutatingInvocationExtraVars(plan *converge.WorkflowPlan, invocation r
 		return err
 	}
 	plan.ExtraVarPairs = append(plan.ExtraVarPairs, pairs...)
+	return nil
+}
+
+func appendControllerNameResolutionInvocationExtraVars(tasks []workflow.ApplyTask, invocation resolvedInvocation) error {
+	controllerDNS, err := controllerNameResolutionRetryInvocation(invocation)
+	if err != nil {
+		return err
+	}
+	for i := range tasks {
+		if tasks[i].Entry.Kind != workflow.ApplyTaskKindControllerNameResolution {
+			continue
+		}
+		values := map[string]any{
+			converge.ApplyControllerDNSInvocationExtraVar: controllerDNS.String(),
+		}
+		switch tasks[i].FailureRemedy.Action {
+		case remedy.ActionResumeControllerDNSMutation:
+			if _, err := exactClusterRootRemedyTargets(tasks[i].FailureRemedy); err != nil {
+				return fmt.Errorf("controller name-resolution task %s: %w", tasks[i].Entry.ID, err)
+			}
+		case remedy.ActionReconcileSharedServiceThenRetrySameSelection:
+			repair, resume, err := sharedServiceRepairCommands(tasks[i].FailureRemedy, invocation)
+			if err != nil {
+				return fmt.Errorf("controller name-resolution task %s: %w", tasks[i].Entry.ID, err)
+			}
+			values[converge.ApplyControllerDNSRepairInvocationExtraVar] = repair.String()
+			values[converge.ApplyControllerDNSResumeInvocationExtraVar] = resume.String()
+		default:
+			return fmt.Errorf("controller name-resolution task %s has no closed typed recovery", tasks[i].Entry.ID)
+		}
+		data, err := json.Marshal(values)
+		if err != nil {
+			return err
+		}
+		tasks[i].ExtraVarPairs = append(tasks[i].ExtraVarPairs, string(data))
+	}
 	return nil
 }
 
@@ -33,6 +71,10 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 			mode:                   workflow.ApplyModeRebuild,
 			requiredAuthorizations: []string{authorizeDataLoss},
 		})
+		if err != nil {
+			return nil, err
+		}
+		controllerDNS, err := controllerNameResolutionRetryInvocation(invocation)
 		if err != nil {
 			return nil, err
 		}
@@ -58,6 +100,7 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		values[converge.ApplyRebuildInvocationExtraVar] = rebuild.String()
 		values[converge.ApplyReclaimInvocationExtraVar] = reclaim.String()
 		values[converge.ApplyReclaimDevicesExtraVar] = preservedDevices
+		values[converge.ApplyControllerDNSInvocationExtraVar] = controllerDNS.String()
 		values[converge.ApplyFullInvocationExtraVar] = full.String()
 		values[converge.ApplyThroughBaseInvocationExtraVar] = throughBase.String()
 	}
@@ -83,4 +126,21 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		return nil, err
 	}
 	return []string{string(data)}, nil
+}
+
+func controllerNameResolutionRetryInvocation(invocation resolvedInvocation) (retryCommand, error) {
+	scope, err := converge.ApplyRangeScope(invocation.flags.selection.stage, invocation.flags.selection.through)
+	if err != nil {
+		return retryCommand{}, err
+	}
+	next := invocation
+	if !converge.ScopeIncludesApplyPhase(scope, converge.PhaseFabric) {
+		next.flags.selection.stage = converge.PhaseFabric
+		next.flags.selection.through = scope.PhaseNames[len(scope.PhaseNames)-1]
+	}
+	intent := retryIntent{}
+	if invocation.flags.mode == workflow.ApplyModeCreate {
+		intent.mode = workflow.ApplyModeReconcile
+	}
+	return next.retry(intent)
 }

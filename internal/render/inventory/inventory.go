@@ -38,7 +38,8 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 	providerHostSet = mergeHostSets(providerHostSet, recorded.ProviderHosts)
 	infraComponentHostSet = mergeHostSets(infraComponentHostSet, recorded.InfraComponentHosts)
 	storageHostSet = mergeHostSets(storageHostSet, recorded.StorageHosts)
-	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, providerHostSet), infraComponentHostSet), bootHostSet), ocpHostSet)
+	controllerHostSet := mergeHostSets(ocpHostSet, recorded.ControllerHosts)
+	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, providerHostSet), infraComponentHostSet), bootHostSet), controllerHostSet)
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 
 	var env *v1alpha1.Environment
@@ -74,7 +75,7 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 			}
 		}
 	}
-	if len(ocpHostSet) > 0 {
+	if len(controllerHostSet) > 0 {
 		hosts["localhost"] = localmachineInventoryEntry()
 	}
 	for _, cluster := range state.ContainerClusters {
@@ -94,7 +95,7 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 		GroupInfraComponentHosts: map[string]any{"hosts": hostsAsEmptyMap(infraComponentHostSet)},
 		GroupInfraHosts:          map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
 		GroupBootHosts:           map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
-		GroupControllerHosts:     map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+		GroupControllerHosts:     map[string]any{"hosts": hostsAsEmptyMap(controllerHostSet)},
 		GroupOCPHosts:            map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
 		GroupAgentNodeHosts:      map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
 		GroupMachineTaskHosts:    map[string]any{"hosts": hostsAsEmptyMap(machineTaskHostSet)},

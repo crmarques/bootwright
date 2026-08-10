@@ -50,6 +50,17 @@ func selectedInfraComponentServiceRefs(state v1alpha1.State, artifactServerOnly,
 	return out
 }
 
+func selectedControllerNameResolutionServiceRefs(state v1alpha1.State, hosts map[string]bool) []converge.InfraComponentServiceRef {
+	services := selectedInfraComponentServiceRefs(state, false, false, hosts)
+	out := make([]converge.InfraComponentServiceRef, 0, len(services))
+	for _, service := range services {
+		if service.Kind == v1alpha1.ComponentSlotNameResolution {
+			out = append(out, service)
+		}
+	}
+	return out
+}
+
 func partialStorageDestroyNodes(partial converge.PartialStorageDestroy) string {
 	if len(partial.Reasons) > 0 {
 		return " Skipped node(s), with what each refusal reported: " + strings.Join(partial.Reasons, "; ") + "."

@@ -183,20 +183,28 @@ func runPhaseWaitingOn(phase status.RunPhase, ledger workflow.RunLedger) string 
 	var shared workflow.TaskLedgerEntry
 	haveShared := false
 	for _, task := range phase.Tasks {
-		for _, dep := range task.Dependencies {
-			blocker, ok := ledger.Task(dep)
-			if !ok || runPhaseDependencySettled(blocker) {
-				continue
-			}
-			if blocker.Cluster == task.Cluster {
-				return ""
-			}
-			if blocker.Cluster != "" {
-				return "waiting on " + blocker.Cluster + ": " + status.TaskPhaseLabel(blocker)
-			}
-			if !haveShared {
-				shared = blocker
-				haveShared = true
+		for _, dependencySet := range []struct {
+			ids             []string
+			requiresSuccess bool
+		}{
+			{ids: task.Dependencies},
+			{ids: task.SuccessDependencies, requiresSuccess: true},
+		} {
+			for _, dep := range dependencySet.ids {
+				blocker, ok := ledger.Task(dep)
+				if !ok || runPhaseDependencySettled(blocker, dependencySet.requiresSuccess) {
+					continue
+				}
+				if blocker.Cluster == task.Cluster {
+					return ""
+				}
+				if blocker.Cluster != "" {
+					return "waiting on " + blocker.Cluster + ": " + status.TaskPhaseLabel(blocker)
+				}
+				if !haveShared {
+					shared = blocker
+					haveShared = true
+				}
 			}
 		}
 	}
@@ -206,8 +214,8 @@ func runPhaseWaitingOn(phase status.RunPhase, ledger workflow.RunLedger) string 
 	return ""
 }
 
-func runPhaseDependencySettled(task workflow.TaskLedgerEntry) bool {
-	return task.Status == workflow.TaskStatusOK || task.Status == workflow.TaskStatusSkipped
+func runPhaseDependencySettled(task workflow.TaskLedgerEntry, requiresSuccess bool) bool {
+	return task.Status == workflow.TaskStatusOK || !requiresSuccess && task.Status == workflow.TaskStatusSkipped
 }
 
 func phaseNamesItsResources(phase status.RunPhase) bool {

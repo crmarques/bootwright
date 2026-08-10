@@ -7,29 +7,31 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
 const (
-	ApplyTaskKindProvider               = "providerServices"
-	ApplyTaskKindInfraComponentServices = "infraComponentServices"
-	ApplyTaskKindMachineInfraPrepare    = "machineInfraPrepare"
-	ApplyTaskKindClusterInstall         = "clusterInstall"
-	ApplyTaskKindMachineInfraFinalize   = "machineInfraFinalize"
-	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
-	ApplyTaskKindMachineRegistration    = "machineRegistration"
-	ApplyTaskKindMachineRepositories    = "machineRepositories"
-	ApplyTaskKindStorageNodeAccess      = "storageNodeAccess"
-	ApplyTaskKindStorageInfra           = "storageInfra"
-	ApplyTaskKindClusterISO             = "clusterISO"
-	ApplyTaskKindHostVirtctl            = "hostVirtctl"
-	ApplyTaskKindNodeBoot               = "nodeBoot"
-	ApplyTaskKindBootstrapWait          = "bootstrapWait"
-	ApplyTaskKindInstallWait            = "installWait"
-	ApplyTaskKindStorageCluster         = "storageCluster"
-	ApplyTaskKindClusterAddon           = "clusterAddon"
-	ApplyTaskKindNodeConfigApply        = "nodeConfigApply"
-	ApplyTaskKindPlaybook               = "provisioningPlaybook"
+	ApplyTaskKindProvider                 = "providerServices"
+	ApplyTaskKindInfraComponentServices   = "infraComponentServices"
+	ApplyTaskKindControllerNameResolution = "controllerNameResolution"
+	ApplyTaskKindMachineInfraPrepare      = "machineInfraPrepare"
+	ApplyTaskKindClusterInstall           = "clusterInstall"
+	ApplyTaskKindMachineInfraFinalize     = "machineInfraFinalize"
+	ApplyTaskKindManagedMachineOS         = "managedMachineOS"
+	ApplyTaskKindMachineRegistration      = "machineRegistration"
+	ApplyTaskKindMachineRepositories      = "machineRepositories"
+	ApplyTaskKindStorageNodeAccess        = "storageNodeAccess"
+	ApplyTaskKindStorageInfra             = "storageInfra"
+	ApplyTaskKindClusterISO               = "clusterISO"
+	ApplyTaskKindHostVirtctl              = "hostVirtctl"
+	ApplyTaskKindNodeBoot                 = "nodeBoot"
+	ApplyTaskKindBootstrapWait            = "bootstrapWait"
+	ApplyTaskKindInstallWait              = "installWait"
+	ApplyTaskKindStorageCluster           = "storageCluster"
+	ApplyTaskKindClusterAddon             = "clusterAddon"
+	ApplyTaskKindNodeConfigApply          = "nodeConfigApply"
+	ApplyTaskKindPlaybook                 = "provisioningPlaybook"
 
 	ApplyClusterKindContainer = "container"
 	ApplyClusterKindStorage   = "storage"
@@ -42,6 +44,7 @@ const (
 
 	applyProviderPlaybook            = roles.PlaybookTaskProviderServicesApply
 	applyInfraComponentsPlaybook     = roles.PlaybookTaskInfraComponentServicesApply
+	applyControllerNameResolution    = roles.PlaybookTaskControllerNameResolutionApply
 	applyMachineInfraPrepare         = roles.PlaybookTaskMachineInfraPrepare
 	applyClusterInstallPlaybook      = roles.PlaybookTaskMachineInfraApply
 	applyMachineInfraFinalize        = roles.PlaybookTaskMachineInfraFinalize
@@ -60,6 +63,7 @@ func ApplyTaskKinds() []string {
 	return []string{
 		ApplyTaskKindProvider,
 		ApplyTaskKindInfraComponentServices,
+		ApplyTaskKindControllerNameResolution,
 		ApplyTaskKindMachineInfraPrepare,
 		ApplyTaskKindClusterInstall,
 		ApplyTaskKindMachineInfraFinalize,
@@ -117,6 +121,10 @@ type ApplyTarget struct {
 	GitSourceRoots      map[string]string
 }
 
+type ApplyTaskExecutionClass string
+
+const ApplyTaskExecutionLiveProof ApplyTaskExecutionClass = "liveProof"
+
 func (t ApplyTarget) MachineScoped() bool { return len(t.MachineProvision) > 0 }
 
 func (t ApplyTarget) MachineIncluded(machine string) bool {
@@ -142,6 +150,8 @@ type ApplyTask struct {
 	RolesPath          string
 	CollectionsPath    string
 	SkipWhenConverged  bool
+	ExecutionClass     ApplyTaskExecutionClass
+	FailureRemedy      remedy.Request
 	State              v1alpha1.State
 	DesiredHashState   *v1alpha1.State
 	DesiredHashVars    any

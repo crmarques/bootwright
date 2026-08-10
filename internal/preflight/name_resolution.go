@@ -84,8 +84,8 @@ func resolutionCheck(deps Deps, name, lookup, expected string, managed bool, ext
 		if managed {
 			return warnResolutionCheck(name,
 				lookup+" does not resolve yet",
-				"Bootwright connects to this machine through its DNS name; the managed name-resolution component publishes this record once the infra stage converges",
-				"bootwright apply converges the managed name-resolution component; if this persists after apply, check that the controller uses the managed resolver")
+				"A fabric or machines apply treats this as provisional: it proves the managed DNS service and controller route before the first machines-phase SSH or mutation; a later-only range assumes that earlier barrier already succeeded",
+				"include fabric or machines when establishing this service; if that apply refuses at its controller name-resolution barrier, repair what it reports and re-run the exact command it prints")
 		}
 		return failCheck(checkGroupNameResolution, name,
 			lookup+" does not resolve",
@@ -104,8 +104,8 @@ func resolutionCheck(deps Deps, name, lookup, expected string, managed bool, ext
 	if managed {
 		return warnResolutionCheck(name,
 			fmt.Sprintf("%s resolves to %s, want %s", lookup, strings.Join(addresses, ","), expected),
-			"The managed record is stale; connections use the old address until the resolver reconverges",
-			"bootwright apply reconverges the managed name-resolution record; if this persists after apply, check the name-resolution component")
+			"A fabric or machines apply reconverges this managed answer and refuses before the first machines-phase SSH or mutation unless the exact address succeeds; a later-only range assumes that earlier barrier already succeeded",
+			"include fabric or machines when reconciling this service; if that apply refuses at its controller name-resolution barrier, repair what it reports and re-run the exact command it prints")
 	}
 	return failCheck(checkGroupNameResolution, name,
 		fmt.Sprintf("%s resolves to %s, want %s", lookup, strings.Join(addresses, ","), expected),

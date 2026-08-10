@@ -185,6 +185,12 @@ while an external entry instead requires its connection facts — `connection.*`
 for proxies, `address` for name resolution and NTP, `endpoints[]` for artifact
 servers, and `url` for registries — which are rejected on managed entries.
 
+The name-resolution catalog may contain several managed entries, but the
+loaded consumers may resolve to only one distinct managed service in a context.
+Unused entries do not count, and compatible aliases of the same
+`InfraComponent` remain one service. This keeps the controller's one global
+resolver route under one lifecycle owner.
+
 Load balancers are deliberately absent from the catalog: one is bound per
 cluster endpoint, not fleet-wide, so a `ContainerCluster` endpoint points at a
 managed component directly through `source.componentRef` plus a
@@ -205,7 +211,7 @@ endpoint with `source.type: external` and an `address`.
 | `proxies[].connection.trustBundleRef` | No | — | Secret (PEM) with the CA a TLS-inspecting proxy re-signs HTTPS with; installed into the trust store of managed hosts that egress through the proxy. See [Disconnected & proxied installs](../advanced/disconnected-proxy.md#tls-inspecting-proxies). |
 | `nameResolution[].name` | Yes | — | DNS-label entry name (not `none`). |
 | `nameResolution[].management` | Yes | — | `external` or `managed`. |
-| `nameResolution[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.nameResolution`. Managed entries only. |
+| `nameResolution[].componentRef` | No | — | Selects a managed `InfraComponent` with `spec.nameResolution`. Managed entries only; all consumed managed entries in one context must resolve to the same component. |
 | `nameResolution[].endpointRef` | No | — | Names an `endpoints[]` entry on the managed component. |
 | `nameResolution[].address` | No | — | Resolver IP address. External entries only, and required there. |
 | `nameResolution[].additionalIngressHosts[]` | No | — | Extra ingress hostnames. |
@@ -338,6 +344,9 @@ Beyond the per-field rules above, the validator enforces:
 - `spec.proxyFor.machineOSInstall` must not resolve — named directly or by
   inheriting a managed default — to a `managed` proxy (the node installs before
   any managed proxy exists); use an external proxy or `none`.
+- Loaded `NetworkConfig.spec.nameResolutionRefs[]` consumers may resolve to at
+  most one distinct managed name-resolution service. Unused catalog entries and
+  compatible aliases of that one service do not violate the limit.
 - `spec.containerClusters[]` / `spec.storageClusters[]` entries must be unique
   and match a loaded `ContainerCluster` / `StorageCluster`.
 - `spec.resources[]`, when set, must list at least one non-empty path that is

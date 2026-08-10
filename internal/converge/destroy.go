@@ -347,6 +347,8 @@ func destroyKindForApplyTaskKind(kind string) string {
 		return workflow.DestroyTaskKindMachineInfra
 	case workflow.ApplyTaskKindInfraComponentServices:
 		return workflow.DestroyTaskKindInfraComponents
+	case workflow.ApplyTaskKindControllerNameResolution:
+		return workflow.DestroyTaskKindControllerNameResolution
 	case workflow.ApplyTaskKindProvider:
 		return workflow.DestroyTaskKindProviderServices
 	default:

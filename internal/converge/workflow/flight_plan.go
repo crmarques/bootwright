@@ -126,8 +126,7 @@ func flightPlanLaneRank(order []string) map[string]int {
 
 func flightPlanDependsOn(task ApplyTask) []string {
 	var out []string
-	out = appendUniqueStrings(out, task.Entry.Dependencies...)
-	out = appendUniqueStrings(out, task.Entry.OrderingDependencies...)
+	out = appendUniqueStrings(out, taskDependencyIDs(task.Entry)...)
 	sort.Strings(out)
 	return out
 }

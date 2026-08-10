@@ -66,3 +66,32 @@ func TestDestroyWrappersAreATopologicalOrderOfTheGeneratedGraph(t *testing.T) {
 		})
 	}
 }
+
+func TestControllerNameResolutionDestroyBracketsInfraMutations(t *testing.T) {
+	const path = "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy.yml"
+	position := destroyWrapperImportPositions(t, path)
+	preflight := position["task_controller_name_resolution_destroy_preflight.yml"]
+	cleanup := position["task_controller_name_resolution_destroy_cleanup.yml"]
+	become := position["check_become.yml"]
+	if !(become < preflight) {
+		t.Fatalf("%s must prove become before the controller destroy preflight: become=%d preflight=%d", path, become, preflight)
+	}
+	for _, mutation := range []string{
+		"task_machine_registration_deregister.yml",
+		"task_machine_infra_destroy.yml",
+		"task_infra_component_services_destroy.yml",
+		"task_provider_services_destroy.yml",
+	} {
+		at, ok := position[mutation]
+		if !ok {
+			t.Fatalf("%s missing existing destroy mutation %s", path, mutation)
+		}
+		if !(preflight < at && at < cleanup) {
+			t.Fatalf("%s must bracket %s with controller ownership preflight and cleanup: preflight=%d mutation=%d cleanup=%d", path, mutation, preflight, at, cleanup)
+		}
+	}
+	artifact := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy_artifact_server.yml")
+	if strings.Contains(artifact, "controller_name_resolution_destroy") {
+		t.Fatal("artifact-server-only destroy must not preflight or remove controller name-resolution state")
+	}
+}

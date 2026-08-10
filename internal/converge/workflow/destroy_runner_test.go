@@ -38,7 +38,7 @@ echo destroy-stderr-line >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 	}
-	tasks, err := PlanDestroyTasks("infra", state, "", nil, nil)
+	tasks, err := PlanDestroyTasks("infra", state, "", []string{DestroySkipOrphanSweepExtraVar + "=true"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

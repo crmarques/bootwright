@@ -24,6 +24,7 @@ type destroySharedServiceMutation struct {
 	lease      *workflow.CommandRunLease
 	runContext context.Context
 	decision   converge.InfraComponentDestroyDecision
+	refusal    error
 	reached    bool
 }
 
@@ -34,7 +35,8 @@ func prepareApplySharedServiceMutation(parent context.Context, contextName strin
 	if sel.MachineSelection {
 		hosts = sel.MachineProvision
 	}
-	if converge.ScopeIncludesApplyPhase(runScope, converge.PhaseFabric) {
+	fabricSelected := converge.ScopeIncludesApplyPhase(runScope, converge.PhaseFabric)
+	if fabricSelected {
 		refs = selectedInfraComponentServiceRefs(sel.RenderState, false, false, hosts)
 		if dryRun {
 			degrading := selectedInfraComponentServiceRefs(sel.RenderState, false, true, hosts)
@@ -42,8 +44,26 @@ func prepareApplySharedServiceMutation(parent context.Context, contextName strin
 			result.refusal = converge.InfraComponentApplyRefusal(decision, scanErr)
 		}
 	}
+	controllerProofSelected := converge.ScopeIncludesApplyPhase(runScope, converge.PhaseMachines) ||
+		converge.ScopeIncludesApplyPhase(runScope, converge.PhaseDeps) ||
+		converge.ScopeIncludesApplyPhase(runScope, converge.PhaseBase) ||
+		converge.ScopeIncludesApplyPhase(runScope, converge.PhaseAddons)
+	if !fabricSelected && controllerProofSelected {
+		refs = selectedControllerNameResolutionServiceRefs(sel.RenderState, hosts)
+	}
 	if converge.ScopeUsesAnsible(runScope) && len(result.artifactServerTargets) > 0 {
 		refs = append(refs, selectedInfraComponentServiceRefs(state, true, false, nil)...)
+	}
+	controllerResolverSelected := false
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == v1alpha1.ComponentSlotNameResolution {
+			controllerResolverSelected = true
+			break
+		}
+	}
+	if dryRun && controllerResolverSelected && result.refusal == nil {
+		claims, warnings, scanErr := converge.OtherContextControllerResolverClaims(contextName)
+		result.refusal = converge.ControllerResolverClaimRefusal(claims, warnings, scanErr)
 	}
 	if dryRun {
 		return result, nil
@@ -56,7 +76,11 @@ func prepareApplySharedServiceMutation(parent context.Context, contextName strin
 	if lease != nil {
 		result.runContext = lease.Context()
 	}
-	if converge.ScopeIncludesApplyPhase(runScope, converge.PhaseFabric) {
+	if controllerResolverSelected {
+		claims, warnings, scanErr := converge.OtherContextControllerResolverClaims(contextName)
+		result.refusal = converge.ControllerResolverClaimRefusal(claims, warnings, scanErr)
+	}
+	if result.refusal == nil && converge.ScopeIncludesApplyPhase(runScope, converge.PhaseFabric) {
 		degrading := selectedInfraComponentServiceRefs(sel.RenderState, false, true, hosts)
 		decision, scanErr := converge.PlanInfraComponentApplyBlocks(contextName, degrading)
 		result.refusal = converge.InfraComponentApplyRefusal(decision, scanErr)
@@ -67,11 +91,16 @@ func prepareApplySharedServiceMutation(parent context.Context, contextName strin
 	return result, nil
 }
 
-func prepareDestroySharedServiceMutation(parent context.Context, contextName string, state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, artifactServerOnly, dryRun bool, records []ownership.ResourceRecord, auth *authorizations, invocation resolvedInvocation) (destroySharedServiceMutation, error) {
+func prepareDestroySharedServiceMutation(parent context.Context, contextName string, state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, artifactServerOnly, dryRun, evidenceDegraded bool, records []ownership.ResourceRecord, auth *authorizations, invocation resolvedInvocation) (destroySharedServiceMutation, error) {
 	result := destroySharedServiceMutation{runContext: parent}
-	refs, selectedRecords := infraComponentDestroyConsequence(state, sel, runScope, artifactServerOnly, records)
+	refs, selectedRecords := infraComponentDestroyConsequence(state, sel, runScope, artifactServerOnly, evidenceDegraded, records)
 	if len(refs) == 0 && len(selectedRecords) == 0 {
 		return result, nil
+	}
+	controllerResolverSelected := controllerResolverDestroySelected(refs, selectedRecords)
+	if dryRun && controllerResolverSelected {
+		claims, warnings, scanErr := converge.OtherContextControllerResolverClaims(contextName)
+		result.refusal = converge.ControllerResolverClaimRefusal(claims, warnings, scanErr)
 	}
 	if !dryRun {
 		lease, err := acquireSharedServiceMutationLease(parent, contextName, "destroy", refs, selectedRecords, invocation)
@@ -81,6 +110,13 @@ func prepareDestroySharedServiceMutation(parent context.Context, contextName str
 		}
 		if lease != nil {
 			result.runContext = lease.Context()
+		}
+		if controllerResolverSelected {
+			claims, warnings, scanErr := converge.OtherContextControllerResolverClaims(contextName)
+			result.refusal = converge.ControllerResolverClaimRefusal(claims, warnings, scanErr)
+			if result.refusal != nil {
+				return result, applyInstallRemedialError(result.refusal, invocation)
+			}
 		}
 	}
 	decision, blocked, err := destroyInfraComponentGate(auth, contextName, refs, selectedRecords, artifactServerOnly, dryRun, invocation)
@@ -114,22 +150,39 @@ func acquireSharedServiceMutationLease(parent context.Context, contextName, comm
 	return nil, fmt.Errorf("another context may be mutating shared infra-component services: %w; inspect the controller-global lease %s, wait for its run to finish, or repair/remove a stale or corrupt lease only after proving no such run is active; then re-run `%s` with exactly the same selected work and intent", err, workflow.LeasePath(workspace.SharedServiceMutationRunsDir()), retry.String())
 }
 
-func infraComponentDestroyConsequence(state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, artifactServerOnly bool, records []ownership.ResourceRecord) ([]converge.InfraComponentServiceRef, []ownership.ResourceRecord) {
+func infraComponentDestroyConsequence(state v1alpha1.State, sel clusteraccess.Selection, runScope converge.Scope, artifactServerOnly, evidenceDegraded bool, records []ownership.ResourceRecord) ([]converge.InfraComponentServiceRef, []ownership.ResourceRecord) {
 	if artifactServerOnly {
-		return selectedInfraComponentServiceRefs(state, true, false, nil), filterInfraComponentRecords(records, nil, nil, true)
+		refs := selectedInfraComponentServiceRefs(state, true, false, nil)
+		recordRefs := destroyRecordScopeRefs(refs, evidenceDegraded)
+		return refs, filterInfraComponentRecords(records, nil, recordRefs, true)
 	}
 	if !converge.ScopeTearsMachineLayer(runScope) {
 		return nil, nil
 	}
 	if sel.MachineSelection {
 		refs := selectedInfraComponentServiceRefs(state, false, false, sel.MachineProvision)
-		return refs, filterInfraComponentRecords(records, sel.MachineProvision, nil, false)
+		recordRefs := destroyRecordScopeRefs(refs, evidenceDegraded)
+		selectedRecords := filterInfraComponentRecords(records, sel.MachineProvision, recordRefs, false)
+		selectedRecords = append(selectedRecords, filterControllerResolverRecords(records, sel.MachineProvision, recordRefs)...)
+		return refs, selectedRecords
 	}
 	refs := selectedInfraComponentServiceRefs(sel.RenderState, false, false, nil)
 	if !sel.Active {
-		return refs, filterInfraComponentRecords(records, nil, nil, false)
+		recordRefs := destroyRecordScopeRefs(refs, evidenceDegraded)
+		selectedRecords := filterInfraComponentRecords(records, nil, recordRefs, false)
+		selectedRecords = append(selectedRecords, filterControllerResolverRecords(records, nil, recordRefs)...)
+		return refs, selectedRecords
 	}
-	return refs, filterInfraComponentRecords(records, nil, refs, false)
+	selectedRecords := filterInfraComponentRecords(records, nil, refs, false)
+	selectedRecords = append(selectedRecords, filterControllerResolverRecords(records, nil, refs)...)
+	return refs, selectedRecords
+}
+
+func destroyRecordScopeRefs(refs []converge.InfraComponentServiceRef, evidenceDegraded bool) []converge.InfraComponentServiceRef {
+	if !evidenceDegraded {
+		return nil
+	}
+	return append([]converge.InfraComponentServiceRef{}, refs...)
 }
 
 func filterInfraComponentRecords(records []ownership.ResourceRecord, hosts map[string]bool, refs []converge.InfraComponentServiceRef, artifactServerOnly bool) []ownership.ResourceRecord {
@@ -158,4 +211,42 @@ func filterInfraComponentRecords(records []ownership.ResourceRecord, hosts map[s
 		out = append(out, record)
 	}
 	return out
+}
+
+func filterControllerResolverRecords(records []ownership.ResourceRecord, hosts map[string]bool, refs []converge.InfraComponentServiceRef) []ownership.ResourceRecord {
+	wanted := map[string]bool{}
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == v1alpha1.ComponentSlotNameResolution {
+			wanted[strings.TrimSpace(ref.Name)] = true
+		}
+	}
+	var out []ownership.ResourceRecord
+	for _, record := range records {
+		if strings.TrimSpace(record.Kind) != string(ownership.KindControllerNameResolver) {
+			continue
+		}
+		if hosts != nil && !hosts[strings.TrimSpace(record.Attributes["machineRef"])] {
+			continue
+		}
+		identity := strings.TrimSpace(record.Provider) + "-" + strings.TrimSpace(record.Attributes["component"])
+		if refs != nil && !wanted[identity] {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out
+}
+
+func controllerResolverDestroySelected(refs []converge.InfraComponentServiceRef, records []ownership.ResourceRecord) bool {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == v1alpha1.ComponentSlotNameResolution {
+			return true
+		}
+	}
+	for _, record := range records {
+		if strings.TrimSpace(record.Kind) == string(ownership.KindControllerNameResolver) {
+			return true
+		}
+	}
+	return false
 }

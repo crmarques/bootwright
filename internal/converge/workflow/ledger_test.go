@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestLeaseLiveness(t *testing.T) {
@@ -143,16 +145,30 @@ func TestRunLedgerRoundTrip(t *testing.T) {
 		ParallelismPerHost: 2,
 		ParallelismRedfish: 8,
 	}, []TaskLedgerEntry{{
-		ID:    "provider",
-		Kind:  "providerServices",
-		Label: "provider services",
+		ID:                  "provider",
+		Kind:                "providerServices",
+		Label:               "provider services",
+		SuccessDependencies: []string{"preflight"},
 	}}, now)
 	ledger.InvocationArgs = []string{"bootwright", "apply", "--mode", "reconcile", "--clusters", "cluster-a", "--context", "matrix"}
+	request := remedy.Request{
+		Action:  remedy.ActionReconcileSharedServiceThenRetrySameSelection,
+		Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "cluster-a"}},
+	}
+	repair := []string{"bootwright", "apply", "--mode", "reconcile", "--stage", "fabric", "--clusters", "cluster-a", "--context", "matrix"}
+	resume := append([]string(nil), ledger.InvocationArgs...)
+	ledger.Recovery = NewRunRecoveryPlan(request, repair, resume)
+	wantRecovery := ledger.Recovery.Clone()
 
 	dir := t.TempDir()
 	if err := SaveRunLedger(dir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
+	request.Targets[0].Name = "changed-request"
+	repair[0] = "changed-repair"
+	resume[0] = "changed-resume"
+	ledger.Recovery.Request.Targets[0].Name = "changed-ledger-request"
+	ledger.Recovery.Steps[0].Args[0] = "changed-ledger-step"
 	loaded, ok, err := LoadRunLedger(dir)
 	if err != nil {
 		t.Fatalf("LoadRunLedger: %v", err)
@@ -163,8 +179,19 @@ func TestRunLedgerRoundTrip(t *testing.T) {
 	if loaded.RunID != "run-1" || loaded.Tasks[0].Status != TaskStatusPending {
 		t.Fatalf("loaded ledger mismatch: %+v", loaded)
 	}
+	if !slices.Equal(loaded.Tasks[0].SuccessDependencies, []string{"preflight"}) {
+		t.Fatalf("loaded success dependencies = %v, want preflight", loaded.Tasks[0].SuccessDependencies)
+	}
 	if !slices.Equal(loaded.InvocationArgs, ledger.InvocationArgs) {
 		t.Fatalf("loaded invocation args = %#v, want %#v", loaded.InvocationArgs, ledger.InvocationArgs)
+	}
+	if !loaded.Recovery.Matches(wantRecovery.Remedy()) || len(loaded.Recovery.Steps) != len(wantRecovery.Steps) {
+		t.Fatalf("loaded recovery plan = %#v, want %#v", loaded.Recovery, wantRecovery)
+	}
+	for i := range wantRecovery.Steps {
+		if !slices.Equal(loaded.Recovery.Steps[i].Args, wantRecovery.Steps[i].Args) {
+			t.Fatalf("loaded recovery step %d = %#v, want independent copy %#v", i, loaded.Recovery.Steps[i].Args, wantRecovery.Steps[i].Args)
+		}
 	}
 	if got := filepath.Base(LedgerPath(dir)); got != "current.json" {
 		t.Fatalf("ledger path base = %q", got)

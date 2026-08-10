@@ -78,7 +78,7 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	if err != nil {
 		return nil, err
 	}
-	if err := planHostVirtctlActivities(graph, state, phaseSet, includeContainer, hostVirtctlReadiness); err != nil {
+	if err := planHostVirtctlActivities(graph, state, phaseSet, includeContainer, hostVirtctlReadiness, machineServiceTaskIDs); err != nil {
 		return nil, err
 	}
 	if err := planContainerInstallActivities(graph, state, phaseSet, includeContainer, clusterNames, kubeVirtReqsByCluster, infraDepsByCluster, prepareDepsByCluster, machineServiceTaskIDs, hostsByContainerCluster); err != nil {
@@ -86,20 +86,23 @@ func PlanApplyTasksCheckedWithHashState(target ApplyTarget, state v1alpha1.State
 	}
 
 	if phaseSet[ApplyPhaseAddons] {
-		if err := planExtensionActivities(graph, state, hashState, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
+		if err := planExtensionActivities(graph, state, hashState, phaseSet[ApplyPhaseBase], storageDepsByCluster, machineServiceTaskIDs); err != nil {
 			return nil, err
 		}
-		if err := planNodeConfigActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
+		if err := planNodeConfigActivities(graph, state, phaseSet[ApplyPhaseBase], machineServiceTaskIDs); err != nil {
 			return nil, err
 		}
 	}
-	if err := planPlaybookActivities(graph, state, phaseSet, target); err != nil {
+	if err := planPlaybookActivities(graph, state, phaseSet, target, machineServiceTaskIDs); err != nil {
+		return nil, err
+	}
+	if err := enforceControllerDNSDependencies(graph); err != nil {
 		return nil, err
 	}
 	return graph.Lower()
 }
 
-func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
+func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, hashState v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string, machineServiceTaskIDs []string) error {
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
 		return err
@@ -118,7 +121,8 @@ func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, hashSta
 			id := "addon." + binding.Cluster + "." + extension.Name
 			provides := append(addonProvidedCapabilities(binding.Cluster, extension.Extension), addonAppliedCapability(binding.Cluster, extension.Name))
 			stepDeps := stepCrossClusterDependencies(state, binding, extension.Name, extension.Extension, installPhasePlanned, storageDepsByCluster)
-			addonDeps := appendUniqueStrings(append([]string(nil), clusterDeps...), stepDeps...)
+			addonDeps := appendUniqueStrings(append([]string(nil), machineServiceTaskIDs...), clusterDeps...)
+			addonDeps = appendUniqueStrings(addonDeps, stepDeps...)
 			for _, key := range addonExclusiveOLMKeys(binding.Cluster, extension.Extension) {
 				if previous := exclusiveOLMOwner[key]; previous != "" {
 					addonDeps = appendUniqueStrings(addonDeps, previous)

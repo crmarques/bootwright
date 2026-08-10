@@ -2,3 +2,10 @@
 bootwright_dnsmasq_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
 bootwright_dnsmasq_dropin_dir: "{{ bootwright_dnsmasq_root }}/dnsmasq.d"
 bootwright_dnsmasq_container_name: "bootwright-dnsmasq-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+bootwright_controller_resolver_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+bootwright_controller_resolver_ownership_name: >-
+  resolver-{{ ([bootwright_controller_resolver_context, bootwright_component.providerName, bootwright_component.name] | to_json) | hash('sha256') }}
+bootwright_controller_resolver_ownership_path: >-
+  {{ bootwright_ownership_dir }}/resources/controller-name-resolver/{{ bootwright_controller_resolver_ownership_name }}.json
+bootwright_controller_resolver_dropin_path: >-
+  /etc/systemd/resolved.conf.d/bootwright-{{ bootwright_controller_resolver_ownership_name }}.conf

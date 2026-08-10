@@ -101,6 +101,7 @@
         loop_var: bootwright_ownership_record
         label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }} reference"
       when:
+        - not (bootwright_destroy_skip_orphan_sweep | default(false) | bool)
         - bootwright_ownership_record.kind == 'infra-component'
         - bootwright_ownership_record.role | default('owner', true) == 'reference'
         - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
@@ -117,6 +118,7 @@
         loop_var: bootwright_ownership_record
         label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
+        - not (bootwright_destroy_skip_orphan_sweep | default(false) | bool)
         - bootwright_ownership_record.kind == 'infra-component'
         - bootwright_ownership_record.role | default('owner', true) != 'reference'
         - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'

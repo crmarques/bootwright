@@ -39,8 +39,8 @@ func TestPlanApplySplitsClusterWaitAtBootstrapBoundary(t *testing.T) {
 		t.Fatalf("bootstrap wait playbook = %q, want the install wait playbook %q", bootstrap.Playbook, wait.Playbook)
 	}
 
-	assertTaskDeps(t, tasks, "wait-bootstrap.sno-libvirt", "boot.sno-libvirt")
-	assertTaskDeps(t, tasks, "wait.sno-libvirt", "wait-bootstrap.sno-libvirt")
+	assertTaskDeps(t, tasks, "wait-bootstrap.sno-libvirt", "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	assertTaskDeps(t, tasks, "wait.sno-libvirt", "wait-bootstrap.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
 }
 
 func TestBootstrapGateNeverPrecedesHardwareOrAddonWork(t *testing.T) {
@@ -52,7 +52,7 @@ func TestBootstrapGateNeverPrecedesHardwareOrAddonWork(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "nodeconfig.sno-libvirt.apply", "wait.sno-libvirt")
+	assertTaskHasDeps(t, tasks, "nodeconfig.sno-libvirt.apply", "wait.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
 	for _, task := range tasks {
 		if task.Entry.ID == "wait.sno-libvirt" {
 			continue
@@ -191,7 +191,7 @@ func TestNodeConfigStaysBehindInstallComplete(t *testing.T) {
 		}}},
 	}}}
 	graph := NewActivityGraph()
-	if err := planNodeConfigActivities(graph, state, true); err != nil {
+	if err := planNodeConfigActivities(graph, state, true, nil); err != nil {
 		t.Fatalf("planNodeConfigActivities: %v", err)
 	}
 	for _, activity := range graph.ActivitySnapshot() {

@@ -104,6 +104,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	ledger.Machines = append([]string(nil), opts.SelectedMachines...)
 	ledger.InvocationArgs = append([]string(nil), opts.InvocationArgs...)
+	ledger.Recovery = defaultRunRecoveryPlan(opts)
 	ownsLease := opts.RunLease == nil
 	var stopLeaseHeartbeat func()
 	var leaseErrors <-chan error
@@ -224,6 +225,14 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 				ledger.RecordBlockedOn(task.Entry.ID, blocker)
 				continue
 			}
+			if firstTaskErr == nil {
+				ledger.Recovery = taskInterruptionRunRecoveryPlan(opts, task)
+				if err := saveLedger(); err != nil {
+					fatalErr = err
+					cancel()
+					break
+				}
+			}
 			redfishSlots := taskRedfishGrant(task, runningRedfish, redfishLimit)
 			taskToRun := task
 			if redfishSlots > 0 && (task.Entry.Kind == ApplyTaskKindNodeBoot || task.Entry.Kind == ApplyTaskKindManagedMachineOS) {
@@ -291,6 +300,9 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			}
 			ledger.MarkFailed(event.id, failure, time.Now())
 			if firstTaskErr == nil {
+				if ctx.Err() == nil {
+					ledger.Recovery = failureRunRecoveryPlan(opts, ledger.Recovery, event.err)
+				}
 				firstTaskErr = event.err
 			}
 		} else if event.skipped {
@@ -561,8 +573,7 @@ func installChainWaitsOnAnotherCluster(ledger RunLedger, task TaskLedgerEntry, c
 		return false
 	}
 	visiting[task.ID] = true
-	deps := append(append([]string(nil), task.Dependencies...), task.OrderingDependencies...)
-	for _, dep := range deps {
+	for _, dep := range taskDependencyIDs(task) {
 		depTask, ok := ledger.Task(dep)
 		if !ok || taskTerminal(depTask.Status) {
 			continue
@@ -674,25 +685,12 @@ func clusterInstallChainAdvancingFrom(ledger RunLedger, task TaskLedgerEntry, vi
 	visiting[task.ID] = true
 	defer delete(visiting, task.ID)
 	advancing := false
-	for _, dep := range task.Dependencies {
-		depTask, ok := ledger.Task(dep)
+	for _, dependency := range taskDependencyRefs(task) {
+		depTask, ok := ledger.Task(dependency.id)
 		if !ok {
 			return false
 		}
-		if depTask.Status == TaskStatusOK || depTask.Status == TaskStatusSkipped {
-			continue
-		}
-		if !clusterInstallDependencyAdvancing(ledger, depTask, task.Cluster, visiting) {
-			return false
-		}
-		advancing = true
-	}
-	for _, dep := range task.OrderingDependencies {
-		depTask, ok := ledger.Task(dep)
-		if !ok {
-			return false
-		}
-		if taskTerminal(depTask.Status) {
+		if taskDependencySatisfied(depTask.Status, dependency.policy) {
 			continue
 		}
 		if !clusterInstallDependencyAdvancing(ledger, depTask, task.Cluster, visiting) {
@@ -781,24 +779,12 @@ func AnnotateApplyTaskClusterLogPaths(runsDir, runID string, tasks []ApplyTask) 
 }
 
 func taskReady(ledger RunLedger, task TaskLedgerEntry) bool {
-	for _, dep := range task.Dependencies {
-		depTask, ok := ledger.Task(dep)
+	for _, dependency := range taskDependencyRefs(task) {
+		depTask, ok := ledger.Task(dependency.id)
 		if !ok {
 			return false
 		}
-		switch depTask.Status {
-		case TaskStatusOK, TaskStatusSkipped:
-			continue
-		default:
-			return false
-		}
-	}
-	for _, dep := range task.OrderingDependencies {
-		depTask, ok := ledger.Task(dep)
-		if !ok {
-			return false
-		}
-		if !taskTerminal(depTask.Status) {
+		if !taskDependencySatisfied(depTask.Status, dependency.policy) {
 			return false
 		}
 	}

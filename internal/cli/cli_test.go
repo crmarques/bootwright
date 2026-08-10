@@ -1103,6 +1103,7 @@ func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 		t.Fatalf("full destroy dry-run report missing destroy plan: %+v", report)
 	}
 	wantIDs := []string{
+		"destroy.controller-name-resolution-preflight",
 		"destroy.cluster-runtime",
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
@@ -1111,6 +1112,7 @@ func TestDestroyFullDryRunJSONPlansDependencySafeLifecycle(t *testing.T) {
 		"destroy.container-clusters",
 		"destroy.infra-components",
 		"destroy.provider-services",
+		"destroy.controller-name-resolution-cleanup",
 	}
 	gotIDs := make([]string, 0, len(report.DestroyPlan.Tasks))
 	for _, task := range report.DestroyPlan.Tasks {
@@ -4560,6 +4562,7 @@ func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 	wantIDs := []string{
 		"provider.bastion",
 		"infra-component.bastion",
+		"controller-name-resolution.InfraComponent.name-resolution",
 		"infraprepare.sno-libvirt.bastion",
 		"infra.sno-libvirt.master-0",
 		"infrafinalize.sno-libvirt.bastion",
@@ -4603,6 +4606,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
+		"controller-name-resolution.InfraComponent.name-resolution",
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait-bootstrap.sno-libvirt",
@@ -4619,8 +4623,8 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 	if got := report.ApplyPlan.Addons[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
 		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt")
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization", "wait.sno-libvirt")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization", "controller-name-resolution.InfraComponent.name-resolution", "wait.sno-libvirt")
 }
 
 func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {

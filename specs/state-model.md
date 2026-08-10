@@ -182,6 +182,13 @@ Rules:
   kind-of-thing discriminators (such as `InfraComponent.spec.type`), so the
   who-runs-it axis is spelled `management` here, matching
   `StorageCluster.spec.management`.
+- Managed name-resolution catalog rows are counted only when a loaded
+  `NetworkConfig.spec.nameResolutionRefs[]` consumer resolves them. Those
+  consumers may resolve to exactly one managed `InfraComponent` service per
+  context; unused catalog entries do not count, and compatible aliases of the
+  same component remain one service. Distinct consumed managed services are
+  rejected. External name-resolution entries do not participate in this
+  controller-lifecycle limit.
 - Load balancers have no catalog slot: they are endpoint-scoped, not fleet-wide.
   A managed one is referenced directly from the consuming endpoint through
   `ContainerCluster.spec.install.endpoints.<slot>.source.componentRef` plus
@@ -926,7 +933,9 @@ Rules:
   requires no capability.
 - The `proxy`, `nameResolution`, `ntp`, and `registry` arms take `bindAddress`
   (defaults to `0.0.0.0`) and `port` (defaults to `3128`, `53`, `123`, and
-  `5000` respectively).
+  `5000` respectively). The current dnsmasq role listens and manages firewall
+  state only on DNS port `53`, so a normalized `nameResolution.port` other than
+  `53` is refused before rendering rather than silently ignored.
 - A `loadBalancer` arm places with `machineRef` and declares `bindAddresses[]`,
   each a `name` unique within the component plus the VIP `address`. A
   `ContainerCluster` endpoint selects one through
@@ -976,6 +985,9 @@ Rules:
     map entries) is rejected as an override error naming the owning field,
     rather than silently dropped.
 - `spec.nameResolutionRefs[]` selects name-resolution catalog entries by name.
+  Across the loaded context, all refs that select managed entries must resolve
+  to one distinct name-resolution `InfraComponent`; unused catalog entries do
+  not count, and compatible aliases of that one component remain one service.
 
 ## ContainerCluster
 
@@ -2676,10 +2688,11 @@ preflight check, status action, or advisory carries argv-free typed evidence,
 while its owning value carries the observed status, phase, record path, probe
 failure, or losslessly known target that justified it. It never constructs a
 runnable `apply`, `destroy`, or `storage-cluster replace-arbiter` invocation.
-The exact mutating argv recorded by a real run is the deliberate exception:
-status may validate and replay those bytes, but never infer missing bytes from
-display fields. Only the CLI maps a typed action to flags and formats a new
-executable command from a resolved invocation. Every registered action must
+The exact mutating argv and CLI-resolved recovery plan recorded by a real run
+are the deliberate exception: status may validate and replay the recovery
+steps, but never infer missing bytes from display fields or reconstruct a
+remedy from evidence. Only the CLI maps a typed action to flags and formats a
+new executable command from a resolved invocation. Every registered action must
 have a CLI formatter and a safety-matrix scenario, so a new backend refusal
 cannot assemble a partial command or silently drop a future selection,
 identity, effect, or authorization flag. An action whose alternatives depend
@@ -2698,15 +2711,21 @@ to preserve, so it renders only the interactive host reconcile and tells the
 operator to rerun the same preflight; it never invents a broad apply from the
 preflight scope.
 
-Every real `apply` and `destroy` ledger records that run's exact resolved
-invocation as argv, not as an inferred display string. A failed-run retry in
-`status` shell-quotes only those recorded arguments: it retains the explicit
-context, stage or range, cluster or machine selection, mode, effect flags, SSH
-overrides, authorizations, and whether the operator did or did not pass
-`--yes`. It never adds `--yes`. A legacy, incomplete, or malformed ledger that
-does not carry a validated apply/destroy invocation with an explicit context
-produces command-free guidance to consult operator history instead of a guessed
-command.
+Every real `apply` and `destroy` ledger keeps the run's exact resolved
+invocation as immutable audit argv and separately records a typed recovery
+request plus its ordered CLI-resolved argv steps. Before a task starts, the
+ledger records the recovery that is safe if execution is interrupted at that
+boundary; a terminal typed task error replaces it with that error's exact
+recovery. A partial `create` mutation therefore records the same selection
+under `reconcile`, while a later-only controller-DNS proof records the original
+invocation until a real proof failure replaces it with fabric repair followed
+by exact resume. Reconcile, rebuild, and destroy retain their resolved intent.
+For failed, stale, and cancelled runs, `status` shell-quotes only the validated
+recorded recovery steps. The steps retain context, stage or range, cluster or
+machine selection, effect flags, SSH overrides, authorizations, and the
+original confirmation choice; status never adds `--yes`. A legacy, incomplete,
+or malformed ledger without a valid typed request and exact explicit-context
+steps produces command-free guidance instead of replaying or guessing argv.
 
 ### Machine-readable output
 
@@ -2986,6 +3005,60 @@ command. The rest are registered per command, on the verbs that reach machines.
     and wait for `openshift-install`.
   - `add-ons` applies declarative cluster add-ons and attaches storage.
 
+  The one consumed managed `nameResolution` service adds a controller-readiness
+  barrier. In a range containing `fabric`, its controller task follows the
+  owning remote service task. A range containing `machines` may establish or
+  reconcile the route, and every selected machines task follows it before any
+  machine SSH, FQDN access, or mutation. A range beginning at `deps`, `base`, or
+  `add-ons` still performs a live read-only proof, and every selected later
+  mutation follows that proof; the proof participates in neither apply-mode
+  preflight nor convergence records. This applies when the only consumer is a
+  `StorageCluster`.
+
+  The route covers the machine domain, every consuming container- or
+  storage-cluster zone, and each rendered record outside those zones; readiness
+  probes every rendered record and its exact expected address set. A resolver
+  that already returns every exact answer is accepted without mutation only
+  when no Bootwright-owned route needs reconciliation and no sibling
+  Bootwright route exists. An existing owned route is always reconciled to
+  current desired state.
+
+  Automatic `systemd-resolved` mutation is permitted only for that one consumed
+  managed service and when no sibling Bootwright route exists. Its drop-in is
+  the exclusive owner of global `DNS=` and `Domains=` settings: an effective
+  static assignment outside the owned file refuses; a first install also
+  requires empty runtime global settings; and an overlapping per-link route
+  domain refuses while disjoint per-link routing may coexist. After mutation,
+  the effective global server and route-domain sets must exactly match desired
+  state. A current or sibling ownership record or drop-in that is unreadable, a
+  symlink, or not a regular file is foreign evidence and refuses before
+  acceptance, mutation, or removal.
+
+  When an owned route needs reconciliation or a desired answer is missing, an
+  unsupported controller resolver, missing concrete service address, ambiguous
+  route set, or incomplete answer fails closed. A changed drop-in restarts
+  systemd-resolved; an unchanged owned drop-in also restarts when the initial
+  exact probe failed, permitting stale daemon/cache recovery, while healthy
+  unchanged state does not restart. A failure that may have partially changed
+  a selected route converts `create` to `reconcile` in its exact retry;
+  `reconcile` and `rebuild` remain unchanged. A machines range that omitted
+  required `fabric` work starts that retry at `fabric` while preserving its
+  ending stage and every other resolved flag.
+
+  A later-only proof failure instead prints two exact commands: reconcile only
+  `fabric` for the service's complete unscoped consumer closure, then resume
+  the byte-equivalent original invocation. The repair cannot run selected
+  `deps`/`base`/`add-ons` work and the resume cannot widen it. Runtime state
+  narrows to the exact managed service, and its task hash uses that service's
+  projection from unscoped desired state; neither depends on `--clusters` or
+  `--machines` selection.
+
+  Replacing the consumed managed service identity in place is unsupported. The
+  old identity must stay declared while its owning infrastructure destroy
+  removes the old controller route and evidence; desired state may select the
+  replacement only after that destroy succeeds. A direct switch refuses the
+  old record or drop-in as sibling evidence rather than adopting or deleting it.
+
   `apply`, `plan`, and `diff` accept sub-phase `--stage` values.
   `destroy --stage` accepts only the two families (`infra`, `clusters`);
   sub-phases are apply-only and rejected on `destroy`.
@@ -3018,7 +3091,21 @@ command. The rest are registered per command, on the verbs that reach machines.
   cleanup. Infra-component services are removed after machine infrastructure,
   because apply makes every machines-phase task depend on the fabric services
   and teardown is the inverse of build-up; the managed name-resolution and proxy
-  components serve the addresses machine teardown itself connects through. The
+  components serve the addresses machine teardown itself connects through. A
+  managed name-resolution service owns its controller resolver drop-in and
+  ownership record: both survive machine and ContainerCluster teardown, only
+  the owning service destroy removes them, and releasing a shared-service
+  reference does not. Its controller preflight proves exact ownership before
+  any infra mutation. Cleanup waits for every bracketed task to settle and
+  requires `ok` from every task that names selected resource identity; a
+  skipped/no-host task with selected work is not completion proof and blocks
+  cleanup while retaining the route and its evidence. A truly empty no-op task
+  may settle as skipped without blocking cleanup.
+  Resolver removal and any required restart precede removal of controller
+  evidence; failure retains that evidence and reports the exact
+  controller-built destroy retry. A `stale-input` run omits that bracket and
+  every record-only/context-wide orphan sweep so a skipped declaration cannot
+  be mistaken for intentional deletion. The
   exception is the infra-component placement closure: a machine infrastructure
   step whose cluster hosts an infra component, or is a transitive KubeVirt host
   of one, runs after infra-component removal so that placement machine remains
@@ -3119,9 +3206,9 @@ command. The rest are registered per command, on the verbs that reach machines.
   | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed | `destroy`, `storage-cluster replace-arbiter` |
   | `same-site-arbiter` | promoting a mon to tiebreaker while another mon already sits in its stretch failure domain, on `storage-cluster replace-arbiter` — Ceph's own `--yes-i-really-mean-it` path. It is the emergency fallback for a lost third site: an arbiter that shares a site with a voting mon cannot independently break a tie, so losing that site drops two votes at once and the survivor is left without quorum. The usual shape is an arbiter moved inside a data site, but the gate keys on the shared domain, not on the site's role | `storage-cluster replace-arbiter` |
   | `degraded-quorum` | moving a stretch tiebreaker while declared mons sit outside quorum, on `storage-cluster replace-arbiter`. `ceph mon set_new_tiebreaker` needs a quorum to commit, and swapping the arbiter during a site outage removes the vote holding the remaining quorum together | `storage-cluster replace-arbiter` |
-  | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources would silently be left standing | `destroy` |
+  | `unreadable-records` | proceeding when ownership records under the context's ownership directory cannot be read, whose resources are left standing. The authorized run disables every record-only/context-wide orphan sweep and the controller-resolver destroy bracket; decoded declaration-backed teardown may continue, but unreadable evidence is never reinterpreted as an orphan authorized for deletion | `destroy` |
   | `shared-infra` | a resolved machine-layer teardown of a storage cluster still consumed by a `ContainerCluster` outside the selection, and teardown of an exact infra-component Kind+Name+Host identity owned or referenced by another context (including unreadable or identity-incomplete cross-context evidence). It never authorizes apply to adopt or overwrite another context's service | `destroy` |
-  | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing | `destroy` |
+  | `stale-input` | planning a teardown from the context's stored input when one or more documents no longer decode or validate against the running build, skipping exactly those documents; whatever they declared is absent from the work set and is reported as left standing. Because a skipped declaration cannot be distinguished from an intentionally removed one, the authorized run disables every context-wide or record-only orphan sweep and the controller-resolver destroy bracket; it acts only on declaration-backed work this build decoded | `destroy` |
 
   No token widens `--clusters`, relaxes the shared-provider-service scope
   conflict, or relaxes the KubeVirt tenant gate — `all` included, because it is
@@ -3569,7 +3656,8 @@ command. The rest are registered per command, on the verbs that reach machines.
   `--reclaim-devices` can name the disk (ADR 0054).
 - `--mode rebuild`'s consequence depends on the object kind, and this split gates
   destroy protection (below). For the reconfigure-only kinds — provider host
-  services, infra-component services, node-config apply, per-host `virtctl`
+  services, infra-component services, controller name-resolution convergence,
+  node-config apply, per-host `virtctl`
   provisioning, cluster add-ons, machine RHSM registration, machine repository
   reconciliation, and provisioning-playbook re-runs — it is an idempotent, non-destructive
   re-apply that touches no data, OS, or VM. For every
@@ -3776,19 +3864,20 @@ command. The rest are registered per command, on the verbs that reach machines.
   Once the context has a recorded apply, the `status` next-step spine surfaces
   `diff` ahead of `plan`/`apply`. Every runnable normal spine entry carries the
   explicitly resolved `--context` and leaves routine confirmation unanswered;
-  when no context can be resolved it emits command-free guidance instead. When
-  the last run failed, the spine's next step is instead the shell-quoted exact
-  invocation argv recorded for that run — including its verb, context,
+  when no context can be resolved it emits command-free guidance instead. For a
+  failed, stale, or cancelled real run, the spine uses the ledger's ordered,
+  typed, CLI-resolved recovery steps — including verb, context,
   `--stage`/`--through`, `--clusters` or `--machines`, mode, effect flags,
   authorizations, SSH globals, and the original presence or absence of `--yes`
-  — alongside the failed tasks' log paths
-  under `runs/history/<run-id>/`, so an interrupted apply resumes without an
-  operator reaching for `--mode rebuild` or `destroy`. A retry hint never widens
-  what the failed run selected: dropping a selection axis the run used offers a
-  mutation the operator never asked for, and on `destroy` an unscoped retry is a
-  whole-context teardown with its confirmation already answered. Status never
-  reconstructs a retry from the ledger's display target, cluster scope, or
-  machine list; an older ledger without exact argv yields no runnable retry.
+  — alongside failed task log paths under `runs/history/<run-id>/`. The original
+  invocation remains immutable audit evidence; it is not automatically the
+  recovery when partial `create` state or a prerequisite repair changes what can
+  progress safely. A recovery hint never widens the selected downstream work:
+  dropping a selection axis offers a mutation the operator never asked for, and
+  on `destroy` an unscoped retry is a whole-context teardown with confirmation
+  already answered. Status never reconstructs recovery from the ledger's
+  display target, scope, machines, original argv, or prose failure. An older or
+  malformed ledger without a validated recovery plan yields no runnable retry.
   Every spine entry is either a command the CLI accepts verbatim — it resolves
   to a registered command path and carries only flags that command registers —
   or command-free prose. A spine that ends on a verb the CLI no longer has

@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/clusteraccess"
@@ -16,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/workspace"
+	"github.com/spf13/cobra"
 )
 
 func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
@@ -185,7 +184,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			secretScope = &preflight.SecretScope{Machines: sel.WorkMachines, StorageClusters: sel.WorkStorageClusters}
 		}
 		if err := clusteraccess.ValidateScopedApplySharedServices(state, runScope.Name, flags.clusterScope); err != nil {
-			return failErr(1, err)
+			return failErr(1, applyInstallRemedialError(err, invocation))
 		}
 		if options.stageSelector {
 			if err := validateKubeVirtClusterSelection(state, runScope, flags.clusterScope, clustersDir); err != nil {
@@ -211,7 +210,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		}
 		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runContext, runScope, &plan, state, mode, sel.StorageWorkNames(), sel.Active, sel.MachineProvision, sel.WorkMachines, workflow.ConcurrencyLimits{}, ctx.RunsDir, ctx.Name, ctx.SecretsDir)
 		if err != nil {
-			return failErr(1, err)
+			return failErr(1, applyInstallRemedialError(err, invocation))
 		}
 		converge.ApplyVerboseExtraVar(&plan, verbose)
 		artifactReclaimPreview, _ := converge.ArtifactServerReclaimPreview(ctx.OwnershipDir, ctx.Name, clustersDir, sharedMutation.artifactServerTargets)
@@ -340,12 +339,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := appendMutatingInvocationExtraVars(&plan, invocation, reclaimDevices); err != nil {
 				return failErr(1, err)
 			}
+			if err := appendControllerNameResolutionInvocationExtraVars(tasks, invocation); err != nil {
+				return failErr(1, err)
+			}
 		}
-		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, dryRun, runCommandLabel, mode, false, invocation.args())
-		runOpts.RunLease = runLease
-		runOpts.OverrideAckedReinstalls = ocpReinstallAcked
-		runOpts.SelectedMachines = sel.MachineScopeNames()
-		runOpts.ClusterAvailabilityChecker = applyClusterAvailabilityChecker
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			if reclaimDevices != "" {
@@ -374,6 +371,10 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				printBundlePath(stdout, bundleResult.Dir)
 			}
 			return nil
+		}
+		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, false, become.PasswordFile, false, runCommandLabel, mode, false, invocation.args())
+		if err := configureScopedApplyRunOptions(&runOpts, invocation, runLease, ocpReinstallAcked, sel.MachineScopeNames(), applyClusterAvailabilityChecker); err != nil {
+			return failErr(1, err)
 		}
 		if err := requireSharedServiceMutationLease(sharedServiceLease, "before apply execution"); err != nil {
 			return failErr(1, err)

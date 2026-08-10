@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render"
 )
 
 const infraComponentRecordNameLabel = "bootwright.name"
@@ -38,6 +39,10 @@ func OwnershipOrphans(state v1alpha1.State, records []ownership.ResourceRecord) 
 	for _, c := range state.InfraComponents {
 		infraComponents[c.Metadata.Name] = true
 	}
+	managedNameResolutionComponents := map[string]bool{}
+	for _, target := range render.ControllerNameResolutionTargets(state) {
+		managedNameResolutionComponents[target.Name] = true
+	}
 
 	var out []UndeclaredResource
 	for _, r := range records {
@@ -50,6 +55,8 @@ func OwnershipOrphans(state v1alpha1.State, records []ownership.ResourceRecord) 
 			declared = machines[r.Machine]
 		case r.Cluster != "":
 			declared = clusters[r.Cluster]
+		case r.Kind == string(ownership.KindControllerNameResolver):
+			declared = managedNameResolutionComponents[strings.TrimSpace(r.Attributes["component"])]
 		case r.Kind == string(ownership.KindInfraComponent):
 			declared = infraComponents[infraComponentRecordName(r)]
 		case r.Provider != "":

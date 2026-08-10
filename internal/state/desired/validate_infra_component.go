@@ -217,6 +217,9 @@ func validateNameResolutionComponent(component v1alpha1.InfraComponent, machines
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", dns.MachineRef, machines, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)...)
 	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
+	if dns.Port != 0 && dns.Port != v1alpha1.DefaultDNSPort {
+		errs = append(errs, fmt.Sprintf("%s.port %d is unsupported; dnsmasq is fixed to port %d", prefix, dns.Port, v1alpha1.DefaultDNSPort))
+	}
 	if machine, ok := machines[dns.MachineRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, machine)...)
 	}

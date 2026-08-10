@@ -25,8 +25,11 @@ func unreadableOwnershipRefusal(ctx workspace.Context, skipped []error, invocati
 	return fmt.Errorf("%d ownership record(s) under %s could not be read and their resources would be silently left standing: %s; fix or remove the corrupted record file(s), or re-run `%s` to destroy the same selected work set without them", len(skipped), ctx.OwnershipDir, strings.Join(details, "; "), command.String())
 }
 
-func destroyDryRunDisclosure(safety workflow.DestroySafetyDecision, inputSkipped, ownershipSkipped []error, decision converge.InfraComponentDestroyDecision, auth *authorizations, purgeHistory bool) dryRunDisclosure {
+func destroyDryRunDisclosure(safety workflow.DestroySafetyDecision, inputSkipped, ownershipSkipped []error, decision converge.InfraComponentDestroyDecision, sharedServiceRefusal error, auth *authorizations, purgeHistory bool) dryRunDisclosure {
 	out := dryRunDisclosure{refusals: destroyGateForecastRefusals(safety, inputSkipped, ownershipSkipped, decision, auth)}
+	if sharedServiceRefusal != nil {
+		out.refusals = append(out.refusals, sharedServiceRefusal.Error())
+	}
 	if purgeHistory {
 		out.purgeHistory = &converge.DryRunPurgeHistory{Scope: destroyPurgeHistoryNotice(true)}
 	}

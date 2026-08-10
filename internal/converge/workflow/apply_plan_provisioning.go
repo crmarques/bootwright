@@ -80,7 +80,7 @@ func clusterMachineNames(state v1alpha1.State, cluster string) []string {
 	return out
 }
 
-func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget) error {
+func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool, target ApplyTarget, machineServiceTaskIDs []string) error {
 	playbooks := selectedPlaybooks(state)
 	if len(playbooks) == 0 {
 		return nil
@@ -113,11 +113,16 @@ func planPlaybookActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet
 		if err != nil {
 			return err
 		}
+		controllerDependencies := append([]string(nil), machineServiceTaskIDs...)
+		if gating && anchor == ApplyPhaseFabric {
+			controllerDependencies = nil
+		}
 
 		activity := Activity{
-			ID:       id,
-			Provides: provisioningProvidesCapabilities(p, anchor, gating),
-			Requires: provisioningRequiresCapabilities(p, anchor, gating),
+			ID:                   id,
+			Provides:             provisioningProvidesCapabilities(p, anchor, gating),
+			Requires:             provisioningRequiresCapabilities(p, anchor, gating),
+			ExplicitDependencies: controllerDependencies,
 			Task: ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:      id,
@@ -203,7 +208,7 @@ func phaseTaskIndex(graph *ActivityGraph) map[string]map[string][]string {
 
 func applyTaskKindPhase(kind string) (string, bool) {
 	switch kind {
-	case ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices:
+	case ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices, ApplyTaskKindControllerNameResolution:
 		return ApplyPhaseFabric, true
 	case ApplyTaskKindMachineInfraPrepare, ApplyTaskKindClusterInstall, ApplyTaskKindMachineInfraFinalize, ApplyTaskKindManagedMachineOS, ApplyTaskKindStorageNodeAccess, ApplyTaskKindMachineRegistration, ApplyTaskKindMachineRepositories:
 		return ApplyPhaseMachines, true

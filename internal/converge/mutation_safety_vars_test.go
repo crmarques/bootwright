@@ -167,6 +167,7 @@ var mutationSafetyVarTokens = map[string]bool{
 	"evict":       true,
 	"force":       true,
 	"format":      true,
+	"mutation":    true,
 	"only":        true,
 	"overwrite":   true,
 	"permit":      true,
@@ -194,6 +195,7 @@ func TestMutationSafetyVarCandidateCoversFutureProvidersAndTasks(t *testing.T) {
 		"bootwright_vsphere_wipe_disks",
 		"bootwright_kubevirt_guest_scope",
 		"bootwright_redfish_force",
+		"bootwright_future_automatic_mutation",
 		"bootwright_task_future_provider_machine",
 	} {
 		if !mutationSafetyVarCandidate(name) {

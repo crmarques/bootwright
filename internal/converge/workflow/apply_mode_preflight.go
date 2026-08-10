@@ -233,14 +233,15 @@ func summarizeApplyObjects(objs []ObjectClassification) string {
 }
 
 var overrideReconfigureOnlyKinds = map[string]bool{
-	ApplyTaskKindProvider:               true,
-	ApplyTaskKindInfraComponentServices: true,
-	ApplyTaskKindNodeConfigApply:        true,
-	ApplyTaskKindHostVirtctl:            true,
-	ApplyTaskKindClusterAddon:           true,
-	ApplyTaskKindMachineRegistration:    true,
-	ApplyTaskKindMachineRepositories:    true,
-	ApplyTaskKindPlaybook:               true,
+	ApplyTaskKindProvider:                 true,
+	ApplyTaskKindInfraComponentServices:   true,
+	ApplyTaskKindControllerNameResolution: true,
+	ApplyTaskKindNodeConfigApply:          true,
+	ApplyTaskKindHostVirtctl:              true,
+	ApplyTaskKindClusterAddon:             true,
+	ApplyTaskKindMachineRegistration:      true,
+	ApplyTaskKindMachineRepositories:      true,
+	ApplyTaskKindPlaybook:                 true,
 }
 
 var overrideDestructiveLayerRoles = map[string]remedy.TargetRole{

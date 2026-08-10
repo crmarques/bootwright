@@ -11,7 +11,43 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
+
+func TestFailedApplyTaskRetainsTypedRemedy(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	opts := schedulerRunOptions(dir)
+	request := remedy.Request{
+		Action:  remedy.ActionReconcileSharedServiceThenRetrySameSelection,
+		Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "cluster-a"}},
+	}
+	task := ApplyTask{
+		Entry:         TaskLedgerEntry{ID: "controller-name-resolution.demo", Kind: ApplyTaskKindControllerNameResolution, Label: "controller name resolution"},
+		Playbook:      "controller-proof",
+		State:         opts.State,
+		FailureRemedy: request,
+	}
+	runner := &recordingApplyRunner{failures: map[string]error{task.Playbook: errors.New("resolver proof failed")}}
+	result := runOneApplyTask(context.Background(), io.Discard, io.Discard, runsDir, "apply-test", opts, task, func(io.Writer, io.Writer) ansible.Runner {
+		return runner
+	})
+	if result.err == nil {
+		t.Fatal("failed apply task returned no error")
+	}
+	var remedial remedy.Error
+	if !errors.As(result.err, &remedial) {
+		t.Fatalf("failed task lost its typed remedy: %v", result.err)
+	}
+	got := remedial.Remedy()
+	if got.Action != request.Action || len(got.Targets) != 1 || got.Targets[0] != request.Targets[0] {
+		t.Fatalf("failed task remedy = %#v, want %#v", got, request)
+	}
+	got.Targets[0].Name = "changed"
+	if remedial.Remedy().Targets[0].Name != "cluster-a" {
+		t.Fatal("failed task remedy exposed mutable target storage")
+	}
+}
 
 func TestFailedGenericApplyPreservesPriorConvergenceRecord(t *testing.T) {
 	cases := []struct {

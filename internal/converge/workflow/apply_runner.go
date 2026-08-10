@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -28,6 +29,9 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	}
 	result.failure = failure
 	result.err = taskErr
+	if task.FailureRemedy.Action != "" && ctx.Err() == nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
+		result.err = &applyTaskRemedialError{cause: taskErr, request: task.FailureRemedy}
+	}
 	return result
 }
 
@@ -42,6 +46,23 @@ func (e *applyTaskFailureError) Error() string {
 
 func (e *applyTaskFailureError) Unwrap() error {
 	return e.cause
+}
+
+type applyTaskRemedialError struct {
+	cause   error
+	request remedy.Request
+}
+
+func (e *applyTaskRemedialError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *applyTaskRemedialError) Unwrap() error {
+	return e.cause
+}
+
+func (e *applyTaskRemedialError) Remedy() remedy.Request {
+	return cloneRemedyRequest(e.request)
 }
 
 func ensureApplyTaskFailureLog(path, failure string) error {
@@ -118,7 +139,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	now = time.Now()
 	if err != nil {
 		if task.Timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			err = fmt.Errorf("playbook timed out after %s; raise spec.timeout if the work legitimately takes longer", task.Timeout)
+			err = fmt.Errorf("playbook timed out after %s; raise spec.timeout if the work legitimately takes longer: %w", task.Timeout, err)
 		}
 		if recordErr := recordClusterInstallTaskFailure(opts, runID, task, priorInstall, priorInstallFound, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
@@ -155,8 +176,10 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 	}
-	if recordErr := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, now); recordErr != nil {
-		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
+	if task.ExecutionClass != ApplyTaskExecutionLiveProof {
+		if recordErr := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, now); recordErr != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
+		}
 	}
 	if SubstrateReleaseClearKind(task.Entry.Kind) {
 		if recordErr := ConsumeSubstrateRelease(runsDir, task.Entry.Cluster, opts.SelectedMachines, ClusterSubstrateMachineNames(task.State, task.Entry.Cluster)); recordErr != nil {
@@ -211,7 +234,7 @@ func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior Cluste
 }
 
 func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, task ApplyTask) (bool, string, error) {
-	if !task.SkipWhenConverged || strings.TrimSpace(runsDir) == "" {
+	if task.ExecutionClass == ApplyTaskExecutionLiveProof || !task.SkipWhenConverged || strings.TrimSpace(runsDir) == "" {
 		return false, "", nil
 	}
 	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))

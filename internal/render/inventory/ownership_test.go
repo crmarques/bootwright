@@ -55,3 +55,60 @@ func TestInventoryWithOwnershipRecordsMergesHostFactsAcrossRecords(t *testing.T)
 		t.Fatalf("a record without host facts must not strip the connection facts of another record for the same host: %v", host)
 	}
 }
+
+func TestControllerOwnershipRecordCreatesOnlyLocalControllerInventory(t *testing.T) {
+	records := []ownership.ResourceRecord{{
+		Kind: string(ownership.KindControllerNameResolver),
+		Name: "resolver-record",
+		Host: "untrusted-remote-host",
+		HostFacts: map[string]string{
+			"ansible_connection": "ssh",
+			"ansible_host":       "203.0.113.10",
+		},
+	}}
+
+	inv := InventoryWithOwnershipRecordsAndPathOptions(v1alpha1.State{}, PathOptions{}, records)
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	if _, found := hosts["untrusted-remote-host"]; found {
+		t.Fatalf("controller ownership evidence created a remote inventory host: %#v", hosts)
+	}
+	localhost := hosts["localhost"].(map[string]any)
+	if localhost["ansible_connection"] != "local" || localhost["ansible_host"] != "localhost" {
+		t.Fatalf("controller ownership evidence did not pin localhost: %#v", localhost)
+	}
+	controllerHosts := all["children"].(map[string]any)[GroupControllerHosts].(map[string]any)["hosts"].(map[string]any)
+	if len(controllerHosts) != 1 {
+		t.Fatalf("%s hosts = %#v, want only localhost", GroupControllerHosts, controllerHosts)
+	}
+	if _, found := controllerHosts["localhost"]; !found {
+		t.Fatalf("%s hosts = %#v, want localhost", GroupControllerHosts, controllerHosts)
+	}
+	counts := HostGroupCountsWithOwnershipRecords(v1alpha1.State{}, records)
+	members := HostGroupMembersWithOwnershipRecords(v1alpha1.State{}, records)
+	if counts[GroupControllerHosts] != 1 || len(members[GroupControllerHosts]) != 1 || members[GroupControllerHosts][0] != "localhost" {
+		t.Fatalf("controller group facts counts=%#v members=%#v", counts, members)
+	}
+}
+
+func TestDNSOwnershipFirewallPortsRenderForRecordDrivenTeardown(t *testing.T) {
+	records := []ownership.ResourceRecord{{
+		Kind:  string(ownership.KindInfraComponent),
+		Name:  "InfraComponent-dns",
+		Owner: ownership.Owner,
+		Attributes: map[string]string{
+			"port":    "53/tcp",
+			"udpPort": "53/udp",
+		},
+	}}
+
+	vars := VarsWithPathOptionsAndOwnership(v1alpha1.State{}, PathOptions{}, records)
+	rendered := vars["bootwright_ownership_records"].([]any)[0].(map[string]any)
+	attrs := rendered["attributes"].(map[string]any)
+	if attrs["port"] != "53/tcp" || attrs["udpPort"] != "53/udp" {
+		t.Fatalf("rendered DNS teardown ports = %#v, want scalar TCP and UDP endpoints", attrs)
+	}
+	if _, found := attrs["ports"]; found {
+		t.Fatalf("rendered DNS teardown attributes retained a plural list value: %#v", attrs)
+	}
+}

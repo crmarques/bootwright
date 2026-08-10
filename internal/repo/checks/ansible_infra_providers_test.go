@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
@@ -282,6 +283,36 @@ func TestRegisteredAdapterRolesExist(t *testing.T) {
 		if !ansibleRoleDirExists(t, role) {
 			t.Fatalf("registered Ansible adapter role %q has no role directory", role)
 		}
+	}
+}
+
+func TestManagedNameResolutionAdaptersOwnControllerLifecycle(t *testing.T) {
+	seen := 0
+	for _, entry := range roles.ServiceEntries() {
+		if entry.Key.Kind != v1alpha1.ComponentSlotNameResolution {
+			continue
+		}
+		seen++
+		applyDir := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot), strings.TrimPrefix(entry.ApplyRole, "bootwright.core."))
+		destroyDir := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot), strings.TrimPrefix(entry.DestroyRole, "bootwright.core."))
+		for _, target := range []struct {
+			task string
+			dir  string
+		}{
+			{task: "controller_apply.yml", dir: applyDir},
+			{task: "controller_destroy_preflight.yml", dir: destroyDir},
+			{task: "controller_destroy.yml", dir: destroyDir},
+		} {
+			if info, err := os.Stat(filepath.Join(target.dir, "tasks", target.task)); err != nil || !info.Mode().IsRegular() {
+				t.Fatalf("managed name-resolution adapter %s/%s has no tasks/%s; every future provider must establish controller readiness before machines and retain controller routing until owner destroy", entry.Key.Kind, entry.Key.Realisation, target.task)
+			}
+		}
+		if destroy := readRepoFile(t, filepath.ToSlash(filepath.Join(bootwrightCollectionRoleRoot, strings.TrimPrefix(entry.DestroyRole, "bootwright.core."), "tasks", "destroy.yml"))); strings.Contains(destroy, "controller_destroy") {
+			t.Fatalf("managed name-resolution adapter %s/%s remote destroy still embeds controller cleanup; the global destroy bracket must preflight before any teardown and clean up only after the whole graph succeeds", entry.Key.Kind, entry.Key.Realisation)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("service registry contains no managed name-resolution adapter; controller lifecycle guard is vacuous")
 	}
 }
 
@@ -1612,8 +1643,35 @@ func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
 	}
 
 	closeIdx := findAnsibleTask(t, tasks, "Close recorded firewalld ports")
-	if !stringListItemContains(tasks[closeIdx]["loop"], "bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort)") {
+	closeLoop := fmt.Sprint(tasks[closeIdx]["loop"])
+	if !strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.vMediaPort") || !strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.vmediaPort") {
 		t.Fatalf("%s must read both vMediaPort and the pre-rename vmediaPort, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	}
+	if strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.ports") {
+		t.Fatalf("%s must not interpret a string-valued ownership attribute as a plural port list, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	}
+}
+
+func TestDNSOwnershipFirewallPortsUseScalarRecordContract(t *testing.T) {
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_name_resolution_dnsmasq/tasks/main.yml")
+	recordIdx := findAnsibleTask(t, mainTasks, "Record DNS service ownership")
+	recordVars := mainTasks[recordIdx]["vars"].(map[string]any)
+	fields := recordVars["bootwright_ownership_fields"].(map[string]any)
+	attrs := fields["attributes"].(map[string]any)
+	if attrs["port"] != "53/tcp" || attrs["udpPort"] != "53/udp" {
+		t.Fatalf("DNS ownership firewall attributes = %#v, want scalar TCP and UDP endpoints", attrs)
+	}
+	if _, found := attrs["ports"]; found {
+		t.Fatalf("DNS ownership must not write a list into the string-valued attributes map: %#v", attrs)
+	}
+
+	destroyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
+	closeIdx := findAnsibleTask(t, destroyTasks, "Close recorded firewalld ports")
+	closeLoop := fmt.Sprint(destroyTasks[closeIdx]["loop"])
+	for _, want := range []string{"bootwright_ownership_destroy_attrs.port", "bootwright_ownership_destroy_attrs.udpPort"} {
+		if !strings.Contains(closeLoop, want) {
+			t.Fatalf("record-driven firewall teardown does not consume %q: %s", want, closeLoop)
+		}
 	}
 }
 

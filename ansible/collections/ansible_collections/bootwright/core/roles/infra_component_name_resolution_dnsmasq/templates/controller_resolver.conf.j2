@@ -1,0 +1,3 @@
+[Resolve]
+DNS={{ bootwright_component.controllerAddresses | join(' ') }}
+Domains={% for domain in bootwright_component.controllerDomains %}~{{ domain }}{% if not loop.last %} {% endif %}{% endfor %}

@@ -94,6 +94,9 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 	expandedStorage := map[string]bool{}
 	for i := range tasks {
 		task := tasks[i]
+		if task.ExecutionClass == ApplyTaskExecutionLiveProof {
+			continue
+		}
 		kind, key, label := objectIdentity(task)
 		desiredHash, err := (&tasks[i]).DesiredHash()
 		if err != nil {

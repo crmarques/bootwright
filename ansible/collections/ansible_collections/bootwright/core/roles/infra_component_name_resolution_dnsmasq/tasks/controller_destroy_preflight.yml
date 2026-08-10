@@ -1,0 +1,13 @@
+---
+- name: Validate controller resolver destroy preflight invocation
+  ansible.builtin.assert:
+    that:
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Controller name-resolution destroy preflight has no exact
+      controller-built destroy invocation. Refusing to continue into teardown.
+
+- name: Prove controller resolver ownership before any teardown mutation
+  ansible.builtin.include_tasks: controller_ownership_gate.yml
+  vars:
+    bootwright_controller_resolver_gate_action: remove

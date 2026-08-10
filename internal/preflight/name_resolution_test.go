@@ -3,6 +3,7 @@ package preflight
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -123,5 +124,28 @@ func TestNameResolutionChecksHonorScopeAndMissingLookupDep(t *testing.T) {
 	}
 	if got := nameResolutionChecks(v1alpha1.State{}, []Phase{{Name: "machines"}}, deps, nil); got != nil {
 		t.Fatalf("checks for a state with no resolvable machines = %+v, want nil", got)
+	}
+}
+
+func TestManagedNameResolutionWarningNamesTheHardApplyBarrier(t *testing.T) {
+	for _, check := range []Check{
+		resolutionCheck(Deps{LookupHost: func(string) ([]string, error) {
+			return nil, errors.New("no such host")
+		}}, "node", "node.example.test", "10.0.0.1", true, ""),
+		resolutionCheck(Deps{LookupHost: func(string) ([]string, error) {
+			return []string{"10.0.0.2"}, nil
+		}}, "node", "node.example.test", "10.0.0.1", true, ""),
+	} {
+		if check.Status != StatusWarn {
+			t.Fatalf("managed preflight = %+v, want WARN before the apply-owned readiness barrier", check)
+		}
+		if !strings.Contains(check.Impact, "before the first machines-phase SSH or mutation") || !strings.Contains(check.Impact, "later-only range assumes") {
+			t.Fatalf("managed preflight impact does not explain the hard barrier: %q", check.Impact)
+		}
+		for _, want := range []string{"include fabric or machines", "exact command it prints"} {
+			if !strings.Contains(check.Remediation, want) {
+				t.Fatalf("managed preflight remediation = %q, want %q", check.Remediation, want)
+			}
+		}
 	}
 }

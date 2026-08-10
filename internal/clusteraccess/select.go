@@ -6,8 +6,26 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
+
+type applySharedServiceScopeError struct {
+	message  string
+	clusters []string
+}
+
+func (e *applySharedServiceScopeError) Error() string {
+	return e.message
+}
+
+func (e *applySharedServiceScopeError) Remedy() remedy.Request {
+	targets := make([]remedy.Target, 0, len(e.clusters))
+	for _, name := range e.clusters {
+		targets = append(targets, remedy.Target{Role: remedy.TargetRoleClusterRoot, Name: name})
+	}
+	return remedy.Request{Action: remedy.ActionApplyAllConsumers, Targets: targets}
+}
 
 func ScopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
 	switch target {
@@ -303,9 +321,22 @@ func scopeProvisionsSharedMachineLayer(target string) bool {
 }
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
-	return formatScopeConflicts(conflicts,
+	err := formatScopeConflicts(conflicts,
 		"--clusters would narrow shared machine service(s) that other clusters still depend on:",
-		"re-run without --clusters to apply every consumer, or extend --clusters to include the unscoped clusters")
+		"apply every consumer together; no authorization token makes a narrowed shared-service projection safe")
+	seen := map[string]bool{}
+	var clusters []string
+	for _, conflict := range conflicts {
+		for _, name := range append(append([]string{}, conflict.ScopedClusters...), conflict.UnscopedClusters...) {
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			clusters = append(clusters, name)
+		}
+	}
+	sort.Strings(clusters)
+	return &applySharedServiceScopeError{message: err.Error(), clusters: clusters}
 }
 
 func ApplyWorkObjects(state v1alpha1.State, containerNames, storageNames []string) (machines map[string]bool, storageClusters map[string]bool) {

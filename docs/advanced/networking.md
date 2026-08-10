@@ -391,12 +391,75 @@ resolver servers for resolvers **not** declared in the environment
 (operator-external ones). Keep `nameResolutionRefs` outside
 `template.networkConfig`; that map is raw NMState.
 
-Before an agent install, Bootwright also routes the cluster domain through
-those selected resolver addresses on a systemd-resolved controller, then
-verifies the API, api-int, and ingress records resolve to their declared VIPs.
-External entries use their authored `address`; managed entries use the
-component's explicit bind address. On a controller without systemd-resolved,
-the operator must make the same resolver path available to the host.
+One context may consume one managed name-resolution service. Bootwright counts
+the services that loaded `NetworkConfig.nameResolutionRefs` actually resolve,
+not every managed row in the Environment catalog. Unused catalog entries are
+allowed, and two compatible catalog names that point at the same
+`InfraComponent` remain one service. Consumers that resolve to two distinct
+managed components fail validation; use one shared component or external DNS.
+
+Bootwright establishes controller resolution after that remote DNS service is
+ready and before any machines-phase SSH or FQDN access. This applies to
+storage-only environments and to a machines-only reapply; the latter assumes
+the omitted `fabric` work already exists but may reconcile its controller route.
+A range that starts at `deps`, `base`, or `add-ons` instead performs a live
+read-only proof before its first selected mutation. It never changes resolver
+state merely because an earlier phase was omitted.
+
+On systemd-resolved Bootwright installs one context-and-service-owned split-DNS
+drop-in. The route includes the machine domain, every container- and
+storage-cluster zone that consumes that service, and any exact rendered name
+outside those zones. It verifies every rendered host, subtree, and CNAME answer
+against the exact desired address set.
+
+If the controller already returns every desired answer, Bootwright leaves its
+resolver untouched only when no Bootwright-owned route needs reconciliation and
+no sibling Bootwright route exists. An owned route is always reconciled to
+current desired state. Before changing it, Bootwright also proves that its
+drop-in can exclusively own global `DNS=` and `Domains=` policy: effective
+static assignments outside the owned file refuse, a first install requires
+empty runtime global settings, and an overlapping per-link route domain
+refuses. Disjoint per-link routes may coexist. After a write, the effective
+global servers and route domains must exactly match desired state.
+
+The systemd-resolved daemon restarts when the drop-in changes. It also restarts
+an unchanged owned route when the initial exact probe fails, which recovers a
+stale daemon or cache before failing the final proof. A healthy unchanged route
+does not restart.
+
+A concrete bind address is used when declared; a wildcard bind resolves through
+the environment entry's selected service endpoint (or the component's sole
+endpoint). If neither yields a concrete controller-reachable address,
+Bootwright cannot install or reconcile an owned route: it refuses before
+machine work and prints an exact controller-built command to retry. An unowned
+operator resolver needs no such address when every exact answer already works.
+When selected work may already have changed the controller route, the retry
+preserves context, selection, authorization, effects, connection options, and
+ending stage. It changes `--mode create` to `--mode reconcile`, because the
+failed attempt may already have written ownership; `reconcile` and `rebuild`
+stay unchanged. A machines-only retry starts at `fabric` when service repair is
+required.
+
+A later-only proof failure prints two commands instead: first an exact
+`--mode reconcile --stage fabric` repair for every cluster that consumes the
+shared service, then a byte-equivalent retry of the original selection. The
+first command cannot run later-phase work; the second cannot widen it. Run them
+in that order.
+
+During infrastructure destroy, a read-only controller ownership preflight runs
+before any teardown and controller cleanup runs last. Cleanup requires every
+task naming selected resource identity to report success; skipped or no-host
+selected work retains the resolver route and its ownership evidence for the
+exact destroy retry. Empty no-op tasks may settle as skipped.
+
+Do not replace the consumed managed component identity in place. Leave the old
+component declared and referenced, complete its owning infrastructure destroy
+so Bootwright safely removes the old route and ownership evidence, then update
+the reference and apply the replacement. A direct switch refuses the old route
+as sibling evidence. On a controller without systemd-resolved the operator must
+provide the required route; Bootwright accepts it only when every exact probe
+already passes. External name-resolution entries remain entirely
+operator-owned.
 
 ### Machine and node records
 
@@ -425,7 +488,9 @@ group **Name resolution** resolves each machine's `fqdn` and each node
 FQDN before apply and fails naming the exact record to create when one is
 missing or points at the wrong address; under managed resolution the same
 checks warn instead of failing — converging the resolver is exactly what
-apply does — and point at the apply command.
+apply does — and point at the apply command. The apply graph's controller-DNS
+barrier then performs the authoritative probe and refuses before machines work
+if the warning was not repaired by managed convergence.
 
 A machine with `os.provided: true` cannot declare `spec.network.config` at all,
 so it can never reference a name-resolution entry. When such a machine is a

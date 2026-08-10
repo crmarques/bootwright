@@ -112,4 +112,3 @@ bootwright_install_node_probe_request_timeout: "10s"
 bootwright_install_bootstrap_marker_path: "{{ bootwright_install_work_dir }}/bootstrap-complete"
 bootwright_install_publish_probe_timeout: 60
 bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"
-bootwright_controller_resolver_dropin_path: "/etc/systemd/resolved.conf.d/bootwright-{{ bootwright_current_cluster.name }}.conf"

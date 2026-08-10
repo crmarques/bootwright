@@ -46,9 +46,6 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 		if keyPath := nodeSSHPrivateKeyPath(state, paths.SecretIndex, ocp, paths.SecretsDir); keyPath != "" {
 			entry["nodeSSHPrivateKeyPath"] = keyPath
 		}
-		if resolvers := ClusterControllerNameResolvers(state, ci); len(resolvers) > 0 {
-			entry["controllerNameResolvers"] = resolvers
-		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)
 		}
@@ -70,6 +67,12 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 	}
 	if services := infraComponentServicesVars(state); len(services) > 0 {
 		out["bootwright_infra_component_services"] = services
+	}
+	if services := controllerNameResolutionServicesVars(state); len(services) > 0 {
+		out["bootwright_controller_name_resolution_services"] = services
+	}
+	if targets := controllerNameResolutionDestroyTargetsVars(state, ownershipRecords); len(targets) > 0 {
+		out["bootwright_controller_name_resolution_destroy_targets"] = targets
 	}
 	if setups := providerMachineSetupsVars(state); len(setups) > 0 {
 		out["bootwright_provider_machine_setups"] = setups

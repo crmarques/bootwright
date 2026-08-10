@@ -1,4 +1,12 @@
 ---
+- name: Validate exact controller DNS retry invocation
+  ansible.builtin.assert:
+    that:
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Controller DNS verification has no exact controller-built retry invocation.
+      Refusing to continue toward node boot.
+
 - name: Build cluster endpoint DNS probes
   ansible.builtin.set_fact:
     bootwright_endpoint_dns_targets: >-
@@ -63,5 +71,5 @@
       {% endfor %}
 
       Configure controller-visible DNS for these endpoint names, then re-run
-      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+      `{{ bootwright_mutating_invocation }}`.
   when: bootwright_controller_dns_failures | length > 0

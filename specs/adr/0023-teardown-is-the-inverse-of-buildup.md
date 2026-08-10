@@ -68,8 +68,9 @@ Container-cluster teardown splits in two. The runtime half — installer runtime
 add-on runtime, generated add-on secrets — is the inverse of the add-ons and
 base phases and is a graph root with no predecessors. The records half —
 install record, connection record, captured `kubeconfig` and
-`kubeadmin-password`, controller resolver drop-in and its `systemd-resolved`
-restart — is the inverse of the credentials apply captured, and runs last.
+`kubeadmin-password` — is the inverse of the credentials apply captured, and
+runs last. ADR 0055 moves the controller resolver lifetime to its owning managed
+name-resolution service at T6; ContainerCluster teardown never changes it.
 
 ### Axioms
 
@@ -86,8 +87,11 @@ restart — is the inverse of the credentials apply captured, and runs last.
   fail-closed mechanism, exactly as ADR 0007 chose.
 - **A3.** Infra components outlive the machines they serve, except for their own
   placement closure. The managed name-resolution component serves the machine
-  addresses teardown connects through and the proxy carries RHSM egress, so
-  fabric teardown is last. A cluster hosting an infra component, or any
+  addresses teardown connects through, its controller split-DNS route remains
+  in place through all machine teardown, and the proxy carries RHSM egress, so
+  fabric teardown is last. Only the owning name-resolution service removes that
+  route; releasing one shared-service reference does not. A cluster hosting an
+  infra component, or any
   transitive KubeVirt host of one, is carved out and torn down after infra
   components instead. The closure over ancestors is what makes the carve-out
   provably acyclic.

@@ -291,7 +291,11 @@ bootwright destroy --authorize stale-input --yes
 
 It skips exactly the documents that fail to decode or validate, and reports both
 them and the ownership records left without a declaration — those resources are
-**not** in the work set and are left standing. Like every token it is refused by
+**not** in the work set and are left standing. Because the run cannot tell a
+skipped declaration from an intentionally deleted one, it also disables every
+record-only or context-wide orphan sweep, including controller-resolver
+preflight/cleanup. This can conservatively leave a genuine orphan; use fully
+decodable input for the later reclaim. Like every token it is refused by
 default, and it is registered for `destroy` only: `apply`, `plan`, `diff`, and
 `context init`/`update` reject it by name, so nothing that *creates* state can
 ever build from input it cannot fully read.

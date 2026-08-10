@@ -15,6 +15,9 @@ _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 
 bootwright_ip_in_cidrs = _module.bootwright_ip_in_cidrs
+bootwright_normalize_ip_set = _module.bootwright_normalize_ip_set
+bootwright_resolved_static_conflicts = _module.bootwright_resolved_static_conflicts
+bootwright_resolved_runtime_conflicts = _module.bootwright_resolved_runtime_conflicts
 
 
 class IpInCidrs(unittest.TestCase):
@@ -63,6 +66,93 @@ class IpInCidrs(unittest.TestCase):
 
     def test_ipv6_address_inside_ipv6_cidr_matches(self):
         self.assertTrue(bootwright_ip_in_cidrs(["fd00::1"], ["fd00::/8"]))
+
+
+class NormalizeIpSet(unittest.TestCase):
+    def test_canonicalizes_deduplicates_and_sorts_both_families(self):
+        self.assertEqual(
+            bootwright_normalize_ip_set(
+                ["2001:0db8:0:0::10", "192.0.2.11", "192.0.2.10", "2001:db8::10"]
+            ),
+            ["192.0.2.10", "192.0.2.11", "2001:db8::10"],
+        )
+
+    def test_normalizes_ipv4_mapped_and_retains_invalid_evidence(self):
+        self.assertEqual(
+            bootwright_normalize_ip_set(["::ffff:192.0.2.10", "bad", None]),
+            ["192.0.2.10", "invalid:bad"],
+        )
+
+
+class ResolvedConflicts(unittest.TestCase):
+    def test_static_config_accepts_only_the_exact_owned_dropin(self):
+        lines = [
+            "# /etc/systemd/resolved.conf",
+            "DNS=192.0.2.1",
+            "# /etc/systemd/resolved.conf.d/bootwright-owned.conf",
+            "DNS=192.0.2.53",
+            "Domains=~apps.example.test",
+        ]
+        self.assertEqual(
+            bootwright_resolved_static_conflicts(
+                lines, "/etc/systemd/resolved.conf.d/bootwright-owned.conf"
+            ),
+            ["/etc/systemd/resolved.conf: DNS=192.0.2.1"],
+        )
+
+    def test_runtime_owned_route_requires_exact_global_state(self):
+        self.assertEqual(
+            bootwright_resolved_runtime_conflicts(
+                ["Global: 192.0.2.53"],
+                ["Global: ~apps.example.test", "Link 2 (eth0): corp.example.test"],
+                True,
+                ["192.0.2.53"],
+                ["apps.example.test"],
+                True,
+            ),
+            [],
+        )
+
+    def test_runtime_rejects_global_and_overlapping_link_routes(self):
+        self.assertEqual(
+            bootwright_resolved_runtime_conflicts(
+                ["Global: 192.0.2.54"],
+                ["Global: ~apps.example.test ~foreign.example.test", "Link 2 (eth0): ~console.apps.example.test"],
+                True,
+                ["192.0.2.53"],
+                ["apps.example.test"],
+                True,
+            ),
+            [
+                "Link 2 (eth0) Domains=~console.apps.example.test",
+                "global DNS=192.0.2.54",
+                "global Domains=~apps.example.test,~foreign.example.test",
+            ],
+        )
+
+    def test_unowned_route_requires_an_empty_global_slot_before_mutation(self):
+        self.assertEqual(
+            bootwright_resolved_runtime_conflicts(
+                ["Global: 192.0.2.53"],
+                ["Global: ~apps.example.test"],
+                False,
+                ["192.0.2.53"],
+                ["apps.example.test"],
+            ),
+            ["global DNS=192.0.2.53", "global Domains=~apps.example.test"],
+        )
+
+    def test_owned_route_may_reconcile_stale_owned_global_values(self):
+        self.assertEqual(
+            bootwright_resolved_runtime_conflicts(
+                ["Global: 192.0.2.54"],
+                ["Global: ~old.example.test"],
+                True,
+                ["192.0.2.53"],
+                ["apps.example.test"],
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

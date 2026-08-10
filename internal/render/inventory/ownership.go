@@ -11,6 +11,7 @@ type ownershipInventoryFacts struct {
 	ProviderHosts       map[string]bool
 	InfraHosts          map[string]bool
 	InfraComponentHosts map[string]bool
+	ControllerHosts     map[string]bool
 	StorageHosts        map[string]bool
 }
 
@@ -20,14 +21,19 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 		ProviderHosts:       map[string]bool{},
 		InfraHosts:          map[string]bool{},
 		InfraComponentHosts: map[string]bool{},
+		ControllerHosts:     map[string]bool{},
 		StorageHosts:        map[string]bool{},
 	}
 	for _, record := range records {
+		group, known := ownership.InventoryGroupForKind(record.Kind)
+		if group == ownership.GroupController {
+			out.ControllerHosts["localhost"] = true
+			continue
+		}
 		if record.Host == "" {
 			continue
 		}
 		out.Hosts[record.Host] = mergeOwnershipHostEntry(out.Hosts[record.Host], record)
-		group, known := ownership.InventoryGroupForKind(record.Kind)
 		if !known {
 			group = ownership.GroupInfra
 		}

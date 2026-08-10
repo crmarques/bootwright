@@ -1,0 +1,42 @@
+---
+- name: Apply controller name resolution
+  hosts: bootwright_controller_hosts
+  strategy: linear
+  gather_facts: false
+  become: true
+
+  vars:
+    bootwright_controller_name_resolution_work: >-
+      {{
+        bootwright_controller_name_resolution_services | default([])
+        | selectattr('kind', 'equalto', 'nameResolution')
+        | list
+      }}
+
+  tasks:
+    - name: Validate controller name resolution invocation
+      ansible.builtin.assert:
+        that:
+          - bootwright_mutating_invocation | default('') | length > 0
+        fail_msg: >-
+          Controller name-resolution execution received no exact
+          controller-built retry invocation. Refusing to continue into machine work.
+
+    - name: Validate exact controller name resolution work
+      ansible.builtin.assert:
+        that:
+          - bootwright_controller_name_resolution_work | length == 1
+        fail_msg: >-
+          Controller name-resolution execution did not receive exactly one
+          managed service. Refusing to continue into machine work. Repair the
+          planner or rendered inventory, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+
+    - name: Establish and verify controller name resolution
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.applyRole }}"
+        tasks_from: controller_apply.yml
+      loop: "{{ bootwright_controller_name_resolution_work }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.name }}"

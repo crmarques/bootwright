@@ -89,6 +89,20 @@ func TestFlightPlanCountsOrderingDependencies(t *testing.T) {
 	}
 }
 
+func TestFlightPlanCountsSuccessDependencies(t *testing.T) {
+	gated := flightPlanTask("cleanup", "", "")
+	gated.Entry.SuccessDependencies = []string{"mutation"}
+	tasks := []ApplyTask{
+		flightPlanTask("mutation", "", ""),
+		gated,
+	}
+	plan := BuildFlightPlan(tasks, nil)
+	stage, ok := plan.StageOf("cleanup")
+	if !ok || stage != 1 {
+		t.Fatalf("a success dependency must advance the stage, got %d (found=%v)", stage, ok)
+	}
+}
+
 func TestFlightPlanIgnoresUnknownAndSelfDependencies(t *testing.T) {
 	self := flightPlanTask("wait.ocp-01", "ocp-01", ApplyClusterKindContainer, "wait.ocp-01", "iso.ocp-01")
 	plan := BuildFlightPlan([]ApplyTask{self}, nil)

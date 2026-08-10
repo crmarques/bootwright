@@ -197,7 +197,10 @@ func applyRedfishMachineSlots(state v1alpha1.State, machineNames []string) int {
 	return slots
 }
 
-const controllerVirtctlResource = "controller:virtctl"
+const (
+	controllerNameResolutionResource = "controller:name-resolution"
+	controllerVirtctlResource        = "controller:virtctl"
+)
 
 func containerFinalizeMutatesHost(state v1alpha1.State, clusterName, host string) bool {
 	if host == "" {

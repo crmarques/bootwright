@@ -1195,6 +1195,13 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		verdict: verdictGateCleared,
 		want:    []string{"Skipped ownership records"},
 	}, {
+		name:    "destroy/unreadable-records: the authorized plan preserves every record-only cleanup target",
+		seed:    seedUnreadableOwnershipRecord,
+		args:    []string{"destroy", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--dry-run", "--output", "json", "--authorize", "unreadable-records", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{converge.DestroySkipOrphanSweepExtraVar + "=true"},
+		deny:    []string{"destroy.controller-name-resolution-preflight", "destroy.controller-name-resolution-cleanup"},
+	}, {
 		name:    "apply/unreadable-records: a corrupt ownership record refuses before the rename-orphan gate reads it",
 		seed:    seedUnreadableOwnershipRecord,
 		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
@@ -1251,6 +1258,23 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		args:     []string{"destroy", "--stage", "infra", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict:  verdictAccepted,
 		want:     []string{"\"refusals\"", "matrix-sibling", "--authorize shared-infra"},
+		check:    checkSharedServiceMutationLeaseReleased,
+	}, {
+		name:     "destroy/controller DNS: sibling controller claim refuses under the global lease",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingControllerResolverClaim,
+		args:     []string{"destroy", "--stage", "infra", "--yes", "--ask-become-pass=false"},
+		verdict:  verdictRefusal,
+		remedy:   remedySameSelection,
+		want:     []string{"matrix-sibling", "matrix-sibling-controller-route", "no authorization token", "bootwright destroy --yes --stage infra --ask-become-pass=false --context matrix"},
+		check:    checkSharedServiceMutationLeaseReleased,
+	}, {
+		name:     "destroy/controller DNS: JSON dry-run forecasts the sibling claim",
+		baseline: safetyBaselineLibvirtKubeVirtHost,
+		seed:     seedSiblingControllerResolverClaim,
+		args:     []string{"destroy", "--stage", "infra", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict:  verdictAccepted,
+		want:     []string{"\"refusals\"", "matrix-sibling", "matrix-sibling-controller-route", "no authorization token", "bootwright destroy --stage infra --dry-run --output json --ask-become-pass=false --context matrix"},
 		check:    checkSharedServiceMutationLeaseReleased,
 	}, {
 		name:     "destroy/shared-infra: explicit authorization tears down the exact consequence",
@@ -1346,6 +1370,13 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		args:    []string{"destroy", "--dry-run", "--authorize", "stale-input", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
 		want:    []string{"Skipped input documents", "is NOT in the teardown work set"},
+	}, {
+		name:    "destroy/stale-input: the authorized plan suppresses every record-only orphan sweep",
+		seed:    seedRetiredKindInStoredInput,
+		args:    []string{"destroy", "--dry-run", "--output", "json", "--authorize", "stale-input", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{converge.DestroySkipOrphanSweepExtraVar + "=true"},
+		deny:    []string{converge.InfraDestroyContextSweepExtraVar + "=true", "destroy.controller-name-resolution-preflight", "destroy.controller-name-resolution-cleanup"},
 	}, {
 		name:    "apply/stale-input is a destroy-only token and apply refuses it by name",
 		args:    []string{"apply", "--authorize", "stale-input", "--yes", "--ask-become-pass=false"},
@@ -1577,6 +1608,93 @@ func safetyStartingStateCases() []safetyCase {
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionReconcileSameSelection,
 		want:        []string{"dc1-metal-ocp"},
+	}, {
+		name:        "apply/shared controller DNS scope names exact all-consumer retry",
+		baseline:    safetyBaselineLibvirtKubeVirtHost,
+		seed:        seedSharedControllerDNSConsumers,
+		args:        []string{"apply", "--stage", "machines", "--clusters", "sno-libvirt", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--verbose"},
+		verdict:     verdictRefusal,
+		remedy:      remedyAlternative,
+		typedRemedy: convergeremedy.ActionApplyAllConsumers,
+		want:        []string{"--clusters would narrow shared machine service", "nameResolution InfraComponent/name-resolution", "no authorization token", "exactly every cluster root", "--stage machines", "--mode reconcile", "--clusters sno-libvirt,sno-other", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--verbose", "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			seen := false
+			for _, command := range backtickedBootwrightCommands(output) {
+				if !strings.HasPrefix(command, "bootwright apply ") || !commandHasFlagValue(command, "--stage", "machines") {
+					continue
+				}
+				if !commandHasFlagValue(command, "--clusters", "sno-libvirt,sno-other") || strings.Contains(command, "--machines") {
+					t.Fatalf("all-consumer remedy did not carry only the exact consumer roots: %q", command)
+				}
+				reexecuteHermeticCommand(t, command, "--clusters would narrow shared machine service", false)
+				seen = true
+			}
+			if !seen {
+				t.Fatalf("shared controller DNS refusal emitted no exact all-consumer apply command:\n%s", output)
+			}
+		},
+	}, {
+		name:        "apply/selected controller DNS mutation names one mode-aware exact retry",
+		baseline:    safetyBaselineLibvirtKubeVirtHost,
+		seed:        seedFailingControllerDNSMutation,
+		args:        []string{"apply", "--mode", "create", "--stage", "machines", "--clusters", safetyLibvirtKubeVirtHostCluster, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--verbose"},
+		verdict:     verdictRefusal,
+		remedy:      remedySameSelection,
+		typedRemedy: convergeremedy.ActionResumeControllerDNSMutation,
+		want: []string{
+			"controller DNS selected mutation failed",
+			"bootwright apply --mode reconcile --yes --stage fabric --through machines --clusters sno-libvirt --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+		},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			var commands []string
+			for _, command := range backtickedBootwrightCommands(output) {
+				commands = appendUniqueString(commands, command)
+			}
+			if len(commands) != 1 {
+				t.Fatalf("controller DNS mutation remedy commands = %v, want one exact retry\n%s", commands, output)
+			}
+			command := commands[0]
+			if !commandHasFlagValue(command, "--mode", "reconcile") || !commandHasFlagValue(command, "--stage", "fabric") || !commandHasFlagValue(command, "--through", "machines") || !commandHasFlagValue(command, "--clusters", safetyLibvirtKubeVirtHostCluster) {
+				t.Fatalf("controller DNS mutation retry changed the selected mode, range, or cluster: %s", command)
+			}
+			assertRetryParses(t, retryCommand{args: shellParseWords(t, command)}, func(*cobra.Command) {})
+			reexecuteHermeticCommand(t, command, "controller DNS selected mutation failed", true)
+		},
+	}, {
+		name:        "apply/later-only controller DNS proof names isolated repair and exact resume",
+		baseline:    safetyBaselineLibvirtKubeVirtHost,
+		seed:        seedFailingControllerDNSProof,
+		args:        []string{"apply", "--mode", "create", "--stage", "deps", "--clusters", safetyLibvirtKubeVirtHostCluster, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--verbose"},
+		verdict:     verdictRefusal,
+		remedy:      remedyAlternative,
+		typedRemedy: convergeremedy.ActionReconcileSharedServiceThenRetrySameSelection,
+		want: []string{
+			"controller DNS proof failed before selected mutation",
+			"bootwright apply --mode reconcile --yes --stage fabric --clusters sno-libvirt --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+			"bootwright apply --mode create --yes --stage deps --clusters sno-libvirt --ask-become-pass=false --trust-on-first-use=false --verbose --context matrix",
+		},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			var commands []string
+			for _, command := range backtickedBootwrightCommands(output) {
+				commands = appendUniqueString(commands, command)
+			}
+			if len(commands) != 2 {
+				t.Fatalf("controller DNS proof remedy commands = %v, want isolated repair and exact resume\n%s", commands, output)
+			}
+			repair := commands[0]
+			resume := commands[1]
+			if !commandHasFlagValue(repair, "--mode", "reconcile") || !commandHasFlagValue(repair, "--stage", "fabric") || !commandHasFlagValue(repair, "--clusters", safetyLibvirtKubeVirtHostCluster) {
+				t.Fatalf("controller DNS repair widened or lost its exact fabric consumer closure: %s", repair)
+			}
+			if !commandHasFlagValue(resume, "--mode", "create") || !commandHasFlagValue(resume, "--stage", "deps") || !commandHasFlagValue(resume, "--clusters", safetyLibvirtKubeVirtHostCluster) {
+				t.Fatalf("controller DNS resume changed the original selected work: %s", resume)
+			}
+			for _, command := range commands {
+				assertRetryParses(t, retryCommand{args: shellParseWords(t, command)}, func(*cobra.Command) {})
+			}
+			reexecuteHermeticCommand(t, repair, "controller DNS proof failed before selected mutation", true)
+			reexecuteHermeticCommand(t, resume, "controller DNS proof failed before selected mutation", false)
+		},
 	}, {
 		name: "apply/a KubeVirt child without host access names a typed target reconcile and exact original retry",
 		seed: func(t *testing.T, ctx workspace.Context) {
@@ -1937,6 +2055,99 @@ const (
 	safetyStandaloneMachine            = "safety-standalone"
 )
 
+func seedSharedControllerDNSConsumers(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	clusterSource := safetyObjectInputPath(t, ctx, v1alpha1.KindContainerCluster, safetyLibvirtKubeVirtHostCluster)
+	clusterData, err := os.ReadFile(clusterSource)
+	if err != nil {
+		t.Fatalf("read shared-DNS cluster fixture: %v", err)
+	}
+	clusterBody := strings.Replace(string(clusterData), "metadata:\n  name: sno-libvirt\n", "metadata:\n  name: sno-other\n", 1)
+	clusterBody = strings.Replace(clusterBody, "machineRef: sno-libvirt-master-0", "machineRef: sno-other-master-0", 1)
+	if clusterBody == string(clusterData) || !strings.Contains(clusterBody, "name: sno-other") || !strings.Contains(clusterBody, "machineRef: sno-other-master-0") {
+		t.Fatal("shared-DNS cluster fixture replacements did not apply")
+	}
+	if err := os.WriteFile(filepath.Join(ctx.InputDir, "safety-shared-dns-cluster.yaml"), []byte(clusterBody), 0o600); err != nil {
+		t.Fatalf("write shared-DNS cluster fixture: %v", err)
+	}
+
+	machineSource := safetyObjectInputPath(t, ctx, v1alpha1.KindMachine, "sno-libvirt-master-0")
+	machineData, err := os.ReadFile(machineSource)
+	if err != nil {
+		t.Fatalf("read shared-DNS machine fixture: %v", err)
+	}
+	machineBody := strings.Replace(string(machineData), "metadata:\n  name: sno-libvirt-master-0\n", "metadata:\n  name: sno-other-master-0\n", 1)
+	machineBody = strings.Replace(machineBody, "address: 192.168.132.20", "address: 192.168.132.21", 1)
+	if machineBody == string(machineData) || !strings.Contains(machineBody, "name: sno-other-master-0") || !strings.Contains(machineBody, "address: 192.168.132.21") {
+		t.Fatal("shared-DNS machine fixture replacements did not apply")
+	}
+	if err := os.WriteFile(filepath.Join(ctx.InputDir, "safety-shared-dns-machine.yaml"), []byte(machineBody), 0o600); err != nil {
+		t.Fatalf("write shared-DNS machine fixture: %v", err)
+	}
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load shared-DNS safety fixture: %v", err)
+	}
+	if len(state.ContainerClusters) != 2 {
+		t.Fatalf("shared-DNS safety fixture container clusters = %d, want two", len(state.ContainerClusters))
+	}
+}
+
+func seedFailingControllerDNSProof(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedRunnableSafetyMutation(t, ctx)
+	dir := t.TempDir()
+	gate := filepath.Join(dir, "controller-dns-repaired")
+	script := `#!/bin/sh
+case " $* " in
+  *bootwright.core.task_controller_name_resolution_apply*)
+    case " $* " in
+      *bootwright_controller_name_resolution_mutation_selected=true*)
+        : > "$BOOTWRIGHT_SAFETY_CONTROLLER_DNS_GATE"
+        exit 0
+        ;;
+    esac
+    if [ -f "$BOOTWRIGHT_SAFETY_CONTROLLER_DNS_GATE" ]; then
+      exit 0
+    fi
+    python3 -c 'import json, sys; values = [json.loads(value) for value in sys.argv[1:] if value.startswith("{")]; facts = next(value for value in values if "bootwright_apply_controller_dns_repair_invocation" in value); tick = chr(96); print("failure: controller DNS proof failed before selected mutation"); print("repair " + tick + facts["bootwright_apply_controller_dns_repair_invocation"] + tick); print("resume " + tick + facts["bootwright_apply_controller_dns_resume_invocation"] + tick)' "$@" >&2
+    exit 42
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(script), 0o700); err != nil {
+		t.Fatalf("write controller DNS proof stub: %v", err)
+	}
+	t.Setenv("BOOTWRIGHT_SAFETY_CONTROLLER_DNS_GATE", gate)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func seedFailingControllerDNSMutation(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedRunnableSafetyMutation(t, ctx)
+	dir := t.TempDir()
+	gate := filepath.Join(dir, "controller-dns-mutated")
+	script := `#!/bin/sh
+case " $* " in
+  *bootwright.core.task_controller_name_resolution_apply*)
+    if [ -f "$BOOTWRIGHT_SAFETY_CONTROLLER_DNS_MUTATION_GATE" ]; then
+      exit 0
+    fi
+    : > "$BOOTWRIGHT_SAFETY_CONTROLLER_DNS_MUTATION_GATE"
+    echo "failure: controller DNS selected mutation failed" >&2
+    exit 42
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(script), 0o700); err != nil {
+		t.Fatalf("write controller DNS mutation stub: %v", err)
+	}
+	t.Setenv("BOOTWRIGHT_SAFETY_CONTROLLER_DNS_MUTATION_GATE", gate)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 func seedStandaloneManagedOSMachine(t *testing.T, ctx workspace.Context) {
 	t.Helper()
 	file := filepath.Join(ctx.InputDir, "safety-standalone.yaml")
@@ -1982,6 +2193,24 @@ func seedSiblingDegradingInfraOwner(t *testing.T, ctx workspace.Context) {
 		Labels:  map[string]string{"bootwright.kind": ref.Kind},
 	}); err != nil {
 		t.Fatalf("save sibling shared-service owner: %v", err)
+	}
+}
+
+func seedSiblingControllerResolverClaim(t *testing.T, _ workspace.Context) {
+	t.Helper()
+	sibling, err := workspace.NewContext("matrix-sibling")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.EnsureDirs(sibling); err != nil {
+		t.Fatal(err)
+	}
+	if err := ownership.SaveResource(sibling.OwnershipDir, ownership.ResourceRecord{
+		Kind:  string(ownership.KindControllerNameResolver),
+		Name:  "matrix-sibling-controller-route",
+		Owner: ownership.Owner,
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

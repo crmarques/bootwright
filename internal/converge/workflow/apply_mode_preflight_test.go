@@ -7,14 +7,15 @@ import (
 
 func TestOverrideReconfigureOnlyKindsMatchPublishedContract(t *testing.T) {
 	want := map[string]bool{
-		ApplyTaskKindProvider:               true,
-		ApplyTaskKindInfraComponentServices: true,
-		ApplyTaskKindNodeConfigApply:        true,
-		ApplyTaskKindHostVirtctl:            true,
-		ApplyTaskKindClusterAddon:           true,
-		ApplyTaskKindMachineRegistration:    true,
-		ApplyTaskKindMachineRepositories:    true,
-		ApplyTaskKindPlaybook:               true,
+		ApplyTaskKindProvider:                 true,
+		ApplyTaskKindInfraComponentServices:   true,
+		ApplyTaskKindControllerNameResolution: true,
+		ApplyTaskKindNodeConfigApply:          true,
+		ApplyTaskKindHostVirtctl:              true,
+		ApplyTaskKindClusterAddon:             true,
+		ApplyTaskKindMachineRegistration:      true,
+		ApplyTaskKindMachineRepositories:      true,
+		ApplyTaskKindPlaybook:                 true,
 	}
 	if len(overrideReconfigureOnlyKinds) != len(want) {
 		t.Fatalf("overrideReconfigureOnlyKinds has %d kinds, published contract has %d; update specs/state-model.md --mode rebuild taxonomy", len(overrideReconfigureOnlyKinds), len(want))

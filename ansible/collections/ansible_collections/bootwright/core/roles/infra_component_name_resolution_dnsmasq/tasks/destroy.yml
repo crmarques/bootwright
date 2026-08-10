@@ -7,14 +7,18 @@
     bootwright_component_teardown_container: "{{ bootwright_dnsmasq_container_name }}"
     bootwright_component_teardown_kind: nameResolution
 
-- name: Close DNS port on host firewall (firewalld)
+- name: Close DNS ports on host firewall
   ansible.posix.firewalld:
-    port: "53/udp"
+    port: "{{ item }}"
     state: disabled
     permanent: true
     immediate: true
+  loop:
+    - 53/tcp
+    - 53/udp
+  loop_control:
+    label: "{{ item }}"
   when: bootwright_firewalld_available | default(false)
-  failed_when: false
 
 - name: Remove dnsmasq state and ownership record
   ansible.builtin.include_role:

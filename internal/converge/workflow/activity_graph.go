@@ -52,6 +52,29 @@ func (g *ActivityGraph) Add(activity Activity) error {
 	if activity.ID == "" {
 		return fmt.Errorf("activity ID is required")
 	}
+	if activity.Task.ExecutionClass != "" && activity.Task.ExecutionClass != ApplyTaskExecutionLiveProof {
+		return fmt.Errorf("activity %s has unknown execution class %q", activity.ID, activity.Task.ExecutionClass)
+	}
+	if activity.Task.ExecutionClass == ApplyTaskExecutionLiveProof && activity.Task.Entry.Kind != ApplyTaskKindControllerNameResolution {
+		return fmt.Errorf("activity %s uses the evidence-free live-proof execution class for unsupported task kind %q", activity.ID, activity.Task.Entry.Kind)
+	}
+	if activity.Task.Entry.Kind == ApplyTaskKindControllerNameResolution {
+		expected := "bootwright_controller_name_resolution_mutation_selected=true"
+		if activity.Task.ExecutionClass == ApplyTaskExecutionLiveProof {
+			expected = "bootwright_controller_name_resolution_mutation_selected=false"
+		}
+		decisions := 0
+		matched := false
+		for _, pair := range activity.Task.ExtraVarPairs {
+			if strings.HasPrefix(pair, "bootwright_controller_name_resolution_mutation_selected=") {
+				decisions++
+				matched = pair == expected
+			}
+		}
+		if decisions != 1 || !matched {
+			return fmt.Errorf("activity %s execution class %q requires exactly %q, got %v", activity.ID, activity.Task.ExecutionClass, expected, activity.Task.ExtraVarPairs)
+		}
+	}
 	if _, ok := g.activities[activity.ID]; ok {
 		return fmt.Errorf("duplicate activity %s", activity.ID)
 	}
@@ -94,6 +117,7 @@ func (g *ActivityGraph) ActivitySnapshot() []Activity {
 
 func (g *ActivityGraph) Lower() ([]ApplyTask, error) {
 	depsByID := map[string][]string{}
+	cycleDepsByID := map[string][]string{}
 	for _, id := range g.order {
 		activity := g.activities[id]
 		var deps []string
@@ -111,8 +135,11 @@ func (g *ActivityGraph) Lower() ([]ApplyTask, error) {
 		deps = appendUniqueStrings(deps, activity.Task.Entry.Dependencies...)
 		deps = appendUniqueStrings(deps, activity.ExplicitDependencies...)
 		depsByID[id] = deps
+		entry := activity.Task.Entry
+		entry.Dependencies = deps
+		cycleDepsByID[id] = taskDependencyIDs(entry)
 	}
-	if err := detectActivityCycles(depsByID, g.activities); err != nil {
+	if err := detectActivityCycles(cycleDepsByID, g.activities); err != nil {
 		return nil, err
 	}
 	tasks := make([]ApplyTask, 0, len(g.order))

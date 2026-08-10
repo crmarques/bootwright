@@ -94,6 +94,22 @@ func TestTasksInDisplayOrderHonoursOrderingDependencies(t *testing.T) {
 	}
 }
 
+func TestTasksInDisplayOrderHonoursSuccessDependencies(t *testing.T) {
+	phases := RunPhases([]workflow.TaskLedgerEntry{
+		{ID: "destroy.provider-services", Kind: workflow.DestroyTaskKindProviderServices, Status: workflow.TaskStatusPending, SuccessDependencies: []string{"destroy.storage-clusters"}},
+		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, Status: workflow.TaskStatusPending},
+	})
+	want := []string{PhaseStorageClusters, PhaseSharedServices}
+	if len(phases) != len(want) {
+		t.Fatalf("phases = %+v, want %v", phases, want)
+	}
+	for i := range want {
+		if phases[i].Label != want[i] {
+			t.Fatalf("phase %d = %q, want %q; display order must include hard success edges", i, phases[i].Label, want[i])
+		}
+	}
+}
+
 func TestTaskUnitNamesCoversCollapsedAndSingleMachineTasks(t *testing.T) {
 	cases := []struct {
 		name string

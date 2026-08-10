@@ -75,7 +75,7 @@ test `internal/repo/checks/ownership_kinds_test.go` asserts every role-emitted
 concrete literal is registered (Jinja-templated values exempt). A kind added on
 one side only silently falls out of every destroy inventory group. `InventoryGroup`
 names the destroy host-set; `GroupNone` marks kinds reclaimed by a dedicated
-play (controller-name-resolver → container-cluster agent-destroy play).
+owner play (controller-name-resolver → managed name-resolution service destroy).
 `InventoryGroupForKind` returns `(GroupNone,false)` for unregistered kinds so
 callers surface drift; the render-side fallback still routes an
 unrecognized-but-Bootwright-owned record to the infra teardown group.

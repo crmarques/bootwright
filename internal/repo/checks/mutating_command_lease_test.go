@@ -71,12 +71,14 @@ func TestArbiterSubrunsConsumeTheCommandLease(t *testing.T) {
 
 func TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution(t *testing.T) {
 	shared := readRepoFile(t, "internal/cli/shared_service_mutation.go")
+	controllerDNS := strings.Index(shared, "selectedControllerNameResolutionServiceRefs")
+	machinesPhase := strings.Index(shared, "ScopeIncludesApplyPhase(runScope, converge.PhaseMachines)")
 	applyLease := strings.Index(shared, "acquireSharedServiceMutationLease(parent, contextName, \"apply\"")
 	applyScan := strings.LastIndex(shared, "PlanInfraComponentApplyBlocks")
 	destroyLease := strings.Index(shared, "acquireSharedServiceMutationLease(parent, contextName, \"destroy\"")
 	destroyScan := strings.Index(shared, "destroyInfraComponentGate")
-	if applyLease < 0 || applyScan < applyLease || destroyLease < 0 || destroyScan < destroyLease {
-		t.Fatalf("shared-service preparation must acquire the global lease before each decisive scan: apply lease=%d scan=%d destroy lease=%d scan=%d", applyLease, applyScan, destroyLease, destroyScan)
+	if controllerDNS < 0 || machinesPhase < 0 || controllerDNS > applyLease || machinesPhase > applyLease || applyLease < 0 || applyScan < applyLease || destroyLease < 0 || destroyScan < destroyLease {
+		t.Fatalf("shared-service preparation must include machines-phase controller DNS in the consequence and acquire the global lease before each decisive scan: dns=%d machines=%d apply lease=%d scan=%d destroy lease=%d scan=%d", controllerDNS, machinesPhase, applyLease, applyScan, destroyLease, destroyScan)
 	}
 	apply := readRepoFile(t, "internal/cli/scope_apply_cmd.go")
 	applyPrepare := strings.Index(apply, "prepareApplySharedServiceMutation(runContext")

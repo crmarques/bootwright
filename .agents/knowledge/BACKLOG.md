@@ -56,10 +56,13 @@ learned; this file records what it still owes.
 - Origin: controller-DNS auto-wiring landing (latent follow-up)
 - Problem: the managed controller resolver is wired via a systemd-resolved
   drop-in, but a latent dnsmasq bind-order issue remains where dnsmasq can race
-  to grab `:53` ahead of the intended listener.
+  to grab `:53` ahead of the intended listener. ADR 0055 moves split-DNS
+  readiness before machines and limits controller lifecycle ownership to the
+  one consumed managed service; neither change proves which process acquired
+  the controller-local listener.
 - Exit: pin the dnsmasq bind order (or bind address) so the controller resolver
   wins deterministically.
-- Related: [external-dns-bootstrap.md](external-dns-bootstrap.md)
+- Related: [external-dns-bootstrap.md](external-dns-bootstrap.md); ADR 0055
 
 ## B-015 — Two architecture recommendations left unlanded: cephadopt package, plan-builder split
 - Status: open
@@ -94,23 +97,6 @@ learned; this file records what it still owes.
 - Exit: add a vSphere reference example, or point vSphere users at the scaffold
   from `docs/advanced/examples.md`.
 - Related: [openshift-vsphere-agent-boot.md](openshift-vsphere-agent-boot.md)
-
-## B-018 — Controller resolver not wired before the machines phase
-- Status: open
-- Area: converge / name resolution
-- Origin: ADR 0017 adversarial review (2026-07-21)
-- Problem: ansible_host for name-resolution-wired machines is the machine's
-  `fqdn` name, but the controller's systemd-resolved drop-in that points at the
-  managed dnsmasq is wired only in the container-cluster agent-install stage.
-  On storage-only environments (or before any container cluster converges) the
-  controller may not resolve managed-only `fqdn` names during the machines
-  phase; the "Name resolution" preflight WARNs but apply can still fail
-  mid-run with "Could not resolve hostname". Environments whose `fqdn` names
-  resolve via infrastructure DNS (corporate zones) are unaffected.
-- Exit: wire the controller resolver drop-in before the machines phase (or as
-  part of the managed name-resolution component apply), then tighten the
-  preflight WARN.
-- Related: ADR 0017; internal/preflight/name_resolution.go
 
 ## B-024 — fusion-data-foundation has no end-to-end example or test coverage
 - Status: open

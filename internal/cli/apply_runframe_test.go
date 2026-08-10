@@ -94,6 +94,24 @@ func TestApplyRunFrameNamesTheCrossClusterBlocker(t *testing.T) {
 	t.Fatalf("guest group missing")
 }
 
+func TestApplyRunFrameKeepsSkippedSuccessDependencyVisible(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "destroy.host", Kind: workflow.DestroyTaskKindMachineInfra, Label: "destroy host", Cluster: "host", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusSkipped},
+		{ID: "cleanup.guest", Kind: workflow.DestroyTaskKindControllerNameResolution, Label: "cleanup guest", Cluster: "guest", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending, SuccessDependencies: []string{"destroy.host"}},
+	}, time.Now())
+
+	for _, group := range applyRunFrame(ledger, nil).Groups {
+		if group.Title != "guest (ContainerCluster)" {
+			continue
+		}
+		if got := group.Steps[0].Detail; got != "waiting on host: "+status.PhaseMachines {
+			t.Fatalf("guest cleanup detail = %q, want the skipped success-only blocker to remain visible", got)
+		}
+		return
+	}
+	t.Fatalf("guest group missing")
+}
+
 func TestApplyRunFrameNamesTheClusterInstallSlotWait(t *testing.T) {
 	readyAt := time.Now().UTC()
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{

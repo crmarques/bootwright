@@ -23,6 +23,7 @@ const (
 	GroupNone           InventoryGroup = ""
 	GroupProvider       InventoryGroup = "provider"
 	GroupInfraComponent InventoryGroup = "infra-component"
+	GroupController     InventoryGroup = "controller"
 	GroupStorage        InventoryGroup = "storage"
 	GroupInfra          InventoryGroup = "infra"
 )
@@ -37,7 +38,7 @@ var kindInventoryGroup = map[Kind]InventoryGroup{
 	KindVsphereMachine:         GroupInfra,
 	KindVsphereVMedia:          GroupInfra,
 	KindManagedOSInstall:       GroupInfra,
-	KindControllerNameResolver: GroupNone,
+	KindControllerNameResolver: GroupController,
 }
 
 func InventoryGroupForKind(kind string) (InventoryGroup, bool) {

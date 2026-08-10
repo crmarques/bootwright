@@ -1,7 +1,6 @@
 package inventory
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -144,33 +143,6 @@ func proxyMachineServiceVars(state v1alpha1.State, service stategraph.MachineSer
 	return proxyComponentVars(state, entry, component), true
 }
 
-func nameResolutionMachineServiceVars(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {
-	component, ok := stateview.InfraComponent(state, service.Identity.Name)
-	if !ok || component.Spec.NameResolution == nil {
-		return nil, false
-	}
-	entry := v1alpha1.EnvironmentNameResolutionComponent{Name: serviceEntryName(service)}
-	out := nameResolutionComponentVars(state, entry, component)
-	out["additionalIngressHosts"] = append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)
-	hostRecords, domainRecords, cnameRecords := nameResolutionRecordsForGraphService(state, service)
-	if len(hostRecords) > 0 {
-		out["hostRecords"] = hostRecords
-	} else {
-		delete(out, "hostRecords")
-	}
-	if len(domainRecords) > 0 {
-		out["domainRecords"] = domainRecords
-	} else {
-		delete(out, "domainRecords")
-	}
-	if len(cnameRecords) > 0 {
-		out["cnameRecords"] = cnameRecords
-	} else {
-		delete(out, "cnameRecords")
-	}
-	return out, true
-}
-
 func ntpMachineServiceVars(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {
 	component, ok := stateview.InfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.NTP == nil {
@@ -236,80 +208,6 @@ func serviceEntryName(service stategraph.MachineService) string {
 		}
 	}
 	return ""
-}
-
-func serviceEntryNames(service stategraph.MachineService) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, consumer := range service.Consumers {
-		entryName := consumer.Fields["entryName"]
-		if entryName == "" || seen[entryName] {
-			continue
-		}
-		seen[entryName] = true
-		out = append(out, entryName)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func nameResolutionRecordsForGraphService(state v1alpha1.State, service stategraph.MachineService) ([]any, []any, []any) {
-	hostRecords := map[string]map[string]any{}
-	domainRecords := map[string]map[string]any{}
-	cnameRecords := map[string]map[string]any{}
-	for _, entryName := range serviceEntryNames(service) {
-		hosts, domains, cnames := nameResolutionRecordsVars(state, entryName, serviceEntryStringField(service, entryName, "additionalIngressHosts"))
-		mergeRecordVars(hostRecords, hosts)
-		mergeRecordVars(domainRecords, domains)
-		mergeRecordVars(cnameRecords, cnames)
-	}
-	return sortedRecordVars(hostRecords), sortedRecordVars(domainRecords), sortedRecordVars(cnameRecords)
-}
-
-func serviceEntryStringField(service stategraph.MachineService, entryName, field string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, consumer := range service.Consumers {
-		if consumer.Fields["entryName"] != entryName {
-			continue
-		}
-		for _, value := range consumer.MergeStringFields[field] {
-			if value == "" || seen[value] {
-				continue
-			}
-			seen[value] = true
-			out = append(out, value)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func mergeRecordVars(dst map[string]map[string]any, records []any) {
-	for _, raw := range records {
-		record, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		key := fmt.Sprintf("%v|%v", record["name"], record["address"])
-		dst[key] = cloneComponentVars(record)
-	}
-}
-
-func sortedRecordVars(records map[string]map[string]any) []any {
-	if len(records) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(records))
-	for key := range records {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	out := make([]any, 0, len(keys))
-	for _, key := range keys {
-		out = append(out, records[key])
-	}
-	return out
 }
 
 func providerMachineSetupsVars(state v1alpha1.State) []any {

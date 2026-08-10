@@ -1,0 +1,203 @@
+---
+- name: Probe controller resolver ownership before mutation
+  block:
+    - name: Validate controller resolver gate invocation
+      ansible.builtin.assert:
+        that:
+          - bootwright_mutating_invocation | default('') | length > 0
+          - bootwright_controller_resolver_gate_action in ['alter', 'remove']
+          - >-
+            bootwright_controller_resolver_gate_action != 'alter'
+            or bootwright_apply_controller_dns_invocation | default('') | length > 0
+
+    - name: Probe controller resolver ownership record
+      ansible.builtin.stat:
+        path: "{{ bootwright_controller_resolver_ownership_path }}"
+      register: bootwright_controller_resolver_owned
+
+    - name: Probe controller resolver drop-in
+      ansible.builtin.stat:
+        path: "{{ bootwright_controller_resolver_dropin_path }}"
+      register: bootwright_controller_resolver_dropin_live
+
+    - name: Probe controller resolver ownership directory
+      ansible.builtin.stat:
+        path: "{{ bootwright_ownership_dir }}/resources/controller-name-resolver"
+      register: bootwright_controller_resolver_ownership_dir
+
+    - name: Probe controller resolver drop-in directory
+      ansible.builtin.stat:
+        path: /etc/systemd/resolved.conf.d
+      register: bootwright_controller_resolver_dropin_dir
+
+    - name: Refuse unsafe controller resolver path types before reading
+      ansible.builtin.assert:
+        that:
+          - >-
+            not bootwright_controller_resolver_ownership_dir.stat.exists
+            or ((bootwright_controller_resolver_ownership_dir.stat.isdir | default(false))
+                and not (bootwright_controller_resolver_ownership_dir.stat.islnk | default(false)))
+          - >-
+            not bootwright_controller_resolver_dropin_dir.stat.exists
+            or ((bootwright_controller_resolver_dropin_dir.stat.isdir | default(false))
+                and not (bootwright_controller_resolver_dropin_dir.stat.islnk | default(false)))
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or ((bootwright_controller_resolver_owned.stat.isreg | default(false))
+                and not (bootwright_controller_resolver_owned.stat.islnk | default(false)))
+          - >-
+            not bootwright_controller_resolver_dropin_live.stat.exists
+            or ((bootwright_controller_resolver_dropin_live.stat.isreg | default(false))
+                and not (bootwright_controller_resolver_dropin_live.stat.islnk | default(false)))
+
+    - name: Find other Bootwright controller resolver ownership records
+      ansible.builtin.find:
+        paths: "{{ bootwright_ownership_dir }}/resources/controller-name-resolver"
+        patterns: "*.json"
+        file_type: any
+      register: bootwright_controller_resolver_ownership_files
+      when:
+        - bootwright_controller_resolver_gate_action == 'alter'
+        - bootwright_controller_resolver_ownership_dir.stat.isdir | default(false)
+
+    - name: Find other Bootwright controller resolver drop-ins
+      ansible.builtin.find:
+        paths: /etc/systemd/resolved.conf.d
+        patterns: "bootwright-*.conf"
+        file_type: any
+      register: bootwright_controller_resolver_dropin_files
+      when:
+        - bootwright_controller_resolver_gate_action == 'alter'
+        - bootwright_controller_resolver_dropin_dir.stat.isdir | default(false)
+
+    - name: Collect other Bootwright controller resolver paths
+      ansible.builtin.set_fact:
+        bootwright_controller_resolver_other_ownership_paths: >-
+          {{
+            bootwright_controller_resolver_ownership_files.files | default([])
+            | map(attribute='path')
+            | reject('equalto', bootwright_controller_resolver_ownership_path)
+            | list
+          }}
+        bootwright_controller_resolver_other_dropin_paths: >-
+          {{
+            bootwright_controller_resolver_dropin_files.files | default([])
+            | map(attribute='path')
+            | reject('equalto', bootwright_controller_resolver_dropin_path)
+            | list
+          }}
+      when: bootwright_controller_resolver_gate_action == 'alter'
+      changed_when: false
+
+    - name: Refuse sibling Bootwright controller resolver state
+      ansible.builtin.fail:
+        msg: >-
+          Another Bootwright controller resolver route can conflict with
+          {{ bootwright_component.providerName }}/{{ bootwright_component.name }}.
+          Other ownership records:
+          {{ bootwright_controller_resolver_other_ownership_paths | default([]) | join(', ') | default('<none>', true) }}.
+          Other drop-ins:
+          {{ bootwright_controller_resolver_other_dropin_paths | default([]) | join(', ') | default('<none>', true) }}.
+          Global systemd-resolved DNS and routing-domain lists cannot preserve
+          service-specific server/domain pairing. Remove stale state only after
+          proving its owning run no longer needs it, or configure the complete
+          controller route out of band; then re-run
+          `{{ bootwright_apply_controller_dns_invocation }}`.
+          Refusing to alter resolver state.
+      when:
+        - bootwright_controller_resolver_gate_action == 'alter'
+        - >-
+          bootwright_controller_resolver_other_ownership_paths | default([]) | length > 0
+          or bootwright_controller_resolver_other_dropin_paths | default([]) | length > 0
+
+    - name: Read controller resolver ownership record
+      ansible.builtin.slurp:
+        src: "{{ bootwright_controller_resolver_ownership_path }}"
+      register: bootwright_controller_resolver_ownership_slurp
+      when: bootwright_controller_resolver_owned.stat.exists
+
+    - name: Decode controller resolver ownership record
+      ansible.builtin.set_fact:
+        bootwright_controller_resolver_existing_ownership: >-
+          {{ bootwright_controller_resolver_ownership_slurp.content | b64decode | from_json }}
+      when: bootwright_controller_resolver_owned.stat.exists
+      changed_when: false
+
+    - name: Refuse unknown or foreign controller resolver state
+      ansible.builtin.assert:
+        that:
+          - >-
+            bootwright_controller_resolver_gate_action != 'alter'
+            or (bootwright_controller_resolver_ownership_files.skipped_paths | default({}) | length) == 0
+          - >-
+            bootwright_controller_resolver_gate_action != 'alter'
+            or (bootwright_controller_resolver_dropin_files.skipped_paths | default({}) | length) == 0
+          - >-
+            bootwright_controller_resolver_gate_action != 'alter'
+            or (bootwright_controller_resolver_other_ownership_paths | default([]) | length) == 0
+          - >-
+            bootwright_controller_resolver_gate_action != 'alter'
+            or (bootwright_controller_resolver_other_dropin_paths | default([]) | length) == 0
+          - >-
+            not bootwright_controller_resolver_dropin_live.stat.exists
+            or bootwright_controller_resolver_owned.stat.exists
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.apiVersion | default('')) == 'bootwright.io/ownership/v1alpha1'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.owner | default('')) == 'bootwright'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.role | default('owner', true)) == 'owner'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.kind | default('')) == 'controller-name-resolver'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.name | default('')) == bootwright_controller_resolver_ownership_name
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.context | default('')) == bootwright_controller_resolver_context
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.provider | default('')) == bootwright_component.providerName
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.paths | default([])) == [bootwright_controller_resolver_dropin_path]
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.attributes.resolver | default('')) == 'systemd-resolved'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.attributes.component | default('')) == bootwright_component.name
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.attributes.machineRef | default('')) == bootwright_component.machineRef
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or (bootwright_controller_resolver_existing_ownership.attributes.realisation | default('')) == bootwright_component.realisation
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or ((bootwright_controller_resolver_existing_ownership.labels | default({})).get('bootwright.kind', '')) == 'nameResolution'
+          - >-
+            not bootwright_controller_resolver_owned.stat.exists
+            or ((bootwright_controller_resolver_existing_ownership.labels | default({})).get('bootwright.name', '')) == bootwright_component.name
+  rescue:
+    - name: Refuse controller resolver mutation without conclusive ownership
+      ansible.builtin.fail:
+        msg: >-
+          Cannot {{ bootwright_controller_resolver_gate_action }} controller split DNS for
+          {{ bootwright_component.providerName }}/{{ bootwright_component.name }} because
+          {{ bootwright_controller_resolver_dropin_path }} and
+          {{ bootwright_controller_resolver_ownership_path }}, or the sibling resolver
+          paths reported below, do not conclusively prove ownership by context
+          {{ bootwright_controller_resolver_context }}:
+          {{ ansible_failed_result.msg | default(ansible_failed_result | string) }}.
+          Refusing to change resolver state or ownership evidence. Inspect and repair the
+          reported files, then re-run
+          `{{ bootwright_apply_controller_dns_invocation
+              if bootwright_controller_resolver_gate_action == 'alter'
+              else bootwright_mutating_invocation }}`.
+  delegate_to: localhost
+  become: true

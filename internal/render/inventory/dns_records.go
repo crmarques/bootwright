@@ -134,56 +134,6 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	return false
 }
 
-func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
-	env := stateview.Environment(state)
-	if env == nil {
-		return nil
-	}
-	baseDomain := env.Spec.Domains.ContainerClustersDomain()
-	if baseDomain == "" {
-		return nil
-	}
-	refs := map[string]bool{}
-	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
-		for _, ref := range network.Spec.NameResolutionRefs {
-			if ref.Name != "" {
-				refs[ref.Name] = true
-			}
-		}
-	}
-	if len(refs) == 0 {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []any
-	for _, entry := range env.Spec.InfraComponents.NameResolution {
-		if !refs[entry.Name] {
-			continue
-		}
-		bind := entry.Address
-		if entry.Management == v1alpha1.EnvironmentComponentManaged {
-			component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
-			if !ok || component.Spec.NameResolution == nil {
-				continue
-			}
-			bind = component.Spec.NameResolution.BindAddress
-		}
-		if entry.Management != v1alpha1.EnvironmentComponentExternal &&
-			entry.Management != v1alpha1.EnvironmentComponentManaged {
-			continue
-		}
-		if bind == "" || bind == "0.0.0.0" || bind == "::" || seen[bind] {
-			continue
-		}
-		seen[bind] = true
-		out = append(out, map[string]any{
-			"bindAddress": bind,
-			"domain":      baseDomain,
-		})
-	}
-	return out
-}
-
 func machineUsesNameResolution(state v1alpha1.State, machine v1alpha1.Machine, entryName string) bool {
 	if entryName == "" {
 		return false

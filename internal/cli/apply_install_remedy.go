@@ -3,8 +3,10 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/remedy"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -22,6 +24,9 @@ func applyInstallRemedialError(err error, invocation resolvedInvocation) error {
 }
 
 func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation) (string, error) {
+	if !workflow.ValidRunRecoveryRequest(request) {
+		return "", fmt.Errorf("cannot construct recovery guidance for invalid typed remedy request %q", request.Action)
+	}
 	switch request.Action {
 	case remedy.ActionRetrySameInvocation:
 		command, commandErr := invocation.retry(retryIntent{})
@@ -29,6 +34,34 @@ func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation
 			return "", fmt.Errorf("cannot construct the exact retry command: %v", commandErr)
 		}
 		return fmt.Sprintf("after completing the non-destructive recovery named above, re-run `%s` with exactly the same selected work and intent", command.String()), nil
+	case remedy.ActionApplyAllConsumers:
+		clusters, targetErr := exactClusterRootRemedyTargets(request)
+		if targetErr != nil {
+			return "", fmt.Errorf("cannot construct the exact all-consumer apply command: %v", targetErr)
+		}
+		allConsumers := invocation
+		allConsumers.flags.selection.clusters = strings.Join(clusters, ",")
+		allConsumers.flags.selection.machines = ""
+		command, commandErr := allConsumers.retry(retryIntent{})
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact all-consumer apply command: %v", commandErr)
+		}
+		return fmt.Sprintf("run `%s` to apply exactly every cluster root that consumes the shared machine service while preserving this run's stage range and intent", command.String()), nil
+	case remedy.ActionResumeControllerDNSMutation:
+		if _, targetErr := exactClusterRootRemedyTargets(request); targetErr != nil {
+			return "", fmt.Errorf("cannot construct the exact controller-DNS mutation retry: %v", targetErr)
+		}
+		command, commandErr := controllerNameResolutionRetryInvocation(invocation)
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact controller-DNS mutation retry: %v", commandErr)
+		}
+		return fmt.Sprintf("re-run `%s` to resume the selected controller-DNS mutation and every dependent task with its safe mode and exact work set", command.String()), nil
+	case remedy.ActionReconcileSharedServiceThenRetrySameSelection:
+		repair, resume, commandErr := sharedServiceRepairCommands(request, invocation)
+		if commandErr != nil {
+			return "", commandErr
+		}
+		return fmt.Sprintf("repair only the shared service for its exact consumer closure with `%s`, then retry exactly the original selected work with `%s`", repair.String(), resume.String()), nil
 	case remedy.ActionReconcileSameSelection:
 		command, commandErr := invocation.retry(retryIntent{mode: workflow.ApplyModeReconcile})
 		if commandErr != nil {
@@ -117,6 +150,49 @@ func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation
 	default:
 		return "", fmt.Errorf("typed remedy action %q has no CLI formatter, so bootwright refuses to suggest an unsafe command", request.Action)
 	}
+}
+
+func sharedServiceRepairCommands(request remedy.Request, invocation resolvedInvocation) (retryCommand, retryCommand, error) {
+	clusters, err := exactClusterRootRemedyTargets(request)
+	if err != nil {
+		return retryCommand{}, retryCommand{}, fmt.Errorf("cannot construct the exact shared-service repair sequence: %v", err)
+	}
+	repairInvocation := invocation
+	repairInvocation.flags.selection.stage = converge.PhaseFabric
+	repairInvocation.flags.selection.through = ""
+	repairInvocation.flags.selection.clusters = strings.Join(clusters, ",")
+	repairInvocation.flags.selection.machines = ""
+	repairInvocation.flags.reclaimDevices = ""
+	repair, err := repairInvocation.retry(retryIntent{mode: workflow.ApplyModeReconcile})
+	if err != nil {
+		return retryCommand{}, retryCommand{}, fmt.Errorf("cannot construct the exact shared-service repair command: %v", err)
+	}
+	resume, err := invocation.retry(retryIntent{})
+	if err != nil {
+		return retryCommand{}, retryCommand{}, fmt.Errorf("cannot construct the exact original-selection retry command: %v", err)
+	}
+	return repair, resume, nil
+}
+
+func exactClusterRootRemedyTargets(request remedy.Request) ([]string, error) {
+	if len(request.Targets) == 0 {
+		return nil, fmt.Errorf("action %q requires at least one cluster root", request.Action)
+	}
+	seen := map[string]bool{}
+	clusters := make([]string, 0, len(request.Targets))
+	for _, target := range request.Targets {
+		name := strings.TrimSpace(target.Name)
+		if target.Role != remedy.TargetRoleClusterRoot || name == "" {
+			return nil, fmt.Errorf("action %q requires only named %q targets", request.Action, remedy.TargetRoleClusterRoot)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("action %q repeats cluster root %q", request.Action, name)
+		}
+		seen[name] = true
+		clusters = append(clusters, name)
+	}
+	sort.Strings(clusters)
+	return clusters, nil
 }
 
 func containerClusterReconcileCommand(request remedy.Request, invocation resolvedInvocation) (string, retryCommand, error) {

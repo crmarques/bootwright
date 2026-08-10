@@ -62,8 +62,11 @@ func TestPlanDestroyInfraRunsFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan infra destroy: %v", err)
 	}
-	if len(tasks) != 4 {
-		t.Fatalf("infra destroy should plan the full 4-step chain, got %d", len(tasks))
+	if len(tasks) != 6 {
+		t.Fatalf("infra destroy should plan four teardown steps inside the controller resolver preflight/cleanup bracket, got %d", len(tasks))
+	}
+	if tasks[0].Entry.Kind != DestroyTaskKindControllerNameResolution || tasks[len(tasks)-1].Entry.Kind != DestroyTaskKindControllerNameResolution {
+		t.Fatalf("infra destroy controller bracket kinds = %q/%q", tasks[0].Entry.Kind, tasks[len(tasks)-1].Entry.Kind)
 	}
 }
 

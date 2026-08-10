@@ -93,24 +93,30 @@ func TestFabricTaskHashesTrackEffectiveRuntimeProxy(t *testing.T) {
 	baseHashes := planTaskHashesByID(t, target, base, base)
 	editedHashes := planTaskHashesByID(t, target, edited, edited)
 
-	for _, kind := range []string{ApplyTaskKindProvider, ApplyTaskKindInfraComponentServices} {
+	for _, taskClass := range []struct {
+		kind     string
+		idPrefix string
+	}{
+		{kind: ApplyTaskKindProvider, idPrefix: "provider."},
+		{kind: ApplyTaskKindInfraComponentServices, idPrefix: "infra-component."},
+	} {
 		seen := 0
 		for key, baseHash := range baseHashes {
-			if !strings.HasPrefix(key, kind+"/") {
+			if !strings.HasPrefix(key, taskClass.kind+"/"+taskClass.idPrefix) {
 				continue
 			}
 			seen++
 			editedHash, ok := editedHashes[key]
 			if !ok {
-				t.Errorf("%s task %s disappeared after a runtime proxy edit", kind, key)
+				t.Errorf("%s task %s disappeared after a runtime proxy edit", taskClass.kind, key)
 				continue
 			}
 			if editedHash == baseHash {
-				t.Errorf("%s hash %s did not move with the effective runtime proxy", kind, key)
+				t.Errorf("%s hash %s did not move with the effective runtime proxy", taskClass.kind, key)
 			}
 		}
 		if seen == 0 {
-			t.Errorf("libvirt fixture planned no %s task", kind)
+			t.Errorf("libvirt fixture planned no %s task with ID prefix %s", taskClass.kind, taskClass.idPrefix)
 		}
 	}
 }

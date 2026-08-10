@@ -21,6 +21,7 @@ func TestDestroyChainResolvesBaseAndFannedDependencies(t *testing.T) {
 			label:                "Root",
 			playbook:             "root.yml",
 			dependencies:         []string{"destroy.leaf"},
+			successDependencies:  []string{"destroy.leaf"},
 			orderingDependencies: []string{"destroy.leaf.a"},
 		},
 	}
@@ -33,6 +34,9 @@ func TestDestroyChainResolvesBaseAndFannedDependencies(t *testing.T) {
 	if !reflect.DeepEqual(root.Entry.Dependencies, wantHard) {
 		t.Fatalf("hard dep naming the base ID = %v, want the whole fanned set %v", root.Entry.Dependencies, wantHard)
 	}
+	if !reflect.DeepEqual(root.Entry.SuccessDependencies, wantHard) {
+		t.Fatalf("success dep naming the base ID = %v, want the whole fanned set %v", root.Entry.SuccessDependencies, wantHard)
+	}
 	wantOrdering := []string{"destroy.leaf.a"}
 	if !reflect.DeepEqual(root.Entry.OrderingDependencies, wantOrdering) {
 		t.Fatalf("edge naming a concrete fanned ID = %v, want %v; an unresolved fanned ID fails OPEN, so a safety edge would vanish with no symptom", root.Entry.OrderingDependencies, wantOrdering)
@@ -41,7 +45,7 @@ func TestDestroyChainResolvesBaseAndFannedDependencies(t *testing.T) {
 
 func TestDestroyChainRejectsDependencyCycle(t *testing.T) {
 	steps := []destroyStep{
-		{id: "destroy.a", kind: DestroyTaskKindInfraComponents, label: "A", playbook: "a.yml", dependencies: []string{"destroy.b"}},
+		{id: "destroy.a", kind: DestroyTaskKindInfraComponents, label: "A", playbook: "a.yml", successDependencies: []string{"destroy.b"}},
 		{id: "destroy.b", kind: DestroyTaskKindProviderServices, label: "B", playbook: "b.yml", orderingDependencies: []string{"destroy.a"}},
 	}
 	_, err := destroyChain(v1alpha1.State{}, "limit", nil, steps)
@@ -100,8 +104,12 @@ func TestFannedMachineInfraScopesItselfAndKeepsTheSweepTerminal(t *testing.T) {
 	if slices.Contains(records.ExtraVarPairs, DestroyClusterScopeExtraVar+"=") {
 		t.Fatalf("the records sweep must carry no cluster scope, or records with a blank or deleted cluster are never reaped: %v", records.ExtraVarPairs)
 	}
-	if !reflect.DeepEqual(records.Entry.Dependencies, destroyTaskIDsOfKind(fanned)) {
+	wantRecordDependencies := destroyTaskIDsOfKind(fanned)
+	if !reflect.DeepEqual(records.Entry.Dependencies, wantRecordDependencies) {
 		t.Fatalf("the records sweep must hard-depend on every fanned machine teardown: taskTerminal releases ordering deps on Blocked, which would let the sweep bypass the graph's fail-closed edges; got %v", records.Entry.Dependencies)
+	}
+	if !reflect.DeepEqual(records.Entry.SuccessDependencies, []string{destroyControllerNameResolutionPreflightTaskID}) {
+		t.Fatalf("the records sweep success dependencies = %v, want controller preflight", records.Entry.SuccessDependencies)
 	}
 }
 

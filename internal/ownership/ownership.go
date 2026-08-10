@@ -172,11 +172,55 @@ func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 	base := filepath.Join(root, ResourceDirName)
 	var records []ResourceRecord
 	var warnings []error
+	for _, path := range []string{root, base} {
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("inspect ownership directory %s: %w", path, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, []error{fmt.Errorf("skip ownership directory %s: symbolic links are not ownership evidence", path)}, nil
+		}
+		if !info.IsDir() {
+			return nil, []error{fmt.Errorf("skip ownership directory %s: path is not a directory", path)}, nil
+		}
+	}
 	err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || filepath.Ext(path) != ".json" {
+		if entry.Type()&os.ModeSymlink != 0 {
+			warnings = append(warnings, fmt.Errorf("skip ownership resource %s: symbolic links are not ownership evidence", path))
+			return nil
+		}
+		if path == base {
+			return nil
+		}
+		rel, err := filepath.Rel(base, path)
+		if err != nil {
+			return err
+		}
+		if filepath.Dir(rel) == "." {
+			if !entry.IsDir() {
+				warnings = append(warnings, fmt.Errorf("skip ownership kind path %s: path is not a directory", path))
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			warnings = append(warnings, fmt.Errorf("inspect ownership resource %s: %w", path, err))
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			warnings = append(warnings, fmt.Errorf("skip ownership resource %s: path is not a regular file", path))
+			return nil
+		}
+		if filepath.Ext(path) != ".json" {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -191,6 +235,15 @@ func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {
 		}
 		if err := ValidateResource(record); err != nil {
 			warnings = append(warnings, fmt.Errorf("skip invalid ownership resource %s: %w", path, err))
+			return nil
+		}
+		expectedPath, err := ResourcePath(root, record)
+		if err != nil {
+			warnings = append(warnings, fmt.Errorf("skip invalid ownership resource %s: resolve canonical path: %w", path, err))
+			return nil
+		}
+		if filepath.Clean(path) != filepath.Clean(expectedPath) {
+			warnings = append(warnings, fmt.Errorf("skip ownership resource %s: record identity requires canonical path %s", path, expectedPath))
 			return nil
 		}
 		records = append(records, record)

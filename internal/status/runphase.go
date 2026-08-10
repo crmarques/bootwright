@@ -45,7 +45,7 @@ func RunPhases(tasks []workflow.TaskLedgerEntry) []RunPhase {
 
 func TaskPhaseLabel(task workflow.TaskLedgerEntry) string {
 	switch task.Kind {
-	case workflow.ApplyTaskKindProvider, workflow.ApplyTaskKindInfraComponentServices,
+	case workflow.ApplyTaskKindProvider, workflow.ApplyTaskKindInfraComponentServices, workflow.ApplyTaskKindControllerNameResolution,
 		workflow.DestroyTaskKindProviderServices, workflow.DestroyTaskKindInfraComponents:
 		return PhaseSharedServices
 	case workflow.ApplyTaskKindMachineInfraPrepare:
@@ -103,7 +103,7 @@ func TasksInDisplayOrder(tasks []workflow.TaskLedgerEntry) []workflow.TaskLedger
 	}
 	for _, task := range tasks {
 		seen := map[string]bool{}
-		for _, deps := range [][]string{task.Dependencies, task.OrderingDependencies} {
+		for _, deps := range [][]string{task.Dependencies, task.SuccessDependencies, task.OrderingDependencies} {
 			for _, dep := range deps {
 				if _, ok := byID[dep]; !ok || seen[dep] {
 					continue

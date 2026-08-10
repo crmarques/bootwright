@@ -3,6 +3,7 @@ package ownership
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -228,5 +229,147 @@ func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
 	}
 	if len(warnings) != 2 {
 		t.Fatalf("expected 2 skip warnings (corrupt + sensitive), got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestLoadResourcesRejectsRecordStoredUnderAnotherIdentity(t *testing.T) {
+	root := t.TempDir()
+	record := ResourceRecord{Kind: "libvirt-domain", Name: "machine-a", Owner: Owner}
+	if err := SaveResource(root, record); err != nil {
+		t.Fatalf("SaveResource: %v", err)
+	}
+	canonical, err := ResourcePath(root, record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	misnamed := filepath.Join(filepath.Dir(canonical), "machine-b.json")
+	if err := os.Rename(canonical, misnamed); err != nil {
+		t.Fatalf("rename record: %v", err)
+	}
+
+	records, warnings, err := LoadResourcesWithWarnings(root)
+	if err != nil {
+		t.Fatalf("LoadResourcesWithWarnings: %v", err)
+	}
+	if len(records) != 0 || len(warnings) != 1 {
+		t.Fatalf("misnamed ownership evidence produced records=%+v warnings=%v", records, warnings)
+	}
+	if !strings.Contains(warnings[0].Error(), canonical) {
+		t.Fatalf("warning does not name canonical record path %q: %v", canonical, warnings[0])
+	}
+}
+
+func TestLoadResourcesRejectsSymlinkedRecord(t *testing.T) {
+	root := t.TempDir()
+	record := ResourceRecord{Kind: "libvirt-domain", Name: "machine-a", Owner: Owner}
+	if err := SaveResource(root, record); err != nil {
+		t.Fatalf("SaveResource: %v", err)
+	}
+	canonical, err := ResourcePath(root, record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(filepath.Dir(canonical), "machine-link.json")
+	if err := os.Symlink(canonical, link); err != nil {
+		t.Fatalf("symlink record: %v", err)
+	}
+
+	records, warnings, err := LoadResourcesWithWarnings(root)
+	if err != nil {
+		t.Fatalf("LoadResourcesWithWarnings: %v", err)
+	}
+	if len(records) != 1 || records[0].Name != record.Name || len(warnings) != 1 {
+		t.Fatalf("symlinked ownership evidence produced records=%+v warnings=%v", records, warnings)
+	}
+	if !strings.Contains(warnings[0].Error(), "symbolic links") {
+		t.Fatalf("symlink warning = %v", warnings[0])
+	}
+}
+
+func TestLoadResourcesRejectsUnsafeOwnershipDirectories(t *testing.T) {
+	tests := []struct {
+		name    string
+		prepare func(*testing.T) string
+		want    string
+	}{
+		{
+			name: "ownership root symlink",
+			prepare: func(t *testing.T) string {
+				root := filepath.Join(t.TempDir(), "ownership")
+				if err := os.Symlink(t.TempDir(), root); err != nil {
+					t.Fatalf("symlink ownership root: %v", err)
+				}
+				return root
+			},
+			want: "symbolic links",
+		},
+		{
+			name: "resource root symlink",
+			prepare: func(t *testing.T) string {
+				root := t.TempDir()
+				if err := os.Symlink(t.TempDir(), filepath.Join(root, ResourceDirName)); err != nil {
+					t.Fatalf("symlink resource root: %v", err)
+				}
+				return root
+			},
+			want: "symbolic links",
+		},
+		{
+			name: "resource root file",
+			prepare: func(t *testing.T) string {
+				root := t.TempDir()
+				if err := os.WriteFile(filepath.Join(root, ResourceDirName), []byte("not a directory"), 0o600); err != nil {
+					t.Fatalf("write resource root file: %v", err)
+				}
+				return root
+			},
+			want: "not a directory",
+		},
+		{
+			name: "kind directory symlink",
+			prepare: func(t *testing.T) string {
+				root := t.TempDir()
+				base := filepath.Join(root, ResourceDirName)
+				if err := os.MkdirAll(base, 0o700); err != nil {
+					t.Fatalf("create resource root: %v", err)
+				}
+				if err := os.Symlink(t.TempDir(), filepath.Join(base, "controller-name-resolver")); err != nil {
+					t.Fatalf("symlink ownership kind directory: %v", err)
+				}
+				return root
+			},
+			want: "symbolic links",
+		},
+		{
+			name: "kind directory file",
+			prepare: func(t *testing.T) string {
+				root := t.TempDir()
+				base := filepath.Join(root, ResourceDirName)
+				if err := os.MkdirAll(base, 0o700); err != nil {
+					t.Fatalf("create resource root: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(base, "controller-name-resolver"), []byte("not a directory"), 0o600); err != nil {
+					t.Fatalf("write ownership kind file: %v", err)
+				}
+				return root
+			},
+			want: "not a directory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := tt.prepare(t)
+			records, warnings, err := LoadResourcesWithWarnings(root)
+			if err != nil {
+				t.Fatalf("LoadResourcesWithWarnings: %v", err)
+			}
+			if len(records) != 0 || len(warnings) != 1 {
+				t.Fatalf("unsafe ownership directory produced records=%+v warnings=%v", records, warnings)
+			}
+			if !strings.Contains(warnings[0].Error(), tt.want) {
+				t.Fatalf("unsafe ownership directory warning = %v, want %q", warnings[0], tt.want)
+			}
+		})
 	}
 }

@@ -115,7 +115,7 @@ const PreflightPlaybook = roles.PlaybookCheckPreflight
 func ansibleLimit(groups ...string) string { return strings.Join(groups, ":") }
 
 var (
-	infraAnsibleLimit    = ansibleLimit(render.GroupProviderHosts, render.GroupInfraComponentHosts, render.GroupInfraHosts, render.GroupOCPHosts)
+	infraAnsibleLimit    = ansibleLimit(render.GroupProviderHosts, render.GroupInfraComponentHosts, render.GroupInfraHosts, render.GroupControllerHosts, render.GroupOCPHosts)
 	clustersAnsibleLimit = ansibleLimit(render.GroupInfraHosts, render.GroupOCPHosts, render.GroupBootHosts, render.GroupStorageHosts)
 	clusterAnsibleLimit  = ansibleLimit(render.GroupOCPHosts, render.GroupBootHosts)
 )

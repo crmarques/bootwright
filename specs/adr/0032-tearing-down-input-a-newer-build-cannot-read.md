@@ -45,7 +45,8 @@ Two further observations shaped the decision. First, the symmetric problem
 already has an answer three lines away in the same function: an ownership record
 that cannot be read does not abort the teardown, it refuses by default and is
 cleared by `--authorize unreadable-records`, which discloses exactly what would
-be left standing. Second, semantic validation protects the *coherence of a
+be left standing and disables record-only orphan sweeps rather than guessing
+from incomplete evidence. Second, semantic validation protects the *coherence of a
 build*; a teardown plan derives from the object graph and the ownership records,
 so a dangling reference in an object the run will not touch has no bearing on
 whether the teardown is safe.
@@ -66,13 +67,19 @@ validation contract holds for every form of the command; the token is what makes
 a dry run tolerant, giving the operator a preview of the blast radius before
 authorizing a real run.
 
-With the token, every skipped document is printed, and the ownership records
-whose declaring object was dropped are reported in the existing "Owned but no
-longer declared" section as left standing.
+With the token, every skipped document is printed. A skipped declaration is
+indistinguishable from an intentionally removed declaration, so the controller
+disables all context-wide and record-only orphan sweeps for that run, including
+the controller-resolver preflight/cleanup bracket. Only work backed by documents
+this build decoded remains eligible. Ownership records whose declaring object
+was skipped are reported in the existing "Owned but no longer declared"
+section as left standing.
 
 The token relaxes exactly one refusal. `data-loss`, `protected`,
 `installed-cluster-node`, `unowned-vms`, `unowned-networks`,
-`unreachable-nodes`, `unreadable-records`, and `shared-infra` are unchanged; so
+`unreachable-nodes`, `unreadable-records`, and `shared-infra` remain separate
+gates; either form of skipped input or ownership evidence disables record-only
+orphan sweeps, while every other token is unchanged. So
 are device data-safety checks, the Ceph seed ownership proof, the active-run
 check, and the confirmation prompt. All of them are still evaluated against
 whatever did decode.
@@ -97,3 +104,7 @@ An operator who authorizes `stale-input` on a context whose *cluster* documents
 are the stale ones gets a teardown that leaves those clusters standing. The
 disclosure is what makes that safe rather than silent, and the refusal remains
 the default precisely so the token is a decision, not a fallback.
+
+The conservative sweep suppression may also leave a genuine orphan whose
+declaration was removed intentionally. Re-run destroy from fully decodable
+input to reclaim it; a stale-input run cannot prove that distinction safely.

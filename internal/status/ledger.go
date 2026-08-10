@@ -7,17 +7,17 @@ import (
 	"github.com/crmarques/bootwright/internal/host/shellquote"
 )
 
-const unavailableLedgerRetryGuidance = "review the failed run and repeat the original mutating invocation from operator history; its exact command was not recorded with a validated context"
+const unavailableLedgerRetryGuidance = "review the run and its task logs before choosing the next command; no validated exact recovery plan was recorded"
 
 func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, existing []string) []string {
 	switch ledger.Status {
 	case workflow.RunStatusRunning:
 		if activity.State == workflow.RunActivityStale {
-			return append([]string{ledgerRetryHint(ledger)}, existing...)
+			return append(ledgerRecoveryHints(ledger), existing...)
 		}
 		return append([]string{ledgerWatchHint(ledger)}, existing...)
-	case workflow.RunStatusFailed:
-		hints := []string{ledgerRetryHint(ledger)}
+	case workflow.RunStatusFailed, workflow.RunStatusCancelled:
+		hints := ledgerRecoveryHints(ledger)
 		for _, task := range ledger.FailedTasks() {
 			if task.LogPath != "" {
 				hints = append(hints, "inspect "+task.LogPath)
@@ -29,11 +29,15 @@ func LedgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 	}
 }
 
-func ledgerRetryHint(ledger workflow.RunLedger) string {
-	if _, ok := recordedMutatingInvocationContext(ledger.InvocationArgs); !ok {
-		return unavailableLedgerRetryGuidance
+func ledgerRecoveryHints(ledger workflow.RunLedger) []string {
+	if !ledger.Recovery.ValidFor(ledger.InvocationArgs) {
+		return []string{unavailableLedgerRetryGuidance}
 	}
-	return shellquote.QuoteWords(ledger.InvocationArgs)
+	hints := make([]string, 0, len(ledger.Recovery.Steps))
+	for _, step := range ledger.Recovery.Steps {
+		hints = append(hints, shellquote.QuoteWords(step.Args))
+	}
+	return hints
 }
 
 func ledgerWatchHint(ledger workflow.RunLedger) string {

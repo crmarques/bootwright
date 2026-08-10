@@ -12,6 +12,7 @@ const (
 	DestroyAuthorizeUnownedVMsExtraVar  = "bootwright_destroy_authorize_unowned_vms"
 	DestroyAuthorizeUnownedNetsExtraVar = "bootwright_destroy_authorize_unowned_networks"
 	DestroySkipUnreachableExtraVar      = "bootwright_destroy_skip_unreachable"
+	DestroySkipOrphanSweepExtraVar      = workflow.DestroySkipOrphanSweepExtraVar
 	CephAuthorizeUnownedDevicesExtraVar = "bootwright_ceph_authorize_unowned_devices"
 	CephAuthorizeForeignDaemonsExtraVar = "bootwright_ceph_authorize_foreign_daemons"
 )
@@ -42,4 +43,17 @@ func ApplyDestroyScopeExtraVars(plan *WorkflowPlan, infraScope bool, clusterScop
 		plan.ExtraVarPairs = append(plan.ExtraVarPairs, DestroySkipUnreachableExtraVar+"=true")
 	}
 	ApplyCephUnownedDeviceAuthorizationExtraVar(plan, unownedDevices)
+}
+
+func ApplyDestroyEvidenceDegradedExtraVar(plan *WorkflowPlan, evidenceDegraded bool) {
+	if !evidenceDegraded {
+		return
+	}
+	pairs := plan.ExtraVarPairs[:0]
+	for _, pair := range plan.ExtraVarPairs {
+		if pair != InfraDestroyContextSweepExtraVar+"=true" && pair != DestroySkipOrphanSweepExtraVar+"=true" {
+			pairs = append(pairs, pair)
+		}
+	}
+	plan.ExtraVarPairs = append(pairs, DestroySkipOrphanSweepExtraVar+"=true")
 }

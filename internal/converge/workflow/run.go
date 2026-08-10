@@ -75,6 +75,8 @@ type RunOptions struct {
 	OverrideAckedReinstalls    []string
 	SelectedMachines           []string
 	InvocationArgs             []string
+	InterruptionRecovery       RunRecoveryPlan
+	ResolveRecovery            RunRecoveryResolver
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 	StreamAnsible              bool
 	addonStepResources         *addonStepResourcePool
@@ -299,6 +301,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 			Status: TaskStatusPending,
 		}}, now)
 		ledger.InvocationArgs = append([]string(nil), opts.InvocationArgs...)
+		ledger.Recovery = defaultRunRecoveryPlan(opts)
 		ledger.MarkRunning(lease.RunID, opts.OutputLogPath, now)
 		if err := SaveRunLedger(opts.RunsDir, ledger); err != nil {
 			return RunResult{Render: result, Command: command}, err
@@ -315,6 +318,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 				ledger.MarkOK(lease.RunID, finished)
 				ledger.Finish(RunStatusOK, finished)
 			} else {
+				ledger.Recovery = failureRunRecoveryPlan(opts, ledger.Recovery, runErr)
 				ledger.MarkFailed(lease.RunID, conciseApplyTaskFailure(runErr.Error()), finished)
 				status := RunStatusFailed
 				if ctx.Err() != nil {

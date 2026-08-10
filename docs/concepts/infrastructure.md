@@ -751,7 +751,7 @@ shape. Each requires its own `implementation` value (see the table above).
 | `implementation` | All | Yes | — | Closed value per arm: `squid` / `dnsmasq` / `chrony` / `mirror-registry`. |
 | `machineRef` | All | Yes | — | Machine that runs the service. |
 | `bindAddress` | All | No | `0.0.0.0` | Bind address; must be a valid IP when set. |
-| `port` | All | No | `3128`/`53`/`123`/`5000` (squid/dnsmasq/chrony/mirror-registry) | Service port; must be `0..65535`. |
+| `port` | All | No | `3128`/`53`/`123`/`5000` (squid/dnsmasq/chrony/mirror-registry) | Service port; must be `0..65535`. The dnsmasq implementation currently accepts only its normalized default `53`. |
 | `endpoints[]` | All | No | — | Named endpoint selectors. |
 | `endpoints[].name` | All | Yes | — | Endpoint selector name; unique within the service. |
 | `endpoints[].addressRef` | All | Yes | — | Must resolve to a `Machine.spec.addresses[].name` on the placement machine. |
@@ -793,13 +793,20 @@ addresses into it.
 | `spec.machineNetwork[]` | Yes | — | At least one entry. |
 | `spec.machineNetwork[].cidr` | Yes | — | Machine network CIDR; must parse and be unique within the NetworkConfig. |
 | `spec.template.networkConfig` | Yes | — | NMState template merged into each selected host. |
-| `spec.nameResolutionRefs[]` | No | — | Names `Environment.spec.infraComponents.nameResolution[]` entries; each ref must match a declared entry and be unique. |
+| `spec.nameResolutionRefs[]` | No | — | Names `Environment.spec.infraComponents.nameResolution[]` entries; each ref must match a declared entry and be unique. Across the context, consumed managed entries must resolve to one distinct service. |
 
 !!! note "Name resolution belongs in `nameResolutionRefs`, not the template"
     `spec.template.networkConfig` must not contain a `nameResolutionRefs` key —
     that is rejected as invalid NMState. Use the dedicated
     `spec.nameResolutionRefs[]` field; its resolved addresses feed the NMState
     `dns-resolver` server list and installer DNS.
+
+!!! note "One managed DNS lifecycle owner"
+    Several catalog names may exist, but loaded consumers may resolve to only
+    one distinct managed name-resolution `InfraComponent`. Unused entries do
+    not count, and compatible aliases of the same component remain one service.
+    External resolver entries are not restricted by this controller-lifecycle
+    rule.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

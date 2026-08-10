@@ -53,6 +53,18 @@ func TestApplyFailedPhaseNamesTheTaskOwnPhase(t *testing.T) {
 	}
 }
 
+func TestApplyBlockingRootTraversesSuccessDependencies(t *testing.T) {
+	failed := workflow.TaskLedgerEntry{ID: "controller-preflight", Status: workflow.TaskStatusFailed}
+	middle := workflow.TaskLedgerEntry{ID: "machine-teardown", Status: workflow.TaskStatusBlocked, SuccessDependencies: []string{failed.ID}}
+	leaf := workflow.TaskLedgerEntry{ID: "controller-cleanup", Status: workflow.TaskStatusBlocked, SuccessDependencies: []string{middle.ID}}
+	ledger := workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{leaf, middle, failed}}
+
+	root, ok := ApplyBlockingRoot(ledger, leaf)
+	if !ok || root.ID != failed.ID {
+		t.Fatalf("blocking root = %+v found=%v, want failed hard-success dependency %q", root, ok, failed.ID)
+	}
+}
+
 func TestRunPhasesFoldDestroyPlumbingIntoLifecyclePhases(t *testing.T) {
 	phases := RunPhases([]workflow.TaskLedgerEntry{
 		{ID: "destroy.machine-registration", Kind: workflow.DestroyTaskKindMachineRegistration, Status: workflow.TaskStatusOK},

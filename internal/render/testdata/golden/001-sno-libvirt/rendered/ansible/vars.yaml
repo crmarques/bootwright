@@ -205,9 +205,6 @@ bootwright_clusters:
           realisation: chrony
           upstreamSources:
             - time.bootwright.test
-      controllerNameResolvers:
-        - bindAddress: 192.168.132.1
-          domain: bootwright.test
       distribution:
         release:
             channel: stable-4.21
@@ -302,6 +299,69 @@ bootwright_component_pins:
       name: openshift-install
       source: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.15/
       version: 4.21.15
+bootwright_controller_name_resolution_destroy_targets:
+    - destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+      infraComponentRecordName: InfraComponent-name-resolution
+      kind: nameResolution
+      machineRef: bastion
+      name: name-resolution
+      providerName: InfraComponent
+      realisation: dnsmasq
+      recordBacked: false
+      valid: true
+bootwright_controller_name_resolution_services:
+    - additionalIngressHosts:
+        - console-openshift-console.apps.sno-libvirt.bootwright.test
+        - oauth-openshift.apps.sno-libvirt.bootwright.test
+      applyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+      bindAddress: 192.168.132.1
+      componentName: name-resolution
+      controllerAddresses:
+        - 192.168.132.1
+      controllerDomains:
+        - bootwright.test
+        - sno-libvirt.bootwright.test
+      controllerProbes:
+        - addresses:
+            - 192.168.132.10
+          name: api-int.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.10
+          name: api.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: bootwright-probe.apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: console-openshift-console.apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: oauth-openshift.apps.sno-libvirt.bootwright.test
+      destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+      domainRecords:
+        - address: 192.168.132.11
+          name: apps.sno-libvirt.bootwright.test
+      entryName: default
+      hostRecords:
+        - address: 192.168.132.10
+          name: api-int.sno-libvirt.bootwright.test
+        - address: 192.168.132.10
+          name: api.sno-libvirt.bootwright.test
+        - address: 192.168.132.11
+          name: console-openshift-console.apps.sno-libvirt.bootwright.test
+        - address: 192.168.132.11
+          name: oauth-openshift.apps.sno-libvirt.bootwright.test
+      image: docker.io/dockurr/dnsmasq:2.92_p2
+      kind: nameResolution
+      machineAddress: localhost
+      machineRef: bastion
+      name: name-resolution
+      port: 53
+      providerName: InfraComponent
+      realisation: dnsmasq
 bootwright_environment:
     baseDomain: bootwright.test
     infraComponents:
@@ -392,6 +452,30 @@ bootwright_infra_component_services:
       componentName: name-resolution
       consumingClusters:
         - sno-libvirt
+      controllerAddresses:
+        - 192.168.132.1
+      controllerDomains:
+        - bootwright.test
+        - sno-libvirt.bootwright.test
+      controllerProbes:
+        - addresses:
+            - 192.168.132.10
+          name: api-int.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.10
+          name: api.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: bootwright-probe.apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: console-openshift-console.apps.sno-libvirt.bootwright.test
+        - addresses:
+            - 192.168.132.11
+          name: oauth-openshift.apps.sno-libvirt.bootwright.test
       destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
       domainRecords:
         - address: 192.168.132.11

@@ -197,6 +197,17 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 			if entry.Address != "" {
 				errs = append(errs, owner+".address is only valid for external nameResolution entries")
 			}
+			if entry.EndpointRef.Name != "" {
+				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.NameResolution != nil {
+					endpoints := map[string]bool{}
+					for _, endpoint := range component.Spec.NameResolution.Endpoints {
+						endpoints[endpoint.Name] = true
+					}
+					if !endpoints[entry.EndpointRef.Name] {
+						errs = append(errs, fmt.Sprintf("%s.endpointRef %q does not resolve on selected InfraComponent spec.nameResolution.endpoints", owner, entry.EndpointRef.Name))
+					}
+				}
+			}
 		default:
 			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}

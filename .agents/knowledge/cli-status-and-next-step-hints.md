@@ -48,21 +48,22 @@ the apply action through the same invocation builder used by real mutation, so
 the current SSH globals, explicit context, reconcile mode, and current default
 safety-flag values are preserved and shell-quoted. It never adds `--yes`, so
 the next state change still needs an operator confirmation. This does not alter
-failed run handling: an exact recorded `InvocationArgs` remains authoritative
-and is never replaced by the normal typed action.
+failed-run handling: the ledger's typed, CLI-resolved recovery remains
+authoritative and is never replaced by the normal next-step action.
 
-**Semantics: a failed-run retry comes only from exact recorded argv.** Every
-real apply and destroy threads `resolvedInvocation.args()` through `RunOptions`
-into both graph and playbook ledgers. `internal/status` validates the recorded
-verb and explicit context, then renders those arguments with
-`shellquote.QuoteWords`; it never derives a verb, stage, range, cluster or
-machine selection from the lossy `Target`/`Scope`/`Machines` display fields and
-never adds `--yes`. The argv preserves context, selection, mode, reclaim or
-recovery/purge effects, authorizations, SSH globals, and the original
-confirmation choice. A legacy, absent, preview-shaped, or malformed invocation
-yields command-free operator-history guidance. Pinned by
-`ledger_audit_test.go`, workflow ledger round-trip/scheduler tests, and the CLI
-next-step spine test.
+**Semantics: failed, stale, and cancelled recovery comes only from a resolved
+ledger plan.** Every real apply and destroy keeps immutable
+`InvocationArgs` for audit and stores a typed request plus ordered argv steps
+resolved by `internal/cli`. The scheduler writes the safe interruption plan
+before each task starts and replaces it with the actual typed task remedy on a
+terminal failure. Thus a partial create resumes as reconcile, a later-only DNS
+proof interruption retries the original selection, and an actual proof failure
+records fabric repair plus exact resume. `internal/status` validates the typed
+request, every mutating verb, and the explicit context before shell-quoting the
+steps; it never derives a command from `Target`/`Scope`/`Machines`, failure
+prose, or the original audit argv, and never adds `--yes`. A legacy, absent,
+preview-shaped, or malformed recovery yields command-free guidance. Pinned by
+ledger round-trip, scheduler boundary, status audit, and CLI recovery tests.
 
 **Semantics: cluster access is advertised only for completed
 installs.** `StorageSummariesForApply` (mirroring

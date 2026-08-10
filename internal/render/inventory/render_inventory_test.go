@@ -580,6 +580,26 @@ func TestStorageInventoryMarksManagedOSNodeNotProvided(t *testing.T) {
 	}
 }
 
+func TestStorageOnlyInventoryIncludesControllerForNameResolutionBarrier(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "ceph-ibm-libvirt-lab")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if len(state.ContainerClusters) != 0 {
+		t.Fatalf("storage-only fixture gained container clusters: %d", len(state.ContainerClusters))
+	}
+	all := Inventory(state, "/context/secrets")["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	if _, ok := hosts["localhost"]; !ok {
+		t.Fatalf("storage-only controller task has no localhost inventory host: %v", hosts)
+	}
+	children := all["children"].(map[string]any)
+	controllerHosts := children[GroupControllerHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := controllerHosts["localhost"]; !ok {
+		t.Fatalf("%s hosts = %v, want localhost for the storage-only DNS barrier", GroupControllerHosts, controllerHosts)
+	}
+}
+
 func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {

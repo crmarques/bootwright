@@ -12,14 +12,15 @@ import (
 )
 
 const (
-	DestroyTaskKindMachineRegistration     = "destroyMachineRegistration"
-	DestroyTaskKindMachineInfra            = "destroyMachineInfra"
-	DestroyTaskKindInfraComponents         = "destroyInfraComponents"
-	DestroyTaskKindProviderServices        = "destroyProviderServices"
-	DestroyTaskKindStorageCluster          = "destroyStorageCluster"
-	DestroyTaskKindContainerCluster        = "destroyContainerCluster"
-	DestroyTaskKindContainerClusterRuntime = "destroyContainerClusterRuntime"
-	DestroyTaskKindStorageNodeAccess       = "destroyStorageNodeAccess"
+	DestroyTaskKindMachineRegistration      = "destroyMachineRegistration"
+	DestroyTaskKindMachineInfra             = "destroyMachineInfra"
+	DestroyTaskKindInfraComponents          = "destroyInfraComponents"
+	DestroyTaskKindControllerNameResolution = "destroyControllerNameResolution"
+	DestroyTaskKindProviderServices         = "destroyProviderServices"
+	DestroyTaskKindStorageCluster           = "destroyStorageCluster"
+	DestroyTaskKindContainerCluster         = "destroyContainerCluster"
+	DestroyTaskKindContainerClusterRuntime  = "destroyContainerClusterRuntime"
+	DestroyTaskKindStorageNodeAccess        = "destroyStorageNodeAccess"
 )
 
 const DestroyStorageScopeExtraVar = "bootwright_destroy_storage_scope"
@@ -33,6 +34,8 @@ const DestroyClusterLevelsExtraVar = "bootwright_destroy_cluster_levels"
 const DestroyClusterScopeExtraVar = "bootwright_destroy_cluster_scope"
 
 const InfraDestroyContextSweepExtraVar = "bootwright_infra_destroy_context_sweep"
+
+const DestroySkipOrphanSweepExtraVar = "bootwright_destroy_skip_orphan_sweep"
 
 const DestroyContainerClusterExtraVar = "bootwright_destroy_container_cluster"
 
@@ -64,7 +67,58 @@ func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extr
 	if err != nil {
 		return nil, err
 	}
-	return destroyChain(state, limit, extraVars, dropOutOfScopeSharedServiceSteps(state, extraVars, steps))
+	steps = dropOutOfScopeSharedServiceSteps(state, extraVars, steps)
+	steps = bracketControllerNameResolutionDestroy(scopeName, extraVars, steps)
+	return destroyChain(state, limit, extraVars, steps)
+}
+
+func bracketControllerNameResolutionDestroy(scopeName string, extraVars []string, steps []destroyStep) []destroyStep {
+	if (scopeName != "infra" && scopeName != "all") || destroyOrphanSweepSuppressed(extraVars) {
+		return steps
+	}
+	hasInfraComponents := false
+	for _, step := range steps {
+		if step.id == destroyInfraComponentsTaskID {
+			hasInfraComponents = true
+			break
+		}
+	}
+	if !hasInfraComponents {
+		return steps
+	}
+	preflight := destroyStep{
+		id:         destroyControllerNameResolutionPreflightTaskID,
+		kind:       DestroyTaskKindControllerNameResolution,
+		label:      "Controller name resolution preflight",
+		playbook:   roles.PlaybookTaskControllerNameResolutionDestroyPreflight,
+		limit:      render.GroupControllerHosts,
+		forksLimit: render.GroupControllerHosts,
+	}
+	cleanup := destroyStep{
+		id:         destroyControllerNameResolutionCleanupTaskID,
+		kind:       DestroyTaskKindControllerNameResolution,
+		label:      "Controller name resolution cleanup",
+		playbook:   roles.PlaybookTaskControllerNameResolutionDestroyCleanup,
+		limit:      render.GroupControllerHosts,
+		forksLimit: render.GroupControllerHosts,
+	}
+	bracketed := make([]destroyStep, 0, len(steps)+2)
+	bracketed = append(bracketed, preflight)
+	for i := range steps {
+		steps[i].successDependencies = appendUniqueString(steps[i].successDependencies, preflight.id)
+		cleanup.dependencies = appendUniqueString(cleanup.dependencies, steps[i].id)
+		bracketed = append(bracketed, steps[i])
+	}
+	return append(bracketed, cleanup)
+}
+
+func destroyOrphanSweepSuppressed(extraVars []string) bool {
+	for _, pair := range extraVars {
+		if pair == DestroySkipOrphanSweepExtraVar+"=true" {
+			return true
+		}
+	}
+	return false
 }
 
 func dropOutOfScopeSharedServiceSteps(state v1alpha1.State, extraVars []string, steps []destroyStep) []destroyStep {
@@ -97,14 +151,16 @@ func destroyClusterScoped(extraVars []string) bool {
 }
 
 const (
-	destroyStorageNodeAccessTaskID   = "destroy.storage-node-access"
-	destroyMachineRegistrationTaskID = "destroy.machine-registration"
-	destroyInfraComponentsTaskID     = "destroy.infra-components"
-	destroyMachineInfraTaskID        = "destroy.machine-infra"
-	destroyMachineInfraRecordsTaskID = "destroy.machine-infra-records"
-	destroyClusterRuntimeTaskID      = "destroy.cluster-runtime"
-	destroyContainerClustersTaskID   = "destroy.container-clusters"
-	destroyProviderServicesTaskID    = "destroy.provider-services"
+	destroyStorageNodeAccessTaskID                 = "destroy.storage-node-access"
+	destroyMachineRegistrationTaskID               = "destroy.machine-registration"
+	destroyInfraComponentsTaskID                   = "destroy.infra-components"
+	destroyMachineInfraTaskID                      = "destroy.machine-infra"
+	destroyMachineInfraRecordsTaskID               = "destroy.machine-infra-records"
+	destroyClusterRuntimeTaskID                    = "destroy.cluster-runtime"
+	destroyContainerClustersTaskID                 = "destroy.container-clusters"
+	destroyProviderServicesTaskID                  = "destroy.provider-services"
+	destroyControllerNameResolutionPreflightTaskID = "destroy.controller-name-resolution-preflight"
+	destroyControllerNameResolutionCleanupTaskID   = "destroy.controller-name-resolution-cleanup"
 )
 
 const destroyMaxForks = 20
@@ -300,6 +356,7 @@ type destroyStep struct {
 	hostSlotKey          string
 	resourceKeys         []string
 	dependencies         []string
+	successDependencies  []string
 	orderingDependencies []string
 	extraVarOverrides    []string
 	dropExtraVarNames    []string
@@ -335,6 +392,7 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			ResourceKeys:         step.resourceKeys,
 			Status:               TaskStatusPending,
 			Dependencies:         destroyEmittedDependencies(step.dependencies, emitted),
+			SuccessDependencies:  destroyEmittedDependencies(step.successDependencies, emitted),
 			OrderingDependencies: destroyOrderingDependencies(step, declared, emitted),
 		}
 		taskLimit := limit
@@ -356,10 +414,36 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			State:         state,
 		})
 	}
+	partitionControllerNameResolutionCleanupDependencies(tasks)
 	if err := detectDestroyTaskCycle(tasks); err != nil {
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func partitionControllerNameResolutionCleanupDependencies(tasks []ApplyTask) {
+	entries := make(map[string]TaskLedgerEntry, len(tasks))
+	for _, task := range tasks {
+		entries[task.Entry.ID] = task.Entry
+	}
+	for i := range tasks {
+		if tasks[i].Entry.ID != destroyControllerNameResolutionCleanupTaskID {
+			continue
+		}
+		var dependencies []string
+		successDependencies := append([]string(nil), tasks[i].Entry.SuccessDependencies...)
+		for _, dependency := range tasks[i].Entry.Dependencies {
+			entry, ok := entries[dependency]
+			if ok && DestroyTaskNeedsCompletionProof(entry) {
+				successDependencies = appendUniqueString(successDependencies, dependency)
+				continue
+			}
+			dependencies = appendUniqueString(dependencies, dependency)
+		}
+		tasks[i].Entry.Dependencies = dependencies
+		tasks[i].Entry.SuccessDependencies = successDependencies
+		return
+	}
 }
 
 func destroyStepHostSlotCount(step destroyStep) int {
@@ -399,7 +483,7 @@ func detectDestroyTaskCycle(tasks []ApplyTask) error {
 	dependents := map[string][]string{}
 	for _, task := range tasks {
 		var deps []string
-		for _, dep := range append(append([]string(nil), task.Entry.Dependencies...), task.Entry.OrderingDependencies...) {
+		for _, dep := range taskDependencyIDs(task.Entry) {
 			if known[dep] {
 				deps = appendUniqueString(deps, dep)
 			}
@@ -672,15 +756,20 @@ func DestroyTaskMachineKeys(task TaskLedgerEntry) []string {
 	return out
 }
 
+func DestroyTaskNeedsCompletionProof(task TaskLedgerEntry) bool {
+	return len(DestroyTaskClusterKeys(task)) > 0 || len(DestroyTaskMachineKeys(task)) > 0 || task.Cluster != "" || task.Node != "" || len(task.Nodes) > 0
+}
+
 var destroyTaskKinds = map[string]bool{
-	DestroyTaskKindMachineRegistration:     true,
-	DestroyTaskKindMachineInfra:            true,
-	DestroyTaskKindInfraComponents:         true,
-	DestroyTaskKindProviderServices:        true,
-	DestroyTaskKindStorageCluster:          true,
-	DestroyTaskKindContainerCluster:        true,
-	DestroyTaskKindContainerClusterRuntime: true,
-	DestroyTaskKindStorageNodeAccess:       true,
+	DestroyTaskKindMachineRegistration:      true,
+	DestroyTaskKindMachineInfra:             true,
+	DestroyTaskKindInfraComponents:          true,
+	DestroyTaskKindControllerNameResolution: true,
+	DestroyTaskKindProviderServices:         true,
+	DestroyTaskKindStorageCluster:           true,
+	DestroyTaskKindContainerCluster:         true,
+	DestroyTaskKindContainerClusterRuntime:  true,
+	DestroyTaskKindStorageNodeAccess:        true,
 }
 
 func IsDestroyTaskKind(kind string) bool {

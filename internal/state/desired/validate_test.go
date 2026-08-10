@@ -1170,6 +1170,26 @@ spec:
 			wantSubstring: "spec.infraComponents.nameResolution[0].endpointRef is only valid for managed nameResolution entries",
 		},
 		{
+			name: "managed-name-resolution-missing-endpoint",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        management: managed\n        componentRef: dns\n        endpointRef: missing\n    artifactServers:\n", 1)
+				files["infra-component.yaml"] += `---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: dns }
+spec:
+  type: nameResolution
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: services-host
+    endpoints:
+      - name: cluster
+        addressRef: bmc-lan
+`
+			},
+			wantSubstring: `endpointRef "missing" does not resolve on selected InfraComponent spec.nameResolution.endpoints`,
+		},
+		{
 			name: "external-registry-component-ref",
 			mutate: func(files map[string]string) {
 				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        management: external\n        url: registry.example.test:5000\n        componentRef: artifact-server\n    artifactServers:\n", 1)
@@ -1621,6 +1641,32 @@ func TestNameResolutionComponentForwarderValidation(t *testing.T) {
 	}
 	if !strings.Contains(errs, `spec.nameResolution.forwarders[1] "not-an-ip" is not a valid IP address`) {
 		t.Fatalf("missing invalid-IP error: %s", errs)
+	}
+}
+
+func TestNameResolutionComponentRejectsUnsupportedPort(t *testing.T) {
+	machines := map[string]v1alpha1.Machine{
+		"bastion": {
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+			},
+		},
+	}
+	component := v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "lab-dns"},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotNameResolution,
+			NameResolution: &v1alpha1.NameResolutionComponent{
+				Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+				Port:           5353,
+			},
+		},
+	}
+	errs := strings.Join(validateNameResolutionComponent(component, machines), "\n")
+	if !strings.Contains(errs, "spec.nameResolution.port 5353 is unsupported; dnsmasq is fixed to port 53") {
+		t.Fatalf("unsupported dnsmasq port errors = %q", errs)
 	}
 }
 
@@ -2944,6 +2990,81 @@ func TestNetworkConfigNameResolutionRefsSelectEnvironmentEntries(t *testing.T) {
 	}
 }
 
+func TestManagedNameResolutionServiceCountUsesResolvedConsumers(t *testing.T) {
+	cases := []struct {
+		name       string
+		entries    string
+		refs       string
+		components string
+		want       string
+	}{
+		{
+			name: "two consumed services",
+			entries: `      - name: primary
+        management: managed
+        componentRef: dns-primary
+      - name: secondary
+        management: managed
+        componentRef: dns-secondary
+`,
+			refs: `    - primary
+    - secondary
+`,
+			components: managedNameResolutionComponentYAML("dns-primary") + "---\n" +
+				managedNameResolutionComponentYAML("dns-secondary"),
+			want: "Environment/env consumers resolve to multiple managed name-resolution services (InfraComponent/dns-primary, InfraComponent/dns-secondary)",
+		},
+		{
+			name: "unused catalog service",
+			entries: `      - name: primary
+        management: managed
+        componentRef: dns-primary
+      - name: unused
+        management: managed
+        componentRef: dns-unused
+`,
+			refs: `    - primary
+`,
+			components: managedNameResolutionComponentYAML("dns-primary") + "---\n" +
+				managedNameResolutionComponentYAML("dns-unused"),
+		},
+		{
+			name: "two catalog aliases for one service",
+			entries: `      - name: primary
+        management: managed
+        componentRef: dns-primary
+      - name: alias
+        management: managed
+        componentRef: dns-primary
+`,
+			refs: `    - primary
+    - alias
+`,
+			components: managedNameResolutionComponentYAML("dns-primary"),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", "  infraComponents:\n    nameResolution:\n"+tc.entries, 1)
+			files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", "  nameResolutionRefs:\n"+tc.refs+"  template:\n", 1)
+			files["infra-component.yaml"] += "---\n" + tc.components
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("LoadNormalizeValidate: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("LoadNormalizeValidate error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestNetworkConfigsAllowSharedMachineCIDR(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -4193,6 +4314,19 @@ func newBaselineFiles() map[string]string {
 		"infra-component.yaml":  newInfraComponentYAML,
 		"cluster.yaml":          newClusterYAML,
 	}
+}
+
+func managedNameResolutionComponentYAML(name string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: ` + name + ` }
+spec:
+  type: nameResolution
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: services-host
+    bindAddress: 192.168.132.1
+`
 }
 
 func baselineFilesWithNTPComponent() map[string]string {

@@ -14,7 +14,10 @@ what turns "forgot" into a red test.
 | --- | --- | --- |
 | an `--authorize` token | `authorizationTokens` (`internal/cli/authorize.go`), the `\| token \| authorizes \| accepted by \|` tables in `specs/state-model.md` and `docs/advanced/operations.md`, a `safetyMatrixCases()` row, and the verb's preview forecast | `authorize_contract_test.go`, `TestEveryTokenAVerbAcceptsIsNamedByItsPreviewForecast` |
 | a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead; and a field emitted by `resolvedInvocation` so refusal retries preserve it | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix`, `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` |
-| an apply task kind | `workflow.ApplyTaskKinds`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToADestroyKind` |
+| an apply task kind | `workflow.ApplyTaskKinds`, `controllerDNSDependencyClasses`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestControllerDNSDependencyRegistryCoversEveryApplyTaskKind`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToARegisteredDestroyKind` |
+| an apply task execution class | the `ApplyTaskExecution*` constant set and `ActivityGraph.Add` validation that binds the class to its sole permitted task kind and exact mutation-control value | `TestApplyTaskExecutionClassRegistryCoversEveryConstant`, `TestApplyTaskExecutionClassPinsControllerMutationDecision` |
+| a destroy task kind | the `DestroyTaskKind*` constant set, `destroyTaskKinds`, and `destroyKindForApplyTaskKind` for every apply task whose convergence record it clears | `TestDestroyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindMapsToARegisteredDestroyKind` |
+| a task dependency class | a `TaskLedgerEntry` field, `taskDependencyRefs`, `taskDependencySatisfied`, and every dependency graph consumer | `TestTaskDependencyPoliciesCoverEveryLedgerDependencyField` |
 | a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, and `substrateResetConsumers` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer` |
 | a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
 | a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed; every live cross-context mutator must also use the controller-global shared-service lease and durable host context claim | `internal/repo/checks/shared_service_classification_test.go`, `TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution`, `TestInfraComponentContainersCarryAndEnforceContextIdentity` |
@@ -43,6 +46,18 @@ kinds. `TestApplyTaskKindsRegistryCoversEveryConstant` parses `apply_tasks.go`
 for `ApplyTaskKind*` constants and fails when one is missing from the registry,
 so a new kind cannot be added without entering the guards below.
 
+**Controller DNS ordering and proof-only execution are closed registries.**
+`controllerDNSDependencyClasses` classifies every apply task kind as before,
+barrier, after, or dynamically ordered. The completeness guard rejects both a
+new unclassified kind and a retired entry; planner coverage then proves all five
+phases, including later-only `deps`, `base`, and `add-ons`, hard-depend on the
+live controller proof wherever their class requires it. The only evidence-free
+execution class is `liveProof`, it is restricted to controller name resolution,
+and the graph requires exactly one matching
+`bootwright_controller_name_resolution_mutation_selected=false`; the ordinary
+class requires exactly one `true`. Adding another class without an equally
+closed kind and mutation-selector rule fails the AST guard.
+
 **Every kind is classified.**
 `TestEveryApplyTaskKindHasAnOverrideClassification` asserts each registered kind
 is exactly one of reconfigure-only (`overrideReconfigureOnlyKinds`) or
@@ -54,11 +69,30 @@ than an accident. `TestOverrideReconfigureOnlyAllowlistHoldsOnlyLiveTaskKinds`
 additionally rejects a retired member — a dead allowlist entry is unreachable
 defence-in-depth and makes the published taxonomy over-promise.
 
-**Every kind is torn down.** `TestEveryApplyTaskKindMapsToADestroyKind`
+**Every kind is torn down.** `TestEveryApplyTaskKindMapsToARegisteredDestroyKind`
 (`internal/converge`) asserts `destroyKindForApplyTaskKind` maps every registered
-kind to a destroy kind. An unmapped kind's convergence record would survive the
+kind to a registered destroy kind. An unmapped kind's convergence record would survive the
 teardown that removed the resource, and the next apply would classify it as
 `match` and skip re-provisioning it — a silent no-op where work was expected.
+`TestDestroyTaskKindsRegistryCoversEveryConstant` also parses the destroy-kind
+constants and rejects a missing or retired `destroyTaskKinds` entry, while the
+controller resolver outcome tests require both its preflight and cleanup task
+to succeed before that destroy kind can clear convergence evidence.
+
+**Every dependency class has one scheduler meaning.** `Dependencies` accepts an
+`OK` or `Skipped` prerequisite, `SuccessDependencies` accepts only `OK`, and
+`OrderingDependencies` accepts any terminal status. `taskDependencyRefs` is the
+single registry read by readiness and by every generic graph walk;
+`TestTaskDependencyPoliciesCoverEveryLedgerDependencyField` reflects over
+`TaskLedgerEntry` and fails when a new `*Dependencies` field has no policy. Every
+controller name-resolution destroy mutation requires a successful preflight.
+Cleanup then shares `DestroyTaskNeedsCompletionProof` with the CLI completion
+gate: an emitted task carrying resource, cluster, or machine identity is a
+`SuccessDependencies` edge, while an empty no-op task is a skip-tolerant
+`Dependencies` edge. Both wait for the task to finish, but only selected work
+must return `OK`. Scheduler coverage proves a skipped selected task blocks
+cleanup and retains controller evidence, while an empty no-host task may skip
+and still release successful cleanup.
 
 **The record round-trips.** `TestWrittenConvergeSafetyRecordClassifiesAsOwnedMatch`
 writes a record through the real writer and classifies it through the real

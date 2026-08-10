@@ -1,6 +1,10 @@
 package workflow
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"net"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -10,6 +14,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	renderinventory "github.com/crmarques/bootwright/internal/render/inventory"
+	"github.com/crmarques/bootwright/internal/roles"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -52,6 +58,57 @@ func assertDestroyOrderingEdges(t *testing.T, tasks []ApplyTask, want map[string
 	}
 }
 
+func TestDestroyTaskKindsRegistryCoversEveryConstant(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "destroy_plan.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse destroy_plan.go: %v", err)
+	}
+	declared := map[string]string{}
+	declaredCount := 0
+	ast.Inspect(file, func(n ast.Node) bool {
+		spec, ok := n.(*ast.ValueSpec)
+		if !ok {
+			return true
+		}
+		for i, name := range spec.Names {
+			if !strings.HasPrefix(name.Name, "DestroyTaskKind") {
+				continue
+			}
+			if i >= len(spec.Values) {
+				t.Errorf("%s has no explicit string value; every destroy task kind must enter the outcome registry", name.Name)
+				continue
+			}
+			lit, ok := spec.Values[i].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				t.Errorf("%s is not an explicit string destroy task kind", name.Name)
+				continue
+			}
+			declaredCount++
+			value := strings.Trim(lit.Value, `"`)
+			if previous := declared[value]; previous != "" {
+				t.Errorf("%s and %s both declare destroy task kind %q; every kind must have one canonical constant", previous, name.Name, value)
+			}
+			declared[value] = name.Name
+			if !IsDestroyTaskKind(value) {
+				t.Errorf("%s = %q is not in destroyTaskKinds; successful teardown could not clear its apply evidence", name.Name, value)
+			}
+		}
+		return true
+	})
+	if declaredCount == 0 {
+		t.Fatal("found no DestroyTaskKind constants to check; the guard would pass vacuously")
+	}
+	for kind := range destroyTaskKinds {
+		if declared[kind] == "" {
+			t.Errorf("destroy task registry holds undeclared or retired kind %q", kind)
+		}
+	}
+	if declaredCount != len(destroyTaskKinds) || len(declared) != len(destroyTaskKinds) {
+		t.Fatalf("destroy task registry has %d entries for %d constants with %d distinct values", len(destroyTaskKinds), declaredCount, len(declared))
+	}
+}
+
 func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	limit := "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"
 	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
@@ -59,19 +116,30 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs := []string{"destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
+	wantIDs := []string{
+		"destroy.controller-name-resolution-preflight",
+		"destroy.machine-registration",
+		"destroy.machine-infra",
+		"destroy.infra-components",
+		"destroy.provider-services",
+		"destroy.controller-name-resolution-cleanup",
+	}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
 		t.Fatalf("infra destroy plan = %v, want %v; teardown is the inverse of build-up, where every machines-phase task depends on the fabric services, so fabric teardown comes last", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.machine-registration": nil,
-		"destroy.machine-infra":        {"destroy.machine-registration"},
-		"destroy.infra-components":     {"destroy.machine-infra", "destroy.machine-registration"},
-		"destroy.provider-services":    {"destroy.machine-infra", "destroy.infra-components"},
+		"destroy.controller-name-resolution-preflight": nil,
+		"destroy.machine-registration":                 nil,
+		"destroy.machine-infra":                        {"destroy.machine-registration"},
+		"destroy.infra-components":                     {"destroy.machine-infra", "destroy.machine-registration"},
+		"destroy.provider-services":                    {"destroy.machine-infra", "destroy.infra-components"},
+		"destroy.controller-name-resolution-cleanup":   nil,
 	})
 	for i, task := range tasks {
 		wantLimit := limit
-		if task.Entry.ID == "destroy.machine-registration" {
+		if task.Entry.ID == "destroy.controller-name-resolution-preflight" || task.Entry.ID == "destroy.controller-name-resolution-cleanup" {
+			wantLimit = render.GroupControllerHosts
+		} else if task.Entry.ID == "destroy.machine-registration" {
 			wantLimit = "bootwright_storage_hosts"
 		} else if task.Entry.ID == "destroy.machine-infra" {
 			wantLimit = "bootwright_machine_task_hosts:bootwright_provider_hosts:bootwright_infra_hosts"
@@ -82,8 +150,19 @@ func TestPlanDestroyTasksInfraChain(t *testing.T) {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
-		if len(task.Entry.Dependencies) != 0 {
-			t.Fatalf("task[%d] hard deps = %v, want none (ordering only)", i, task.Entry.Dependencies)
+		wantDependencies := []string(nil)
+		wantSuccessDependencies := []string(nil)
+		switch task.Entry.ID {
+		case "destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services":
+			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
+		case "destroy.controller-name-resolution-cleanup":
+			wantDependencies = []string{"destroy.machine-registration", "destroy.machine-infra", "destroy.infra-components", "destroy.provider-services"}
+		}
+		if !reflect.DeepEqual(task.Entry.Dependencies, wantDependencies) {
+			t.Fatalf("task[%d] skip-tolerant deps = %v, want %v", i, task.Entry.Dependencies, wantDependencies)
+		}
+		if !reflect.DeepEqual(task.Entry.SuccessDependencies, wantSuccessDependencies) {
+			t.Fatalf("task[%d] success deps = %v, want %v", i, task.Entry.SuccessDependencies, wantSuccessDependencies)
 		}
 	}
 	if tasks[0].Playbook == "" || tasks[0].Playbook == tasks[1].Playbook {
@@ -190,6 +269,7 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs := []string{
+		"destroy.controller-name-resolution-preflight",
 		"destroy.cluster-runtime",
 		"destroy.storage-clusters",
 		"destroy.machine-registration",
@@ -198,15 +278,17 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		"destroy.container-clusters",
 		"destroy.infra-components",
 		"destroy.provider-services",
+		"destroy.controller-name-resolution-cleanup",
 	}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
 		t.Fatalf("full destroy plan = %v, want %v", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.cluster-runtime":      nil,
-		"destroy.storage-clusters":     nil,
-		"destroy.machine-registration": {"destroy.storage-clusters"},
-		"destroy.storage-node-access":  {"destroy.machine-registration", "destroy.storage-clusters"},
+		"destroy.controller-name-resolution-preflight": nil,
+		"destroy.cluster-runtime":                      nil,
+		"destroy.storage-clusters":                     nil,
+		"destroy.machine-registration":                 {"destroy.storage-clusters"},
+		"destroy.storage-node-access":                  {"destroy.machine-registration", "destroy.storage-clusters"},
 		"destroy.machine-infra": {
 			"destroy.cluster-runtime",
 			"destroy.storage-node-access",
@@ -219,21 +301,41 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 			"destroy.storage-node-access",
 			"destroy.machine-registration",
 		},
-		"destroy.provider-services": {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.provider-services":                  {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.controller-name-resolution-cleanup": nil,
 	})
 	for i, task := range tasks {
 		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
 			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
 		}
 		wantDependencies := []string(nil)
-		if task.Entry.ID == "destroy.container-clusters" {
+		wantSuccessDependencies := []string(nil)
+		switch task.Entry.ID {
+		case "destroy.cluster-runtime", "destroy.storage-clusters", "destroy.machine-registration", "destroy.storage-node-access", "destroy.infra-components", "destroy.provider-services":
+			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
+		case "destroy.container-clusters":
 			wantDependencies = []string{"destroy.machine-infra"}
-		}
-		if task.Entry.ID == "destroy.machine-infra" {
+			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
+		case "destroy.machine-infra":
 			wantDependencies = []string{"destroy.storage-clusters"}
+			wantSuccessDependencies = []string{"destroy.controller-name-resolution-preflight"}
+		case "destroy.controller-name-resolution-cleanup":
+			wantDependencies = []string{
+				"destroy.cluster-runtime",
+				"destroy.storage-clusters",
+				"destroy.machine-registration",
+				"destroy.storage-node-access",
+				"destroy.machine-infra",
+				"destroy.container-clusters",
+				"destroy.infra-components",
+				"destroy.provider-services",
+			}
 		}
 		if !reflect.DeepEqual(task.Entry.Dependencies, wantDependencies) {
-			t.Fatalf("task[%d] hard deps = %v, want %v", i, task.Entry.Dependencies, wantDependencies)
+			t.Fatalf("task[%d] skip-tolerant deps = %v, want %v", i, task.Entry.Dependencies, wantDependencies)
+		}
+		if !reflect.DeepEqual(task.Entry.SuccessDependencies, wantSuccessDependencies) {
+			t.Fatalf("task[%d] success deps = %v, want %v", i, task.Entry.SuccessDependencies, wantSuccessDependencies)
 		}
 	}
 	nodeAccess := slices.Index(wantIDs, "destroy.storage-node-access")
@@ -263,7 +365,170 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		t.Fatalf("the proxy InfraComponent carries RHSM egress, so deregistration must complete before the fabric is torn down; got %v", got)
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.provider-services").Entry.OrderingDependencies; !slices.Contains(got, "destroy.container-clusters") {
-		t.Fatalf("provider services must stay serialised behind container-cluster teardown: container_cluster_agent_install/tasks/destroy_records.yml restarts systemd-resolved on the controller that every other destroy play resolves its SSH targets through; got %v", got)
+		t.Fatalf("provider services must remain behind the container-cluster teardown they supported; got %v", got)
+	}
+}
+
+func TestControllerNameResolutionDestroyBracketHardGatesEveryInfraMutation(t *testing.T) {
+	cases := []struct {
+		name  string
+		scope string
+		state v1alpha1.State
+	}{
+		{name: "infra empty", scope: "infra"},
+		{name: "all empty", scope: "all"},
+		{name: "all selected resources", scope: "all", state: loadWorkflowFixtureState(t, "001-sno-libvirt")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks, err := PlanDestroyTasks(tc.scope, tc.state, "", nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preflight := destroyTaskByID(t, tasks, destroyControllerNameResolutionPreflightTaskID)
+			cleanup := destroyTaskByID(t, tasks, destroyControllerNameResolutionCleanupTaskID)
+			if preflight.Entry.Kind != DestroyTaskKindControllerNameResolution || cleanup.Entry.Kind != DestroyTaskKindControllerNameResolution {
+				t.Fatalf("controller bracket kinds = %q/%q, want %q", preflight.Entry.Kind, cleanup.Entry.Kind, DestroyTaskKindControllerNameResolution)
+			}
+			if preflight.Playbook != roles.PlaybookTaskControllerNameResolutionDestroyPreflight || cleanup.Playbook != roles.PlaybookTaskControllerNameResolutionDestroyCleanup {
+				t.Fatalf("controller bracket playbooks = %q/%q", preflight.Playbook, cleanup.Playbook)
+			}
+			var successDependencies []string
+			var skipTolerantDependencies []string
+			for _, task := range tasks {
+				if task.Entry.ID == preflight.Entry.ID || task.Entry.ID == cleanup.Entry.ID {
+					continue
+				}
+				if !slices.Contains(task.Entry.SuccessDependencies, preflight.Entry.ID) {
+					t.Errorf("destroy mutation %s does not require successful controller ownership preflight: %v", task.Entry.ID, task.Entry.SuccessDependencies)
+				}
+				if DestroyTaskNeedsCompletionProof(task.Entry) {
+					successDependencies = append(successDependencies, task.Entry.ID)
+					if !slices.Contains(cleanup.Entry.SuccessDependencies, task.Entry.ID) || slices.Contains(cleanup.Entry.Dependencies, task.Entry.ID) {
+						t.Errorf("controller cleanup does not require success only from identity-bearing mutation %s: deps=%v success=%v", task.Entry.ID, cleanup.Entry.Dependencies, cleanup.Entry.SuccessDependencies)
+					}
+				} else {
+					skipTolerantDependencies = append(skipTolerantDependencies, task.Entry.ID)
+					if !slices.Contains(cleanup.Entry.Dependencies, task.Entry.ID) || slices.Contains(cleanup.Entry.SuccessDependencies, task.Entry.ID) {
+						t.Errorf("controller cleanup does not accept a skipped empty mutation %s after waiting for it: deps=%v success=%v", task.Entry.ID, cleanup.Entry.Dependencies, cleanup.Entry.SuccessDependencies)
+					}
+				}
+			}
+			if len(successDependencies)+len(skipTolerantDependencies) == 0 {
+				t.Fatal("destroy plan has no bracketed mutation; the dependency assertion would pass vacuously")
+			}
+			if !reflect.DeepEqual(cleanup.Entry.Dependencies, skipTolerantDependencies) {
+				t.Fatalf("controller cleanup skip-tolerant dependencies = %v, want empty mutations in plan order %v", cleanup.Entry.Dependencies, skipTolerantDependencies)
+			}
+			if !reflect.DeepEqual(cleanup.Entry.SuccessDependencies, successDependencies) {
+				t.Fatalf("controller cleanup success dependencies = %v, want identity-bearing mutations in plan order %v", cleanup.Entry.SuccessDependencies, successDependencies)
+			}
+		})
+	}
+	clusters, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range clusters {
+		if task.Entry.Kind == DestroyTaskKindControllerNameResolution {
+			t.Fatalf("clusters-only destroy planned controller resolver teardown %s", task.Entry.ID)
+		}
+	}
+}
+
+func TestManagedNameResolutionPlacementDestroyKeepsResolverIndependentConnectionUntilCleanup(t *testing.T) {
+	state := loadControllerResolverState(t, "sno-libvirt-redfish")
+	const resolverHost = "bastion"
+	const sshAddress = "192.0.2.53"
+	found := false
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name != resolverHost {
+			continue
+		}
+		for j := range state.Machines[i].Spec.Addresses {
+			if state.Machines[i].Spec.Addresses[j].Name == state.Machines[i].Spec.Access.SSH.AddressRef.Name {
+				state.Machines[i].Spec.Addresses[j].Address = sshAddress
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("managed resolver host %q has no SSH address to exercise", resolverHost)
+	}
+	providerHosts := render.HostGroupMembers(state)[render.GroupProviderHosts]
+	if !slices.Contains(providerHosts, resolverHost) {
+		t.Fatalf("provider hosts = %v, want managed resolver placement host %q", providerHosts, resolverHost)
+	}
+	inventory := renderinventory.Inventory(state, "")
+	all := inventory["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	host := hosts[resolverHost].(map[string]any)
+	if got := host["ansible_host"]; got != sshAddress || net.ParseIP(got.(string)) == nil {
+		t.Fatalf("managed resolver placement host ansible_host = %v, want explicit SSH IP %s independent of the resolver it hosts", got, sshAddress)
+	}
+	if got := host["ansible_connection"]; got == "local" {
+		t.Fatalf("managed resolver placement host unexpectedly uses controller-local connection: %v", host)
+	}
+
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatalf("plan destroy: %v", err)
+	}
+	infra := destroyTaskByID(t, tasks, destroyInfraComponentsTaskID)
+	provider := destroyTaskByID(t, tasks, destroyProviderServicesTaskID)
+	cleanup := destroyTaskByID(t, tasks, destroyControllerNameResolutionCleanupTaskID)
+	if !slices.Contains(provider.Entry.OrderingDependencies, infra.Entry.ID) {
+		t.Fatalf("provider teardown ordering dependencies = %v, want name-resolution teardown %s first", provider.Entry.OrderingDependencies, infra.Entry.ID)
+	}
+	if !slices.Contains(cleanup.Entry.Dependencies, provider.Entry.ID) {
+		t.Fatalf("controller cleanup dependencies = %v, want resolver-independent provider teardown %s to reach OK or skipped first", cleanup.Entry.Dependencies, provider.Entry.ID)
+	}
+	if tasks[len(tasks)-1].Entry.ID != cleanup.Entry.ID {
+		t.Fatalf("last destroy task = %s, want controller cleanup %s", tasks[len(tasks)-1].Entry.ID, cleanup.Entry.ID)
+	}
+}
+
+func TestDestroySkipOrphanSweepPreservesGraphWithoutControllerBracket(t *testing.T) {
+	extra := []string{DestroySkipOrphanSweepExtraVar + "=true"}
+	for _, scope := range []string{"infra", "all"} {
+		t.Run(scope, func(t *testing.T) {
+			normal, err := PlanDestroyTasks(scope, v1alpha1.State{}, "", nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			suppressed, err := PlanDestroyTasks(scope, v1alpha1.State{}, "", extra, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantByID := map[string]ApplyTask{}
+			var wantIDs []string
+			for _, task := range normal {
+				if task.Entry.Kind == DestroyTaskKindControllerNameResolution {
+					continue
+				}
+				filtered := task.Entry.SuccessDependencies[:0:0]
+				for _, dependency := range task.Entry.SuccessDependencies {
+					if dependency != destroyControllerNameResolutionPreflightTaskID {
+						filtered = append(filtered, dependency)
+					}
+				}
+				task.Entry.SuccessDependencies = filtered
+				wantByID[task.Entry.ID] = task
+				wantIDs = append(wantIDs, task.Entry.ID)
+			}
+			if got := destroyTaskIDs(suppressed); !reflect.DeepEqual(got, wantIDs) {
+				t.Fatalf("suppressed destroy graph = %v, want the normal graph without controller preflight/cleanup %v", got, wantIDs)
+			}
+			for _, task := range suppressed {
+				want := wantByID[task.Entry.ID]
+				if task.Entry.Kind != want.Entry.Kind || task.Playbook != want.Playbook || task.Limit != want.Limit || !slices.Equal(task.Entry.Dependencies, want.Entry.Dependencies) || !slices.Equal(task.Entry.SuccessDependencies, want.Entry.SuccessDependencies) || !slices.Equal(task.Entry.OrderingDependencies, want.Entry.OrderingDependencies) {
+					t.Errorf("suppressed task %s changed outside bracket removal: got kind=%q playbook=%q limit=%q deps=%v success=%v ordering=%v; want kind=%q playbook=%q limit=%q deps=%v success=%v ordering=%v", task.Entry.ID, task.Entry.Kind, task.Playbook, task.Limit, task.Entry.Dependencies, task.Entry.SuccessDependencies, task.Entry.OrderingDependencies, want.Entry.Kind, want.Playbook, want.Limit, want.Entry.Dependencies, want.Entry.SuccessDependencies, want.Entry.OrderingDependencies)
+				}
+				if !reflect.DeepEqual(task.ExtraVarPairs, extra) {
+					t.Errorf("suppressed task %s extra vars = %v, want %v", task.Entry.ID, task.ExtraVarPairs, extra)
+				}
+			}
+		})
 	}
 }
 
@@ -273,11 +538,13 @@ func TestPlanDestroyTasksRelinksOrderingAcrossSkippedSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.cluster-runtime":    nil,
-		"destroy.machine-infra":      {"destroy.cluster-runtime"},
-		"destroy.container-clusters": {"destroy.cluster-runtime"},
-		"destroy.infra-components":   {"destroy.machine-infra"},
-		"destroy.provider-services":  {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.controller-name-resolution-preflight": nil,
+		"destroy.cluster-runtime":                      nil,
+		"destroy.machine-infra":                        {"destroy.cluster-runtime"},
+		"destroy.container-clusters":                   {"destroy.cluster-runtime"},
+		"destroy.infra-components":                     {"destroy.machine-infra"},
+		"destroy.provider-services":                    {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.controller-name-resolution-cleanup":   nil,
 	})
 
 	clusters, err := PlanDestroyTasks("clusters", v1alpha1.State{}, "limit", nil, []string{})
@@ -672,6 +939,7 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs := []string{
+		"destroy.controller-name-resolution-preflight",
 		"destroy.cluster-runtime",
 		"destroy.storage-clusters.ceph-a",
 		"destroy.storage-clusters.ceph-b",
@@ -683,18 +951,20 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 		"destroy.container-clusters",
 		"destroy.infra-components",
 		"destroy.provider-services",
+		"destroy.controller-name-resolution-cleanup",
 	}
 	if got := destroyTaskIDs(tasks); !reflect.DeepEqual(got, wantIDs) {
 		t.Fatalf("fanned destroy plan = %v, want %v", got, wantIDs)
 	}
 	assertDestroyOrderingEdges(t, tasks, map[string][]string{
-		"destroy.cluster-runtime":             nil,
-		"destroy.storage-clusters.ceph-a":     nil,
-		"destroy.storage-clusters.ceph-b":     nil,
-		"destroy.machine-registration.ceph-a": {"destroy.storage-clusters.ceph-a"},
-		"destroy.machine-registration.ceph-b": {"destroy.storage-clusters.ceph-b"},
-		"destroy.storage-node-access.ceph-a":  {"destroy.machine-registration.ceph-a", "destroy.storage-clusters.ceph-a"},
-		"destroy.storage-node-access.ceph-b":  {"destroy.machine-registration.ceph-b", "destroy.storage-clusters.ceph-b"},
+		"destroy.controller-name-resolution-preflight": nil,
+		"destroy.cluster-runtime":                      nil,
+		"destroy.storage-clusters.ceph-a":              nil,
+		"destroy.storage-clusters.ceph-b":              nil,
+		"destroy.machine-registration.ceph-a":          {"destroy.storage-clusters.ceph-a"},
+		"destroy.machine-registration.ceph-b":          {"destroy.storage-clusters.ceph-b"},
+		"destroy.storage-node-access.ceph-a":           {"destroy.machine-registration.ceph-a", "destroy.storage-clusters.ceph-a"},
+		"destroy.storage-node-access.ceph-b":           {"destroy.machine-registration.ceph-b", "destroy.storage-clusters.ceph-b"},
 		"destroy.machine-infra": {
 			"destroy.cluster-runtime",
 			"destroy.storage-node-access.ceph-a",
@@ -716,7 +986,8 @@ func TestPlanDestroyTasksFansOutIndependentStorageClusters(t *testing.T) {
 			"destroy.machine-registration.ceph-a",
 			"destroy.machine-registration.ceph-b",
 		},
-		"destroy.provider-services": {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.provider-services":                  {"destroy.machine-infra", "destroy.container-clusters", "destroy.infra-components"},
+		"destroy.controller-name-resolution-cleanup": nil,
 	})
 	for _, cluster := range []string{"ceph-a", "ceph-b"} {
 		other := map[string]string{"ceph-a": "ceph-b", "ceph-b": "ceph-a"}[cluster]
@@ -810,6 +1081,56 @@ func TestSucceededDestroyTaskKindsScopesSuccessToItsOwnCluster(t *testing.T) {
 	}
 }
 
+func TestControllerNameResolutionDestroyOutcomeRequiresBothBracketTasks(t *testing.T) {
+	cases := []struct {
+		name            string
+		preflightStatus TaskStatus
+		cleanupStatus   TaskStatus
+		wantCovered     bool
+	}{
+		{name: "both succeeded", preflightStatus: TaskStatusOK, cleanupStatus: TaskStatusOK, wantCovered: true},
+		{name: "preflight failed", preflightStatus: TaskStatusFailed, cleanupStatus: TaskStatusBlocked},
+		{name: "cleanup failed", preflightStatus: TaskStatusOK, cleanupStatus: TaskStatusFailed},
+		{name: "cleanup skipped", preflightStatus: TaskStatusOK, cleanupStatus: TaskStatusSkipped},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			outcome := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
+				{ID: destroyControllerNameResolutionPreflightTaskID, Kind: DestroyTaskKindControllerNameResolution, Status: tc.preflightStatus},
+				{ID: destroyControllerNameResolutionCleanupTaskID, Kind: DestroyTaskKindControllerNameResolution, Status: tc.cleanupStatus},
+			}})
+			if !outcome.Attempted(DestroyTaskKindControllerNameResolution, "") {
+				t.Fatal("controller name-resolution destroy outcome did not record an attempted bracket")
+			}
+			if got := outcome.Covers(DestroyTaskKindControllerNameResolution, ""); got != tc.wantCovered {
+				t.Fatalf("controller name-resolution destroy covered = %t, want %t for preflight=%s cleanup=%s", got, tc.wantCovered, tc.preflightStatus, tc.cleanupStatus)
+			}
+		})
+	}
+}
+
+func TestDestroyTaskNeedsCompletionProofUsesSelectedIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		task TaskLedgerEntry
+		want bool
+	}{
+		{name: "empty"},
+		{name: "cluster resource", task: TaskLedgerEntry{ResourceKeys: []string{"cluster-a"}}, want: true},
+		{name: "machine resource", task: TaskLedgerEntry{ResourceKeys: []string{DestroyMachineResourceKeyPrefix + "node-a"}}, want: true},
+		{name: "cluster field", task: TaskLedgerEntry{Cluster: "cluster-a"}, want: true},
+		{name: "node field", task: TaskLedgerEntry{Node: "node-a"}, want: true},
+		{name: "nodes field", task: TaskLedgerEntry{Nodes: []string{"node-a"}}, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DestroyTaskNeedsCompletionProof(tc.task); got != tc.want {
+				t.Fatalf("DestroyTaskNeedsCompletionProof(%+v) = %t, want %t", tc.task, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSucceededDestroyTaskKindsMarksKindsWhoseTasksAllSucceeded(t *testing.T) {
 	outcome := SucceededDestroyTaskKinds(RunLedger{Tasks: []TaskLedgerEntry{
 		{ID: "destroy.storage-clusters.ceph-a", Kind: DestroyTaskKindStorageCluster, ResourceKeys: []string{"ceph-a"}, Status: TaskStatusOK},
@@ -888,12 +1209,14 @@ func TestDestroyChainSetsForksForEveryStep(t *testing.T) {
 		t.Fatalf("fixture must have several storage hosts and a strictly larger inventory to prove the fork limit is per step; storage=%d inventory=%d", storageHosts, inventory)
 	}
 	want := map[string]int{
-		"destroy.storage-clusters":     bounded(storageHosts),
-		"destroy.machine-registration": bounded(storageHosts),
-		"destroy.storage-node-access":  bounded(storageHosts),
-		"destroy.infra-components":     bounded(hostCount(render.GroupInfraComponentHosts)),
-		"destroy.provider-services":    bounded(hostCount(render.GroupProviderHosts)),
-		"destroy.machine-infra":        bounded(hostCount(render.GroupMachineTaskHosts, render.GroupProviderHosts, render.GroupInfraHosts)),
+		"destroy.controller-name-resolution-preflight": bounded(hostCount(render.GroupControllerHosts)),
+		"destroy.controller-name-resolution-cleanup":   bounded(hostCount(render.GroupControllerHosts)),
+		"destroy.storage-clusters":                     bounded(storageHosts),
+		"destroy.machine-registration":                 bounded(storageHosts),
+		"destroy.storage-node-access":                  bounded(storageHosts),
+		"destroy.infra-components":                     bounded(hostCount(render.GroupInfraComponentHosts)),
+		"destroy.provider-services":                    bounded(hostCount(render.GroupProviderHosts)),
+		"destroy.machine-infra":                        bounded(hostCount(render.GroupMachineTaskHosts, render.GroupProviderHosts, render.GroupInfraHosts)),
 	}
 	ocpForks := bounded(hostCount(render.GroupOCPHosts))
 	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)

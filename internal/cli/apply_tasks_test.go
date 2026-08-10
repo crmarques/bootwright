@@ -28,8 +28,8 @@ func planApplyTasks(t *testing.T, target workflow.ApplyTarget, state v1alpha1.St
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.AllScope.ApplyTarget(), state)
-	if len(tasks) != 10 {
-		t.Fatalf("planned %d tasks, want 10: %+v", len(tasks), tasks)
+	if len(tasks) != 11 {
+		t.Fatalf("planned %d tasks, want 11: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "provider.bastion" {
 		t.Fatalf("first task = %s, want provider.bastion", tasks[0].Entry.ID)
@@ -43,41 +43,45 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if tasks[1].Entry.Host != "bastion" || len(tasks[1].Entry.ResourceKeys) != 1 {
 		t.Fatalf("infra component host/resources = %q/%v, want bastion with resource key", tasks[1].Entry.Host, tasks[1].Entry.ResourceKeys)
 	}
-	if tasks[2].Entry.ID != "infraprepare.sno-libvirt.bastion" {
-		t.Fatalf("third task = %s, want infraprepare.sno-libvirt.bastion", tasks[2].Entry.ID)
+	if tasks[2].Entry.ID != "controller-name-resolution.InfraComponent.name-resolution" {
+		t.Fatalf("third task = %s, want controller-name-resolution.InfraComponent.name-resolution", tasks[2].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[2], "provider.bastion")
-	if tasks[3].Entry.ID != "infra.sno-libvirt.master-0" {
-		t.Fatalf("fourth task = %s, want infra.sno-libvirt.master-0", tasks[3].Entry.ID)
+	assertPlannedDeps(t, tasks[2], "infra-component.bastion")
+	if tasks[3].Entry.ID != "infraprepare.sno-libvirt.bastion" {
+		t.Fatalf("fourth task = %s, want infraprepare.sno-libvirt.bastion", tasks[3].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[3], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
-	if tasks[3].Entry.HostSlotKey != "host:bastion:machine" || tasks[3].Entry.HostSlotCount != 1 {
-		t.Fatalf("machine infra host slot = %q/%d, want host:bastion:machine/1", tasks[3].Entry.HostSlotKey, tasks[3].Entry.HostSlotCount)
+	assertPlannedDeps(t, tasks[3], "provider.bastion", "controller-name-resolution.InfraComponent.name-resolution")
+	if tasks[4].Entry.ID != "infra.sno-libvirt.master-0" {
+		t.Fatalf("fifth task = %s, want infra.sno-libvirt.master-0", tasks[4].Entry.ID)
 	}
-	if tasks[4].Entry.ID != "infrafinalize.sno-libvirt.bastion" {
-		t.Fatalf("fifth task = %s, want infrafinalize.sno-libvirt.bastion", tasks[4].Entry.ID)
+	assertPlannedDeps(t, tasks[4], "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "infraprepare.sno-libvirt.bastion")
+	if tasks[4].Entry.HostSlotKey != "host:bastion:machine" || tasks[4].Entry.HostSlotCount != 1 {
+		t.Fatalf("machine infra host slot = %q/%d, want host:bastion:machine/1", tasks[4].Entry.HostSlotKey, tasks[4].Entry.HostSlotCount)
 	}
-	assertPlannedDeps(t, tasks[4], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
-	if tasks[5].Entry.ID != "iso.sno-libvirt" {
-		t.Fatalf("sixth task = %s, want iso.sno-libvirt", tasks[5].Entry.ID)
+	if tasks[5].Entry.ID != "infrafinalize.sno-libvirt.bastion" {
+		t.Fatalf("sixth task = %s, want infrafinalize.sno-libvirt.bastion", tasks[5].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[5], "provider.bastion", "infra-component.bastion", "infraprepare.sno-libvirt.bastion")
-	if tasks[6].Entry.ID != "boot.sno-libvirt" {
-		t.Fatalf("seventh task = %s, want boot.sno-libvirt", tasks[6].Entry.ID)
+	assertPlannedDeps(t, tasks[5], "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "infraprepare.sno-libvirt.bastion")
+	if tasks[6].Entry.ID != "iso.sno-libvirt" {
+		t.Fatalf("seventh task = %s, want iso.sno-libvirt", tasks[6].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[6], "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
-	if tasks[7].Entry.ID != "wait-bootstrap.sno-libvirt" {
-		t.Fatalf("eighth task = %s, want wait-bootstrap.sno-libvirt", tasks[7].Entry.ID)
+	assertPlannedDeps(t, tasks[6], "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "infraprepare.sno-libvirt.bastion")
+	if tasks[7].Entry.ID != "boot.sno-libvirt" {
+		t.Fatalf("eighth task = %s, want boot.sno-libvirt", tasks[7].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[7], "boot.sno-libvirt")
-	if tasks[8].Entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("ninth task = %s, want wait.sno-libvirt", tasks[8].Entry.ID)
+	assertPlannedDeps(t, tasks[7], "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "iso.sno-libvirt", "infra.sno-libvirt.master-0", "infrafinalize.sno-libvirt.bastion")
+	if tasks[8].Entry.ID != "wait-bootstrap.sno-libvirt" {
+		t.Fatalf("ninth task = %s, want wait-bootstrap.sno-libvirt", tasks[8].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[8], "wait-bootstrap.sno-libvirt")
-	if tasks[9].Entry.ID != "nodeconfig.sno-libvirt.apply" {
-		t.Fatalf("tenth task = %s, want nodeconfig.sno-libvirt.apply", tasks[9].Entry.ID)
+	assertPlannedDeps(t, tasks[8], "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	if tasks[9].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("tenth task = %s, want wait.sno-libvirt", tasks[9].Entry.ID)
 	}
-	assertPlannedDeps(t, tasks[9], "wait.sno-libvirt")
+	assertPlannedDeps(t, tasks[9], "wait-bootstrap.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	if tasks[10].Entry.ID != "nodeconfig.sno-libvirt.apply" {
+		t.Fatalf("eleventh task = %s, want nodeconfig.sno-libvirt.apply", tasks[10].Entry.ID)
+	}
+	assertPlannedDeps(t, tasks[10], "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.name-resolution", "wait.sno-libvirt")
 }
 
 func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
@@ -90,33 +94,37 @@ func assertPlannedDeps(t *testing.T, task workflow.ApplyTask, want ...string) {
 func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := planApplyTasks(t, converge.ContainerClusterScope.ApplyTarget(), state)
-	if len(tasks) != 5 {
-		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
+	if len(tasks) != 6 {
+		t.Fatalf("planned %d tasks, want 6: %+v", len(tasks), tasks)
 	}
-	if tasks[0].Entry.ID != "iso.sno-libvirt" {
-		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].Entry.ID)
+	if tasks[0].Entry.ID != "controller-name-resolution.InfraComponent.name-resolution" {
+		t.Fatalf("task = %s, want controller-name-resolution.InfraComponent.name-resolution", tasks[0].Entry.ID)
 	}
 	if len(tasks[0].Entry.Dependencies) != 0 {
-		t.Fatalf("container-cluster-only iso deps = %v, want none", tasks[0].Entry.Dependencies)
+		t.Fatalf("controller name-resolution deps = %v, want none", tasks[0].Entry.Dependencies)
 	}
-	if tasks[1].Entry.ID != "boot.sno-libvirt" {
-		t.Fatalf("task = %s, want boot.sno-libvirt", tasks[1].Entry.ID)
+	if tasks[1].Entry.ID != "iso.sno-libvirt" {
+		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[1].Entry.ID)
 	}
-	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "iso.sno-libvirt" {
-		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[1].Entry.Dependencies)
+	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "controller-name-resolution.InfraComponent.name-resolution" {
+		t.Fatalf("container-cluster-only iso deps = %v, want controller name resolution", tasks[1].Entry.Dependencies)
 	}
-	if tasks[2].Entry.ID != "wait-bootstrap.sno-libvirt" {
-		t.Fatalf("task = %s, want wait-bootstrap.sno-libvirt", tasks[2].Entry.ID)
+	if tasks[2].Entry.ID != "boot.sno-libvirt" {
+		t.Fatalf("task = %s, want boot.sno-libvirt", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "boot.sno-libvirt" {
-		t.Fatalf("bootstrap wait deps = %v, want boot.sno-libvirt", tasks[2].Entry.Dependencies)
+	assertPlannedDeps(t, tasks[2], "controller-name-resolution.InfraComponent.name-resolution", "iso.sno-libvirt")
+	if tasks[3].Entry.ID != "wait-bootstrap.sno-libvirt" {
+		t.Fatalf("task = %s, want wait-bootstrap.sno-libvirt", tasks[3].Entry.ID)
 	}
-	if tasks[3].Entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[3].Entry.ID)
+	assertPlannedDeps(t, tasks[3], "boot.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	if tasks[4].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[4].Entry.ID)
 	}
-	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "wait-bootstrap.sno-libvirt" {
-		t.Fatalf("wait deps = %v, want wait-bootstrap.sno-libvirt", tasks[3].Entry.Dependencies)
+	assertPlannedDeps(t, tasks[4], "wait-bootstrap.sno-libvirt", "controller-name-resolution.InfraComponent.name-resolution")
+	if tasks[5].Entry.ID != "nodeconfig.sno-libvirt.apply" {
+		t.Fatalf("task = %s, want nodeconfig.sno-libvirt.apply", tasks[5].Entry.ID)
 	}
+	assertPlannedDeps(t, tasks[5], "controller-name-resolution.InfraComponent.name-resolution", "wait.sno-libvirt")
 }
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {

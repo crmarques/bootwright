@@ -1,0 +1,62 @@
+---
+- name: Clean up controller name resolution after destroy
+  hosts: bootwright_controller_hosts
+  strategy: linear
+  gather_facts: false
+  become: true
+
+  vars:
+    bootwright_controller_name_resolution_destroy_work: >-
+      {{
+        (bootwright_controller_name_resolution_destroy_targets | default([]))
+        if bootwright_infra_component_destroy_scope_records is not defined
+        else (bootwright_controller_name_resolution_destroy_targets | default([])
+              | selectattr('infraComponentRecordName', 'in',
+                           bootwright_infra_component_destroy_scope_records.split(','))
+              | list)
+      }}
+
+  tasks:
+    - name: Validate controller name-resolution cleanup invocation
+      ansible.builtin.assert:
+        that:
+          - bootwright_mutating_invocation | default('') | length > 0
+        fail_msg: >-
+          Controller name-resolution cleanup received no exact controller-built
+          destroy invocation. Refusing to remove resolver state or ownership evidence.
+
+    - name: Validate managed controller name-resolution cleanup targets
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.kind | default('') == 'nameResolution'
+          - item.providerName | default('') | length > 0
+          - item.name | default('') | length > 0
+          - item.machineRef | default('') | length > 0
+          - item.realisation | default('') | length > 0
+          - item.valid | default(false) | bool
+          - >-
+            item.infraComponentRecordName | default('')
+            is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+          - >-
+            item.destroyRole | default('')
+            is match('^bootwright[.]core[.]infra_component_name_resolution_[a-z0-9_]+$')
+        fail_msg: >-
+          Controller name-resolution cleanup received an incomplete or
+          non-registry adapter target. Refusing to remove resolver state or
+          ownership evidence. Repair desired state or controller ownership
+          evidence ({{ item.validationError | default('target validation failed') }}),
+          then re-run `{{ bootwright_mutating_invocation }}`.
+      loop: "{{ bootwright_controller_name_resolution_destroy_work }}"
+      loop_control:
+        label: >-
+          {{ item.providerName | default('<unknown>') }}/{{ item.name | default('<unknown>') }}
+
+    - name: Remove owned controller name-resolution state
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.destroyRole }}"
+        tasks_from: controller_destroy.yml
+      loop: "{{ bootwright_controller_name_resolution_destroy_work }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.name }}"

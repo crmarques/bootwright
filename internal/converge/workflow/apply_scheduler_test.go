@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -106,6 +107,97 @@ func schedulerRunOptions(dir string) RunOptions {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
+	}
+}
+
+func TestRunPreparedDestroyTaskGraphBlocksCleanupAfterRequiredTaskSkips(t *testing.T) {
+	dir := t.TempDir()
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	tasks, err := PlanDestroyTasks("all", state, "", nil, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroyTasks: %v", err)
+	}
+	skippedID := ""
+	for _, task := range tasks {
+		if task.Entry.ID != destroyControllerNameResolutionPreflightTaskID && task.Entry.ID != destroyControllerNameResolutionCleanupTaskID && DestroyTaskNeedsCompletionProof(task.Entry) {
+			skippedID = task.Entry.ID
+			break
+		}
+	}
+	if skippedID == "" {
+		t.Fatal("fixture planned no identity-bearing destroy task")
+	}
+	prepared := PreparedApplyTaskGraph{
+		RunID:     "destroy-success-dependency-test",
+		StartedAt: time.Now().UTC(),
+		Tasks:     tasks,
+		Limits:    ConcurrencyLimits{Parallelism: 1},
+	}
+	var calls []string
+	executor := func(_ context.Context, _, _ io.Writer, _, _ string, _ RunOptions, task ApplyTask, _ ApplyTaskRunnerFactory) applyTaskResult {
+		calls = append(calls, task.Entry.ID)
+		if task.Entry.ID == skippedID {
+			return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: "no remote hosts matched task limit"}
+		}
+		return applyTaskResult{id: task.Entry.ID}
+	}
+	ledger, err := runPreparedTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir), ApplyTarget{Name: "all"}, "", prepared, nil, func(io.Writer, io.Writer) ansible.Runner { return nil }, executor)
+	if err == nil || !strings.Contains(err.Error(), destroyControllerNameResolutionCleanupTaskID) {
+		t.Fatalf("runPreparedTaskGraph error = %v, want blocked controller cleanup", err)
+	}
+	if slices.Contains(calls, destroyControllerNameResolutionCleanupTaskID) {
+		t.Fatalf("scheduler calls = %v; cleanup ran after a required destroy task skipped", calls)
+	}
+	mutation, _ := ledger.Task(skippedID)
+	if mutation.Status != TaskStatusSkipped {
+		t.Fatalf("machine destroy status = %s, want skipped", mutation.Status)
+	}
+	cleanup, _ := ledger.Task(destroyControllerNameResolutionCleanupTaskID)
+	if cleanup.Status != TaskStatusBlocked || !strings.Contains(cleanup.SkippedReason, skippedID+" (skipped)") {
+		t.Fatalf("cleanup = %s/%q, want blocked by skipped identity-bearing destroy %s", cleanup.Status, cleanup.SkippedReason, skippedID)
+	}
+	if outcome := SucceededDestroyTaskKinds(ledger); outcome.Covers(DestroyTaskKindControllerNameResolution, "") {
+		t.Fatal("a bracket with blocked cleanup must retain controller name-resolution evidence")
+	}
+}
+
+func TestRunPreparedDestroyTaskGraphAllowsCleanupAfterEmptyTaskSkips(t *testing.T) {
+	dir := t.TempDir()
+	tasks, err := PlanDestroyTasks("infra", minimalState(), "", nil, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroyTasks: %v", err)
+	}
+	registration := destroyTaskByID(t, tasks, destroyMachineRegistrationTaskID)
+	if DestroyTaskNeedsCompletionProof(registration.Entry) {
+		t.Fatalf("empty machine-registration task unexpectedly needs completion proof: %+v", registration.Entry)
+	}
+	prepared := PreparedApplyTaskGraph{
+		RunID:     "destroy-empty-dependency-test",
+		StartedAt: time.Now().UTC(),
+		Tasks:     tasks,
+		Limits:    ConcurrencyLimits{Parallelism: 1},
+	}
+	var calls []string
+	executor := func(_ context.Context, _, _ io.Writer, _, _ string, _ RunOptions, task ApplyTask, _ ApplyTaskRunnerFactory) applyTaskResult {
+		calls = append(calls, task.Entry.ID)
+		if task.Entry.ID == registration.Entry.ID {
+			return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: "no remote hosts matched task limit"}
+		}
+		return applyTaskResult{id: task.Entry.ID}
+	}
+	ledger, err := runPreparedTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir), ApplyTarget{Name: "infra"}, "", prepared, nil, func(io.Writer, io.Writer) ansible.Runner { return nil }, executor)
+	if err != nil {
+		t.Fatalf("runPreparedTaskGraph: %v", err)
+	}
+	if !slices.Contains(calls, destroyControllerNameResolutionCleanupTaskID) {
+		t.Fatalf("scheduler calls = %v; cleanup did not run after an empty task skipped", calls)
+	}
+	cleanup, _ := ledger.Task(destroyControllerNameResolutionCleanupTaskID)
+	if cleanup.Status != TaskStatusOK {
+		t.Fatalf("cleanup status = %s, want OK after empty task skipped", cleanup.Status)
+	}
+	if outcome := SucceededDestroyTaskKinds(ledger); !outcome.Covers(DestroyTaskKindControllerNameResolution, "") {
+		t.Fatal("a successful bracket around an empty skipped task must prove controller cleanup")
 	}
 }
 

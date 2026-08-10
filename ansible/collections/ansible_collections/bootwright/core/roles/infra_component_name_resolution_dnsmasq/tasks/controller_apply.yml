@@ -1,0 +1,457 @@
+---
+- name: Validate controller resolver invocations
+  ansible.builtin.assert:
+    that:
+      - bootwright_mutating_invocation | default('') | length > 0
+      - bootwright_apply_controller_dns_invocation | default('') | length > 0
+      - >-
+        bootwright_controller_name_resolution_mutation_selected | default(false) | bool
+        or bootwright_apply_controller_dns_repair_invocation | default('') | length > 0
+      - >-
+        bootwright_controller_name_resolution_mutation_selected | default(false) | bool
+        or bootwright_apply_controller_dns_resume_invocation | default('') | length > 0
+    fail_msg: >-
+      Controller name resolution received no exact controller-built current and
+      required-fabric-range apply invocations. Refusing to alter the controller resolver.
+
+- name: Validate controller resolver desired contract
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.controllerDomains | default([]) | length > 0
+      - bootwright_component.controllerProbes | default([]) | length > 0
+    fail_msg: >-
+      Controller name resolution for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      rendered no routing domain or desired DNS probe. Ensure a selected machine,
+      ContainerCluster, or StorageCluster consumes this managed service and has
+      resolvable desired records, then re-run `{{ bootwright_apply_controller_dns_invocation }}`.
+      Refusing to alter the controller resolver.
+
+- name: Validate exact controller resolver probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.name | default('') | length > 0
+      - item.addresses | default([]) | length > 0
+    fail_msg: >-
+      Controller name resolution for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      rendered an incomplete exact-address probe for {{ item.name | default('<unnamed>') }}.
+      Refusing to accept or alter the controller resolver. Repair the desired
+      DNS record projection, then re-run `{{ bootwright_apply_controller_dns_invocation }}`.
+  loop: "{{ bootwright_component.controllerProbes }}"
+  loop_control:
+    label: "{{ item.name | default('<unnamed>') }}"
+
+- name: Probe desired names through the current controller resolver
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahosts
+      - "{{ item.name }}"
+  loop: "{{ bootwright_component.controllerProbes }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.addresses | join(', ') }}"
+  register: bootwright_controller_resolver_initial_probes
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect initial controller resolver failures
+  ansible.builtin.set_fact:
+    bootwright_controller_resolver_initial_failures: >-
+      {%- set failures = [] -%}
+      {%- for result in bootwright_controller_resolver_initial_probes.results | default([]) -%}
+      {%- set answers = [] -%}
+      {%- for line in result.stdout_lines | default([]) -%}
+      {%- set columns = line.split() -%}
+      {%- if columns | length > 0 and columns[0] not in answers -%}
+      {%- set _ = answers.append(columns[0]) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set observed = answers | bootwright.core.bootwright_normalize_ip_set -%}
+      {%- set expected = result.item.addresses | default([]) | bootwright.core.bootwright_normalize_ip_set -%}
+      {%- if result.rc != 0 or observed != expected -%}
+      {%- set _ = failures.append({
+            'name': result.item.name,
+            'expected': expected | join(', '),
+            'got': (observed | join(', ')) or '<no resolution>',
+          }) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ failures }}
+  changed_when: false
+
+- name: Detect active systemd-resolved on the controller
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - --quiet
+      - systemd-resolved
+  register: bootwright_controller_resolved_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Prove controller resolver namespace before readiness acceptance
+  ansible.builtin.include_tasks: controller_ownership_gate.yml
+  vars:
+    bootwright_controller_resolver_gate_action: alter
+
+- name: Enforce apply mode for controller resolver state
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: >-
+      controller resolver
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+    bootwright_gate_exists: >-
+      {{ bootwright_controller_resolver_owned.stat.exists
+         or bootwright_controller_resolver_dropin_live.stat.exists }}
+    bootwright_gate_owned: "{{ bootwright_controller_resolver_owned.stat.exists }}"
+    bootwright_apply_reconcile_invocation: "{{ bootwright_apply_controller_dns_invocation }}"
+  when: bootwright_controller_name_resolution_mutation_selected | default(false) | bool
+
+- name: Resolve whether owned controller routing needs reconciliation
+  ansible.builtin.set_fact:
+    bootwright_controller_resolver_managed_reconcile_required: >-
+      {{
+        bootwright_controller_resolver_initial_failures | length > 0
+        or ((bootwright_controller_name_resolution_mutation_selected | default(false) | bool)
+            and (bootwright_controller_resolver_owned.stat.exists
+                 or bootwright_controller_resolver_dropin_live.stat.exists))
+      }}
+  changed_when: false
+
+- name: Refuse later-only work when controller DNS proof needs reconciliation
+  ansible.builtin.fail:
+    msg: |-
+      This apply range omitted the fabric and machines phases, but controller
+      name resolution for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      is not ready for the selected later mutation:
+      {% for failure in bootwright_controller_resolver_initial_failures %}
+        - {{ failure.name }}: {{ failure.expected }} -> {{ failure.got }}
+      {% endfor %}
+      Repair only the shared fabric service for its exact consumer closure with
+      `{{ bootwright_apply_controller_dns_repair_invocation }}`, then retry the
+      original selection with `{{ bootwright_apply_controller_dns_resume_invocation }}`.
+      The repair command cannot widen deps/base/add-ons work, and the resume
+      preserves the original mode, context, selection, authorizations, effects,
+      and SSH options because no selected mutation has started.
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - not (bootwright_controller_name_resolution_mutation_selected | default(false) | bool)
+
+- name: Require a concrete address before managed controller routing
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.controllerAddresses | default([]) | length > 0
+    fail_msg: >-
+      Managed name resolution
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      needs controller-route reconciliation but has no concrete
+      controller-reachable address. Declare a concrete bindAddress or select a
+      service endpoint, then re-run `{{ bootwright_apply_controller_dns_invocation }}`.
+      Refusing to alter the controller resolver.
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_name_resolution_mutation_selected | default(false) | bool
+
+- name: Refuse unresolved managed names without a supported controller resolver
+  ansible.builtin.fail:
+    msg: |-
+      Controller name resolution cannot be established for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}.
+      systemd-resolved is not active, so Bootwright cannot reconcile its owned
+      route or install one for unresolved desired records:
+      {% for failure in bootwright_controller_resolver_initial_failures %}
+        - {{ failure.name }}: {{ failure.expected }} -> {{ failure.got }}
+      {% endfor %}
+      Configure the controller resolver to route
+      {{ bootwright_component.controllerDomains | join(', ') }} to
+      {{ bootwright_component.controllerAddresses | default([]) | join(', ') }},
+      then re-run `{{ bootwright_apply_controller_dns_invocation }}`. No machines-phase work
+      has started.
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc != 0
+
+- name: Refuse ambiguous automatic controller split DNS
+  ansible.builtin.fail:
+    msg: >-
+      Controller name resolution cannot be established automatically for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}.
+      More than one managed name-resolution service contributes controller
+      routes, while systemd-resolved global DNS and routing-domain settings do
+      not bind one server set to one domain set. Configure the controller
+      resolver out of band so every reported desired answer succeeds, then
+      re-run `{{ bootwright_apply_controller_dns_invocation }}`. Refusing to alter the
+      controller resolver or start machines-phase work.
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - not (bootwright_controller_name_resolution_automatic_mutation | default(false) | bool)
+
+- name: Read effective static systemd-resolved configuration
+  ansible.builtin.command:
+    argv:
+      - systemd-analyze
+      - cat-config
+      - systemd/resolved.conf
+  register: bootwright_controller_resolver_static_config
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+
+- name: Read effective global controller DNS servers
+  ansible.builtin.command:
+    argv:
+      - resolvectl
+      - dns
+  register: bootwright_controller_resolver_runtime_dns
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+
+- name: Read effective controller DNS routing domains
+  ansible.builtin.command:
+    argv:
+      - resolvectl
+      - domain
+  register: bootwright_controller_resolver_runtime_domains
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+
+- name: Classify controller resolver configuration conflicts
+  ansible.builtin.set_fact:
+    bootwright_controller_resolver_static_conflicts: >-
+      {{
+        bootwright_controller_resolver_static_config.stdout_lines | default([])
+        | bootwright.core.bootwright_resolved_static_conflicts(bootwright_controller_resolver_dropin_path)
+      }}
+    bootwright_controller_resolver_runtime_conflicts: >-
+      {{
+        bootwright_controller_resolver_runtime_dns.stdout_lines | default([])
+        | bootwright.core.bootwright_resolved_runtime_conflicts(
+            bootwright_controller_resolver_runtime_domains.stdout_lines | default([]),
+            bootwright_controller_resolver_owned.stat.exists | bool,
+            bootwright_component.controllerAddresses | default([]),
+            bootwright_component.controllerDomains | default([]))
+      }}
+  changed_when: false
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+
+- name: Refuse conflicting controller-global resolver configuration
+  ansible.builtin.assert:
+    that:
+      - bootwright_controller_resolver_static_config.rc == 0
+      - bootwright_controller_resolver_runtime_dns.rc == 0
+      - bootwright_controller_resolver_runtime_domains.rc == 0
+      - bootwright_controller_resolver_static_conflicts | length == 0
+      - bootwright_controller_resolver_runtime_conflicts | length == 0
+    fail_msg: >-
+      Refusing to alter controller-global systemd-resolved state for
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}.
+      Effective resolver configuration could not be proved safe and exclusive.
+      Static conflicts: {{ bootwright_controller_resolver_static_conflicts | default([]) | join(', ') | default('<none>', true) }}.
+      Runtime conflicts: {{ bootwright_controller_resolver_runtime_conflicts | default([]) | join(', ') | default('<none>', true) }}.
+      Probe return codes: cat-config={{ bootwright_controller_resolver_static_config.rc | default('<not run>') }},
+      dns={{ bootwright_controller_resolver_runtime_dns.rc | default('<not run>') }},
+      domain={{ bootwright_controller_resolver_runtime_domains.rc | default('<not run>') }}.
+      Move foreign global DNS/routing-domain policy to a paired per-link route or
+      remove it through its owner, then re-run `{{ bootwright_apply_controller_dns_invocation }}`.
+      No selected mutation has started.
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+
+- name: Configure supported controller split DNS
+  when:
+    - bootwright_controller_resolver_managed_reconcile_required | bool
+    - bootwright_controller_resolved_active.rc == 0
+    - bootwright_controller_name_resolution_automatic_mutation | default(false) | bool
+  block:
+    - name: Record ownership and mutate the controller resolver
+      block:
+        - name: Record controller resolver ownership before mutation
+          ansible.builtin.include_role:
+            name: bootwright.core.ownership_record
+            tasks_from: resource.yml
+          vars:
+            bootwright_ownership_kind: controller-name-resolver
+            bootwright_ownership_name: "{{ bootwright_controller_resolver_ownership_name }}"
+            bootwright_ownership_fields:
+              provider: "{{ bootwright_component.providerName }}"
+              paths:
+                - "{{ bootwright_controller_resolver_dropin_path }}"
+              attributes:
+                resolver: systemd-resolved
+                component: "{{ bootwright_component.name }}"
+                machineRef: "{{ bootwright_component.machineRef }}"
+                realisation: "{{ bootwright_component.realisation }}"
+                addresses: "{{ bootwright_component.controllerAddresses | join(',') }}"
+                domains: "{{ bootwright_component.controllerDomains | join(',') }}"
+              labels:
+                bootwright.kind: nameResolution
+                bootwright.name: "{{ bootwright_component.name }}"
+
+        - name: Ensure systemd-resolved drop-in directory
+          ansible.builtin.file:
+            path: /etc/systemd/resolved.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          when: not (bootwright_controller_resolver_dropin_dir.stat.exists | bool)
+
+        - name: Render controller split-DNS drop-in
+          ansible.builtin.template:
+            src: controller_resolver.conf.j2
+            dest: "{{ bootwright_controller_resolver_dropin_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          register: bootwright_controller_resolver_dropin
+
+        - name: Restart systemd-resolved after a routing change
+          ansible.builtin.systemd_service:
+            name: systemd-resolved
+            state: restarted
+          when: >-
+            bootwright_controller_resolver_dropin.changed
+            or bootwright_controller_resolver_initial_failures | length > 0
+      rescue:
+        - name: Refuse to continue after controller resolver ownership or mutation failed
+          ansible.builtin.fail:
+            msg: >-
+              Controller split-DNS ownership or mutation failed for
+              {{ bootwright_component.providerName }}/{{ bootwright_component.name }}:
+              {{ ansible_failed_result.msg | default(ansible_failed_result | string) }}.
+              Resolver mutation is ordered only after a successful ownership claim;
+              any pre-existing evidence was left in place. Repair systemd-resolved,
+              then re-run `{{ bootwright_apply_controller_dns_invocation }}`. No
+              machines-phase work has started.
+
+    - name: Read configured global controller DNS servers
+      ansible.builtin.command:
+        argv:
+          - resolvectl
+          - dns
+      register: bootwright_controller_resolver_configured_dns
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: Read configured controller DNS routing domains
+      ansible.builtin.command:
+        argv:
+          - resolvectl
+          - domain
+      register: bootwright_controller_resolver_configured_domains
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: Prove configured controller-global resolver state is exact
+      ansible.builtin.assert:
+        that:
+          - bootwright_controller_resolver_configured_dns.rc == 0
+          - bootwright_controller_resolver_configured_domains.rc == 0
+          - >-
+            bootwright_controller_resolver_configured_dns.stdout_lines | default([])
+            | bootwright.core.bootwright_resolved_runtime_conflicts(
+                bootwright_controller_resolver_configured_domains.stdout_lines | default([]),
+                true,
+                bootwright_component.controllerAddresses | default([]),
+                bootwright_component.controllerDomains | default([]),
+                true)
+            | length == 0
+        fail_msg: >-
+          Controller split DNS was written for
+          {{ bootwright_component.providerName }}/{{ bootwright_component.name }},
+          but the effective global DNS servers and routing domains are not the
+          exact owned desired set. Ownership evidence was retained. Repair
+          systemd-resolved, then re-run `{{ bootwright_apply_controller_dns_invocation }}`.
+          No machines-phase work has started.
+      when: not ansible_check_mode
+
+    - name: Probe desired names through the configured controller resolver
+      ansible.builtin.command:
+        argv:
+          - getent
+          - ahosts
+          - "{{ item.name }}"
+      loop: "{{ bootwright_component.controllerProbes }}"
+      loop_control:
+        label: "{{ item.name }} -> {{ item.addresses | join(', ') }}"
+      register: bootwright_controller_resolver_final_probes
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: Collect configured controller resolver failures
+      ansible.builtin.set_fact:
+        bootwright_controller_resolver_final_failures: >-
+          {%- set failures = [] -%}
+          {%- for result in bootwright_controller_resolver_final_probes.results | default([]) -%}
+          {%- set answers = [] -%}
+          {%- for line in result.stdout_lines | default([]) -%}
+          {%- set columns = line.split() -%}
+          {%- if columns | length > 0 and columns[0] not in answers -%}
+          {%- set _ = answers.append(columns[0]) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {%- set observed = answers | bootwright.core.bootwright_normalize_ip_set -%}
+          {%- set expected = result.item.addresses | default([]) | bootwright.core.bootwright_normalize_ip_set -%}
+          {%- if result.rc != 0 or observed != expected -%}
+          {%- set _ = failures.append({
+                'name': result.item.name,
+                'expected': expected | join(', '),
+                'got': (observed | join(', ')) or '<no resolution>',
+              }) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ failures }}
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Refuse machines work when controller DNS is not ready
+      ansible.builtin.fail:
+        msg: |-
+          Controller split DNS was configured for
+          {{ bootwright_component.providerName }}/{{ bootwright_component.name }},
+          but the managed resolver did not return every desired record:
+          {% for failure in bootwright_controller_resolver_final_failures %}
+            - {{ failure.name }}: {{ failure.expected }} -> {{ failure.got }}
+          {% endfor %}
+          Restore or converge the managed name-resolution service, then run
+          `{{ bootwright_apply_controller_dns_invocation }}`. The controller-built
+          command preserves this run's context, object selection, intent,
+          authorizations, and ending stage while adding `fabric` only when the
+          current range omitted it. No machines-phase work has started.
+      when:
+        - not ansible_check_mode
+        - bootwright_controller_resolver_final_failures | length > 0

@@ -2,13 +2,30 @@ package desiredstate
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 func validateSharedMachineServices(state v1alpha1.State) []string {
-	return stategraph.ResolveMachineServices(state).ValidateSharedServices()
+	graph := stategraph.ResolveMachineServices(state)
+	errs := graph.ValidateSharedServices()
+	managedNameResolution := []string{}
+	for _, service := range graph.Services {
+		if service.Identity.Kind != v1alpha1.ComponentSlotNameResolution {
+			continue
+		}
+		managedNameResolution = append(managedNameResolution, service.Identity.ProviderName+"/"+service.Identity.Name)
+	}
+	if len(managedNameResolution) > 1 {
+		environment := "Environment"
+		if len(state.Environments) > 0 && state.Environments[0].Metadata.Name != "" {
+			environment += "/" + state.Environments[0].Metadata.Name
+		}
+		errs = append(errs, fmt.Sprintf("%s consumers resolve to multiple managed name-resolution services (%s); one context may consume at most one managed service, so consolidate every NetworkConfig.spec.nameResolutionRefs[] consumer on one service or use external name resolution. Unused catalog entries do not count", environment, strings.Join(managedNameResolution, ", ")))
+	}
+	return errs
 }
 
 type libvirtBMCServiceConfig struct {

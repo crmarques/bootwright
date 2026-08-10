@@ -75,6 +75,7 @@ type RunLedger struct {
 	Scope          string            `json:"scope,omitempty"`
 	Machines       []string          `json:"machines,omitempty"`
 	InvocationArgs []string          `json:"invocationArgs,omitempty"`
+	Recovery       RunRecoveryPlan   `json:"recovery,omitempty"`
 	Status         RunStatus         `json:"status"`
 	StartedAt      time.Time         `json:"startedAt"`
 	EndedAt        *time.Time        `json:"endedAt,omitempty"`
@@ -122,6 +123,7 @@ type TaskLedgerEntry struct {
 	HostSlotCount        int        `json:"hostSlotCount,omitempty"`
 	Status               TaskStatus `json:"status"`
 	Dependencies         []string   `json:"dependencies,omitempty"`
+	SuccessDependencies  []string   `json:"successDependencies,omitempty"`
 	OrderingDependencies []string   `json:"orderingDependencies,omitempty"`
 	ReadyAt              *time.Time `json:"readyAt,omitempty"`
 	BlockedOn            []string   `json:"blockedOn,omitempty"`
@@ -639,7 +641,7 @@ func (l *RunLedger) BlockDependents(failedID string, now time.Time) {
 			if taskTerminal(task.Status) {
 				continue
 			}
-			for _, dep := range task.Dependencies {
+			for _, dep := range taskBlockingDependencyIDs(*task) {
 				if blocked[dep] {
 					task.Status = TaskStatusBlocked
 					t := now.UTC()
@@ -798,15 +800,13 @@ func (l RunLedger) CriticalPath() CriticalPath {
 		chosen := false
 		bestDep := time.Duration(0)
 		bestPrev := ""
-		for _, deps := range [][]string{timing.Entry.Dependencies, timing.Entry.OrderingDependencies} {
-			for _, dep := range deps {
-				if _, known := timings[dep]; !known {
-					continue
-				}
-				total := solve(dep)
-				if !chosen || total > bestDep || (total == bestDep && dep < bestPrev) {
-					chosen, bestDep, bestPrev = true, total, dep
-				}
+		for _, dep := range taskDependencyIDs(timing.Entry) {
+			if _, known := timings[dep]; !known {
+				continue
+			}
+			total := solve(dep)
+			if !chosen || total > bestDep || (total == bestDep && dep < bestPrev) {
+				chosen, bestDep, bestPrev = true, total, dep
 			}
 		}
 		visiting[id] = false
@@ -855,12 +855,10 @@ func taskQueueWait(task TaskLedgerEntry, ends map[string]time.Time) time.Duratio
 		return 0
 	}
 	latest := time.Time{}
-	for _, deps := range [][]string{task.Dependencies, task.OrderingDependencies} {
-		for _, dep := range deps {
-			end, ok := ends[dep]
-			if ok && end.After(latest) {
-				latest = end
-			}
+	for _, dep := range taskDependencyIDs(task) {
+		end, ok := ends[dep]
+		if ok && end.After(latest) {
+			latest = end
 		}
 	}
 	if latest.IsZero() {

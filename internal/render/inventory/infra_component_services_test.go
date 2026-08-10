@@ -117,7 +117,11 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{
-				Domains: v1alpha1.EnvironmentDomainsSpec{Base: "example.test"},
+				Domains: v1alpha1.EnvironmentDomainsSpec{
+					Base:            "example.test",
+					Machines:        "machines.example.test",
+					StorageClusters: "storage.example.test",
+				},
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "lab-dns",
@@ -152,6 +156,13 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
+				Addresses: []v1alpha1.MachineAddress{
+					{Name: "ssh", Address: "192.168.134.20"},
+					{Name: v1alpha1.MachineAddressFQDN, Address: "ceph-0.machines.example.test"},
+				},
+				Access: v1alpha1.MachineAccess{SSH: &v1alpha1.MachineSSHSpec{
+					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+				}},
 				Network: v1alpha1.MachineNetwork{
 					Config: v1alpha1.MachineNetworkConfig{
 						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "ceph-bridge"},
@@ -189,6 +200,17 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 	want := []any{"1.1.1.1", "9.9.9.9"}
 	if got := service["forwarders"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("forwarders = %v, want %v", got, want)
+	}
+	controller := Vars(state)["bootwright_controller_name_resolution_services"].([]any)
+	if len(controller) != 1 {
+		t.Fatalf("storage-only controller resolver services = %d, want 1", len(controller))
+	}
+	resolver := controller[0].(map[string]any)
+	if got, want := resolver["controllerDomains"], []any{"ceph-libvirt.storage.example.test", "machines.example.test"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("storage-only controllerDomains = %v, want %v", got, want)
+	}
+	if got, want := controllerProbePairs(resolver["controllerProbes"]), []string{"ceph-0.machines.example.test=192.168.134.20"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("storage-only controllerProbes = %v, want %v", got, want)
 	}
 }
 

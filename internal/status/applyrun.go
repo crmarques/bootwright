@@ -60,7 +60,7 @@ func ApplyFailureReason(failure string) string {
 
 func ApplyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) (workflow.TaskLedgerEntry, bool) {
 	visited := map[string]bool{}
-	queue := append([]string(nil), task.Dependencies...)
+	queue := applyBlockingDependencyIDs(task)
 	var fallback workflow.TaskLedgerEntry
 	haveFallback := false
 	for len(queue) > 0 {
@@ -82,10 +82,15 @@ func ApplyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry)
 				fallback = dep
 				haveFallback = true
 			}
-			queue = append(queue, dep.Dependencies...)
+			queue = append(queue, applyBlockingDependencyIDs(dep)...)
 		}
 	}
 	return fallback, haveFallback
+}
+
+func applyBlockingDependencyIDs(task workflow.TaskLedgerEntry) []string {
+	ids := append([]string(nil), task.Dependencies...)
+	return append(ids, task.SuccessDependencies...)
 }
 
 func applyPhaseStatus(tasks []workflow.TaskLedgerEntry) workflow.TaskStatus {

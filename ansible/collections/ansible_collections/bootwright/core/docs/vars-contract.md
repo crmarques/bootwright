@@ -17,6 +17,7 @@ authors.
 | `bootwright_managed_os_install_groups` | managed machine OS install groups for storage and service machines |
 | `bootwright_provider_services` | provider/BMC service instances with rendered role names |
 | `bootwright_infra_component_services` | InfraComponent service instances with rendered role names |
+| `bootwright_controller_name_resolution_services` | managed name-resolution services projected for controller routing and exact-answer readiness probes |
 | `bootwright_provider_machine_setups` | provider-machine setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
 | `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses; consumed by the libvirt substrate network template for DHCP NTP options |
@@ -324,6 +325,33 @@ bootwright_infra_component_services:
           - name: master-0
             address: 192.168.133.20
             role: master
+```
+
+Each controller name-resolution task consumes one exact resolved service shape.
+Its hash renders that service projection from unscoped desired state, never from
+the current `--clusters` or `--machines` selection and never from another
+service on the same host. `controllerAddresses` contains concrete
+controller-reachable service IPs, `controllerDomains` contains routing domains
+and exact out-of-zone names, and `controllerProbes` contains every name/address
+answer that must succeed before machine work starts.
+
+```yaml
+bootwright_controller_name_resolution_services:
+  - kind: nameResolution
+    providerName: InfraComponent
+    name: dns
+    componentName: dns
+    machineRef: services-host
+    realisation: dnsmasq
+    applyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+    destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
+    controllerAddresses: [192.168.133.1]
+    controllerDomains:
+      - machines.example.test
+      - prod-3node.ocp.example.test
+    controllerProbes:
+      - { name: master-0.machines.example.test, address: 192.168.133.20 }
+      - { name: api.prod-3node.ocp.example.test, address: 192.168.133.10 }
 ```
 
 ```yaml
@@ -795,6 +823,8 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_machine_task_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
 | `bootwright_machine_task_provider_host_name` | Provider host name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
 | `bootwright_apply_mode` | Apply intent from the CLI `--mode` flag: `create`, `reconcile` (default), or `rebuild`. `rebuild` authorizes Bootwright-owned reconfigure/rebuild; roles gate destructive resets on it |
+| `bootwright_controller_name_resolution_automatic_mutation` | Positive controller decision that exactly one consumed managed name-resolution service contributes routes in unscoped desired state; unused catalog entries do not count. Absent or false forbids automatic systemd-resolved mutation but still permits read-only readiness probes |
+| `bootwright_controller_name_resolution_mutation_selected` | Positive planner decision that the selected apply range includes `fabric` or `machines`; absent or false permits the controller task to prove readiness but forbids it from changing resolver state |
 | `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 
 Real mutating runs also receive CLI-rendered remediation commands. They are
@@ -810,6 +840,9 @@ operator-facing retry guidance instead of assembling a `bootwright apply` or
 | `bootwright_apply_rebuild_invocation` | Exact selected apply invocation with `--mode rebuild` and additive `--authorize data-loss` |
 | `bootwright_apply_reclaim_invocation` | Exact selected apply invocation with prior accepted authorizations retained, `data-loss,unowned-devices` unioned, and exactly one `__BOOTWRIGHT_RUNTIME_RECLAIM_DEVICES_7EF51C56__` value for `--reclaim-devices`; a role may replace only that value with one shell-quoted, comma-joined nonempty list of runtime-probed device paths |
 | `bootwright_apply_reclaim_devices` | Static reclaim paths already selected by the controller; the runtime reclaim remedy preserves these in the sentinel replacement operand |
+| `bootwright_apply_controller_dns_invocation` | Mode-aware exact selected apply invocation for resuming a controller-DNS task that may have partially changed selected fabric/machines work; an interrupted `create` becomes `reconcile`, `reconcile`/`rebuild` remain unchanged, and a machines range omitting required fabric starts at fabric while preserving its ending stage |
+| `bootwright_apply_controller_dns_repair_invocation` | Exact `--mode reconcile --stage fabric` apply for every cluster root that consumes this task's shared name-resolution service; it changes no later phase and carries no deps-only reclaim effect |
+| `bootwright_apply_controller_dns_resume_invocation` | Byte-equivalent retry of the original selected apply work, used only after a proof-only controller-DNS task failed before any selected mutation |
 | `bootwright_apply_full_invocation` | Exact apply invocation with stage/range narrowing removed while retaining context and object selection |
 | `bootwright_apply_through_base_invocation` | Exact apply invocation changed to `--through base` while retaining context and object selection |
 
@@ -826,6 +859,7 @@ detects a newly rendered mutation-control name that was not registered.
 | --- | --- | --- |
 | Intent | `bootwright_apply_mode` | Exact `create`, `reconcile`, or `rebuild` value selected by the operator |
 | Authorization | `bootwright_ceph_authorize_foreign_daemons`, `bootwright_ceph_authorize_unowned_devices`, `bootwright_destroy_authorize_unowned_networks`, `bootwright_destroy_authorize_unowned_vms`, `bootwright_destroy_skip_unreachable` | Boolean risk grants derived from a consumed `--authorize` token; omitted when not granted |
+| Authorization | `bootwright_destroy_skip_orphan_sweep` | Positive selector emitted only when `destroy` consumed `stale-input` or `unreadable-records` for evidence the run actually skipped; disables every context-wide or record-only ownership sweep and the controller-resolver preflight/cleanup bracket, so an absent declaration or unreadable record cannot be mistaken for an orphan authorized for deletion. Absent or false permits only the normally planned scope and never suppresses declaration-backed teardown |
 | Authorization | `bootwright_ceph_rebuild_authorized_clusters`, `bootwright_ceph_incomplete_bootstrap_authorized_clusters`, `bootwright_ceph_subobject_rebuild_authorized`, `bootwright_ocp_rebuild_authorized_clusters` | Exact clusters or storage sub-objects whose destructive rebuild was acknowledged. The incomplete-bootstrap list is emitted only for selected managed storage clusters whose exact owner-role record names this context, cluster, host, and desired `seedHost`, only under `--mode rebuild` plus consumed `data-loss`; the seed re-validates that record, config present, marker absent, and cluster unreachable before the shared cleanup predicate becomes true |
 | Authorization | `bootwright_ceph_filter_reclaim_clusters`, `bootwright_ceph_reclaim_clusters`, `bootwright_ceph_reclaim_devices` | Exact cluster and device allowlists for an acknowledged reclaim; an empty or absent list authorizes no wipe |
 | Authorization | `bootwright_ceph_destroy_confirmed_fsids` | StorageCluster-to-fsid attestations accepted by the controller ownership-recovery gate |
@@ -841,7 +875,10 @@ detects a newly rendered mutation-control name that was not registered.
 | Scope | `bootwright_arbiter_cluster_name`, `bootwright_arbiter_desired_node`, `bootwright_arbiter_live_node` | Replacement-arbiter cluster and old/new machine selection |
 | Execution | `bootwright_destroy_cluster_levels`, `bootwright_destroy_cluster_order`, `bootwright_machine_infra_records_only` | Controller-derived teardown barriers, compatibility order, and records-only cleanup mode |
 | Execution | `bootwright_install_wait_target`, `bootwright_task_storage_prereqs_only`, `bootwright_task_storage_skip_prereqs` | Exact task entrypoint inside a split apply workflow |
-| Execution | `bootwright_mutating_invocation`, `bootwright_apply_reconcile_invocation`, `bootwright_apply_rebuild_invocation`, `bootwright_apply_reclaim_invocation`, `bootwright_apply_full_invocation`, `bootwright_apply_through_base_invocation`, `bootwright_arbiter_degraded_invocation`, `bootwright_arbiter_same_site_invocation`, `bootwright_arbiter_unreachable_invocation` | Shell-quoted commands derived from the resolved CLI invocation; roles consume these exact variants and never rebuild operator remedies from task-local facts |
+| Execution | `bootwright_controller_name_resolution_automatic_mutation` | Positive exact-one-consumed-service decision for automatic controller resolver mutation; false or absent permits only read-only proof of an already-correct resolver |
+| Execution | `bootwright_controller_name_resolution_mutation_selected` | Positive selected-range decision for controller resolver mutation; false or absent makes later-only apply proof-only and fail-closed on drift |
+| Execution | `bootwright_controller_name_resolution_destroy_targets` | Deterministic controller-rendered union of desired managed resolver targets and current-context controller-resolver ownership records. Adapter, infra-component record identity, controller record identity, and drop-in path are registry- or identity-derived rather than trusted from records; malformed or unknown evidence remains an invalid target that preflight refuses instead of being omitted. Cluster-scoped destroy filters this union only by `infraComponentRecordName` |
+| Execution | `bootwright_mutating_invocation`, `bootwright_apply_reconcile_invocation`, `bootwright_apply_rebuild_invocation`, `bootwright_apply_reclaim_invocation`, `bootwright_apply_controller_dns_invocation`, `bootwright_apply_controller_dns_repair_invocation`, `bootwright_apply_controller_dns_resume_invocation`, `bootwright_apply_full_invocation`, `bootwright_apply_through_base_invocation`, `bootwright_arbiter_degraded_invocation`, `bootwright_arbiter_same_site_invocation`, `bootwright_arbiter_unreachable_invocation` | Shell-quoted commands derived from the resolved CLI invocation; roles consume these exact variants and never rebuild operator remedies from task-local facts |
 | Execution | `bootwright_arbiter_desired_addr`, `bootwright_arbiter_desired_mon`, `bootwright_arbiter_desired_site`, `bootwright_arbiter_failure_domain`, `bootwright_arbiter_live_mon`, `bootwright_arbiter_tiebreaker_mon` | Controller-resolved arbiter identities and topology facts |
 | Execution | `bootwright_arbiter_mon_hosts_during`, `bootwright_arbiter_mon_hosts_after`, `bootwright_arbiter_mon_locations`, `bootwright_arbiter_mon_locations_after` | JSON projections of the accepted during/after monitor topology |
 

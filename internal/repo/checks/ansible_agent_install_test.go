@@ -1422,14 +1422,209 @@ func TestContainerClusterCredentialRemovalStaysInTheRecordsHalf(t *testing.T) {
 		"{{ bootwright_cluster_secrets_dir }}/kubeadmin-password",
 		"{{ bootwright_cluster_install_record_path }}",
 		"{{ bootwright_cluster_connection_record_path }}",
-		"bootwright_controller_resolver_dropin_path",
-		"systemd-resolved",
 	} {
 		if !strings.Contains(records, want) {
 			t.Fatalf("destroy_records missing %q", want)
 		}
 		if strings.Contains(runtime, want) {
 			t.Fatalf("destroy_runtime must not carry %q: the runtime half is the graph root and runs before machine teardown, which still needs the host kubeconfig to reach KubeVirt and the controller resolver to reach every SSH target", want)
+		}
+	}
+	for _, stale := range []string{"bootwright_controller_resolver_dropin_path", "controller-name-resolver", "systemd-resolved"} {
+		if strings.Contains(records, stale) || strings.Contains(runtime, stale) {
+			t.Fatalf("ContainerCluster teardown still owns %q; controller DNS must survive until the managed name-resolution owner is removed after machine teardown", stale)
+		}
+	}
+}
+
+func TestManagedControllerResolverRemovalStaysWithDNSOwner(t *testing.T) {
+	const roleRoot = "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_name_resolution_dnsmasq/"
+	controllerPlay := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_controller_name_resolution_apply.yml")
+	for _, want := range []string{"bootwright_controller_name_resolution_work | length == 1", "`{{ bootwright_mutating_invocation }}`"} {
+		if !strings.Contains(controllerPlay, want) {
+			t.Fatalf("controller resolver play can silently omit or merge selected managed services: missing %q", want)
+		}
+	}
+	if strings.Contains(controllerPlay, "end_host") {
+		t.Fatal("controller resolver play silently skips an empty desired projection instead of failing closed before machine work")
+	}
+	destroy := readRepoFile(t, roleRoot+"tasks/destroy.yml")
+	container := strings.Index(destroy, "support_component_teardown")
+	evidence := strings.LastIndex(destroy, "support_component_teardown")
+	if container < 0 || evidence < 0 || container >= evidence {
+		t.Fatalf("DNS remote destroy must remove the service before its remote evidence: container=%d evidence=%d", container, evidence)
+	}
+	if strings.Contains(destroy, "controller_destroy") {
+		t.Fatal("DNS remote destroy embeds controller cleanup instead of leaving the controller route inside the global preflight/cleanup bracket")
+	}
+	for _, port := range []string{"53/tcp", "53/udp"} {
+		if !strings.Contains(destroy, port) {
+			t.Fatalf("DNS remote destroy does not close %s", port)
+		}
+	}
+	apply := readRepoFile(t, roleRoot+"tasks/main.yml")
+	for _, port := range []string{"53/tcp", "53/udp"} {
+		if !strings.Contains(apply, port) {
+			t.Fatalf("DNS apply does not open and record %s", port)
+		}
+	}
+	for _, attr := range []string{"port: 53/tcp", "udpPort: 53/udp"} {
+		if !strings.Contains(apply, attr) {
+			t.Fatalf("DNS ownership evidence does not retain scalar firewall endpoint %q for orphan cleanup", attr)
+		}
+	}
+	if strings.Contains(destroy, "failed_when: false") {
+		t.Fatal("DNS remote destroy suppresses firewall cleanup failure before service evidence removal")
+	}
+	controllerPreflight := readRepoFile(t, roleRoot+"tasks/controller_destroy_preflight.yml")
+	if !strings.Contains(controllerPreflight, "controller_ownership_gate.yml") || !strings.Contains(controllerPreflight, "bootwright_mutating_invocation") {
+		t.Fatal("controller destroy preflight does not prove ownership with the exact destroy retry")
+	}
+	for _, mutation := range []string{"ansible.builtin.file:", "ansible.builtin.systemd_service:", "tasks_from: remove_resource.yml"} {
+		if strings.Contains(controllerPreflight, mutation) {
+			t.Fatalf("controller destroy preflight contains mutation %q", mutation)
+		}
+	}
+	controllerDestroy := readRepoFile(t, roleRoot+"tasks/controller_destroy.yml")
+	for _, want := range []string{
+		"bootwright_controller_resolver_dropin_path",
+		"systemd-resolved",
+		"controller-name-resolver",
+		"bootwright_mutating_invocation",
+		"throttle: 1",
+		"bootwright_controller_resolver_destroy_resolved_active.rc == 0",
+		"Any existing controller resolver ownership evidence was retained",
+	} {
+		if !strings.Contains(controllerDestroy, want) {
+			t.Fatalf("controller_destroy missing %q", want)
+		}
+	}
+	if strings.Contains(controllerDestroy, "failed_when: false") {
+		t.Fatal("controller resolver teardown suppresses a remover failure and can discard retry evidence")
+	}
+	controllerGate := strings.Index(controllerDestroy, "controller_ownership_gate.yml")
+	activeProbe := strings.Index(controllerDestroy, "Probe whether systemd-resolved is active before removal")
+	dropinRemoval := strings.Index(controllerDestroy, "Remove controller resolver drop-in")
+	restart := strings.Index(controllerDestroy, "Restart systemd-resolved after removing controller routing")
+	recordRemoval := strings.Index(controllerDestroy, "Remove controller resolver ownership record")
+	if controllerGate < 0 || activeProbe < 0 || dropinRemoval < 0 || restart < 0 || recordRemoval < 0 ||
+		!(controllerGate < activeProbe && activeProbe < dropinRemoval && dropinRemoval < restart && restart < recordRemoval) {
+		t.Fatalf("controller cleanup order must be gate, active probe, exact drop-in removal, conditional restart, evidence removal: gate=%d active=%d dropin=%d restart=%d record=%d", controllerGate, activeProbe, dropinRemoval, restart, recordRemoval)
+	}
+	for _, play := range []struct {
+		path      string
+		tasksFrom string
+	}{
+		{path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_controller_name_resolution_destroy_preflight.yml", tasksFrom: "controller_destroy_preflight.yml"},
+		{path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_controller_name_resolution_destroy_cleanup.yml", tasksFrom: "controller_destroy.yml"},
+	} {
+		body := readRepoFile(t, play.path)
+		for _, want := range []string{
+			"bootwright_controller_name_resolution_destroy_targets",
+			"bootwright_component.destroyRole",
+			"tasks_from: " + play.tasksFrom,
+			"item.kind | default('') == 'nameResolution'",
+			"bootwright_mutating_invocation",
+		} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("%s does not fail closed and dispatch a registry-derived controller target: missing %q", play.path, want)
+			}
+		}
+		for _, forbidden := range []string{"bootwright_ownership_record.role", "bootwright_ownership_record.paths"} {
+			if strings.Contains(body, forbidden) {
+				t.Fatalf("%s trusts ownership-record dispatch metadata %q", play.path, forbidden)
+			}
+		}
+	}
+	defaults := readRepoFile(t, roleRoot+"defaults/main.yml")
+	for _, want := range []string{
+		"bootwright_controller_resolver_context",
+		"[bootwright_controller_resolver_context, bootwright_component.providerName, bootwright_component.name] | to_json",
+		"hash('sha256')",
+		"bootwright_controller_resolver_ownership_name }}.conf",
+	} {
+		if !strings.Contains(defaults, want) {
+			t.Fatalf("controller resolver identity is not unique per context and managed service: missing %q", want)
+		}
+	}
+	controllerApply := readRepoFile(t, roleRoot+"tasks/controller_apply.yml")
+	gate := strings.Index(controllerApply, "controller_ownership_gate.yml")
+	ownership := strings.Index(controllerApply, "Record controller resolver ownership before mutation")
+	mutation := strings.Index(controllerApply, "Render controller split-DNS drop-in")
+	if gate < 0 || ownership < 0 || mutation < 0 || !(gate < ownership && ownership < mutation) {
+		t.Fatalf("controller resolver ownership gate and evidence must precede the first resolver mutation: gate=%d ownership=%d mutation=%d", gate, ownership, mutation)
+	}
+	for _, exact := range []string{"`{{ bootwright_apply_controller_dns_invocation }}`"} {
+		if !strings.Contains(controllerApply, exact) {
+			t.Fatalf("controller resolver refusal does not consume the exact controller-built invocation %q", exact)
+		}
+	}
+	for _, closed := range []string{
+		"Validate exact controller resolver probes",
+		"item.addresses | default([]) | length > 0",
+		"ahosts",
+		"bootwright.core.bootwright_normalize_ip_set",
+		"observed != expected",
+		"bootwright_controller_resolver_initial_failures | length > 0",
+		"bootwright_controller_resolver_managed_reconcile_required",
+		"bootwright_controller_resolver_owned.stat.exists",
+		"bootwright_controller_name_resolution_automatic_mutation | default(false) | bool",
+		"Refuse ambiguous automatic controller split DNS",
+		"systemd-resolved global DNS and routing-domain settings",
+		"not bind one server set to one domain set",
+	} {
+		if !strings.Contains(controllerApply, closed) {
+			t.Fatalf("controller resolver automatic mutation is not fail-closed: missing %q", closed)
+		}
+	}
+	ownershipGate := readRepoFile(t, roleRoot+"tasks/controller_ownership_gate.yml")
+	typeGate := strings.Index(ownershipGate, "Refuse unsafe controller resolver path types before reading")
+	readRecord := strings.Index(ownershipGate, "Read controller resolver ownership record")
+	if typeGate < 0 || readRecord < 0 || typeGate >= readRecord {
+		t.Fatalf("controller resolver path-type gate must precede ownership-record slurp: type=%d read=%d", typeGate, readRecord)
+	}
+	for _, want := range []string{
+		"bootwright-*.conf",
+		"bootwright_controller_resolver_dropin_live.stat.exists",
+		"bootwright_controller_resolver_ownership_files.files",
+		"bootwright_controller_resolver_dropin_files.files",
+		"bootwright_controller_resolver_ownership_files.skipped_paths",
+		"bootwright_controller_resolver_dropin_files.skipped_paths",
+		"file_type: any",
+		"Refuse sibling Bootwright controller resolver state",
+		"bootwright_controller_resolver_other_ownership_paths",
+		"bootwright_controller_resolver_other_dropin_paths",
+		"reject('equalto', bootwright_controller_resolver_ownership_path)",
+		"reject('equalto', bootwright_controller_resolver_dropin_path)",
+		"bootwright_controller_resolver_existing_ownership.owner",
+		"bootwright_controller_resolver_existing_ownership.apiVersion",
+		"bootwright.io/ownership/v1alpha1",
+		"bootwright_controller_resolver_existing_ownership.role | default('owner', true)",
+		"bootwright_controller_resolver_ownership_dir.stat.islnk",
+		"bootwright_controller_resolver_dropin_dir.stat.islnk",
+		"bootwright_controller_resolver_owned.stat.isreg",
+		"bootwright_controller_resolver_owned.stat.islnk",
+		"bootwright_controller_resolver_dropin_live.stat.isreg",
+		"bootwright_controller_resolver_dropin_live.stat.islnk",
+		"bootwright_controller_resolver_existing_ownership.context",
+		"bootwright_controller_resolver_existing_ownership.provider",
+		"bootwright_controller_resolver_existing_ownership.paths",
+		"bootwright_controller_resolver_existing_ownership.attributes.resolver",
+		"bootwright_controller_resolver_existing_ownership.attributes.component",
+		"bootwright_controller_resolver_existing_ownership.attributes.machineRef",
+		"bootwright_controller_resolver_existing_ownership.attributes.realisation",
+		"bootwright_controller_resolver_existing_ownership.labels",
+		"bootwright_apply_controller_dns_invocation",
+		"bootwright_mutating_invocation",
+		"Refusing to change resolver state or ownership evidence",
+	} {
+		if !strings.Contains(ownershipGate, want) {
+			t.Fatalf("controller resolver ownership gate is not fail-closed: missing %q", want)
+		}
+	}
+	for _, body := range []string{controllerApply, controllerPreflight, controllerDestroy, ownershipGate} {
+		if strings.Contains(body, "bootwright_controller_resolver_retry_invocation") {
+			t.Fatal("controller resolver role reintroduced an undocumented role-local retry invocation fact")
 		}
 	}
 }

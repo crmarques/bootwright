@@ -17,14 +17,14 @@ func managedOSLibvirtCephState(t *testing.T) v1alpha1.State {
 	return state
 }
 
-func TestStorageManagedOSPrepareDependsOnlyOnItsProviderHost(t *testing.T) {
+func TestStorageManagedOSPrepareDependsOnProviderAndControllerDNS(t *testing.T) {
 	state := managedOSLibvirtCephState(t)
 	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion")
+	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion", "controller-name-resolution.InfraComponent.lab-dns")
 	assertTaskPresent(t, tasks, "infra-component.bastion")
 	assertTaskResourceKeys(t, tasks, "osprepare.ceph-libvirt.bastion", hostMutationResource("bastion"))
 }
@@ -90,6 +90,6 @@ func TestProvidedOSStorageClusterKeepsMachineServiceDependencies(t *testing.T) {
 
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt")
 	assertTaskMissing(t, tasks, "osprepare.ceph-libvirt.bastion")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "nodeaccess.ceph-libvirt")
-	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "storageinfra.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "nodeaccess.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "controller-name-resolution.InfraComponent.lab-dns", "storageinfra.ceph-libvirt")
 }

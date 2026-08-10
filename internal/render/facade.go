@@ -131,6 +131,16 @@ func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
 	return inventory.FabricHostDesiredVars(state, host)
 }
 
+type ControllerNameResolutionTarget = inventory.ControllerNameResolutionTarget
+
+func ControllerNameResolutionTargets(state v1alpha1.State) []ControllerNameResolutionTarget {
+	return inventory.ControllerNameResolutionTargets(state)
+}
+
+func ControllerNameResolutionTargetDesiredVars(state v1alpha1.State, target ControllerNameResolutionTarget) []any {
+	return inventory.ControllerNameResolutionTargetDesiredVars(state, target)
+}
+
 func ProviderDriver(state v1alpha1.State, m v1alpha1.InstallMachine) roles.DispatchSupport {
 	return inventory.ProviderDriver(state, m)
 }

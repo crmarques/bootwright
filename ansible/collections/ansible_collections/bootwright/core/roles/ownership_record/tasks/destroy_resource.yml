@@ -122,10 +122,23 @@
     state: disabled
     permanent: true
     immediate: true
-  loop:
-    - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
-    - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"
-    - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string | length) > 0 else '' }}"
+  loop: >-
+    {{
+      [
+          bootwright_ownership_destroy_attrs.port | default(''),
+          bootwright_ownership_destroy_attrs.udpPort | default(''),
+          ((bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp')
+          if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0
+          else '',
+          ((bootwright_ownership_destroy_attrs.vMediaPort
+             | default(bootwright_ownership_destroy_attrs.vmediaPort)
+             | default('') | string) ~ '/tcp')
+          if (bootwright_ownership_destroy_attrs.vMediaPort
+              | default(bootwright_ownership_destroy_attrs.vmediaPort)
+              | default('') | string | length) > 0
+          else ''
+      ]
+    }}
   loop_control:
     label: "{{ item }}"
   when:

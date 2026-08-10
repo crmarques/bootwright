@@ -13,24 +13,3 @@
     - "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password"
   loop_control:
     label: "{{ item }}"
-
-- name: Remove controller resolver drop-in
-  ansible.builtin.file:
-    path: "{{ bootwright_controller_resolver_dropin_path }}"
-    state: absent
-  register: bootwright_controller_resolver_removed
-
-- name: Restart systemd-resolved after removing controller resolver drop-in
-  ansible.builtin.systemd_service:
-    name: systemd-resolved
-    state: restarted
-  when: bootwright_controller_resolver_removed.changed
-  failed_when: false
-
-- name: Remove controller resolver ownership record
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
-  vars:
-    bootwright_ownership_kind: controller-name-resolver
-    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}"

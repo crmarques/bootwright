@@ -285,6 +285,49 @@ func TestReadOnlyPreflightRemedyNeverInfersAnOriginalApply(t *testing.T) {
 	assertRetryParses(t, retryCommand{args: shellParseWords(t, commands[0])}, func(*cobra.Command) {})
 }
 
+func TestControllerDNSMutationRemedyUsesModeAwareExactRetry(t *testing.T) {
+	request := remedy.Request{
+		Action:  remedy.ActionResumeControllerDNSMutation,
+		Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "cluster-a"}},
+	}
+	for _, tc := range []struct {
+		name     string
+		mode     workflow.ApplyMode
+		wantMode workflow.ApplyMode
+	}{
+		{name: "partial create reconciles", mode: workflow.ApplyModeCreate, wantMode: workflow.ApplyModeReconcile},
+		{name: "structural rebuild stays rebuild", mode: workflow.ApplyModeRebuild, wantMode: workflow.ApplyModeRebuild},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := resolvedInvocation{
+				verb:        invocationApply,
+				contextName: "prod",
+				flags: invocationFlags{
+					mode:           tc.mode,
+					selection:      runSelection{stage: converge.PhaseMachines, clusters: "cluster-a"},
+					authorizations: []string{authorizeForeignDaemons},
+					yes:            true,
+				},
+			}
+			guidance, err := applyRemedialGuidance(request, invocation)
+			if err != nil {
+				t.Fatal(err)
+			}
+			commands := backtickedBootwrightCommands(guidance)
+			if len(commands) != 1 {
+				t.Fatalf("controller DNS mutation commands = %v, want one exact retry", commands)
+			}
+			command := commands[0]
+			for _, want := range []string{"--mode " + string(tc.wantMode), "--stage fabric", "--through machines", "--clusters cluster-a", "--authorize foreign-daemons", "--yes", "--context prod"} {
+				if !strings.Contains(command, want) {
+					t.Fatalf("controller DNS mutation retry %q missing %q", command, want)
+				}
+			}
+			assertRetryParses(t, retryCommand{args: shellParseWords(t, command)}, func(*cobra.Command) {})
+		})
+	}
+}
+
 func TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -548,6 +591,9 @@ func TestEveryRegisteredRemedyActionHasAnExactCLIFormatter(t *testing.T) {
 	for _, action := range remedy.RegisteredActions() {
 		t.Run(string(action), func(t *testing.T) {
 			request := clusterInstallRemedyRequest(action, "ocp")
+			if action == remedy.ActionApplyAllConsumers || action == remedy.ActionResumeControllerDNSMutation || action == remedy.ActionReconcileSharedServiceThenRetrySameSelection {
+				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}}
+			}
 			if action == remedy.ActionDestroyProtectedLayersThenRebuildSameSelection {
 				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}}}
 			}
@@ -576,6 +622,15 @@ func TestUnknownOrMalformedRemedyFailsClosedWithoutACommand(t *testing.T) {
 		{Action: remedy.Action("future-action"), Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}},
 		{Action: remedy.ActionRegenerateClusterISO},
 		{Action: remedy.ActionRegenerateClusterISO, Targets: []remedy.Target{{Role: remedy.TargetRole("future-role"), Name: "ocp"}}},
+		{Action: remedy.ActionApplyAllConsumers},
+		{Action: remedy.ActionApplyAllConsumers, Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}},
+		{Action: remedy.ActionApplyAllConsumers, Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}, {Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}},
+		{Action: remedy.ActionResumeControllerDNSMutation},
+		{Action: remedy.ActionResumeControllerDNSMutation, Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}},
+		{Action: remedy.ActionResumeControllerDNSMutation, Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}, {Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}},
+		{Action: remedy.ActionReconcileSharedServiceThenRetrySameSelection},
+		{Action: remedy.ActionReconcileSharedServiceThenRetrySameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}},
+		{Action: remedy.ActionReconcileSharedServiceThenRetrySameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}, {Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}},
 		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection},
 		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRole("future-layer")}}},
 		{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleMachineLayer}}},

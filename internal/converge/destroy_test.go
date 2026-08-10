@@ -1,12 +1,14 @@
 package converge
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
@@ -221,6 +223,69 @@ func TestDestroyKindForApplyTaskKindSeparatesStorageNodeAccess(t *testing.T) {
 		if got := destroyKindForApplyTaskKind(kind); got != workflow.DestroyTaskKindStorageCluster {
 			t.Fatalf("apply kind %q maps to %q, want %q", kind, got, workflow.DestroyTaskKindStorageCluster)
 		}
+	}
+}
+
+func TestEveryApplyTaskKindMapsToARegisteredDestroyKind(t *testing.T) {
+	for _, applyKind := range workflow.ApplyTaskKinds() {
+		destroyKind := destroyKindForApplyTaskKind(applyKind)
+		if destroyKind == "" {
+			t.Errorf("apply task kind %q has no destroy mapping; its convergence record would survive teardown and make a later apply skip missing state", applyKind)
+			continue
+		}
+		if !workflow.IsDestroyTaskKind(destroyKind) {
+			t.Errorf("apply task kind %q maps to unregistered destroy kind %q", applyKind, destroyKind)
+		}
+	}
+}
+
+func TestControllerResolverConvergeRecordClearsOnlyAfterCleanupSuccess(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "sno-libvirt-redfish")})
+	if err != nil {
+		t.Fatalf("load controller resolver state: %v", err)
+	}
+	tasks, err := workflow.PlanApplyTasksChecked(InfraScope.ApplyTarget(), state)
+	if err != nil {
+		t.Fatalf("plan controller resolver apply: %v", err)
+	}
+	var controllerTask workflow.ApplyTask
+	for _, task := range tasks {
+		if task.Entry.Kind == workflow.ApplyTaskKindControllerNameResolution {
+			controllerTask = task
+			break
+		}
+	}
+	if controllerTask.Entry.ID == "" {
+		t.Fatal("fixture planned no controller name-resolution apply task")
+	}
+	cases := []struct {
+		name          string
+		cleanupStatus workflow.TaskStatus
+		wantRecord    bool
+	}{
+		{name: "cleanup failed", cleanupStatus: workflow.TaskStatusFailed, wantRecord: true},
+		{name: "cleanup blocked after skipped mutation", cleanupStatus: workflow.TaskStatusBlocked, wantRecord: true},
+		{name: "cleanup succeeded", cleanupStatus: workflow.TaskStatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runsDir := t.TempDir()
+			clustersDir := t.TempDir()
+			if err := workflow.MarkApplyTaskConvergeSafety(runsDir, "ctx", "apply", controllerTask, workflow.ConvergeSafetyStatusReconciled, time.Unix(1700000000, 0)); err != nil {
+				t.Fatalf("mark controller record: %v", err)
+			}
+			outcome := workflow.SucceededDestroyTaskKinds(workflow.RunLedger{Tasks: []workflow.TaskLedgerEntry{
+				{ID: "destroy.controller-name-resolution-preflight", Kind: workflow.DestroyTaskKindControllerNameResolution, Status: workflow.TaskStatusOK},
+				{ID: "destroy.controller-name-resolution-cleanup", Kind: workflow.DestroyTaskKindControllerNameResolution, Status: tc.cleanupStatus},
+			}})
+			problems := ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "ctx", InfraScope, state, nil, nil, nil, outcome, "destroy", false, false)
+			if len(problems) != 0 {
+				t.Fatalf("reset controller record: %v", problems)
+			}
+			if got := workflow.HasConvergeSafetyRecords(runsDir); got != tc.wantRecord {
+				t.Fatalf("controller converge record present = %t, want %t after cleanup status %s", got, tc.wantRecord, tc.cleanupStatus)
+			}
+		})
 	}
 }
 

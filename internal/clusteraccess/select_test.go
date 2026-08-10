@@ -1,10 +1,13 @@
 package clusteraccess
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
 )
 
 func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
@@ -19,6 +22,17 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unscoped {cluster-b}") {
 		t.Fatalf("error %q does not list unscoped consumer", err)
+	}
+	var typed remedy.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("shared service conflict is not a typed exact remedy: %T", err)
+	}
+	wantTargets := []remedy.Target{
+		{Role: remedy.TargetRoleClusterRoot, Name: "cluster-a"},
+		{Role: remedy.TargetRoleClusterRoot, Name: "cluster-b"},
+	}
+	if got := typed.Remedy().Targets; !reflect.DeepEqual(got, wantTargets) {
+		t.Fatalf("shared service remedy targets = %#v, want exact consumers %#v", got, wantTargets)
 	}
 }
 
