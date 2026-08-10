@@ -47,11 +47,12 @@ type Record struct {
 }
 
 type StepRecord struct {
-	Lifecycle string       `json:"lifecycle"`
-	Status    RecordStatus `json:"status"`
-	Digest    string       `json:"digest,omitempty"`
-	RanAt     time.Time    `json:"ranAt,omitempty"`
-	LastError string       `json:"lastError,omitempty"`
+	Lifecycle       string            `json:"lifecycle"`
+	Status          RecordStatus      `json:"status"`
+	Digest          string            `json:"digest,omitempty"`
+	ObservedDigests map[string]string `json:"observedDigests,omitempty"`
+	RanAt           time.Time         `json:"ranAt,omitempty"`
+	LastError       string            `json:"lastError,omitempty"`
 }
 
 func (r Record) HasFailedStep() bool {

@@ -24,8 +24,14 @@ type nativeCatalogAddOn struct {
 			} `yaml:"inputs"`
 		} `yaml:"accepts"`
 		Steps []struct {
-			Name      string `yaml:"name"`
-			Playbook  string `yaml:"playbook"`
+			Name     string `yaml:"name"`
+			Playbook string `yaml:"playbook"`
+			Outputs  []struct {
+				Name   string `yaml:"name"`
+				File   string `yaml:"file"`
+				Secret bool   `yaml:"secret"`
+				Format string `yaml:"format"`
+			} `yaml:"outputs"`
 			Manifests []struct {
 				Path string `yaml:"path"`
 			} `yaml:"manifests"`
@@ -209,6 +215,56 @@ func TestNativeCatalogDataFoundationGatewayConditionalIsBoolean(t *testing.T) {
 		}
 		if !strings.Contains(string(data), "when: bootwright_gateway is not none") {
 			t.Errorf("%s must test gateway presence with a boolean expression", path)
+		}
+	}
+}
+
+func TestNativeCatalogDataFoundationRecordsExporterScriptDigestBeforeExecution(t *testing.T) {
+	root := repoRoot(t)
+	addOns := loadNativeCatalogAddOns(t)
+	for _, name := range []string{"openshift-data-foundation", "fusion-data-foundation"} {
+		key := name + "/4.21"
+		addon, ok := addOns[key]
+		if !ok {
+			t.Fatalf("native catalog has no %s", key)
+		}
+		var playbook string
+		foundOutput := false
+		for _, step := range addon.Spec.Steps {
+			if step.Name != "attach-external-storage" {
+				continue
+			}
+			playbook = step.Playbook
+			for _, output := range step.Outputs {
+				if output.Name != "exporterScript" {
+					continue
+				}
+				foundOutput = true
+				if output.File != "exporter-script.sha256" || output.Format != "sha256" || output.Secret {
+					t.Errorf("%s exporterScript output = file %q format %q secret %t, want exporter-script.sha256/sha256/non-secret", key, output.File, output.Format, output.Secret)
+				}
+			}
+		}
+		if !foundOutput {
+			t.Errorf("%s attach-external-storage step has no exporterScript digest output", key)
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, "add-ons", name, "4.21", playbook))
+		if err != nil {
+			t.Fatalf("read %s exporter playbook: %v", key, err)
+		}
+		text := string(data)
+		statIndex := strings.Index(text, "- name: Calculate the staged exporter script SHA-256")
+		assertIndex := strings.Index(text, "- name: Confirm the staged exporter script has a SHA-256")
+		recordIndex := strings.Index(text, "- name: Record the staged exporter script SHA-256")
+		runIndex := strings.Index(text, "- name: Run the Rook external cluster details exporter")
+		if statIndex < 0 || assertIndex < 0 || recordIndex < 0 || runIndex < 0 || !(statIndex < assertIndex && assertIndex < recordIndex && recordIndex < runIndex) {
+			t.Errorf("%s must calculate, validate, and record the staged exporter SHA-256 before executing it", key)
+		}
+		for _, want := range []string{"checksum_algorithm: sha256", "stat.isreg | default(false)", "match('^[0-9a-f]{64}$')", `dest: "{{ bootwright_step_outputs_dir }}/exporter-script.sha256"`} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s exporter playbook does not contain %q", key, want)
+			}
 		}
 	}
 }

@@ -365,7 +365,7 @@ everywhere else in the input tree.
 | `steps[].timeout` | No | `10m` | Playbook run timeout (Go duration). |
 | `steps[].run` | No | `onChange` | `onChange` skips a step whose content and inputs are unchanged; `always` re-runs every apply. |
 | `steps[].onFailure` | No | `fail` | `fail` blocks the add-on; `continue` records the failure and proceeds. A step whose manifests consume its outputs must be `fail`. |
-| `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_step_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the step; `format: json` validates the payload; `secret: true` persists it under the cluster's secrets area (non-secret outputs under its runtime area). Requires a `playbook`. |
+| `steps[].outputs[]` | No | — | Files the playbook writes under `{{ bootwright_step_outputs_dir }}`; Bootwright captures each. A declared output the playbook did not write fails the step. `format` is `text` (default), `json`, or `sha256`; `json` validates the payload, while `sha256` accepts only `sha256:` plus 64 lowercase hexadecimal characters and must not set `secret: true`. Secret outputs persist under the cluster's secrets area; non-secret outputs persist under its runtime area. Requires a `playbook`. |
 | `steps[].manifests[]` | No | — | Templated manifests applied to the bound cluster after the step succeeds. |
 | `steps[].manifests[].path` | Yes (per entry) | — | Manifest template path, relative to the add-on file, applied in declared order. |
 | `steps[].manifests[].reclaimRendered` | No | `false` | Delete the rendered plaintext manifest from disk after it applies. Recommended for manifests that embed secret outputs (e.g. the Rook external-details `Secret`), so decrypted material does not linger on the controller. |
@@ -422,6 +422,15 @@ shared step coordinator is unavailable, it refuses before running the
 playbook. This prevents two Data Foundation consumers from deleting and
 reminting the same external-Ceph credentials concurrently.
 
+A `format: sha256` output is audit evidence for content the playbook fetched at
+runtime. Bootwright accepts one trailing newline, persists the canonical value
+without it, and copies the value into that step's `observedDigests` map in the
+per-add-on runtime record. If a playbook fails or times out after writing the
+digest, the failed record still captures it. A successful run must produce
+valid evidence before Bootwright applies the step's manifests or marks it
+ready. This observed value is not an expected checksum and does not participate
+in desired-state hashing or drift.
+
 Manifest templates use whole-scalar tokens: `{{ cluster }}`,
 `{{ output <name> }}`, `{{ input <in> }}`, `{{ secret <name> }}`, and
 `{{ exportDetails <in> }}` (the operator-supplied
@@ -474,6 +483,9 @@ spec:
       run: always
       timeout: 20m
       outputs:
+        - name: exporterScript
+          file: exporter-script.sha256
+          format: sha256
         - name: externalDetails
           file: external-cluster-details.json
           secret: true

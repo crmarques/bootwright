@@ -91,22 +91,6 @@ learned; this file records what it still owes.
   Manual`.
 - Related: internal/addons/records/records.go, internal/addons/oc/execute.go
 
-## B-026 — Fetched Data Foundation exporter script has no audit trail
-- Status: open
-- Area: addons / security
-- Origin: OCP<->Ceph Data Foundation integration review 2026-07-23
-- Problem: the exporter step (`run: always`, root-privileged, executes against
-  the live Ceph cluster on every apply) fetches its script at runtime from the
-  operator-published `rook-ceph-external-cluster-script-config` ConfigMap;
-  neither the step digest nor the StepRecord captures any checksum/identity of
-  the fetched script, so there is no record of exactly which code ran on a
-  given apply.
-- Exit: persist the fetched script's SHA-256 (or the ConfigMap's
-  resourceVersion) into the StepRecord on every run, for audit purposes;
-  optionally support an add-on-declared expected checksum later.
-- Related: add-ons/openshift-data-foundation/4.21/playbooks/export-external-details.yaml,
-  internal/addons/records/records.go
-
 ## B-028 — fusion-data-foundation catalogSource image pin unverified against the live IBM registry
 - Status: open
 - Area: addons / supply-chain

@@ -221,6 +221,38 @@ func TestValidateHookOutputConsumerMustFail(t *testing.T) {
 	hookErrsContain(t, validateClusterAddonSteps(v1alpha1.State{}, addon), "onFailure must be fail")
 }
 
+func TestValidateHookOutputAcceptsNonSecretSHA256(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name:     "h",
+		Gates:    v1alpha1.ClusterAddonStepGateApply,
+		Playbook: "playbooks/p.yml",
+		Target:   v1alpha1.ClusterAddonStepTarget{BoundCluster: &v1alpha1.ClusterAddonStepBoundTarget{}},
+		Outputs: []v1alpha1.ClusterAddonStepOutput{{
+			Name: "exporterScript", File: "exporter-script.sha256", Format: v1alpha1.ClusterAddonStepOutputFormatSHA256,
+		}},
+	})
+	if errs := validateClusterAddonSteps(v1alpha1.State{}, addon); len(errs) != 0 {
+		t.Fatalf("valid sha256 output rejected: %v", errs)
+	}
+}
+
+func TestValidateHookOutputRejectsSecretSHA256(t *testing.T) {
+	dir := t.TempDir()
+	writeHookFile(t, dir, "playbooks/p.yml", "- hosts: all\n")
+	addon := hookAddon(dir, v1alpha1.ClusterAddonStep{
+		Name:     "h",
+		Gates:    v1alpha1.ClusterAddonStepGateApply,
+		Playbook: "playbooks/p.yml",
+		Target:   v1alpha1.ClusterAddonStepTarget{BoundCluster: &v1alpha1.ClusterAddonStepBoundTarget{}},
+		Outputs: []v1alpha1.ClusterAddonStepOutput{{
+			Name: "exporterScript", File: "exporter-script.sha256", Secret: true, Format: v1alpha1.ClusterAddonStepOutputFormatSHA256,
+		}},
+	})
+	hookErrsContain(t, validateClusterAddonSteps(v1alpha1.State{}, addon), "must not combine format \"sha256\" with secret: true")
+}
+
 func writeHookFile(t *testing.T, dir, rel, body string) {
 	t.Helper()
 	path := filepath.Join(dir, rel)

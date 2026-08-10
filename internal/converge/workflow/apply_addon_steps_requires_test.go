@@ -73,7 +73,7 @@ func TestRunStepDoesNotApplyManifestsBeforeTheRequiredAPIExists(t *testing.T) {
 	ocRunner := &absentCRDRunner{}
 	executor, step := requiresStepExecutor(t, readRunner, ocRunner)
 
-	observed, err := executor.runStep(context.Background(), step)
+	observed, _, err := executor.runStep(context.Background(), step)
 	if err == nil {
 		t.Fatal("expected runStep to fail while the required API is absent")
 	}

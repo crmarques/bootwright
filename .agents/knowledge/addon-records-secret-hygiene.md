@@ -29,14 +29,24 @@ provided at apply time. Non-Secret custom resources with `data`/`stringData`
 fields are untouched.
 
 **Record.Steps two-writer protocol:** `Record.Steps` is a map keyed by step
-name of `StepRecord{Lifecycle, Status, Digest, RanAt, LastError}`; `Digest` is
-the step's content+inputs digest used to skip an unchanged `run: onChange`
-step. The add-on engine (Apply/Wait) rebuilds the record from scratch on every
-save and never sets `Steps`; the step executor writes per-step state out of
-band via `SetStep` (a load-modify-save that is the executor's only writer).
+name of `StepRecord{Lifecycle, Status, Digest, ObservedDigests, RanAt,
+LastError}`; `Digest` is the step's content+inputs digest used to skip an
+unchanged `run: onChange` step, while `ObservedDigests` holds canonical
+non-secret identities the playbook measured at runtime. The add-on engine
+(Apply/Wait) rebuilds the record from scratch on every save and never sets
+`Steps`; the step executor writes per-step state out of band via `SetStep` (a
+load-modify-save that is the executor's only writer).
 `SaveRecord` therefore preserves any `Steps` already on disk when the incoming
 record carries none — without this, an engine save would clobber the
 executor's per-step updates.
+
+**Output-set atomic validation:** Successful playbook capture reads and
+validates every declared output before persisting any of them. A missing or
+malformed observed digest therefore cannot persist a secret sibling. If a
+later filesystem write fails, capture reclaims every secret output it may have
+written before returning the error. On a playbook failure or timeout, capture
+reads only available non-secret `sha256` evidence and writes the failed step
+record before releasing the storage target lock.
 
 **Scoped secret materialization:** `ContextStore.MaterializeSelected`
 materializes only the named materials into a target dir and is the

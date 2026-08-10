@@ -2148,9 +2148,17 @@ Rules:
     manifest token), `file` (relative to the outputs directory), optional
     `secret` (persisted `0600` under `clusters/<cluster>/secrets/addons/...` and
     reclaimed from run history; non-secret outputs persist under
-    `runtime/addons/...`), and `format` `text` (default) or `json` (validates the
-    captured bytes parse as JSON). A declared output the playbook did not write
-    fails the step; `outputs` require a `playbook`.
+    `runtime/addons/...`), and `format` `text` (default), `json` (the captured
+    bytes must parse as JSON), or `sha256`. A `sha256` output must be non-secret
+    and contain exactly `sha256:` followed by 64 lowercase hexadecimal
+    characters; one trailing newline is accepted and removed before
+    persistence. Its canonical value is also written to the step record's
+    `observedDigests` map. Bootwright captures available digest evidence after
+    a failed or timed-out playbook, but a successful playbook cannot proceed to
+    manifests or a ready record until every declared output is present and
+    valid. Observed digests identify runtime-fetched content for audit; they do
+    not enter the desired hash or drift calculation. A declared output the
+    playbook did not write fails the step; `outputs` require a `playbook`.
   - `steps[].manifests[]` are templated manifests applied to the bound cluster
     (`oc apply --server-side`, in declared order) after the step succeeds. Each
     entry requires `path`; `reclaimRendered` removes the rendered plaintext once

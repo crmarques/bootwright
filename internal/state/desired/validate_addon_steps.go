@@ -215,8 +215,11 @@ func validateHookOutputs(prefix string, hook v1alpha1.ClusterAddonStep) []string
 		if _, pathErrs := validateContainedPath(owner+".file", output.File); len(pathErrs) > 0 {
 			errs = append(errs, pathErrs...)
 		}
-		if output.Format != "" && output.Format != v1alpha1.ClusterAddonStepOutputFormatText && output.Format != v1alpha1.ClusterAddonStepOutputFormatJSON {
-			errs = append(errs, fmt.Sprintf("%s.format %q must be %q or %q", owner, output.Format, v1alpha1.ClusterAddonStepOutputFormatText, v1alpha1.ClusterAddonStepOutputFormatJSON))
+		if output.Format != "" && output.Format != v1alpha1.ClusterAddonStepOutputFormatText && output.Format != v1alpha1.ClusterAddonStepOutputFormatJSON && output.Format != v1alpha1.ClusterAddonStepOutputFormatSHA256 {
+			errs = append(errs, fmt.Sprintf("%s.format %q must be %q, %q, or %q", owner, output.Format, v1alpha1.ClusterAddonStepOutputFormatText, v1alpha1.ClusterAddonStepOutputFormatJSON, v1alpha1.ClusterAddonStepOutputFormatSHA256))
+		}
+		if output.Secret && output.Format == v1alpha1.ClusterAddonStepOutputFormatSHA256 {
+			errs = append(errs, fmt.Sprintf("%s must not combine format %q with secret: true; observed digests are non-secret audit evidence persisted in the step record", owner, v1alpha1.ClusterAddonStepOutputFormatSHA256))
 		}
 	}
 	return errs

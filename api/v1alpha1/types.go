@@ -267,8 +267,9 @@ const (
 	ClusterAddonStepTargetLimitFirstReachable = "firstReachable"
 	ClusterAddonStepTargetLimitAll            = "all"
 
-	ClusterAddonStepOutputFormatText = "text"
-	ClusterAddonStepOutputFormatJSON = "json"
+	ClusterAddonStepOutputFormatText   = "text"
+	ClusterAddonStepOutputFormatJSON   = "json"
+	ClusterAddonStepOutputFormatSHA256 = "sha256"
 
 	DefaultClusterAddonStepTimeout = "10m"
 	DefaultCustomPlaybookTimeout   = "10m"

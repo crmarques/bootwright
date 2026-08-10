@@ -1,4 +1,4 @@
-# Add-on step runtime: digest, inventory, output paths, cross-cluster edges
+# Add-on step runtime: desired and observed digests, output paths, cross-cluster edges
 
 **Per-step digest:** `stepDigest` combines the step's shipped-content digest
 with its RESOLVED inputs and target, so a change to either re-runs a
@@ -32,6 +32,18 @@ and reclaimed after the step's manifests apply; non-secret outputs under
 deliberately mirrors the old Data Foundation attachment-details records.
 Manifests with `reclaimRendered` have their rendered plaintext removed after
 the `oc apply`.
+
+**Observed runtime digests:** A non-secret output with `format: sha256` carries
+exactly `sha256:` plus 64 lowercase hexadecimal characters. Capture accepts one
+trailing LF but stores the canonical value without it, both at the normal
+runtime output path and under `StepRecord.ObservedDigests[outputName]`. The
+failed/timed-out Ansible path captures every valid digest file that already
+exists before returning; the storage target remains locked through that
+capture and failed-record write. The successful path first reads and validates
+the whole declared output set before persisting any member, so a malformed or
+missing digest cannot leave a sibling secret output behind. An observed digest
+is execution evidence only and never feeds `stepDigest`, `render.DesiredHash`,
+or drift.
 
 **Kubeconfig lifetime:** The add-on task materializes the bound cluster's
 encrypted kubeconfig once into its owner-only runtime scratch directory and

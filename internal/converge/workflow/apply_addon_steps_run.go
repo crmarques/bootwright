@@ -1,11 +1,14 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -22,13 +25,25 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.ClusterAddonStep, stepRoot string) (map[string]string, error) {
+var stepSHA256Output = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+type capturedAddonStepOutputs struct {
+	Values          map[string]string
+	ObservedDigests map[string]string
+}
+
+type normalizedAddonStepOutput struct {
+	output v1alpha1.ClusterAddonStepOutput
+	data   []byte
+}
+
+func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.ClusterAddonStep, stepRoot string) (capturedAddonStepOutputs, error) {
 	machines, err := e.resolveStepTargetMachines(step)
 	if err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 	if len(machines) == 0 {
-		return nil, fmt.Errorf("step %s target resolved to no machines", step.Name)
+		return capturedAddonStepOutputs{}, fmt.Errorf("step %s target resolved to no machines", step.Name)
 	}
 
 	connectionDir := filepath.Join(stepRoot, "connection-secrets")
@@ -36,15 +51,15 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 	outputsDir := filepath.Join(stepRoot, "outputs")
 	for _, dir := range []string{connectionDir, stepSecretsDir, outputsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, err
+			return capturedAddonStepOutputs{}, err
 		}
 	}
 	store := secret.NewContextStore(effectiveContextName(e.opts.ContextName), e.opts.SecretsDir)
 	if err := store.MaterializeSelected(connectionDir, stepConnectionSecretNames(machines)); err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 	if err := store.MaterializeSelected(stepSecretsDir, append(stepSecretNames(step), e.stepGatewayCertificateNames()...)); err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 
 	idx := secret.NewIndex(e.state)
@@ -52,7 +67,7 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 	for i, m := range machines {
 		address := stateview.MachineConnectionAddress(e.state, m.machine)
 		if m.machine.Spec.Access.SSH == nil || address == "" {
-			return nil, fmt.Errorf("step %s target machine %s has no resolvable SSH access", step.Name, m.machine.Metadata.Name)
+			return capturedAddonStepOutputs{}, fmt.Errorf("step %s target machine %s has no resolvable SSH access", step.Name, m.machine.Metadata.Name)
 		}
 		targets = append(targets, stepSSHTarget{
 			label:            m.label,
@@ -72,24 +87,24 @@ func (e *addonStepExecutor) runStepPlaybook(ctx context.Context, step v1alpha1.C
 	inventoryPath := filepath.Join(stepRoot, "inventory.yaml")
 	varsPath := filepath.Join(stepRoot, "vars.yaml")
 	if err := writeStepInventory(inventoryPath, targets, e.opts.PreferredIdentityFile, e.opts.SSHUser); err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 	if err := writeWorkflowYAML(varsPath, map[string]any{}, 0o600); err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 
-	var outputs map[string]string
 	extraVars, err := stepExtraVarPairs(step, e.plan.Name, e.plan.Cluster, outputsDir, stepSecretsDir, e.kubeconfig, e.resolveStepRefs(stepSecretsDir), e.inputs)
 	if err != nil {
-		return nil, err
+		return capturedAddonStepOutputs{}, err
 	}
 	timeout := stepTimeout(step)
-	if err := e.runStepAnsible(ctx, step, inventoryPath, varsPath, stepRoot, targets, extraVars, timeout); err != nil {
-		return nil, err
+	if runErr := e.runStepAnsible(ctx, step, inventoryPath, varsPath, stepRoot, targets, extraVars, timeout); runErr != nil {
+		digests, captureErr := e.captureAvailableStepDigests(step, outputsDir)
+		return capturedAddonStepOutputs{ObservedDigests: digests}, errors.Join(runErr, captureErr)
 	}
-	outputs, err = e.captureStepOutputs(step, outputsDir)
+	outputs, err := e.captureStepOutputs(step, outputsDir)
 	if err != nil {
-		return nil, err
+		return outputs, err
 	}
 	return outputs, nil
 }
@@ -162,27 +177,110 @@ func (e *addonStepExecutor) runOneStepAnsible(ctx context.Context, runner ansibl
 	return nil
 }
 
-func (e *addonStepExecutor) captureStepOutputs(step v1alpha1.ClusterAddonStep, outputsDir string) (map[string]string, error) {
-	values := map[string]string{}
+func (e *addonStepExecutor) captureStepOutputs(step v1alpha1.ClusterAddonStep, outputsDir string) (capturedAddonStepOutputs, error) {
+	captured := capturedAddonStepOutputs{Values: map[string]string{}}
+	normalized := make([]normalizedAddonStepOutput, 0, len(step.Outputs))
 	for _, output := range step.Outputs {
-		path := filepath.Join(outputsDir, output.File)
-		data, err := os.ReadFile(path)
+		data, err := readNormalizedStepOutput(step, output, outputsDir)
 		if err != nil {
-			return nil, fmt.Errorf("step %s did not produce declared output %q (%s): %w", step.Name, output.Name, output.File, err)
+			return e.captureStepOutputFailure(step, outputsDir, err)
 		}
-		if v1alpha1.ClusterAddonStepOutputFormatValue(output) == v1alpha1.ClusterAddonStepOutputFormatJSON {
-			var probe any
-			if err := json.Unmarshal(data, &probe); err != nil {
-				return nil, fmt.Errorf("step %s output %q is not valid JSON: %w", step.Name, output.Name, err)
-			}
-		}
-		dest := steps.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, output)
-		if err := safefs.WriteFileEnsuringDir(dest, data, 0o600); err != nil {
-			return nil, err
-		}
-		values[output.Name] = string(data)
+		normalized = append(normalized, normalizedAddonStepOutput{output: output, data: data})
 	}
-	return values, nil
+	for _, item := range normalized {
+		output := item.output
+		if err := e.persistStepOutput(step, output, item.data); err != nil {
+			_ = e.reclaimSecretStepOutputs(step)
+			return e.captureStepOutputFailure(step, outputsDir, err)
+		}
+		value := string(item.data)
+		captured.Values[output.Name] = value
+		if v1alpha1.ClusterAddonStepOutputFormatValue(output) == v1alpha1.ClusterAddonStepOutputFormatSHA256 {
+			if captured.ObservedDigests == nil {
+				captured.ObservedDigests = map[string]string{}
+			}
+			captured.ObservedDigests[output.Name] = value
+		}
+	}
+	return captured, nil
+}
+
+func (e *addonStepExecutor) captureStepOutputFailure(step v1alpha1.ClusterAddonStep, outputsDir string, failure error) (capturedAddonStepOutputs, error) {
+	digests, digestErr := e.captureAvailableStepDigests(step, outputsDir)
+	return capturedAddonStepOutputs{ObservedDigests: digests}, errors.Join(failure, digestErr)
+}
+
+func (e *addonStepExecutor) captureAvailableStepDigests(step v1alpha1.ClusterAddonStep, outputsDir string) (map[string]string, error) {
+	var observed map[string]string
+	var problems []error
+	for _, output := range step.Outputs {
+		if v1alpha1.ClusterAddonStepOutputFormatValue(output) != v1alpha1.ClusterAddonStepOutputFormatSHA256 {
+			continue
+		}
+		data, err := readNormalizedStepOutput(step, output, outputsDir)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			problems = append(problems, err)
+			continue
+		}
+		if observed == nil {
+			observed = map[string]string{}
+		}
+		if err := e.persistStepOutput(step, output, data); err != nil {
+			problems = append(problems, err)
+			continue
+		}
+		value := string(data)
+		observed[output.Name] = value
+	}
+	return observed, errors.Join(problems...)
+}
+
+func readNormalizedStepOutput(step v1alpha1.ClusterAddonStep, output v1alpha1.ClusterAddonStepOutput, outputsDir string) ([]byte, error) {
+	path := filepath.Join(outputsDir, output.File)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("step %s did not produce declared output %q (%s): %w", step.Name, output.Name, output.File, err)
+	}
+	normalized, err := normalizeStepOutput(output, data)
+	if err != nil {
+		return nil, fmt.Errorf("step %s output %q: %w", step.Name, output.Name, err)
+	}
+	return normalized, nil
+}
+
+func (e *addonStepExecutor) persistStepOutput(step v1alpha1.ClusterAddonStep, output v1alpha1.ClusterAddonStepOutput, data []byte) error {
+	dest := steps.OutputPath(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, output)
+	if err := safefs.WriteFileEnsuringDir(dest, data, 0o600); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeStepOutput(output v1alpha1.ClusterAddonStepOutput, data []byte) ([]byte, error) {
+	switch v1alpha1.ClusterAddonStepOutputFormatValue(output) {
+	case v1alpha1.ClusterAddonStepOutputFormatText:
+		return data, nil
+	case v1alpha1.ClusterAddonStepOutputFormatJSON:
+		var probe any
+		if err := json.Unmarshal(data, &probe); err != nil {
+			return nil, fmt.Errorf("is not valid JSON: %w", err)
+		}
+		return data, nil
+	case v1alpha1.ClusterAddonStepOutputFormatSHA256:
+		if output.Secret {
+			return nil, errors.New("format sha256 cannot be secret")
+		}
+		normalized := bytes.TrimSuffix(data, []byte("\n"))
+		if !stepSHA256Output.Match(normalized) {
+			return nil, errors.New("must contain exactly sha256: followed by 64 lowercase hexadecimal characters, with at most one trailing newline")
+		}
+		return normalized, nil
+	default:
+		return nil, fmt.Errorf("has unsupported format %q", output.Format)
+	}
 }
 
 func (e *addonStepExecutor) reclaimSecretStepOutputs(step v1alpha1.ClusterAddonStep) error {

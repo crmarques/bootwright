@@ -187,7 +187,7 @@ func TestRunStepRefusesStorageMutationWithoutSharedResourcePool(t *testing.T) {
 	if err := osWriteResourceTestPlaybook(dir, step.Playbook); err != nil {
 		t.Fatalf("write playbook: %v", err)
 	}
-	_, err := executor.runStep(context.Background(), step)
+	_, _, err := executor.runStep(context.Background(), step)
 	if err == nil {
 		t.Fatal("runStep reached a storage mutation without the scheduler's shared resource pool")
 	}

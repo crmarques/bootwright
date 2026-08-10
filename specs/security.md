@@ -613,3 +613,12 @@ the rendered lock. Component image overrides must use an explicit version tag
 or digest. Mutable or floating references, including omitted image tags,
 non-version tags, and `:latest`, are invalid unless an accepted spec decision
 documents a temporary hold.
+
+An add-on that executes content fetched at runtime records that content's
+observed identity through a non-secret `sha256` step output. The canonical
+digest is persisted in the step record even when execution fails or times out,
+when the playbook produced it before failing. This is forensic evidence, not an
+allowlist or a trust decision: it does not authorize the fetched content, alter
+the desired hash, or create drift. Secret outputs are validated as part of the
+whole declared output set before any captured output is persisted, so invalid
+digest evidence cannot strand a credential-bearing sibling output.

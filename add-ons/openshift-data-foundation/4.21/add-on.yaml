@@ -51,6 +51,9 @@ spec:
       run: always
       timeout: 20m
       outputs:
+        - name: exporterScript
+          file: exporter-script.sha256
+          format: sha256
         - name: externalDetails
           file: external-cluster-details.json
           secret: true

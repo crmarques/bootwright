@@ -78,19 +78,21 @@ func newAddonStepExecutor(stdout, stderr io.Writer, runsDir, runID, kubeconfig s
 func (e *addonStepExecutor) Run(ctx context.Context, lifecycle string) ([]string, error) {
 	var observed []string
 	for _, step := range steps.At(e.plan.Addon, lifecycle) {
-		stepObserved, err := e.runStep(ctx, step)
+		stepObserved, failureRecordAttempted, err := e.runStep(ctx, step)
 		observed = append(observed, stepObserved...)
 		if err == nil {
 			continue
 		}
 		detail := conciseApplyTaskFailure(err)
-		if recordErr := extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
-			Lifecycle: lifecycle,
-			Status:    extensionrecords.RecordStatusFailed,
-			RanAt:     time.Now().UTC(),
-			LastError: detail,
-		}); recordErr != nil {
-			fmt.Fprintf(e.stderr, "warning: could not record failed step %s (%s): %v; a prior ready record may skip it on the next run\n", step.Name, lifecycle, recordErr)
+		if !failureRecordAttempted {
+			if recordErr := extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
+				Lifecycle: lifecycle,
+				Status:    extensionrecords.RecordStatusFailed,
+				RanAt:     time.Now().UTC(),
+				LastError: detail,
+			}); recordErr != nil {
+				fmt.Fprintf(e.stderr, "warning: could not record failed step %s (%s): %v; a prior ready record may skip it on the next run\n", step.Name, lifecycle, recordErr)
+			}
 		}
 		if v1alpha1.ClusterAddonStepFailureMode(step) == v1alpha1.PlaybookFailureContinue {
 			fmt.Fprintf(e.stderr, "step %s (%s) failed, continuing: %s\n", step.Name, lifecycle, detail)
@@ -101,20 +103,20 @@ func (e *addonStepExecutor) Run(ctx context.Context, lifecycle string) ([]string
 	return observed, nil
 }
 
-func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAddonStep) ([]string, error) {
+func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAddonStep) (observed []string, failureRecordAttempted bool, resultErr error) {
 	digest, err := e.stepDigest(step)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if v1alpha1.ClusterAddonStepRun(step) == v1alpha1.PlaybookRunOnChange && e.stepConverged(step.Name, digest) {
-		return nil, nil
+		return nil, false, nil
 	}
 	storageTargets, err := steps.StorageMutationTargets(e.state, e.plan.Addon, e.plan.Cluster, step, e.inputs)
 	if err != nil {
-		return nil, fmt.Errorf("ClusterAddon/%s step %s cannot prove the target of its mutating playbook: %w; fix the step target before applying again", e.plan.Name, step.Name, err)
+		return nil, false, fmt.Errorf("ClusterAddon/%s step %s cannot prove the target of its mutating playbook: %w; fix the step target before applying again", e.plan.Name, step.Name, err)
 	}
 	if err := extensionoc.WaitStepRequirements(ctx, e.readRunner, e.kubeconfig, e.plan.Name, step.Name, step.Requires, e.plan.Addon.Spec.Readiness.Timeout, e.startedAt, 0, e.stdout); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	resourceKeys := make([]string, 0, len(storageTargets))
 	for _, target := range storageTargets {
@@ -122,32 +124,52 @@ func (e *addonStepExecutor) runStep(ctx context.Context, step v1alpha1.ClusterAd
 	}
 	releaseResources, err := e.stepResources.acquire(ctx, resourceKeys)
 	if err != nil {
-		return nil, fmt.Errorf("ClusterAddon/%s step %s cannot acquire its mutation lock: %w", e.plan.Name, step.Name, err)
+		return nil, false, fmt.Errorf("ClusterAddon/%s step %s cannot acquire its mutation lock: %w", e.plan.Name, step.Name, err)
 	}
 	defer releaseResources()
+	anchor, _ := v1alpha1.ClusterAddonStepAnchor(step)
+	var observedDigests map[string]string
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		failureRecordAttempted = true
+		recordErr := extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
+			Lifecycle:       anchor,
+			Status:          extensionrecords.RecordStatusFailed,
+			Digest:          digest,
+			ObservedDigests: observedDigests,
+			RanAt:           time.Now().UTC(),
+			LastError:       conciseApplyTaskFailure(resultErr),
+		})
+		if recordErr != nil {
+			resultErr = fmt.Errorf("%w; could not record failed step %s (%s): %v", resultErr, step.Name, anchor, recordErr)
+		}
+	}()
 	stepRoot := filepath.Join(e.runsDir, "history", e.runID, "tasks", e.taskID, "steps", step.Name)
 	defer os.RemoveAll(stepRoot)
 	outputs := map[string]string{}
 	if step.Playbook != "" {
 		captured, err := e.runStepPlaybook(ctx, step, stepRoot)
+		observedDigests = captured.ObservedDigests
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		outputs = captured
+		outputs = captured.Values
 	}
-	observed, err := e.applyStepManifests(ctx, step, outputs)
+	observed, err = e.applyStepManifests(ctx, step, outputs)
 	if err != nil {
-		return observed, err
+		return observed, false, err
 	}
 	if err := e.reclaimSecretStepOutputs(step); err != nil {
-		return observed, err
+		return observed, false, err
 	}
-	anchor, _ := v1alpha1.ClusterAddonStepAnchor(step)
-	return observed, extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
-		Lifecycle: anchor,
-		Status:    extensionrecords.RecordStatusReady,
-		Digest:    digest,
-		RanAt:     time.Now().UTC(),
+	return observed, false, extensionrecords.SetStep(e.opts.ClustersDir, e.plan.Cluster, e.plan.Name, step.Name, extensionrecords.StepRecord{
+		Lifecycle:       anchor,
+		Status:          extensionrecords.RecordStatusReady,
+		Digest:          digest,
+		ObservedDigests: observedDigests,
+		RanAt:           time.Now().UTC(),
 	})
 }
 

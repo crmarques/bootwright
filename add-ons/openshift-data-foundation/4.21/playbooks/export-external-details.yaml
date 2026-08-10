@@ -140,6 +140,31 @@
       ansible.builtin.set_fact:
         bootwright_exporter_path: "{{ bootwright_exporter_staged_path }}"
 
+    - name: Calculate the staged exporter script SHA-256
+      ansible.builtin.stat:
+        path: "{{ bootwright_exporter_path }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: bootwright_exporter_script_stat
+
+    - name: Confirm the staged exporter script has a SHA-256
+      ansible.builtin.assert:
+        that:
+          - bootwright_exporter_script_stat.stat.isreg | default(false)
+          - bootwright_exporter_script_stat.stat.checksum | default('') is match('^[0-9a-f]{64}$')
+        fail_msg: >-
+          The staged Data Foundation exporter is not a regular file with a
+          valid SHA-256, so Bootwright refuses to execute code it cannot
+          identify in the add-on step record.
+
+    - name: Record the staged exporter script SHA-256
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        content: "sha256:{{ bootwright_exporter_script_stat.stat.checksum }}\n"
+        dest: "{{ bootwright_step_outputs_dir }}/exporter-script.sha256"
+        mode: "0600"
+
     - name: Read the certificate authority that signed the manager Prometheus endpoint
       when: bootwright_exporter_monitoring_url is match('https://')
       ansible.builtin.command:

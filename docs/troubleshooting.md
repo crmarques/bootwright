@@ -421,6 +421,12 @@ The per-add-on apply record (status, phase, and the same last-observed detail)
 also lives on disk at
 `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/addons/<addon>.json`,
 independent of the run history, if you need to inspect it outside of `status`.
+Each step's `observedDigests` carries non-secret evidence its playbook reported.
+The shipped Data Foundation playbook specifically records `exporterScript`
+before executing the staged script; it remains available on a failed or
+timed-out step when the playbook wrote the digest before failing. The value is
+forensic evidence, not proof that the content was trusted or matched an
+expected checksum.
 
 ## Resources no longer in desired state (orphans)
 
