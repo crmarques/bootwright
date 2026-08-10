@@ -51,6 +51,18 @@ resources under both `/Systems/<id>/VirtualMedia` and
 `/Managers/<id>/VirtualMedia`; member URLs are `unique`'d on the resolved URL
 string so nothing is probed twice. iBMC 404s the system view and is unaffected.
 
+**Cleanup action normalization:** the boot role's public cleanup action is
+`cleanup_media`. An emulated Redfish machine also carries the direct-libvirt
+`mediaPrepareRole`, whose internal destructive action is `cleanup`; forwarding
+the public spelling unchanged reaches that role's closed action assert and
+leaves the optical drive attached. The direct-libvirt boundary normalizes only
+`cleanup_media` to `cleanup` before validation. Its remaining action vocabulary
+stays closed (`boot`, `cleanup`, `cleanup_persistent`), and Redfish media
+preparation is unconditional after Redfish's own closed action assert because
+both accepted actions require discovery and eject.
+`TestEmulatedRedfishCleanupDispatchesThroughLibvirtMediaBackend` pins that
+complete cleanup chain against the rendered libvirt/emulated-BMC fixture.
+
 **Multi-system BMCs:** a blade/chassis or some OpenBMC exposes more than one
 ComputerSystem; falling through to `Members|first` can target — and boot
 destructively — the wrong system. The role warns when multiple systems exist

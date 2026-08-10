@@ -1,7 +1,12 @@
 ---
 - name: Resolve direct libvirt virtual media action
   ansible.builtin.set_fact:
-    bootwright_libvirt_media_action: "{{ bootwright_vmedia_action_effective | default('boot') }}"
+    bootwright_libvirt_media_action: >-
+      {{
+        'cleanup'
+        if (bootwright_vmedia_action_effective | default('boot')) == 'cleanup_media'
+        else (bootwright_vmedia_action_effective | default('boot'))
+      }}
   changed_when: false
 
 - name: Validate direct libvirt virtual media action

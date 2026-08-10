@@ -28,17 +28,6 @@ learned; this file records what it still owes.
 
 ## Entries
 
-## B-006 — Redfish Ansible de-noise + `cleanup_media` assert bug
-- Status: open
-- Area: ansible / redfish
-- Origin: Redfish Ansible de-noise review 2026-07-02 (not implemented)
-- Problem: the boot_redfish role has accumulated redundant tasks the review
-  proposed removing, and carries a latent `cleanup_media` assert bug identified
-  but not yet fixed.
-- Exit: apply the reviewed de-noise cleanups and fix the `cleanup_media` assert;
-  keep the boot-flow guard tests green.
-- Related: [redfish-boot-flow-quirks.md](redfish-boot-flow-quirks.md)
-
 ## B-007 — dnsmasq bind-order follow-up for controller DNS auto-wiring
 - Status: open
 - Area: networking / dns

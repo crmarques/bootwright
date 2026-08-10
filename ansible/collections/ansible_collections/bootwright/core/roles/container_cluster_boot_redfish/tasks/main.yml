@@ -42,7 +42,6 @@
 
     - name: Prepare Redfish virtual media
       ansible.builtin.import_tasks: media/prepare.yml
-      when: bootwright_vmedia_action_effective in ['boot', 'cleanup_media']
 
     - name: Validate declared MACs against Redfish inventory
       ansible.builtin.import_tasks: validation/macs.yml

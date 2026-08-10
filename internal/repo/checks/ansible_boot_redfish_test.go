@@ -102,8 +102,8 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", mainTasks[actionIdx]["name"])
 	}
-	if got := actionFacts["bootwright_libvirt_media_action"]; got != "{{ bootwright_vmedia_action_effective | default('boot') }}" {
-		t.Fatalf("%s must default to boot action, got %v", mainTasks[actionIdx]["name"], got)
+	if _, ok := actionFacts["bootwright_libvirt_media_action"]; !ok {
+		t.Fatalf("%s must resolve bootwright_libvirt_media_action, got %v", mainTasks[actionIdx]["name"], actionFacts)
 	}
 	validateAction, ok := mainTasks[validateActionIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -154,6 +154,79 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	}
 	if recordFacts["bootwright_vmedia_backend_attached"] != true || recordFacts["bootwright_vmedia_backend"] != "libvirt-direct" {
 		t.Fatalf("%s must mark direct libvirt virtual media attached, got %v", mainTasks[recordIdx]["name"], recordFacts)
+	}
+}
+
+func TestEmulatedRedfishCleanupDispatchesThroughLibvirtMediaBackend(t *testing.T) {
+	fixtureVars := readRepoFile(t, "internal/render/testdata/golden/001-sno-libvirt/rendered/ansible/vars.yaml")
+	for _, want := range []string{
+		"bootApplyRole: bootwright.core.container_cluster_boot_redfish",
+		"cleanupMediaRole: bootwright.core.container_cluster_boot_redfish",
+		"mediaPrepareRole: bootwright.core.container_cluster_media_libvirt",
+	} {
+		if !strings.Contains(fixtureVars, want) {
+			t.Fatalf("emulated Redfish fixture missing %q", want)
+		}
+	}
+
+	waitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
+	cleanup := waitTasks[findAnsibleTask(t, waitTasks, "Clean virtual media after successful install")]
+	cleanupVars, ok := cleanup["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no vars", cleanup["name"])
+	}
+	if got := cleanupVars["bootwright_vmedia_action"]; got != "cleanup_media" {
+		t.Fatalf("%s action got %v, want cleanup_media", cleanup["name"], got)
+	}
+
+	redfishFileTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml")
+	redfishTasks := nestedAnsibleTasks(t, redfishFileTasks[findAnsibleTask(t, redfishFileTasks, "Boot via Redfish with shared request defaults")], "block")
+	selectAction := redfishTasks[findAnsibleTask(t, redfishTasks, "Select Redfish boot action")]
+	selectFacts, ok := selectAction["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", selectAction["name"])
+	}
+	if got := selectFacts["bootwright_vmedia_action_effective"]; got != "{{ bootwright_vmedia_action | default('boot') }}" {
+		t.Fatalf("%s must preserve the public cleanup action, got %v", selectAction["name"], got)
+	}
+	prepare := redfishTasks[findAnsibleTask(t, redfishTasks, "Prepare Redfish virtual media")]
+	if got, present := prepare["when"]; present {
+		t.Fatalf("%s must run after the closed Redfish action assert, got when=%v", prepare["name"], got)
+	}
+
+	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
+	backend := prepareTasks[findAnsibleTask(t, prepareTasks, "Run virtual-media backend preparation")]
+	assertIncludeRoleName(t, backend, "{{ bootwright_component.mediaPrepareRole }}")
+
+	libvirtTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
+	resolveIdx := findAnsibleTask(t, libvirtTasks, "Resolve direct libvirt virtual media action")
+	validateIdx := findAnsibleTask(t, libvirtTasks, "Validate direct libvirt virtual media action")
+	runningIdx := findAnsibleTask(t, libvirtTasks, "Clean stale running virtual media before insert")
+	persistentIdx := findAnsibleTask(t, libvirtTasks, "Clean stale persistent virtual media before insert")
+	if !(resolveIdx < validateIdx && validateIdx < runningIdx && runningIdx < persistentIdx) {
+		t.Fatalf("libvirt cleanup action must normalize before validation and both detach passes")
+	}
+	resolveFacts, ok := libvirtTasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", libvirtTasks[resolveIdx]["name"])
+	}
+	wantAction := "{{\n  'cleanup'\n  if (bootwright_vmedia_action_effective | default('boot')) == 'cleanup_media'\n  else (bootwright_vmedia_action_effective | default('boot'))\n}}"
+	if got := resolveFacts["bootwright_libvirt_media_action"]; got != wantAction {
+		t.Fatalf("%s must normalize cleanup_media to cleanup, got %v", libvirtTasks[resolveIdx]["name"], got)
+	}
+	validate, ok := libvirtTasks[validateIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", libvirtTasks[validateIdx]["name"])
+	}
+	allowed := fmt.Sprint(validate["that"])
+	if !strings.Contains(allowed, "'cleanup'") || strings.Contains(allowed, "cleanup_media") {
+		t.Fatalf("%s must validate the normalized cleanup action, got %v", libvirtTasks[validateIdx]["name"], validate["that"])
+	}
+	if got := libvirtTasks[runningIdx]["when"]; got != "bootwright_libvirt_media_action in ['boot', 'cleanup']" {
+		t.Fatalf("%s must run for normalized cleanup, got when=%v", libvirtTasks[runningIdx]["name"], got)
+	}
+	if got := libvirtTasks[persistentIdx]["when"]; got != "bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']" {
+		t.Fatalf("%s must run for normalized cleanup, got when=%v", libvirtTasks[persistentIdx]["name"], got)
 	}
 }
 
@@ -346,8 +419,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("boot_redfish action validation must not keep managed-only action %q: %v", forbidden, validateAction["that"])
 		}
 	}
-	if got := mainTasks[prepareIdx]["when"]; got != "bootwright_vmedia_action_effective in ['boot', 'cleanup_media']" {
-		t.Fatalf("boot_redfish media preparation must only run for media actions, got when=%v", got)
+	if got, present := mainTasks[prepareIdx]["when"]; present {
+		t.Fatalf("boot_redfish media preparation is unconditional after the closed action assert; redundant when=%v", got)
 	}
 	for _, want := range []string{
 		"bootwright_vmedia_action_effective == 'boot'",

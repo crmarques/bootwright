@@ -16,7 +16,7 @@ install, media cleanup in
 `container_cluster_agent_install/tasks/actions/wait_install.yml` dispatches on
 the rendered `cleanupMediaRole` of each cluster component
 (`selectattr('cleanupMediaRole', 'defined')`), invoked with
-`bootwright_redfish_action: cleanup_media`. The renderer sets
+`bootwright_vmedia_action: cleanup_media`. The renderer sets
 `cleanupMediaRole` only for boot roles that own a `cleanup_media` action
 (Redfish, vSphere) and leaves it unset otherwise — KubeVirt deletes its
 agent-ISO DataVolume during boot, and `none` is a no-op. Adding a

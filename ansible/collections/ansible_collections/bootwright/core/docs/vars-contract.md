@@ -802,7 +802,9 @@ rendered role names and task entrypoints (`applyRole`, `destroyRole`,
 and `osInstallRole`) rather than constructing role names from diagnostic labels.
 `cleanupMediaRole` is set only for boot backends that own a `cleanup_media`
 action (Redfish, vSphere), so post-install media cleanup dispatches on it without
-enumerating boot roles.
+enumerating boot roles. When Redfish also dispatches a direct-libvirt
+`mediaPrepareRole`, that backend normalizes the public `cleanup_media` action to
+its closed internal `cleanup` action before validating it.
 
 ## Task-Scoped Apply Vars
 
