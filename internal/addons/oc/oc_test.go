@@ -672,12 +672,15 @@ func gatedOLMPlan(timeout string) extensionplan.ExtensionPlan {
 }
 
 type phasedCSVRunner struct {
+	mu           sync.Mutex
 	events       []string
 	csvReads     int
 	succeedAfter int
 }
 
 func (r *phasedCSVRunner) Run(_ context.Context, _ string, args []string, input []byte) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if len(args) == 0 {
 		return nil, fmt.Errorf("empty oc args")
 	}

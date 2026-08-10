@@ -22,10 +22,6 @@ func resolvedPostDestroyRetry(invocation resolvedInvocation, skipUnreachable boo
 	return invocation.retry(retryIntent{})
 }
 
-func infraComponentServiceRefs(state v1alpha1.State, artifactServerOnly bool) []converge.InfraComponentServiceRef {
-	return selectedInfraComponentServiceRefs(state, artifactServerOnly, false, nil)
-}
-
 func selectedInfraComponentServiceRefs(state v1alpha1.State, artifactServerOnly, degradingOnly bool, hosts map[string]bool) []converge.InfraComponentServiceRef {
 	var out []converge.InfraComponentServiceRef
 	for _, service := range stategraph.ResolveMachineServices(state).Services {

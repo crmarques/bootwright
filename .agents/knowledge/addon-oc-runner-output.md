@@ -96,3 +96,14 @@ alternatives were considered and rejected on 2026-08-07:
   re-evaluate and would have flipped later. The budget exists to absorb that.
 
 Report staleness; never let it decide.
+
+## Readiness probes are concurrent, including in test runners
+
+`readinessOutcomes` evaluates independent checks in parallel. A fake `Runner`
+used by readiness tests must therefore synchronize every shared counter and
+event slice just like a production runner would. The original
+`phasedCSVRunner` mutated `events` and `csvReads` directly; ordinary tests were
+green, but `TestApplyAndWaitShareOneReadinessDeadline` consistently failed the
+release race gate. Its mutex protects only the zero-delay fake bookkeeping, so
+the production concurrency and the deadline behavior under test remain
+unchanged.

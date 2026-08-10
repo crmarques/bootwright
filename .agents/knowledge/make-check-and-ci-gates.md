@@ -81,6 +81,15 @@ worktree; CI and ordinary repositories must retain their normal environment,
 and Bootwright release metadata remains supplied by the Makefile's explicit
 linker flags.
 
+**Clean-checkout bundle exclusion:** `go-test-clean-checkout` deliberately
+omits the gitignored `internal/converge/bundle/ansible_bundle.zip`; its purpose
+is to prove the authored checkout, not a developer's generated artifact. A CLI
+test that intentionally proceeds into a workflow mutation must install the
+existing `SetWorkflowBundlePreparerForTest` seam (the safety matrix wraps it in
+`seedSafetyWorkflowBundle`) before invoking the command. Otherwise the test
+passes after `sync-bundle` locally but fails the clean-checkout gate with
+`missing ansible_bundle.zip`, masking the behavior it meant to exercise.
+
 **CI gates:**
 
 - `checks.yml` runs the full suite on `v*` release tags (not just PRs/main

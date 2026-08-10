@@ -17,9 +17,9 @@ var mutatingCommandTextPatterns = []struct {
 	pattern  *regexp.Regexp
 	bareRuns bool
 }{
-	{pattern: regexp.MustCompile("(?i)bootwright[ \\t]+apply"), bareRuns: true},
-	{pattern: regexp.MustCompile("(?i)bootwright[ \\t]+destroy"), bareRuns: true},
-	{pattern: regexp.MustCompile("(?i)bootwright[ \\t]+storage-cluster[ \\t]+replace-arbiter")},
+	{pattern: regexp.MustCompile(`(?i)bootwright[ \t]+apply`), bareRuns: true},
+	{pattern: regexp.MustCompile(`(?i)bootwright[ \t]+destroy`), bareRuns: true},
+	{pattern: regexp.MustCompile(`(?i)bootwright[ \t]+storage-cluster[ \t]+replace-arbiter`)},
 }
 
 func TestOnlyCLIConstructsMutatingBootwrightInvocations(t *testing.T) {

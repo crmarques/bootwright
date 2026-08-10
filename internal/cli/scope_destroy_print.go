@@ -59,21 +59,6 @@ func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestro
 	return fmt.Errorf("destroy would destroy data: %s. --yes does not authorize data loss: add --authorize %s and re-run `%s` to proceed non-interactively, or drop --yes to confirm interactively; if the list names a cluster you did not intend to destroy, re-run with %s to narrow the work set", dataLoss.Consequence(), authorizeDataLoss, command.String(), invocation.flags.selection.narrowFlag())
 }
 
-func mergeSkippedInputDocuments(groups ...[]error) []error {
-	seen := map[string]bool{}
-	var out []error
-	for _, group := range groups {
-		for _, err := range group {
-			if err == nil || seen[err.Error()] {
-				continue
-			}
-			seen[err.Error()] = true
-			out = append(out, err)
-		}
-	}
-	return out
-}
-
 func staleInputRefusal(contextName string, skipped []error, invocation resolvedInvocation) error {
 	details := make([]string, 0, len(skipped))
 	for _, err := range skipped {

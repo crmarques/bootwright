@@ -19,7 +19,7 @@ type InfraComponentApplySafetyError struct {
 
 func PlanInfraComponentApplyBlocks(selfContext string, services []InfraComponentServiceRef) (InfraComponentApplyDecision, error) {
 	decision, err := PlanInfraComponentDestroyBlocks(selfContext, services, nil, false)
-	return InfraComponentApplyDecision{Blocks: decision.Blocks, Warnings: decision.Warnings}, err
+	return InfraComponentApplyDecision(decision), err
 }
 
 func InfraComponentApplyRefusal(decision InfraComponentApplyDecision, scanErr error) error {

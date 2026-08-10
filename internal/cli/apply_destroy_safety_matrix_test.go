@@ -1347,11 +1347,14 @@ func safetyAuthorizationTokenCases() []safetyCase {
 	}, {
 		name:     "destroy/shared-infra: explicit authorization tears down the exact consequence",
 		baseline: safetyBaselineLibvirtKubeVirtHost,
-		seed:     seedSiblingDegradingInfraOwner,
-		args:     []string{"destroy", "--stage", "infra", "--authorize", "shared-infra", "--yes", "--ask-become-pass=false"},
-		verdict:  verdictAuthorized,
-		want:     []string{"matrix-sibling", "WILL BE TORN DOWN", "--authorize shared-infra"},
-		check:    checkSharedServiceMutationLeaseReleased,
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedSiblingDegradingInfraOwner(t, ctx)
+			seedSafetyWorkflowBundle(t)
+		},
+		args:    []string{"destroy", "--stage", "infra", "--authorize", "shared-infra", "--yes", "--ask-become-pass=false"},
+		verdict: verdictAuthorized,
+		want:    []string{"matrix-sibling", "WILL BE TORN DOWN", "--authorize shared-infra"},
+		check:   checkSharedServiceMutationLeaseReleased,
 	}, {
 		name:    "destroy/unowned-vms: the token is inert outside the machine layer and says so",
 		args:    []string{"destroy", "--stage", "clusters", "--authorize", "unowned-vms", "--yes", "--ask-become-pass=false"},
