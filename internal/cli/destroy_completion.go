@@ -4,8 +4,20 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
+
+func recordStorageDestroyCompletion(ownershipDir, contextName, runLogPath string, state v1alpha1.State, ledger workflow.RunLedger, storageScopeNames []string, skipUnreachable bool, retry retryCommand) (converge.PartialStorageDestroy, error) {
+	expectedNodes := workflow.StorageDestroyExpectedNodesForLedger(state, ledger)
+	expectedSeedHosts := workflow.StorageDestroyExpectedSeedHostsForLedger(state, ledger)
+	partial, err := converge.RecordPartialStorageDestroy(ownershipDir, contextName, runLogPath, expectedNodes, expectedSeedHosts, skipUnreachable)
+	if err != nil {
+		return partial, fmt.Errorf("storage teardown completion could not be proved: %w; keeping the converge records, captured secrets and history of storage cluster(s) %s — re-run `%s` once every topology node can produce the terminal proof", err, strings.Join(storageScopeNames, ", "), retry.String())
+	}
+	return partial, nil
+}
 
 func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvocation) (workflow.DestroyOutcome, error) {
 	outcome := workflow.SucceededDestroyTaskKinds(ledger)

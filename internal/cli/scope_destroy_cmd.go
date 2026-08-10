@@ -343,12 +343,10 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, false)
 			result, ledger, runLogPath, gerr := converge.ExecuteDestroyGraph(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, flags.clusterScope, plan, false, become.PasswordFile, false, workflowLabel, dr, runLease, invocation.args())
 			destroyOutcome, skippedErr := destroyGraphCompletion(ledger, invocation)
-			storageExpectedNodes := workflow.StorageDestroyExpectedNodesForLedger(plan.State, ledger)
-			storageExpectedSeedHosts := workflow.StorageDestroyExpectedSeedHostsForLedger(plan.State, ledger)
-			partial, partialErr := converge.RecordPartialStorageDestroy(ctx.OwnershipDir, ctx.Name, runLogPath, storageExpectedNodes, storageExpectedSeedHosts, skipUnreachable)
-			if partialErr != nil {
-				partialErr = fmt.Errorf("storage teardown completion could not be proved: %w; keeping the converge records, captured secrets and history of storage cluster(s) %s — re-run `%s` once every topology node can produce the terminal proof", partialErr, strings.Join(storageScopeNames, ", "), postDestroyRetry.String())
-			}
+			partial, partialErr := recordStorageDestroyCompletion(
+				ctx.OwnershipDir, ctx.Name, runLogPath, plan.State, ledger,
+				storageScopeNames, skipUnreachable, postDestroyRetry,
+			)
 			resetPartial := partial.Clusters
 			if partialErr != nil {
 				resetPartial = storageScopeNames
