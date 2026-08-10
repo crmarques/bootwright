@@ -5,9 +5,6 @@
 - name: Resolve Ceph storage role variables
   ansible.builtin.include_tasks: phases/context_vars.yml
 
-- name: Resolve the Ceph provider before any storage-cluster mutation
-  ansible.builtin.include_tasks: phases/context_provider.yml
-
 - name: Require a Ceph image for the container-runtime safety proof
   ansible.builtin.assert:
     that:

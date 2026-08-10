@@ -1533,25 +1533,28 @@ func TestStorageCephNetworksAreAssertedBeforeDaemonPlacement(t *testing.T) {
 
 func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	main := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
-	provider := strings.Index(main, "phases/context_provider.yml")
+	context := strings.Index(main, "phases/context_vars.yml")
 	image := strings.Index(main, "Require a Ceph image for the container-runtime safety proof")
 	gate := strings.Index(main, "phases/container_runtime.yml")
 	rebuild := strings.Index(main, "phases/rebuild.yml")
 	bootstrap := strings.Index(main, "phases/bootstrap.yml")
 	endHost := strings.Index(main, "end_host")
-	if provider < 0 || image < 0 || gate < 0 || rebuild < 0 || bootstrap < 0 || endHost < 0 {
-		t.Fatalf("the role is missing a step this ordering depends on (provider=%d image=%d gate=%d rebuild=%d bootstrap=%d endHost=%d)", provider, image, gate, rebuild, bootstrap, endHost)
+	if context < 0 || image < 0 || gate < 0 || rebuild < 0 || bootstrap < 0 || endHost < 0 {
+		t.Fatalf("the role is missing a step this ordering depends on (context=%d image=%d gate=%d rebuild=%d bootstrap=%d endHost=%d)", context, image, gate, rebuild, bootstrap, endHost)
 	}
-	if !(provider < image && image < gate && gate < rebuild && gate < bootstrap) {
-		t.Fatalf("the provider image must be resolved and required before the runtime proof, and the proof must precede rebuild and bootstrap (provider=%d image=%d gate=%d rebuild=%d bootstrap=%d)", provider, image, gate, rebuild, bootstrap)
+	if !(context < image && image < gate && gate < rebuild && gate < bootstrap) {
+		t.Fatalf("the provider image must be resolved and required before the runtime proof, and the proof must precede rebuild and bootstrap (context=%d image=%d gate=%d rebuild=%d bootstrap=%d)", context, image, gate, rebuild, bootstrap)
 	}
 	if gate > endHost {
 		t.Fatalf("the container runtime gate must run before non-seed hosts leave the play, or it only ever proves the seed (gate=%d endHost=%d)", gate, endHost)
 	}
+	if strings.Contains(main, "phases/context_provider.yml") {
+		t.Fatalf("the role must not materialize the full provider before distribution facts exist; only its image scalar is needed by the early runtime gate")
+	}
 
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
 	for _, name := range []string{
-		"Resolve the Ceph provider before any storage-cluster mutation",
+		"Resolve Ceph storage role variables",
 		"Require a Ceph image for the container-runtime safety proof",
 		"Prove the Ceph storage node container runtime",
 	} {
@@ -1559,6 +1562,19 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 		if when := fmt.Sprint(task["when"]); strings.Contains(when, "bootwright_task_storage_skip_prereqs") {
 			t.Fatalf("%q is gated by skip_prereqs, so apply --stage base can bypass it: when=%v", name, task["when"])
 		}
+	}
+	contextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_vars.yml")
+	contextTask := contextTasks[findAnsibleTask(t, contextTasks, "Resolve managed Ceph image for pre-mutation checks")]
+	contextFacts, ok := contextTask["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the early Ceph context must be resolved with set_fact, got %v", contextTask)
+	}
+	imageExpr := fmt.Sprint(contextFacts["bootwright_ceph_bootstrap_image"])
+	if !strings.Contains(imageExpr, "bootwright_selected_storage_cluster.provider.image") {
+		t.Fatalf("the early Ceph context must extract only the provider image needed by the runtime gate, got %v", contextFacts)
+	}
+	if _, ok := contextFacts["bootwright_ceph_provider"]; ok {
+		t.Fatalf("the early Ceph context must not materialize the full provider before distribution facts exist, got %v", contextFacts)
 	}
 	imageTask := mainTasks[findAnsibleTask(t, mainTasks, "Require a Ceph image for the container-runtime safety proof")]
 	imageAssert, ok := imageTask["ansible.builtin.assert"].(map[string]any)
@@ -3323,7 +3339,14 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("host context must gather OS facts before provider templates are materialized")
 	}
 	providerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_provider.yml")
-	findAnsibleTask(t, providerTasks, "Resolve managed Ceph provider context")
+	providerTask := providerTasks[findAnsibleTask(t, providerTasks, "Resolve managed Ceph provider context")]
+	providerFacts, ok := providerTask["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("the post-fact provider context must be resolved with set_fact, got %v", providerTask)
+	}
+	if _, ok := providerFacts["bootwright_ceph_bootstrap_image"]; ok {
+		t.Fatalf("the provider image must have one scalar owner before full provider materialization, got %v", providerFacts)
+	}
 	seedContextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context_seed.yml")
 	seedGatherIdx := findAnsibleTask(t, seedContextTasks, "Gather seed OS facts for provider rendering")
 	seedProviderIdx := findAnsibleTask(t, seedContextTasks, "Resolve managed Ceph provider context on the seed host")
@@ -3331,6 +3354,10 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	operationsIdx := findAnsibleTask(t, seedContextTasks, "Resolve rendered Ceph operations, execution plan and batch scripts")
 	if !(seedGatherIdx < seedProviderIdx && seedProviderIdx < manifestIdx && manifestIdx < operationsIdx) {
 		t.Fatalf("seed context must gather OS facts before provider templates, then load bootstrap operations")
+	}
+	seedGatherWhen := fmt.Sprint(seedContextTasks[seedGatherIdx]["when"])
+	if !strings.Contains(seedGatherWhen, "ansible_distribution_major_version") {
+		t.Fatalf("the conditional seed gather must test the distribution-major fact provider templates actually consume, got when=%v", seedContextTasks[seedGatherIdx]["when"])
 	}
 	operationFacts, ok := seedContextTasks[operationsIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {

@@ -345,3 +345,24 @@ learned; this file records what it still owes.
 - Exit: add a release-payload reachability check that runs against the node network
   rather than the controller, and report measured throughput, not just reachability
   — the failure mode is slowness, not refusal.
+
+## B-087 — Ceph repository templates depend on deprecated injected fact aliases
+
+- Status: open
+- Area: storage / ceph / ansible compatibility
+- Origin: production provider-context failure reproduction 2026-08-10
+- Severity: medium
+- Problem: Ceph repository ids and URLs render with the top-level
+  `ansible_distribution_major_version` alias. ansible-core warns that automatic
+  top-level fact injection will be removed in 2.24, after which gathering the
+  distribution subset will no longer make that alias available. The current fix
+  correctly orders gathering before full-provider materialization, but does not
+  remove the future compatibility boundary. Changing the rendered expressions
+  to `ansible_facts['distribution_major_version']` also changes desired provider
+  bytes and must account for the resulting storage drift.
+- Exit: before adopting ansible-core 2.24, move every Ceph distribution template
+  and consumer to `ansible_facts['distribution_major_version']`, update the
+  renderer and role guards together, and classify the one-time desired-hash
+  change.
+- Related: [ansible-core-eager-setfact.md](ansible-core-eager-setfact.md),
+  [ceph-distribution-packaging.md](ceph-distribution-packaging.md)

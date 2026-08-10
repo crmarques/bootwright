@@ -1,4 +1,8 @@
 ---
+- name: Resolve managed Ceph image for pre-mutation checks
+  ansible.builtin.set_fact:
+    bootwright_ceph_bootstrap_image: "{{ bootwright_selected_storage_cluster.provider.image | default('') }}"
+
 - name: Resolve managed Ceph work paths
   ansible.builtin.set_fact:
     bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"

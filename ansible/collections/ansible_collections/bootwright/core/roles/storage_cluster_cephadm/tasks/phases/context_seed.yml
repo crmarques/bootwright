@@ -5,7 +5,7 @@
       - "!all"
       - "!min"
       - distribution
-  when: ansible_facts.os_family | default('') | length == 0
+  when: ansible_distribution_major_version | default('') | length == 0
 
 - name: Resolve managed Ceph provider context on the seed host
   ansible.builtin.include_tasks: context_provider.yml
