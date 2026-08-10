@@ -28,17 +28,6 @@ learned; this file records what it still owes.
 
 ## Entries
 
-## B-005 — Kickstart merges bond and VLAN into one stanza, capping bond MTU
-- Status: open
-- Area: managed-os / networking / render
-- Origin: managed-OS post-install network review
-- Problem: the minimal kickstart emits a single merged bond+VLAN network stanza,
-  which cannot set the bond-layer MTU independently; jumbo-frame bonds are capped
-  because the MTU can only be expressed on the merged line.
-- Exit: de-merge the bond and VLAN stanzas in the kickstart render so each layer
-  carries its own MTU (render-only change; add a golden fixture).
-- Related: [managed-os-post-install-network.md](managed-os-post-install-network.md)
-
 ## B-006 — Redfish Ansible de-noise + `cleanup_media` assert bug
 - Status: open
 - Area: ansible / redfish

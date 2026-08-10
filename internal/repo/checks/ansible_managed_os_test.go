@@ -623,7 +623,6 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"--bondopts={{ iface.bondOptions }}",
 		"--vlanid={{ iface.vlanID }}",
 		"--interfacename={{ iface.interfaceName }}",
-		"--mtu={{ iface.mtu }}",
 		"--noipv4 --noipv6",
 		"{{ hostname_flag }}",
 		"services{{ svc_opts }}",
@@ -675,6 +674,13 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("Kickstart template must rely on boot control, not %q", forbidden)
 		}
+	}
+}
+
+func TestManagedOSKickstartTemplateOmitsInstallTimeMTU(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2")
+	if strings.Contains(body, "--mtu=") {
+		t.Fatal("Kickstart template must omit install-time MTU; post-install nmstate owns MTU on every network layer")
 	}
 }
 

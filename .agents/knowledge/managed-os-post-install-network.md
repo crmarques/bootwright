@@ -10,8 +10,13 @@ into each side.
 merged bond+VLAN stanza for the routed interface: `--bondslaves` builds the
 bond and its port connections (no separate per-slave stanzas), `--device`
 names the parent bond, and the static IP settings apply to the VLAN device.
-The merged line cannot set the bond MTU, so MTU and every other interface
-never appear in the kickstart — they are configured post-install from
+RHEL 9 pykickstart keys both a standalone bond directive and its VLAN
+directive by the same `--device=bond0` value and rejects the second as a
+duplicate, so splitting that line is not a valid remedy. Anaconda applies
+`--mtu` on the merged line to the child VLAN connection, not the separately
+created parent bond; rendering it can leave the child larger than its parent.
+Bootwright therefore deliberately omits install-time MTU. MTU and every other
+interface are configured post-install from
 `osInstall.network.desiredState`, which carries every VLAN (including
 secondary/cluster VLANs that never reach the kickstart), MTU on every layer,
 and the cluster-network IPs.

@@ -1,8 +1,9 @@
 # Managed-OS network convergence via nmstate
 
-**Design:** the install-time kickstart brings up only the routed interface —
-its merged bond+VLAN line cannot set bond MTU — and after the node is up and
-SSH-verified the full desired-state nmstate is applied, realizing every
+**Design:** the install-time kickstart brings up only the routed interface
+without an authored MTU — a merged bond+VLAN line cannot set the parent bond
+MTU, while separate lines are invalid RHEL 9 Kickstart — and after the node is
+up and SSH-verified the full desired-state nmstate is applied, realizing every
 interface, VLAN, route, and MTU. The renderer injects the `nmstate` package
 into install packages whenever a desired network state exists. Runs every
 converge and reconciles drift idempotently; requires root plus the

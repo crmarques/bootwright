@@ -64,37 +64,45 @@ func TestKickstartNetworkInterfacesPrefersDefaultRouteVLAN(t *testing.T) {
 	}
 }
 
-func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
+func TestKickstartNetworkInterfacesOmitsMTUFromJumboBondVLAN(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
 			map[string]any{
-				"name": "ens1f0", "type": "ethernet", "mtu": 9000,
+				"name": "ens65f0", "type": "ethernet", "mtu": 9000,
 			},
 			map[string]any{
-				"name": "ens1f1", "type": "ethernet", "mtu": 9000,
+				"name": "ens65f1", "type": "ethernet", "mtu": 9000,
+			},
+			map[string]any{
+				"name": "ens66f0", "type": "ethernet", "mtu": 9000,
+			},
+			map[string]any{
+				"name": "ens66f1", "type": "ethernet", "mtu": 9000,
 			},
 			map[string]any{
 				"name": "bond0", "type": "bond", "mtu": 9000,
 				"link-aggregation": map[string]any{
-					"mode": "802.3ad",
-					"options": map[string]any{
-						"lacp_rate": "fast",
-						"miimon":    "100",
-					},
-					"port": []any{"ens1f0", "ens1f1"},
+					"mode":    "active-backup",
+					"options": map[string]any{"miimon": "100"},
+					"port":    []any{"ens65f0", "ens65f1", "ens66f0", "ens66f1"},
 				},
 			},
 			map[string]any{
-				"name": "bond0.743", "type": "vlan", "mtu": 9000,
-				"vlan": map[string]any{"base-iface": "bond0", "id": 743},
-				"ipv4": nmstateIPv4("10.7.7.129", 28),
+				"name": "bond0.200", "type": "vlan", "mtu": 9000,
+				"vlan": map[string]any{"base-iface": "bond0", "id": 200},
+				"ipv4": nmstateIPv4("198.51.100.11", 25),
+			},
+			map[string]any{
+				"name": "bond0.201", "type": "vlan", "mtu": 9000,
+				"vlan": map[string]any{"base-iface": "bond0", "id": 201},
+				"ipv4": nmstateIPv4("203.0.113.11", 24),
 			},
 		},
 		"routes": map[string]any{
 			"config": []any{map[string]any{
 				"destination":        "0.0.0.0/0",
-				"next-hop-address":   "10.7.7.142",
-				"next-hop-interface": "bond0.743",
+				"next-hop-address":   "198.51.100.1",
+				"next-hop-interface": "bond0.200",
 			}},
 		},
 	}
@@ -104,13 +112,13 @@ func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
 	}
 	want := map[string]any{
 		"device":      "bond0",
-		"vlanID":      743,
-		"bondSlaves":  []string{"ens1f0", "ens1f1"},
-		"bondOptions": "mode=802.3ad,lacp_rate=fast,miimon=100",
+		"vlanID":      200,
+		"bondSlaves":  []string{"ens65f0", "ens65f1", "ens66f0", "ens66f1"},
+		"bondOptions": "mode=active-backup,miimon=100",
 		"bootproto":   "static",
-		"ip":          "10.7.7.129",
-		"prefix":      28,
-		"netmask":     "255.255.255.240",
+		"ip":          "198.51.100.11",
+		"prefix":      25,
+		"netmask":     "255.255.255.128",
 		"hostname":    true,
 	}
 	if !reflect.DeepEqual(stanzas[0], want) {
@@ -118,6 +126,19 @@ func TestKickstartNetworkInterfacesMinimalBondVLANPrimaryOnly(t *testing.T) {
 	}
 	if _, present := stanzas[0]["mtu"]; present {
 		t.Fatalf("merged stanza carries mtu %v; kickstart must omit MTU (post-install nmstate owns it)", stanzas[0]["mtu"])
+	}
+}
+
+func TestKickstartBondOptionsSortsOptions(t *testing.T) {
+	got := kickstartBondOptions(map[string]any{
+		"mode": "802.3ad",
+		"options": map[string]any{
+			"miimon":    "100",
+			"lacp_rate": "fast",
+		},
+	})
+	if got != "mode=802.3ad,lacp_rate=fast,miimon=100" {
+		t.Fatalf("bond options = %q, want deterministic mode and sorted options", got)
 	}
 }
 

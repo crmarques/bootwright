@@ -525,6 +525,7 @@ reaches the install itself
 | IPv4 static addressing, or DHCP | Yes |
 | The default gateway (`routes.config` destination `0.0.0.0/0`) | Yes |
 | DNS servers (`dns-resolver`) | Yes |
+| MTU | **No** — RHEL 9 applies a merged bond+VLAN `--mtu` only to the child VLAN and rejects separate parent/child directives; full nmstate applies every layer after SSH |
 | `bridge`, `team`, VRF as the install primary | **No** — `validate` refuses; one of these away from the primary is simply not lowered |
 | A second addressed interface | **No** — only the primary renders, and `validate` refuses when `access.ssh.addressRef` resolves to an IP that is not on it |
 | IPv6-only addressing | **No** — only IPv4 addresses are read, and `validate` refuses unless the same interface also takes IPv4 by DHCP |

@@ -2494,7 +2494,11 @@ section above.
   express. Anaconda takes exactly one `network` directive, so the expressible
   subset is a single primary interface of type `ethernet`, `vlan`, or `bond`
   carrying one IPv4 address or taking one by DHCP, plus an optional default
-  gateway and DNS servers.
+  gateway and DNS servers. Install-time MTU is excluded: RHEL 9 applies
+  `--mtu` on a merged bond+VLAN directive only to the child VLAN, while a
+  separate parent-bond directive is rejected as a duplicate use of the same
+  device. The post-install nmstate convergence applies the authored MTU to
+  every layer after SSH is verified.
   Three postures fail validation, each naming the `Machine`, the interface, the
   reason, and `spec.os.provided: true` as the alternative that hands the
   install to the operator: the install interface carries neither an IPv4
