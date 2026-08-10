@@ -392,3 +392,20 @@ learned; this file records what it still owes.
   require the same exact identity on every destroy authority path, and add
   reachable-seed plus survivor-adoption fixtures for malformed, reference,
   foreign-context, wrong-seed, missing-fsid, and matching owner records.
+
+## B-090 — Staticcheck is red on the merge base
+
+- Status: in-progress
+- Area: repository fitness / Go
+- Origin: `make check-full` for commit 74ad0eb3 on 2026-08-10; reproduced on
+  merge-base ed51b82d
+- Severity: low
+- Problem: the staticcheck stage fails before it can validate later changes.
+  `internal/cli/destroy_helpers.go` and `internal/cli/scope_destroy_print.go`
+  retain one unused helper each (U1000),
+  `internal/converge/scope_apply_shared_services.go` manually copies identical
+  struct fields instead of converting the value (S1016), and three regexes in
+  `internal/repo/checks/go_mutating_invocation_test.go` use needless escaped
+  quotes inside raw strings (S1007).
+- Exit: remove the dead helpers, use the direct struct conversion, simplify the
+  raw regexes, make staticcheck green, and delete this entry in the same fix.
