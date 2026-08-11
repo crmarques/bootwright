@@ -56,3 +56,14 @@ The mutating `oc apply` always uses the runner passed to `Apply`, and a nil
 `ReadRunner` falls back to it.
 `waitCSVSucceeded` and `waitCatalogSourceReady` take the read runner for
 the same reason.
+
+**Gotcha: out-of-band Ansible runs do not inherit scheduler output routing.**
+Apply and destroy task runners receive file-only writers from the scheduler,
+but command-level cleanup and finalizers run outside it and may execute after
+the lifecycle summary. Constructing one of those runners with the CLI stdout
+or stderr bypasses task capture and emits raw `PLAY`, `TASK`, and `PLAY RECAP`
+output after the summary. Such a run must select the file-only runner unless
+its caller carries an explicit stream gate, while retaining an output log path
+for diagnostics. `TestHostSharedServiceFinalizeCapturesAnsibleOutput` pins the
+command-wide shared-service finalizer on both stdout and stderr and proves the
+same bytes remain in its owner-only log.

@@ -35,7 +35,7 @@ func FinalizeHostSharedServiceOperations(cmdCtx context.Context, stdout, stderr 
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(cmdCtx), hostSharedServiceFinalizeTimeout)
 	defer cancel()
-	result, err := workflow.Run(cleanupCtx, opts, ansible.CommandRunner{Stdout: stdout, Stderr: stderr}, reporter)
+	result, err := workflow.Run(cleanupCtx, opts, preflightRunner(stdout, stderr, false), reporter)
 	if err != nil {
 		return fmt.Errorf("release the exact host-wide shared-service operation after selected work became terminal: %w", err)
 	}
