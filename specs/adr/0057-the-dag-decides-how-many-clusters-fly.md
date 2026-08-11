@@ -9,6 +9,10 @@ contract makes undeclared cross-cluster ordering a failure. Follows the
 value-carrying flag convention of
 [ADR 0010](0010-cli-gate-and-flag-conventions.md).
 
+Its separately configured Redfish-budget clause is refined by
+[ADR 0059](0059-the-graph-sets-default-redfish-capacity.md): the budget remains
+independent, but its default is graph-full rather than fixed.
+
 ## Context
 
 The apply graph already gives independent ContainerCluster roots no edge and
@@ -29,8 +33,9 @@ made a one-run throttle awkward to express and easy to lose from an exact retry.
 With no override, the cluster-install capacity equals the number of distinct
 ContainerCluster install chains in the selected graph. The capacity is therefore
 non-binding: dependency edges, resource locks, and the global, per-host, and
-Redfish budgets alone decide which work can run. Managed-OS and StorageCluster
-tasks, including Ceph work, remain outside the cluster-install budget.
+explicitly narrowed Redfish budgets alone decide which work can run. Managed-OS
+and StorageCluster tasks, including Ceph work, remain outside the
+cluster-install budget.
 
 `apply` and `plan` accept the positive value-carrying flag
 `--cluster-install-parallelism`. Resolution is flag, then
@@ -53,5 +58,6 @@ admission lets every candidate compete and the DAG decides readiness.
   standing environment limit or throttle one invocation with the flag.
 - A run header may report more than one cluster install without configuration;
   the number is the selected graph's demand, not a machine-wide constant.
-- Only an ordering edge serializes two install chains in the DAG; shared locks
-  and the independently configured budgets remain separate constraints.
+- Only an ordering edge serializes two install chains in the DAG; shared locks,
+  the global and per-host safety budgets, and explicitly configured throttles
+  remain separate constraints.

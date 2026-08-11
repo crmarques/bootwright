@@ -44,6 +44,31 @@ type gatedPlaybookRunner struct {
 	release map[string]chan struct{}
 }
 
+type blockedSnapshotReporter struct {
+	taskID   string
+	blocker  string
+	observed chan struct{}
+	once     sync.Once
+}
+
+func newBlockedSnapshotReporter(taskID, blocker string) *blockedSnapshotReporter {
+	return &blockedSnapshotReporter{taskID: taskID, blocker: blocker, observed: make(chan struct{})}
+}
+
+func (*blockedSnapshotReporter) RunStart(RunLedger) {}
+
+func (r *blockedSnapshotReporter) StageSnapshot(ledger RunLedger) {
+	task, found := ledger.Task(r.taskID)
+	if !found || task.Status != TaskStatusPending || task.ReadyAt == nil || !slices.Contains(task.BlockedOn, r.blocker) {
+		return
+	}
+	r.once.Do(func() { close(r.observed) })
+}
+
+func (*blockedSnapshotReporter) RunSummary(RunLedger) {}
+
+func (*blockedSnapshotReporter) PromptGap() {}
+
 func newGatedPlaybookRunner(playbooks ...string) *gatedPlaybookRunner {
 	runner := &gatedPlaybookRunner{entered: map[string]chan struct{}{}, release: map[string]chan struct{}{}}
 	for _, playbook := range playbooks {
@@ -474,6 +499,47 @@ func TestRunApplyTaskGraphRecordsReadyAtAndBlockedOnForHostSlotContention(t *tes
 	}
 }
 
+func TestRunApplyTaskGraphPublishesRedfishBlockerBeforeRunningTaskFinishes(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+	state := minimalState()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := newGatedPlaybookRunner("task-a", "task-b")
+	reporter := newBlockedSnapshotReporter("task-b", "redfish budget")
+	tasks := []ApplyTask{
+		{Entry: TaskLedgerEntry{ID: "task-a", Kind: ApplyTaskKindNodeBoot, Label: "task a", Cluster: "ocp-a", Status: TaskStatusPending}, Playbook: "task-a", RedfishSlots: 1, State: state},
+		{Entry: TaskLedgerEntry{ID: "task-b", Kind: ApplyTaskKindNodeBoot, Label: "task b", Cluster: "ocp-b", Status: TaskStatusPending}, Playbook: "task-b", RedfishSlots: 1, State: state},
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := RunApplyTaskGraph(ctx, io.Discard, io.Discard, runsDir, schedulerRunOptions(dir),
+			ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseMachines}}, "", tasks,
+			ConcurrencyLimits{Parallelism: 2, ParallelismRedfish: 1}, reporter, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- err
+	}()
+	runner.awaitStart(t, "task-a")
+	select {
+	case <-reporter.observed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the reporter never received task-b's live Redfish blocker while task-a was running")
+	}
+	ledger, found, err := LoadRunLedger(runsDir)
+	if err != nil || !found {
+		t.Fatalf("LoadRunLedger: found=%v err=%v", found, err)
+	}
+	blocked, found := ledger.Task("task-b")
+	if !found || blocked.ReadyAt == nil || !slices.Contains(blocked.BlockedOn, "redfish budget") {
+		t.Fatalf("persisted task-b = %+v, want a dependency-ready task blocked on the Redfish budget", blocked)
+	}
+	runner.releasePlaybook("task-a")
+	runner.awaitStart(t, "task-b")
+	runner.releasePlaybook("task-b")
+	if err := <-done; err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+}
+
 func TestRunApplyTaskGraphAttributesTheGlobalTaskBudget(t *testing.T) {
 	dir := t.TempDir()
 	state := minimalState()
@@ -846,26 +912,33 @@ func TestRunApplyTaskGraphYieldsTheClusterInstallSlotToTheClusterItWaitsOn(t *te
 }
 
 func TestRedfishGrantUsesTheFreeSlotsRatherThanStarvingTheTask(t *testing.T) {
+	const redfishLimit = 8
 	storageOS := ApplyTask{Entry: TaskLedgerEntry{ID: "osinstall.ceph", Kind: ApplyTaskKindManagedMachineOS}, RedfishSlots: 6}
 	nodeBoot := ApplyTask{Entry: TaskLedgerEntry{ID: "boot.ocp", Kind: ApplyTaskKindNodeBoot}, RedfishSlots: 3}
-	if got := taskRedfishGrant(storageOS, 0, DefaultParallelismRedfish); got != 6 {
+	if got := taskRedfishGrant(storageOS, 0, redfishLimit); got != 6 {
 		t.Fatalf("grant for the first task = %d, want its full demand of 6", got)
 	}
-	if got := taskRedfishGrant(nodeBoot, 6, DefaultParallelismRedfish); got != 2 {
+	if got := taskRedfishGrant(nodeBoot, 6, redfishLimit); got != 2 {
 		t.Fatalf("grant for a 3-slot node boot against 2 free slots = %d, want 2: an all-or-nothing hold parks the whole bare-metal cluster behind an unrelated storage OS install for its full duration", got)
 	}
-	if got := taskRedfishGrant(nodeBoot, DefaultParallelismRedfish, DefaultParallelismRedfish); got != 0 {
+	if got := taskRedfishGrant(nodeBoot, redfishLimit, redfishLimit); got != 0 {
 		t.Fatalf("grant against a fully committed budget = %d, want 0", got)
 	}
-	if got := taskRedfishGrant(ApplyTask{Entry: TaskLedgerEntry{ID: "iso.ocp", Kind: ApplyTaskKindClusterISO}}, 0, DefaultParallelismRedfish); got != 0 {
+	if got := taskRedfishGrant(ApplyTask{Entry: TaskLedgerEntry{ID: "iso.ocp", Kind: ApplyTaskKindClusterISO}}, 0, redfishLimit); got != 0 {
 		t.Fatalf("a task charging no Redfish slots must take none, got %d", got)
 	}
 }
 
-func TestRunApplyTaskGraphBootsWhileAStorageOSInstallHoldsMostRedfishSlots(t *testing.T) {
+func TestRunApplyTaskGraphStartsEveryIndependentRedfishCohortByDefault(t *testing.T) {
+	t.Setenv(ParallelismEnvVar, "")
+	t.Setenv(ParallelismPerHostEnvVar, "")
+	t.Setenv(ParallelismRedfishEnvVar, "")
+	t.Setenv(ParallelismClustersEnvVar, "")
 	dir := t.TempDir()
 	state := minimalState()
-	runner := newGatedPlaybookRunner("osinstall.ceph", "boot.ocp")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := newGatedPlaybookRunner("osinstall.ceph", "boot.ocp-a", "boot.ocp-b")
 	tasks := []ApplyTask{
 		{
 			Entry:        TaskLedgerEntry{ID: "osinstall.ceph", Kind: ApplyTaskKindManagedMachineOS, Label: "managed OS ceph machines", Cluster: "ceph", ClusterKind: ApplyClusterKindStorage, Status: TaskStatusPending},
@@ -874,25 +947,41 @@ func TestRunApplyTaskGraphBootsWhileAStorageOSInstallHoldsMostRedfishSlots(t *te
 			State:        state,
 		},
 		{
-			Entry:        TaskLedgerEntry{ID: "boot.ocp", Kind: ApplyTaskKindNodeBoot, Label: "boot ocp nodes", Cluster: "ocp", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
-			Playbook:     "boot.ocp",
+			Entry:        TaskLedgerEntry{ID: "boot.ocp-a", Kind: ApplyTaskKindNodeBoot, Label: "boot ocp-a nodes", Cluster: "ocp-a", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook:     "boot.ocp-a",
+			RedfishSlots: 3,
+			State:        state,
+		},
+		{
+			Entry:        TaskLedgerEntry{ID: "boot.ocp-b", Kind: ApplyTaskKindNodeBoot, Label: "boot ocp-b nodes", Cluster: "ocp-b", ClusterKind: ApplyClusterKindContainer, Status: TaskStatusPending},
+			Playbook:     "boot.ocp-b",
 			RedfishSlots: 3,
 			State:        state,
 		},
 	}
-	done := make(chan error, 1)
+	type result struct {
+		ledger RunLedger
+		err    error
+	}
+	done := make(chan result, 1)
 	go func() {
-		_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
+		ledger, err := RunApplyTaskGraph(ctx, io.Discard, io.Discard, filepath.Join(dir, "runs"), schedulerRunOptions(dir),
 			ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseMachines, ApplyPhaseBase}}, "", tasks,
-			ConcurrencyLimits{ParallelismRedfish: DefaultParallelismRedfish}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
-		done <- err
+			ConcurrencyLimits{}, nil, func(io.Writer, io.Writer) ansible.Runner { return runner })
+		done <- result{ledger: ledger, err: err}
 	}()
 	runner.awaitStart(t, "osinstall.ceph")
-	runner.awaitStart(t, "boot.ocp")
+	runner.awaitStart(t, "boot.ocp-a")
+	runner.awaitStart(t, "boot.ocp-b")
 	runner.releasePlaybook("osinstall.ceph")
-	runner.releasePlaybook("boot.ocp")
-	if err := <-done; err != nil {
-		t.Fatalf("RunApplyTaskGraph: %v", err)
+	runner.releasePlaybook("boot.ocp-a")
+	runner.releasePlaybook("boot.ocp-b")
+	got := <-done
+	if got.err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", got.err)
+	}
+	if got.ledger.Limits.ParallelismRedfish != 12 || !got.ledger.Limits.ParallelismRedfishUnbounded() {
+		t.Fatalf("resolved Redfish limits = %+v, want graph-full capacity 12 reported as unbounded", got.ledger.Limits)
 	}
 }
 

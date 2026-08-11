@@ -85,11 +85,13 @@ host per machine so independent VMs in the same child-before-host cluster pass
 tear down concurrently; shared VIP preparation and ownership-record sweeps
 remain serialized at the real provider-host boundary.
 
-Absent an explicit cluster-install cap, the selected dependency DAG, resource
-locks, and the global, per-host, and Redfish budgets are the only ordering
-constraints. Independent bare-metal ContainerCluster roots may therefore enter
-their install chains together while peer Ceph machine and storage work runs;
-neither cluster kind imposes an undeclared edge on the other.
+Absent explicit cluster-install or Redfish throttles, the selected dependency
+DAG, resource locks, and the global and per-host safety budgets are the only
+ordering constraints. Default Redfish capacity equals the selected apply or
+destroy graph's declared demand and adds no ordering. Independent bare-metal
+ContainerCluster roots may therefore enter their install chains together while
+peer Ceph machine and storage work runs; neither cluster kind imposes an
+undeclared edge on the other.
 
 Add-on playbooks use a narrower dynamic lock after their read-only requirement
 wait. A playbook whose resolved target includes a `StorageCluster` acquires all

@@ -19,9 +19,13 @@ func TestApplyTaskDisplayLabelNamesTheBootstrapWait(t *testing.T) {
 
 func TestApplyRunStartPrintsTheLimitTheRunResolved(t *testing.T) {
 	t.Setenv(workflow.ParallelismClustersEnvVar, "")
+	t.Setenv(workflow.ParallelismRedfishEnvVar, "")
 	tasks := []workflow.ApplyTask{
 		{Entry: workflow.TaskLedgerEntry{ID: "iso.ocp-prd-01", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso ocp-prd-01", Cluster: "ocp-prd-01"}},
 		{Entry: workflow.TaskLedgerEntry{ID: "iso.ocp-prd-02", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso ocp-prd-02", Cluster: "ocp-prd-02"}},
+		{Entry: workflow.TaskLedgerEntry{ID: "osinstall.ceph-prd-01", Kind: workflow.ApplyTaskKindManagedMachineOS, Label: "managed OS ceph-prd-01", Cluster: "ceph-prd-01"}, RedfishSlots: 6},
+		{Entry: workflow.TaskLedgerEntry{ID: "boot.ocp-prd-01", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot ocp-prd-01", Cluster: "ocp-prd-01"}, RedfishSlots: 3},
+		{Entry: workflow.TaskLedgerEntry{ID: "boot.ocp-prd-02", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot ocp-prd-02", Cluster: "ocp-prd-02"}, RedfishSlots: 3},
 	}
 	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
 	if limits.ParallelismClusters != 2 {
@@ -30,8 +34,9 @@ func TestApplyRunStartPrintsTheLimitTheRunResolved(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-limits", "clusters", "", limits, workflow.TaskLedgerEntries(tasks), time.Now())
 	var stdout strings.Builder
 	t.Setenv(workflow.ParallelismClustersEnvVar, "8")
+	t.Setenv(workflow.ParallelismRedfishEnvVar, "8")
 	printApplyRunStart(&stdout, "test", t.TempDir(), ledger)
-	if !strings.Contains(stdout.String(), "cluster installs 2") {
+	if !strings.Contains(stdout.String(), "Redfish unbounded, cluster installs 2") {
 		t.Fatalf("run header = %q; it must report the limit the run resolved, not the one the printing shell asks for", stdout.String())
 	}
 }

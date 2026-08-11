@@ -70,5 +70,6 @@ below.
 | [0054](0054-a-filter-is-not-permission-to-wipe-a-device.md) | A Filter Is Not Permission to Wipe a Device | refines 0007, 0030, 0034; limits OSD auto-reclaim to an effective unbounded managed data selection |
 | [0055](0055-the-controller-resolves-before-the-machine-it-contacts.md) | The Controller Resolves Before the Machine It Contacts | refines 0017, 0018, 0023, 0046 |
 | [0056](0056-the-support-report-a-storage-node-can-produce.md) | The Support Report a Storage Node Can Produce | follows 0002 and 0007; gives storage support tooling the owned package lifecycle |
-| [0057](0057-the-dag-decides-how-many-clusters-fly.md) | The DAG Decides How Many Clusters Fly | extends 0053; follows the value-carrying flag convention of 0010 |
+| [0057](0057-the-dag-decides-how-many-clusters-fly.md) | The DAG Decides How Many Clusters Fly | extends 0053; follows the value-carrying flag convention of 0010; Redfish default refined by 0059 |
 | [0058](0058-storage-destroy-completion-is-positive-proof.md) | Storage Destroy Completion Is Positive Proof | revises managed-storage A2 and fail-closed edges of 0023; follows 0007 and 0039 |
+| [0059](0059-the-graph-sets-default-redfish-capacity.md) | The Graph Sets Default Redfish Capacity | extends 0057 |

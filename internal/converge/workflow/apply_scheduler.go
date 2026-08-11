@@ -207,6 +207,7 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 
 	for completed < len(tasks) {
 		startedAny := false
+		blockedAny := false
 		releaseIdleClusterInstalls(ledger, tasks, started, heldClusterInstalls)
 		slotAdmission := clusterInstallSlotAdmission(ledger, clusterInstallLimit)
 		for _, task := range tasks {
@@ -219,10 +220,12 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			ledger.MarkDependencyReady(task.Entry.ID, time.Now())
 			if running >= parallelism {
 				ledger.RecordBlockedOn(task.Entry.ID, applyTaskBudgetBlocker)
+				blockedAny = true
 				continue
 			}
 			if blocker := taskDispatchBlocker(task, runningRedfish, redfishLimit, runningResources, runningHostSlots, perHostLimit, heldClusterInstalls, clusterInstallLimit, slotAdmission); blocker != "" {
 				ledger.RecordBlockedOn(task.Entry.ID, blocker)
+				blockedAny = true
 				continue
 			}
 			if firstTaskErr == nil {
@@ -270,6 +273,14 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 			if err := saveLedger(); err != nil && fatalErr == nil {
 				fatalErr = err
 				cancel()
+			}
+		}
+		if blockedAny && fatalErr == nil {
+			if err := saveLedger(); err != nil {
+				fatalErr = err
+				cancel()
+			} else if reporter != nil {
+				reporter.StageSnapshot(ledger)
 			}
 		}
 		if fatalErr != nil && running == 0 {

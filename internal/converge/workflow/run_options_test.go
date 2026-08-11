@@ -25,7 +25,7 @@ func wideApplyTaskGraph(count int) []ApplyTask {
 	return tasks
 }
 
-func TestResolveApplyConcurrencyLimitsCapsAWideGraph(t *testing.T) {
+func TestResolveApplyConcurrencyLimitsPreservesSafetyCapsAndDefaultsRedfishToGraph(t *testing.T) {
 	tasks := wideApplyTaskGraph(40)
 	limits := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks)
 
@@ -38,11 +38,11 @@ func TestResolveApplyConcurrencyLimitsCapsAWideGraph(t *testing.T) {
 	if limits.ParallelismPerHost != DefaultParallelismPerHost {
 		t.Fatalf("per-host parallelism = %d, want the %d default cap", limits.ParallelismPerHost, DefaultParallelismPerHost)
 	}
-	if limits.ParallelismRedfish != DefaultParallelismRedfish {
-		t.Fatalf("Redfish parallelism = %d, want the %d default cap", limits.ParallelismRedfish, DefaultParallelismRedfish)
+	if limits.ParallelismRedfish != limits.AutoParallelismRedfish {
+		t.Fatalf("Redfish parallelism = %d, want the graph demand %d", limits.ParallelismRedfish, limits.AutoParallelismRedfish)
 	}
-	if limits.ParallelismUnbounded() || limits.ParallelismPerHostUnbounded() || limits.ParallelismRedfishUnbounded() {
-		t.Fatalf("a capped wide graph must report every limit as bounded: %+v", limits)
+	if limits.ParallelismUnbounded() || limits.ParallelismPerHostUnbounded() || !limits.ParallelismRedfishUnbounded() {
+		t.Fatalf("a wide graph must report controller and host limits as bounded and Redfish as unbounded: %+v", limits)
 	}
 	if again := ResolveApplyConcurrencyLimits(limits, tasks); again != limits {
 		t.Fatalf("resolving already-resolved wide-graph limits changed them: %+v -> %+v", limits, again)
@@ -98,9 +98,27 @@ func TestResolveApplyConcurrencyLimitsIgnoresUnusableEnvironmentValues(t *testin
 			t.Fatalf("%s=%q resolved global parallelism to %d, want the %d default", ParallelismEnvVar, raw, limits.Parallelism, DefaultParallelism())
 		}
 	}
+	for _, raw := range []string{"", "  ", "0", "-4", "many"} {
+		t.Setenv(ParallelismRedfishEnvVar, raw)
+		limits := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks)
+		if limits.ParallelismRedfish != limits.AutoParallelismRedfish {
+			t.Fatalf("%s=%q resolved Redfish parallelism to %d, want graph demand %d", ParallelismRedfishEnvVar, raw, limits.ParallelismRedfish, limits.AutoParallelismRedfish)
+		}
+	}
 	t.Setenv(ParallelismEnvVar, "1000")
 	if got := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks).Parallelism; got != 40 {
 		t.Fatalf("an environment override above the graph maximum resolved to %d, want 40", got)
+	}
+	t.Setenv(ParallelismRedfishEnvVar, "1000")
+	if got := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, tasks).ParallelismRedfish; got != 40 {
+		t.Fatalf("a Redfish environment override above graph demand resolved to %d, want 40", got)
+	}
+}
+
+func TestResolveApplyConcurrencyLimitsUsesTrivialRedfishCapacityWithoutDemand(t *testing.T) {
+	limits := ResolveApplyConcurrencyLimits(ConcurrencyLimits{}, []ApplyTask{{Entry: TaskLedgerEntry{ID: "task"}}})
+	if limits.ParallelismRedfish != 1 || limits.AutoParallelismRedfish != 1 || !limits.ParallelismRedfishUnbounded() {
+		t.Fatalf("Redfish limits without Redfish work = %+v, want the unbounded bookkeeping value 1/1", limits)
 	}
 }
 

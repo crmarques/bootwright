@@ -2906,13 +2906,32 @@ command. The rest are registered per command, on the verbs that reach machines.
   can install together, and independent StorageCluster work can run beside
   them. A requested limit is clamped to the number of chains the graph contains;
   a graph with no ContainerCluster install task records no cluster limit.
+- The effective Redfish limit resolves from
+  `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH`, then the sum of positive Redfish-slot
+  demand in the selected apply or destroy graph. The graph-derived default is
+  non-binding. An absent, invalid, zero, or negative environment value selects
+  that default; a valid positive value is clamped to graph demand and acts as a
+  standing estate throttle. A graph with no Redfish task records the trivial
+  bookkeeping value one for both the resolved and automatic limits.
+- Under an explicitly narrowed Redfish budget, a task that drives BMCs receives
+  `min(declared demand, free capacity)` when at least one slot is free, runs with
+  its Ansible forks clamped to that grant, and holds the grant until it returns.
+  Distinct per-BMC resource locks continue to serialize work against the same
+  target independently of this aggregate budget.
 - One chain comprises its agent-ISO, node-boot, bootstrap-wait, and install-wait
   tasks. Managed-OS and StorageCluster tasks, including Ceph work, do not consume
   this limit. Resource locks and the global, per-host, and Redfish budgets still
   apply independently.
-- The resolved integer is persisted in the run ledger. Resuming that run uses
-  the persisted value even if the environment changes, and an exact retry of an
-  explicit apply invocation preserves `--cluster-install-parallelism`.
+- The resolved cluster-install and Redfish integers are persisted in the run
+  ledger. Redfish graph demand is stored beside its resolved value so reporting
+  can identify a non-binding limit. Resuming that run uses the persisted values
+  even if the environment changes, and an exact retry of an explicit apply
+  invocation preserves `--cluster-install-parallelism`.
+- A dependency-ready task denied by any task, host, Redfish, cluster-install, or
+  resource admission constraint records `ReadyAt` and the current `BlockedOn`
+  reason. The scheduler persists that state and publishes a live snapshot before
+  waiting for another task event, so a durable status read and the live run tree
+  name the same active blocker.
 
 ### Contexts, runs, and read-only posture
 

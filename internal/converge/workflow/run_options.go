@@ -16,7 +16,6 @@ const (
 
 const (
 	DefaultParallelismPerHost = 4
-	DefaultParallelismRedfish = 8
 
 	minDefaultParallelism = 8
 	maxDefaultParallelism = 32
@@ -36,13 +35,13 @@ func DefaultParallelism() int {
 func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) ConcurrencyLimits {
 	autoGlobal := autoParallelism(len(tasks))
 	autoPerHost := hostSlotAutoParallelism(tasks)
-	autoRedfish := nodeBootTaskCount(tasks)
+	autoRedfish := redfishAutoParallelism(tasks)
 	if autoRedfish < 1 {
 		autoRedfish = 1
 	}
 	limits.Parallelism = boundedLimit(requestedLimit(limits.Parallelism, ParallelismEnvVar), DefaultParallelism(), autoGlobal, 1)
 	limits.ParallelismPerHost = boundedLimit(requestedLimit(limits.ParallelismPerHost, ParallelismPerHostEnvVar), DefaultParallelismPerHost, autoPerHost, hostSlotDispatchFloor(tasks))
-	limits.ParallelismRedfish = boundedLimit(requestedLimit(limits.ParallelismRedfish, ParallelismRedfishEnvVar), DefaultParallelismRedfish, autoRedfish, 1)
+	limits.ParallelismRedfish = boundedLimit(requestedLimit(limits.ParallelismRedfish, ParallelismRedfishEnvVar), autoRedfish, autoRedfish, 1)
 	limits.ParallelismClusters = resolveClusterInstallLimit(requestedLimit(limits.ParallelismClusters, ParallelismClustersEnvVar), clusterInstallAutoParallelism(TaskLedgerEntries(tasks)))
 	limits.AutoParallelism = autoGlobal
 	limits.AutoParallelismPerHost = autoPerHost
@@ -116,7 +115,7 @@ func autoParallelism(taskCount int) int {
 	return taskCount
 }
 
-func nodeBootTaskCount(tasks []ApplyTask) int {
+func redfishAutoParallelism(tasks []ApplyTask) int {
 	count := 0
 	for _, task := range tasks {
 		if task.RedfishSlots > 0 {

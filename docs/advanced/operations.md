@@ -1004,7 +1004,7 @@ Run
   Target: clusters
   Status: ok
   Wall clock: 2m0s
-  Parallelism: tasks 16, per host 4, Redfish 8
+  Parallelism: tasks 16, per host 4, Redfish unbounded
 
 Critical path
   [DONE] Create ISO demo: 10s (cumulative 10s)
@@ -1079,22 +1079,23 @@ variable; the cluster-install cap also has an invocation flag:
 | --- | --- | --- | --- |
 | `BOOTWRIGHT_APPLY_PARALLELISM` | — | Tasks in flight across the whole run | `NumCPU × 2`, clamped to the range 8–32 |
 | `BOOTWRIGHT_APPLY_PARALLELISM_PER_HOST` | — | Tasks in flight against any single host (hypervisor, bastion, vCenter) | 4 |
-| `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | — | Concurrent Redfish/BMC operations | 8 |
+| `BOOTWRIGHT_APPLY_PARALLELISM_REDFISH` | — | Concurrent Redfish/BMC operations | Total declared Redfish demand in the selected graph |
 | `BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS` | `--cluster-install-parallelism` | ContainerClusters *installing* at once — the ISO, node boot, bootstrap wait and install wait of one cluster count as that one cluster, however many tasks they are | Every install chain in the selected graph |
 
 Despite the `APPLY` in the names, `destroy` plans its task graph under the same
 four caps — a teardown installs nothing, so the cluster cap simply never binds
 there.
 
-By default the cluster cap is non-binding: every ContainerCluster install chain
-in the selected dependency graph may enter it. Two independent bare-metal OCP
-roots therefore install side by side, while Ceph machine and storage work runs
-under the other budgets because storage never consumes a cluster-install slot.
-Authored graph dependencies still apply — a hosted cluster cannot provision its
-machines before its host cluster and required add-ons are ready.
+By default the cluster-install and Redfish caps are non-binding: every
+ContainerCluster install chain may enter, and the Redfish capacity covers all
+declared BMC work in the selected dependency graph. Two independent bare-metal
+OCP roots therefore install side by side while Ceph machine and storage work
+runs. Authored graph dependencies still apply — a hosted cluster cannot
+provision its machines before its host cluster and required add-ons are ready —
+and the global and per-host safety caps remain independent constraints.
 
-Narrow the cap when a shared registry, mirror, proxy, or BMC path lacks headroom.
-The flag is convenient for one run:
+Narrow the cluster-install cap when a shared registry, mirror, or proxy lacks
+headroom. The flag is convenient for one run:
 
 ```text
 bootwright apply --cluster-install-parallelism 1 --yes
@@ -1104,6 +1105,13 @@ The environment variable expresses the same standing estate policy:
 
 ```text
 BOOTWRIGHT_APPLY_PARALLELISM_CLUSTERS=1 bootwright apply --yes
+```
+
+Use the Redfish environment limit when a shared BMC gateway or management path
+needs its own standing throttle:
+
+```text
+BOOTWRIGHT_APPLY_PARALLELISM_REDFISH=8 bootwright apply --yes
 ```
 
 When a cap is scarce, a cluster whose chain parks on another cluster — for
@@ -1120,14 +1128,15 @@ tree names the other budgets the same way (`waiting for Redfish slots`,
 `waiting for a task slot`, `waiting for a slot on <host>`), always the one the
 task is waiting on right now, so a row that sits still for an hour says why.
 
-The Redfish cap is granted in parts rather than all at once. A task declares how
-many BMCs it drives — a six-node storage OS install declares six, a three-master
-node boot declares three — and takes `min(declared, free)` whenever at least one
-slot is free, running that many hosts at a time. Without that, a fleet whose
-declared demand exceeds the cap serialises: the storage OS install holds six of
-eight slots for its whole runtime and the three-slot node boot of an unrelated
-bare-metal cluster never fits, parking that cluster (and everything behind it)
-on work it shares nothing with.
+The default Redfish capacity is the sum of every task's declared BMC demand, so
+it adds no ordering of its own. A six-node storage OS install and two
+three-master node boots resolve to 12 slots and may all enter together. Under an
+explicit narrower cap, grants are partial rather than all-or-nothing: each task
+takes `min(declared, free)` whenever at least one slot is free and runs that many
+hosts at a time. With an explicit cap of eight, for example, the storage task
+may take six and the first node boot the remaining two while the second boot
+reports `waiting for Redfish slots`. Partial grants keep useful work moving,
+while the configured limit remains a real throttle.
 
 `apply` prints the caps it resolved in its run header, with the cluster cap as a
 fourth segment whenever the run installs at least one cluster:
@@ -1137,27 +1146,29 @@ fourth segment whenever the run installs at least one cluster:
   ID: apply-20260807T101500.000000000Z
   Target: clusters
   Tasks: 24
-  Parallelism: tasks 16, per host 4, Redfish 8, cluster installs 2
+  Parallelism: tasks 16, per host 4, Redfish unbounded, cluster installs 2
   Run log: /var/lib/bootwright/contexts/prd/runs/history/apply-20260807T101500.000000000Z/bootwright.log
 ```
 
 A run that installs no cluster omits that segment, and `status --timings` reports
 the first three caps only.
 
-The global, per-host, and Redfish values remain environment-only estate policy.
-Cluster installs additionally accept `--cluster-install-parallelism` because a
-single high-contention invocation may need a narrower cap. A positive flag wins
-the environment variable; a valid positive environment value wins the
-graph-derived default. The flag is available on `apply` and `plan`, and an
-explicit flag is retained in exact apply retry commands.
+The global and per-host defaults remain controller and shared-host safety
+policy. Redfish defaults to graph demand and its environment variable supplies
+an optional standing estate throttle. Cluster installs also default to graph
+demand and additionally accept `--cluster-install-parallelism` because a single
+high-contention invocation may need a narrower cap. For that limit, a positive
+flag wins the environment variable. The flag is available on `apply` and
+`plan`, and an explicit flag is retained in exact apply retry commands.
 
 A requested value is clamped down to what the task graph can actually use — ask
 for 64 in a run that has 9 tasks and you get 9 — and raised to the floor a single
 task needs to be dispatchable at all. A cluster-install flag that is not a
-positive integer is a usage error; an invalid environment value is ignored and
-the graph-derived default applies. `status --timings` prints what the run really
-used, and prints `unbounded` for a cap that never constrained the graph — a cap
-reported that way is not the thing making the run slow.
+positive integer is a usage error; an invalid environment value is ignored.
+For Redfish and cluster installs, that means the graph-derived default applies.
+`status --timings` prints what the run really used, and prints `unbounded` for a
+cap that never constrained the graph — a cap reported that way is not the thing
+making the run slow.
 
 !!! warning "The per-host cap of 4 throttles libvirt VM creation"
     The per-host cap counts every task targeting the same host, so a lab where
