@@ -12,6 +12,7 @@ func ossCommunityChecksumCluster(checksum string) v1alpha1.StorageCluster {
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: v1alpha1.StorageCephDistributionOSS,
+				Release:      "tentacle",
 				Community: &v1alpha1.StorageCephCommunitySpec{
 					Checksum: checksum,
 				},

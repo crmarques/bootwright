@@ -144,8 +144,8 @@ func newAddonsAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		Short: "Register a catalog add-on in the machine-local store",
 		Args:  cobra.NoArgs,
 		Example: `  bootwright add-ons add --name openshift-data-foundation
-  bootwright add-ons add --name openshift-data-foundation:4.21
-  bootwright add-ons add --name fusion-data-foundation --version 4.21 --yes`,
+  bootwright add-ons add --name openshift-data-foundation:<version>
+  bootwright add-ons add --name fusion-data-foundation --version <version> --yes`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "catalog add-on name, optionally <name>:<version> (required)")
 	cmd.Flags().StringVar(&version, "version", "", "catalog version (default: the entry's default version)")

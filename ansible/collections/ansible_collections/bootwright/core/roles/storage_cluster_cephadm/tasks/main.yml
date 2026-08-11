@@ -54,6 +54,23 @@
   ansible.builtin.include_tasks: phases/install.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
+- name: Run the selected native Ceph preparation flow
+  ansible.builtin.include_tasks: >-
+    phases/native_preparation/{{ bootwright_ceph_provider.artifactPolicy.nativePreparationMode }}.yml
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_ceph_provider.artifactPolicy.nativePreparationMode | default('') | length > 0
+
+- name: Re-prove every exact native Ceph package after provider preparation
+  ansible.builtin.include_tasks: phases/native_package_parity_one.yml
+  loop: "{{ bootwright_ceph_provider.packageArtifacts | default([]) }}"
+  loop_control:
+    loop_var: bootwright_ceph_package_artifact
+    label: "{{ bootwright_current_storage_host.hostname }} {{ bootwright_ceph_package_artifact.spec }}"
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_ceph_provider.artifactPolicy.nativePreparationMode | default('') | length > 0
+
 - name: Prove the Ceph storage node container runtime
   ansible.builtin.include_tasks: phases/container_runtime.yml
 

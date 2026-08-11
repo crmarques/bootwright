@@ -10,6 +10,8 @@ bootwright_ceph_default_prerequisite_packages:
   - sos
 bootwright_ceph_managed_packages:
   - cephadm
+  - cephadm-ansible
+  - ceph-common
   - firewalld
   - lvm2
   - podman

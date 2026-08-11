@@ -54,17 +54,19 @@ public-internet package dependency and no override.
   removal, so it cannot pass against stale public-repo metadata — disables
   every undeclared repository, enables only the rendered provider repository
   set, forces `skip_if_unavailable=False` globally and for each declared id,
-  and queries `cephadm` plus `ibm-storage-ceph-license` together. It proves the
-  declared repositories are readable and serve both packages before anything
-  installs.
+  and queries every rendered native artifact plus `ibm-storage-ceph-license`
+  together. Under the current IBM policy that artifact set is `cephadm`,
+  `ceph-common`, and `cephadm-ansible`. It proves the declared repositories are
+  readable and serve every package before anything installs.
 
 The preflight queries bare package names rather than the pinned spec, and has
 dnf attribute every emitted line to its package while printing every spec form
 it would itself accept for each available build. One command means both package
 verdicts share one repository read. Separate asserts then distinguish a command
 failure from a readable repository set that publishes no build of a particular
-package, before a final assert tests the pin against the emitted `cephadm` spec
-set. Querying the pinned spec directly would have collapsed those failures into
+package, before a final loop tests every rendered exact artifact against its
+emitted spec set. Querying pinned specs directly would have collapsed those
+failures into
 a single empty result — a declared repository that is unreachable, one that
 carries no Ceph content, and one that is merely a z-stream behind the pin are
 three different problems with three different remedies. The command-failure

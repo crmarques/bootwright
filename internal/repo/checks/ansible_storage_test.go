@@ -1709,40 +1709,49 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(assertion), "bootwright_ceph_runtime_ready") {
 		t.Fatalf("the gate must assert on the runtime as this apply leaves the node, not on a probe taken before it changed the cgroup manager selection: accepting the earlier probe passes a node whose remediation this same task removed moments later. Got %v", assertion)
 	}
-	cephadmVersionIdx := findAnsibleTask(t, tasks, "Read the installed IBM cephadm version for package and image parity")
-	imageVersionIdx := findAnsibleTask(t, tasks, "Read the Ceph version from the declared IBM daemon image")
-	resolveVersionsIdx := findAnsibleTask(t, tasks, "Resolve IBM cephadm and daemon image versions")
-	matchVersionsIdx := findAnsibleTask(t, tasks, "Require matching IBM cephadm and daemon image versions")
-	if !(assertIdx < cephadmVersionIdx && cephadmVersionIdx < imageVersionIdx && imageVersionIdx < resolveVersionsIdx && resolveVersionsIdx < matchVersionsIdx) {
-		t.Fatalf("IBM package/image parity must be checked after the runtime is proven and before cluster work (runtime=%d cephadm=%d image=%d resolve=%d match=%d)", assertIdx, cephadmVersionIdx, imageVersionIdx, resolveVersionsIdx, matchVersionsIdx)
+	parityIdx := findAnsibleTask(t, tasks, "Run the selected native Ceph artifact parity flow")
+	if assertIdx >= parityIdx {
+		t.Fatalf("native package/image parity must be checked after the runtime is proven and before cluster work (runtime=%d parity=%d)", assertIdx, parityIdx)
 	}
-	if got := fmt.Sprint(tasks[cephadmVersionIdx]); !strings.Contains(got, "cephadm") || !strings.Contains(got, "version") {
-		t.Fatalf("the IBM host-tool probe must read the installed native cephadm version, got %v", tasks[cephadmVersionIdx])
+	parityInclude := fmt.Sprint(tasks[parityIdx]["ansible.builtin.include_tasks"])
+	if !strings.Contains(parityInclude, "native_parity/{{ bootwright_ceph_provider.artifactPolicy.nativeParityMode }}.yml") {
+		t.Fatalf("the parity dispatcher must select a separate flow from rendered artifact policy, got %v", tasks[parityIdx])
 	}
-	if got := fmt.Sprint(tasks[imageVersionIdx]); !strings.Contains(got, "--entrypoint ceph") || !strings.Contains(got, "--version") || !strings.Contains(got, "bootwright_ceph_bootstrap_image") {
-		t.Fatalf("the IBM image version probe must execute ceph --version inside the exact declared image, got %v", tasks[imageVersionIdx])
+	if got := fmt.Sprint(tasks[parityIdx]["when"]); !strings.Contains(got, "artifactPolicy.nativeParityMode") || strings.Contains(strings.ToLower(got), "ibm") {
+		t.Fatalf("the parity dispatcher must key only on rendered policy, got when=%v", tasks[parityIdx]["when"])
 	}
-	matchVersions, ok := tasks[matchVersionsIdx]["ansible.builtin.assert"].(map[string]any)
+
+	parityPath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/native_parity/ceph-version.yml"
+	parityTasks := readAnsibleTasks(t, parityPath)
+	cephadmVersionIdx := findAnsibleTask(t, parityTasks, "Read the installed cephadm version for native artifact parity")
+	imageVersionIdx := findAnsibleTask(t, parityTasks, "Read the Ceph version from the declared daemon image")
+	resolveVersionsIdx := findAnsibleTask(t, parityTasks, "Resolve native cephadm and daemon image versions")
+	matchVersionsIdx := findAnsibleTask(t, parityTasks, "Require matching native cephadm and daemon image versions")
+	if !(cephadmVersionIdx < imageVersionIdx && imageVersionIdx < resolveVersionsIdx && resolveVersionsIdx < matchVersionsIdx) {
+		t.Fatalf("native parity flow order is invalid (cephadm=%d image=%d resolve=%d match=%d)", cephadmVersionIdx, imageVersionIdx, resolveVersionsIdx, matchVersionsIdx)
+	}
+	if got := fmt.Sprint(parityTasks[cephadmVersionIdx]); !strings.Contains(got, "cephadm") || !strings.Contains(got, "version") {
+		t.Fatalf("the host-tool probe must read the installed native cephadm version, got %v", parityTasks[cephadmVersionIdx])
+	}
+	if got := fmt.Sprint(parityTasks[imageVersionIdx]); !strings.Contains(got, "--entrypoint ceph") || !strings.Contains(got, "--version") || !strings.Contains(got, "bootwright_ceph_bootstrap_image") {
+		t.Fatalf("the image version probe must execute ceph --version inside the exact declared image, got %v", parityTasks[imageVersionIdx])
+	}
+	matchVersions, ok := parityTasks[matchVersionsIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
-		t.Fatalf("the IBM parity gate must be an assertion, got %v", tasks[matchVersionsIdx])
+		t.Fatalf("the native parity gate must be an assertion, got %v", parityTasks[matchVersionsIdx])
 	}
 	comparisons := fmt.Sprint(matchVersions["that"])
 	for _, want := range []string{
-		"bootwright_ceph_ibm_cephadm_version_value == bootwright_ceph_ibm_declared_version_value",
-		"bootwright_ceph_ibm_image_version_value == bootwright_ceph_ibm_declared_version_value",
-		"bootwright_ceph_ibm_cephadm_version_value == bootwright_ceph_ibm_image_version_value",
+		"bootwright_ceph_native_cephadm_version_value == bootwright_ceph_native_declared_version_value",
+		"bootwright_ceph_native_image_version_value == bootwright_ceph_native_declared_version_value",
+		"bootwright_ceph_native_cephadm_version_value == bootwright_ceph_native_image_version_value",
 	} {
 		if !strings.Contains(comparisons, want) {
-			t.Fatalf("the IBM parity gate must compare the exact declared package, native cephadm, and image versions (missing %q), got %v", want, tasks[matchVersionsIdx])
+			t.Fatalf("the parity gate must compare the exact declared package, native cephadm, and image versions (missing %q), got %v", want, parityTasks[matchVersionsIdx])
 		}
 	}
-	for _, idx := range []int{cephadmVersionIdx, imageVersionIdx, resolveVersionsIdx, matchVersionsIdx} {
-		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_ceph_provider_name == 'ibm'") {
-			t.Fatalf("the IBM-specific version proof must not affect other distributions, got when=%v", tasks[idx]["when"])
-		}
-	}
-	if got := fmt.Sprint(tasks[cephadmVersionIdx]["when"]); strings.Contains(got, "bootwright_task_storage_skip_prereqs") {
-		t.Fatalf("the IBM host-tool probe must run on the split seed pass after package prerequisites were skipped, got when=%v", tasks[cephadmVersionIdx]["when"])
+	if strings.Contains(strings.ToLower(readRepoFile(t, parityPath)), "ibm") {
+		t.Fatalf("the native parity flow must be distribution-neutral; selection belongs to provider artifact policy")
 	}
 }
 
@@ -3855,43 +3864,65 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(cephadmPackageBody["name"]), "bootwright_ceph_provider.cephadmPackage") {
 		t.Fatalf("cephadm package fallback must install provider-selected cephadm package, got %v", cephadmPackage)
 	}
-	packageFactsIdx := findAnsibleTask(t, installTasks, "Gather installed package facts before pinning the cephadm build")
-	pinnedInstallIdx := findAnsibleTask(t, installTasks, "Install the pinned cephadm build on storage node")
-	if !(initialProbeIdx < packageFactsIdx && packageFactsIdx < pinnedInstallIdx && pinnedInstallIdx < recordCephadmIdx) {
-		t.Fatalf("package facts must be gathered before the pinned cephadm install so package_records_write can tell a preexisting cephadm from one Bootwright installed; otherwise destroy removes the operator's package")
+	packageFactsIdx := findAnsibleTask(t, installTasks, "Gather installed package facts before pinning native Ceph artifacts")
+	resolveUnpinnedIdx := findAnsibleTask(t, installTasks, "Resolve unpinned native preparation packages")
+	installUnpinnedIdx := findAnsibleTask(t, installTasks, "Install and own unpinned native preparation packages")
+	pinnedIncludeIdx := findAnsibleTask(t, installTasks, "Install and verify each pinned native Ceph package artifact")
+	if !(initialProbeIdx < packageFactsIdx && packageFactsIdx < cephadmPackageIdx && recordCephadmIdx < resolveUnpinnedIdx && resolveUnpinnedIdx < installUnpinnedIdx && installUnpinnedIdx < pinnedIncludeIdx && pinnedIncludeIdx < verifyCephadmIdx) {
+		t.Fatalf("native tooling must record original package facts, preserve the OSS fallback, install unpinned provider artifacts, exact-pin authored artifacts, then verify cephadm")
 	}
-	pinnedInstall := installTasks[pinnedInstallIdx]
+	if got := fmt.Sprint(installTasks[packageFactsIdx]["when"]); !strings.Contains(got, "packageArtifacts") {
+		t.Fatalf("package facts must be gathered for every exact provider artifact so ownership preserves preexisting packages, got when=%s", got)
+	}
+	if got := fmt.Sprint(installTasks[resolveUnpinnedIdx]); !strings.Contains(got, "nativePreparationMode") || !strings.Contains(got, "cephadmAnsiblePackage") || !strings.Contains(got, "runtimePackages") {
+		t.Fatalf("unpinned native tooling must be selected from the rendered native preparation policy, got %s", got)
+	}
+	assertIncludeRoleName(t, installTasks[installUnpinnedIdx], "bootwright.core.ownership_record")
+	if got := fmt.Sprint(installTasks[installUnpinnedIdx]); !strings.Contains(got, "package_apply.yml") || !strings.Contains(got, "bootwright_ceph_unpinned_native_preparation_packages") {
+		t.Fatalf("optional unpinned provider artifacts must install with the ownership helper and package state present, got %s", got)
+	}
+	if got := fmt.Sprint(installTasks[pinnedIncludeIdx]); !strings.Contains(got, "provider.packageArtifacts") || !strings.Contains(got, "native_package_install_one.yml") {
+		t.Fatalf("exact package installation must dispatch over the rendered generic artifact set, got %s", got)
+	}
+
+	pinnedTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/native_package_install_one.yml")
+	pinnedInstallIdx := findAnsibleTask(t, pinnedTasks, "Install the pinned native Ceph package artifact")
+	readCoordinatesIdx := findAnsibleTask(t, pinnedTasks, "Read the installed native Ceph package coordinates")
+	requireCoordinatesIdx := findAnsibleTask(t, pinnedTasks, "Require the installed native Ceph package to equal the declared build")
+	recordNativeIdx := findAnsibleTask(t, pinnedTasks, "Write native Ceph package ownership record")
+	if !(pinnedInstallIdx < readCoordinatesIdx && readCoordinatesIdx < requireCoordinatesIdx && requireCoordinatesIdx < recordNativeIdx) {
+		t.Fatalf("every exact native package must be installed, proved, then attributed before provider preparation")
+	}
+	pinnedInstall := pinnedTasks[pinnedInstallIdx]
 	pinnedBody, ok := pinnedInstall["ansible.builtin.dnf"].(map[string]any)
 	if !ok {
-		t.Fatalf("the pinned cephadm install must use ansible.builtin.dnf so the rendered RPM version-release is passed verbatim, got %v", pinnedInstall)
+		t.Fatalf("the pinned native artifact install must use ansible.builtin.dnf so the rendered RPM version-release is passed verbatim, got %v", pinnedInstall)
 	}
 	if pinnedBody["allow_downgrade"] != false {
-		t.Fatalf("the pinned cephadm install must explicitly refuse software downgrades; IBM supports upgrades but not in-place downgrades, got %v", pinnedBody)
+		t.Fatalf("the pinned native artifact install must explicitly refuse software downgrades, got %v", pinnedBody)
 	}
 	if _, ok := pinnedInstall["failed_when"]; ok {
-		t.Fatalf("the pinned cephadm install must fail closed; an unavailable pinned build is an error, not a silent float back to whatever the repository ships, got %v", pinnedInstall)
+		t.Fatalf("the pinned native artifact install must fail closed; an unavailable build must never float, got %v", pinnedInstall)
 	}
-	if got := fmt.Sprint(pinnedBody["name"]); !strings.Contains(got, "cephadmPackageSpec") || strings.Contains(got, "~") || strings.Contains(got, "join") {
-		t.Fatalf("the pinned install name must be the rendered cephadmPackageSpec verbatim, with no Jinja string composition, got %v", got)
+	if got := fmt.Sprint(pinnedBody["name"]); !strings.Contains(got, "bootwright_ceph_package_artifact.spec") || strings.Contains(got, "~") || strings.Contains(got, "join") {
+		t.Fatalf("the pinned install name must be the rendered artifact spec verbatim, with no Jinja string composition, got %v", got)
 	}
-	readCoordinatesIdx := findAnsibleTask(t, installTasks, "Read installed cephadm package coordinates after pinning")
-	requireCoordinatesIdx := findAnsibleTask(t, installTasks, "Require the installed cephadm package to equal the declared build")
-	if !(pinnedInstallIdx < readCoordinatesIdx && readCoordinatesIdx < requireCoordinatesIdx && requireCoordinatesIdx < recordCephadmIdx) {
-		t.Fatalf("the exact installed package must be verified before ownership is recorded (install=%d read=%d require=%d record=%d)", pinnedInstallIdx, readCoordinatesIdx, requireCoordinatesIdx, recordCephadmIdx)
+	if got := fmt.Sprint(pinnedTasks[readCoordinatesIdx]["ansible.builtin.command"]); !strings.Contains(got, "EPOCHNUM") || !strings.Contains(got, "VERSION") || !strings.Contains(got, "RELEASE") {
+		t.Fatalf("the installed-coordinate probe must accept the RPM forms dnf accepts, got %v", pinnedTasks[readCoordinatesIdx])
 	}
-	if got := fmt.Sprint(installTasks[readCoordinatesIdx]["ansible.builtin.command"]); !strings.Contains(got, "EPOCHNUM") || !strings.Contains(got, "VERSION") || !strings.Contains(got, "RELEASE") {
-		t.Fatalf("the installed-coordinate probe must accept the RPM forms dnf accepts, got %v", installTasks[readCoordinatesIdx])
+	requireCoordinates, ok := pinnedTasks[requireCoordinatesIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(requireCoordinates["that"]), "bootwright_ceph_package_artifact.spec") || !strings.Contains(fmt.Sprint(requireCoordinates["fail_msg"]), "desiredStatePath") || !strings.Contains(fmt.Sprint(requireCoordinates["fail_msg"]), "refuses to downgrade") {
+		t.Fatalf("the installed-coordinate gate must fail closed against each authored artifact and explain the no-downgrade boundary, got %v", pinnedTasks[requireCoordinatesIdx])
 	}
-	requireCoordinates, ok := installTasks[requireCoordinatesIdx]["ansible.builtin.assert"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(requireCoordinates["that"]), "cephadmPackageSpec") || !strings.Contains(fmt.Sprint(requireCoordinates["fail_msg"]), "refuses to downgrade") {
-		t.Fatalf("the installed-coordinate gate must fail closed on a mismatch and explain the no-downgrade boundary, got %v", installTasks[requireCoordinatesIdx])
+	recordName := fmt.Sprint(pinnedTasks[recordNativeIdx]["vars"])
+	if !strings.Contains(recordName, "bootwright_ceph_package_artifact.name") || strings.Contains(recordName, ".spec") {
+		t.Fatalf("the ownership record must key on each bare package name, never its versioned spec, got %v", recordName)
 	}
-	recordName := fmt.Sprint(installTasks[recordCephadmIdx]["vars"])
-	if !strings.Contains(recordName, "cephadmPackage") || strings.Contains(recordName, "cephadmPackageSpec") {
-		t.Fatalf("the ownership record must key on the bare cephadm package name, never the versioned spec; the static destroy list looks up the bare name and would orphan a versioned record, got %v", recordName)
-	}
-	if body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml"); !strings.Contains(body, "- cephadm\n") {
-		t.Fatalf("bootwright_ceph_managed_packages must keep the bare cephadm entry so destroy still matches the ownership record")
+	managedPackages := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/vars/os/RedHat.yml")
+	for _, name := range []string{"cephadm", "ceph-common", "cephadm-ansible"} {
+		if !strings.Contains(managedPackages, "- "+name+"\n") {
+			t.Fatalf("bootwright_ceph_managed_packages must include %s so destroy matches its ownership record", name)
+		}
 	}
 	assertIncludeRoleName(t, installTasks[recordCephadmIdx], "bootwright.core.ownership_record")
 	if got := installTasks[verifyCephadmIdx]["failed_when"]; got != false {
@@ -3902,13 +3933,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("cephadm unavailable assert must point to managed OS package ownership, got %v", failCephadm)
 	}
 
-	for _, path := range []string{
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/stage_inputs.yml",
-	} {
-		if body := readRepoFile(t, path); strings.Contains(body, "ceph-common") || strings.Contains(body, "cephCommonPackage") {
-			t.Fatalf("%s must not install host Ceph client tooling", path)
-		}
+	if body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/stage_inputs.yml"); strings.Contains(body, "ceph-common") || strings.Contains(body, "cephCommonPackage") {
+		t.Fatalf("bootstrap input staging must not independently install host Ceph client tooling")
 	}
 
 	block := storageCephBootstrapTasks(t)

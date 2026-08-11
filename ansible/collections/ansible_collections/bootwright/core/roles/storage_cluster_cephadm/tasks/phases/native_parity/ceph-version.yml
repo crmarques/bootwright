@@ -1,0 +1,64 @@
+---
+- name: Read the installed cephadm version for native artifact parity
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - version
+  register: bootwright_ceph_native_cephadm_version
+  changed_when: false
+  failed_when: false
+
+- name: Read the Ceph version from the declared daemon image
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - --kill-after=10
+      - "120"
+      - podman
+      - run
+      - --rm
+      - --net=host
+      - --entrypoint
+      - ceph
+      - "{{ bootwright_ceph_bootstrap_image }}"
+      - --version
+  register: bootwright_ceph_native_image_version
+  changed_when: false
+  failed_when: false
+
+- name: Resolve native cephadm and daemon image versions
+  ansible.builtin.set_fact:
+    bootwright_ceph_native_declared_version_value: >-
+      {{ bootwright_ceph_provider.cephadmPackageSpec
+         | regex_replace('^' ~ (bootwright_ceph_provider.cephadmPackage | default('cephadm') | regex_escape) ~ '-', '')
+         | regex_replace('^[0-9]+:', '') }}
+    bootwright_ceph_native_cephadm_version_value: >-
+      {{ bootwright_ceph_native_cephadm_version.stdout | default('')
+         | regex_replace('^cephadm version ([^ ]+).*$', '\1') }}
+    bootwright_ceph_native_image_version_value: >-
+      {{ bootwright_ceph_native_image_version.stdout | default('')
+         | regex_replace('^ceph version ([^ ]+).*$', '\1') }}
+  changed_when: false
+
+- name: Require matching native cephadm and daemon image versions
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_native_cephadm_version.rc | default(1) | int == 0
+      - bootwright_ceph_native_image_version.rc | default(1) | int == 0
+      - bootwright_ceph_native_cephadm_version.stdout | default('') is match('^cephadm version [^ ]+')
+      - bootwright_ceph_native_image_version.stdout | default('') is match('^ceph version [^ ]+')
+      - bootwright_ceph_native_cephadm_version_value == bootwright_ceph_native_declared_version_value
+      - bootwright_ceph_native_image_version_value == bootwright_ceph_native_declared_version_value
+      - bootwright_ceph_native_cephadm_version_value == bootwright_ceph_native_image_version_value
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} has cephadm
+      {{ bootwright_ceph_native_cephadm_version.stdout | default('(unavailable)') | trim }}, but the
+      declared daemon image {{ bootwright_ceph_bootstrap_image }} reports
+      {{ bootwright_ceph_native_image_version.stdout | default('(unavailable)') | trim }}.
+      The selected artifact policy requires the bootstrap image and native cephadm
+      package to carry the same Ceph version; the declared host package coordinate
+      resolves to
+      {{ bootwright_ceph_native_declared_version_value | default('(unavailable)') }}.
+      Correct spec.ceph.packageVersion and spec.ceph.image.version so both artifacts
+      carry the same build before bootstrapping this cluster.
+    quiet: true

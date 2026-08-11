@@ -26,6 +26,7 @@ func TestValidateStorageCephVendorReleaseAcceptsAnyProductVersion(t *testing.T) 
 		{v1alpha1.StorageCephDistributionIBM, "9.9.1", false},
 		{v1alpha1.StorageCephDistributionIBM, "10", false},
 		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0.1", false},
+		{v1alpha1.StorageCephDistributionIBM, "", true},
 		{v1alpha1.StorageCephDistributionIBM, "squid", true},
 		{v1alpha1.StorageCephDistributionRedHat, "9.1-beta", true},
 	}
@@ -50,6 +51,7 @@ func TestValidateStorageCephOSSReleaseAcceptsAnyUpstreamCoordinate(t *testing.T)
 		{"18.2.7", false},
 		{"bananas", false},
 		{"21.2.0", false},
+		{"", true},
 		{"20.2", true},
 		{"Tentacle", true},
 	}
@@ -187,6 +189,7 @@ func TestValidateStorageCephCustomVendorRegistryRequiresMatchingImage(t *testing
 	}}}
 	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 		Distribution:   v1alpha1.StorageCephDistributionRedHat,
+		Release:        "9.1",
 		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 	}}}
 	if errs := validateStorageCephImage("StorageCluster/ceph spec.ceph.image", cluster, state); len(errs) == 0 || !strings.Contains(strings.Join(errs, "; "), "base is required") {

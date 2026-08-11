@@ -10,6 +10,7 @@ spec:
     release: "9.1"
     packageVersion: "19.2.1-245.el9cp"
     image:
+      base: registry.redhat.io/rhceph/rhceph-9-rhel9
       version: "9-1234"
     entitlementRef: rhcs
     cephadm:

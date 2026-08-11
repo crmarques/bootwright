@@ -2,11 +2,14 @@
 
 **Constraint:** Distribution facts live in one Go table (`distributionDef` in
 `internal/storage/cephprovider`) — capability flags (`requiresRHSM`,
-`requiresRegistry`, `requiresLicense`), repo sets, and image templates. The
-Ansible role dispatches on the rendered flags (a `community` block vs
-`requiresRHSM`), never on distribution names (ADR 0002): a new distribution is
-a table entry plus its api/v1alpha1 constant and validation, not a new `when:`
-clause or task file.
+`requiresRegistry`, `requiresLicense`), repo sets, vendor image namespace/stream
+templates, and `ArtifactPolicy`. The policy states whether Ceph-runtime and
+cephadm-ansible package pins, full RPM release coordinates, image bases, and
+image pins are optional, required, or forbidden and selects optional native
+preparation and parity modes. The Ansible role dispatches on rendered flags and
+policy, never on distribution names (ADR 0002): a new
+distribution is a table entry plus its api/v1alpha1 constant and validation,
+not a new product-name `when:` clause.
 
 **Constraint:** Bootwright carries NO Ceph release list and NO vendor support
 matrix, and must never acquire one — not as a validation gate, not as a warning,
@@ -18,53 +21,53 @@ even flagging a stale copy turns a correct operator declaration into noise or a
 failure. `ResolveRelease` (`internal/storage/cephprovider/release.go`) fails only
 when a string cannot yield artifact coordinates at all; the leading dot-component
 of a product version is the stream, and the stream plus the node's own
-`ansible_distribution_major_version` build every repo id, `.repo` URL, and image
-repository. The authored release is carried verbatim — no normalization to a
-Bootwright-preferred value. `ResolvedRelease` holds exactly `Value` and `Stream`;
+`ansible_distribution_major_version` build each package repo id and `.repo`
+URL. Every managed release is required and carried verbatim — no compiled
+default or normalization to a Bootwright-preferred value. `ResolvedRelease`
+holds exactly `Value` and `Stream`;
 adding a support-matrix field to it is the mistake this constraint exists to
 prevent. Two earlier attempts got this wrong: first a closed release catalog that
 hard-failed unknown releases, then an advisory catalog that warned on them. The
-same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`: both
-are coordinates the operator reads off the vendor's own release-to-build table,
-validated syntactically and never cross-checked against `release` or a static
-catalog. IBM adds a live artifact proof without adding a catalog: both pins are
-required and the installed native `cephadm` version must equal the native Ceph
-version reported by the exact declared image before cluster work.
+same rule governs `spec.ceph.packageVersion`,
+`spec.ceph.cephadm.ansible.packageVersion`, and `spec.ceph.image.version`: all
+are coordinates the operator reads from vendor sources, validated syntactically
+and never cross-checked against `release` or a static catalog. Artifact
+requirements and live proofs come from provider policy. The current IBM row
+requires all three pins and selects the generic `cephadm-ansible-local`
+preparation plus `ceph-version` parity adapters. A future rule changes policy
+data or adds an isolated capability-named adapter, never a release-number
+branch.
 
 **Constraint:** `spec.ceph.image` is a `{base, version}` block, not a reference
-string. `version` is the build (tag or `sha256:` digest) and `base` defaults to
-`DerivedImageRepository(distribution, release, registryURL)`; the renderer joins
-them in `cephprovider.resolvedImage`, with `@` for a digest and `:` for a tag.
-Because the derived base is the same value `validateStorageCephImageBase`
-compares against, an unauthored base satisfies the vendor-prefix guard by
-construction and the guard is deliberately not re-run on it — a property test in
-`cephprovider` welds the two. Vendor image tags are build-numbered and a product
-release such as `9.1` or `9.9.1.0` is not a tag, so defaulting `version` to the
-release would compose a reference that fails the pull. IBM therefore requires
-the authored pin; Red Hat may leave it unset and accept the floating image. Only
-`oss` derives one, `v<x.y.z>`, and only from an exact version.
+string. `version` is the build (tag or `sha256:` digest), and the renderer joins
+it to `base` with `@` for a digest and `:` for a tag. Subscription-backed
+providers require an authored base: its trailing OS stream is an independent
+vendor coordinate, so Bootwright must not compile one into future combinations.
+Validation still welds that base to the provider's vendor namespace and product
+stream. `oss` alone defaults the stable repository `quay.io/ceph/ceph`; it
+derives `v<x.y.z>` only from an exact release version. A base without a version
+is valid whenever provider policy makes image pinning optional.
 
-**Constraint:** `spec.ceph.packageVersion` renders as `CephadmPackageSpec`
-(`cephadm-<nvr>`) and feeds the `dnf` install plus its exact installed-coordinate
-assertion. `CephadmPackage` stays the bare name because it is the ownership-record
-key, and the destroy list (`vars/os/RedHat.yml` `bootwright_ceph_managed_packages`)
-is static and bare: keying the record on the versioned string orphans the package
-forever. The pinned install uses `ansible.builtin.dnf` with downgrades disabled,
-then `rpm -q` emits version, version-release, epoch-version, and
-epoch-version-release forms; one must equal the declaration before ownership is
-recorded. This closes DNF's possible no-op against a newer installed package and
-fails closed instead of silently accepting it. IBM supports upgrades, not
+**Constraint:** `spec.ceph.packageVersion` renders exact artifacts for
+`cephadm` and the provider's native-preparation runtime names (`ceph-common` in
+the current subscription-backed rows).
+`spec.ceph.cephadm.ansible.packageVersion` independently renders the
+`cephadm-ansible` artifact. Each artifact carries a bare name, composed package
+spec, and desired-state path; the generic install, repository probe, post-native
+proof, and failure all consume that same list. Bare names remain the
+ownership-record keys and the static destroy list contains `cephadm`,
+`ceph-common`, and `cephadm-ansible`: keying a record on a versioned string
+orphans it forever. Exact installs use `ansible.builtin.dnf` with downgrades
+disabled, then `rpm -q` emits version, version-release, epoch-version, and
+epoch-version-release forms; one must equal the declaration both before and
+after native preparation. This closes DNF's possible no-op against a newer
+installed package and any native-artifact change. IBM supports upgrades, not
 in-place software downgrades, so a lower declaration is refused and must be
-handled as a new cluster or through the vendor's supported release procedure. It
-also gathers `package_facts` first: `package_records_write.yml` computes
-`preexisting` by membership in `ansible_facts.packages`, and the pinned path is
-the first one that can touch an already-installed cephadm — without the gather,
-`preexisting` reads false and destroy removes the operator's own package. The pin
-is reconcilable drift only when the exact package can be reached without a
-downgrade; it is not structural and is nulled from both
-`storageClusterStructuralHashVars` and `managedMachineOSStructuralHashVars`, the
-latter because that task kind is not reconfigure-only and would propose a machine
-reinstall.
+handled as a new cluster or through the vendor procedure. Package facts are
+gathered before the first exact transaction because ownership computes
+`preexisting` from them; otherwise destroy could remove an operator package.
+Both package coordinates are reconcile-only desired state and are excluded
+from storage and managed-OS structural hashes.
 
 **Constraint:** Package-mode daemon RPMs and cephadm container daemons cannot
 share a storage node safely. The fixed conflict set is `ceph-mds`, `ceph-mgr`,
@@ -266,16 +269,16 @@ components need no Bootwright knowledge.
 
 **Constraint:** An entitlement registry override changes credentials and trust
 and acts as a mirror root, not permission to select an arbitrary repository. A
-subscription-backed cluster with a custom `registry.url` must pin
-`spec.ceph.image` at that root plus the distribution's namespace and stream:
+subscription-backed cluster always authors `spec.ceph.image.base` at the
+selected registry root plus the distribution's namespace and stream:
 `rhceph/rhceph-<stream>-rhel` for Red Hat or `ibm-ceph/ceph-<stream>-rhel` for
 IBM. The same prefix check applies on the default vendor registry, preventing a
 Red Hat cluster from accepting an IBM or unrelated image merely because it is
 below the authenticated registry. It is a cross-vendor guard only — the trailing
 build base is never compared against the release, because which base a vendor
-compiled a release against is a vendor fact Bootwright does not track. The
-derived `container_image_base` defaults that base to `rhel9`
-(`defaultImageOSMajor`); an explicit `spec.ceph.image` overrides it.
+compiled a release against is a vendor fact Bootwright does not track. There is
+no compiled `rhel9` or other OS-stream default; the authored base is also the
+value asserted as `container_image_base`.
 Registry addresses are scheme-less `host[:port][/path]`; community package
 mirrors remain HTTPS URLs because cephadm refuses insecure repository
 transport.
@@ -299,40 +302,49 @@ must be gathered first (context phase, before the repository phase) or the
 set_fact fails with `ansible_distribution_major_version is undefined`.
 
 **Constraint:** Bootstrap, live health, and destroy use `cephadm shell` for all
-Ceph client commands. The host-level package gate covers `cephadm`; no phase
-assumes a host-installed `ceph` or `radosgw-admin` binary. This is also the IBM
-native-tool boundary: Bootwright installs `cephadm` directly and never invokes
-`cephadm-ansible` or installs the latter's host `ceph-common` client set.
+Ceph client commands; no phase assumes a host `ceph` or `radosgw-admin` binary.
+Subscription-backed native preparation nevertheless installs `ceph-common`
+because the provider artifact requires it. That package belongs to the
+preflight/runtime artifact set and is not a license to bypass `cephadm shell` in
+later tasks.
 
 **Constraint:** IBM's release table has two similarly named package columns.
 `StorageCluster.spec.ceph.packageVersion` takes the **IBM Storage Package
-Version**, not the **Cephadm Ansible Package Version**. The field pins the
-`cephadm` RPM that Bootwright installs on every node. IBM's public Ceph 9 RPM
-metadata confirms that `cephadm` shares the Ceph build NVR (with epoch `2`),
-whereas `5.0.x` versions belong to the separate `cephadm-ansible` package that
-Bootwright does not use. For IBM Storage Ceph 9.9.0.3, the July 2026 CVE row
-therefore maps to `packageVersion: 20.1.0-221.el9cp` and image tag
-`v9.0-20201`; `5.0.2-1` would make Bootwright ask DNF for a nonexistent
-`cephadm-5.0.2-1` build. IBM repository primary metadata recorded SHA-256
+Version**; `StorageCluster.spec.ceph.cephadm.ansible.packageVersion` takes the
+**Cephadm Ansible Package Version**. IBM's public Ceph RPM metadata confirms
+that `cephadm` and `ceph-common` share the Ceph build NVR (with epoch `2`),
+whereas the separate `cephadm-ansible` RPM carries epoch `1`. For IBM Storage
+Ceph 9.9.0.3, the July 2026 CVE row maps to
+`packageVersion: 20.1.0-221.el9cp`,
+`cephadm.ansible.packageVersion: 5.0.2-1.el9cp`, and image tag
+`v9.0-20201`. The public table abbreviates the Ansible package to `5.0.2-1`,
+but exact DNF installation and verification use the RPM's full version-release
+`5.0.2-1.el9cp`. Swapping the two fields would request nonexistent package
+builds. IBM repository primary metadata recorded SHA-256
 `af0e7053c765de766abb3c81991cfa31af425c1cfca31985320b4623afe75a45`
 for `cephadm-20.1.0-221.el9cp.noarch.rpm` and
 `40541d9e3e10b8df3a0fa7e4be27f6a872f3a369dbbac1b794b7fee6c39876f8`
-for the stock preflight's matching
+for the matching
 `ceph-common-20.1.0-221.el9cp.x86_64.rpm` when inspected.
 
-**Constraint:** IBM requires `packageVersion`, including the RPM release
-component, and `image.version` together. On each storage node, after the
-runtime is proven and before cluster work,
-`container_runtime.yml` runs installed `cephadm version` and `ceph --version`
-inside `bootwright_ceph_bootstrap_image`. Both probes must succeed and their
-native version tokens must equal the epoch-free package declaration and each
-other. This catches a host/image mismatch from coordinates selected from
-different IBM release-table rows, while deliberately
-proving nothing about the authored `release`, RHEL compatibility, or vendor
-certification.
+**Constraint:** Exact-artifact enforcement consumes rendered provider policy,
+not `distribution == ibm`. The current IBM row requires `packageVersion`
+(including the RPM release component),
+`cephadm.ansible.packageVersion` (also full version-release), `image.base`, and
+`image.version`. It selects native preparation mode `cephadm-ansible-local` and
+parity mode `ceph-version`. The package artifact list drives subscription
+repoquery, exact DNF installation, bare-name ownership, and exact post-native
+proof for `cephadm`, `ceph-common`, and `cephadm-ansible` on every node. After
+runtime readiness and before cluster work, the generic dispatcher includes
+`phases/native_parity/ceph-version.yml`; its installed `cephadm version` and
+`ceph --version` image probes must succeed, and their native version tokens must
+equal the epoch-free package declaration and each other. This proves nothing
+about the authored product `release`, RHEL compatibility, or certification. A
+future provider selects another policy or isolated parity adapter without a
+release-number branch.
 
-**Constraint:** IBM's stock `cephadm-ansible` preflight has different package
-semantics from Bootwright's direct path. The inspected
+**Constraint:** Bootwright executes the installed provider preflight; it does
+not reproduce that playbook's checks. The inspected
 `cephadm-ansible-5.0.2-1.el9cp.noarch.rpm` from IBM's public Ceph 9 RHEL 9
 repository has SHA-256
 `e3174a043c3273177d73ee73881870ad1ae3a37347d844ef083d28a3dc0bd6be`;
@@ -347,22 +359,42 @@ variables into those defaults. In the extracted `cephadm-preflight.yml:193-214`,
 package state is `latest` only when that upgrade switch is true and otherwise
 `present`; the earlier `ceph-common` install is also unversioned.
 Consequently `present` retains an already-installed package but, on an absent
-host, DNF resolves the best candidate visible in IBM's moving major-stream
-repository. The current stream can contain later Ceph and cephadm-ansible builds
-than the release being retained.
+host, resolves the best candidate visible in the configured repository.
 
-The supported stock path for exact retention is frozen content: expose only the
-intended package/dependency closure in a custom repository or Satellite content
-view, then run IBM's disconnected preflight with
-`ansible-playbook -i INVENTORY_FILE cephadm-preflight.yml --extra-vars
-"ceph_origin=custom" -e "custom_repo_url=CUSTOM_REPO_URL"`. Supplying full
-versioned names through the role's legacy `ceph_pkgs` override is not a complete
-pin: an earlier task installs `ceph-common` unversioned, and the documented
-connected setup also installs `cephadm-ansible` unversioned. The inspected role
-also accepts `custom_repo_gpgkey`, `custom_repo_state`, `custom_repo_enabled`, or
-the multi-repository `ceph_custom_repositories` form; IBM's documented command
-uses only `ceph_origin` and `custom_repo_url`. Bootwright needs neither workaround
-because its desired state selects and verifies the native `cephadm` RPM itself.
+The `cephadm-ansible-local` adapter closes that moving-source gap without
+replacing the provider artifact. Bootwright converges the repository first,
+preinstalls authored exact artifacts with downgrades disabled, then runs the
+RPM-owned playbook on every node with `-i localhost, -c local --limit
+localhost`. Both origin variables are `custom`,
+`ceph_custom_repositories: []` is explicitly defined, and the audited 5.0.2
+validation/setup accepts that empty list and adds no repository. Both upgrade
+spellings are false, `packages_to_uninstall` is empty, Ceph package lists carry
+the rendered exact requests, client lists are empty, and prerequisites retain
+the provider's rendered list. The playbook therefore uses Bootwright's already
+selected vendor or subscription repository and `present` skips every exact
+package already installed. A post-run RPM proof detects any change. Red Hat's
+optional pins use the same adapter but install an omitted coordinate by bare
+name with `present`; frozen repository content is then the reproducibility
+boundary.
+
+The nested Ansible run uses the installed `ansible.cfg` for the artifact's role
+and module paths, but redirects its log, local/remote temp paths, and fact cache
+into a root-only transient directory and uses memory fact caching. Its report is
+first written in that fresh directory, proved current, then copied into the
+Bootwright ownership directory; destroy removes the preserved copy. This avoids
+stale `localhost` facts, operator-home residue, and an old report satisfying a
+new run. Provider report findings remain advisory because the stock playbook
+records several failures without necessarily failing the play; Bootwright's
+package-conflict, FIPS, runtime, network, and ownership gates remain
+authoritative.
+
+`cephadm-ansible-local` is a capability/ABI adapter, not a promise that every
+future RPM understands the audited variable surface. An artifact that renames
+or removes origin, repository, upgrade, uninstall, package-list, client-list, or
+report variables needs a new capability-named adapter selected by provider
+policy. It must never be selected through a concrete product release branch;
+Ansible silently accepts unknown extra vars, so syntax-check alone cannot prove
+that an incompatible artifact consumed the safety controls.
 
 ## Vendor references
 

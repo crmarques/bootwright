@@ -1,0 +1,32 @@
+---
+- name: Read the native Ceph package coordinates after provider preparation
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - --qf
+      - "%{VERSION}\n%{VERSION}-%{RELEASE}\n%{EPOCHNUM}:%{VERSION}\n%{EPOCHNUM}:%{VERSION}-%{RELEASE}\n"
+      - "{{ bootwright_ceph_package_artifact.name }}"
+  register: bootwright_ceph_native_preparation_package_coordinates
+  changed_when: false
+  failed_when: false
+
+- name: Require provider preparation to preserve the declared native Ceph package build
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_native_preparation_package_coordinates.rc | default(1) | int == 0
+      - >-
+        bootwright_ceph_package_artifact.spec
+        | regex_replace('^' ~ (bootwright_ceph_package_artifact.name | regex_escape) ~ '-', '')
+        in (bootwright_ceph_native_preparation_package_coordinates.stdout_lines | default([]))
+    fail_msg: >-
+      The selected native Ceph preparation flow changed or removed
+      {{ bootwright_ceph_package_artifact.name }} on
+      {{ bootwright_current_storage_host.hostname }}. Desired state
+      {{ bootwright_ceph_package_artifact.desiredStatePath }} resolves to
+      {{ bootwright_ceph_package_artifact.spec }}, while rpm reports
+      {{ bootwright_ceph_native_preparation_package_coordinates.stdout_lines | default([]) | join(', ') }}.
+      Bootwright refuses to bootstrap from artifacts that differ from the declared exact
+      coordinates. Restore repository content for the declaration and rebuild fresh, or
+      declare the installed/newer supported artifact tuple.
+    quiet: true

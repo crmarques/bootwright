@@ -75,9 +75,10 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
   subscription-backed repo; Bootwright configures the community repo on each node
   with cephadm, scoped to `spec.ceph.release`. Because cephadm's `add-repo`
   enables EPEL and these RHEL nodes are unregistered, Bootwright also pre-installs
-  `epel-release` from `dl.fedoraproject.org`. Ceph client commands run through
-  `cephadm shell`, so Bootwright does not install `ceph-common` or add CentOS
-  Stream repositories to RHEL. For a disconnected lab, set
+  `epel-release` from `dl.fedoraproject.org`. On this OSS path, Ceph client
+  commands run through `cephadm shell`; Bootwright neither installs
+  `ceph-common` nor adds CentOS Stream repositories to RHEL. For a disconnected
+  lab, set
   `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com`,
   override `bootwright_ceph_community_epel_release_url` to an internal EPEL
   mirror, and point `forwarders` at an internal resolver.

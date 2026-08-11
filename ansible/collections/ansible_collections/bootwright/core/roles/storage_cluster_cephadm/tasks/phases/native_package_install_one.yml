@@ -1,0 +1,45 @@
+---
+- name: Install the pinned native Ceph package artifact
+  ansible.builtin.dnf:
+    name: "{{ bootwright_ceph_package_artifact.spec }}"
+    state: present
+    allow_downgrade: false
+
+- name: Read the installed native Ceph package coordinates
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - --qf
+      - "%{VERSION}\n%{VERSION}-%{RELEASE}\n%{EPOCHNUM}:%{VERSION}\n%{EPOCHNUM}:%{VERSION}-%{RELEASE}\n"
+      - "{{ bootwright_ceph_package_artifact.name }}"
+  register: bootwright_ceph_package_coordinates
+  changed_when: false
+  failed_when: false
+
+- name: Require the installed native Ceph package to equal the declared build
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_package_coordinates.rc | default(1) | int == 0
+      - >-
+        bootwright_ceph_package_artifact.spec
+        | regex_replace('^' ~ (bootwright_ceph_package_artifact.name | regex_escape) ~ '-', '')
+        in (bootwright_ceph_package_coordinates.stdout_lines | default([]))
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} does not run the
+      {{ bootwright_ceph_package_artifact.name }} build declared by
+      {{ bootwright_ceph_package_artifact.desiredStatePath }}. The declaration resolves to
+      {{ bootwright_ceph_package_artifact.spec }}, while rpm reports
+      {{ bootwright_ceph_package_coordinates.stdout_lines | default([]) | join(', ') }}.
+      Bootwright refuses to downgrade native Ceph software. Use this coordinate on fresh
+      hosts, or declare the installed/newer supported coordinate and follow the vendor's
+      upgrade procedure.
+    quiet: true
+
+- name: Write native Ceph package ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: package_apply_one.yml
+  vars:
+    bootwright_ownership_package_name: "{{ bootwright_ceph_package_artifact.name }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"

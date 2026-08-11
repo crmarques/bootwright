@@ -319,9 +319,6 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 		cluster.Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionOSS
 	}
 	ceph := cluster.Spec.Ceph
-	if ceph.Release == "" {
-		ceph.Release = cephprovider.DefaultRelease(ceph.Distribution)
-	}
 	if release, ok := cephprovider.ResolveRelease(ceph.Distribution, ceph.Release); ok {
 		ceph.Release = release.Value
 	}

@@ -5,7 +5,8 @@
       - bootwright_openshift_release_version is defined
       - (bootwright_openshift_release_version | string | length) > 0
     fail_msg: >-
-      bootwright_openshift_release_version is required (e.g. 4.21.12);
+      bootwright_openshift_release_version is required and must name the
+      operator-authored OpenShift release;
       pass it via -e or set it in the playbook vars.
 
 - name: Validate controller CLI install is running as root

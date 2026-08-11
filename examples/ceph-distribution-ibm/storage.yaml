@@ -10,12 +10,15 @@ spec:
     release: "9.9.0.3"
     packageVersion: "20.1.0-221.el9cp"
     image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
       version: "v9.0-20201"
     ibm:
       callHome: disabled
     entitlementRef: ibm-storage-ceph
     osSubscriptionRef: rhel
     cephadm:
+      ansible:
+        packageVersion: "5.0.2-1.el9cp"
       clusterSSH:
         keyRef: ceph-cluster-ssh
       bootstrap:

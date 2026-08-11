@@ -47,6 +47,22 @@ func TestCephPackageVersionIsReconcilableNotStructural(t *testing.T) {
 	}
 }
 
+func TestCephadmAnsiblePackageVersionIsReconcilableNotStructural(t *testing.T) {
+	base := versionPinState("", "")
+	pinned := versionPinState("", "")
+	pinned.StorageClusters[0].Spec.Ceph.Cephadm.Ansible = &v1alpha1.StorageCephadmAnsible{PackageVersion: "17.3.2-9.el14"}
+
+	if hashJSON(t, storageClusterDesiredHashVars(base, "ceph")) == hashJSON(t, storageClusterDesiredHashVars(pinned, "ceph")) {
+		t.Fatal("a cephadm-ansible package pin must change the desired hash so apply reconciles the provider artifact")
+	}
+	if hashJSON(t, storageClusterStructuralHashVars(base, "ceph")) != hashJSON(t, storageClusterStructuralHashVars(pinned, "ceph")) {
+		t.Fatal("a cephadm-ansible package pin must not propose a Ceph cluster rebuild")
+	}
+	if hashJSON(t, managedMachineOSStructuralHashVars(base, "ceph")) != hashJSON(t, managedMachineOSStructuralHashVars(pinned, "ceph")) {
+		t.Fatal("a cephadm-ansible package pin must not propose a managed-machine reinstall")
+	}
+}
+
 func TestCephImageVersionIsStructural(t *testing.T) {
 	base := versionPinState("", "")
 	pinned := versionPinState("", "9.9.1.0-123")
@@ -57,7 +73,7 @@ func TestCephImageVersionIsStructural(t *testing.T) {
 
 func TestCephVersionPinsOmittedWhenUnset(t *testing.T) {
 	encoded := hashJSON(t, versionPinState("", ""))
-	for _, key := range []string{"packageVersion", "image"} {
+	for _, key := range []string{"packageVersion", "ansible", "image"} {
 		if strings.Contains(encoded, key) {
 			t.Fatalf("an unset %s must not serialize; a bare tag false-drifts every already-recorded fleet on the first apply after upgrade: %s", key, encoded)
 		}

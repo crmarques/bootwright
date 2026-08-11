@@ -28,7 +28,7 @@ var allowedImports = map[string][]string{
 		"internal/sshtrust", "internal/state/advice", "internal/state/desired",
 		"internal/state/graph", "internal/state/scaffold", "internal/state/view",
 		"internal/status", "internal/storage/arbiter", "internal/storage/cephadopt", "internal/storage/cephdiff",
-		"internal/storage/cephstate", "internal/storage/topology", "internal/workspace",
+		"internal/storage/cephprovider", "internal/storage/cephstate", "internal/storage/topology", "internal/workspace",
 	},
 	"internal/cli/output": {},
 

@@ -32,7 +32,7 @@ component, and get the same result every time.
 The CLI covers the normal convergence path:
 
 ```text
-bootwright example init --name lab --output-dir ./lab-input
+bootwright example init --name lab --openshift-version <version> --output-dir ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init --name lab -f ./lab-input
 bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json

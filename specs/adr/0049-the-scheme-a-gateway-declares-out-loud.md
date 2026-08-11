@@ -5,7 +5,8 @@
 Accepted
 
 Revises [ADR 0047](0047-the-certificate-a-vendor-gateway-never-settles-on.md):
-the implicit vendor `ssl: false` pin becomes this declared field. Extended by
+the implicit vendor `ssl: false` pin becomes an authored workaround plus this
+declared field. Extended by
 [ADR 0052](0052-the-port-a-scheme-arrives-on.md): the declared scheme also
 decides the gateway's default port, so `exposure: http` no longer serves
 cleartext on the TLS-conventional 8443.
@@ -37,39 +38,34 @@ management phase's persisted-spec repair; it rejects `tls` (a certificate on
 a cleartext listener is a contradiction) and `oauth2Proxy` (SSO cookies and
 access tokens must not cross the network in cleartext).
 
-**On subscription-backed distributions the field must be authored
-explicitly.** A defaulted `https` there is a silent walk into the reconfigure
-loop, so validation refuses an absent field and names both choices: `http`
-converges on every vendor build shipped to date, `https` is the deliberate
-declaration for a vendor build that repairs the dependency recording. The
-explicit `https` passes validation today — it wedges at the service-readiness
-gate on current builds, with the loop visible in the collected diagnostics —
-because the alternative, refusing it outright, would demand a Bootwright
-release on the same day a fixed vendor build appears. The flip is one edit in
-the operator's input, which is where a scheme change belongs.
+**The defect is selected by authored workaround data, never inferred from a
+distribution or release number.** The closed
+`spec.ceph.cephadm.workarounds[]` token
+`mgmt-gateway-spec-dependency-recording` records that the selected cephadm build
+has the defect from ADR 0047. Validation accepts that token only with a declared
+gateway using `exposure: http`, no `tls`, and no `oauth2Proxy`. The token is
+distribution-neutral: any affected build may select it, and a repaired vendor
+build simply omits it.
 
-**`oauth2Proxy` is refused on subscription-backed distributions outright.**
-The upstream fix names `oauth2-proxy` as sharing the same spec-less
-dependency recording, so vendor SSO daemons loop exactly as the gateway does.
-The refusal lifts with the same evidence that lifts the gateway's.
-
-The `tls` refusal on vendor builds (ADR 0047) is unchanged; `tls` remains an
-`oss`-plus-`https` combination.
+**Without the workaround, native HTTPS, TLS, and OAuth are valid on every
+distribution.** Bootwright carries no release-to-defect catalog and does not
+make an operator wait for a Bootwright release when a fixed supplier build
+appears. Service readiness and the live manager capability probe remain the
+authoritative runtime gates.
 
 ## Consequences
 
-- Vendor environments carry `exposure: http` in their inputs today and flip
-  the same field to `https` when a repaired vendor build lands — no
-  Bootwright change is part of that flip. Environment templates author the
-  field explicitly for their vendor arms.
+- Environments using an affected build carry the workaround token and
+  `exposure: http`; they remove the token and select the desired native gateway
+  shape when a repaired build lands. No Bootwright code change is part of that
+  flip.
 - The cleartext dashboard is now a visible, versioned line in the desired
   state instead of a rendering side effect — reviewable where security
   decisions get reviewed.
-- Community clusters are untouched: `exposure` defaults to `https`, and
-  `http` is available there for whoever wants a proxy of their own in front.
-- ADR 0047's distribution-keyed `ssl: false` pin is superseded by the
-  exposure field. Its store-repair and settle-wait machinery now keys to
-  `exposure: http`; its dashboard-port vacation and internal firewall-port
-  opening key to gateway presence, because an https gateway collides with the
-  classic dashboard's port and serves the internal monitoring endpoint all
-  the same.
+- `exposure` defaults to `https` on every distribution, and `http` remains
+  available independently of the workaround.
+- ADR 0047's distribution-keyed `ssl: false` pin is superseded by the exposure
+  field plus authored workaround validation. Store repair and settle waiting
+  key to `exposure: http`, not the workaround token, because the falsy-field
+  serialization defect can affect any cephadm lineage. Dashboard-port vacation
+  and internal firewall opening key to gateway presence.

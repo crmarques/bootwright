@@ -252,7 +252,7 @@ func TestDesiredStateExamplesSpaceSpecBlocks(t *testing.T) {
 
 	for _, provider := range scaffold.KnownProviders() {
 		t.Run("scaffold/"+provider, func(t *testing.T) {
-			files, err := scaffold.Workspace("spacing-check", scaffold.Provider(provider))
+			files, err := scaffold.Workspace("spacing-check", scaffold.Provider(provider), "42.7.3")
 			if err != nil {
 				t.Fatalf("workspace: %v", err)
 			}
@@ -272,7 +272,7 @@ func TestDesiredStateExamplesUseCurrentAddressAndInstallFields(t *testing.T) {
 
 	for _, provider := range scaffold.KnownProviders() {
 		t.Run("scaffold/"+provider, func(t *testing.T) {
-			files, err := scaffold.Workspace("schema-check", scaffold.Provider(provider))
+			files, err := scaffold.Workspace("schema-check", scaffold.Provider(provider), "42.7.3")
 			if err != nil {
 				t.Fatalf("workspace: %v", err)
 			}
@@ -295,7 +295,7 @@ func TestDesiredStateYAMLUsesBlockStyleCollections(t *testing.T) {
 
 	for _, provider := range scaffold.KnownProviders() {
 		t.Run("scaffold/"+provider, func(t *testing.T) {
-			files, err := scaffold.Workspace("block-style-check", scaffold.Provider(provider))
+			files, err := scaffold.Workspace("block-style-check", scaffold.Provider(provider), "42.7.3")
 			if err != nil {
 				t.Fatalf("workspace: %v", err)
 			}

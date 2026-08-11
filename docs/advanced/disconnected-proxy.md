@@ -113,8 +113,9 @@ repository ids in `spec.ceph.ibm.packages.subscriptionRepos`. The Ceph deps
 phase then enables those repositories alongside BaseOS/AppStream, never fetches
 the public `.repo` file, and removes one an earlier vendor-sourced apply left
 behind. One preflight disables every undeclared repository, makes an unavailable
-declared repository a hard error, and queries the pinned `cephadm` source plus
-the `ibm-storage-ceph-license` package together before anything installs. The
+declared repository a hard error, and queries every rendered exact native
+artifact (`cephadm`, `ceph-common`, and `cephadm-ansible` under the current IBM
+policy) plus `ibm-storage-ceph-license` together before anything installs. The
 storage phase also preserves every repository the node's
 `MachineInstallProfile` `customizations.repositories.subscription.enable[]`
 declares — machine-declared repositories survive the Ceph phase's repository

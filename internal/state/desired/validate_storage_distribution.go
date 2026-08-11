@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -13,8 +12,9 @@ import (
 )
 
 var (
-	cephPackageVersionPattern = regexp.MustCompile(`^(?:[0-9]+:)?[0-9][0-9A-Za-z._+~^-]*$`)
-	cephImageBasePattern      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)+$`)
+	cephPackageVersionPattern    = regexp.MustCompile(`^(?:[0-9]+:)?[0-9][0-9A-Za-z._+~^-]*$`)
+	cephRPMVersionReleasePattern = regexp.MustCompile(`^(?:[0-9]+:)?[0-9][0-9A-Za-z._+~^]*-[0-9A-Za-z][0-9A-Za-z._+~^-]*$`)
+	cephImageBasePattern         = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)+$`)
 )
 
 func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
@@ -61,15 +61,15 @@ func validateStorageCephDistributionEntitlement(prefix string, state v1alpha1.St
 
 func validateStorageCephRelease(prefix, distribution, release string) []string {
 	if release == "" {
-		return nil
+		return []string{prefix + ".release is required; managed Ceph versions are authored desired state and never selected from a compiled default"}
 	}
 	if _, ok := cephprovider.ResolveRelease(distribution, release); ok {
 		return nil
 	}
 	if distribution == v1alpha1.StorageCephDistributionOSS {
-		return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
+		return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name or an x.y.z version", prefix, release)}
 	}
-	return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version such as 9, 9.1, or 9.9.1.0; its leading component selects the product stream", prefix, release)}
+	return []string{fmt.Sprintf("%s.release %q must be a dot-separated numeric product version; its leading component selects the product stream", prefix, release)}
 }
 
 func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.StorageCluster) []string {
@@ -79,12 +79,8 @@ func validateStorageCephMgmtGatewayRelease(prefix string, cluster v1alpha1.Stora
 	if !ok || major >= cephprovider.MgmtGatewayMinimumCephMajor {
 		return nil
 	}
-	resolved := authored
-	if resolved == "" {
-		resolved = cephprovider.DefaultRelease(distribution) + " (the distribution default)"
-	}
-	return []string{fmt.Sprintf("%s requires Ceph %d or later; spec.ceph.release %s is Ceph %d, which defines no mgmt-gateway or oauth2-proxy service and refuses the spec document at apply time",
-		prefix, cephprovider.MgmtGatewayMinimumCephMajor, strconv.Quote(resolved), major)}
+	return []string{fmt.Sprintf("%s requires Ceph %d or later; spec.ceph.release %q is Ceph %d, which defines no mgmt-gateway or oauth2-proxy service and refuses the spec document at apply time",
+		prefix, cephprovider.MgmtGatewayMinimumCephMajor, authored, major)}
 }
 
 func validateStorageCephMgmtGatewayPortScheme(prefix string, mgmt *v1alpha1.StorageCephMgmtGateway) []string {
@@ -134,75 +130,57 @@ func validateStorageCephMgmtGatewayExposure(prefix string, cluster v1alpha1.Stor
 			errs = append(errs, fmt.Sprintf("%s.oauth2Proxy requires exposure: https — SSO cookies and access tokens must not cross the network in cleartext", prefix))
 		}
 	}
-	distribution := storageCephDistribution(cluster)
-	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
-		return errs
-	}
-	if mgmt.Exposure == "" {
-		errs = append(errs, fmt.Sprintf("%s.exposure must be declared explicitly when distribution=%s: these vendor cephadm builds record mgmt-gateway daemon dependencies without the certificate entries they recompute every pass, so any https gateway — cephadm's own certificate included — reconfigures its daemons forever and apply fails closed at the service-readiness gate. Set exposure: http to converge today (the gateway serves plain HTTP on its authored port, ADR 0047/0049), or set exposure: https deliberately on a vendor build that repairs the dependency recording", prefix, distribution))
-	}
-	if mgmt.OAuth2Proxy != nil {
-		errs = append(errs, fmt.Sprintf("%s.oauth2Proxy is refused when distribution=%s: the oauth2-proxy service records its daemon dependencies without the spec on these builds — the same defect that loops the gateway — so SSO daemons reconfigure forever; drop the block or run distribution: oss", prefix, distribution))
-	}
 	return errs
-}
-
-func validateStorageCephMgmtGatewayTLSDistribution(prefix string, cluster v1alpha1.StorageCluster) []string {
-	mgmt := cluster.Spec.Ceph.MgmtGateway
-	if mgmt == nil || mgmt.TLS == nil {
-		return nil
-	}
-	distribution := storageCephDistribution(cluster)
-	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
-		return nil
-	}
-	return []string{fmt.Sprintf("%s.tls is refused when distribution=%s: vendor cephadm builds compute mgmt-gateway daemon dependencies from the spec's certificate (certificate_source plus ssl_cert/ssl_key hashes) but record each daemon's dependencies without them, so the lists never match and every orchestrator pass reconfigures all gateway daemons — nginx restarts each cycle, the service never holds its declared count, and apply fails closed at the service-readiness gate after ~15 minutes. Drop spec.ceph.mgmtGateway.tls and set spec.ceph.mgmtGateway.exposure: http — the gateway then serves plain HTTP on its authored port, the only shape that converges here, because the same dependency mismatch covers cephadm's own certificate too; distribution: oss on tentacle computes no certificate dependencies and accepts the block with HTTPS intact", prefix, distribution)}
 }
 
 func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.StorageCluster, state v1alpha1.State) []string {
 	var errs []string
 	errs = append(errs, validateStorageCephDistribution(prefix, cluster, state)...)
-	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), cluster.Spec.Ceph.Release)...)
+	if v1alpha1.StorageClusterManaged(cluster) || cluster.Spec.Ceph.Release != "" {
+		errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), cluster.Spec.Ceph.Release)...)
+	}
 	errs = append(errs, validateStorageCephPackageVersion(prefix, cluster)...)
+	errs = append(errs, validateStorageCephadmAnsiblePackageVersion(prefix+".cephadm.ansible", cluster)...)
 	errs = append(errs, validateStorageCephImage(prefix+".image", cluster, state)...)
-	errs = append(errs, validateStorageCephIBMArtifactPins(prefix, cluster)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster, state)...)
 	return errs
 }
 
-func validateStorageCephIBMArtifactPins(prefix string, cluster v1alpha1.StorageCluster) []string {
-	if storageCephDistribution(cluster) != v1alpha1.StorageCephDistributionIBM {
+func validateStorageCephPackageVersion(prefix string, cluster v1alpha1.StorageCluster) []string {
+	policy, ok := cephprovider.ArtifactPolicyFor(storageCephDistribution(cluster))
+	if !ok {
 		return nil
 	}
-	var errs []string
-	if cluster.Spec.Ceph.PackageVersion == "" {
-		errs = append(errs, prefix+".packageVersion is required when distribution=ibm; IBM's product-stream repository carries several releases, so an unversioned cephadm install can resolve independently of .release")
-	} else {
-		version := cluster.Spec.Ceph.PackageVersion
-		if index := strings.IndexByte(version, ':'); index >= 0 {
-			version = version[index+1:]
-		}
-		if !strings.Contains(version, "-") {
-			errs = append(errs, prefix+".packageVersion must include the RPM release component when distribution=ibm, such as 20.1.0-221.el9cp; the full IBM Storage Package Version is required to prove the installed native build")
-		}
-	}
-	if v1alpha1.StorageCephImageVersion(cluster.Spec.Ceph) == "" {
-		errs = append(errs, prefix+".image.version is required when distribution=ibm; the IBM daemon build is an independent coordinate in the vendor release table and a floating image does not select .release")
-	}
-	return errs
+	return validateStorageCephRPMVersion(prefix+".packageVersion", cluster.Spec.Ceph.PackageVersion, policy.PackagePin, policy.RPMReleaseRequired, v1alpha1.StorageClusterManaged(cluster))
 }
 
-func validateStorageCephPackageVersion(prefix string, cluster v1alpha1.StorageCluster) []string {
-	version := cluster.Spec.Ceph.PackageVersion
-	if version == "" {
+func validateStorageCephadmAnsiblePackageVersion(prefix string, cluster v1alpha1.StorageCluster) []string {
+	policy, ok := cephprovider.ArtifactPolicyFor(storageCephDistribution(cluster))
+	if !ok {
 		return nil
 	}
-	if storageCephDistribution(cluster) == v1alpha1.StorageCephDistributionOSS {
-		return []string{prefix + ".packageVersion must be empty when distribution=oss; the exact community build is named by .release as an x.y.z version, which selects the package repository"}
+	version := ""
+	if cluster.Spec.Ceph.Cephadm.Ansible != nil {
+		version = cluster.Spec.Ceph.Cephadm.Ansible.PackageVersion
+	}
+	return validateStorageCephRPMVersion(prefix+".packageVersion", version, policy.CephadmAnsiblePackagePin, policy.CephadmAnsibleRPMReleaseRequired, v1alpha1.StorageClusterManaged(cluster))
+}
+
+func validateStorageCephRPMVersion(prefix, version string, pinPolicy cephprovider.ArtifactPinPolicy, releaseRequired, managed bool) []string {
+	switch {
+	case version == "" && pinPolicy == cephprovider.ArtifactPinRequired && managed:
+		return []string{prefix + " is required by the selected distribution artifact policy"}
+	case version == "":
+		return nil
+	case pinPolicy == cephprovider.ArtifactPinForbidden:
+		return []string{prefix + " must be empty because the selected distribution artifact policy forbids a native package pin"}
 	}
 	if !cephPackageVersionPattern.MatchString(version) {
-		return []string{fmt.Sprintf("%s.packageVersion %q must be an RPM version-release such as 19.2.1-245.el9cp, optionally epoch-prefixed; it names the cephadm build to install and must not carry a package name, glob, or separator", prefix, version)}
+		return []string{fmt.Sprintf("%s %q must be an RPM version or version-release, optionally epoch-prefixed; it must not carry a package name, glob, or separator", prefix, version)}
+	}
+	if releaseRequired && !cephRPMVersionReleasePattern.MatchString(version) {
+		return []string{prefix + " must include the RPM release component because the selected distribution artifact policy requires the full native build coordinate"}
 	}
 	return nil
 }
@@ -214,6 +192,16 @@ func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, st
 	}
 	errs := validateStorageCephImageParts(prefix, *image)
 	distribution := storageCephDistribution(cluster)
+	policy, ok := cephprovider.ArtifactPolicyFor(distribution)
+	if !ok {
+		return errs
+	}
+	if policy.ImageBaseRequired && image.Base == "" && v1alpha1.StorageClusterManaged(cluster) {
+		errs = append(errs, prefix+".base is required by the selected distribution artifact policy")
+	}
+	if policy.ImagePinRequired && image.Version == "" && v1alpha1.StorageClusterManaged(cluster) {
+		errs = append(errs, prefix+".version is required by the selected distribution artifact policy")
+	}
 	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
 		return errs
 	}
@@ -221,9 +209,6 @@ func validateStorageCephImage(prefix string, cluster v1alpha1.StorageCluster, st
 	registry := vendorRegistry
 	if entitlement, ok := v1alpha1.EntitlementByName(state.Entitlements, cluster.Spec.Ceph.EntitlementRef.Name); ok && entitlement.Spec.Registry != nil && entitlement.Spec.Registry.URL != "" {
 		registry = entitlement.Spec.Registry.URL
-		if registry != vendorRegistry && image.Base == "" {
-			return append(errs, fmt.Sprintf("%s.base is required when Entitlement/%s spec.registry.url overrides the vendor registry; the derived base names the vendor registry, which a mirrored estate cannot pull", prefix, entitlement.Metadata.Name))
-		}
 	}
 	if image.Base != "" {
 		errs = append(errs, validateStorageCephImageBase(prefix, distribution, cluster.Spec.Ceph.Release, registry, image.Base)...)
@@ -238,9 +223,6 @@ func validateStorageCephImageParts(prefix string, image v1alpha1.StorageCephImag
 	}
 	if image.Version != "" && !imageVersionTag.MatchString(image.Version) && !imageSHA256Digest.MatchString(image.Version) {
 		errs = append(errs, fmt.Sprintf("%s.version %q must be an image tag or a sha256: digest; a mutable tag such as latest is not a pin", prefix, image.Version))
-	}
-	if image.Base != "" && image.Version == "" {
-		errs = append(errs, prefix+".base names no image until .version completes it")
 	}
 	return errs
 }

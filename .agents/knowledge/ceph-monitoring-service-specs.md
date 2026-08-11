@@ -122,15 +122,13 @@ reconfigure every ~30s forever — observed as `diff {'certificate_source:
 cephadm-signed'}` spam, gateways cycling through `starting` (the service polls
 0/6..6/6 unstably), and downstream churn such as ceph-exporter redeploy loops
 whose deps list the gateway daemons. No ssl-enabled gateway shape converges on
-that build, so the gateway spec carries `ssl: false` whenever
-`spec.ceph.mgmtGateway.exposure: http` is declared (a plain-HTTP gateway on
-the authored port) — and on subscription-backed distributions the exposure
-field is REQUIRED explicitly, so the cleartext choice is the operator's, not
-a render side effect (ADR 0047, ADR 0049). oss defaults to cephadm-signed
-HTTPS, which converges upstream; an explicit `exposure: https` on a vendor
-build is accepted as the forward declaration for a build that repairs the
-recording. `oauth2Proxy` is refused on vendor builds outright — upstream
-names oauth2-proxy as sharing the same spec-less dependency recording.
+that build. The closed `spec.ceph.cephadm.workarounds[]` token
+`mgmt-gateway-spec-dependency-recording` records this defect without mapping it
+to a distribution or release; validation requires the affected gateway to use
+`exposure: http`, no TLS, and no OAuth. An HTTP gateway carries `ssl: false` on
+every distribution. Omitting the workaround leaves native HTTPS, TLS, and OAuth
+available, so a repaired build needs no Bootwright code change (ADR 0047, ADR
+0049).
 
 **Trap, fifth order (fixed):** `ssl: false` does not survive the spec store.
 `ServiceSpec.to_json` drops every falsy field (`if val:` on the spec dict,
@@ -325,10 +323,9 @@ cephadm cert store (`certificate_source: reference`) loops identically — the
 `certificate_source:` entry alone breaks the match — and a TLS-free spec
 serves the cephadm-managed certificate, not a store-held user one, so **no
 spec shape carries a user certificate convergently on such a build**.
-Validation therefore refuses `spec.ceph.mgmtGateway.tls` on
-subscription-backed distributions
-(`validateStorageCephMgmtGatewayTLSDistribution`); upstream community
-`v20.2.x` computes no certificate dependencies and keeps the block. A cluster
-already wedged by an inline-TLS spec self-heals on the next apply: the
-late-services TLS-free document makes computed and recorded deps agree again
-and the daemons settle.
+Validation therefore accepts the
+`mgmt-gateway-spec-dependency-recording` workaround only with HTTP/no-TLS/no-OAuth.
+It does not reject TLS by distribution or guess whether a release contains the
+fix. A cluster already wedged by an inline-TLS spec self-heals on the next apply
+after the operator selects the workaround and safe shape: the TLS-free document
+makes computed and recorded deps agree again and the daemons settle.

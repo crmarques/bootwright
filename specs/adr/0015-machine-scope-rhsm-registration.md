@@ -68,10 +68,12 @@ cluster's `StorageCluster.spec.ceph.osSubscriptionRef`; the earlier
 A delegated registration is opaque (ADR 0005): Bootwright cannot observe
 whether the corporate playbook actually registered nodes or enabled the right
 repos, and does not hard-probe `subscription-manager status` (an internal
-mirror needs no RHSM). The fail-closed gate stays where package availability
-is actually consumed: the cephadm install assert names delegated registration
-among the remedies. Ceph client commands execute through `cephadm shell`, so
-the host does not need a separately installed `ceph-common` package.
+mirror needs no RHSM). The fail-closed gates stay where package availability
+is actually consumed: rendered native-artifact probes and installs name
+delegated registration among the remedies. Provider-selected native
+preparation may install `ceph-common` and `cephadm-ansible` before executing the
+RPM-owned preflight; the community path continues to execute client commands
+through `cephadm shell` without requiring host `ceph-common`.
 
 ### Lifecycle
 

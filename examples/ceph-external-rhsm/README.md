@@ -19,8 +19,11 @@ with the site playbook (vendored roles/collections go next to it, see
 The registration playbook must leave every storage node able to install the
 RHEL BaseOS/AppStream and `rhceph-*-tools` packages (activation-key repo sets,
 a Satellite content view, or an internal mirror all work); Bootwright verifies
-package availability fail-closed when installing `cephadm`. Ceph client
-commands run through `cephadm shell`.
+package availability fail-closed while installing the rendered native tooling.
+Red Hat's optional pins are omitted here, so `cephadm`, `ceph-common`, and
+`cephadm-ansible` install with `present` from the operator-enabled repositories;
+Bootwright then executes the RPM-owned preflight locally. Ceph client commands
+after preparation still run through `cephadm shell`.
 
 ## Edit First
 
@@ -32,8 +35,8 @@ commands run through `cephadm shell`.
   `redhat-registry-credentials`.
 - `rhcs.yaml`: the `redhat-ceph` `Entitlement` — `rhsm.management: external`
   plus the registry credential reference.
-- `storage.yaml`: `spec.ceph.release`, the cephadm bootstrap node, and the node
-  topology.
+- `storage.yaml`: `spec.ceph.release`, required `image.base`, optional native
+  package/image pins, the cephadm bootstrap node, and the node topology.
 - `custom-playbooks/corporate-rhsm.yaml`: the gating `CustomPlaybook` — its
   `gates` anchor and `target.clusters`.
 - `custom-playbooks/playbooks/corporate-rhsm.yml`: the stub playbook to replace

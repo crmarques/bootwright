@@ -36,13 +36,13 @@ type ResolvedRelease struct {
 }
 
 func ResolveRelease(distribution, authored string) (ResolvedRelease, bool) {
-	def, ok := distributions[distribution]
+	_, ok := distributions[distribution]
 	if !ok {
 		return ResolvedRelease{}, false
 	}
 	value := authored
 	if value == "" {
-		value = def.defaultRelease
+		return ResolvedRelease{}, false
 	}
 	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
 		if !ossReleaseNamePattern.MatchString(value) && !ossUpstreamVersionPattern.MatchString(value) {
@@ -75,13 +75,6 @@ func UpstreamCephMajor(distribution, release string) (int, bool) {
 		return 0, false
 	}
 	return major, true
-}
-
-func DefaultRelease(distribution string) string {
-	if def, ok := distributions[distribution]; ok {
-		return def.defaultRelease
-	}
-	return ""
 }
 
 func DefaultRegistryURL(distribution string) string {
@@ -120,17 +113,6 @@ func ImageRepository(image string) string {
 		return image[:segStart+colon]
 	}
 	return image
-}
-
-func DerivedImageRepository(distribution, release, registryURL string) (string, bool) {
-	prefix, ok := ImageRepositoryPrefix(distribution, release, registryURL)
-	if !ok {
-		return "", false
-	}
-	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
-		return prefix, true
-	}
-	return prefix + distributions[distribution].defaultImageOSMajor, true
 }
 
 func ImageRepositoryPrefix(distribution, release, registryURL string) (string, bool) {

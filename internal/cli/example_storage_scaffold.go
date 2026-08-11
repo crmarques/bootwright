@@ -29,6 +29,7 @@ type storageExampleNode struct {
 
 type storageExampleData struct {
 	Cluster string
+	Release string
 	Nodes   []storageExampleNode
 	Node    storageExampleNode
 }
@@ -50,8 +51,8 @@ var storageExampleTemplates = []storageExampleTemplate{
 	{name: "clusters/storage/{{.Cluster}}/cluster.yaml", body: storageClusterTmpl},
 }
 
-func storageExampleWorkspace(clusterName string) ([]scaffold.File, error) {
-	data := storageExampleData{Cluster: clusterName}
+func storageExampleWorkspace(clusterName, release string) ([]scaffold.File, error) {
+	data := storageExampleData{Cluster: clusterName, Release: release}
 	for _, node := range storageExampleNodes {
 		node.Machine = clusterName + "-" + node.Machine
 		data.Nodes = append(data.Nodes, node)

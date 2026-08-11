@@ -19,11 +19,13 @@ registration to a corporate `CustomPlaybook` (see
 `examples/ceph-external-rhsm`). The secret names below are declarations only;
 the bytes are supplied out of band.
 
-`storage.yaml` pins the three coordinates from the IBM release table as one
-unit: IBM Storage Ceph `9.9.0.3`, package build `20.1.0-221.el9cp`, and daemon
-image tag `v9.0-20201`. Keep those values on the same vendor-table row when
-selecting another release. The provided-OS node in `machine.yaml` is expected
-to run the compatible RHEL `9.7` release.
+`storage.yaml` pins the product and three build coordinates as one unit: IBM
+Storage Ceph `9.9.0.3`, IBM Storage package build `20.1.0-221.el9cp`, Cephadm
+Ansible package build `5.0.2-1.el9cp`, and daemon image tag `v9.0-20201`.
+IBM's table abbreviates the Ansible package to `5.0.2-1`; the desired state uses
+the repository RPM's full version-release. Keep the coordinates on one vendor
+release row when selecting another release. The provided-OS node in
+`machine.yaml` is expected to run the compatible RHEL `9.7` release.
 
 ## Edit First
 
@@ -37,8 +39,9 @@ to run the compatible RHEL `9.7` release.
   activation-key references.
 - `ibm-storage-ceph.yaml`: the `ibm-storage-ceph` `Entitlement` — registry
   credential reference and `license.accept`.
-- `storage.yaml`: `spec.ceph.release`, `packageVersion`, `image.version`,
-  `ibm.callHome`, the cephadm bootstrap node, and the node topology.
+- `storage.yaml`: `spec.ceph.release`, `packageVersion`,
+  `cephadm.ansible.packageVersion`, `image.version`, `ibm.callHome`, the
+  cephadm bootstrap node, and the node topology.
 
 ## Credentials to supply
 

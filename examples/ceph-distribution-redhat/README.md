@@ -9,10 +9,12 @@ The StorageCluster selects Red Hat Ceph Storage 9.1 and pins both build axes:
 `spec.ceph.packageVersion` fixes the `cephadm` RPM the nodes install, and
 `spec.ceph.image.version` fixes the daemon container build. Read both off Red
 Hat's own release-to-package-version table — Bootwright keeps no such table and
-takes whatever you write verbatim. `spec.ceph.image.base` is left unset, so the
-vendor repository is derived from the distribution and release and cannot drift
-from them. `examples/ceph-external-rhsm` uses the 9.0 stream instead, to
-demonstrate delegated registration.
+takes whatever you write verbatim. `spec.ceph.image.base` authors the vendor
+repository including its independent RHEL image stream.
+`spec.ceph.cephadm.ansible.packageVersion` is omitted because Red Hat's current
+policy permits an unpinned native-preflight package; Bootwright installs it with
+`present` from the declared repository content. `examples/ceph-external-rhsm`
+uses the 9.0 stream instead, to demonstrate delegated registration.
 
 Bootwright registers each provided RHEL node with RHSM in the machines phase,
 before any Ceph work; the clusters-stage Ceph work then enables the RHEL
@@ -32,7 +34,8 @@ below are declarations only; the bytes are supplied out of band.
   entitlement secrets in the table below.
 - `rhcs.yaml`: the `redhat-ceph` `Entitlement` — RHSM organization/activation
   key and registry credential references.
-- `storage.yaml`: `spec.ceph.release`, `packageVersion`, `image.version`, the
+- `storage.yaml`: `spec.ceph.release`, optional `packageVersion`, optional
+  `cephadm.ansible.packageVersion`, `image.base`, optional `image.version`, the
   cephadm bootstrap node, and the node topology.
 
 ## Credentials to supply

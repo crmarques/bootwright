@@ -279,9 +279,12 @@ Rules:
   does not gate later phases. The delegated playbook must leave the nodes able
   to install the distribution's packages. Under `external`, the
   subscription-backed repository enablement (which purges unlisted repos) is
-  also skipped so operator-enabled repo sets survive; the cephadm install assert
-  remains the fail-closed package-availability gate. Ceph commands run through
-  `cephadm shell`, so Bootwright does not install a host `ceph-common` package.
+  also skipped so operator-enabled repo sets survive; the rendered provider
+  package probes and installs remain the fail-closed availability gates. A
+  provider-selected native preparation may install `ceph-common` and
+  `cephadm-ansible` from those externally managed repositories before running
+  the RPM-owned preflight; the `oss` path continues to run client commands
+  through `cephadm shell` without installing host `ceph-common`.
 - Registration is applied at the machines phase and reversed on teardown: a
   `destroy` covering a managed-RHSM storage node runs the
   `destroy.machine-registration` task, limited to the storage hosts, which
@@ -1315,15 +1318,15 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
-  distribution, and every artifact coordinate is *derived* from it rather than
-  looked up: the leading component is the product stream, which names the
-  subscription tools repo, the vendor `.repo` URL, and the daemon image
-  repository, while the node's own RHEL major fills the repo templates. Any
-  release Bootwright can parse is therefore installable without a code change.
+  distribution and is required for every managed cluster. Bootwright never
+  selects a compiled current release. The leading component is the product
+  stream, which names the subscription tools repo and vendor `.repo` URL,
+  while the node's own RHEL major fills the package-repository templates. Any
+  release Bootwright can parse is therefore selectable and renderable without a
+  code change; artifact availability and native preflight remain authoritative.
   Validation is syntactic: `oss` accepts an upstream release name (`^[a-z][a-z0-9]+$`,
   such as `tentacle`) or an exact `x.y.z` version; `redhat` and `ibm` accept a
   dot-separated numeric product version of any length (`9`, `9.1`, `9.9.1.0`).
-  Omitted defaults to `20.2.2` (`oss`), `9.1` (`redhat`), or `9.9.1.0` (`ibm`).
 - Bootwright holds **no catalog of Ceph releases and no vendor support matrix**,
   and must not acquire one. It does not know, check, or report which releases a
   vendor ships, which are current or ended, or which operating systems a release
@@ -1334,12 +1337,19 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   a release being unknown, newer, older, or mismatched against a node OS. The
   authored release is carried verbatim into normalization and convergence
   hashing; nothing is silently rewritten to a Bootwright-preferred value. The
-  same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`:
-  both are read off the vendor's own release-to-build tables by the operator and
-  taken verbatim, and neither is checked against `release` or against a static
-  build list. IBM is a runtime-artifact exception, not a catalog exception: both
-  fields are required and the installed native `cephadm` version must equal the
-  native Ceph version reported by the declared image before cluster work.
+  same rule governs `spec.ceph.packageVersion`,
+  `spec.ceph.cephadm.ansible.packageVersion`, and
+  `spec.ceph.image.version`: all are read from the vendor's release table and
+  package repository by the operator, taken verbatim, and never checked against
+  `release` or a static build list. Exact-artifact requirements are
+  distribution-provider data, not
+  product-name branches in validation or Ansible: `oss` forbids a package pin;
+  Red Hat permits optional package and image pins but requires the image base;
+  IBM requires full RPM version-release coordinates for the Ceph runtime and
+  cephadm-ansible packages, plus an image base and image pin, and selects the
+  generic `cephadm-ansible-local` preparation and `ceph-version` parity flows.
+  A future distribution or changed policy is another table row or isolated
+  adapter, never a release-number branch.
 - The only storage-node OS check is a capability statement, not a compatibility
   one: the subscription-backed provider implements RHEL-family package sources
   only, so a Ceph node's `MachineInstallProfile` must declare `family: rhel`
@@ -1350,23 +1360,30 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   Apply records whether the package predated Bootwright and which storage
   clusters require it. Destroy releases only the selected cluster's requirement
   and removes the package only when Bootwright installed it and no owner remains.
-- `spec.ceph.packageVersion` pins the exact Ceph package build to install, as an
-  RPM `[epoch:]version[-release]` such as `20.1.0-221.el9cp`. It names the
-  `cephadm` build on each storage node and nothing else: the daemons run from the
-  container image, so an equal or forward package change can reconcile the host
-  CLI in place and is **not** a cluster upgrade and **not** a rebuild. IBM
-  requires the field with the RPM release component present; Red Hat leaves it
-  optional; `oss` rejects it because an exact `x.y.z` release already selects
-  the package repository. The exact
-  versioned RPM is installed with downgrades disabled, then `rpm -q` must report
-  the declared version, version-release, epoch-version, or
+- `spec.ceph.packageVersion` pins the native Ceph RPM build as an RPM
+  `[epoch:]version[-release]`. Provider data maps it to `cephadm` and the
+  native-preparation runtime package set (`ceph-common` for the current
+  subscription-backed providers) on every storage node. IBM requires the field
+  with the RPM release component present; Red Hat leaves it optional; `oss`
+  rejects it because an exact `x.y.z` release already selects the package
+  repository.
+- `spec.ceph.cephadm.ansible.packageVersion` independently pins the provider's
+  `cephadm-ansible` RPM. IBM requires a full RPM version-release; Red Hat leaves
+  the pin optional; `oss` rejects it because it selects no native preparation
+  adapter. A selected subscription-backed adapter installs the package on every
+  storage node and executes the playbook that RPM owns locally before bootstrap.
+- Every authored native RPM is installed with downgrades disabled, then
+  `rpm -q` must report the declared version, version-release, epoch-version, or
   epoch-version-release coordinate before ownership is recorded. A newer
   installed package that DNF cannot reconcile to the declaration is refused;
-  Bootwright never performs a Ceph software downgrade. The ownership record
-  keys on the bare package name, so destroy still matches a pinned install.
-  Validation is syntactic — the value must not carry a package name, glob, or
-  separator — and is never checked against `release`.
-- `spec.ceph.image` pins the cephadm container image when a version is resolved;
+  Bootwright never performs a Ceph software downgrade. Ownership keys on each
+  bare package name, so destroy still matches a pinned install. Validation is
+  syntactic — a coordinate must not carry a package name, glob, or separator —
+  and is never checked against `release`. Native package coordinates are
+  reconcile-only desired state: they do not upgrade daemons or authorize a
+  cluster rebuild.
+- `spec.ceph.image` names the cephadm container repository and pins it when a
+  version is resolved;
   IBM requires its `version`, while the other distributions may omit it. Every
   apply asserts a resolved pin as the cluster's `container_image` so that
   cephadm deploys every Ceph daemon from it, making the running cluster version
@@ -1390,24 +1407,22 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
     field; Red Hat may leave it unset and accept the build's floating image. For
     `oss` an exact `x.y.z` `release` derives `vX.Y.Z`; a release name leaves the
     daemon image unpinned.
-  - `base` is the `<registry>/<path>` the version hangs off, and defaults to the
-    repository Bootwright derives from distribution, release and the entitlement
-    registry — `quay.io/ceph/ceph`,
-    `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or
-    `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leaving it unset is the normal
-    case and keeps the namespace and stream welded to the release. It must be a
-    bare reference carrying no tag, digest, or scheme, and it is also what
-    `container_image_base` is pinned to.
+  - `base` is the `<registry>/<path>` the version hangs off. It is required for
+    subscription-backed distributions because the vendor image's trailing OS
+    stream is an independent release coordinate and Bootwright must not compile
+    one into future combinations. `oss` defaults only this repository field to
+    `quay.io/ceph/ceph`. A base must be a bare reference carrying no tag, digest,
+    or scheme, and it is also what `container_image_base` is pinned to. A base
+    without `version` is valid when the provider policy leaves image pinning
+    optional.
 
   An authored subscription `base` must start with the cluster's own vendor
   namespace and stream. This is a cross-vendor guard (a Red Hat cluster must not
   run an IBM image, and vice versa), not a version check: the trailing build base
   is whatever the vendor compiled that release against and is never validated.
-  When an entitlement overrides `registry.url`, `base` is required and the same
-  namespace rule applies against that mirror root — the derived base names the
-  vendor registry, which a mirrored estate cannot pull. Changing only the login
-  target or using an arbitrary repository below a broad registry namespace is
-  rejected.
+  The same namespace rule applies against an entitlement's `registry.url`
+  mirror root. Changing only the login target or using an arbitrary repository
+  below a broad registry namespace is rejected.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
   community repository on each node with cephadm and runs Ceph client commands
@@ -1435,12 +1450,14 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   Before installing, one probe disables every undeclared repository, enables
   the rendered provider repository set, refuses to skip an unavailable declared
   repository, and queries every required IBM package together. Repository
-  unreadability, missing package content, and a missing pinned `cephadm` build
+  unreadability, missing package content, and a missing pinned native build
   are distinct fail-closed states, each reported with its exact retry.
-  `packageVersion` and `image.version` are required. Bootwright installs the
-  exact native `cephadm` RPM directly; it does not invoke `cephadm-ansible` or
-  install host `ceph-common`. After the container runtime is proven and before
-  cluster work, every IBM node must successfully report `cephadm version`, the
+  `packageVersion`, `cephadm.ansible.packageVersion`, and `image.version` are
+  required. Bootwright exact-installs `cephadm`, `ceph-common`, and
+  `cephadm-ansible` on every node, executes the installed provider preflight
+  locally with upgrades disabled, and re-verifies all three RPM coordinates.
+  After the container runtime is proven and before cluster work, every IBM node
+  must successfully report `cephadm version`, the
   declared image must successfully report `ceph --version`, and the two native
   versions and the epoch-free package declaration must be equal. This is an
   artifact-parity proof, not a release/OS support claim. Neither source may mix
@@ -1450,16 +1467,20 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   IBM Call Home, `spec.ceph.ibm.callHome`
   is required as either `enabled` or `disabled`; apply reconciles the manager
   module to that explicit outbound-communication intent.
-- IBM's stock `cephadm-ansible` preflight remains outside Bootwright's direct
-  cephadm path. It configures a moving major-stream repository and requests
-  unversioned `cephadm`/`ceph-common`: the default package state `present`
-  retains an installed package but selects the best current candidate on an
-  absent host, while `upgrade_ceph_packages: true` requests `latest`. Exact
-  release retention on that stock path therefore requires a frozen custom
-  repository or Satellite content view exposing only the intended build and its
-  dependency closure, selected with IBM's `ceph_origin=custom` and
-  `custom_repo_url` procedure. A versioned `ceph_pkgs` override alone is not an
-  exact pin because the stock role also installs `ceph-common` unversioned.
+- A provider-selected `cephadm-ansible-local` preparation flow runs on each
+  storage node during the all-node infrastructure task. Bootwright first
+  converges the declared repository source and preinstalls its rendered package
+  artifacts. It then invokes the RPM-owned
+  `/usr/share/cephadm-ansible/cephadm-preflight.yml` against local `localhost`,
+  selects `ceph_origin=custom` with an empty `ceph_custom_repositories` list so
+  the native artifact cannot add or mix a public repository, supplies both
+  legacy and current package variables, and forces both upgrade switches false.
+  The native role's `present` transactions therefore preserve preinstalled
+  exact builds; a post-run exact RPM proof fails closed on any change. An
+  optional unpinned coordinate still installs with `present` and resolves from
+  the currently declared repository content. The native report is preserved as
+  provider evidence, while Bootwright's independent FIPS, package-conflict,
+  runtime, network, and ownership gates remain authoritative.
 - `spec.ceph.osSubscriptionRef`, when set, must resolve to a `redhat-rhel`
   [`Entitlement`](#entitlement) whose `rhsm.management` is `managed`. It names
   the fleet-wide RHEL subscription every storage node registers with. Omitted,
@@ -1593,21 +1614,24 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   ingress, so there is no sibling to cover the other site). `port` sets the
   gateway port (`0`–`65535`). `exposure` declares the scheme the gateway itself
   serves: `https` (the default) keeps cephadm's TLS, `http` pins the gateway
-  spec to `ssl: false` and forbids `tls` and `oauth2Proxy`. On
-  subscription-backed distributions (`redhat`, `ibm`) the field is required
-  explicitly — their cephadm builds record gateway daemon dependencies without
-  the certificate entries they recompute, so every https shape reconfigures
-  forever (ADR 0047); `http` converges today, and an explicit `https` is the
-  declaration for a vendor build that repairs the recording (ADR 0049).
+  spec to `ssl: false` and forbids `tls` and `oauth2Proxy`.
   `tls`, when set,
   supplies the gateway certificate through `certificateRef`+`keyRef`, each of
-  which must name a `tlsCertificate` Secret (accepted only on `oss`). `enableAuth`
+  which must name a `tlsCertificate` Secret. `enableAuth`
   and `oauth2Proxy` are coupled: `enableAuth: true` requires an `oauth2Proxy`
   block (`providerDisplayName`, `clientId`, `oidcIssuerUrl`, and `clientSecretRef`
   required; optional `redirectUrl`, `httpsAddress`, `allowlistDomains[]`,
   `cookieSecretRef`), and an `oauth2Proxy` block requires `enableAuth: true`;
-  `oauth2Proxy` additionally requires `exposure: https` and is refused on
-  `redhat`/`ibm`, whose builds loop the `oauth2-proxy` service the same way.
+  `oauth2Proxy` additionally requires `exposure: https`.
+- `spec.ceph.cephadm.workarounds[]` is a unique closed-token list for authored
+  supplier quirks that cannot be inferred from a release catalog. The
+  `mgmt-gateway-spec-dependency-recording` token records the cephadm defect in
+  ADR 0047 and is valid for any distribution only with a declared management
+  gateway using `exposure: http`, no `tls`, and no `oauth2Proxy`. Without the
+  token, native HTTPS, TLS and OAuth remain available. HTTP's `ssl: false`
+  persistence repair remains keyed to the generic HTTP shape, not this token,
+  because every cephadm lineage that serializes a falsy field away needs it.
+  This workaround never branches on a release number.
 - `spec.ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
   (rejected for `oss`) and gates the cluster on FIPS-mode Ceph hosts: every host
   that installs a managed OS must reference a `MachineInstallProfile` whose
@@ -4113,13 +4137,16 @@ command. The rest are registered per command, on the verbs that reach machines.
 - `example init --name <cluster>` writes a scaffolded desired-state tree,
   contacting no host and no context. `--kind` selects the shape and defaults to
   `container-cluster`: that kind writes the OpenShift core set for the
-  substrate `--provider` names, and `storage-cluster` writes the smallest Ceph
+  substrate `--provider` names and requires `--openshift-version`; `storage-cluster`
+  requires `--ceph-release` and writes the smallest Ceph
   input — an `Environment`, a `Secret`, the storage-node `Machine`s, and a
   `StorageCluster` under `clusters/storage/<cluster>/`. An unknown `--kind` is
   a usage error naming the known kinds. `--provider` applies to
   `container-cluster` only: the storage scaffold's machines are `os.provided`,
   so it provisions no substrate, and passing `--provider` with it is a usage
   error naming the flag to drop rather than a silently ignored flag. Both kinds
+  reject the other kind's release flag. Neither scaffold selects a compiled
+  current product version. Both kinds
   share one command shape — `--output-dir` defaults to the `--name` value, a
   non-empty output directory is refused unless `--yes` is passed, and the run
   reports what was written. Scaffolded output carries no secret material, only

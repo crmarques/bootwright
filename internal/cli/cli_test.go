@@ -1577,7 +1577,7 @@ func TestRenderEffectiveWritesNormalizedState(t *testing.T) {
 
 func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 	dir := t.TempDir()
-	files, err := scaffold.Workspace("kubevirt-lab", scaffold.ProviderKubeVirt)
+	files, err := scaffold.Workspace("kubevirt-lab", scaffold.ProviderKubeVirt, "42.7.3")
 	if err != nil {
 		t.Fatalf("scaffold kubevirt workspace: %v", err)
 	}

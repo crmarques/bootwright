@@ -17,16 +17,17 @@ example by hand — it emits the schema the binary you installed reads, so it
 cannot skew against a release the way a tree copied from `main` can:
 
 ```text
-bootwright example init --name <cluster-name> --output-dir <input-dir>
-bootwright example init --name <cluster-name> --kind storage-cluster --output-dir <input-dir>
+bootwright example init --name <cluster-name> --openshift-version <version> --output-dir <input-dir>
+bootwright example init --name <cluster-name> --kind storage-cluster --ceph-release <release> --output-dir <input-dir>
 ```
 
 `--kind` selects what is scaffolded. `container-cluster` — the default — produces
 the nested `infra/` + `clusters/container/<name>/` OpenShift workspace
 [Getting Started](../getting-started/index.md) walks through, and takes
-`--provider`. `storage-cluster` produces the smallest complete Ceph input —
+`--provider` plus a required `--openshift-version`. `storage-cluster` produces the smallest complete Ceph input —
 `Environment`, `Secret`, three provided-machine Ceph nodes, and a
-`StorageCluster` under `clusters/storage/<name>/` — and takes no `--provider`,
+`StorageCluster` under `clusters/storage/<name>/` — and takes a required
+`--ceph-release` but no `--provider`,
 because it provisions no substrate. Both trees pass `bootwright validate` as
 written. The committed examples below are reference trees for comparison and
 adaptation — some use a different (often flatter, more minimal) shape than the
@@ -36,7 +37,8 @@ scaffold, so read the example's own `README.md` for its authoritative file list.
     The committed examples cover libvirt/emulated-Redfish, bare-metal Redfish,
     and KubeVirt substrates; there is no vSphere example. To start a
     vSphere-backed topology, scaffold one with
-    `bootwright example init --provider vsphere` and adapt it.
+    `bootwright example init --provider vsphere --openshift-version <version>`
+    and adapt it.
 
 !!! note "This page is a chooser only"
     The table maps each example directory to the situation it fits. The

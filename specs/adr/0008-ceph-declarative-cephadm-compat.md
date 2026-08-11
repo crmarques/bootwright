@@ -37,23 +37,32 @@ concepts rather than inventing its own vocabulary:
   `extraContainerArgs`, `customConfigs`, and a real `rotational: true` that
   renders as cephadm's `rotational: 1`. Passthrough `spec.ceph.services[]`
   render verbatim for service types not modeled first-class.
-- Distribution differences (oss/redhat/ibm) are data in one renderer table,
-  not control flow; the Ansible role dispatches on rendered capability flags
-  (ADR 0002).
-- IBM artifact selection is explicit at both native boundaries:
-  `packageVersion` names the exact `cephadm` RPM and `image.version` names the
-  daemon image, and both are required. Bootwright installs and verifies the
-  exact RPM directly, never runs `cephadm-ansible`, then compares the declared
-  package coordinate, `cephadm version`, and `ceph --version` inside the image
-  before cluster work. The equality gate proves native artifact parity without
-  embedding a release or OS support catalog. Package downgrades are refused;
-  supported forward movement remains a vendor upgrade workflow.
-- IBM's stock preflight is an external installation path, not a second
-  Bootwright renderer. Its moving stream repository and unversioned package
-  requests make `present` retain an installed build but resolve the best current
-  candidate on a clean host; its upgrade switch requests `latest`. Exact
-  retention there requires IBM's custom-repository procedure backed by frozen
-  content containing the intended dependency closure.
+- Distribution differences (oss/redhat/ibm) are data in one provider table,
+  not product-name control flow; the Ansible role dispatches on rendered
+  capability and artifact-policy fields (ADR 0002). Policy declares whether a
+  Ceph runtime pin, cephadm-ansible pin, full RPM release, image base, and image
+  pin are optional, required, or forbidden and selects optional native
+  preparation and parity adapters.
+- Release and subscription image-base coordinates are authored desired state;
+  Bootwright carries no compiled current release or RHEL image suffix. The
+  current IBM policy requires exact Ceph runtime, cephadm-ansible, and image
+  pins and selects the generic `cephadm-ansible-local` preparation plus
+  `ceph-version` parity adapters. Bootwright preinstalls and verifies the exact
+  `cephadm`, `ceph-common`, and `cephadm-ansible` RPMs on every node, runs the
+  installed RPM-owned preflight locally with both package-upgrade switches
+  false, re-verifies every package coordinate, then compares `cephadm version`
+  with `ceph --version` inside the image before cluster work. A future policy
+  changes table data or adds an isolated adapter, never a release-number branch.
+  Package downgrades are refused; supported forward movement remains a vendor
+  upgrade workflow.
+- The native preflight is provider evidence, not a second desired-state
+  renderer. Bootwright owns repository convergence and passes
+  `ceph_origin=custom` with an explicitly empty custom-repository list, so the
+  artifact uses only the already declared vendor or subscription repositories.
+  Exact packages are preinstalled and the preflight's `present` state preserves
+  them; optional unpinned packages resolve from the operator-selected repository
+  content. Bootwright retains its independent fail-closed platform and security
+  gates because the provider report is advisory.
 
 Convergence is declarative-first and additive-only:
 
@@ -119,9 +128,10 @@ case; it cannot be inferred from an absent map or list entry.
 - New Ceph features cost a renderer table/spec change plus validation, not new
   imperative role branches; a knob Bootwright does not model is still
   reachable via config options or passthrough services.
-- IBM installs fail closed when the exact host package cannot be installed or
-  its native version differs from the declared daemon image; a static
-  release-to-build catalog is neither necessary nor permitted.
+- A provider policy that requires exact artifacts fails closed when the host
+  package cannot be installed or its selected native parity check differs from
+  the declared daemon image; a static release-to-build catalog is neither
+  necessary nor permitted.
 - The fail-safe gating means a stale rendered bundle can under-converge or
   skip a rebuild, but never over-destroy; recovery paths (re-apply, `continue`
   mode, `--reclaim-devices`) are designed around re-running apply rather than

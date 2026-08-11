@@ -25,16 +25,21 @@ type File struct {
 	Body string
 }
 
-func Workspace(clusterName string, kind Provider) ([]File, error) {
+func Workspace(clusterName string, kind Provider, openshiftVersion string) ([]File, error) {
+	openshiftVersion = strings.TrimSpace(openshiftVersion)
+	if openshiftVersion == "" {
+		return nil, fmt.Errorf("OpenShift version is required")
+	}
 	s, ok := Substrates[kind]
 	if !ok {
 		known := KnownProviders()
 		return nil, fmt.Errorf("unknown provider %q (known: %s)", kind, strings.Join(known, ", "))
 	}
 	data := templateData{
-		Cluster:    clusterName,
-		ProviderID: clusterName + "-" + s.ProviderNameSuffix,
-		NetworkID:  clusterName + "-" + s.NetworkNameSuffix,
+		Cluster:          clusterName,
+		OpenShiftVersion: openshiftVersion,
+		ProviderID:       clusterName + "-" + s.ProviderNameSuffix,
+		NetworkID:        clusterName + "-" + s.NetworkNameSuffix,
 	}
 	resolved, err := resolveSubstrateFragments(s, data)
 	if err != nil {
@@ -235,6 +240,7 @@ type Substrate struct {
 
 type templateData struct {
 	Cluster             string
+	OpenShiftVersion    string
 	ProviderID          string
 	NetworkID           string
 	Substrate           Substrate

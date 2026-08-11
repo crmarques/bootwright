@@ -35,7 +35,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		Short: "Desired-state OpenShift, OKD, and Ceph fleet provisioning",
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
 			"to drive OpenShift, OKD, and Ceph cluster lifecycle.",
-		Example: `  bootwright example init --name lab --output-dir ./lab-input
+		Example: `  bootwright example init --name lab --openshift-version <version> --output-dir ./lab-input
   bootwright validate -f ./lab-input
   bootwright context init --name lab -f ./lab-input
   bootwright secret set --name openshift-pull-secret --pull-secret ~/openshift-pull-secret.json

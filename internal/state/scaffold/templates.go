@@ -73,7 +73,7 @@ metadata:
 spec:
   distribution:
     release:
-      version: 4.21.15
+      version: {{printf "%q" .OpenShiftVersion}}
 
   install:
 {{.Substrate.PlatformYAML}}

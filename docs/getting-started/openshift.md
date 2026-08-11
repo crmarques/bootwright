@@ -20,10 +20,12 @@ Generate a single-node lab workspace. The default provider,
 uses:
 
 ```bash
-bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
+bootwright example init --name my-sno-lab --openshift-version <version> --output-dir ./my-sno-lab
 ```
 
-The scaffold writes ten `apiVersion: bootwright.io/v1alpha1` files:
+`--openshift-version` is authored install intent; the scaffold never chooses a
+compiled current release. The scaffold writes ten
+`apiVersion: bootwright.io/v1alpha1` files:
 
 ```text
 my-sno-lab/

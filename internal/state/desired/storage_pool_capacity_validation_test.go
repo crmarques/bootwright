@@ -102,6 +102,8 @@ func storagePoolCapacityState(hostCount int, singleHost bool) v1alpha1.State {
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Distribution: v1alpha1.StorageCephDistributionOSS,
+					Release:      "tentacle",
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						ClusterSSH: v1alpha1.StorageCephadmSSHSpec{User: v1alpha1.RootSSHUser},

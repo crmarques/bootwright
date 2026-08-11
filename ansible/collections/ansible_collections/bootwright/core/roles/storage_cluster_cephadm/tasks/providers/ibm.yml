@@ -20,9 +20,12 @@
 - name: Resolve the declared IBM Ceph package repository probe
   ansible.builtin.set_fact:
     bootwright_ceph_subscription_probe_packages: >-
-      {{ [bootwright_ceph_provider.cephadmPackage | default('cephadm')]
+      {{ (bootwright_ceph_provider.packageArtifacts | default([])
+          | map(attribute='name') | list)
          + (['ibm-storage-ceph-license']
             if (bootwright_ceph_provider.requiresLicense | default(false) | bool) else []) }}
+    bootwright_ceph_subscription_pinned_packages: >-
+      {{ bootwright_ceph_provider.packageArtifacts | default([]) }}
     bootwright_ceph_subscription_probe_repo_args: >-
       {{ (bootwright_ceph_provider.repository.redhatRepos | default([])
           | map('regex_replace', '^', '--enablerepo=') | list)
@@ -94,7 +97,8 @@
       ({{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }})
       were read successfully but publish no build of {{ item }}.
       spec.ceph.ibm.packages.source=subscription requires those repositories to publish
-      both the cephadm build and the ibm-storage-ceph-license package for this release.
+      every rendered native Ceph tooling package and the ibm-storage-ceph-license package
+      for this release.
       Check that the Satellite content view includes the IBM Storage Ceph repository, that
       a version carrying it is promoted to this host's lifecycle environment, and that the
       host's activation key subscribes it. A republished content view may require
@@ -108,50 +112,25 @@
     - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
     - bootwright_ceph_subscription_preflight.rc | default(1) == 0
 
-- name: Resolve the cephadm builds the declared subscription repositories serve
-  ansible.builtin.set_fact:
-    bootwright_ceph_subscription_cephadm_builds: >-
-      {{ bootwright_ceph_subscription_cephadm_lines
-         | select('match', '^build ' ~ bootwright_ceph_subscription_cephadm_name ~ ' ')
-         | map('regex_replace', '^build [^ ]+ ', '') | unique | sort | list }}
-    bootwright_ceph_subscription_cephadm_pins: >-
-      {{ bootwright_ceph_subscription_cephadm_lines
-         | select('match', '^pin ' ~ bootwright_ceph_subscription_cephadm_name ~ ' ')
-         | map('regex_replace', '^pin [^ ]+ ', '') | unique | sort | list }}
-    bootwright_ceph_subscription_cephadm_specs: >-
-      {{ bootwright_ceph_subscription_cephadm_lines
-         | select('match', '^spec ' ~ bootwright_ceph_subscription_cephadm_name ~ ' ')
-         | map('regex_replace', '^spec [^ ]+ ', '') | unique | list }}
-  vars:
-    bootwright_ceph_subscription_cephadm_name: >-
-      {{ bootwright_ceph_provider.cephadmPackage | default('cephadm') | regex_escape }}
-    bootwright_ceph_subscription_cephadm_lines: >-
-      {{ bootwright_ceph_subscription_preflight.stdout_lines | default([])
-         | map('trim') | list }}
-  changed_when: false
-  when:
-    - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
-    - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
-    - bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
-
-- name: Require the declared subscription repositories to serve the pinned cephadm build
+- name: Require the declared subscription repositories to serve each pinned native tooling build
   ansible.builtin.assert:
     that:
       - >-
-        bootwright_ceph_provider.cephadmPackageSpec
-        in (bootwright_ceph_subscription_cephadm_specs | default([]))
+        item.spec in
+        (bootwright_ceph_subscription_package_lines
+         | select('match', '^spec ' ~ (item.name | regex_escape) ~ ' ')
+         | map('regex_replace', '^spec [^ ]+ ', '') | unique | list)
     fail_msg: >-
       Storage node {{ bootwright_current_storage_host.hostname }}: the declared repositories
       ({{ bootwright_ceph_provider.repository.redhatRepos | default([]) | join(', ') }})
-      serve {{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}, but not the
-      build spec.ceph.packageVersion pins. They publish
-      {{ bootwright_ceph_subscription_cephadm_builds | default([]) | join(', ') }}, and
-      `dnf install {{ bootwright_ceph_provider.cephadmPackageSpec }}` resolves against none
-      of them, so this is a pin/content mismatch and not a missing repository. Either set
-      spec.ceph.packageVersion to a build these repositories publish
-      ({{ bootwright_ceph_subscription_cephadm_pins | default([]) | join(' or ') }}), or
+      serve {{ item.name }}, but not the build {{ item.desiredStatePath }} pins. They publish
+      {{ bootwright_ceph_subscription_package_builds | join(', ') }}, and
+      `dnf install {{ item.spec }}` resolves against none of them, so this is a pin/content
+      mismatch and not a missing repository. Either set {{ item.desiredStatePath }} to a build these
+      repositories publish
+      ({{ bootwright_ceph_subscription_package_pins | join(' or ') }}), or
       promote a Satellite content view version that publishes
-      {{ bootwright_ceph_provider.cephadmPackageSpec }} to this host's lifecycle
+      {{ item.spec }} to this host's lifecycle
       environment; then retry with {{ bootwright_mutating_invocation }}. The pin is matched
       against every name-[epoch:]version[-release][.arch]
       form dnf itself accepts, so an omitted epoch is never the cause; when the pin does
@@ -162,10 +141,25 @@
       a no-op on a node that already carries that build: the repositories, not this node's
       disk, are what the next fresh or rebuilt node installs from.
     quiet: true
+  vars:
+    bootwright_ceph_subscription_package_lines: >-
+      {{ bootwright_ceph_subscription_preflight.stdout_lines | default([])
+         | map('trim') | list }}
+    bootwright_ceph_subscription_package_builds: >-
+      {{ bootwright_ceph_subscription_package_lines
+         | select('match', '^build ' ~ (item.name | regex_escape) ~ ' ')
+         | map('regex_replace', '^build [^ ]+ ', '') | unique | sort | list }}
+    bootwright_ceph_subscription_package_pins: >-
+      {{ bootwright_ceph_subscription_package_lines
+         | select('match', '^pin ' ~ (item.name | regex_escape) ~ ' ')
+         | map('regex_replace', '^pin [^ ]+ ', '') | unique | sort | list }}
+  loop: "{{ bootwright_ceph_subscription_pinned_packages | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.name }}"
   when:
     - bootwright_ceph_provider.repository.ibmRepoURL | default('') | length == 0
     - bootwright_ceph_provider.rhsmManagement | default('managed') != 'external'
-    - bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+    - item.spec | default('') | length > 0
 
 - name: Install vendor Ceph repository definition
   ansible.builtin.get_url:

@@ -6,9 +6,9 @@ Accepted
 
 Extends [ADR 0049](0049-the-scheme-a-gateway-declares-out-loud.md): the scheme
 the gateway declares now also decides the port it defaults to. ADR 0049's
-`exposure` field, its explicit-declaration rule on subscription-backed
-distributions, and its refusals of `tls` and `oauth2Proxy` under `http` are
-unchanged.
+`exposure` field and its refusals of `tls` and `oauth2Proxy` under `http` are
+unchanged. ADR 0049 now models the supplier dependency-recording defect through
+an authored workaround rather than a distribution rule.
 
 ## Context
 
@@ -22,9 +22,9 @@ server.
 That is not cosmetic. `bootwright cluster info` prints the URL, operators paste
 it, browsers and scanners read the port before they read anything else, and a
 firewall rule written against 8443 documents a TLS exposure that does not
-exist. On subscription-backed distributions, where `exposure: http` is the only
-shape that converges today, every cluster lands there — so the misleading form
-is the common one, not the edge case.
+exist. On a build selecting the dependency-recording workaround,
+`exposure: http` is the required safe shape, so the misleading form would be
+systematic rather than an edge case.
 
 The classic dashboard's own TLS listener also defaults to 8443, and the
 management phase already vacates it so gateway daemons can bind. One constant
@@ -58,9 +58,9 @@ access summary reads it directly.
   purpose, because holding a cleartext listener on the TLS port is exactly the
   shape this ADR removes. Environment templates expose the port so the choice
   is made where the rest of the gateway is described.
-- The flip ADR 0049 promised stays a single edit: moving `exposure` from `http`
-  to `https` on a repaired vendor build carries the port with it, and only an
-  estate that pinned a port has anything else to change.
+- Moving from the affected-build workaround and HTTP to HTTPS on a repaired
+  build carries the port with it; only an estate that pinned a port has
+  anything else to change.
 - The dashboard-port vacation is unaffected: it already moves the classic
   dashboard clear of whatever port the gateway occupies, and keys to gateway
   presence rather than to the scheme.

@@ -609,6 +609,15 @@ bootwright_storage_clusters:
       requiresRHSM: true
       requiresRegistry: true
       requiresLicense: false
+      artifactPolicy:
+        packagePin: optional
+        rpmReleaseRequired: false
+        cephadmAnsiblePackagePin: optional
+        cephadmAnsibleRPMReleaseRequired: false
+        imageBaseRequired: true
+        imagePinRequired: false
+        nativeParityMode: ""
+        nativePreparationMode: cephadm-ansible-local
       prerequisitePackages:
         - firewalld
         - lvm2
@@ -616,6 +625,19 @@ bootwright_storage_clusters:
         - chrony
       cephadmPackage: cephadm
       cephadmPackageSpec: cephadm-19.2.1-245.el9cp
+      cephadmAnsiblePackage: cephadm-ansible
+      nativePreparation:
+        runtimePackages:
+          - ceph-common
+        runtimePackageSpecs:
+          - ceph-common-19.2.1-245.el9cp
+      packageArtifacts:
+        - name: cephadm
+          spec: cephadm-19.2.1-245.el9cp
+          desiredStatePath: spec.ceph.packageVersion
+        - name: ceph-common
+          spec: ceph-common-19.2.1-245.el9cp
+          desiredStatePath: spec.ceph.packageVersion
       entitlement:
         name: rhcs
         provider: redhat
@@ -728,8 +750,9 @@ inside those files stays keyed to rendered capability flags and data
 `community.*`), never re-derived from the name: `redhat.yml` and `ibm.yml` are
 thin compositions of the shared `subscription.yml` task file, and `ibm.yml`
 adds the vendor-specific repository and license steps. For `distribution: oss`
-the `provider` block carries a `community` map with a `version` (defaulting to
-exact `20.2.2`) or an authored codename `release`, plus an optional `mirror`;
+the `provider` block carries a `community` map with the required authored exact
+`version` or codename `release`, plus an optional `mirror`; there is no compiled
+current release.
 `oss.yml` uses it to configure the upstream community Ceph package repository
 with cephadm before installing `cephadm`. It imports the Ceph release signing
 key from `<mirror>/keys/release.asc` (fingerprint-pinned) before
@@ -768,7 +791,7 @@ declared id, and queries every required bare package name together. Dnf prints
 the package name, canonical NEVRA, a paste-ready `packageVersion` value, and
 every `name-[epoch:]version[-release][.arch]` spec form it accepts. Separate
 asserts classify a non-zero repository read, a successful read with no build of
-one required package, and a missing pinned `cephadm` spec. The last tests
+one required package, and a missing exact native-artifact spec. The last tests
 membership in the emitted spec set, so an omitted epoch can never cause a false
 miss, and the failure names the builds the repositories do publish. The pin
 assert deliberately fails even where the pinned install would
@@ -782,32 +805,52 @@ renderer/table change plus one provider task file keyed by its name (or a
 composition of the shared subscription file), not new branches in the shared
 flow.
 
-`cephadmPackage` is always the bare package name and is the key the ownership
-record is written under, so destroy — which looks the package up by that bare
-name from a static list — still matches. `cephadmPackageSpec` is present only
-when `spec.ceph.packageVersion` pins a build, carries the composed
-`<package>-<version>`, and is consumed verbatim by the `dnf` install and the
-post-install exact-coordinate gate. The role never composes the two itself.
-IBM desired state always renders it; Red Hat desired state may omit it. The
-IBM value includes the RPM release component so the CLI's native version can be
-matched to it. The install permits an upgrade but never enables DNF downgrade
-behavior, and a build that still differs after DNF runs fails closed before
-cluster convergence.
+`cephadmPackage` and `cephadmAnsiblePackage` are bare package names.
+`cephadmPackageSpec` and `cephadmAnsiblePackageSpec` are present only when their
+desired-state fields pin a build. `packageArtifacts[]` is the generic exact
+installation contract: every entry carries its bare `name`, composed `spec`,
+and `desiredStatePath`; subscription repo probes, DNF installation, ownership,
+and the post-native exact-coordinate gate all consume that same list. Bare
+names are the ownership keys, so destroy's static `cephadm`, `ceph-common`, and
+`cephadm-ansible` candidates match. `nativePreparation.runtimePackages` carries
+the provider's bare runtime set and `runtimePackageSpecs` carries its exact
+projection when `spec.ceph.packageVersion` is authored. The role never composes
+package specs itself.
+
+`artifactPolicy.packagePin` and `cephadmAnsiblePackagePin` independently mark
+those coordinates optional, required, or forbidden;
+`rpmReleaseRequired` and `cephadmAnsibleRPMReleaseRequired` select full RPM
+version-release syntax. Exact installs permit an upgrade but never enable DNF
+downgrades, and a build that differs after DNF or native preparation fails
+closed. When an optional Red Hat pin is omitted, the corresponding bare package
+is installed through the ownership helper with `state: present`.
+
+When `artifactPolicy.nativePreparationMode` is non-empty, the storage-infra
+all-node pass dispatches to that closed adapter after native package install and
+before runtime/bootstrap work. `cephadm-ansible-local` verifies that the
+installed `cephadm-ansible` RPM owns its playbook, syntax-checks it, and executes
+it locally on each node. The adapter selects custom origin with no added
+repositories, disables both package-upgrade switches and the stock uninstall
+set, passes exact package requests when authored, and preserves a fresh report.
+Nested Ansible logs, temp paths, and fact cache stay in the root-only transient
+work directory. The generic exact-artifact loop re-proves all authored EVRs
+afterward.
 
 The provider also carries the `runtimeOS` family and, for IBM,
 `ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
 bootstrap phase then enables and acknowledges Call Home or denies it according
 to the required authored value. A custom entitlement `registry.url` is paired
 with an explicit daemon image base under the same registry namespace by
-desired-state validation. The rendered `image` and `imageBase` are already
-composed by the renderer from `spec.ceph.image.base` (or the derived vendor
-repository) and `spec.ceph.image.version`; the role consumes them verbatim.
-For IBM, desired-state validation requires both the full package and image
-pins. The container-runtime phase reads `cephadm version` from the installed
-vendor RPM, runs `ceph --version` in that exact image, and requires both
-reported builds to match the epoch-free package declaration before bootstrap
-or service convergence. This proof also runs on the split seed pass where
-package prerequisites are skipped.
+desired-state validation. The rendered `image` and `imageBase` are composed
+from authored `spec.ceph.image.base` and `spec.ceph.image.version`; only the
+community repository may default. `artifactPolicy.imageBaseRequired` and
+`imagePinRequired` express the provider requirements. When
+`artifactPolicy.nativeParityMode` is non-empty, the container-runtime phase
+dispatches to that closed generic adapter. The current `ceph-version` adapter
+reads `cephadm version` from the installed RPM, runs `ceph --version` in the
+exact image, and requires both reported builds to match the epoch-free package
+declaration before bootstrap or service convergence. This proof also runs on
+the split seed pass where package prerequisites are skipped.
 
 `ceph.sidecarImagePins` carries the cluster's `config[mgr]`
 `mgr/cephadm/container_image_*` entries, excluding `container_image_base`. The

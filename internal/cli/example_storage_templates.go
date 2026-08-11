@@ -44,7 +44,7 @@ spec:
   ceph:
     distribution: oss                 # oss | redhat | ibm - redhat and ibm need an Entitlement
 
-    release: "20.2.2"                 # change to the community Ceph release you want
+    release: "{{.Release}}"
 
     community:
       mirror: https://download.ceph.com

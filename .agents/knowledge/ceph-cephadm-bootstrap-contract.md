@@ -166,8 +166,9 @@ later**. No Squid release defines either class (`v19.2.3`'s `service_spec.py`
 has neither), so `ServiceSpec._cls` falls through to the base class and the
 document is refused — as an unexpected keyword argument for whichever gateway
 field it reaches first, which names a field and never mentions the release.
-A `spec.ceph.mgmtGateway` block therefore needs Ceph 20+, and the floor is
-enforced twice because neither half can cover the other:
+A `spec.ceph.mgmtGateway` block therefore needs Ceph 20+, and this isolated
+version-sensitive capability flow is enforced twice because neither half can
+cover the other:
 
 - **validate**, exactly, for `oss` only: the authored release *is* the Ceph
   version there, so `cephprovider.UpstreamCephMajor` maps a known codename or

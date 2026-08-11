@@ -11,7 +11,7 @@ import (
 
 func TestExampleInitWritesValidWorkspace(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "my-sno-lab")
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--openshift-version", "42.7.3", "--output-dir", outputDir)
 	if code != 0 {
 		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -40,7 +40,7 @@ func TestExampleInitWritesValidWorkspace(t *testing.T) {
 
 func TestExampleInitWritesValidStorageWorkspace(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "my-ceph-lab")
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--output-dir", outputDir)
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--ceph-release", "37.4.2", "--output-dir", outputDir)
 	if code != 0 {
 		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -70,7 +70,7 @@ func TestExampleInitWritesValidStorageWorkspace(t *testing.T) {
 }
 
 func TestExampleInitStorageWorkspaceUsesBlockStyle(t *testing.T) {
-	files, err := storageExampleWorkspace("block-style-check")
+	files, err := storageExampleWorkspace("block-style-check", "37.4.2")
 	if err != nil {
 		t.Fatalf("storage workspace: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestExampleInitStorageWorkspaceUsesBlockStyle(t *testing.T) {
 
 func TestExampleInitRejectsProviderForStorageKind(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "my-ceph-lab")
-	_, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--provider", "bare-metal", "--output-dir", outputDir)
+	_, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--provider", "bare-metal", "--ceph-release", "37.4.2", "--output-dir", outputDir)
 	if code != 2 {
 		t.Fatalf("example init exited %d, stderr=%q", code, stderr)
 	}
@@ -101,6 +101,60 @@ func TestExampleInitRejectsProviderForStorageKind(t *testing.T) {
 	}
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
 		t.Fatalf("refused example init still created %s: %v", outputDir, err)
+	}
+}
+
+func TestExampleInitRequiresAuthoredProductVersion(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "container",
+			args: []string{"example", "init", "--name", "my-ocp-lab", "--output-dir", filepath.Join(t.TempDir(), "my-ocp-lab")},
+			want: "--openshift-version is required",
+		},
+		{
+			name: "storage",
+			args: []string{"example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--output-dir", filepath.Join(t.TempDir(), "my-ceph-lab")},
+			want: "--ceph-release is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, stderr, code := runCLI(t, test.args...)
+			if code != 2 || !strings.Contains(stderr, test.want) {
+				t.Fatalf("example init exited %d, stderr=%q, want %q", code, stderr, test.want)
+			}
+		})
+	}
+}
+
+func TestExampleInitRejectsProductVersionFlagForOtherKind(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "ceph release on container",
+			args: []string{"example", "init", "--name", "my-ocp-lab", "--openshift-version", "42.7.3", "--ceph-release", "37.4.2", "--output-dir", filepath.Join(t.TempDir(), "my-ocp-lab")},
+			want: "--ceph-release applies only",
+		},
+		{
+			name: "OpenShift version on storage",
+			args: []string{"example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--openshift-version", "42.7.3", "--ceph-release", "37.4.2", "--output-dir", filepath.Join(t.TempDir(), "my-ceph-lab")},
+			want: "--openshift-version applies only",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, stderr, code := runCLI(t, test.args...)
+			if code != 2 || !strings.Contains(stderr, test.want) {
+				t.Fatalf("example init exited %d, stderr=%q, want %q", code, stderr, test.want)
+			}
+		})
 	}
 }
 
@@ -119,14 +173,14 @@ func TestExampleInitStorageRejectsNonEmptyOutputWithoutYes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outputDir, "note.txt"), []byte("keep me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--output-dir", outputDir)
+	_, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--ceph-release", "37.4.2", "--output-dir", outputDir)
 	if code == 0 {
 		t.Fatal("example init unexpectedly wrote into a non-empty directory")
 	}
 	if !strings.Contains(stderr, "not empty") {
 		t.Fatalf("stderr does not describe non-empty output: %q", stderr)
 	}
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--output-dir", outputDir, "--yes")
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-ceph-lab", "--kind", "storage-cluster", "--ceph-release", "37.4.2", "--output-dir", outputDir, "--yes")
 	if code != 0 {
 		t.Fatalf("example init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -151,7 +205,7 @@ func TestExampleInitDoesNotRequireContextRegistry(t *testing.T) {
 	t.Cleanup(func() { localRootGate = previous })
 
 	outputDir := filepath.Join(t.TempDir(), "my-sno-lab")
-	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
+	stdout, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--openshift-version", "42.7.3", "--output-dir", outputDir)
 	if code != 0 {
 		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -165,7 +219,7 @@ func TestExampleInitRejectsNonEmptyOutputWithoutYes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outputDir, "note.txt"), []byte("keep me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--output-dir", outputDir)
+	_, stderr, code := runCLI(t, "example", "init", "--name", "my-sno-lab", "--openshift-version", "42.7.3", "--output-dir", outputDir)
 	if code == 0 {
 		t.Fatal("example init unexpectedly wrote into a non-empty directory")
 	}
@@ -180,7 +234,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		t.Fatalf("bootwright --help exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{
-		"bootwright example init --name lab",
+		"bootwright example init --name lab --openshift-version <version>",
 		"bootwright validate -f ./lab-input",
 		"bootwright context init --name lab",
 		"bootwright bastion setup --yes",

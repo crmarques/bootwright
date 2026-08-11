@@ -275,9 +275,15 @@ func StorageCephIBMPackageSource(ceph *StorageClusterCephSpec) string {
 }
 
 type StorageCephadmSpec struct {
-	AddressRef LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
-	ClusterSSH StorageCephadmSSHSpec   `yaml:"clusterSSH,omitempty" json:"clusterSSH,omitempty"`
-	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	AddressRef  LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	Workarounds []string                `yaml:"workarounds,omitempty" json:"workarounds,omitempty"`
+	Ansible     *StorageCephadmAnsible  `yaml:"ansible,omitempty" json:"ansible,omitempty"`
+	ClusterSSH  StorageCephadmSSHSpec   `yaml:"clusterSSH,omitempty" json:"clusterSSH,omitempty"`
+	Bootstrap   StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+}
+
+type StorageCephadmAnsible struct {
+	PackageVersion string `yaml:"packageVersion,omitempty" json:"packageVersion,omitempty"`
 }
 
 type StorageCephadmSSHSpec struct {

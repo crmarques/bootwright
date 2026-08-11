@@ -8,10 +8,10 @@
   changed_when: false
   failed_when: false
 
-- name: Gather installed package facts before pinning the cephadm build
+- name: Gather installed package facts before pinning native Ceph artifacts
   ansible.builtin.package_facts:
     manager: auto
-  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+  when: bootwright_ceph_provider.packageArtifacts | default([]) | length > 0
 
 - name: Install cephadm package on storage node when not preinstalled
   ansible.builtin.package:
@@ -21,56 +21,19 @@
   failed_when: false
   when:
     - bootwright_ceph_provider.cephadmPackageSpec | default('') | length == 0
+    - bootwright_ceph_provider.artifactPolicy.nativePreparationMode | default('') | length == 0
     - bootwright_cephadm_initial_probe.rc | default(1) != 0
 
-- name: Install the pinned cephadm build on storage node
-  ansible.builtin.dnf:
-    name: "{{ bootwright_ceph_provider.cephadmPackageSpec }}"
-    state: present
-    allow_downgrade: false
-  register: bootwright_cephadm_pinned_install
-  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
-
-- name: Read installed cephadm package coordinates after pinning
-  ansible.builtin.command:
-    argv:
-      - rpm
-      - -q
-      - --qf
-      - "%{VERSION}\n%{VERSION}-%{RELEASE}\n%{EPOCHNUM}:%{VERSION}\n%{EPOCHNUM}:%{VERSION}-%{RELEASE}\n"
-      - "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
-  register: bootwright_cephadm_installed_coordinates
-  changed_when: false
-  failed_when: false
-  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
-
-- name: Require the installed cephadm package to equal the declared build
-  ansible.builtin.assert:
-    that:
-      - bootwright_cephadm_installed_coordinates.rc | default(1) | int == 0
-      - >-
-        bootwright_ceph_provider.cephadmPackageSpec
-        | regex_replace('^' ~ (bootwright_ceph_provider.cephadmPackage | default('cephadm') | regex_escape) ~ '-', '')
-        in (bootwright_cephadm_installed_coordinates.stdout_lines | default([]))
-    fail_msg: >-
-      Storage node {{ bootwright_current_storage_host.hostname }} does not run the
-      cephadm build declared by spec.ceph.packageVersion. The declaration resolves to
-      {{ bootwright_ceph_provider.cephadmPackageSpec }}, while rpm reports
-      {{ bootwright_cephadm_installed_coordinates.stdout_lines | default([]) | join(', ') }}.
-      Bootwright refuses to downgrade Ceph software because the vendor supports upgrades,
-      not in-place downgrades. Use this release only on a new cluster, or declare the
-      installed/newer supported release and follow the vendor's upgrade procedure.
-    quiet: true
-  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
-
-- name: Create cephadm package ownership directory
+- name: Create native Ceph package ownership directory
   ansible.builtin.file:
     path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
     state: directory
     owner: root
     group: root
     mode: "0700"
-  when: (bootwright_cephadm_package_install.changed | default(false)) or (bootwright_cephadm_pinned_install.changed | default(false))
+  when: >-
+    (bootwright_cephadm_package_install.changed | default(false))
+    or (bootwright_ceph_provider.packageArtifacts | default([]) | length > 0)
 
 - name: Write cephadm package ownership record
   ansible.builtin.include_role:
@@ -79,7 +42,40 @@
   vars:
     bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
-  when: (bootwright_cephadm_package_install.changed | default(false)) or (bootwright_cephadm_pinned_install.changed | default(false))
+  when: bootwright_cephadm_package_install.changed | default(false)
+
+- name: Resolve unpinned native preparation packages
+  ansible.builtin.set_fact:
+    bootwright_ceph_unpinned_native_preparation_packages: >-
+      {{
+        ([bootwright_ceph_provider.cephadmPackage | default('cephadm')]
+         if (bootwright_ceph_provider.cephadmPackageSpec | default('') | length == 0)
+         else [])
+        + ([bootwright_ceph_provider.cephadmAnsiblePackage | default('cephadm-ansible')]
+           if (bootwright_ceph_provider.cephadmAnsiblePackageSpec | default('') | length == 0)
+           else [])
+        + (bootwright_ceph_provider.nativePreparation.runtimePackages | default([])
+           if (bootwright_ceph_provider.nativePreparation.runtimePackageSpecs | default([]) | length == 0)
+           else [])
+      }}
+  changed_when: false
+  when: bootwright_ceph_provider.artifactPolicy.nativePreparationMode | default('') | length > 0
+
+- name: Install and own unpinned native preparation packages
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages: "{{ bootwright_ceph_unpinned_native_preparation_packages }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  when: bootwright_ceph_unpinned_native_preparation_packages | default([]) | length > 0
+
+- name: Install and verify each pinned native Ceph package artifact
+  ansible.builtin.include_tasks: native_package_install_one.yml
+  loop: "{{ bootwright_ceph_provider.packageArtifacts | default([]) }}"
+  loop_control:
+    loop_var: bootwright_ceph_package_artifact
+    label: "{{ bootwright_current_storage_host.hostname }} {{ bootwright_ceph_package_artifact.spec }}"
 
 - name: Verify cephadm CLI on storage node
   ansible.builtin.command:

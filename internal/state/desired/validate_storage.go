@@ -141,6 +141,7 @@ func validateStorageCephSingleHostDefaults(prefix string, cluster v1alpha1.Stora
 func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, state v1alpha1.State) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
+	errs = append(errs, validateStorageCephadmWorkarounds(prefix+".workarounds", cluster)...)
 	if adm.Bootstrap.Node == "" {
 		errs = append(errs, prefix+".bootstrap.node is required")
 	} else if !storageCephNodeExists(cluster, adm.Bootstrap.Node) {
@@ -160,6 +161,39 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 		}
 	}
 	errs = append(errs, validateStorageCephadmSSHPosture(prefix, cluster, machines, state)...)
+	return errs
+}
+
+func validateStorageCephadmWorkarounds(prefix string, cluster v1alpha1.StorageCluster) []string {
+	seen := map[string]bool{}
+	var errs []string
+	for i, workaround := range cluster.Spec.Ceph.Cephadm.Workarounds {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if seen[workaround] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, workaround))
+			continue
+		}
+		seen[workaround] = true
+		switch workaround {
+		case v1alpha1.StorageCephadmWorkaroundMgmtGatewaySpecDependencyRecording:
+			mgmt := cluster.Spec.Ceph.MgmtGateway
+			if mgmt == nil {
+				errs = append(errs, fmt.Sprintf("%s %q requires spec.ceph.mgmtGateway", owner, workaround))
+				continue
+			}
+			if v1alpha1.StorageCephMgmtGatewayExposureEffective(mgmt) != v1alpha1.StorageCephMgmtGatewayExposureHTTP {
+				errs = append(errs, fmt.Sprintf("%s %q requires spec.ceph.mgmtGateway.exposure: http", owner, workaround))
+			}
+			if mgmt.TLS != nil {
+				errs = append(errs, fmt.Sprintf("%s %q requires spec.ceph.mgmtGateway.tls to be empty", owner, workaround))
+			}
+			if mgmt.OAuth2Proxy != nil {
+				errs = append(errs, fmt.Sprintf("%s %q requires spec.ceph.mgmtGateway.oauth2Proxy to be empty", owner, workaround))
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("%s %q must be %q", owner, workaround, v1alpha1.StorageCephadmWorkaroundMgmtGatewaySpecDependencyRecording))
+		}
+	}
 	return errs
 }
 
@@ -479,7 +513,6 @@ func validateStorageCephMgmtGateway(prefix string, cluster v1alpha1.StorageClust
 		errs = append(errs, validatePlacementCoversDataSites(prefix+".ingress.placement", topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), cluster, v1alpha1.StorageCephRoleIngress, nil)...)
 	}
 	if mgmt.TLS != nil {
-		errs = append(errs, validateStorageCephMgmtGatewayTLSDistribution(prefix, cluster)...)
 		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.certificateRef", mgmt.TLS.CertificateRef.Name, state)...)
 		errs = append(errs, validateStorageTLSSecretRef(prefix+".tls.keyRef", mgmt.TLS.KeyRef.Name, state)...)
 	}

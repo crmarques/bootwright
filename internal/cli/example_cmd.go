@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
+	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 )
 
 func newExampleCmd(stdout io.Writer) *cobra.Command {
@@ -28,15 +29,17 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 	name := ""
 	kind := exampleKindContainerCluster
 	provider := string(scaffold.ProviderEmulatedBareMetal)
+	openshiftVersion := ""
+	cephRelease := ""
 	outputDir := ""
 	yes := false
 	cmd := &cobra.Command{
 		Use:   "init --name <cluster-name>",
 		Short: "Write a safe desired-state example directory",
 		Args:  cobra.NoArgs,
-		Example: `  bootwright example init --name my-sno-lab --output-dir ./my-sno-lab
-  bootwright example init --name my-baremetal-lab --provider bare-metal --output-dir ./my-baremetal-lab
-  bootwright example init --name my-ceph-lab --kind storage-cluster --output-dir ./my-ceph-lab`,
+		Example: `  bootwright example init --name my-sno-lab --openshift-version <version> --output-dir ./my-sno-lab
+  bootwright example init --name my-baremetal-lab --provider bare-metal --openshift-version <version> --output-dir ./my-baremetal-lab
+  bootwright example init --name my-ceph-lab --kind storage-cluster --ceph-release <release> --output-dir ./my-ceph-lab`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "cluster name to scaffold (required)")
 	cmd.Flags().StringVar(&kind, "kind", kind, "cluster kind to scaffold ("+strings.Join(exampleKinds(), "|")+")")
@@ -44,6 +47,8 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&provider, "provider", provider, "example provider for --kind container-cluster ("+strings.Join(scaffold.KnownProviders(), "|")+")")
 	registerFlagCompletion(cmd, "provider", scaffold.KnownProviders())
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory to write the example into (default: the --name value)")
+	cmd.Flags().StringVar(&openshiftVersion, "openshift-version", openshiftVersion, "OpenShift release version for --kind container-cluster (required)")
+	cmd.Flags().StringVar(&cephRelease, "ceph-release", cephRelease, "community Ceph release for --kind storage-cluster (required)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite files in a non-empty output directory")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		clusterName := name
@@ -53,7 +58,7 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 		if outputDir == "" {
 			outputDir = clusterName
 		}
-		files, fields, err := exampleWorkspace(kind, clusterName, provider, c.Flags().Changed("provider"))
+		files, fields, err := exampleWorkspace(kind, clusterName, provider, c.Flags().Changed("provider"), openshiftVersion, c.Flags().Changed("openshift-version"), cephRelease, c.Flags().Changed("ceph-release"))
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -73,10 +78,17 @@ func newExampleInitCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func exampleWorkspace(kind, clusterName, provider string, providerSet bool) ([]scaffold.File, []output.Field, error) {
+func exampleWorkspace(kind, clusterName, provider string, providerSet bool, openshiftVersion string, openshiftVersionSet bool, cephRelease string, cephReleaseSet bool) ([]scaffold.File, []output.Field, error) {
 	switch kind {
 	case exampleKindContainerCluster:
-		files, err := scaffold.Workspace(clusterName, scaffold.Provider(provider))
+		if cephReleaseSet {
+			return nil, nil, fmt.Errorf("--ceph-release applies only to --kind %s; drop the flag", exampleKindStorageCluster)
+		}
+		if !openshiftVersionSet || strings.TrimSpace(openshiftVersion) == "" {
+			return nil, nil, fmt.Errorf("--openshift-version is required with --kind %s", exampleKindContainerCluster)
+		}
+		openshiftVersion = strings.TrimSpace(openshiftVersion)
+		files, err := scaffold.Workspace(clusterName, scaffold.Provider(provider), openshiftVersion)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -85,19 +97,30 @@ func exampleWorkspace(kind, clusterName, provider string, providerSet bool) ([]s
 			{Key: "cluster", Value: clusterName},
 			{Key: "kind", Value: kind},
 			{Key: "provider", Value: provider},
+			{Key: "openshift version", Value: openshiftVersion},
 			{Key: "apply support", Value: fmt.Sprintf("%s - %s", support.Status, support.Summary)},
 		}, nil
 	case exampleKindStorageCluster:
+		if openshiftVersionSet {
+			return nil, nil, fmt.Errorf("--openshift-version applies only to --kind %s; drop the flag", exampleKindContainerCluster)
+		}
 		if providerSet {
 			return nil, nil, fmt.Errorf("--provider does not apply to --kind %s: its machines are provided, so no substrate is scaffolded; drop --provider", exampleKindStorageCluster)
 		}
-		files, err := storageExampleWorkspace(clusterName)
+		if !cephReleaseSet || cephRelease == "" {
+			return nil, nil, fmt.Errorf("--ceph-release is required with --kind %s", exampleKindStorageCluster)
+		}
+		if _, ok := cephprovider.ResolveRelease("oss", cephRelease); !ok {
+			return nil, nil, fmt.Errorf("--ceph-release must be an upstream Ceph release name or an x.y.z version")
+		}
+		files, err := storageExampleWorkspace(clusterName, cephRelease)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, []output.Field{
 			{Key: "cluster", Value: clusterName},
 			{Key: "kind", Value: kind},
+			{Key: "ceph release", Value: cephRelease},
 			{Key: "apply support", Value: storageExampleApplySupport},
 		}, nil
 	default:

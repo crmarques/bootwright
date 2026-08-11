@@ -10,8 +10,17 @@ import (
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
 
+const testOpenShiftVersion = "42.7.3"
+
+func TestWorkspaceRequiresOpenShiftVersion(t *testing.T) {
+	_, err := scaffold.Workspace("c1", scaffold.ProviderEmulatedBareMetal, "")
+	if err == nil || !strings.Contains(err.Error(), "OpenShift version is required") {
+		t.Fatalf("Workspace without version error = %v", err)
+	}
+}
+
 func TestWorkspaceUnknownProvider(t *testing.T) {
-	_, err := scaffold.Workspace("c1", scaffold.Provider("not-a-provider"))
+	_, err := scaffold.Workspace("c1", scaffold.Provider("not-a-provider"), testOpenShiftVersion)
 	if err == nil {
 		t.Fatal("expected error for unknown provider, got nil")
 	}
@@ -61,7 +70,7 @@ func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 			case scaffold.ProviderEmulatedBareMetal:
 				wantNames = emulatedNames
 			}
-			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p))
+			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p), testOpenShiftVersion)
 			if err != nil {
 				t.Fatalf("Workspace(%q): %v", p, err)
 			}
@@ -83,7 +92,7 @@ func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 func TestWorkspacePassesValidator(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
-			files, err := scaffold.Workspace("test-cluster", scaffold.Provider(p))
+			files, err := scaffold.Workspace("test-cluster", scaffold.Provider(p), testOpenShiftVersion)
 			if err != nil {
 				t.Fatalf("Workspace: %v", err)
 			}
@@ -104,7 +113,7 @@ func TestWorkspacePassesValidator(t *testing.T) {
 }
 
 func TestWorkspaceInterpolatesClusterName(t *testing.T) {
-	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal)
+	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal, testOpenShiftVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +122,7 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		"clusters/container/my-cluster/cluster-machines.yaml": {"name: my-cluster-master-0", "providerRef: my-cluster-libvirt"},
 		"infra/networkconfigs/networks.yaml":                  {"name: my-cluster-bridge"},
 		"infra/providers/provider.yaml":                       {"name: my-cluster-libvirt"},
-		"clusters/container/my-cluster/cluster.yaml":          {"name: my-cluster", "machineRef: my-cluster-master-0"},
+		"clusters/container/my-cluster/cluster.yaml":          {"name: my-cluster", "version: \"" + testOpenShiftVersion + "\"", "machineRef: my-cluster-master-0"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]
@@ -129,7 +138,7 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 }
 
 func TestEmulatedBareMetalScaffoldOmitsUnselectedProxy(t *testing.T) {
-	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal)
+	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal, testOpenShiftVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +154,7 @@ func TestEmulatedBareMetalScaffoldOmitsUnselectedProxy(t *testing.T) {
 func TestWorkspaceDoesNotRenderFlowStyleCollections(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
-			files, err := scaffold.Workspace("no-flow-maps", scaffold.Provider(p))
+			files, err := scaffold.Workspace("no-flow-maps", scaffold.Provider(p), testOpenShiftVersion)
 			if err != nil {
 				t.Fatalf("workspace: %v", err)
 			}
@@ -161,7 +170,7 @@ func TestWorkspaceDoesNotRenderFlowStyleCollections(t *testing.T) {
 func TestWorkspaceUsesContextSecretDeclaration(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
-			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p))
+			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p), testOpenShiftVersion)
 			if err != nil {
 				t.Fatalf("Workspace(%q): %v", p, err)
 			}
@@ -192,7 +201,7 @@ func TestWorkspaceUsesContextSecretDeclaration(t *testing.T) {
 func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
-			files, err := scaffold.Workspace("compact", scaffold.Provider(p))
+			files, err := scaffold.Workspace("compact", scaffold.Provider(p), testOpenShiftVersion)
 			if err != nil {
 				t.Fatalf("workspace: %v", err)
 			}

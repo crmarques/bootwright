@@ -283,10 +283,10 @@ const (
 	StorageCephDistributionRedHat = "redhat"
 	StorageCephDistributionIBM    = "ibm"
 
-	StorageCephCommunityDefaultRelease = "20.2.2"
-
 	StorageCephIBMCallHomeEnabled  = "enabled"
 	StorageCephIBMCallHomeDisabled = "disabled"
+
+	StorageCephadmWorkaroundMgmtGatewaySpecDependencyRecording = "mgmt-gateway-spec-dependency-recording"
 
 	StorageCephIBMPackageSourceVendor       = "vendor"
 	StorageCephIBMPackageSourceSubscription = "subscription"

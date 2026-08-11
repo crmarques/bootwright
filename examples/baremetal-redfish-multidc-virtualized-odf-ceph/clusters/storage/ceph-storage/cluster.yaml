@@ -8,6 +8,8 @@ spec:
   ceph:
     distribution: redhat
     release: "9.1"
+    image:
+      base: registry.redhat.io/rhceph/rhceph-9-rhel9
     entitlementRef: rhcs
     cephadm:
       clusterSSH:

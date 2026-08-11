@@ -48,6 +48,11 @@
       were kept intact.
   when: (bootwright_ceph_cleanup_foreign_fsids | default([])) | length > 0
 
+- name: Remove native Ceph preparation reports for the released cluster
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/native-preparation/{{ bootwright_selected_storage_cluster.name }}"
+    state: absent
+
 - name: Remove Ceph package ownership records
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record

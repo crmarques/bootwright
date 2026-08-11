@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
+func TestNormalizeStorageCephReleaseKeepsAuthoredCoordinates(t *testing.T) {
 	checksum := "sha256:" + strings.Repeat("A", 64)
 	cases := []struct {
 		name         string
@@ -18,10 +18,8 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 		wantChecksum string
 	}{
 		{
-			name:        "oss default is exact and reproducible",
-			ceph:        v1alpha1.StorageClusterCephSpec{},
-			wantRelease: "20.2.2",
-			wantVersion: "v20.2.2",
+			name: "oss release remains required desired state",
+			ceph: v1alpha1.StorageClusterCephSpec{},
 		},
 		{
 			name: "oss checksum and image are canonical",
@@ -35,9 +33,8 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 			wantChecksum: strings.Repeat("a", 64),
 		},
 		{
-			name:        "redhat default is current exact product release",
-			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionRedHat},
-			wantRelease: "9.1",
+			name: "redhat release is not compiled",
+			ceph: v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionRedHat},
 		},
 		{
 			name:        "authored release is carried verbatim",
@@ -50,9 +47,8 @@ func TestNormalizeStorageCephReleaseDefaults(t *testing.T) {
 			wantRelease: "9.9.2.0",
 		},
 		{
-			name:        "ibm default is current exact product release",
-			ceph:        v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM},
-			wantRelease: "9.9.1.0",
+			name: "ibm release is not compiled",
+			ceph: v1alpha1.StorageClusterCephSpec{Distribution: v1alpha1.StorageCephDistributionIBM},
 		},
 	}
 	for _, tc := range cases {

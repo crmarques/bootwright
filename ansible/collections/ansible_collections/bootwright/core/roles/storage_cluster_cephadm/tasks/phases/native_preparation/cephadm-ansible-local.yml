@@ -1,0 +1,222 @@
+---
+- name: Run the installed cephadm-ansible preparation artifact locally
+  vars:
+    bootwright_ceph_native_preparation_dir: "{{ bootwright_ceph_remote_work_dir }}-native-preparation"
+    bootwright_ceph_native_preparation_vars_path: "{{ bootwright_ceph_remote_work_dir }}-native-preparation/extra-vars.yml"
+    bootwright_ceph_native_preparation_playbook: /usr/share/cephadm-ansible/cephadm-preflight.yml
+    bootwright_ceph_native_preparation_config: /usr/share/cephadm-ansible/ansible.cfg
+    bootwright_ceph_native_preparation_run_reports_dir: >-
+      {{ bootwright_ceph_remote_work_dir }}-native-preparation/reports
+    bootwright_ceph_native_preparation_reports_dir: >-
+      {{ bootwright_ownership_dir }}/native-preparation/{{ bootwright_selected_storage_cluster.name }}
+    bootwright_ceph_native_runtime_package_requests: >-
+      {{ ([bootwright_ceph_provider.cephadmPackageSpec]
+          if (bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0)
+          else [bootwright_ceph_provider.cephadmPackage | default('cephadm')])
+         + ((bootwright_ceph_provider.nativePreparation.runtimePackageSpecs | default([]))
+            if (bootwright_ceph_provider.nativePreparation.runtimePackageSpecs | default([]) | length > 0)
+            else (bootwright_ceph_provider.nativePreparation.runtimePackages | default([])))
+         | reject('equalto', '') | unique | list }}
+    bootwright_ceph_native_preparation_extra_vars:
+      ceph_origin: custom
+      ceph_defaults_ceph_origin: custom
+      ceph_custom_repositories: []
+      upgrade_ceph_packages: false
+      ceph_defaults_upgrade_ceph_packages: false
+      ceph_pkgs: "{{ bootwright_ceph_native_runtime_package_requests }}"
+      ceph_defaults_ceph_pkgs: "{{ bootwright_ceph_native_runtime_package_requests }}"
+      ceph_client_pkgs: []
+      ceph_defaults_ceph_client_pkgs: []
+      infra_pkgs: "{{ bootwright_ceph_provider.prerequisitePackages | default([]) }}"
+      ceph_defaults_infra_pkgs: "{{ bootwright_ceph_provider.prerequisitePackages | default([]) }}"
+      packages_to_uninstall: []
+      client_group: bootwright_no_ceph_clients
+      ceph_defaults_client_group: bootwright_no_ceph_clients
+      reports_dir: "{{ bootwright_ceph_native_preparation_run_reports_dir }}"
+      set_insecure_registries: false
+  block:
+    - name: Require native package inputs for cephadm-ansible preparation
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_provider.cephadmPackage | default('') | length > 0
+          - bootwright_ceph_provider.cephadmAnsiblePackage | default('') | length > 0
+          - bootwright_ceph_native_runtime_package_requests | length > 1
+        fail_msg: >-
+          The selected native preparation mode requires cephadm, ceph-common, and
+          cephadm-ansible package inputs before it can run. The rendered provider policy
+          is incomplete; validate the StorageCluster declaration again and retry without
+          bypassing validation.
+        quiet: true
+
+    - name: Clear prior native preparation transient directory
+      ansible.builtin.file:
+        path: "{{ bootwright_ceph_native_preparation_dir }}"
+        state: absent
+
+    - name: Create the native preparation work directory
+      ansible.builtin.file:
+        path: "{{ bootwright_ceph_native_preparation_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Write root-only native preparation variables
+      ansible.builtin.copy:
+        dest: "{{ bootwright_ceph_native_preparation_vars_path }}"
+        content: "{{ bootwright_ceph_native_preparation_extra_vars | to_nice_yaml(indent=2, sort_keys=true) }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Inspect the installed native preparation entrypoints
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/bin/ansible-playbook
+        - "{{ bootwright_ceph_native_preparation_playbook }}"
+        - "{{ bootwright_ceph_native_preparation_config }}"
+      register: bootwright_ceph_native_preparation_entrypoints
+
+    - name: Require every installed native preparation entrypoint
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists | default(false) | bool
+          - item.stat.isreg | default(false) | bool
+        fail_msg: >-
+          The selected native preparation package did not install {{ item.item }} on
+          {{ bootwright_current_storage_host.hostname }}. Bootwright refuses to substitute
+          a bundled or downloaded playbook for the declared provider artifact.
+        quiet: true
+      loop: "{{ bootwright_ceph_native_preparation_entrypoints.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read the RPM owner of the installed native preparation playbook
+      ansible.builtin.command:
+        argv:
+          - rpm
+          - -qf
+          - --qf
+          - "%{NAME}\n"
+          - "{{ bootwright_ceph_native_preparation_playbook }}"
+      register: bootwright_ceph_native_preparation_owner
+      changed_when: false
+      failed_when: false
+
+    - name: Require the declared package to own the native preparation playbook
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_native_preparation_owner.rc | default(1) | int == 0
+          - >-
+            bootwright_ceph_provider.cephadmAnsiblePackage
+            in (bootwright_ceph_native_preparation_owner.stdout_lines | default([]))
+        fail_msg: >-
+          {{ bootwright_ceph_native_preparation_playbook }} on
+          {{ bootwright_current_storage_host.hostname }} is not owned by the declared
+          {{ bootwright_ceph_provider.cephadmAnsiblePackage }} RPM. Bootwright refuses to
+          execute an unowned replacement as the provider's native preflight artifact.
+        quiet: true
+
+    - name: Syntax-check the installed native preparation playbook
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_probe_timeout_seconds }}"
+          - /usr/bin/ansible-playbook
+          - --inventory
+          - localhost,
+          - --connection
+          - local
+          - --limit
+          - localhost
+          - --extra-vars
+          - "@{{ bootwright_ceph_native_preparation_vars_path }}"
+          - --syntax-check
+          - "{{ bootwright_ceph_native_preparation_playbook }}"
+        chdir: /usr/share/cephadm-ansible
+      environment:
+        ANSIBLE_CONFIG: "{{ bootwright_ceph_native_preparation_config }}"
+        ANSIBLE_LOG_PATH: "{{ bootwright_ceph_native_preparation_dir }}/ansible.log"
+        ANSIBLE_CACHE_PLUGIN: memory
+        ANSIBLE_CACHE_PLUGIN_CONNECTION: "{{ bootwright_ceph_native_preparation_dir }}/facts"
+        ANSIBLE_GATHERING: explicit
+        ANSIBLE_LOCAL_TEMP: "{{ bootwright_ceph_native_preparation_dir }}/local-tmp"
+        ANSIBLE_REMOTE_TEMP: "{{ bootwright_ceph_native_preparation_dir }}/remote-tmp"
+      changed_when: false
+
+    - name: Execute the installed native preparation playbook without package upgrades
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+          - "{{ bootwright_ceph_operation_batch_timeout_seconds }}"
+          - /usr/bin/ansible-playbook
+          - --inventory
+          - localhost,
+          - --connection
+          - local
+          - --limit
+          - localhost
+          - --extra-vars
+          - "@{{ bootwright_ceph_native_preparation_vars_path }}"
+          - "{{ bootwright_ceph_native_preparation_playbook }}"
+        chdir: /usr/share/cephadm-ansible
+      environment:
+        ANSIBLE_CONFIG: "{{ bootwright_ceph_native_preparation_config }}"
+        ANSIBLE_LOG_PATH: "{{ bootwright_ceph_native_preparation_dir }}/ansible.log"
+        ANSIBLE_CACHE_PLUGIN: memory
+        ANSIBLE_CACHE_PLUGIN_CONNECTION: "{{ bootwright_ceph_native_preparation_dir }}/facts"
+        ANSIBLE_GATHERING: explicit
+        ANSIBLE_LOCAL_TEMP: "{{ bootwright_ceph_native_preparation_dir }}/local-tmp"
+        ANSIBLE_REMOTE_TEMP: "{{ bootwright_ceph_native_preparation_dir }}/remote-tmp"
+      register: bootwright_ceph_native_preparation_run
+      changed_when: >-
+        bootwright_ceph_native_preparation_run.stdout | default('')
+        is search('changed=[1-9][0-9]*')
+
+    - name: Inspect the current native preparation report
+      ansible.builtin.stat:
+        path: "{{ bootwright_ceph_native_preparation_run_reports_dir }}/localhost_preflight_report.txt"
+      register: bootwright_ceph_native_preparation_report
+
+    - name: Require the current native preparation report
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_native_preparation_report.stat.exists | default(false) | bool
+          - bootwright_ceph_native_preparation_report.stat.isreg | default(false) | bool
+        fail_msg: >-
+          The installed native preparation playbook exited successfully but wrote no report
+          for {{ bootwright_current_storage_host.hostname }} at
+          {{ bootwright_ceph_native_preparation_run_reports_dir }}/localhost_preflight_report.txt.
+          Bootwright refuses to treat an incomplete provider preflight as preparation.
+
+    - name: Create the preserved native preparation report directory
+      ansible.builtin.file:
+        path: "{{ bootwright_ceph_native_preparation_reports_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Preserve the current native preparation report
+      ansible.builtin.copy:
+        src: "{{ bootwright_ceph_native_preparation_run_reports_dir }}/localhost_preflight_report.txt"
+        dest: "{{ bootwright_ceph_native_preparation_reports_dir }}/localhost_preflight_report.txt"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Surface the preserved native preparation report
+      ansible.builtin.debug:
+        msg: >-
+          Provider preflight report for {{ bootwright_current_storage_host.hostname }} is
+          preserved at
+          {{ bootwright_ceph_native_preparation_reports_dir }}/localhost_preflight_report.txt.
+  always:
+    - name: Remove native preparation transient inputs
+      ansible.builtin.file:
+        path: "{{ bootwright_ceph_native_preparation_dir }}"
+        state: absent

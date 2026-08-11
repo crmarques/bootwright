@@ -49,6 +49,7 @@ metadata:
 spec:
   type: ceph
   ceph:
+    release: tentacle
     cephadm:
       clusterSSH:
         user: root

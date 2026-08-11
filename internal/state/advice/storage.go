@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -321,14 +320,10 @@ func storageGrafanaCredentialAdvisories(object string, cluster v1alpha1.StorageC
 
 func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
 	distribution := cluster.Spec.Ceph.Distribution
-	if distribution != v1alpha1.StorageCephDistributionIBM && distribution != v1alpha1.StorageCephDistributionRedHat {
+	if !v1alpha1.StorageCephDistributionSubscriptionBacked(distribution) {
 		return nil
 	}
 	if v1alpha1.StorageCephImagePinned(cluster.Spec.Ceph) {
-		return nil
-	}
-	example, ok := cephprovider.DerivedImageRepository(distribution, cluster.Spec.Ceph.Release, "")
-	if !ok {
 		return nil
 	}
 	return []StorageAdvisory{{
@@ -337,7 +332,7 @@ func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []St
 		Object:      object,
 		Finding:     fmt.Sprintf("distribution %q pins no spec.ceph.image.version", distribution),
 		Impact:      "the install uses the distribution-packaged cephadm's default image tag, which floats; the running Ceph version is not reproducible across re-installs",
-		Remediation: "set spec.ceph.image.version to the vendor build you run, as a tag or a sha256: digest; spec.ceph.image.base defaults to " + example + " and is only authored for a mirror",
+		Remediation: "set spec.ceph.image.version to the build you run, as a tag or a sha256: digest, while keeping spec.ceph.image.base as the declared image repository",
 	}}
 }
 

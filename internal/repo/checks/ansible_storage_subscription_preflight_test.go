@@ -12,9 +12,9 @@ func TestIBMSubscriptionPreflightScopesOneQueryToDeclaredRepositories(t *testing
 	probeIdx := findAnsibleTask(t, tasks, "Probe only the declared subscription repositories for all IBM Ceph packages")
 	readableIdx := findAnsibleTask(t, tasks, "Require every declared IBM Ceph subscription repository to be readable")
 	contentIdx := findAnsibleTask(t, tasks, "Require the declared subscription repositories to serve every IBM Ceph package")
-	buildsIdx := findAnsibleTask(t, tasks, "Resolve the cephadm builds the declared subscription repositories serve")
-	if !(resolveIdx < probeIdx && probeIdx < readableIdx && readableIdx < contentIdx && contentIdx < buildsIdx) {
-		t.Fatalf("IBM subscription preflight must resolve, query once, prove readability, attribute every package, then resolve builds: %d %d %d %d %d", resolveIdx, probeIdx, readableIdx, contentIdx, buildsIdx)
+	pinnedIdx := findAnsibleTask(t, tasks, "Require the declared subscription repositories to serve each pinned native tooling build")
+	if !(resolveIdx < probeIdx && probeIdx < readableIdx && readableIdx < contentIdx && contentIdx < pinnedIdx) {
+		t.Fatalf("IBM subscription preflight must resolve, query once, prove readability, attribute every package, then prove every exact artifact: %d %d %d %d %d", resolveIdx, probeIdx, readableIdx, contentIdx, pinnedIdx)
 	}
 
 	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -22,8 +22,12 @@ func TestIBMSubscriptionPreflightScopesOneQueryToDeclaredRepositories(t *testing
 		t.Fatalf("IBM repository probe resolution must be set_fact, got %v", tasks[resolveIdx])
 	}
 	packages := fmt.Sprint(resolve["bootwright_ceph_subscription_probe_packages"])
-	if !strings.Contains(packages, "cephadmPackage") || !strings.Contains(packages, "ibm-storage-ceph-license") {
+	if !strings.Contains(packages, "packageArtifacts") || !strings.Contains(packages, "attribute='name'") || !strings.Contains(packages, "ibm-storage-ceph-license") {
 		t.Fatalf("one probe must carry both required package names, got %s", packages)
+	}
+	pins := fmt.Sprint(resolve["bootwright_ceph_subscription_pinned_packages"])
+	if !strings.Contains(pins, "packageArtifacts") {
+		t.Fatalf("exact subscription probes must consume the rendered provider artifact set, got %s", pins)
 	}
 	repoArgs := fmt.Sprint(resolve["bootwright_ceph_subscription_probe_repo_args"])
 	for _, want := range []string{"repository.redhatRepos", "--enablerepo=", "--setopt=", ".skip_if_unavailable=False"} {
@@ -85,17 +89,23 @@ func TestIBMSubscriptionPreflightScopesOneQueryToDeclaredRepositories(t *testing
 		t.Fatalf("package content refusal must distinguish readability and carry the exact retry, got %s", failure)
 	}
 
-	builds := fmt.Sprint(tasks[buildsIdx])
-	if strings.Contains(builds, ".results") || !strings.Contains(builds, "subscription_preflight.stdout_lines") || !strings.Contains(builds, "^build ") || !strings.Contains(builds, "^spec ") {
-		t.Fatalf("cephadm build resolution must consume the one package-attributed stdout, got %s", builds)
-	}
-	pinned := tasks[findAnsibleTask(t, tasks, "Require the declared subscription repositories to serve the pinned cephadm build")]
+	pinned := tasks[pinnedIdx]
 	pinnedBody, ok := pinned["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("pinned build gate must be an assert, got %v", pinned)
 	}
+	if got := fmt.Sprint(pinned["loop"]); !strings.Contains(got, "bootwright_ceph_subscription_pinned_packages") {
+		t.Fatalf("pinned build gate must prove every rendered exact native artifact, got loop=%s", got)
+	}
+	pinnedAssertion := fmt.Sprint(pinnedBody["that"])
+	if !strings.Contains(pinnedAssertion, "item.spec") || !strings.Contains(pinnedAssertion, "subscription_package_lines") || !strings.Contains(pinnedAssertion, "^spec ") {
+		t.Fatalf("pinned build gate must consume the one package-attributed stdout and compare each exact spec, got %s", pinnedAssertion)
+	}
+	if got := fmt.Sprint(pinned["vars"]); strings.Contains(got, ".results") || !strings.Contains(got, "subscription_preflight.stdout_lines") || !strings.Contains(got, "^build ") {
+		t.Fatalf("pinned build diagnostics must consume the one package-attributed stdout, got %s", got)
+	}
 	pinnedFailure := fmt.Sprint(pinnedBody["fail_msg"])
-	if !strings.Contains(pinnedFailure, "declared repositories") || !strings.Contains(pinnedFailure, "bootwright_mutating_invocation") || strings.Contains(pinnedFailure, "re-run apply") {
+	if !strings.Contains(pinnedFailure, "declared repositories") || !strings.Contains(pinnedFailure, "desiredStatePath") || !strings.Contains(pinnedFailure, "bootwright_mutating_invocation") || strings.Contains(pinnedFailure, "re-run apply") {
 		t.Fatalf("pinned build refusal must name only declared repositories and the exact retry, got %s", pinnedFailure)
 	}
 }

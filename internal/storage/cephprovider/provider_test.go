@@ -70,9 +70,10 @@ func TestVarsEmitsOSRegistrationRHSMForIBM(t *testing.T) {
 }
 
 func TestSelectDefaultsToOSSProvider(t *testing.T) {
+	release := "37.4.2"
 	cluster := v1alpha1.StorageCluster{
 		Spec: v1alpha1.StorageClusterSpec{
-			Ceph: &v1alpha1.StorageClusterCephSpec{},
+			Ceph: &v1alpha1.StorageClusterCephSpec{Release: release},
 		},
 	}
 	provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
@@ -82,17 +83,17 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	if provider.RequiresRHSM || provider.RequiresRegistry || provider.RequiresLicense {
 		t.Fatalf("OSS provider requires vendor material: %#v", provider)
 	}
-	if provider.Community.Version != v1alpha1.StorageCephCommunityDefaultRelease {
-		t.Fatalf("community version = %q, want default %q", provider.Community.Version, v1alpha1.StorageCephCommunityDefaultRelease)
+	if provider.Community.Version != release {
+		t.Fatalf("community version = %q, want authored %q", provider.Community.Version, release)
 	}
 	community, ok := Vars(provider)["community"].(map[string]any)
 	if !ok {
 		t.Fatalf("oss provider vars missing community map: %#v", Vars(provider))
 	}
-	if community["version"] != v1alpha1.StorageCephCommunityDefaultRelease {
-		t.Fatalf("community vars version = %v, want default", community["version"])
+	if community["version"] != release {
+		t.Fatalf("community vars version = %v, want authored release", community["version"])
 	}
-	if provider.Image != "quay.io/ceph/ceph:v"+v1alpha1.StorageCephCommunityDefaultRelease {
+	if provider.Image != "quay.io/ceph/ceph:v"+release {
 		t.Fatalf("default image = %q, want exact release image", provider.Image)
 	}
 	if _, hasMirror := community["mirror"]; hasMirror {
@@ -118,12 +119,10 @@ func TestResolveReleaseCarriesTheAuthoredValueAndItsStream(t *testing.T) {
 		wantValue    string
 		wantStream   string
 	}{
-		{v1alpha1.StorageCephDistributionRedHat, "", "9.1", "9"},
 		{v1alpha1.StorageCephDistributionRedHat, "9", "9", "9"},
 		{v1alpha1.StorageCephDistributionRedHat, "9.0.3", "9.0.3", "9"},
 		{v1alpha1.StorageCephDistributionRedHat, "9.2", "9.2", "9"},
 		{v1alpha1.StorageCephDistributionRedHat, "10", "10", "10"},
-		{v1alpha1.StorageCephDistributionIBM, "", "9.9.1.0", "9"},
 		{v1alpha1.StorageCephDistributionIBM, "9.9.2.0", "9.9.2.0", "9"},
 		{v1alpha1.StorageCephDistributionIBM, "10.1.0.0", "10.1.0.0", "10"},
 	}
@@ -138,13 +137,67 @@ func TestResolveReleaseCarriesTheAuthoredValueAndItsStream(t *testing.T) {
 	}
 }
 
+func TestResolveReleaseRejectsMissingAuthoredVersion(t *testing.T) {
+	for _, distribution := range []string{
+		v1alpha1.StorageCephDistributionOSS,
+		v1alpha1.StorageCephDistributionRedHat,
+		v1alpha1.StorageCephDistributionIBM,
+	} {
+		if _, ok := ResolveRelease(distribution, ""); ok {
+			t.Fatalf("ResolveRelease(%q, empty) selected a compiled default", distribution)
+		}
+	}
+}
+
+func TestArtifactPoliciesDriveExactCoordinatesWithoutReleaseBranches(t *testing.T) {
+	cases := []struct {
+		distribution string
+		want         ArtifactPolicy
+	}{
+		{distribution: v1alpha1.StorageCephDistributionOSS, want: ArtifactPolicy{PackagePin: ArtifactPinForbidden, CephadmAnsiblePackagePin: ArtifactPinForbidden}},
+		{distribution: v1alpha1.StorageCephDistributionRedHat, want: ArtifactPolicy{PackagePin: ArtifactPinOptional, CephadmAnsiblePackagePin: ArtifactPinOptional, ImageBaseRequired: true, NativePreparationMode: NativePreparationCephadmAnsibleLocal}},
+		{distribution: v1alpha1.StorageCephDistributionIBM, want: ArtifactPolicy{
+			PackagePin:                       ArtifactPinRequired,
+			RPMReleaseRequired:               true,
+			CephadmAnsiblePackagePin:         ArtifactPinRequired,
+			CephadmAnsibleRPMReleaseRequired: true,
+			ImageBaseRequired:                true,
+			ImagePinRequired:                 true,
+			NativeParityMode:                 NativeParityCephVersion,
+			NativePreparationMode:            NativePreparationCephadmAnsibleLocal,
+		}},
+	}
+	for _, tc := range cases {
+		policy, ok := ArtifactPolicyFor(tc.distribution)
+		if !ok || policy != tc.want {
+			t.Fatalf("ArtifactPolicyFor(%q) = %#v, %t; want %#v", tc.distribution, policy, ok, tc.want)
+		}
+		release := "42.7.3.1"
+		if tc.distribution == v1alpha1.StorageCephDistributionOSS {
+			release = "future"
+		}
+		cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: tc.distribution,
+			Release:      release,
+		}}}
+		provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+		if provider.ArtifactPolicy != tc.want {
+			t.Fatalf("Select(%q) artifact policy = %#v, want %#v", tc.distribution, provider.ArtifactPolicy, tc.want)
+		}
+		projected := Vars(provider)["artifactPolicy"].(map[string]any)
+		if projected["packagePin"] != string(tc.want.PackagePin) || projected["cephadmAnsiblePackagePin"] != string(tc.want.CephadmAnsiblePackagePin) || projected["nativeParityMode"] != tc.want.NativeParityMode || projected["nativePreparationMode"] != tc.want.NativePreparationMode {
+			t.Fatalf("Vars(%q) artifact policy = %#v", tc.distribution, projected)
+		}
+	}
+}
+
 func TestResolveReleaseAcceptsAnyParseableOSSRelease(t *testing.T) {
-	for _, release := range []string{"", "tentacle", "20.2.2", "squid", "19.2.1", "reef", "18.2.7", "21.2.0", "unicorn"} {
+	for _, release := range []string{"tentacle", "20.2.2", "squid", "19.2.1", "reef", "18.2.7", "21.2.0", "unicorn"} {
 		if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, release); !ok {
 			t.Fatalf("ResolveRelease(oss, %q) rejected a parseable release", release)
 		}
 	}
-	for _, release := range []string{"20.2", "Squid", "19.2.1-rc1"} {
+	for _, release := range []string{"", "20.2", "Squid", "19.2.1-rc1"} {
 		if _, ok := ResolveRelease(v1alpha1.StorageCephDistributionOSS, release); ok {
 			t.Fatalf("ResolveRelease(oss, %q) accepted an underivable release", release)
 		}
@@ -254,26 +307,27 @@ func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
 	}
 }
 
-func TestSelectComposesImageVersionOntoTheDerivedBase(t *testing.T) {
-	cluster := func(distribution, release, version string) v1alpha1.StorageCluster {
+func TestSelectComposesImageVersionOntoTheAuthoredBase(t *testing.T) {
+	cluster := func(distribution, release, base, version string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: distribution,
 			Release:      release,
-			Image:        imageSpec("", version),
+			Image:        imageSpec(base, version),
 		}}}
 	}
 	cases := []struct {
 		distribution string
 		release      string
+		base         string
 		version      string
 		want         string
 	}{
-		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "9.9.1.0-123", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:9.9.1.0-123"},
-		{v1alpha1.StorageCephDistributionRedHat, "9.1", "9-1234", "registry.redhat.io/rhceph/rhceph-9-rhel9:9-1234"},
-		{v1alpha1.StorageCephDistributionOSS, "squid", "v19.2.1", "quay.io/ceph/ceph:v19.2.1"},
+		{v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9", "9.9.1.0-123", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:9.9.1.0-123"},
+		{v1alpha1.StorageCephDistributionRedHat, "9.1", "registry.redhat.io/rhceph/rhceph-9-rhel9", "9-1234", "registry.redhat.io/rhceph/rhceph-9-rhel9:9-1234"},
+		{v1alpha1.StorageCephDistributionOSS, "squid", "quay.io/ceph/ceph", "v19.2.1", "quay.io/ceph/ceph:v19.2.1"},
 	}
 	for _, tc := range cases {
-		provider := Select(cluster(tc.distribution, tc.release, tc.version), nil, secret.Index{}, "/context/secrets")
+		provider := Select(cluster(tc.distribution, tc.release, tc.base, tc.version), nil, secret.Index{}, "/context/secrets")
 		if provider.Image != tc.want {
 			t.Fatalf("%s composed image = %q, want %q", tc.distribution, provider.Image, tc.want)
 		}
@@ -283,21 +337,22 @@ func TestSelectComposesImageVersionOntoTheDerivedBase(t *testing.T) {
 	}
 }
 
-func TestSelectComposedImageBaseMatchesTheVendorPrefixGuard(t *testing.T) {
+func TestSelectAuthoredImageBaseMatchesTheVendorPrefixGuard(t *testing.T) {
 	for _, distribution := range []string{v1alpha1.StorageCephDistributionIBM, v1alpha1.StorageCephDistributionRedHat} {
-		for _, release := range []string{"", "9", "9.1", "10.0.0.1"} {
-			cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-				Distribution: distribution,
-				Release:      release,
-				Image:        imageSpec("", "9-1234"),
-			}}}
-			provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+		for _, release := range []string{"9", "9.1", "10.0.0.1"} {
 			prefix, ok := ImageRepositoryPrefix(distribution, release, "")
 			if !ok {
 				t.Fatalf("%s release %q has no vendor prefix", distribution, release)
 			}
-			if !strings.HasPrefix(provider.ImageBase, prefix) {
-				t.Fatalf("%s release %q derived base %q does not satisfy the guard prefix %q", distribution, release, provider.ImageBase, prefix)
+			base := prefix + "14"
+			cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+				Distribution: distribution,
+				Release:      release,
+				Image:        imageSpec(base, "42-future-build"),
+			}}}
+			provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
+			if provider.ImageBase != base {
+				t.Fatalf("%s release %q image base = %q, want authored %q", distribution, release, provider.ImageBase, base)
 			}
 		}
 	}
@@ -308,6 +363,9 @@ func TestSelectKeepsTheOwnershipPackageNameBareWhilePinningTheBuild(t *testing.T
 		Distribution:   v1alpha1.StorageCephDistributionIBM,
 		Release:        "9.9.1.0",
 		PackageVersion: "19.2.1-245.el9cp",
+		Cephadm: v1alpha1.StorageCephadmSpec{Ansible: &v1alpha1.StorageCephadmAnsible{
+			PackageVersion: "5.0.2-1.el9cp",
+		}},
 	}}}
 	provider := Select(cluster, nil, secret.Index{}, "/context/secrets")
 	if provider.CephadmPackage != "cephadm" {
@@ -316,14 +374,71 @@ func TestSelectKeepsTheOwnershipPackageNameBareWhilePinningTheBuild(t *testing.T
 	if provider.CephadmPackageSpec != "cephadm-19.2.1-245.el9cp" {
 		t.Fatalf("pinned install spec = %q", provider.CephadmPackageSpec)
 	}
+	if provider.CephadmAnsiblePackage != "cephadm-ansible" || provider.CephadmAnsiblePackageSpec != "cephadm-ansible-5.0.2-1.el9cp" {
+		t.Fatalf("cephadm-ansible package coordinates = %q %q", provider.CephadmAnsiblePackage, provider.CephadmAnsiblePackageSpec)
+	}
+	wantArtifacts := []PackageArtifact{
+		{Name: "cephadm", Spec: "cephadm-19.2.1-245.el9cp", DesiredStatePath: "spec.ceph.packageVersion"},
+		{Name: "ceph-common", Spec: "ceph-common-19.2.1-245.el9cp", DesiredStatePath: "spec.ceph.packageVersion"},
+		{Name: "cephadm-ansible", Spec: "cephadm-ansible-5.0.2-1.el9cp", DesiredStatePath: "spec.ceph.cephadm.ansible.packageVersion"},
+	}
+	if !slices.Equal(provider.PackageArtifacts, wantArtifacts) {
+		t.Fatalf("IBM package artifacts = %#v, want %#v", provider.PackageArtifacts, wantArtifacts)
+	}
+	if !slices.Equal(provider.NativePreparation.RuntimePackages, []string{"ceph-common"}) || !slices.Equal(provider.NativePreparation.RuntimePackageSpecs, []string{"ceph-common-19.2.1-245.el9cp"}) {
+		t.Fatalf("IBM native preparation runtime packages = %#v", provider.NativePreparation)
+	}
 	vars := Vars(provider)
-	if vars["cephadmPackage"] != "cephadm" || vars["cephadmPackageSpec"] != "cephadm-19.2.1-245.el9cp" {
+	if vars["cephadmPackage"] != "cephadm" || vars["cephadmPackageSpec"] != "cephadm-19.2.1-245.el9cp" || vars["cephadmAnsiblePackage"] != "cephadm-ansible" || vars["cephadmAnsiblePackageSpec"] != "cephadm-ansible-5.0.2-1.el9cp" {
 		t.Fatalf("package vars = %#v", vars)
+	}
+	if projected, ok := vars["packageArtifacts"].([]map[string]any); !ok || len(projected) != len(wantArtifacts) {
+		t.Fatalf("projected IBM package artifacts = %#v", vars["packageArtifacts"])
 	}
 
 	cluster.Spec.Ceph.PackageVersion = ""
+	cluster.Spec.Ceph.Cephadm.Ansible = nil
 	if _, ok := Vars(Select(cluster, nil, secret.Index{}, "/context/secrets"))["cephadmPackageSpec"]; ok {
 		t.Fatalf("unpinned provider must omit cephadmPackageSpec")
+	}
+	if _, ok := Vars(Select(cluster, nil, secret.Index{}, "/context/secrets"))["cephadmAnsiblePackageSpec"]; ok {
+		t.Fatalf("unpinned provider must omit cephadmAnsiblePackageSpec")
+	}
+}
+
+func TestSelectRedHatNativePreparationKeepsOptionalPinsIndependent(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+		Distribution: v1alpha1.StorageCephDistributionRedHat,
+		Release:      "42.1",
+	}}}
+
+	unpinned := Select(cluster, nil, secret.Index{}, "/context/secrets")
+	if len(unpinned.PackageArtifacts) != 0 {
+		t.Fatalf("unpinned Red Hat package artifacts = %#v, want none", unpinned.PackageArtifacts)
+	}
+	if !slices.Equal(unpinned.NativePreparation.RuntimePackages, []string{"ceph-common"}) || len(unpinned.NativePreparation.RuntimePackageSpecs) != 0 {
+		t.Fatalf("unpinned Red Hat native preparation = %#v", unpinned.NativePreparation)
+	}
+	if _, ok := Vars(unpinned)["packageArtifacts"]; ok {
+		t.Fatalf("unpinned Red Hat provider must omit exact packageArtifacts")
+	}
+
+	cluster.Spec.Ceph.PackageVersion = "31.7.3-456.el14"
+	runtimePinned := Select(cluster, nil, secret.Index{}, "/context/secrets")
+	wantRuntime := []PackageArtifact{
+		{Name: "cephadm", Spec: "cephadm-31.7.3-456.el14", DesiredStatePath: "spec.ceph.packageVersion"},
+		{Name: "ceph-common", Spec: "ceph-common-31.7.3-456.el14", DesiredStatePath: "spec.ceph.packageVersion"},
+	}
+	if !slices.Equal(runtimePinned.PackageArtifacts, wantRuntime) || !slices.Equal(runtimePinned.NativePreparation.RuntimePackageSpecs, []string{"ceph-common-31.7.3-456.el14"}) {
+		t.Fatalf("runtime-pinned Red Hat provider = artifacts %#v preparation %#v", runtimePinned.PackageArtifacts, runtimePinned.NativePreparation)
+	}
+
+	cluster.Spec.Ceph.PackageVersion = ""
+	cluster.Spec.Ceph.Cephadm.Ansible = &v1alpha1.StorageCephadmAnsible{PackageVersion: "17.3.2-9.el14"}
+	ansiblePinned := Select(cluster, nil, secret.Index{}, "/context/secrets")
+	wantAnsible := []PackageArtifact{{Name: "cephadm-ansible", Spec: "cephadm-ansible-17.3.2-9.el14", DesiredStatePath: "spec.ceph.cephadm.ansible.packageVersion"}}
+	if !slices.Equal(ansiblePinned.PackageArtifacts, wantAnsible) || len(ansiblePinned.NativePreparation.RuntimePackageSpecs) != 0 {
+		t.Fatalf("ansible-pinned Red Hat provider = artifacts %#v preparation %#v", ansiblePinned.PackageArtifacts, ansiblePinned.NativePreparation)
 	}
 }
 
@@ -334,11 +449,6 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 			Release:      release,
 			Image:        imageSpec(base, version),
 		}}}
-	}
-
-	def := Select(redhat("", "", ""), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
-	if got := def[len(def)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
-		t.Fatalf("default tools repo = %q", got)
 	}
 
 	repos := Select(redhat("9.0", "registry.redhat.io/rhceph/rhceph-9-rhel9", "9"), nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
@@ -359,9 +469,6 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 			Release:      release,
 		}}}
 	}
-	if url := Select(ibm(""), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
-		t.Fatalf("default ibm repo url = %q", url)
-	}
 	if url := Select(ibm("9"), nil, secret.Index{}, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo" {
 		t.Fatalf("stream alias ibm repo url = %q, want stream 9", url)
 	}
@@ -370,7 +477,7 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 	}
 }
 
-func TestSelectResolvesContainerImageBase(t *testing.T) {
+func TestSelectUsesAuthoredContainerImageBase(t *testing.T) {
 	cluster := func(distribution, release, base string) v1alpha1.StorageCluster {
 		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: distribution,
@@ -385,13 +492,11 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 		base         string
 		want         string
 	}{
-		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "9", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"ibm full product version", v1alpha1.StorageCephDistributionIBM, "9.9.1.0", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
-		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
+		{"ibm omitted base", v1alpha1.StorageCephDistributionIBM, "9", "", ""},
+		{"redhat omitted base", v1alpha1.StorageCephDistributionRedHat, "9", "", ""},
 		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
 		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},
-		{"ibm authored base", v1alpha1.StorageCephDistributionIBM, "", "mirror.example.test/ibm-ceph/ceph-9-rhel9", "mirror.example.test/ibm-ceph/ceph-9-rhel9"},
+		{"ibm authored base", v1alpha1.StorageCephDistributionIBM, "9", "mirror.example.test/ibm-ceph/ceph-9-rhel14", "mirror.example.test/ibm-ceph/ceph-9-rhel14"},
 		{"redhat authored base", v1alpha1.StorageCephDistributionRedHat, "9.1", "mirror.example.test/rhceph/rhceph-9-rhel9", "mirror.example.test/rhceph/rhceph-9-rhel9"},
 		{"oss authored base", v1alpha1.StorageCephDistributionOSS, "19.2.1", "mirror.example.test/ceph/ceph", "mirror.example.test/ceph/ceph"},
 	}
@@ -401,7 +506,11 @@ func TestSelectResolvesContainerImageBase(t *testing.T) {
 			if provider.ImageBase != tc.want {
 				t.Fatalf("ImageBase = %q, want %q", provider.ImageBase, tc.want)
 			}
-			if got := Vars(provider)["imageBase"]; got != tc.want {
+			got, present := Vars(provider)["imageBase"]
+			if tc.want == "" && present {
+				t.Fatalf("imageBase var = %v, want omission", got)
+			}
+			if tc.want != "" && got != tc.want {
 				t.Fatalf("imageBase var = %v, want %q", got, tc.want)
 			}
 		})
@@ -420,69 +529,6 @@ func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
 		if got := ImageRepository(in); got != want {
 			t.Fatalf("ImageRepository(%q) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-func TestDerivedImageRepositoryUsesDistributionStreamAndMirrorRoot(t *testing.T) {
-	cases := []struct {
-		name         string
-		distribution string
-		release      string
-		registry     string
-		want         string
-		wantOK       bool
-	}{
-		{
-			name:         "redhat current default",
-			distribution: v1alpha1.StorageCephDistributionRedHat,
-			want:         "registry.redhat.io/rhceph/rhceph-9-rhel9",
-			wantOK:       true,
-		},
-		{
-			name:         "redhat exact release mirror",
-			distribution: v1alpha1.StorageCephDistributionRedHat,
-			release:      "9.0",
-			registry:     "mirror.example.test/vendor",
-			want:         "mirror.example.test/vendor/rhceph/rhceph-9-rhel9",
-			wantOK:       true,
-		},
-		{
-			name:         "ibm bare stream",
-			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9",
-			want:         "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
-			wantOK:       true,
-		},
-		{
-			name:         "ibm mirror",
-			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1.0",
-			registry:     "mirror.example.test/ibm",
-			want:         "mirror.example.test/ibm/ibm-ceph/ceph-9-rhel9",
-			wantOK:       true,
-		},
-		{
-			name:         "release newer than bootwright derives its own stream",
-			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "10.1.0.0",
-			want:         "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9",
-			wantOK:       true,
-		},
-		{
-			name:         "redhat release newer than bootwright derives its own stream",
-			distribution: v1alpha1.StorageCephDistributionRedHat,
-			release:      "9.2",
-			want:         "registry.redhat.io/rhceph/rhceph-9-rhel9",
-			wantOK:       true,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := DerivedImageRepository(tc.distribution, tc.release, tc.registry)
-			if ok != tc.wantOK || got != tc.want {
-				t.Fatalf("DerivedImageRepository(%q, %q, %q) = %q, %t; want %q, %t", tc.distribution, tc.release, tc.registry, got, ok, tc.want, tc.wantOK)
-			}
-		})
 	}
 }
 
@@ -652,6 +698,7 @@ func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
 	for _, tc := range cases {
 		cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
 			Distribution: tc.distribution,
+			Release:      "9.1",
 		}}}
 		repos := Select(cluster, nil, secret.Index{}, "/context/secrets").Repository.RedHatRepos
 		if len(repos) != len(tc.want) {
@@ -723,17 +770,32 @@ func TestSelectDerivesPackageSourcesForAReleaseNewerThanBootwright(t *testing.T)
 	}
 
 	ibm := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
-		Distribution: v1alpha1.StorageCephDistributionIBM,
-		Release:      "9.9.2.0",
-		IBM:          &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
+		Distribution:   v1alpha1.StorageCephDistributionIBM,
+		Release:        "42.7.3.1",
+		PackageVersion: "31.7.3-456.el14",
+		Cephadm: v1alpha1.StorageCephadmSpec{Ansible: &v1alpha1.StorageCephadmAnsible{
+			PackageVersion: "17.3.2-9.el14",
+		}},
+		Image: &v1alpha1.StorageCephImageSpec{
+			Base:    "cp.icr.io/cp/ibm-ceph/ceph-42-rhel14",
+			Version: "v42.7-12345",
+		},
+		IBM: &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled},
 	}}}
 	provider := Select(ibm, nil, secret.Index{}, "/context/secrets")
-	wantURL := "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-{{ ansible_distribution_major_version }}.repo"
+	wantURL := "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-42-rhel-{{ ansible_distribution_major_version }}.repo"
 	if provider.Repository.IBMRepoURL != wantURL {
-		t.Fatalf("ibm 9.9.2.0 repo URL = %q, want %q", provider.Repository.IBMRepoURL, wantURL)
+		t.Fatalf("future IBM repo URL = %q, want %q", provider.Repository.IBMRepoURL, wantURL)
 	}
-	if provider.ImageBase != "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" {
-		t.Fatalf("ibm 9.9.2.0 imageBase = %q", provider.ImageBase)
+	if provider.ImageBase != ibm.Spec.Ceph.Image.Base || provider.Image != ibm.Spec.Ceph.Image.Base+":"+ibm.Spec.Ceph.Image.Version {
+		t.Fatalf("future IBM image coordinates were rewritten: base=%q image=%q", provider.ImageBase, provider.Image)
+	}
+	if provider.CephadmPackageSpec != "cephadm-31.7.3-456.el14" || provider.CephadmAnsiblePackageSpec != "cephadm-ansible-17.3.2-9.el14" {
+		t.Fatalf("future IBM native package coordinates were rewritten: cephadm=%q cephadm-ansible=%q", provider.CephadmPackageSpec, provider.CephadmAnsiblePackageSpec)
+	}
+	policy := Vars(provider)["artifactPolicy"].(map[string]any)
+	if policy["packagePin"] != string(ArtifactPinRequired) || policy["cephadmAnsiblePackagePin"] != string(ArtifactPinRequired) || policy["nativeParityMode"] != NativeParityCephVersion {
+		t.Fatalf("future IBM tuple lost distribution artifact policy: %#v", policy)
 	}
 	runtimeOS := Vars(provider)["runtimeOS"].(map[string]any)
 	if runtimeOS["family"] != "rhel" || len(runtimeOS) != 1 {
@@ -752,7 +814,7 @@ func TestUpstreamCephMajorDerivesOnlyWhatTheReleaseActuallyNames(t *testing.T) {
 		{distribution: v1alpha1.StorageCephDistributionOSS, release: "squid", want: 19, ok: true},
 		{distribution: v1alpha1.StorageCephDistributionOSS, release: "tentacle", want: 20, ok: true},
 		{distribution: v1alpha1.StorageCephDistributionOSS, release: "19.2.3", want: 19, ok: true},
-		{distribution: v1alpha1.StorageCephDistributionOSS, release: "", want: 20, ok: true},
+		{distribution: v1alpha1.StorageCephDistributionOSS, release: ""},
 		{distribution: v1alpha1.StorageCephDistributionOSS, release: "umbriel"},
 		{distribution: v1alpha1.StorageCephDistributionOSS, release: "not a release"},
 		{distribution: v1alpha1.StorageCephDistributionIBM, release: "9.9.1.0"},

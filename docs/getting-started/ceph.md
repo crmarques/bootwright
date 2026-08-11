@@ -48,13 +48,14 @@ how managed-OS installs work in general, see
 what it writes always matches your binary's schema:
 
 ```bash
-bootwright example init --name my-ceph --kind storage-cluster --output-dir ./my-ceph
+bootwright example init --name my-ceph --kind storage-cluster --ceph-release <release> --output-dir ./my-ceph
 ```
 
 That writes the four kinds
 [the desired-state model](../concepts/index.md#the-smallest-input) calls the
-smallest Ceph input, and the result passes `bootwright validate -f ./my-ceph` as
-written:
+smallest Ceph input. `--ceph-release` is authored install intent; the scaffold
+never chooses a compiled current release. The result passes
+`bootwright validate -f ./my-ceph` as written:
 
 ```text
 my-ceph/
@@ -232,11 +233,15 @@ resolvers. It also publishes the RGW S3 endpoint
 The Ceph install intent. `StorageCluster` `ceph-ibm` is `type: ceph`,
 `management: managed` (bootwright installs and owns it via cephadm). Its `spec.ceph`
 block sets `distribution: ibm`, `release: "9.9.0.3"`,
-`packageVersion: "20.1.0-221.el9cp"`, `image.version: "v9.0-20201"`,
+`packageVersion: "20.1.0-221.el9cp"`,
+`cephadm.ansible.packageVersion: "5.0.2-1.el9cp"`,
+`image.base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9`,
+`image.version: "v9.0-20201"`,
 `ibm.callHome: disabled`, `entitlementRef: ibm-storage-ceph`,
 FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap node
 (`node-01`), the public/cluster networks, the HA dashboard
-(`mgmtGateway` → mgmt-gateway with a `keepalive_only` ingress VIP on `.81`), and
+(`cephadm.workarounds` records the affected gateway build and `mgmtGateway`
+uses its safe HTTP shape with a `keepalive_only` ingress VIP on `.81`), and
 the `topology.nodes` that assign roles and OSD devices per node.
 
 The surrounding objects fill in the pools and services:
@@ -269,7 +274,10 @@ environment differs.
 | `infra/profiles/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.7`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.0.3`). Its leading component selects the stream. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.packageVersion` | The full IBM Storage Package Version from the same [release-table](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions) row (`20.1.0-221.el9cp`), including the RPM release component and not the Cephadm Ansible Package Version. Required for IBM. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.cephadm.ansible.packageVersion` | The full Cephadm Ansible RPM version-release for that row (`5.0.2-1.el9cp`). IBM's table abbreviates it to `5.0.2-1`; use the repository RPM's full EVR. Required for IBM. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.image.base` | The explicit IBM daemon repository, including its vendor OS stream suffix (`cp.icr.io/cp/ibm-ceph/ceph-9-rhel9`). Required by the subscription-backed provider policy. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.image.version` | The IBM daemon image tag from that row (`v9.0-20201`). Required for IBM. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.cephadm.workarounds[]` | Keep `mgmt-gateway-spec-dependency-recording` only while the selected cephadm build has that defect. The token requires the declared HTTP/no-TLS/no-OAuth gateway shape and is never inferred from a release number. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `mgmtGateway.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsLabel` and `spec.ceph.ingresses[].address` | The RGW endpoint label and ingress VIP, if you changed the network. |
@@ -287,20 +295,16 @@ If you change the `192.168.140.*` network, update every place it appears:
     an IBM FIPS deployment, obtain the FIPS-enabled product build through IBM;
     Bootwright's kernel check does not establish build provenance.
 
-!!! note "Bootwright uses native cephadm"
-    Bootwright installs the exact declared `cephadm` RPM directly, verifies its
-    installed coordinate, and checks that its native Ceph version equals the
-    version reported inside the declared image before bootstrap. It refuses a
-    package downgrade.
-
-    IBM's stock `cephadm-ansible` preflight is a different installation path.
-    Its moving major-stream repository plus unversioned `state: present`
-    resolves the newest available build on a clean host (and retains an existing
-    package); `upgrade_ceph_packages: true` requests `latest`. Use a frozen
-    custom repository or Satellite content view containing the exact package
-    closure with IBM's `ceph_origin=custom` / `custom_repo_url` procedure when a
-    stock-preflight install must retain this build; follow IBM's
-    [disconnected preflight procedure](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook-disconnected).
+!!! note "Bootwright uses the installed provider artifacts"
+    Bootwright installs the exact declared `cephadm`, `ceph-common`, and
+    `cephadm-ansible` RPMs on every node and refuses a package downgrade. It
+    verifies their coordinates, runs the `cephadm-preflight.yml` owned by that
+    installed RPM locally with package upgrades disabled, then verifies the
+    coordinates again. The native role receives `ceph_origin=custom` with an
+    empty custom-repository list, so it uses only the vendor or subscription
+    repositories Bootwright already converged. Before bootstrap, Bootwright also
+    requires the installed native Ceph version to equal the version reported by
+    the exact declared image.
 
 ## Prerequisites Unique To This Lab
 

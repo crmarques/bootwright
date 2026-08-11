@@ -6,10 +6,10 @@ Accepted
 
 Revised by [ADR 0049](0049-the-scheme-a-gateway-declares-out-loud.md): the
 distribution-keyed `ssl: false` pin became the operator-declared
-`spec.ceph.mgmtGateway.exposure` field, which vendor distributions must author
-explicitly. The store-repair and settle-wait machinery below now keys to
-`exposure: http`; the dashboard-port vacation and the internal firewall-port
-opening key to gateway presence and run for https gateways too.
+`spec.ceph.mgmtGateway.exposure` field plus the closed
+`mgmt-gateway-spec-dependency-recording` workaround token. Store repair and
+settle waiting key to `exposure: http`, not the token; dashboard-port vacation
+and internal firewall opening key to gateway presence.
 
 ## Context
 
@@ -55,18 +55,14 @@ no released vendor build fixes the recording.
 
 ## Decision
 
-**Validation refuses `spec.ceph.mgmtGateway.tls` on subscription-backed
-distributions** (`redhat`, `ibm`). The refusal names the loop it prevents —
-dependencies recomputed with the certificate but recorded without it, gateways
-reconfigured every pass, apply failing closed at service readiness — and both
-exits: omit the block, which on these distributions yields a gateway pinned to
-`ssl: false` serving plain HTTP, or run `distribution: oss`, whose tentacle
-builds compute no certificate dependencies and keep HTTPS.
-A vendor build that records certificate dependencies lifts the refusal by
-narrowing the gate, not by an operator override; a spec that deterministically
-wedges a cluster is not an authorization decision, so no token applies
-(ADR 0030 governs consequences an operator may accept; a permanently
-reconfiguring gateway is not one).
+**Validation models the defect as explicit supplier-workaround data.** The
+closed `spec.ceph.cephadm.workarounds[]` token
+`mgmt-gateway-spec-dependency-recording` records that the selected cephadm build
+recomputes certificate dependencies but fails to persist them. It is valid only
+with a declared management gateway using HTTP, no TLS, and no OAuth. No
+distribution or release-number branch selects it. Without the token, native
+HTTPS, TLS, and OAuth shapes are valid for every distribution; a fixed build
+therefore needs only a desired-state edit, not a Bootwright release.
 
 **The management phase runs for every declared gateway, secrets or not.** A
 gateway without TLS or OAuth2 renders into the ordinary late-services spec for
@@ -82,16 +78,16 @@ cluster previously wedged by an inline-TLS spec self-heals on the next apply —
 re-applying the TLS-free document makes the computed and recorded lists agree
 again, the loop stops, and the daemons settle.
 
-**The vendor gateway spec pins `ssl: false`, because the dependency asymmetry
+**An affected gateway spec pins `ssl: false`, because the dependency asymmetry
 covers every certificate source.** The first TLS-free apply on the same build
 looped identically with `diff {'certificate_source: cephadm-signed'}`: the
 vendor base dependency computation appends the `certificate_source` entry for
 its own self-signed path too, and the recording side still drops it. No
 ssl-enabled gateway shape converges — inline, reference, or cephadm-signed —
-so on subscription-backed distributions Bootwright emits `ssl: false`
-(`MgmtGatewaySpec` defaults it to true) in both the late-services document and
-the management-phase document, and the gateway serves plain HTTP on its
-authored port. Community builds keep cephadm's HTTPS default, which converges.
+so an authored `exposure: http` emits `ssl: false` (`MgmtGatewaySpec` defaults
+it to true) in both the late-services document and the management-phase
+document, and the gateway serves plain HTTP on its authored port. This render
+is distribution-neutral and remains available with or without the workaround.
 
 **The management phase re-persists the `ssl: false` the spec store serializes
 away, and proves it.** The same lineage's `ServiceSpec.to_json` drops every
@@ -103,7 +99,7 @@ switch (observed in the field: the stored inner spec held only `port` and
 `virtual_ip`; `enable_auth: false` vanished the same way). A manager failover
 or restart reloads the stored copy, `ssl` resurrects to its class default
 `true`, and the loop returns with nothing having been applied. So after
-applying the document on a subscription-backed distribution, the management
+applying an HTTP document, the management
 phase reads the stored spec back, injects `ssl: false` into its inner block
 through `ceph config-key set` when the store dropped it, and asserts on a
 second read that the stored copy now carries the switch — the apply fails
@@ -148,16 +144,13 @@ spec when recording dependencies, so recorded and computed lists agree.
 
 ## Consequences
 
-- A vendor-distribution dashboard is plain HTTP on the authored port until the
-  vendor repairs the recording; operators who need TLS on the management VIP —
-  their own certificate or cephadm's — need `distribution: oss`, a fixed
-  vendor build, or a reverse proxy of their own in front of the gateway.
-  Environment templates that mint a management-gateway certificate must author
-  the `tls` block only for the community arm.
-- The gate is deliberately wider than the one observed build. Both vendor
-  streams ship the same downstream source, no released build is known fixed,
-  and the failure mode — a production cluster restarting its gateway tier
-  forever — costs more than a refusal that a fixed build later narrows.
+- An affected-build dashboard is plain HTTP while the workaround is selected.
+  Operators remove the token and choose native HTTPS/TLS/OAuth when their
+  supplier build repairs the recording, or put a reverse proxy in front while
+  it remains affected.
+- The workaround is deliberately explicit rather than mapped to the one
+  observed build, a vendor family, or a guessed version range. Bootwright does
+  not certify which builds carry the defect.
 - `StorageObjectGateway` ingress TLS is untouched: cephadm's ingress spec has
   no `ssl` attribute feeding the same base dependency computation, so haproxy
   certificates do not loop.
@@ -167,7 +160,7 @@ spec when recording dependencies, so recorded and computed lists agree.
   configuration (the cephadm-signed certificate, a dead backend map) until
   something rewrites it. One `ceph orch reconfig mgmt-gateway` after the first
   corrected apply re-renders them; subsequent applies converge on their own.
-- On subscription-backed builds, `ceph orch ls --export` shows `ssl: true`
+- On affected builds, `ceph orch ls --export` shows `ssl: true`
   for a gateway that verifiably runs with `ssl: false`; the stored truth is
   `ceph config-key get mgr/cephadm/spec.mgmt-gateway`, and the management
   phase's read-back assert is the guard that actually proves it.
