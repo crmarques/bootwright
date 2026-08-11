@@ -289,7 +289,7 @@ func discoverArbiterClusterState(cmdCtx context.Context, stdout, stderr io.Write
 	if err != nil {
 		return cephstate.Discovery{}, err
 	}
-	discovered, err := converge.RunCephStateDiscovery(cmdCtx, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, flags.verbose, false, newWorkflowReporter(stdout, "Read"))
+	discovered, err := converge.RunCephStateDiscovery(cmdCtx, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, state, []string{clusterName}, flags.verbose, false, newWorkflowReporter(stdout, "Read"))
 	if err != nil {
 		return cephstate.Discovery{}, &arbiter.LivePlanError{Failure: arbiter.LivePlanStateUnreadable, Cluster: clusterName, Cause: err}
 	}

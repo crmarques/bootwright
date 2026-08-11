@@ -4,8 +4,13 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
@@ -73,18 +78,106 @@ func TestDiffAdoptRejectsRecorded(t *testing.T) {
 
 func TestDiffAdoptRefusesWhileAnotherMutatorHoldsTheContext(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
+	identityFile := filepath.Join(t.TempDir(), "operator identity")
+	if err := os.WriteFile(identityFile, []byte("test identity"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	guard, err := workflow.AcquireCommandRunLease(context.Background(), ctx.RunsDir, "destroy")
 	if err != nil {
 		t.Fatalf("AcquireCommandRunLease: %v", err)
 	}
 	defer guard.Close()
-	_, stderr, code := runCLI(t, "diff", "--adopt")
-	if code == 0 || !strings.Contains(stderr, "mutating run") || !strings.Contains(stderr, guard.RunID) {
-		t.Fatalf("diff --adopt exit=%d stderr=%q, want active-mutator refusal", code, stderr)
+	stdout, stderr, code := runCLI(t,
+		"diff", "--adopt", "--stage", "deps", "--through", "base", "--clusters", "dc1-ocp",
+		"--output", "json", "--verbose", "--context", ctx.Name, "--ssh-id-file", identityFile,
+		"--ssh-user", "operator", "--ssh-user-for-provisioned")
+	out := stdout + stderr
+	if code == 0 || !strings.Contains(out, "mutating run") || !strings.Contains(out, guard.RunID) {
+		t.Fatalf("diff --adopt exit=%d output=%q, want active-mutator refusal", code, out)
+	}
+	wantRetry := retryCommand{args: []string{
+		"bootwright", "diff", "--stage", "deps", "--through", "base", "--clusters", "dc1-ocp",
+		"--adopt", "--output", "json", "--verbose", "--context", ctx.Name, "--ssh-id-file", identityFile,
+		"--ssh-user", "operator", "--ssh-user-for-provisioned",
+	}}.String()
+	if !strings.Contains(out, "`"+wantRetry+"`") {
+		t.Fatalf("active-mutator refusal did not preserve the exact diff retry %q:\n%s", wantRetry, out)
 	}
 	if entries, err := os.ReadDir(workspace.InputHistoryDir(ctx)); err == nil && len(entries) > 0 {
 		t.Fatalf("diff --adopt snapshotted input despite the active mutation lease: %v", entries)
 	}
+}
+
+func TestDiffLocalFlagSurfaceIsExplicit(t *testing.T) {
+	cmd := newDiffCmd(&bytes.Buffer{}, &bytes.Buffer{})
+	cmd.InitDefaultHelpFlag()
+	var got []string
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		got = append(got, flag.Name)
+	})
+	slices.Sort(got)
+	want := []string{"adopt", "clusters", "help", "output", "recorded", "stage", "through", "verbose"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("diff local flags = %v, want exact public surface %v", got, want)
+	}
+}
+
+func TestDiffRetryBuilderRepresentsEveryAcceptedFlag(t *testing.T) {
+	base := resolvedInvocation{
+		verb:                  invocationDiff,
+		contextName:           "matrix context",
+		sshIdentityFile:       "/tmp/operator identity",
+		sshUser:               "operator",
+		sshAskSudoPassword:    true,
+		sshUserForProvisioned: true,
+		flags: invocationFlags{
+			selection: runSelection{stage: "deps", through: "base", clusters: "ceph-a,ceph-b"},
+			output:    outputJSON,
+			adopt:     true,
+			verbose:   true,
+		},
+	}
+	adopt := mustRetry(t, base, retryIntent{})
+	want := []string{
+		"bootwright", "diff", "--stage", "deps", "--through", "base", "--clusters", "ceph-a,ceph-b",
+		"--adopt", "--output", "json", "--verbose", "--context", "matrix context",
+		"--ssh-id-file", "/tmp/operator identity", "--ssh-user", "operator", "--ssh-ask-sudo-password",
+		"--ssh-user-for-provisioned",
+	}
+	if got := adopt.Args(); !slices.Equal(got, want) {
+		t.Fatalf("diff adopt retry args = %#v\nwant %#v", got, want)
+	}
+	assertRetryParses(t, adopt, func(cmd *cobra.Command) {
+		if cmd.Flag("adopt").Value.String() != "true" {
+			t.Fatal("parsed retry did not preserve --adopt")
+		}
+	})
+
+	recordedInvocation := base
+	recordedInvocation.flags.adopt = false
+	recordedInvocation.flags.recorded = true
+	recorded := mustRetry(t, recordedInvocation, retryIntent{})
+	if !slices.Contains(recorded.Args(), "--recorded") || slices.Contains(recorded.Args(), "--adopt") {
+		t.Fatalf("recorded diff retry = %v", recorded.Args())
+	}
+	preserved := map[string]bool{}
+	for _, retry := range []retryCommand{adopt, recorded} {
+		for _, name := range retryFlagNames(retry.Args()) {
+			preserved[name] = true
+		}
+	}
+	root := newRootCmd(&bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{})
+	diff, _, err := root.Find([]string{"diff"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	visit := func(flag *pflag.Flag) {
+		if flag.Name != "help" && !preserved[flag.Name] {
+			t.Errorf("diff --%s has no representation in the exact retry builder", flag.Name)
+		}
+	}
+	diff.Flags().VisitAll(visit)
+	diff.InheritedFlags().VisitAll(visit)
 }
 
 func TestDiffRejectsUnknownOutput(t *testing.T) {

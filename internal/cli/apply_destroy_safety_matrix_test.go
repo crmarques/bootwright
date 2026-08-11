@@ -446,7 +446,7 @@ func assertApplyToDestroyAuthorizationProjection(t *testing.T, output string, wa
 }
 
 func isTargetMutatingCommand(command string) bool {
-	return strings.HasPrefix(command, "bootwright apply ") || strings.HasPrefix(command, "bootwright destroy ") || strings.HasPrefix(command, "bootwright storage-cluster replace-arbiter ")
+	return strings.HasPrefix(command, "bootwright apply ") || strings.HasPrefix(command, "bootwright destroy ") || strings.HasPrefix(command, "bootwright storage-cluster replace-arbiter ") || (strings.HasPrefix(command, "bootwright diff ") && strings.Contains(command, "--adopt"))
 }
 
 func commandHasFlagValue(command, flag, value string) bool {
@@ -703,6 +703,14 @@ func safetyBlanketAuthorizationCases() []safetyCase {
 
 func safetyFlagCoherenceCases() []safetyCase {
 	return []safetyCase{{
+		name:    "diff/adopt: an active mutator refuses before the input snapshot and preserves the exact retry",
+		seed:    seedActiveMutatingRunLease,
+		args:    []string{"diff", "--adopt", "--stage", "deps", "--through", "base", "--clusters", safetyAdvancedCephCluster, "--output", "json", "--verbose"},
+		verdict: verdictRefusal,
+		remedy:  remedySameSelection,
+		want:    []string{"bootwright diff --stage deps --through base --clusters " + safetyAdvancedCephCluster + " --adopt --output json --verbose --context matrix"},
+		deny:    []string{"input-history"},
+	}, {
 		name:    "apply/cluster install parallelism is part of the mutating flag matrix",
 		args:    []string{"apply", "--cluster-install-parallelism", "1", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
@@ -1031,6 +1039,23 @@ func safetyReplaceArbiterCases() []safetyCase {
 		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeSameSiteArbiter, "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
 		want:    []string{"refusing to move the stretch tiebreaker", "--authorize " + authorizeSameSiteArbiter + "," + authorizeDegradedQuorum},
+	}, {
+		name:    "replace-arbiter/preview: unreachable-nodes is accepted by the verb and satisfies its host-decided gate",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeUnreachableNodes, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"--authorize " + authorizeUnreachableNodes + ": " + authorizationSatisfied, "--authorize " + authorizeUnreachableNodes + " is not consumed by a dry-run"},
+	}, {
+		name:    "replace-arbiter/preview: all is accepted by the verb and satisfies every replacement gate",
+		seed:    seedLiveStretchClusterOffItsArbiter,
+		args:    []string{"storage-cluster", "replace-arbiter", "--name", safetyAdvancedCephCluster, "--authorize", authorizeAll, "--dry-run", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want: []string{
+			"--authorize " + authorizeSameSiteArbiter + ": " + authorizationSatisfied,
+			"--authorize " + authorizeDegradedQuorum + ": " + authorizationSatisfied,
+			"--authorize " + authorizeUnreachableNodes + ": " + authorizationSatisfied,
+			"--authorize " + authorizeAll + " is not consumed by a dry-run",
+		},
 	}, {
 		name:    "replace-arbiter/preview: a supplied token reads satisfied and still previews the gate it clears",
 		seed:    seedLiveStretchClusterOffItsArbiter,
@@ -1477,6 +1502,19 @@ func seedUndecodableRunLease(t *testing.T, ctx workspace.Context) {
 	if err := os.WriteFile(workflow.LeasePath(ctx.RunsDir), []byte("{ truncated"), 0o600); err != nil {
 		t.Fatalf("write truncated run lease: %v", err)
 	}
+}
+
+func seedActiveMutatingRunLease(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	lease, err := workflow.AcquireCommandRunLease(context.Background(), ctx.RunsDir, "destroy")
+	if err != nil {
+		t.Fatalf("acquire active mutating run lease: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := lease.Close(); err != nil {
+			t.Errorf("close active mutating run lease: %v", err)
+		}
+	})
 }
 
 func seedRetiredFieldInStoredInput(t *testing.T, ctx workspace.Context) {

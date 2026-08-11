@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -90,6 +91,21 @@ func TestDiffStorageClusterUnreachableIsNotInSync(t *testing.T) {
 	result = diffStorageCluster(state, external, "ceph-prod", map[string]cephstate.Discovery{}, &live)
 	if !result.InSync || !live.InSync {
 		t.Fatalf("external cluster comparison must stay neutral: result=%+v live=%+v", result, live)
+	}
+}
+
+func TestSelectedManagedStorageDiscoveryClustersDoesNotWidenAcrossTwoClusters(t *testing.T) {
+	first := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph-a"},
+		Spec:     v1alpha1.StorageClusterSpec{Type: v1alpha1.StorageClusterTypeCeph, Ceph: &v1alpha1.StorageClusterCephSpec{}},
+	}
+	second := first
+	second.Metadata.Name = "ceph-b"
+	byName := map[string]v1alpha1.StorageCluster{first.Metadata.Name: first, second.Metadata.Name: second}
+	roots := []workflow.StateCheckRoot{{Kind: workflow.ApplyClusterKindStorage, Name: second.Metadata.Name}}
+
+	if got := selectedManagedStorageDiscoveryClusters(byName, roots); !slices.Equal(got, []string{second.Metadata.Name}) {
+		t.Fatalf("selected discovery clusters = %v, want only %q", got, second.Metadata.Name)
 	}
 }
 

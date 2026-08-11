@@ -30,6 +30,7 @@ const (
 	invocationApply          invocationVerb = authorizeVerbApply
 	invocationDestroy        invocationVerb = authorizeVerbDestroy
 	invocationReplaceArbiter invocationVerb = authorizeVerbReplaceArbiter
+	invocationDiff           invocationVerb = "diff"
 )
 
 type invocationFlags struct {
@@ -45,6 +46,8 @@ type invocationFlags struct {
 	askBecomePass             bool
 	trustOnFirstUse           bool
 	verbose                   bool
+	recorded                  bool
+	adopt                     bool
 	clusterInstallParallelism int
 	clusterName               string
 	newArbiterMachine         string
@@ -71,7 +74,7 @@ type retryCommand struct {
 }
 
 func newResolvedInvocation(verb invocationVerb, contextName string, flags invocationFlags) (resolvedInvocation, error) {
-	if verb != invocationApply && verb != invocationDestroy && verb != invocationReplaceArbiter {
+	if verb != invocationApply && verb != invocationDestroy && verb != invocationReplaceArbiter && verb != invocationDiff {
 		return resolvedInvocation{}, fmt.Errorf("unsupported mutating invocation verb %q", verb)
 	}
 	identityFile, err := resolveSSHIDFile()
@@ -96,6 +99,12 @@ func newResolvedInvocation(verb invocationVerb, contextName string, flags invoca
 
 func (i resolvedInvocation) retry(intent retryIntent) (retryCommand, error) {
 	next := i
+	if next.verb == invocationDiff {
+		if intent.mode != "" || len(intent.requiredAuthorizations) > 0 || intent.excludedAuthorization != "" {
+			return retryCommand{}, fmt.Errorf("a diff retry cannot add lifecycle authorization intent")
+		}
+		return retryCommand{args: next.args()}, nil
+	}
 	if next.verb != invocationApply && next.verb != invocationDestroy && next.verb != invocationReplaceArbiter {
 		return retryCommand{}, fmt.Errorf("unsupported mutating invocation verb %q", next.verb)
 	}
@@ -297,26 +306,10 @@ func (i resolvedInvocation) replaceArbiterRetry(cluster string) (retryCommand, e
 	return retryCommand{args: next.args()}, nil
 }
 
-func authorizationsAcceptedByVerb(names []string, sourceVerb, targetVerb invocationVerb) []string {
-	accepted := authorizationTokenNamesForVerb(string(targetVerb))
-	var out []string
-	for _, name := range names {
-		if name == authorizeAll && sourceVerb != targetVerb {
-			for _, expanded := range authorizationTokenNamesForVerb(string(sourceVerb)) {
-				if expanded != authorizeAll && slices.Contains(accepted, expanded) && !slices.Contains(out, expanded) {
-					out = append(out, expanded)
-				}
-			}
-			continue
-		}
-		if slices.Contains(accepted, name) && !slices.Contains(out, name) {
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
 func (i resolvedInvocation) args() []string {
+	if i.verb == invocationDiff {
+		return i.diffArgs()
+	}
 	args := []string{"bootwright", string(i.verb)}
 	if i.verb == invocationReplaceArbiter {
 		args = []string{"bootwright", "storage-cluster", "replace-arbiter"}

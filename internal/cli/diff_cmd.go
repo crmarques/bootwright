@@ -70,6 +70,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 	addOutputFlag(cmd, &output)
 	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
 		var runLease *workflow.CommandRunLease
+		var invocation resolvedInvocation
 		defer func() {
 			returnErr = closeMutatingRunLease(returnErr, runLease)
 		}()
@@ -94,9 +95,19 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 			if err != nil {
 				return failErr(1, err)
 			}
-			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "diff-adopt")
+			invocation, err = newResolvedInvocation(invocationDiff, ctx.Name, invocationFlags{
+				selection: runSelection{stage: stage, through: through, clusters: clusterScope},
+				output:    output,
+				recorded:  recorded,
+				adopt:     adopt,
+				verbose:   verbose,
+			})
 			if err != nil {
 				return failErr(1, err)
+			}
+			runLease, err = workflow.AcquireCommandRunLease(c.Context(), ctx.RunsDir, "diff-adopt")
+			if err != nil {
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
 			}
 			c.SetContext(runLease.Context())
 		}
@@ -124,7 +135,7 @@ func newDiffCmd(stdout, stderr io.Writer) *cobra.Command {
 		live := buildLiveDiff(c.Context(), cf, executable, state, report, verbose, false, stderr)
 		if adopt {
 			if err := runLease.RequireOwned(); err != nil {
-				return failErr(1, err)
+				return failErr(1, mutatingRunLeaseRefusal(err, invocation))
 			}
 			var probed []cephadopt.ProbedStorage
 			for _, storage := range live.Storage {

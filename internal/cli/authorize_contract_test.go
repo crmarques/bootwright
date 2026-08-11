@@ -200,22 +200,63 @@ func publishedVerbLabels() []string {
 }
 
 func TestEveryAuthorizationTokenHasASafetyMatrixCase(t *testing.T) {
-	exercised := map[string]bool{}
+	exercised := map[string]map[string]bool{}
 	for _, tc := range safetyMatrixCases() {
-		for i, arg := range tc.args {
-			if arg != "--authorize" || i+1 >= len(tc.args) {
-				continue
-			}
-			for _, name := range strings.Split(tc.args[i+1], ",") {
-				exercised[strings.TrimSpace(name)] = true
+		verb := safetyCaseAuthorizationVerb(tc.args)
+		if verb == "" {
+			continue
+		}
+		if exercised[verb] == nil {
+			exercised[verb] = map[string]bool{}
+		}
+		for _, name := range safetyCaseAuthorizationNames(tc.args) {
+			exercised[verb][name] = true
+		}
+	}
+	for _, token := range authorizationTokens {
+		for _, verb := range token.verbs {
+			if !exercised[verb][token.name] {
+				t.Errorf("no case in safetyMatrixCases() passes --authorize %s to %s; every verb that accepts a token must exercise it in the scenario matrix", token.name, verb)
 			}
 		}
 	}
-	for _, name := range authorizationTokenNames() {
-		if !exercised[name] {
-			t.Errorf("no case in safetyMatrixCases() passes --authorize %s; a token that unblocks a refusal must be exercised by the scenario matrix", name)
+}
+
+func safetyCaseAuthorizationVerb(args []string) string {
+	args = stripLeadingGlobalFlags(args)
+	if len(args) == 0 {
+		return ""
+	}
+	switch args[0] {
+	case "apply":
+		return authorizeVerbApply
+	case "destroy":
+		return authorizeVerbDestroy
+	case "storage-cluster":
+		if len(args) > 1 && args[1] == "replace-arbiter" {
+			return authorizeVerbReplaceArbiter
 		}
 	}
+	return ""
+}
+
+func safetyCaseAuthorizationNames(args []string) []string {
+	var names []string
+	for i, arg := range args {
+		value := ""
+		switch {
+		case arg == "--authorize" && i+1 < len(args):
+			value = args[i+1]
+		case strings.HasPrefix(arg, "--authorize="):
+			value = strings.TrimPrefix(arg, "--authorize=")
+		}
+		for _, name := range strings.Split(value, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }
 
 func TestEveryAuthorizationTokenDeclaresAConsumingVerb(t *testing.T) {

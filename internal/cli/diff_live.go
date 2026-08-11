@@ -64,19 +64,11 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 		storageByName[cluster.Metadata.Name] = cluster
 	}
 
-	needDiscovery := false
-	for _, root := range offline.Roots {
-		if root.Kind == workflow.ApplyClusterKindStorage && !root.Absent {
-			if cluster, ok := storageByName[root.Name]; ok && v1alpha1.StorageClusterManaged(cluster) {
-				needDiscovery = true
-				break
-			}
-		}
-	}
+	discoveryClusters := selectedManagedStorageDiscoveryClusters(storageByName, offline.Roots)
 
 	discos := map[string]cephstate.Discovery{}
-	if needDiscovery {
-		got, warning := runCephDiscovery(ctx, cf, executable, state, verbose, streamAnsible, stderr)
+	if len(discoveryClusters) > 0 {
+		got, warning := runCephDiscovery(ctx, cf, executable, state, discoveryClusters, verbose, streamAnsible, stderr)
 		if warning != "" {
 			live.Warnings = append(live.Warnings, warning)
 		}
@@ -124,6 +116,20 @@ func buildLiveDiff(ctx context.Context, cf *commonFlags, executable string, stat
 	return live
 }
 
+func selectedManagedStorageDiscoveryClusters(storageByName map[string]v1alpha1.StorageCluster, roots []workflow.StateCheckRoot) []string {
+	var names []string
+	for _, root := range roots {
+		if root.Kind != workflow.ApplyClusterKindStorage || root.Absent {
+			continue
+		}
+		cluster, found := storageByName[root.Name]
+		if found && v1alpha1.StorageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
+			names = append(names, root.Name)
+		}
+	}
+	return names
+}
+
 func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, name string, discos map[string]cephstate.Discovery, live *liveDiffReport) liveStorageDiff {
 	result := liveStorageDiff{Cluster: name, InSync: true}
 	if cluster.Metadata.Name == "" {
@@ -151,14 +157,14 @@ func diffStorageCluster(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 	return result
 }
 
-func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, verbose bool, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
+func runCephDiscovery(ctx context.Context, cf *commonFlags, executable string, state v1alpha1.State, clusterNames []string, verbose bool, streamAnsible bool, stderr io.Writer) (map[string]cephstate.Discovery, string) {
 	clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
 	reporter := newWorkflowReporter(stderr, "Run")
 	bundle, err := prepareWorkflowBundle(false)
 	if err != nil {
 		return nil, "live Ceph discovery skipped: could not prepare the Ansible bundle: " + firstErrorLine(err)
 	}
-	discos, err := converge.RunCephStateDiscovery(ctx, stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, verbose, streamAnsible, reporter)
+	discos, err := converge.RunCephStateDiscovery(ctx, stderr, stderr, cf.ctx, clustersDir, executable, bundle.Dir, state, clusterNames, verbose, streamAnsible, reporter)
 	if err != nil {
 		return discos, "live Ceph discovery incomplete: " + firstErrorLine(err)
 	}
