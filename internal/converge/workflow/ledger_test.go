@@ -203,8 +203,8 @@ func TestRunLeaseRoundTrip(t *testing.T) {
 	lease := NewRunLease("run-1", now)
 
 	dir := t.TempDir()
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	loaded, ok, err := LoadRunLease(dir)
 	if err != nil {
@@ -243,8 +243,8 @@ func TestAssessRunActivity(t *testing.T) {
 	}
 
 	lease := NewRunLease("run-1", now)
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease fresh: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture fresh: %v", err)
 	}
 	active, err := AssessRunActivity(dir, ledger, now.Add(ApplyLeaseStaleAfter-time.Second))
 	if err != nil {
@@ -256,8 +256,8 @@ func TestAssessRunActivity(t *testing.T) {
 
 	lease.Hostname = "other-host"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Second)
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease stale: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture stale: %v", err)
 	}
 	stale, err := AssessRunActivity(dir, ledger, now)
 	if err != nil {
@@ -273,8 +273,8 @@ func TestAssessRunActivityTreatsFreshLocalLeaseWithMissingProcessAsStale(t *test
 	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, nil, now)
 	lease := NewRunLease("run-1", now)
 	dir := t.TempDir()
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	previous := runLeaseProcessAlive
 	runLeaseProcessAlive = func(int) bool { return false }
@@ -295,8 +295,8 @@ func TestAssessRunActivityDoesNotProbeRemoteHostLeaseProcess(t *testing.T) {
 	lease := NewRunLease("run-1", now)
 	lease.Hostname = "other-host"
 	dir := t.TempDir()
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	previous := runLeaseProcessAlive
 	runLeaseProcessAlive = func(int) bool {
@@ -322,8 +322,8 @@ func TestCancelRunLedgerMarksNonTerminalTasksCancelled(t *testing.T) {
 		{ID: "pending", Status: TaskStatusPending},
 	}, now)
 	dir := t.TempDir()
-	if err := SaveRunLease(dir, NewRunLease("run-1", now)); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, NewRunLease("run-1", now)); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 
 	cancelled, err := CancelRunLedger(dir, ledger, "test cancellation", now.Add(time.Minute))

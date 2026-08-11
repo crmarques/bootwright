@@ -43,7 +43,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan after: %v", err)
 	}
-	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify before reset: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestInfraDestroyResetsClusterStageConvergeRecords(t *testing.T) {
 
 	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", InfraScope, after, nil, nil, nil, nil, "", false, false)
 
-	objects, err = workflow.ClassifyApplyObjects(afterTasks, runsDir)
+	objects, err = workflow.ClassifyApplyObjects(afterTasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify after reset: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestResetConvergeRecordsKeepsPartiallyDestroyedStorageCluster(t *testing.T)
 
 	ResetConvergeRecordsAfterDestroy(runsDir, clustersDir, "test", ClustersScope, st, nil, []string{"ceph-a"}, nil, nil, "", false, false)
 
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify after reset: %v", err)
 	}

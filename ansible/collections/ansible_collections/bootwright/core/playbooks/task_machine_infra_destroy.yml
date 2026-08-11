@@ -188,3 +188,13 @@
       when:
         - bootwright_infra_destroy_context_sweep | default(false) | bool
         - bootwright_host_libvirt_providers | length > 0
+
+- name: Prove machine infrastructure destroy completion
+  hosts: bootwright_machine_task_hosts:bootwright_provider_hosts:bootwright_infra_hosts
+  strategy: linear
+  gather_facts: false
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
+
+  tasks:
+    - name: Finalize machine infrastructure destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

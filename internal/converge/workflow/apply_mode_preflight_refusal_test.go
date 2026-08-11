@@ -12,7 +12,7 @@ func TestContinueDriftRefusalNamesConsequenceAndRemedy(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, osMachine, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, storage, "sha256:stale", ConvergeSafetyOwner)
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{osMachine, storage}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{osMachine, storage}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

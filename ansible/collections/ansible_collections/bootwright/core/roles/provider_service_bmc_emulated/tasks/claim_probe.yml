@@ -1,0 +1,186 @@
+---
+- name: Probe BMC provider-global claim root
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_claim_root }}"
+  register: bootwright_bmc_claim_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Probe BMC provider-global claim document
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_claim_path }}"
+  register: bootwright_bmc_claim_document_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read BMC provider-global claim document
+  ansible.builtin.slurp:
+    src: "{{ bootwright_bmc_claim_path }}"
+  register: bootwright_bmc_claim_document_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_claim_document_stat.stat.exists | default(false) | bool
+
+- name: Probe BMC provider-global transition document
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_transition_path }}"
+  register: bootwright_bmc_transition_document_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read BMC provider-global transition document
+  ansible.builtin.slurp:
+    src: "{{ bootwright_bmc_transition_path }}"
+  register: bootwright_bmc_transition_document_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_transition_document_stat.stat.exists | default(false) | bool
+
+- name: Probe legacy BMC provider-global context marker
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_claim_root }}/.bootwright-context"
+  register: bootwright_bmc_claim_marker_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read legacy BMC provider-global context marker
+  ansible.builtin.slurp:
+    src: "{{ bootwright_bmc_claim_root }}/.bootwright-context"
+  register: bootwright_bmc_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_claim_marker_stat.stat.exists | default(false) | bool
+
+- name: List BMC provider-global claim root entries
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ bootwright_bmc_claim_root }}"
+      - -mindepth
+      - "1"
+      - -maxdepth
+      - "1"
+      - -printf
+      - "%f\n"
+  register: bootwright_bmc_claim_root_entries
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_claim_root_stat.stat.exists | default(false) | bool
+
+- name: Require conclusive safe BMC claim paths
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_claim_root_stat.stat.exists is defined
+      - bootwright_bmc_claim_document_stat.stat.exists is defined
+      - bootwright_bmc_transition_document_stat.stat.exists is defined
+      - bootwright_bmc_claim_marker_stat.stat.exists is defined
+      - >-
+        not (bootwright_bmc_claim_root_stat.stat.exists | bool)
+        or (
+          bootwright_bmc_claim_root_stat.stat.isdir is defined
+          and bootwright_bmc_claim_root_stat.stat.isdir | bool
+          and bootwright_bmc_claim_root_stat.stat.islnk is defined
+          and not (bootwright_bmc_claim_root_stat.stat.islnk | bool)
+          and bootwright_bmc_claim_root_entries.rc is defined
+          and bootwright_bmc_claim_root_entries.rc | int == 0
+          and bootwright_bmc_claim_root_entries.stdout_lines is defined
+          and (bootwright_bmc_claim_root_entries.stdout_lines
+               | difference(['claim.json', 'transition.json', '.bootwright-context']) | length) == 0
+        )
+      - >-
+        not (bootwright_bmc_claim_document_stat.stat.exists | bool)
+        or (
+          bootwright_bmc_claim_document_stat.stat.isreg is defined
+          and bootwright_bmc_claim_document_stat.stat.isreg | bool
+          and bootwright_bmc_claim_document_stat.stat.islnk is defined
+          and not (bootwright_bmc_claim_document_stat.stat.islnk | bool)
+          and bootwright_bmc_claim_document_content.content is defined
+        )
+      - >-
+        not (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+        or (
+          bootwright_bmc_claim_marker_stat.stat.isreg is defined
+          and bootwright_bmc_claim_marker_stat.stat.isreg | bool
+          and bootwright_bmc_claim_marker_stat.stat.islnk is defined
+          and not (bootwright_bmc_claim_marker_stat.stat.islnk | bool)
+          and bootwright_bmc_claim_content.content is defined
+        )
+      - >-
+        not (bootwright_bmc_transition_document_stat.stat.exists | bool)
+        or (
+          bootwright_bmc_transition_document_stat.stat.isreg is defined
+          and bootwright_bmc_transition_document_stat.stat.isreg | bool
+          and bootwright_bmc_transition_document_stat.stat.islnk is defined
+          and not (bootwright_bmc_transition_document_stat.stat.islnk | bool)
+          and bootwright_bmc_transition_document_content.content is defined
+        )
+    fail_msg: >-
+      Refusing BMC emulator mutation because the provider-global claim root,
+      full claim, or legacy context marker could not be proven to be a safe,
+      readable canonical path. No authorization consumes an unreadable,
+      symlinked, non-regular, or unexpectedly populated claim. Repair the
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Classify exact BMC provider-global claim
+  ansible.builtin.set_fact:
+    bootwright_bmc_claim_record: >-
+      {{
+        (bootwright_bmc_claim_document_content.content | default('') | b64decode)
+        | bootwright.core.bootwright_bmc_claim_identity(
+            bootwright_bmc_current_context,
+            bootwright_bmc_provider_name,
+            bootwright_host_name | default(inventory_hostname),
+            bootwright_provider_state_dir)
+      }}
+    bootwright_bmc_claim_context: >-
+      {{ bootwright_bmc_claim_content.content | default('') | b64decode | trim }}
+    bootwright_bmc_claim_transition: >-
+      {{
+        (bootwright_bmc_transition_document_content.content | default('') | b64decode)
+        | bootwright.core.bootwright_bmc_transition_identity(
+            bootwright_bmc_current_context,
+            bootwright_bmc_provider_name,
+            bootwright_host_name | default(inventory_hostname),
+            bootwright_provider_state_dir)
+      }}
+  changed_when: false
+
+- name: Refuse malformed or foreign BMC full claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_claim_document_stat.stat.exists | bool)
+        or bootwright_bmc_claim_record | length > 0
+    fail_msg: >-
+      Refusing BMC emulator mutation because claim {{ bootwright_bmc_claim_path }}
+      does not exactly bind the Bootwright API, current context, provider, host,
+      URI, pool, ports, units, firewall consequence, and canonical paths. No
+      mode or authorization adopts or overwrites that evidence. Restore the
+      exact claim or remove only this file after independently proving it stale,
+      then re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Refuse malformed or contradictory BMC transition evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_transition_document_stat.stat.exists | bool)
+        or bootwright_bmc_claim_transition | length > 0
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or bootwright_bmc_claim_record in [
+          bootwright_bmc_claim_transition.active,
+          bootwright_bmc_claim_transition.pending
+        ]
+      - >-
+        not (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+        or bootwright_bmc_claim_context == bootwright_bmc_current_context
+    fail_msg: >-
+      Refusing BMC emulator mutation because its full claim, transition pair,
+      and legacy context marker are contradictory. A transition must bind one
+      exact active and pending composite, the full claim must name one side,
+      and any legacy marker must name the current context. Restore that exact
+      evidence and re-run `{{ bootwright_mutating_invocation }}`; no mutation
+      overwrites or deletes contradictory provider-global evidence.

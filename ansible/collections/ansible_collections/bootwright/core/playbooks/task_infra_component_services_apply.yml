@@ -29,22 +29,58 @@
       when:
         - bootwright_host_infra_component_services | length == 0
 
-    - name: Apply base host packages
-      ansible.builtin.import_role:
-        name: bootwright.core.machine_base
+    - name: Initialize exact infra-component host apply set
+      ansible.builtin.set_fact:
+        bootwright_host_infra_component_apply_targets: []
+        bootwright_host_operation_guard_acquired: false
+        bootwright_infra_host_apply_failed: false
+      changed_when: false
 
-    - name: Persist host proxy settings
-      ansible.builtin.import_role:
-        name: bootwright.core.machine_proxy
-
-    - name: Apply infra component service roles
-      ansible.builtin.include_role:
-        name: "{{ bootwright_component.applyRole }}"
+    - name: Resolve exact infra-component host apply set
+      ansible.builtin.set_fact:
+        bootwright_host_infra_component_apply_targets: >-
+          {{ bootwright_host_infra_component_apply_targets + [bootwright_component] }}
       loop: "{{ bootwright_host_infra_component_services }}"
       loop_control:
         loop_var: bootwright_component
-        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.applyRole }}"
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }}"
+      changed_when: false
       when: >-
         (bootwright_infra_component_apply_skip_records | default('')) == ''
         or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
            not in bootwright_infra_component_apply_skip_records.split(',')
+
+    - name: Skip host when every infra-component apply target is already complete
+      ansible.builtin.meta: end_host
+      when: bootwright_host_infra_component_apply_targets | length == 0
+
+    - name: Acquire host-wide operation for the full infra-component apply set
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: acquire_host_shared_service_operation.yml
+
+    - name: Apply the guarded infra-component host set
+      block:
+        - name: Run every selected infra-component host mutation
+          ansible.builtin.include_tasks: tasks/apply_infra_component_host_set.yml
+      rescue:
+        - name: Capture guarded infra-component host apply failure
+          ansible.builtin.set_fact:
+            bootwright_infra_host_apply_failed: true
+            bootwright_infra_host_apply_failed_task: >-
+              {{ ansible_failed_task.name | default('an unknown task') }}
+            bootwright_infra_host_apply_failed_detail: >-
+              {{ ansible_failed_result.msg | default('no failure detail was returned') }}
+          changed_when: false
+
+    - name: Report guarded infra-component host apply failure
+      ansible.builtin.fail:
+        msg: >-
+          Infra-component host apply failed at
+          {{ bootwright_infra_host_apply_failed_task }}:
+          {{ bootwright_infra_host_apply_failed_detail }}. Durable endpoint,
+          transition, claim, and ownership evidence was retained for an exact
+          retry. The command-wide per-host finalizer retains sole authority to
+          release the operation guard. Restore access to the failed service and re-run
+          `{{ bootwright_mutating_invocation }}`.
+      when: bootwright_infra_host_apply_failed | bool

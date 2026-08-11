@@ -8,17 +8,19 @@ import (
 	"testing"
 )
 
-func TestRunResultIsUnreachableOnlyBeforeExecution(t *testing.T) {
+func TestRunResultIsUnreachableWithMixedHostEvents(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
 		want bool
 	}{
-		{name: "initial unreachable", body: `{"host":"step_0","status":"unreachable"}` + "\n", want: true},
-		{name: "skipped then unreachable", body: `{"host":"step_0","status":"skipped"}` + "\n" + `{"host":"step_0","status":"unreachable"}` + "\n", want: true},
-		{name: "reachable before unreachable", body: `{"host":"step_0","status":"ok"}` + "\n" + `{"host":"step_0","status":"unreachable"}` + "\n"},
-		{name: "failure after unreachable", body: `{"host":"step_0","status":"unreachable"}` + "\n" + `{"host":"step_0","status":"failed"}` + "\n"},
-		{name: "success only", body: `{"host":"step_0","status":"ok"}` + "\n"},
+		{name: "initial unreachable", body: `{"host":"step_0","status":"unreachable"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":0,"failed":0,"skipped":0,"unreachable":1}}}` + "\n", want: true},
+		{name: "skipped then unreachable", body: `{"host":"step_0","status":"skipped"}` + "\n" + `{"host":"step_0","status":"unreachable"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":0,"failed":0,"skipped":1,"unreachable":1}}}` + "\n", want: true},
+		{name: "reachable before unreachable", body: `{"host":"step_0","status":"ok"}` + "\n" + `{"host":"step_0","status":"unreachable"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":1,"failed":0,"skipped":0,"unreachable":1}}}` + "\n", want: true},
+		{name: "other host reachable", body: `{"host":"step_0","status":"ok"}` + "\n" + `{"host":"step_1","status":"unreachable"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0","step_1"],"hosts":{"step_0":{"ok":1,"failed":0,"skipped":0,"unreachable":0},"step_1":{"ok":0,"failed":0,"skipped":0,"unreachable":1}}}` + "\n", want: true},
+		{name: "diagnostic probe only", body: `{"host":"step_0","status":"probe-unreachable"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":0,"failed":0,"skipped":0,"unreachable":0,"probeUnreachable":1}}}` + "\n"},
+		{name: "failure after unreachable", body: `{"host":"step_0","status":"unreachable"}` + "\n" + `{"host":"step_0","status":"failed"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":0,"failed":1,"skipped":0,"unreachable":1}}}` + "\n"},
+		{name: "success only", body: `{"host":"step_0","status":"ok"}` + "\n" + `{"schemaVersion":1,"status":"terminal","processedHosts":["step_0"],"hosts":{"step_0":{"ok":1,"failed":0,"skipped":0,"unreachable":0}}}` + "\n"},
 		{name: "malformed", body: "not-json\n"},
 		{name: "empty"},
 	}
@@ -66,7 +68,7 @@ func TestCommandRunnerReturnsTypedUnreachableError(t *testing.T) {
 	dir := t.TempDir()
 	executable := filepath.Join(dir, "fake-ansible-playbook")
 	body := "#!/bin/sh\n" +
-		"printf '%s\\n' '{\"host\":\"step_0\",\"status\":\"unreachable\"}' > \"$BOOTWRIGHT_ANSIBLE_ARTIFACTS/" + RunResultName + "\"\n" +
+		"printf '%s\\n' '{\"host\":\"step_0\",\"status\":\"unreachable\"}' '{\"schemaVersion\":1,\"status\":\"terminal\",\"processedHosts\":[\"step_0\"],\"hosts\":{\"step_0\":{\"ok\":0,\"failed\":0,\"skipped\":0,\"unreachable\":1}}}' > \"$BOOTWRIGHT_ANSIBLE_ARTIFACTS/" + RunResultName + "\"\n" +
 		"exit 2\n"
 	if err := os.WriteFile(executable, []byte(body), 0o755); err != nil {
 		t.Fatalf("write executable: %v", err)

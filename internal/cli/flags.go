@@ -124,7 +124,7 @@ func addYesFlag(cmd *cobra.Command, p *bool, action string) {
 }
 
 func addModeFlag(cmd *cobra.Command, p *string, action string) {
-	cmd.Flags().StringVar(p, "mode", string(workflow.ApplyModeReconcile), "intent of this "+action+" ("+strings.Join(workflow.ApplyModeNames(), "|")+"): create asserts a greenfield run and fails if any selected object already exists; reconcile creates what is missing, skips what matches, and fails closed on drift; rebuild authorizes Bootwright-owned destructive rebuilds of drifted owned objects (a rebuild that destroys data additionally needs --authorize "+authorizeDataLoss+")")
+	cmd.Flags().StringVar(p, "mode", string(workflow.ApplyModeReconcile), "intent of this "+action+" ("+strings.Join(workflow.ApplyModeNames(), "|")+"): create asserts a greenfield run and fails if any selected object already exists; reconcile creates what is missing, skips what matches, converges drift that is reconcilable in place, and fails closed on structural (destructive-identity) drift or foreign ownership; rebuild authorizes Bootwright-owned destructive rebuilds of drifted owned objects (a rebuild that destroys data additionally needs --authorize "+authorizeDataLoss+")")
 	registerFlagCompletion(cmd, "mode", workflow.ApplyModeNames())
 }
 

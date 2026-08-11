@@ -121,7 +121,7 @@ func TestBootstrapWaitAdditionLeavesInstalledClusterConverged(t *testing.T) {
 		}
 	}
 
-	objects, err := ClassifyApplyObjects(tasks, runsDir)
+	objects, err := ClassifyApplyObjects(tasks, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}

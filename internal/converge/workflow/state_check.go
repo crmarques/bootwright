@@ -49,7 +49,7 @@ type AddonCSVReport struct {
 	Note         string                           `json:"note,omitempty"`
 }
 
-func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, runsDir string) (StateCheckReport, error) {
+func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, runsDir, contextName string) (StateCheckReport, error) {
 	type rootAcc struct {
 		kind, name string
 		total      int
@@ -89,7 +89,7 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		if name == "" {
 			kind, name = "infrastructure", "infrastructure"
 		}
-		class, warning, err := classifyApplyTaskStateLenient(task, runsDir)
+		class, warning, err := classifyApplyTaskStateLenient(task, runsDir, contextName)
 		if err != nil {
 			return StateCheckReport{}, err
 		}
@@ -118,7 +118,7 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 		}
 		acc := rootFor(ApplyClusterKindStorage, cluster.Metadata.Name)
 		for _, sub := range storageSubObjects(state, cluster.Metadata.Name) {
-			class, warning, err := classifyStorageSubObjectLenient(state, sub, runsDir)
+			class, warning, err := classifyStorageSubObjectLenient(state, sub, runsDir, contextName)
 			if err != nil {
 				return StateCheckReport{}, err
 			}
@@ -127,7 +127,7 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 			}
 			reconcilable := false
 			if warning == "" {
-				reconcilable, err = storageSubObjectReconcilableDrift(state, sub, runsDir)
+				reconcilable, err = storageSubObjectReconcilableDrift(state, sub, runsDir, contextName)
 				if err != nil {
 					return StateCheckReport{}, err
 				}
@@ -159,7 +159,7 @@ func StateCheck(tasks []ApplyTask, target ApplyTarget, state v1alpha1.State, run
 	return report, nil
 }
 
-func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafetyClassification, string, error) {
+func classifyApplyTaskStateLenient(task ApplyTask, runsDir, contextName string) (ConvergeSafetyClassification, string, error) {
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
 		return "", "", err
@@ -174,14 +174,14 @@ func classifyApplyTaskStateLenient(task ApplyTask, runsDir string) (ConvergeSafe
 	if !found {
 		return ConvergeSafetyMissing, "", nil
 	}
-	class, classifyErr := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+	class, classifyErr := classifyApplyTaskWithRecordForContext(task, runsDir, contextName, record, desiredHash)
 	if classifyErr != nil {
 		return ConvergeSafetyUnknown, classifyErr.Error(), nil
 	}
 	return class, "", nil
 }
 
-func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject, runsDir string) (ConvergeSafetyClassification, string, error) {
+func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject, runsDir, contextName string) (ConvergeSafetyClassification, string, error) {
 	desiredHash, err := storageSubObjectDesiredHash(state, sub)
 	if err != nil {
 		return "", "", err
@@ -196,14 +196,14 @@ func classifyStorageSubObjectLenient(state v1alpha1.State, sub storageSubObject,
 	if !found {
 		return ConvergeSafetyMissing, "", nil
 	}
-	class, classifyErr := classifyStorageSubObjectWithRecord(state, sub, runsDir, record, desiredHash)
+	class, classifyErr := classifyStorageSubObjectWithRecordForContext(state, sub, runsDir, contextName, record, desiredHash)
 	if classifyErr != nil {
 		return ConvergeSafetyUnknown, classifyErr.Error(), nil
 	}
 	return class, "", nil
 }
 
-func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClassification, error) {
+func classifyApplyTaskState(task ApplyTask, runsDir, contextName string) (ConvergeSafetyClassification, error) {
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
 		return "", err
@@ -215,7 +215,7 @@ func classifyApplyTaskState(task ApplyTask, runsDir string) (ConvergeSafetyClass
 	if !found {
 		return ConvergeSafetyMissing, nil
 	}
-	return classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+	return classifyApplyTaskWithRecordForContext(task, runsDir, contextName, record, desiredHash)
 }
 
 func stateCheckResource(task ApplyTask, class ConvergeSafetyClassification, reconcilable bool) StateCheckResource {

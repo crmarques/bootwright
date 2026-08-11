@@ -32,7 +32,7 @@ func TestStorageOverrideHelpersMatchClassifiedObjects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan after: %v", err)
 	}
-	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestSubObjectRebuildAuthorizationKeysTrackStructuralDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan after: %v", err)
 	}
-	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(afterTasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestRebuildAuthorizationSkipsHealthyMatchStorageCluster(t *testing.T) {
 			}
 		}
 	}
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

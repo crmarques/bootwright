@@ -1,0 +1,6 @@
+---
+- name: Reserve complete infra-component endpoint registry after family recovery
+  ansible.builtin.include_tasks: reserve_infra_component_endpoint_claims.yml
+
+- name: Acquire sorted infra-component endpoint slots after family recovery publication
+  ansible.builtin.include_tasks: acquire_host_endpoint_slots.yml

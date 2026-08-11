@@ -1,6 +1,7 @@
 package ownership
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
@@ -89,6 +90,26 @@ func TestValidateResourceRejectsUnknownRole(t *testing.T) {
 	}
 	if err := ValidateResource(ResourceRecord{Kind: "infra-component", Name: "edge", Role: RoleReference}); err != nil {
 		t.Fatalf("reference role must validate: %v", err)
+	}
+}
+
+func TestResourceRecordRejectsNonStringRole(t *testing.T) {
+	for _, value := range []string{"null", "false", "0", "[]", "{}"} {
+		t.Run(value, func(t *testing.T) {
+			var record ResourceRecord
+			if err := json.Unmarshal([]byte(`{"kind":"infra-component","name":"edge","role":`+value+`}`), &record); err == nil {
+				t.Fatalf("role %s decoded as effective %q; a non-string role must not become owner evidence", value, record.EffectiveRole())
+			}
+		})
+	}
+	for _, body := range []string{
+		`{"kind":"infra-component","name":"edge"}`,
+		`{"kind":"infra-component","name":"edge","role":""}`,
+	} {
+		var record ResourceRecord
+		if err := json.Unmarshal([]byte(body), &record); err != nil || record.EffectiveRole() != RoleOwner {
+			t.Fatalf("legacy owner role %s decoded as %+v, err=%v", body, record, err)
+		}
 	}
 }
 

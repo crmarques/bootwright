@@ -5,15 +5,12 @@
       - bootwright_ownership_dir | default('') | length > 0
       - bootwright_ownership_kind | default('') is match('^[A-Za-z0-9_.-]+$')
       - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
-    fail_msg: "ownership resource records need safe kind, name, and bootwright_ownership_dir"
-
-- name: Create ownership resource directory
-  ansible.builtin.file:
-    path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
+      - bootwright_ownership_role | default('owner') in ['owner', 'reference']
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Ownership resource records need a safe kind, name, ownership directory,
+      and exact controller-built retry invocation. Repair the task inputs and
+      re-run `{{ bootwright_mutating_invocation | default('the same bootwright mutation') }}`.
 
 - name: Resolve ownership resource record path
   ansible.builtin.set_fact:
@@ -26,12 +23,101 @@
       }}.json
   changed_when: false
 
+- name: Inspect existing ownership resource record
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_resource_path }}"
+  register: bootwright_ownership_resource_stat
+  changed_when: false
+  failed_when: false
+
 - name: Load existing ownership resource record
   ansible.builtin.slurp:
     src: "{{ bootwright_ownership_resource_path }}"
   register: bootwright_ownership_resource_slurp
   changed_when: false
   failed_when: false
+  when: bootwright_ownership_resource_stat.stat.exists | default(false) | bool
+
+- name: Decode existing ownership resource identity
+  block:
+    - name: Decode existing ownership resource JSON
+      ansible.builtin.set_fact:
+        bootwright_ownership_existing_decoded: >-
+          {{ bootwright_ownership_resource_slurp.content | b64decode | from_json }}
+      changed_when: false
+  rescue:
+    - name: Refuse to replace malformed ownership evidence
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to replace ownership evidence at
+          {{ bootwright_ownership_resource_path }} because it is not readable JSON.
+          No ownership record was changed. Restore the exact record from trusted
+          evidence, or remove it only after proving it stale, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_ownership_resource_stat.stat.exists | default(false) | bool
+    - (bootwright_ownership_resource_slurp | default({})).content is defined
+
+- name: Refuse to replace contradictory ownership evidence
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_resource_stat.stat.exists is defined
+      - >-
+        not (bootwright_ownership_resource_stat.stat.exists | default(true) | bool)
+        or (
+          not (bootwright_ownership_resource_stat.stat.islnk | default(false) | bool)
+          and (bootwright_ownership_resource_stat.stat.isreg | default(false) | bool)
+          and (bootwright_ownership_resource_slurp.content is defined)
+          and (bootwright_ownership_existing_decoded.apiVersion | default('')
+               == 'bootwright.io/ownership/v1alpha1')
+          and (bootwright_ownership_existing_decoded.kind | default('')
+               == bootwright_ownership_kind)
+          and (bootwright_ownership_existing_decoded.name | default('')
+               == bootwright_ownership_name)
+          and (bootwright_ownership_existing_decoded.owner | default('')
+               == 'bootwright')
+          and (
+            (
+              bootwright_ownership_existing_decoded.role is not defined
+              and bootwright_ownership_role | default('owner') == 'owner'
+            )
+            or (
+              bootwright_ownership_existing_decoded.role is defined
+              and bootwright_ownership_existing_decoded.role is string
+              and (
+                (
+                  bootwright_ownership_existing_decoded.role | trim | length == 0
+                  and bootwright_ownership_role | default('owner') == 'owner'
+                )
+                or (
+                  bootwright_ownership_existing_decoded.role | trim
+                  == bootwright_ownership_role | default('owner')
+                )
+              )
+            )
+          )
+          and (bootwright_ownership_existing_decoded.context | default('')
+               == bootwright_ownership_context)
+          and (bootwright_ownership_existing_decoded.host | default('')
+               == bootwright_host_name | default(inventory_hostname))
+        )
+    fail_msg: >-
+      Refusing to replace contradictory ownership evidence at
+      {{ bootwright_ownership_resource_path }}. An existing record must be a regular
+      non-symlink file and exactly match ownership API, kind, name, manager, effective
+      role, context, and host before this run may update it. Found
+      {{ bootwright_ownership_existing_decoded | default('unreadable') }}.
+      No ownership record was changed. Restore the exact record from trusted evidence,
+      or remove it only after proving it stale, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Create ownership resource directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
 
 - name: Write ownership resource record
   ansible.builtin.copy:
@@ -66,8 +152,8 @@
         | combine(bootwright_ownership_fields | default({}), recursive=True)
       }}
     bootwright_ownership_existing: >-
-      {{ (bootwright_ownership_resource_slurp.content | b64decode | from_json)
-         if (bootwright_ownership_resource_slurp.content is defined)
+      {{ bootwright_ownership_existing_decoded
+         if (bootwright_ownership_resource_stat.stat.exists | default(false) | bool)
          else {} }}
     bootwright_ownership_record: >-
       {{

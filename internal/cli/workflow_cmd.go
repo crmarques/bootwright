@@ -51,9 +51,10 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 		use:   "apply",
 		short: "Apply the provisioning graph",
 		long: "Applies the provisioning graph, reconciling desired state idempotently. It\n" +
-			"fails closed on drift or foreign ownership before mutating; --mode rebuild\n" +
-			"authorizes Bootwright-owned rebuilds and --authorize data-loss authorizes the\n" +
-			"disk wipes such a rebuild needs. Exit codes: 0 success, 2 usage error, non-zero\n" +
+			"converges drift that is reconcilable in place and fails closed on structural\n" +
+			"drift or foreign ownership before mutating; --mode rebuild authorizes\n" +
+			"Bootwright-owned rebuilds and --authorize data-loss authorizes the disk wipes\n" +
+			"such a rebuild needs. Exit codes: 0 success, 2 usage error, non-zero\n" +
 			"on run failure.",
 		stageSelector: true,
 		commandLabel:  "apply",
@@ -85,12 +86,10 @@ func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		use:   "plan",
 		short: "Preview what apply would change (contacts nothing)",
 		long: "Previews the provisioning task graph. Read-only: it contacts no hosts, BMCs,\n" +
-			"or clusters, writes no runtime records, and never prompts. Exit codes: 0\n" +
-			"success, 1 load error, 2 usage error.",
+			"or clusters and writes no runtime records. It has no workflow confirmation or\n" +
+			"host-key prompt; the persistent --ssh-ask-sudo-password flag still prompts\n" +
+			"before the command. Exit codes: 0 success, 1 load error, 2 usage error.",
 		defaultPlan:   true,
-		hideDryRun:    true,
-		hideApproval:  true,
-		hideExecFlags: true,
 		stageSelector: true,
 		commandLabel:  "plan",
 		action:        "plan",

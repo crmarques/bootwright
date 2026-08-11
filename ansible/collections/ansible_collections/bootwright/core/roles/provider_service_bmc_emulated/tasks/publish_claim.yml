@@ -1,0 +1,137 @@
+---
+- name: Atomically acquire or advance BMC full claim
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_bmc_claim_path }}"
+    state: present
+    desired_content: "{{ bootwright_bmc_preapply_claim | to_nice_json }}\n"
+    expected_contents: >-
+      {{
+        [bootwright_bmc_claim_document_content.content | b64decode]
+        if (bootwright_bmc_claim_document_stat.stat.exists | bool)
+        else []
+      }}
+    allow_absent: "{{ not (bootwright_bmc_claim_document_stat.stat.exists | bool) }}"
+    create_parents: true
+    trusted_root: /
+  register: bootwright_bmc_claim_cas_result
+  failed_when: false
+
+- name: Re-probe BMC full claim winner
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Require exact BMC full claim CAS winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_claim_cas_result.previous_sha256 is defined
+      - bootwright_bmc_claim_cas_result.current_sha256 is defined
+      - >-
+        bootwright_bmc_claim_record == bootwright_bmc_preapply_claim
+        or (
+          bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+          and bootwright_bmc_claim_record in [
+            bootwright_bmc_apply_transition_envelope.active,
+            bootwright_bmc_apply_transition_envelope.pending
+          ]
+        )
+    fail_msg: >-
+      Refusing BMC emulator apply because another mutation won or held the
+      host-atomic full-claim CAS: {{ bootwright_bmc_claim_cas_result.msg | default('winner differs') }}.
+      No BMC runtime was changed. Inspect the winning claim and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before BMC transition publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+  when: bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+
+- name: Atomically publish BMC transition envelope before pending mutation
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_bmc_transition_path }}"
+    state: present
+    desired_content: "{{ bootwright_bmc_apply_transition_envelope | to_nice_json }}\n"
+    expected_contents: >-
+      {{
+        [bootwright_bmc_transition_document_content.content | b64decode]
+        if (bootwright_bmc_transition_document_stat.stat.exists | bool)
+        else []
+      }}
+    allow_absent: "{{ not (bootwright_bmc_transition_document_stat.stat.exists | bool) }}"
+    create_parents: false
+    trusted_root: /
+  when: bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+  register: bootwright_bmc_transition_cas_result
+  failed_when: false
+
+- name: Re-probe BMC transition CAS winner
+  ansible.builtin.import_tasks: claim_probe.yml
+  when: bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+
+- name: Require exact BMC transition CAS winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_transition_cas_result.previous_sha256 is defined
+      - bootwright_bmc_transition_cas_result.current_sha256 is defined
+      - bootwright_bmc_claim_transition == bootwright_bmc_apply_transition_envelope
+    fail_msg: >-
+      Refusing BMC emulator apply because another mutation won or held the
+      host-atomic transition CAS: {{ bootwright_bmc_transition_cas_result.msg | default('winner differs') }}.
+      The full claim was retained and no pending runtime was changed. Inspect
+      both transition sides and re-run `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+
+- name: Revalidate host operation before BMC marker publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Atomically publish legacy BMC context marker
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_bmc_claim_root }}/.bootwright-context"
+    state: present
+    desired_content: "{{ bootwright_bmc_current_context }}\n"
+    expected_contents: >-
+      {{
+        [bootwright_bmc_claim_content.content | b64decode]
+        if (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+        else []
+      }}
+    allow_absent: "{{ not (bootwright_bmc_claim_marker_stat.stat.exists | bool) }}"
+    create_parents: false
+    trusted_root: /
+  register: bootwright_bmc_marker_cas_result
+  failed_when: false
+
+- name: Re-probe atomic BMC claim winner before mutation
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Require exact atomic BMC claim winner before mutation
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_marker_cas_result.previous_sha256 is defined
+      - bootwright_bmc_marker_cas_result.current_sha256 is defined
+      - >-
+        bootwright_bmc_claim_record == bootwright_bmc_preapply_claim
+        or (
+          bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+          and bootwright_bmc_claim_record in [
+            bootwright_bmc_apply_transition_envelope.active,
+            bootwright_bmc_apply_transition_envelope.pending
+          ]
+        )
+      - >-
+        bootwright_bmc_apply_transition_envelope | default({}) | length == 0
+        or bootwright_bmc_claim_transition == bootwright_bmc_apply_transition_envelope
+      - bootwright_bmc_claim_context == bootwright_bmc_current_context
+    fail_msg: >-
+      Refusing BMC emulator apply because another mutation won or changed the
+      host-atomic full claim, transition, or context marker. No BMC package,
+      config, service, pool, firewall rule, runtime path, or ownership record
+      was changed. Re-read the winning evidence and re-run
+      `{{ bootwright_mutating_invocation }}`. CAS result:
+      {{ bootwright_bmc_marker_cas_result.msg | default('winner differs') }}.
+      No authorization bypasses this
+      cross-controller compare-and-swap.

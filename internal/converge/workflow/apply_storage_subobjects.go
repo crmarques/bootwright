@@ -230,7 +230,7 @@ func storageSubObjectStructuralHash(state v1alpha1.State, sub storageSubObject) 
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObject, runsDir string) (bool, error) {
+func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObject, runsDir, contextName string) (bool, error) {
 	structuralHash, err := storageSubObjectStructuralHash(state, sub)
 	if err != nil {
 		return false, err
@@ -243,48 +243,86 @@ func storageSubObjectReconcilableDrift(state v1alpha1.State, sub storageSubObjec
 	if err != nil || !found {
 		return false, err
 	}
+	class, err := classifyStorageSubObjectWithRecordForContext(state, sub, runsDir, contextName, record, desiredHash)
+	if err != nil || class != ConvergeSafetyDrift {
+		return false, err
+	}
 	if structuralHash == "" {
 		return false, nil
 	}
 	return IsReconcilableDrift(record, desiredHash, structuralHash), nil
 }
 
-func classifyStorageSubObject(state v1alpha1.State, sub storageSubObject, runsDir string) (ConvergeSafetyClassification, error) {
+func classifyStorageSubObject(state v1alpha1.State, sub storageSubObject, runsDir, contextName string) (ConvergeSafetyClassification, error) {
 	desiredHash, err := storageSubObjectDesiredHash(state, sub)
 	if err != nil {
 		return "", err
 	}
 	record, found, err := LoadConvergeSafetyRecord(runsDir, sub.resourceID())
 	if err != nil {
-		return "", err
+		return "", untrustedConvergenceEvidence(runsDir, sub.resourceID(), err)
 	}
 	if !found {
 		return ConvergeSafetyMissing, nil
 	}
-	return classifyStorageSubObjectWithRecord(state, sub, runsDir, record, desiredHash)
+	return classifyStorageSubObjectWithRecordForContext(state, sub, runsDir, contextName, record, desiredHash)
 }
 
 func classifyStorageSubObjectWithRecord(state v1alpha1.State, sub storageSubObject, runsDir string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
-	class := ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
-	if class == ConvergeSafetyMissing || class == ConvergeSafetyForeign || record.HashSchema != ConvergeHashSchema-1 {
-		return class, nil
+	if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+		return ConvergeSafetyForeign, nil
 	}
-	taskID := "storage." + sub.Cluster
-	if record.ResourceID != sub.resourceID() || record.TaskID != taskID || record.TaskKind != ApplyTaskKindStorageCluster {
-		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: sub.resourceID(), Cause: fmt.Errorf("the converge record has ambiguous resource or task identity")}
+	return ConvergeSafetyUnknown, untrustedConvergenceEvidence(runsDir, sub.resourceID(), fmt.Errorf("the context-free classifier cannot verify exact owner.context"))
+}
+
+func classifyStorageSubObjectWithRecordForContext(state v1alpha1.State, sub storageSubObject, runsDir, contextName string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
+	identity := convergeSafetyRecordIdentity{
+		ResourceID:   sub.resourceID(),
+		ResourceKind: sub.Kind,
+		TaskID:       "storage." + sub.Cluster,
+		TaskKind:     ApplyTaskKindStorageCluster,
+		OwnerContext: contextName,
 	}
-	input, err := storageSubObjectDesiredHashInput(state, sub)
-	if err != nil {
-		return ConvergeSafetyUnknown, err
+	if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+		return ConvergeSafetyForeign, nil
 	}
-	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, sub.resourceID(), taskID, ApplyTaskKindStorageCluster, successfulTaskStatus(record.Status), record.HashSchema, input)
-	if err != nil {
-		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: sub.resourceID(), Cause: err}
+	if err := validateConvergeSafetyRecordAuthority(record, identity); err != nil {
+		return ConvergeSafetyUnknown, untrustedConvergenceEvidence(runsDir, identity.ResourceID, err)
 	}
-	if matched {
-		return ConvergeSafetyMatch, nil
+	switch record.HashSchema {
+	case ConvergeHashSchema:
+		if err := validateConvergeSafetyRecordPayload(record, identity.ResourceID); err != nil {
+			return ConvergeSafetyUnknown, &CurrentConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if record.DesiredHash == desiredHash {
+			return ConvergeSafetyMatch, nil
+		}
+		return ConvergeSafetyDrift, nil
+	case ConvergeHashSchema - 1:
+		if record.HashSchema < successfulInputSnapshotFirstSchema {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: fmt.Errorf("hash schema %d predates immutable successful-input snapshots", record.HashSchema)}
+		}
+		if err := validateConvergeSafetyRecordPayload(record, identity.ResourceID); err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if err := validateRunIDPathSegment(record.RunID); err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		input, err := storageSubObjectDesiredHashInput(state, sub)
+		if err != nil {
+			return ConvergeSafetyUnknown, err
+		}
+		matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, identity.ResourceID, identity.TaskID, identity.TaskKind, successfulTaskStatus(record.Status), record.HashSchema, record.DesiredHash, input)
+		if err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if matched {
+			return ConvergeSafetyMatch, nil
+		}
+		return ConvergeSafetyDrift, nil
+	default:
+		return ConvergeSafetyDrift, nil
 	}
-	return ConvergeSafetyDrift, nil
 }
 
 func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, state v1alpha1.State, cluster string, status ConvergeSafetyStatus, now time.Time) error {
@@ -323,6 +361,16 @@ func MarkStorageSubObjectsConvergeSafety(runsDir, contextName, runID string, sta
 			Status:    status,
 			RunID:     runID,
 			UpdatedAt: now.UTC(),
+		}
+		identity := convergeSafetyRecordIdentity{
+			ResourceID:   sub.resourceID(),
+			ResourceKind: sub.Kind,
+			TaskID:       taskID,
+			TaskKind:     ApplyTaskKindStorageCluster,
+			OwnerContext: contextName,
+		}
+		if err := validateCurrentConvergeSafetyRecord(record, identity); err != nil {
+			return err
 		}
 		retained, err := retainCurrentConvergeSafetyEvidence(runsDir, record, input)
 		if err != nil {

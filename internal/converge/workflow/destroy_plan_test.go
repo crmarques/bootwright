@@ -406,7 +406,7 @@ func TestControllerNameResolutionDestroyBracketHardGatesEveryInfraMutation(t *te
 				if !slices.Contains(task.Entry.SuccessDependencies, preflight.Entry.ID) {
 					t.Errorf("destroy mutation %s does not require successful controller ownership preflight: %v", task.Entry.ID, task.Entry.SuccessDependencies)
 				}
-				if DestroyTaskNeedsCompletionProof(task.Entry) {
+				if DestroyTaskNeedsCompletionProof(task.Entry) && len(task.Entry.ResourceKeys) > 0 {
 					successDependencies = append(successDependencies, task.Entry.ID)
 					if !slices.Contains(cleanup.Entry.SuccessDependencies, task.Entry.ID) || slices.Contains(cleanup.Entry.Dependencies, task.Entry.ID) {
 						t.Errorf("controller cleanup does not require success only from identity-bearing mutation %s: deps=%v success=%v", task.Entry.ID, cleanup.Entry.Dependencies, cleanup.Entry.SuccessDependencies)
@@ -484,8 +484,8 @@ func TestManagedNameResolutionPlacementDestroyKeepsResolverIndependentConnection
 	if !slices.Contains(provider.Entry.OrderingDependencies, infra.Entry.ID) {
 		t.Fatalf("provider teardown ordering dependencies = %v, want name-resolution teardown %s first", provider.Entry.OrderingDependencies, infra.Entry.ID)
 	}
-	if !slices.Contains(cleanup.Entry.Dependencies, provider.Entry.ID) {
-		t.Fatalf("controller cleanup dependencies = %v, want resolver-independent provider teardown %s to reach OK or skipped first", cleanup.Entry.Dependencies, provider.Entry.ID)
+	if !slices.Contains(cleanup.Entry.SuccessDependencies, provider.Entry.ID) {
+		t.Fatalf("controller cleanup success dependencies = %v, want resolver-independent provider teardown %s to carry exact completion proof first", cleanup.Entry.SuccessDependencies, provider.Entry.ID)
 	}
 	if tasks[len(tasks)-1].Entry.ID != cleanup.Entry.ID {
 		t.Fatalf("last destroy task = %s, want controller cleanup %s", tasks[len(tasks)-1].Entry.ID, cleanup.Entry.ID)
@@ -1152,18 +1152,18 @@ func TestControllerNameResolutionDestroyOutcomeRequiresBothBracketTasks(t *testi
 	}
 }
 
-func TestDestroyTaskNeedsCompletionProofUsesSelectedIdentity(t *testing.T) {
+func TestDestroyTaskNeedsCompletionProofUsesRegisteredDestroyKinds(t *testing.T) {
 	cases := []struct {
 		name string
 		task TaskLedgerEntry
 		want bool
 	}{
 		{name: "empty"},
-		{name: "cluster resource", task: TaskLedgerEntry{ResourceKeys: []string{"cluster-a"}}, want: true},
-		{name: "machine resource", task: TaskLedgerEntry{ResourceKeys: []string{DestroyMachineResourceKeyPrefix + "node-a"}}, want: true},
-		{name: "cluster field", task: TaskLedgerEntry{Cluster: "cluster-a"}, want: true},
-		{name: "node field", task: TaskLedgerEntry{Node: "node-a"}, want: true},
-		{name: "nodes field", task: TaskLedgerEntry{Nodes: []string{"node-a"}}, want: true},
+		{name: "full scope provider kind", task: TaskLedgerEntry{Kind: DestroyTaskKindProviderServices}, want: true},
+		{name: "unknown kind", task: TaskLedgerEntry{Kind: "futureDestroyKind"}},
+		{name: "unknown kind with cluster resource", task: TaskLedgerEntry{Kind: "futureDestroyKind", ResourceKeys: []string{"cluster-a"}}},
+		{name: "registered container kind without selected identity", task: TaskLedgerEntry{Kind: DestroyTaskKindContainerCluster}, want: true},
+		{name: "registered machine kind", task: TaskLedgerEntry{Kind: DestroyTaskKindMachineInfra}, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

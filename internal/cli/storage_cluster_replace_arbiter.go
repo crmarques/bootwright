@@ -105,11 +105,11 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 	}
 	live, err := discoverArbiterClusterState(runContext, discoveryStdout, stderr, ctx, clustersDir, flags, state, cluster.Metadata.Name)
 	if err != nil {
-		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
+		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, ctx.Name, invocation))
 	}
 	plan, err := arbiter.Compute(arbiterDesiredCluster(cluster, promotion), live)
 	if err != nil {
-		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
+		return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, ctx.Name, invocation))
 	}
 	if plan.Settled && promotion.Empty() {
 		if flags.output == outputJSON {
@@ -159,7 +159,7 @@ func runReplaceArbiter(c *cobra.Command, stdin io.Reader, stdout, stderr io.Writ
 			return failErr(1, err)
 		}
 		if plan, err = arbiter.Compute(cluster, live); err != nil {
-			return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, invocation))
+			return failErr(1, arbiterLivePlanRefusal(err, state, ctx.RunsDir, ctx.Name, invocation))
 		}
 		if err := replaceArbiterGateRefusals(auth, plan, invocation); err != nil {
 			return failErr(1, err)
@@ -323,7 +323,7 @@ func prepareArbiterMachine(cmdCtx context.Context, stdout, stderr io.Writer, ctx
 	if _, _, err := applyOwnershipRecords(ctx, false, &invocation); err != nil {
 		return failErr(1, err)
 	}
-	if err := converge.ArbiterPreparePreflight(tasks, ctx.RunsDir, clusterName); err != nil {
+	if err := converge.ArbiterPreparePreflight(tasks, ctx.RunsDir, ctx.Name, clusterName); err != nil {
 		return failErr(1, arbiterPrepareDriftRefusal(err, applyInvocation, invocation))
 	}
 	if err := arbiterPrepareReleasedSubstrateRefusal(ctx.RunsDir, tasks, invocation); err != nil {

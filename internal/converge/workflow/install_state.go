@@ -464,12 +464,27 @@ func stampInstalledClusterConvergeRecords(runsDir, contextName, runID string, ta
 		if err != nil {
 			return err
 		}
+		if found {
+			identity := convergeSafetyRecordIdentity{
+				ResourceID:   applyTaskSafetyResourceID(task),
+				ResourceKind: task.Entry.Kind,
+				TaskID:       task.Entry.ID,
+				TaskKind:     task.Entry.Kind,
+				OwnerContext: contextName,
+			}
+			if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+				return fmt.Errorf("cannot replace convergence safety evidence for %s recorded by manager %q while stamping installed cluster %s; use that manager to reconcile it, or remove the exact record only after proving it stale", identity.ResourceID, record.Owner.Manager, task.Entry.Cluster)
+			}
+			if err := validateConvergeSafetyRecordAuthority(record, identity); err != nil {
+				return untrustedConvergenceEvidence(runsDir, identity.ResourceID, err)
+			}
+		}
 		if found && record.HashSchema != ConvergeHashSchema {
 			desiredHash, err := ApplyTaskDesiredHash(task)
 			if err != nil {
 				return err
 			}
-			class, err := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+			class, err := classifyApplyTaskWithRecordForContext(task, runsDir, contextName, record, desiredHash)
 			if err != nil {
 				return err
 			}

@@ -25,14 +25,12 @@
 - name: Remove managed OS install artifacts
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: destroy_resource.yml
+    tasks_from: destroy_declared_managed_os.yml
   vars:
-    bootwright_ownership_record:
-      kind: managed-os-install
-      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-      paths:
-        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-      attributes: {}
+    bootwright_declared_managed_os_cluster: "{{ bootwright_current_cluster.name }}"
+    bootwright_declared_managed_os_machine: "{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
   when: bootwright_component.osManaged | default(false) | bool
 
 - name: Probe remaining managed-OS install machines in this cluster

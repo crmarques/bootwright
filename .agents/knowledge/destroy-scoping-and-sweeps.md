@@ -125,13 +125,22 @@ TestPlanDestroyMachineScopeRunsRegistrationThenMachineInfra,
 TestPlanDestroyTasksMachineInfraUsesOneForkPerDeclaredHost, and
 TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped.
 
-**An unreachable KubeVirt host is not an absent guest:** a recorded
-`kubevirt-machine` requires a successful host API probe even when
-`--authorize unreachable-nodes` is set. Unlike a node-local cleanup, host-cluster
-unreachability gives no evidence that the VirtualMachine or DataVolumes are
-gone. The machine-infra task therefore fails before removing the ownership
-record; the full-lifecycle hard dependency blocks container runtime cleanup, so
-a retry keeps both the host access material and the guest evidence.
+**An unreachable KubeVirt host is not an absent guest:** every selected
+KubeVirt guest requires a successful host API probe even when its controller
+record is missing or `--authorize unreachable-nodes` is set. Unlike a node-local
+cleanup, missing captured access or host-cluster unreachability gives no evidence
+that the VirtualMachine, DataVolumes, or PVCs are gone. The machine-infra task
+therefore fails before removing any ownership record; the full-lifecycle hard
+dependency blocks container runtime cleanup, so a retry keeps both the host
+access material and the guest evidence.
+
+**Authorized unreachable work stays incomplete:** play-level
+`ignore_unreachable` lets independent hosts drain, but it is not a successful
+destroy result. Any selected task that skipped a proven-unreachable host remains
+non-OK in the controller ledger, returns a partial error, and keeps convergence,
+install, ownership, captured access, and substrate-release evidence. A future
+runner must add the same positive per-target terminal proof before it may join
+the cleanup/reset mapping.
 
 ## Record sweeps and partial bookkeeping
 
@@ -160,6 +169,11 @@ three kinds: `libvirt-domain`, `libvirt-network`, `managed-os-install`.
 down only from desired-state component loops — once undeclared, no sweep
 reaches them; the preview hint must say "destroy it while it is still declared,
 or clean it up manually" (guarded by destroy_output_test).
+The allowlist identifies which kinds have a live classifier; it does not make a
+record deletion authority. Each candidate is re-probed at its recorded address
+and removed only after a successful absence result or exact current-context live
+identity. A same-name foreign replacement, malformed response, permission
+failure, or unsupported classifier is retained with its ownership evidence.
 
 **noRemoteWork must count recorded hosts:** destroy playbooks tear down
 recorded-but-undeclared resources, so `prepareScopedWorkflow` must receive the

@@ -1,0 +1,137 @@
+---
+- name: Validate sorted host endpoint reservation set
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_acquire_set: >-
+      {{ bootwright_host_endpoint_desired_claims | default([])
+         | bootwright.core.bootwright_host_endpoint_claim_set }}
+  changed_when: false
+
+- name: Require exact host endpoint reservation inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_acquire_set.valid | default(false) | bool
+      - >-
+        bootwright_host_endpoint_allowed_claim_digests | default([]) | length > 0
+      - >-
+        (bootwright_host_endpoint_allowed_claim_digests | default([])
+         | reject('match', '^sha256:[a-f0-9]{64}$') | list | length) == 0
+    fail_msg: >-
+      Refusing shared endpoint reservation because its sorted unique endpoint
+      documents or allowed claim digests are invalid. No endpoint or service
+      state was changed. Repair the selected consequence set and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before full endpoint reservation
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Probe atomic host endpoint registry
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/endpoints.json
+    follow: false
+  register: bootwright_host_endpoint_registry_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read atomic host endpoint registry
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_registry_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_registry_stat.stat.exists | default(false) | bool
+
+- name: Classify atomic host endpoint registry
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_current: >-
+      {{ (bootwright_host_endpoint_registry_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_registry_any }}
+  changed_when: false
+
+- name: Require safe readable atomic host endpoint registry
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_endpoint_registry_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_registry_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_endpoint_registry_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_endpoint_registry_content.content is defined
+          and bootwright_host_endpoint_registry_current | length > 0
+        )
+    fail_msg: >-
+      Refusing shared endpoint reservation because the atomic host endpoint
+      registry is unreadable, malformed, linked, or non-regular. No slot or
+      service state was changed. Restore exact trusted registry evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve next atomic full host endpoint reservation
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_next: >-
+      {{ bootwright_host_endpoint_registry_current
+         | bootwright.core.bootwright_host_endpoint_registry_next(
+             bootwright_host_endpoint_acquire_set.claims,
+             bootwright_host_endpoint_allowed_claim_digests) }}
+  changed_when: false
+
+- name: Refuse conflicting atomic host endpoint reservation
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_next.valid | default(false) | bool
+      - bootwright_host_endpoint_registry_next.conflicts | default([]) | length == 0
+      - bootwright_host_endpoint_registry_next.registry | default({}) | length > 0
+    fail_msg: >-
+      Refusing shared-service mutation because its complete selected endpoint
+      set conflicts with durable host reservations:
+      {{ bootwright_host_endpoint_registry_next.conflicts | default('invalid registry transition') }}.
+      No per-endpoint slot or service was changed. Inspect the owning registry
+      entries and re-run `{{ bootwright_mutating_invocation }}`; no
+      authorization overwrites another composite.
+
+- name: Resolve next atomic host endpoint registry content
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_next_content: >-
+      {{ (bootwright_host_endpoint_registry_next.registry | to_nice_json) ~ '\n' }}
+  changed_when: false
+
+- name: Publish complete host endpoint reservation atomically
+  bootwright.core.claim_cas:
+    path: /var/lib/bootwright/shared-services/endpoints.json
+    state: present
+    desired_content: "{{ bootwright_host_endpoint_registry_next_content }}"
+    expected_contents: >-
+      {{ [bootwright_host_endpoint_registry_content.content | b64decode]
+         if (bootwright_host_endpoint_registry_stat.stat.exists | bool) else [] }}
+    allow_absent: "{{ not (bootwright_host_endpoint_registry_stat.stat.exists | bool) }}"
+    create_parents: true
+    trusted_root: /
+  register: bootwright_host_endpoint_registry_cas
+  failed_when: false
+
+- name: Re-read complete host endpoint reservation winner
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_registry_winner_content
+  changed_when: false
+  failed_when: false
+
+- name: Require exact complete host endpoint reservation winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_cas.previous_sha256 is defined
+      - bootwright_host_endpoint_registry_cas.current_sha256 is defined
+      - bootwright_host_endpoint_registry_winner_content.content is defined
+      - >-
+        (bootwright_host_endpoint_registry_winner_content.content | b64decode
+         | bootwright.core.bootwright_host_endpoint_registry_any)
+        == bootwright_host_endpoint_registry_next.registry
+    fail_msg: >-
+      Refusing shared-service mutation because another writer won or held the
+      atomic full endpoint reservation. CAS detail:
+      {{ bootwright_host_endpoint_registry_cas.msg | default('winner differs') }}.
+      No per-endpoint slot or service was changed. Inspect endpoints.json and
+      re-run `{{ bootwright_mutating_invocation }}`.

@@ -54,6 +54,14 @@
         | map(attribute='name')
         | list
       }}
+    bootwright_host_infra_component_owner_names: >-
+      {{
+        bootwright_host_infra_component_ownership_records
+        | selectattr('kind', 'equalto', 'infra-component')
+        | rejectattr('role', 'defined')
+        | map(attribute='name')
+        | list
+      }}
 
   tasks:
     - name: Validate infra component service destroy scope
@@ -66,6 +74,137 @@
       ansible.builtin.include_role:
         name: bootwright.core.machine_base
         tasks_from: firewalld_probe.yml
+
+    - name: Initialize recorded infra-component orphan preflight
+      ansible.builtin.set_fact:
+        bootwright_infra_component_direct_selected_names: []
+        bootwright_infra_component_orphan_selected_names: []
+        bootwright_infra_component_orphan_composites: []
+        bootwright_infra_component_transition_composites: []
+      changed_when: false
+
+    - name: Select desired infra-component records removed before orphan dispatch
+      ansible.builtin.set_fact:
+        bootwright_infra_component_direct_selected_names: >-
+          {{ bootwright_infra_component_direct_selected_names
+             + [bootwright_component.providerName ~ '-' ~ bootwright_component.name] }}
+      loop: "{{ bootwright_host_infra_component_services | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }}"
+      changed_when: false
+      when:
+        - >-
+          (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+          not in bootwright_host_infra_component_reference_names
+        - >-
+          bootwright_infra_component_reclaim_records is not defined
+          or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+             in bootwright_infra_component_reclaim_records.split(',')
+        - >-
+          bootwright_infra_component_destroy_scope_records is not defined
+          or (bootwright_component.providerName ~ '-' ~ bootwright_component.name)
+             in bootwright_infra_component_destroy_scope_names
+
+    - name: Select recorded infra-component orphan candidates
+      ansible.builtin.set_fact:
+        bootwright_infra_component_orphan_selected_names: >-
+          {{ bootwright_infra_component_orphan_selected_names
+             + [bootwright_ownership_record.name] }}
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
+      changed_when: false
+      when:
+        - not (bootwright_destroy_skip_orphan_sweep | default(false) | bool)
+        - bootwright_ownership_record.kind == 'infra-component'
+        - bootwright_ownership_record.role | default('owner', true) != 'reference'
+        - bootwright_ownership_record.name not in bootwright_host_infra_component_record_names
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+        - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
+        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names
+
+    - name: Select recorded infra-component transition-only orphan candidates
+      ansible.builtin.set_fact:
+        bootwright_infra_component_orphan_selected_names: >-
+          {{ bootwright_infra_component_orphan_selected_names
+             + [bootwright_ownership_record.name] }}
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
+      changed_when: false
+      when:
+        - not (bootwright_destroy_skip_orphan_sweep | default(false) | bool)
+        - bootwright_ownership_record.kind == 'infra-component-transition'
+        - bootwright_ownership_record.role | default('owner', true) != 'reference'
+        - bootwright_ownership_record.name not in bootwright_host_infra_component_record_names
+        - bootwright_ownership_record.name not in bootwright_host_infra_component_owner_names
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+        - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
+        - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
+        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names
+
+    - name: Preflight every recorded infra-component orphan and survivor
+      ansible.builtin.include_tasks: tasks/preflight_infra_component_orphan.yml
+      vars:
+        bootwright_infra_component_orphan_record: "{{ bootwright_ownership_record }}"
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
+      when:
+        - bootwright_infra_component_orphan_selected_names | length > 0
+        - bootwright_ownership_record.kind == 'infra-component'
+        - bootwright_ownership_record.role | default('owner', true) != 'reference'
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+
+    - name: Preflight every selected infra-component transition recovery
+      ansible.builtin.include_tasks: tasks/preflight_infra_component_transition.yml
+      vars:
+        bootwright_infra_component_transition_snapshot: "{{ bootwright_ownership_record }}"
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_ownership_record
+        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
+      when:
+        - bootwright_ownership_record.kind == 'infra-component-transition'
+        - bootwright_ownership_record.role | default('owner', true) != 'reference'
+        - >-
+          bootwright_ownership_record.name in bootwright_infra_component_orphan_selected_names
+          or bootwright_ownership_record.name in bootwright_infra_component_direct_selected_names
+        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
+
+    - name: Resolve exact infra-component owner and transition dispatch set
+      ansible.builtin.set_fact:
+        bootwright_infra_component_dispatch_composites: >-
+          {{ bootwright_infra_component_orphan_composites
+             + (bootwright_infra_component_transition_composites
+                | rejectattr(
+                    'name',
+                    'in',
+                    bootwright_infra_component_orphan_composites
+                    | map(attribute='name')
+                    | list)
+                | list) }}
+      changed_when: false
+
+    - name: Resolve whether this host has selected infra-component teardown work
+      ansible.builtin.set_fact:
+        bootwright_infra_host_destroy_selected: >-
+          {{ bootwright_infra_component_direct_selected_names | length > 0
+             or bootwright_infra_component_orphan_selected_names | length > 0
+             or bootwright_host_infra_component_reference_names | length > 0 }}
+        bootwright_host_operation_guard_acquired: false
+      changed_when: false
+
+    - name: Acquire command-wide host operation before infra-component teardown
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: acquire_host_shared_service_operation.yml
+      when: bootwright_infra_host_destroy_selected | bool
 
     - name: Destroy infra component service roles
       ansible.builtin.include_role:
@@ -109,19 +248,112 @@
         - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
         - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names
 
-    - name: Destroy recorded infra component resources
+    - name: Exclude desired infra-components already removed before orphan dispatch
+      ansible.builtin.set_fact:
+        bootwright_infra_component_endpoint_composites: >-
+          {{ bootwright_infra_component_dispatch_composites
+             | rejectattr('name', 'in', bootwright_infra_component_direct_selected_names)
+             | list }}
+      changed_when: false
+
+    - name: Classify recorded infra-component endpoint survivors
+      ansible.builtin.set_fact:
+        bootwright_infra_component_endpoint_decision: >-
+          {{ bootwright_infra_component_endpoint_composites
+             | bootwright.core.bootwright_infra_component_endpoint_conflicts(
+                 bootwright_infra_component_orphan_selected_names) }}
+      changed_when: false
+
+    - name: Refuse recorded infra-component endpoint removal with survivors
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_infra_component_endpoint_decision.valid | default(false) | bool
+          - bootwright_infra_component_endpoint_decision.conflicts | default([]) | length == 0
+        fail_msg: >-
+          Refusing recorded infra-component teardown because one or more selected
+          firewall endpoints are still claimed by an unselected surviving owner
+          on {{ inventory_hostname }}: {{ bootwright_infra_component_endpoint_decision.conflicts | default('invalid endpoint evidence') }}.
+          No orphan component was changed. Expand the explicit destroy scope to
+          include every named survivor or keep the shared endpoint, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+      when: bootwright_infra_component_orphan_selected_names | length > 0
+
+    - name: Destroy recorded artifact-server orphans through the hardened role
       ansible.builtin.include_role:
-        name: bootwright.core.ownership_record
-        tasks_from: destroy_resource.yml
-      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
-      loop_control:
-        loop_var: bootwright_ownership_record
-        label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
+        name: bootwright.core.infra_component_artifact_server_http
+        tasks_from: destroy.yml
+      vars:
+        bootwright_component: "{{ bootwright_infra_component_orphan.component }}"
+        bootwright_ownership_expected_record: "{{ bootwright_infra_component_orphan.record }}"
+        bootwright_infra_component_selection_record: "{{ bootwright_infra_component_orphan.selectionRecord }}"
+        bootwright_infra_component_record_only: true
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: &bootwright_infra_component_orphan_loop
+        loop_var: bootwright_infra_component_orphan
+        label: "{{ bootwright_infra_component_orphan.kind }}/{{ bootwright_infra_component_orphan.name }}"
       when:
-        - not (bootwright_destroy_skip_orphan_sweep | default(false) | bool)
-        - bootwright_ownership_record.kind == 'infra-component'
-        - bootwright_ownership_record.role | default('owner', true) != 'reference'
-        - bootwright_infra_component_service_destroy_scope == '' or (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') == 'artifacts'
-        - bootwright_infra_component_reclaim_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_reclaim_records.split(',')
-        - bootwright_infra_component_destroy_scope_records is not defined or bootwright_ownership_record.name in bootwright_infra_component_destroy_scope_names
-        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_host_infra_component_record_names
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'artifacts'
+
+    - name: Destroy recorded HAProxy orphans through the hardened role
+      ansible.builtin.include_role:
+        name: bootwright.core.infra_component_load_balancer_haproxy
+        tasks_from: destroy.yml
+      vars: &bootwright_infra_component_orphan_vars
+        bootwright_component: "{{ bootwright_infra_component_orphan.component }}"
+        bootwright_ownership_expected_record: "{{ bootwright_infra_component_orphan.record }}"
+        bootwright_infra_component_selection_record: "{{ bootwright_infra_component_orphan.selectionRecord }}"
+        bootwright_infra_component_record_only: true
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: *bootwright_infra_component_orphan_loop
+      when:
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'load-balancer'
+
+    - name: Destroy recorded dnsmasq orphans through the hardened role
+      ansible.builtin.include_role:
+        name: bootwright.core.infra_component_name_resolution_dnsmasq
+        tasks_from: destroy.yml
+      vars: *bootwright_infra_component_orphan_vars
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: *bootwright_infra_component_orphan_loop
+      when:
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'nameResolution'
+
+    - name: Destroy recorded chrony orphans through the hardened role
+      ansible.builtin.include_role:
+        name: bootwright.core.infra_component_ntp_chrony
+        tasks_from: destroy.yml
+      vars: *bootwright_infra_component_orphan_vars
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: *bootwright_infra_component_orphan_loop
+      when:
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'ntp'
+
+    - name: Destroy recorded Squid orphans through the hardened role
+      ansible.builtin.include_role:
+        name: bootwright.core.infra_component_proxy_squid
+        tasks_from: destroy.yml
+      vars: *bootwright_infra_component_orphan_vars
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: *bootwright_infra_component_orphan_loop
+      when:
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'proxy'
+
+    - name: Destroy recorded mirror-registry orphans through the hardened role
+      ansible.builtin.include_role:
+        name: bootwright.core.infra_component_registry_mirror
+        tasks_from: destroy.yml
+      vars: *bootwright_infra_component_orphan_vars
+      loop: "{{ bootwright_infra_component_dispatch_composites }}"
+      loop_control: *bootwright_infra_component_orphan_loop
+      when:
+        - bootwright_infra_component_orphan.name in bootwright_infra_component_orphan_selected_names
+        - bootwright_infra_component_orphan.kind == 'registry'
+
+    - name: Finalize infra component destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

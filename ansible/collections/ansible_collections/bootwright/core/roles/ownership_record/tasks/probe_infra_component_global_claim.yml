@@ -1,0 +1,121 @@
+---
+- name: Resolve canonical host-global infra-component claim identity
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_infra_global_claim_host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+    bootwright_infra_global_claim_desired: >-
+      {{ bootwright_infra_transition_desired | default({})
+         | bootwright.core.bootwright_infra_component_transition_composite(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact host-global infra-component claim inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_desired | length > 0
+      - bootwright_infra_global_claim_context is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_infra_global_claim_host is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing infra-component apply because the exact context, host, provider,
+      name, service/container, or desired composite for its host-global claim is
+      missing. No claim or role state was changed. Repair the rendered input and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve unambiguous canonical host-global infra-component claim path
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_key: >-
+      {{ bootwright_infra_global_claim_desired.provider
+         | bootwright.core.bootwright_infra_component_claim_digest(
+             bootwright_infra_global_claim_desired.name) }}
+    bootwright_infra_global_claim_path: >-
+      /var/lib/bootwright/shared-services/infra-component/claims/{{ bootwright_infra_global_claim_desired.provider
+        | bootwright.core.bootwright_infra_component_claim_digest(
+            bootwright_infra_global_claim_desired.name) }}.json
+  changed_when: false
+
+- name: Probe canonical host-global infra-component claim ancestors
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /var/lib/bootwright/shared-services
+    - /var/lib/bootwright/shared-services/infra-component
+    - /var/lib/bootwright/shared-services/infra-component/claims
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_infra_global_claim_ancestor_stats
+  changed_when: false
+  failed_when: false
+
+- name: Probe host-global infra-component claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_claim_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read host-global infra-component claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_global_claim_stat.stat.exists | default(false) | bool
+
+- name: Classify host-global infra-component claim
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_existing: >-
+      {{ (bootwright_infra_global_claim_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact host-global infra-component claim preflight
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_key is match('^[a-f0-9]{64}$')
+      - bootwright_infra_global_claim_ancestor_stats.results | default([]) | length == 3
+      - >-
+        (bootwright_infra_global_claim_ancestor_stats.results
+         | selectattr('stat.exists', 'undefined') | list | length) == 0
+      - >-
+        (bootwright_infra_global_claim_ancestor_stats.results
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | rejectattr('stat.isdir', 'defined') | list | length) == 0
+      - >-
+        (bootwright_infra_global_claim_ancestor_stats.results
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | rejectattr('stat.isdir', 'equalto', true) | list | length) == 0
+      - >-
+        (bootwright_infra_global_claim_ancestor_stats.results
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | selectattr('stat.islnk', 'defined')
+         | selectattr('stat.islnk', 'equalto', true) | list | length) == 0
+      - bootwright_infra_global_claim_stat.stat.exists is defined
+      - >-
+        not (bootwright_infra_global_claim_stat.stat.exists | bool)
+        or (
+          bootwright_infra_global_claim_stat.stat.isreg | default(false) | bool
+          and not (bootwright_infra_global_claim_stat.stat.islnk | default(false) | bool)
+          and bootwright_infra_global_claim_content.content is defined
+          and bootwright_infra_global_claim_existing | length > 0
+          and bootwright_infra_global_claim_existing.name
+              == bootwright_infra_global_claim_desired.provider
+                 ~ '-' ~ bootwright_infra_global_claim_desired.name
+        )
+    fail_msg: >-
+      Refusing infra-component apply because the canonical host-global claim or
+      one of its ancestors is unreadable, linked, foreign, malformed, or names a
+      different exact service/container composite. No claim, container, service,
+      firewall endpoint, or role state was changed. Destroy from the owning
+      context or restore trusted evidence, then re-run
+      `{{ bootwright_mutating_invocation }}`.

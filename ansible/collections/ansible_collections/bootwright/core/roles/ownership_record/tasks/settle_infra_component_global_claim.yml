@@ -1,0 +1,91 @@
+---
+- name: Revalidate host operation before settling infra-component claim
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Re-probe authoritative host-global infra-component applying claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_settle_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read authoritative host-global infra-component applying claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_settle_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_global_settle_stat.stat.exists | default(false) | bool
+
+- name: Resolve steady host-global infra-component claim
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_steady: >-
+      {{ bootwright_infra_global_claim_next
+         | bootwright.core.bootwright_infra_component_global_steady(
+             bootwright_infra_transition_completion_context,
+             bootwright_infra_transition_completion_host,
+             bootwright_managed_services_dir) }}
+    bootwright_infra_global_settle_live: >-
+      {{ (bootwright_infra_global_settle_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_transition_completion_context,
+             bootwright_infra_transition_completion_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require unchanged authoritative applying claim before settlement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_steady | length > 0
+      - bootwright_infra_global_settle_stat.stat.exists is defined
+      - bootwright_infra_global_settle_stat.stat.exists | bool
+      - bootwright_infra_global_settle_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_global_settle_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_global_settle_content.content is defined
+      - bootwright_infra_global_settle_live == bootwright_infra_global_claim_next
+    fail_msg: >-
+      Refusing to settle infra-component apply because the authoritative global
+      applying claim changed, disappeared, or became unreadable after owner
+      publication. The exact owner remains for recovery. Inspect the claim and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Settle authoritative host-global infra-component claim atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    state: present
+    desired_content: "{{ (bootwright_infra_global_claim_steady | to_nice_json) ~ '\n' }}"
+    expected_contents:
+      - "{{ bootwright_infra_global_settle_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_infra_global_settle_cas
+  failed_when: false
+
+- name: Re-read settled host-global infra-component claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_settled_content
+  changed_when: false
+  failed_when: false
+
+- name: Require exact steady host-global infra-component claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_settle_cas.current_sha256 is defined
+      - bootwright_infra_global_settled_content.content is defined
+      - >-
+        ((bootwright_infra_global_settled_content.content | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_transition_completion_context,
+             bootwright_infra_transition_completion_host,
+             bootwright_managed_services_dir)) == bootwright_infra_global_claim_steady
+    fail_msg: >-
+      Infra-component convergence could not prove the authoritative global claim
+      settled to this exact desired composite. CAS detail:
+      {{ bootwright_infra_global_settle_cas.msg | default('winner differs') }}.
+      The desired owner record remains. Inspect the global claim and re-run
+      `{{ bootwright_mutating_invocation }}`.

@@ -6,9 +6,10 @@ description: How Bootwright tracks ownership, what makes re-running apply safe, 
 # Ownership, idempotency, and safety
 
 Bootwright is built to be re-run. A bare `apply` reconciles: it creates what is
-missing, skips what already matches, and **fails closed** on anything it did not
-create or cannot safely resume — *before* it mutates a single host. That makes
-the everyday loop (`validate` → `plan` → `apply` → `apply` again) safe by
+missing, skips matching work where a concrete probe proves the match, and
+**fails closed** before changing any target it does not own or cannot safely
+resume. Configuration tasks without such a probe can re-run idempotently. That
+makes the everyday loop (`validate` → `plan` → `apply` → `apply` again) safe by
 construction.
 
 This page explains the machinery behind that promise — how Bootwright knows what
@@ -43,9 +44,12 @@ mutates a host it writes durable **ownership evidence** so later runs — and
 | Per-cluster install records | A cluster-bound, schema-versioned non-secret fingerprint plus writer run and lifecycle times | Skipping completed installs and resuming only from known-safe phases |
 | Provider VM markers | That a substrate VM is one Bootwright created | Bounded teardown — never touching co-resident VMs |
 
-These live under the protected context state directory
-(`/var/lib/bootwright/contexts/<context>/`) and are the source of truth for every
-skip, resume, and teardown decision. They never contain secret bytes.
+The controller records live under the protected context state directory
+(`/var/lib/bootwright/contexts/<context>/`); provider markers live on the
+external resources they identify. A controller record can locate the target,
+but every external skip, resume, or teardown decision pairs it with a conclusive
+live probe, and contradictory live identity wins. The records never contain
+secret bytes.
 
 A machine installed by cloning a vSphere template records exactly what an
 Anaconda-installed one does. Its install ownership record carries the same
@@ -60,11 +64,16 @@ not write the annotation is unowned in the ordinary sense and needs
 `--authorize unowned-vms` like any other.
 
 !!! note "Owned versus foreign is the central distinction"
-    Bootwright only ever rebuilds or removes resources its own records prove it
-    created. A resource with a non-Bootwright owner — or a Ceph cluster that is
-    co-resident but not the one Bootwright bootstrapped — is **foreign**, and
-    every destructive path fails closed on it rather than guessing. This is what
-    lets Bootwright share a host with things it does not manage.
+    By default Bootwright rebuilds or removes only resources whose controller
+    and live evidence prove exact Bootwright ownership. The narrow
+    `unowned-vms`, `unowned-networks`, and `unowned-devices` authorizations let a
+    selected destroy remove a resource with no ownership marker after every
+    other live safety probe passes; they never authorize a resource carrying a
+    foreign identity. A resource with a non-Bootwright owner — or a Ceph cluster
+    that is co-resident but not the one Bootwright bootstrapped — is
+    **foreign**, and every destructive path fails closed on it rather than
+    guessing. This is what lets Bootwright share a host with things it does not
+    manage.
 
 ## What makes re-running apply safe
 
@@ -124,8 +133,10 @@ running it again.
 
 ## The safety checkpoints
 
-Every `apply` passes through a sequence of fail-closed gates. Each one stops the
-run *before* any mutation if its precondition is not met:
+Every `apply` passes through a sequence of fail-closed gates. Whole-run gates
+stop before any run mutation. A live gate at a concrete task stops before that
+target's first side effect; an independently authorized branch may already have
+completed and is not rolled back:
 
 1. **Offline validation.** Strict decode (unknown and retired fields are
    rejected, never translated) plus ownership and cross-reference checks run
@@ -145,7 +156,10 @@ run *before* any mutation if its precondition is not met:
    overwrites a resource it does not own.
 5. **Concrete-probe gating.** Install, add-on, managed-OS, provider, and storage
    sites refuse to reinstall or rebuild over existing state without an explicit
-   `--mode rebuild`.
+   `--mode rebuild`. A stored ownership name only locates the live object: reuse
+   or deletion still requires either a successful `NotFound` or exact live
+   manager, context, cluster/provider and machine/component identity. A failed
+   or unreadable probe is unknown, not absence, and no mode or token adopts it.
 6. **Powered-off installer boot.** Booting install media on a managed-OS
    machine — the OpenShift agent ISO or the Anaconda ISO — requires the machine
    to be observably powered off first, on every substrate (Redfish
@@ -217,8 +231,11 @@ treats resources Bootwright does **not** own:
 
 A few habits keep operators on the safe side of these guardrails:
 
-- **Re-running `apply` is safe — lean on it.** It never silently destroys. Only
-  `apply --mode rebuild` and `destroy` mutate destructively, and both are gated.
+- **Re-running `apply` is safe — lean on it.** A plain reconcile without a
+  reclaim, durable release, or named authorization never silently destroys.
+  Destructive apply requires an explicit rebuild, a selected device reclaim, a
+  prior destroy release, or the foreign-daemons authorization described above;
+  `destroy` crosses its own explicit gates.
 - **Preview first.** Run `bootwright plan` (or `apply --dry-run`) and read the
   graph before any override or teardown. `diff` shows drift without
   touching hosts.
@@ -301,6 +318,14 @@ decodable input for the later reclaim. Like every token it is refused by
 default, and it is registered for `destroy` only: `apply`, `plan`, `diff`, and
 `context init`/`update` reject it by name, so nothing that *creates* state can
 ever build from input it cannot fully read.
+
+The same rule bounds ordinary orphan cleanup. A decoded record is candidate
+discovery, not permission to delete whatever later occupies that name. Before
+the sweep changes a provider object, service, network, disk, or container it
+re-reads the live identity and requires the current context's exact claim; a
+foreign replacement or an inconclusive probe is retained and reported for an
+operator to resolve. Controller evidence is removed only after deletion or a
+conclusive already-absent response.
 
 !!! warning "It authorizes one refusal and nothing else"
     `stale-input` relaxes no other token and no un-tokened refusal: every

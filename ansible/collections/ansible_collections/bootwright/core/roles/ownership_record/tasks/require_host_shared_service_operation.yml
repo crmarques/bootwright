@@ -1,0 +1,39 @@
+---
+- name: Resolve expected host-wide operation for revalidation
+  ansible.builtin.import_tasks: resolve_host_shared_service_operation.yml
+
+- name: Re-probe exact host-wide shared-service operation guard
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_operation_guard_path }}"
+    follow: false
+  register: bootwright_host_operation_guard_recheck_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read exact host-wide shared-service operation guard
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_operation_guard_path }}"
+  register: bootwright_host_operation_guard_recheck_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_operation_guard_recheck_stat.stat.exists | default(false) | bool
+
+- name: Require unchanged host-wide shared-service operation authority
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_operation_guard_recheck_stat.stat.exists is defined
+      - bootwright_host_operation_guard_recheck_stat.stat.exists | bool
+      - bootwright_host_operation_guard_recheck_stat.stat.isreg | default(false) | bool
+      - not (bootwright_host_operation_guard_recheck_stat.stat.islnk | default(false) | bool)
+      - bootwright_host_operation_guard_recheck_content.content is defined
+      - >-
+        (bootwright_host_operation_guard_recheck_content.content | b64decode
+         | bootwright.core.bootwright_host_operation_guard_any)
+        == bootwright_host_operation_guard
+    fail_msg: >-
+      Refusing the next shared-service mutation because this controller no
+      longer conclusively owns its exact host-wide operation guard. Durable
+      endpoint, transition, claim, and owner evidence was retained. Inspect the
+      winning operation and re-run `{{ bootwright_mutating_invocation }}`; no
+      run continues on an absent, replaced, malformed, or foreign token.

@@ -333,6 +333,10 @@ func TestMachineServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml",
 	} {
 		body := readRepoFile(t, path)
+		if strings.HasSuffix(path, "task_infra_component_services_apply.yml") {
+			body += readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/apply_infra_component_host_set.yml")
+		}
+		fixedInfraOrphanDispatch := strings.HasSuffix(path, "task_infra_component_services_destroy.yml")
 		for _, forbidden := range []string{
 			"load_balancer_haproxy",
 			"artifacts_http",
@@ -342,7 +346,7 @@ func TestMachineServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 			"mirror_registry",
 			"bmc_{{",
 		} {
-			if strings.Contains(body, forbidden) {
+			if strings.Contains(body, forbidden) && !fixedInfraOrphanDispatch {
 				t.Fatalf("%s hardcodes provider service role %q", path, forbidden)
 			}
 		}
@@ -367,7 +371,7 @@ func TestServiceRecordDestroyScopedByClusterScope(t *testing.T) {
 	}{
 		{
 			path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml",
-			task: "Destroy recorded infra component resources",
+			task: "Select recorded infra-component orphan candidates",
 		},
 		{
 			path: "ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
@@ -409,9 +413,9 @@ func TestInfraComponentReferenceDestroyOnlyReleasesReference(t *testing.T) {
 	if vars := fmt.Sprint(release["vars"]); !strings.Contains(vars, "reference") {
 		t.Fatalf("reference release must preserve the reference filename convention: %v", release["vars"])
 	}
-	destroy := tasks[findAnsibleTask(t, tasks, "Destroy recorded infra component resources")]
-	if when := fmt.Sprint(destroy["when"]); !strings.Contains(when, "!= 'reference'") {
-		t.Fatalf("reference records must never enter destructive recorded-resource cleanup: %v", destroy["when"])
+	selectOrphan := tasks[findAnsibleTask(t, tasks, "Select recorded infra-component orphan candidates")]
+	if when := fmt.Sprint(selectOrphan["when"]); !strings.Contains(when, "!= 'reference'") {
+		t.Fatalf("reference records must never enter fixed-role orphan teardown: %v", selectOrphan["when"])
 	}
 }
 
@@ -658,8 +662,13 @@ func TestLibvirtApplyRequiresConclusiveDomainProbe(t *testing.T) {
 		t.Fatalf("conclusive-probe must be an assert, got %v", tasks[probeIdx])
 	}
 	that := fmt.Sprint(assert["that"])
-	if !strings.Contains(that, "rc | default(1) == 0") || !strings.Contains(that, "Domain not found") || !strings.Contains(that, "failed to get domain") {
-		t.Fatalf("conclusive-probe must accept only rc==0 or a domain-absent stderr, got that=%v", that)
+	for _, want := range []string{"rc is defined", "rc | int == 0", "stdout is defined", "stderr is defined", "bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("conclusive-probe must accept only success or centrally classified explicit absence; missing %q in %v", want, assert["that"])
+		}
+	}
+	if strings.Contains(that, "failed to get domain") {
+		t.Fatalf("conclusive-probe must not treat an ambiguous failed-to-get prefix as positive absence, got that=%v", that)
 	}
 }
 
@@ -831,7 +840,7 @@ func TestInfraComponentContainersCarryAndEnforceContextIdentity(t *testing.T) {
 		"Refuse unclaimed existing service state",
 		"Refuse unclaimed existing container",
 		"podman\n      - container\n      - inspect",
-		"bootwright.context",
+		"bootwright_podman_container_context",
 		"Refuse cross-context overwrite",
 		"Refuse cross-context service claim",
 		"bootwright_mutating_invocation",
@@ -846,10 +855,11 @@ func TestInfraComponentContainersCarryAndEnforceContextIdentity(t *testing.T) {
 	liveRefusal := findAnsibleTaskByPrefix(t, tasks, "Refuse cross-context overwrite")
 	claimRefusal := findAnsibleTaskByPrefix(t, tasks, "Refuse cross-context service claim")
 	modeGate := findAnsibleTaskByPrefix(t, tasks, "Enforce apply mode")
-	claimDir := findAnsibleTaskByPrefix(t, tasks, "Create service claim directory")
-	claim := findAnsibleTaskByPrefix(t, tasks, "Claim service for this context before mutation")
-	if !(claimProbe < liveRefusal && liveRefusal < claimRefusal && claimRefusal < modeGate && modeGate < claimDir && claimDir < claim) {
-		t.Fatalf("read-only context and apply-mode gates must precede the durable claim: probe=%d live=%d claim-refusal=%d mode=%d dir=%d claim=%d", claimProbe, liveRefusal, claimRefusal, modeGate, claimDir, claim)
+	claim := findAnsibleTaskByPrefix(t, tasks, "Acquire service claim atomically before mutation")
+	winner := findAnsibleTaskByPrefix(t, tasks, "Require exact atomic service claim winner")
+	normalize := findAnsibleTaskByPrefix(t, tasks, "Normalize service claim directory after exact claim")
+	if !(claimProbe < liveRefusal && liveRefusal < claimRefusal && claimRefusal < modeGate && modeGate < claim && claim < winner && winner < normalize) {
+		t.Fatalf("read-only context and apply-mode gates must precede atomic claim acquisition, winner proof, and directory normalization: probe=%d live=%d claim-refusal=%d mode=%d claim=%d winner=%d normalize=%d", claimProbe, liveRefusal, claimRefusal, modeGate, claim, winner, normalize)
 	}
 	roles := []string{
 		"infra_component_artifact_server_http",
@@ -875,11 +885,12 @@ func TestNTPContextClaimPrecedesEveryServiceMutation(t *testing.T) {
 	unknown := findAnsibleTask(t, tasks, "Refuse unclaimed existing NTP service state")
 	refusal := findAnsibleTask(t, tasks, "Refuse cross-context NTP overwrite")
 	modeGate := findAnsibleTask(t, tasks, "Enforce apply mode for this NTP service")
-	claimDir := findAnsibleTask(t, tasks, "Create NTP ownership-claim directory")
-	claim := findAnsibleTask(t, tasks, "Claim NTP service for this context before mutation")
+	claim := findAnsibleTask(t, tasks, "Acquire NTP service claim atomically before mutation")
+	winner := findAnsibleTask(t, tasks, "Require exact atomic NTP service claim winner")
+	normalize := findAnsibleTask(t, tasks, "Normalize NTP ownership-claim directory after exact claim")
 	packages := findAnsibleTask(t, tasks, "Install chrony packages")
-	if !(rootProbe < probe && probe < unreadable && unreadable < unknown && unknown < refusal && refusal < modeGate && modeGate < claimDir && claimDir < claim && claim < packages) {
-		t.Fatalf("NTP read and mode gates plus durable context claim must precede package/config/service mutation: root=%d marker=%d unreadable=%d unknown=%d refusal=%d mode=%d dir=%d claim=%d package=%d", rootProbe, probe, unreadable, unknown, refusal, modeGate, claimDir, claim, packages)
+	if !(rootProbe < probe && probe < unreadable && unreadable < unknown && unknown < refusal && refusal < modeGate && modeGate < claim && claim < winner && winner < normalize && normalize < packages) {
+		t.Fatalf("NTP read and mode gates plus atomic context claim must precede package/config/service mutation: root=%d marker=%d unreadable=%d unknown=%d refusal=%d mode=%d claim=%d winner=%d normalize=%d package=%d", rootProbe, probe, unreadable, unknown, refusal, modeGate, claim, winner, normalize, packages)
 	}
 	if body := readRepoFile(t, path); !strings.Contains(body, "bootwright_mutating_invocation") || !strings.Contains(body, "no apply authorization adopts another context's service") {
 		t.Fatalf("NTP context refusal must carry the exact controller-built retry and no bypass")
@@ -903,8 +914,8 @@ func TestVsphereManagedOSResetGatedOnDriftAuthorization(t *testing.T) {
 
 func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
-	if len(plays) != 3 {
-		t.Fatalf("task_machine_infra_destroy plays = %d, want 3", len(plays))
+	if len(plays) != 4 {
+		t.Fatalf("task_machine_infra_destroy plays = %d, want 4", len(plays))
 	}
 	if got := plays[0]["hosts"]; got != "bootwright_provider_hosts:bootwright_infra_hosts" {
 		t.Fatalf("machine infra destroy preparation hosts = %v", got)
@@ -1018,10 +1029,13 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s must be a hard assertion, got %v", tasks[idx]["name"], tasks[idx])
 		}
-		for _, want := range []string{"rc", "Domain not found", "failed to get domain", "no domain with matching name"} {
+		for _, want := range []string{"rc", "bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')"} {
 			if !strings.Contains(fmt.Sprint(gate["that"]), want) {
 				t.Fatalf("%s must accept only success or a proven-absent domain; missing %q in %v", tasks[idx]["name"], want, gate["that"])
 			}
+		}
+		if strings.Contains(fmt.Sprint(gate["that"]), "failed to get domain") {
+			t.Fatalf("%s must not treat an ambiguous failed-to-get prefix as positive absence: %v", tasks[idx]["name"], gate["that"])
 		}
 	}
 	consistencyGate, ok := tasks[consistencyGateIdx]["ansible.builtin.assert"].(map[string]any)
@@ -1044,7 +1058,7 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 		t.Fatalf("context sweep must stop the complete marker-owned domain set, got loop=%v", tasks[stopIdx]["loop"])
 	}
 	absentGate, ok := tasks[absentGateIdx]["ansible.builtin.assert"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(absentGate["that"]), "item.rc") || !strings.Contains(fmt.Sprint(absentGate["that"]), "Domain not found") {
+	if !ok || !strings.Contains(fmt.Sprint(absentGate["that"]), "item.rc") || !strings.Contains(fmt.Sprint(absentGate["that"]), "bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')") {
 		t.Fatalf("context sweep must positively prove each removed domain absent, got %v", tasks[absentGateIdx])
 	}
 	if got := fmt.Sprint(blanket["when"]); !strings.Contains(got, "bootwright_libvirt_context_foreign_storage") || !strings.Contains(got, "length == 0") {
@@ -1065,21 +1079,25 @@ func TestLibvirtContextSweepPreservesForeignDiskUnderRoot(t *testing.T) {
 }
 
 func TestBMCProviderDestroyRetainsEvidenceOnRuntimeFailure(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy.yml")
-	runtimeIdx := findAnsibleTask(t, tasks, "Tear down BMC runtime before deleting state and ownership")
-	stateIdx := findAnsibleTask(t, tasks, "Remove BMC state directory")
-	recordIdx := findAnsibleTask(t, tasks, "Remove BMC emulator ownership record")
-	if !(runtimeIdx < stateIdx && stateIdx < recordIdx) {
-		t.Fatalf("BMC runtime must finish before state and ownership deletion (runtime=%d state=%d record=%d)", runtimeIdx, stateIdx, recordIdx)
-	}
-
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy_owned.yml")
+	runtimeIdx := findAnsibleTask(t, tasks, "Teardown exact BMC provider-global composite")
 	runtime := nestedAnsibleTasks(t, tasks[runtimeIdx], "block")
+	stopIdx := findAnsibleTask(t, runtime, "Stop exact loaded BMC systemd units")
+	poolIdx := findAnsibleTask(t, runtime, "Remove exact BMC libvirt vmedia pool")
+	stateIdx := findAnsibleTask(t, runtime, "Remove exact BMC runtime paths while retaining durable claim")
+	verifyIdx := findAnsibleTask(t, runtime, "Require removed BMC systemd units to be unloaded")
+	endpointIdx := findAnsibleTask(t, runtime, "Release all exact BMC endpoint claims after teardown proof")
+	transitionIdx := findAnsibleTask(t, runtime, "Atomically remove exact BMC transition after teardown")
+	claimIdx := findAnsibleTask(t, runtime, "Atomically remove exact BMC full claim after teardown")
+	if !(stopIdx < poolIdx && poolIdx < stateIdx && stateIdx < verifyIdx && verifyIdx < endpointIdx && endpointIdx < transitionIdx && transitionIdx < claimIdx) {
+		t.Fatalf("BMC runtime and postconditions must finish before ordered endpoint, transition, and full-claim deletion: %d %d %d %d %d %d %d", stopIdx, poolIdx, stateIdx, verifyIdx, endpointIdx, transitionIdx, claimIdx)
+	}
 	for _, name := range []string{
-		"Stop sushy-emulator service",
-		"Stop vmedia HTTP service",
-		"Remove sushy + vmedia systemd units",
-		"Reload systemd after removing BMC units",
-		"Destroy libvirt vmedia pool",
+		"Stop exact loaded BMC systemd units",
+		"Remove exact BMC libvirt vmedia pool",
+		"Close exact recorded BMC Redfish firewall port",
+		"Remove exact BMC runtime paths while retaining durable claim",
+		"Reload systemd after exact BMC unit removal",
 	} {
 		idx := findAnsibleTask(t, runtime, name)
 		if runtime[idx]["failed_when"] == false {
@@ -1088,12 +1106,12 @@ func TestBMCProviderDestroyRetainsEvidenceOnRuntimeFailure(t *testing.T) {
 	}
 
 	rescue := nestedAnsibleTasks(t, tasks[runtimeIdx], "rescue")
-	refuse := rescue[findAnsibleTask(t, rescue, "Refuse BMC state and ownership deletion after runtime teardown failure")]
+	refuse := rescue[findAnsibleTask(t, rescue, "Refuse incomplete BMC provider-global teardown")]
 	fail, ok := refuse["ansible.builtin.fail"].(map[string]any)
 	if !ok {
 		t.Fatalf("BMC teardown rescue must hard-fail, got %v", refuse)
 	}
-	for _, want := range []string{"ansible_failed_task.name", "ansible_failed_result.msg", "bootwright_mutating_invocation", "same bootwright destroy invocation"} {
+	for _, want := range []string{"ansible_failed_task.name", "ansible_failed_result.msg", "bootwright_mutating_invocation", "durable claim", "ownership record"} {
 		if !strings.Contains(fmt.Sprint(fail["msg"]), want) {
 			t.Fatalf("BMC teardown rescue missing actionable fragment %q: %v", want, fail["msg"])
 		}
@@ -1274,13 +1292,13 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("libvirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
 	}
 	owned := fmt.Sprint(decide["bootwright_libvirt_destroy_owned"])
-	for _, want := range []string{"([A-Za-z0-9_]+:)?context>", "([A-Za-z0-9_]+:)?cluster>", "([A-Za-z0-9_]+:)?machine>"} {
+	for _, want := range []string{"bootwright.core.bootwright_libvirt_resource_identity", "'context':", "'cluster':", "'machine':", "bootwright_clusters_dir", "bootwright_current_cluster.name", "bootwright_component.name", "=="} {
 		if !strings.Contains(owned, want) {
-			t.Fatalf("libvirt destroy ownership decision must require the Bootwright ownership marker %q, got %v", want, decide["bootwright_libvirt_destroy_owned"])
+			t.Fatalf("libvirt destroy ownership decision must require the exact parsed Bootwright identity via %q, got %v", want, decide["bootwright_libvirt_destroy_owned"])
 		}
 	}
-	if !strings.Contains(owned, "is search(") {
-		t.Fatalf("libvirt destroy ownership decision must match the marker via the search test (prefix-agnostic), got %v", decide["bootwright_libvirt_destroy_owned"])
+	if strings.Contains(owned, "is search(") {
+		t.Fatalf("libvirt destroy ownership decision must compare a parsed exact identity, not an independently maintained marker regex: %v", decide["bootwright_libvirt_destroy_owned"])
 	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -1320,37 +1338,33 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 }
 
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
+	destroyPath := "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml"
+	destroyBody := readRepoFile(t, destroyPath)
+	if strings.Contains(destroyBody, "bootwright_kubevirt_machine_recorded") || strings.Contains(destroyBody, "never-provisioned KubeVirt guest") {
+		t.Fatal("KubeVirt destroy must not convert a missing controller record plus inaccessible host into proven guest absence")
+	}
+	topTasks := readAnsibleTasks(t, destroyPath)
 	probeIdx := findAnsibleTask(t, topTasks, "Probe KubeVirt host cluster reachability")
-	recordIdx := findAnsibleTask(t, topTasks, "Resolve KubeVirt machine ownership record presence")
+	kubeconfigGateIdx := findAnsibleTask(t, topTasks, "Require a captured kubeconfig for the selected KubeVirt guest")
 	gateIdx := findAnsibleTask(t, topTasks, "Require the KubeVirt host cluster to be reachable")
 	blockIdx := findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")
-	if !(probeIdx < recordIdx && recordIdx < gateIdx && gateIdx < blockIdx) {
-		t.Fatalf("kubevirt destroy must probe, resolve the ownership record, then gate reachability before the teardown (probe=%d record=%d gate=%d block=%d)", probeIdx, recordIdx, gateIdx, blockIdx)
-	}
-	recordDecide, ok := topTasks[recordIdx]["ansible.builtin.set_fact"].(map[string]any)
-	if !ok {
-		t.Fatalf("kubevirt destroy record presence must be a set_fact, got %v", topTasks[recordIdx])
-	}
-	if got := fmt.Sprint(recordDecide["bootwright_kubevirt_machine_recorded"]); !strings.Contains(got, "kubevirt-machine") || !strings.Contains(got, "bootwright_ownership_records_by_kind") {
-		t.Fatalf("kubevirt destroy must resolve record presence from the in-scope kubevirt-machine ownership records, got %v", recordDecide["bootwright_kubevirt_machine_recorded"])
+	if !(probeIdx < kubeconfigGateIdx && kubeconfigGateIdx < gateIdx && gateIdx < blockIdx) {
+		t.Fatalf("kubevirt destroy must probe and unconditionally gate host access before the teardown (probe=%d kubeconfig=%d gate=%d block=%d)", probeIdx, kubeconfigGateIdx, gateIdx, blockIdx)
 	}
 	gateWhen := fmt.Sprint(topTasks[gateIdx]["when"])
 	if strings.Contains(gateWhen, "bootwright_destroy_skip_unreachable") {
-		t.Fatalf("host-reachability gate must not let --authorize unreachable-nodes discard a recorded guest, got when=%v", topTasks[gateIdx]["when"])
+		t.Fatalf("host-reachability gate must not let --authorize unreachable-nodes discard a selected guest, got when=%v", topTasks[gateIdx]["when"])
 	}
-	if !strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
-		t.Fatalf("host-reachability gate must only fail closed for a recorded guest, got when=%v", topTasks[gateIdx]["when"])
+	if strings.Contains(gateWhen, "bootwright_kubevirt_machine_recorded") {
+		t.Fatalf("host-reachability gate must not turn a missing controller record into proof of guest absence, got when=%v", topTasks[gateIdx]["when"])
 	}
 	if _, ok := topTasks[gateIdx]["ansible.builtin.assert"]; !ok {
 		t.Fatalf("host-reachability gate must be a hard assert, got %v", topTasks[gateIdx])
 	}
-	if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, "--authorize unreachable-nodes cannot prove the guest absent") {
-		t.Fatalf("host-reachability refusal must explain why skipping cannot release guest ownership, got %v", topTasks[gateIdx])
-	}
-	kubeconfigGateIdx := findAnsibleTask(t, topTasks, "Require a captured kubeconfig for the recorded KubeVirt guest")
-	if !(recordIdx < kubeconfigGateIdx && kubeconfigGateIdx < gateIdx) {
-		t.Fatalf("the captured-kubeconfig gate must sit between the ownership record and the reachability gate (record=%d kubeconfig=%d gate=%d)", recordIdx, kubeconfigGateIdx, gateIdx)
+	for _, want := range []string{"missing controller ownership record", "--authorize unreachable-nodes", "bootwright_mutating_invocation"} {
+		if got := fmt.Sprint(topTasks[gateIdx]["ansible.builtin.assert"]); !strings.Contains(got, want) {
+			t.Fatalf("host-reachability refusal must explain the retained evidence and exact retry (missing %q), got %v", want, topTasks[gateIdx])
+		}
 	}
 	kubeconfigGate, ok := topTasks[kubeconfigGateIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -1359,34 +1373,56 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	if got := fmt.Sprint(kubeconfigGate["that"]); !strings.Contains(got, "bootwright_kubevirt_host_kubeconfig_available") {
 		t.Fatalf("the captured-kubeconfig gate must require the resolved availability fact, got %v", kubeconfigGate["that"])
 	}
-	kubeconfigGateWhen := fmt.Sprint(topTasks[kubeconfigGateIdx]["when"])
-	if !strings.Contains(kubeconfigGateWhen, "bootwright_kubevirt_machine_recorded") {
-		t.Fatalf("a host cluster with no captured kubeconfig must only fail closed for a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
+	if got := fmt.Sprint(kubeconfigGate["fail_msg"]); !strings.Contains(got, "missing controller ownership record") || !strings.Contains(got, "bootwright_mutating_invocation") {
+		t.Fatalf("the captured-kubeconfig refusal must reject missing-record absence inference and name the exact retry, got %v", kubeconfigGate["fail_msg"])
 	}
-	if strings.Contains(kubeconfigGateWhen, "bootwright_destroy_skip_unreachable") {
-		t.Fatalf("the captured-kubeconfig gate must not let --authorize unreachable-nodes discard a recorded guest, got when=%v", topTasks[kubeconfigGateIdx]["when"])
-	}
-	if got := fmt.Sprint(topTasks[gateIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_kubeconfig_available") {
-		t.Fatalf("the reachability gate must defer to the captured-kubeconfig gate when no kubeconfig exists, got when=%v", topTasks[gateIdx]["when"])
+	if _, ok := topTasks[kubeconfigGateIdx]["when"]; ok {
+		t.Fatalf("the captured-kubeconfig gate must apply even when the controller record is missing, got when=%v", topTasks[kubeconfigGateIdx]["when"])
 	}
 	if got := fmt.Sprint(topTasks[blockIdx]["when"]); !strings.Contains(got, "bootwright_kubevirt_host_reachable") {
 		t.Fatalf("guest teardown must be gated on host reachability, got when=%v", topTasks[blockIdx]["when"])
 	}
 	tasks := nestedAnsibleTasks(t, topTasks[blockIdx], "block")
-	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")
+	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine identity")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify KubeVirt VirtualMachine probe payload")
+	conclusiveIdx := findAnsibleTask(t, tasks, "Require a conclusive KubeVirt VirtualMachine probe")
+	liveIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt VirtualMachine live identity")
 	decideIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt VirtualMachine ownership for destroy")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt VirtualMachine")
 	deleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine")
-	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < deleteIdx) {
-		t.Fatalf("kubevirt destroy must read, decide, and verify the ownership label before deleting (read=%d decide=%d refuse=%d delete=%d)", readIdx, decideIdx, refuseIdx, deleteIdx)
+	if !(readIdx < classifyIdx && classifyIdx < conclusiveIdx && conclusiveIdx < liveIdx && liveIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < deleteIdx) {
+		t.Fatalf("kubevirt destroy must safely classify and verify the exact live identity before deleting (read=%d classify=%d conclusive=%d live=%d decide=%d refuse=%d delete=%d)", readIdx, classifyIdx, conclusiveIdx, liveIdx, decideIdx, refuseIdx, deleteIdx)
+	}
+	classify, ok := tasks[classifyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(classify["bootwright_kubevirt_vm_payload"]), "bootwright_kubernetes_object_probe") {
+		t.Fatalf("kubevirt VM probe payload must use the non-throwing Kubernetes object classifier, got %v", tasks[classifyIdx])
+	}
+	conclusive, ok := tasks[conclusiveIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt VM probe verdict must be an assert, got %v", tasks[conclusiveIdx])
+	}
+	for _, want := range []string{"bootwright_kubevirt_vm_payload.valid", "kubevirt.io", "VirtualMachine", "bootwright_kubevirt_vm_name", "bootwright_kubevirt_namespace"} {
+		if !strings.Contains(fmt.Sprint(conclusive["that"]), want) {
+			t.Fatalf("a successful VM probe must return the exact Kubernetes object envelope (missing %q), got %v", want, conclusive["that"])
+		}
+	}
+	for _, want := range []string{"bootwright_kubevirt_vm_payload.reason", "bootwright_mutating_invocation"} {
+		if !strings.Contains(fmt.Sprint(conclusive["fail_msg"]), want) {
+			t.Fatalf("a malformed successful VM probe must refuse with its reason and exact retry (missing %q), got %v", want, conclusive["fail_msg"])
+		}
 	}
 	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("kubevirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
 	}
 	owned := fmt.Sprint(decide["bootwright_kubevirt_destroy_owned"])
-	if !strings.Contains(owned, "bootwright_kubevirt_vm_owner") || !strings.Contains(owned, "'bootwright'") {
-		t.Fatalf("kubevirt destroy ownership decision must require the live owner label to equal bootwright, got %v", decide["bootwright_kubevirt_destroy_owned"])
+	for _, want := range []string{"bootwright_kubevirt_vm_live", "bootwright.io/managed-by", "bootwright.io/context", "bootwright.io/cluster", "bootwright.io/node", "bootwright_kubevirt_context_name", "bootwright_component.name"} {
+		if !strings.Contains(owned, want) {
+			t.Fatalf("kubevirt destroy ownership decision must require the exact live target identity (missing %q), got %v", want, decide["bootwright_kubevirt_destroy_owned"])
+		}
+	}
+	if strings.Contains(owned, "bootwright.io/role") {
+		t.Fatalf("the VM identity must match its writer and apply gate, which intentionally stamp no role label, got %v", decide["bootwright_kubevirt_destroy_owned"])
 	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -1412,8 +1448,10 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 		}
 	}
 
-	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
-	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
+	dvReadIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume identities")
+	dvConclusiveIdx := findAnsibleTask(t, tasks, "Require conclusive KubeVirt DataVolume probes")
+	dvResolveIdx := findAnsibleTask(t, tasks, "Resolve exact KubeVirt DataVolume identities")
+	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a foreign KubeVirt DataVolume")
 	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
 	if _, ok := tasks[dvReadIdx]["loop"]; !ok {
 		t.Fatal("KubeVirt DataVolume probes must stay per-item so one NotFound cannot mask the other's failure")
@@ -1436,24 +1474,50 @@ func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 			t.Fatalf("KubeVirt DataVolume deletion argv missing %q: %v", want, dvDeleteBody["argv"])
 		}
 	}
-	if got := fmt.Sprint(dvDelete["when"]); !strings.Contains(got, "bootwright_kubevirt_dv_owner") {
+	if got := fmt.Sprint(dvDelete["when"]); !strings.Contains(got, "bootwright_kubevirt_dv_probe") {
 		t.Fatalf("KubeVirt DataVolume deletion must stay gated on the per-item probes, got when=%v", dvDelete["when"])
 	}
 	if got := fmt.Sprint(tasks[findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine")]["ansible.builtin.command"]); strings.Contains(got, "--wait=false") {
 		t.Fatal("KubeVirt VirtualMachine deletion must block until the guest is provably absent")
 	}
-	if !(dvReadIdx < dvRefuseIdx && dvRefuseIdx < dvDeleteIdx) {
-		t.Fatalf("kubevirt destroy must read and verify each DataVolume ownership label before deleting (read=%d refuse=%d delete=%d)", dvReadIdx, dvRefuseIdx, dvDeleteIdx)
+	if !(dvReadIdx < dvConclusiveIdx && dvConclusiveIdx < dvResolveIdx && dvResolveIdx < dvRefuseIdx && dvRefuseIdx < dvDeleteIdx) {
+		t.Fatalf("kubevirt destroy must conclusively read and verify each exact DataVolume identity before deleting (read=%d conclusive=%d resolve=%d refuse=%d delete=%d)", dvReadIdx, dvConclusiveIdx, dvResolveIdx, dvRefuseIdx, dvDeleteIdx)
 	}
 	dvRefuse, ok := tasks[dvRefuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("kubevirt DataVolume delete guard must be an assert, got %v", tasks[dvRefuseIdx])
 	}
-	if got := fmt.Sprint(dvRefuse["that"]); !strings.Contains(got, "'bootwright'") || !strings.Contains(got, "stdout") {
-		t.Fatalf("kubevirt DataVolume delete guard must require the live managed-by label to equal bootwright, got %v", dvRefuse["that"])
+	if got := fmt.Sprint(dvRefuse["that"]); !strings.Contains(got, "bootwright_kubevirt_dv_owned_by_name") {
+		t.Fatalf("kubevirt DataVolume delete guard must require the resolved exact live identity, got %v", dvRefuse["that"])
 	}
-	if !strings.Contains(fmt.Sprint(dvRefuse["fail_msg"]), "managed-by") {
-		t.Fatalf("kubevirt DataVolume delete guard message must name the managed-by label, got %v", dvRefuse["fail_msg"])
+	dvConclusive, ok := tasks[dvConclusiveIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt DataVolume probe verdict must be an assert, got %v", tasks[dvConclusiveIdx])
+	}
+	for _, want := range []string{"bootwright_kubernetes_object_probe", "cdi.kubevirt.io", "DataVolume", "item.item.name", "bootwright_kubevirt_namespace"} {
+		if !strings.Contains(fmt.Sprint(dvConclusive["that"]), want) {
+			t.Fatalf("a successful DataVolume probe must be a safely parsed exact live object (missing %q), got %v", want, dvConclusive["that"])
+		}
+	}
+	for _, want := range []string{"bootwright_kubernetes_object_probe", "bootwright_mutating_invocation"} {
+		if !strings.Contains(fmt.Sprint(dvConclusive["fail_msg"]), want) {
+			t.Fatalf("a malformed successful DataVolume probe must refuse with an exact retry (missing %q), got %v", want, dvConclusive["fail_msg"])
+		}
+	}
+	dvResolve, ok := tasks[dvResolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt DataVolume identity resolution must be a set_fact, got %v", tasks[dvResolveIdx])
+	}
+	dvIdentity := fmt.Sprint(dvResolve["bootwright_kubevirt_dv_owned_by_name"])
+	for _, want := range []string{"bootwright.io/managed-by", "bootwright.io/context", "bootwright.io/cluster", "bootwright.io/role", "bootwright.io/node", "bootwright_kubevirt_context_name", "bootwright_current_cluster.name", "item.node"} {
+		if !strings.Contains(dvIdentity, want) {
+			t.Fatalf("kubevirt DataVolume identity must pin every target label (missing %q), got %v", want, dvResolve["bootwright_kubevirt_dv_owned_by_name"])
+		}
+	}
+	for _, want := range []string{"managed-by", "context", "cluster", "role", "node", "bootwright_mutating_invocation", "--authorize unowned-networks"} {
+		if !strings.Contains(fmt.Sprint(dvRefuse["fail_msg"]), want) {
+			t.Fatalf("kubevirt DataVolume delete guard must name its exact identity and retry (missing %q), got %v", want, dvRefuse["fail_msg"])
+		}
 	}
 	if got := fmt.Sprint(tasks[dvRefuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_authorize_unowned_networks") {
 		t.Fatalf("kubevirt DataVolume delete guard must be skipped only under --authorize unowned-networks, whose blast radius reaches another context, got when=%v", tasks[dvRefuseIdx]["when"])
@@ -1630,16 +1694,17 @@ func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 	if !ok || fmt.Sprint(inc["name"]) != "bootwright.core.ownership_record" {
 		t.Fatalf("reclaim task must include the ownership_record role, got %v", reclaim["ansible.builtin.include_role"])
 	}
-	if got := fmt.Sprint(inc["tasks_from"]); got != "destroy_resource.yml" {
-		t.Fatalf("reclaim task must run destroy_resource.yml (idempotent, no-op on a never-provisioned node), got %q", got)
+	if got := fmt.Sprint(inc["tasks_from"]); got != "destroy_declared_managed_os.yml" {
+		t.Fatalf("reclaim task must use the desired-state-bound managed-OS dispatcher, got %q", got)
 	}
 	recordVars, ok := reclaim["vars"].(map[string]any)
 	if !ok {
-		t.Fatalf("reclaim task must set the ownership record vars, got %v", reclaim["vars"])
+		t.Fatalf("reclaim task must set the declared managed-OS identity vars, got %v", reclaim["vars"])
 	}
-	record, ok := recordVars["bootwright_ownership_record"].(map[string]any)
-	if !ok || fmt.Sprint(record["kind"]) != "managed-os-install" {
-		t.Fatalf("reclaim task must target the managed-os-install record, got %v", recordVars["bootwright_ownership_record"])
+	for _, want := range []string{"bootwright_declared_managed_os_cluster", "bootwright_declared_managed_os_machine", "bootwright_declared_managed_os_root"} {
+		if value := fmt.Sprint(recordVars[want]); value == "" || !strings.Contains(value, "bootwright_") {
+			t.Fatalf("reclaim task must bind %s to desired state, got %v", want, recordVars[want])
+		}
 	}
 	if got := fmt.Sprint(reclaim["when"]); !strings.Contains(got, "bootwright_component.osManaged") {
 		t.Fatalf("reclaim task must be gated on osManaged, got when=%v", reclaim["when"])
@@ -1652,45 +1717,80 @@ func TestBaremetalSubstrateDestroyNoUnconditionalFail(t *testing.T) {
 	}
 }
 
-func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
-
-	stopIdx := findAnsibleTask(t, tasks, "Stop recorded systemd units")
-	unitItem := "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
-	if !stringListContains(tasks[stopIdx]["loop"], unitItem) {
-		t.Fatalf("%s must read both vMediaUnit and the pre-rename vmediaUnit, got %v", tasks[stopIdx]["name"], tasks[stopIdx]["loop"])
+func TestOwnershipDestroyRequiresCanonicalBMCAttributes(t *testing.T) {
+	gateTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_record_gate.yml")
+	validate := gateTasks[findAnsibleTask(t, gateTasks, "Validate recorded BMC emulator live identity fields")]
+	conditions := fmt.Sprint(validate["ansible.builtin.assert"])
+	for _, want := range []string{"redfishUnit", "vMediaUnit", "redfishPort", "vMediaPort", "firewallManaged", "keys()"} {
+		if !strings.Contains(conditions, want) {
+			t.Fatalf("BMC ownership validation must require canonical attribute %q: %v", want, validate)
+		}
+	}
+	for _, obsolete := range []string{".vmediaUnit", ".vmediaPort"} {
+		if strings.Contains(conditions, obsolete) {
+			t.Fatalf("BMC ownership validation must not preserve the pre-v1alpha1 alias %q: %v", obsolete, validate)
+		}
 	}
 
-	closeIdx := findAnsibleTask(t, tasks, "Close recorded firewalld ports")
-	closeLoop := fmt.Sprint(tasks[closeIdx]["loop"])
-	if !strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.vMediaPort") || !strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.vmediaPort") {
-		t.Fatalf("%s must read both vMediaPort and the pre-rename vmediaPort, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	runtimeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy_owned.yml")
+	runtime := nestedAnsibleTasks(t, runtimeTasks[findAnsibleTask(t, runtimeTasks, "Teardown exact BMC provider-global composite")], "block")
+	stop := fmt.Sprint(runtime[findAnsibleTask(t, runtime, "Stop exact loaded BMC systemd units")])
+	close := fmt.Sprint(runtime[findAnsibleTask(t, runtime, "Close exact recorded BMC Redfish firewall port")])
+	for _, want := range []string{"redfishUnit", "vMediaUnit"} {
+		if !strings.Contains(stop, want) {
+			t.Fatalf("fixed BMC teardown does not consume canonical unit attribute %q: %s", want, stop)
+		}
 	}
-	if strings.Contains(closeLoop, "bootwright_ownership_destroy_attrs.ports") {
-		t.Fatalf("%s must not interpret a string-valued ownership attribute as a plural port list, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	if !strings.Contains(close, "redfishPort") || !strings.Contains(close, "firewallManaged") {
+		t.Fatalf("fixed BMC teardown must close only its exact recorded managed Redfish endpoint: %s", close)
 	}
 }
 
 func TestDNSOwnershipFirewallPortsUseScalarRecordContract(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_name_resolution_dnsmasq/tasks/main.yml")
-	recordIdx := findAnsibleTask(t, mainTasks, "Record DNS service ownership")
-	recordVars := mainTasks[recordIdx]["vars"].(map[string]any)
-	fields := recordVars["bootwright_ownership_fields"].(map[string]any)
-	attrs := fields["attributes"].(map[string]any)
+	desiredIdx := findAnsibleTask(t, mainTasks, "Resolve desired dnsmasq ownership transition")
+	desiredFacts, ok := mainTasks[desiredIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("DNS desired transition task must set facts, got %v", mainTasks[desiredIdx])
+	}
+	desired, ok := desiredFacts["bootwright_infra_transition_desired"].(map[string]any)
+	if !ok {
+		t.Fatalf("DNS desired transition must be a mapping, got %v", desiredFacts["bootwright_infra_transition_desired"])
+	}
+	attrs, ok := desired["attributes"].(map[string]any)
+	if !ok {
+		t.Fatalf("DNS desired transition attributes must be a mapping, got %v", desired["attributes"])
+	}
 	if attrs["port"] != "53/tcp" || attrs["udpPort"] != "53/udp" {
-		t.Fatalf("DNS ownership firewall attributes = %#v, want scalar TCP and UDP endpoints", attrs)
+		t.Fatalf("DNS desired ownership firewall attributes = %#v, want scalar TCP and UDP endpoints", attrs)
 	}
 	if _, found := attrs["ports"]; found {
-		t.Fatalf("DNS ownership must not write a list into the string-valued attributes map: %#v", attrs)
+		t.Fatalf("DNS desired ownership must not write a list into the string-valued attributes map: %#v", attrs)
 	}
 
-	destroyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
-	closeIdx := findAnsibleTask(t, destroyTasks, "Close recorded firewalld ports")
-	closeLoop := fmt.Sprint(destroyTasks[closeIdx]["loop"])
-	for _, want := range []string{"bootwright_ownership_destroy_attrs.port", "bootwright_ownership_destroy_attrs.udpPort"} {
-		if !strings.Contains(closeLoop, want) {
-			t.Fatalf("record-driven firewall teardown does not consume %q: %s", want, closeLoop)
-		}
+	recordIdx := findAnsibleTask(t, mainTasks, "Record DNS service ownership")
+	recordVars, ok := mainTasks[recordIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("DNS owner writer vars must be a mapping, got %v", mainTasks[recordIdx]["vars"])
+	}
+	fields, ok := recordVars["bootwright_ownership_fields"].(map[string]any)
+	if !ok {
+		t.Fatalf("DNS owner writer fields must be a mapping, got %v", recordVars["bootwright_ownership_fields"])
+	}
+	if got := fmt.Sprint(fields["attributes"]); got != "{{ bootwright_infra_transition_desired.attributes }}" {
+		t.Fatalf("DNS owner record attributes must be the exact durable-transition composite, got %q", got)
+	}
+
+	destroyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_name_resolution_dnsmasq/tasks/destroy.yml")
+	closeIdx := findAnsibleTask(t, nestedAnsibleTasks(t, destroyTasks[findAnsibleTask(t, destroyTasks, "Tear down dnsmasq before deleting its ownership evidence")], "block"), "Close DNS ports on host firewall")
+	teardown := nestedAnsibleTasks(t, destroyTasks[findAnsibleTask(t, destroyTasks, "Tear down dnsmasq before deleting its ownership evidence")], "block")
+	if got := fmt.Sprint(teardown[closeIdx]["loop"]); got != "{{ bootwright_dnsmasq_selected_ports }}" {
+		t.Fatalf("DNS teardown firewall endpoints = %q, want authoritative transition ledger", got)
+	}
+	ledgerIdx := findAnsibleTask(t, destroyTasks, "Resolve authoritative DNS endpoint ledger")
+	ledgerFacts, ok := destroyTasks[ledgerIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || fmt.Sprint(ledgerFacts["bootwright_dnsmasq_selected_ports"]) != "{{ bootwright_infra_destroy_global_ports }}" {
+		t.Fatalf("DNS teardown must consume the desired, owner, and transition endpoint union, got %v", destroyTasks[ledgerIdx])
 	}
 }
 
@@ -1706,7 +1806,6 @@ func TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure(t *testing.
 		"Undefine recorded libvirt domain",
 		"Stop recorded libvirt network",
 		"Undefine recorded libvirt network",
-		"Stop recorded systemd units",
 		"Remove recorded podman container",
 		"Close recorded firewalld ports",
 		"List active mounts before removing owned paths",
@@ -1728,7 +1827,7 @@ func TestOwnershipDestroyStopsBeforeEvidenceDeletionOnRemoverFailure(t *testing.
 	} {
 		idx := findAnsibleTask(t, tasks, name)
 		failedWhen := fmt.Sprint(tasks[idx]["failed_when"])
-		if !strings.Contains(failedWhen, "not found") && !strings.Contains(failedWhen, "not in") {
+		if !strings.Contains(failedWhen, "bootwright_libvirt_explicit_absence") && !strings.Contains(failedWhen, "not in") {
 			t.Fatalf("%s must remain idempotent for an exactly absent resource, got failed_when=%v", name, tasks[idx]["failed_when"])
 		}
 	}
@@ -1746,6 +1845,31 @@ func TestOwnershipHelperWritesTimezoneQualifiedTimestamps(t *testing.T) {
 		}
 		if !strings.Contains(body, "now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')") {
 			t.Fatalf("%s must write RFC3339 UTC timestamps with a Z suffix", path)
+		}
+	}
+}
+
+func TestOwnershipHelperRefusesContradictoryEvidenceBeforeWriting(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/resource.yml"
+	tasks := readAnsibleTasks(t, path)
+	statIdx := findAnsibleTask(t, tasks, "Inspect existing ownership resource record")
+	decodeIdx := findAnsibleTask(t, tasks, "Decode existing ownership resource identity")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to replace contradictory ownership evidence")
+	dirIdx := findAnsibleTask(t, tasks, "Create ownership resource directory")
+	writeIdx := findAnsibleTask(t, tasks, "Write ownership resource record")
+	if !(statIdx < decodeIdx && decodeIdx < refuseIdx && refuseIdx < dirIdx && dirIdx < writeIdx) {
+		t.Fatalf("ownership evidence must be inspected, decoded, and accepted before the first durable write (stat=%d decode=%d refuse=%d dir=%d write=%d)", statIdx, decodeIdx, refuseIdx, dirIdx, writeIdx)
+	}
+	refusal := fmt.Sprint(tasks[refuseIdx])
+	for _, want := range []string{"apiVersion", "kind", "name", "owner", "role", "is string", "context", "stat.exists is defined", "islnk", "isreg", "bootwright_mutating_invocation", "remove it only after proving it stale"} {
+		if !strings.Contains(refusal, want) {
+			t.Errorf("ownership replacement guard is missing %q: %v", want, tasks[refuseIdx])
+		}
+	}
+	body := readRepoFile(t, path)
+	for _, want := range []string{"Refuse to replace malformed ownership evidence", "No ownership record was changed", "bootwright_mutating_invocation"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("malformed ownership evidence path is missing %q", want)
 		}
 	}
 }

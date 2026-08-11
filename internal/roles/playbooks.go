@@ -28,6 +28,7 @@ const (
 	PlaybookTaskStorageNodeAccessApply           = "bootwright.core.task_storage_node_access_apply"
 	PlaybookTaskStorageClusterApply              = "bootwright.core.task_storage_cluster_apply"
 	PlaybookTaskStorageClusterReplaceArbiter     = "bootwright.core.task_storage_cluster_replace_arbiter"
+	PlaybookTaskHostSharedServiceFinalize        = "bootwright.core.task_host_shared_service_operation_finalize"
 
 	PlaybookTaskMachineRegistrationDeregister            = "bootwright.core.task_machine_registration_deregister"
 	PlaybookTaskControllerNameResolutionDestroyPreflight = "bootwright.core.task_controller_name_resolution_destroy_preflight"

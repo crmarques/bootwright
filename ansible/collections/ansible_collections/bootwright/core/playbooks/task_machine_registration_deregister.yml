@@ -3,7 +3,7 @@
   hosts: bootwright_storage_hosts
   gather_facts: false
   become: true
-  ignore_unreachable: true
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
   environment: "{{ bootwright_proxy_env | default({}) }}"
   vars:
     bootwright_selected_storage_cluster: >-
@@ -16,13 +16,27 @@
         | default({})
       }}
   pre_tasks:
+    - name: Record completed no-op for hosts without managed storage nodes
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when: bootwright_storage_cluster_name | default('') | length == 0
+
     - name: End hosts that are not managed storage nodes
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') | length == 0
 
+    - name: Record completed no-op for provided-OS hosts
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when: bootwright_os_provided | default(false) | bool
+
     - name: End provided-OS hosts
       ansible.builtin.meta: end_host
       when: bootwright_os_provided | default(false) | bool
+
+    - name: Record completed no-op outside selected storage clusters
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_destroy_storage_scope is defined
+        - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
 
     - name: End hosts outside the selected storage clusters
       ansible.builtin.meta: end_host
@@ -30,11 +44,21 @@
         - bootwright_destroy_storage_scope is defined
         - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
 
+    - name: Record completed no-op outside selected machines
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_destroy_machine_scope is defined
+        - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
+
     - name: End hosts outside the selected machines
       ansible.builtin.meta: end_host
       when:
         - bootwright_destroy_machine_scope is defined
         - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
+
+    - name: Record completed no-op for storage clusters without managed RHSM
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when: bootwright_selected_storage_cluster.provider.rhsmManagement | default('') != 'managed'
 
     - name: End hosts whose storage cluster does not manage RHSM
       ansible.builtin.meta: end_host
@@ -95,6 +119,12 @@
           bootwright_node_access is not defined
           or (bootwright_node_access_connection_available | default(false) | bool)
 
+    - name: Record completed deregistration for nodes proved absent
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_registration_reachable_probe.unreachable | default(false) | bool
+        - bootwright_node_access_node_absent | default(false) | bool
+
     - name: End nodes this deregistration proved absent
       ansible.builtin.meta: end_host
       when:
@@ -121,6 +151,18 @@
           subscription service by hand.
       when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
 
+    - name: Refuse unauthorized unreachable deregistration skip
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_storage_node_name | default(inventory_hostname) }}
+          could not be reached, so Bootwright cannot prove its RHSM registration
+          was released. Re-run the exact destroy with
+          `--authorize unreachable-nodes` only if retaining that registration
+          and all retry evidence is intentional.
+      when:
+        - bootwright_registration_reachable_probe.unreachable | default(false) | bool
+        - not (bootwright_destroy_skip_unreachable | default(false) | bool)
+
     - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host
       when: bootwright_registration_reachable_probe.unreachable | default(false) | bool
@@ -129,3 +171,6 @@
       ansible.builtin.include_role:
         name: bootwright.core.machine_registration_rhsm
         tasks_from: deregister.yml
+
+    - name: Finalize machine registration destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

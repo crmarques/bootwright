@@ -704,13 +704,14 @@ func TestApplyModeRetryClearsOnlyTheNamedGateWithoutWidening(t *testing.T) {
 		ResourceKind: workflow.ApplyTaskKindStorageCluster,
 		TaskID:       task.Entry.ID,
 		TaskKind:     task.Entry.Kind,
-		DesiredHash:  "sha256:stale",
+		DesiredHash:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		HashSchema:   workflow.ConvergeHashSchema,
-		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner},
+		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner, Context: "test"},
+		Status:       workflow.ConvergeSafetyStatusReconciled,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir)
+	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -767,11 +768,12 @@ func TestCreateModeRetryChangesOnlyModeAndKeepsTheSelectedWorkSet(t *testing.T) 
 		TaskKind:     task.Entry.Kind,
 		DesiredHash:  desiredHash,
 		HashSchema:   workflow.ConvergeHashSchema,
-		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner},
+		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: workflow.ConvergeSafetyOwner, Context: "test"},
+		Status:       workflow.ConvergeSafetyStatusReconciled,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir)
+	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -815,13 +817,14 @@ func TestForeignApplyRefusalNamesOnlyTheSanctionedExternalRemedy(t *testing.T) {
 		ResourceKind: workflow.ApplyTaskKindProvider,
 		TaskID:       task.Entry.ID,
 		TaskKind:     task.Entry.Kind,
-		DesiredHash:  "sha256:foreign",
+		DesiredHash:  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		HashSchema:   workflow.ConvergeHashSchema,
-		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: "another-manager"},
+		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: "another-manager", Context: "test"},
+		Status:       workflow.ConvergeSafetyStatusReconciled,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir)
+	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

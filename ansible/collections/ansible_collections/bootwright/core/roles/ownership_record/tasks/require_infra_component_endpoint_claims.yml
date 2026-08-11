@@ -1,0 +1,12 @@
+---
+- name: Rebind infra-component endpoint mutation to command selection
+  ansible.builtin.include_tasks: bind_infra_component_host_operation.yml
+
+- name: Resolve required infra-component endpoint claims
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_required_claims: >-
+      {{ bootwright_host_endpoint_desired_claims | default([]) }}
+  changed_when: false
+
+- name: Require every exact infra-component endpoint claim
+  ansible.builtin.include_tasks: require_host_endpoint_claims.yml

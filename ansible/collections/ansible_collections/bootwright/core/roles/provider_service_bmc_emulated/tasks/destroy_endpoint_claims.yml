@@ -1,0 +1,63 @@
+---
+- name: Resolve exact BMC endpoint set authorized for destroy
+  ansible.builtin.set_fact:
+    bootwright_bmc_endpoint_transition: >-
+      {{ (bootwright_bmc_claim_transition.active
+          if (bootwright_bmc_claim_transition | default({}) | length > 0)
+          else bootwright_bmc_claim_record)
+         | bootwright.core.bootwright_bmc_endpoint_transition(
+             bootwright_bmc_claim_transition.pending
+             if (bootwright_bmc_claim_transition | default({}) | length > 0)
+             else bootwright_bmc_claim_record) }}
+  changed_when: false
+
+- name: Require exact BMC endpoint set authorized for destroy
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_endpoint_transition.valid | default(false) | bool
+      - bootwright_bmc_endpoint_transition.retainedClaims | length >= 2
+    fail_msg: >-
+      Refusing BMC destroy because the durable claim and transition do not bind
+      an exact Redfish and vMedia endpoint set. No endpoint, runtime, or owner
+      evidence was changed. Restore the exact evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve exact BMC destroy operation consequence digests
+  ansible.builtin.set_fact:
+    bootwright_bmc_operation_claim_digests: >-
+      {{ [
+           (bootwright_bmc_claim_transition.active
+            if (bootwright_bmc_claim_transition | default({}) | length > 0)
+            else bootwright_bmc_claim_record)
+           | bootwright.core.bootwright_bmc_consequence_digest,
+           (bootwright_bmc_claim_transition.pending
+            if (bootwright_bmc_claim_transition | default({}) | length > 0)
+            else bootwright_bmc_claim_record)
+           | bootwright.core.bootwright_bmc_consequence_digest
+         ] | unique | sort }}
+  changed_when: false
+
+- name: Bind BMC destroy to command-wide selected host consequences
+  ansible.builtin.import_tasks: operation_binding.yml
+
+- name: Preflight symmetric host consequences before BMC destroy authority
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: preflight_host_shared_service_consequences.yml
+  vars:
+    bootwright_host_prepublication_candidate_family: bmc-emulator
+    bootwright_host_prepublication_candidate: >-
+      {{ bootwright_bmc_claim_transition
+         if (bootwright_bmc_claim_transition | default({}) | length > 0)
+         else bootwright_bmc_claim_record }}
+
+- name: Acquire exact BMC endpoint authority for resumable destroy
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: acquire_host_endpoint_claims.yml
+  vars:
+    bootwright_host_endpoint_desired_claims: >-
+      {{ bootwright_bmc_endpoint_transition.retainedClaims }}
+    bootwright_host_endpoint_allowed_claim_digests: >-
+      {{ bootwright_bmc_endpoint_transition.allowedDigests }}

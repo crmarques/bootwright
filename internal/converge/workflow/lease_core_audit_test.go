@@ -17,8 +17,8 @@ func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 	defer func() { runLeaseProcessAlive = previous }()
 
 	leaseA := NewRunLease("run-A", now.Add(-10*time.Minute))
-	if err := SaveRunLease(runsDir, leaseA); err != nil {
-		t.Fatalf("SaveRunLease A: %v", err)
+	if err := saveRunLeaseFixture(runsDir, leaseA); err != nil {
+		t.Fatalf("saveRunLeaseFixture A: %v", err)
 	}
 	if err := AcquireRunLease(runsDir, NewRunLease("run-B", now), now); err != nil {
 		t.Fatalf("AcquireRunLease B over stale A: %v", err)
@@ -48,6 +48,168 @@ func TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact(t *testing.T) {
 	}
 }
 
+func TestRunLeaseHeartbeatSerializesOwnerCheckWithTakeover(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Now()
+	leaseA := NewRunLease("run-A", now.Add(-10*time.Minute))
+	if err := saveRunLeaseFixture(runsDir, leaseA); err != nil {
+		t.Fatalf("saveRunLeaseFixture A: %v", err)
+	}
+
+	previousAlive := runLeaseProcessAlive
+	previousChecked := runLeaseOwnerChecked
+	previousAttempted := runLeaseLockAttempted
+	runLeaseProcessAlive = func(int) bool { return false }
+	defer func() {
+		runLeaseProcessAlive = previousAlive
+		runLeaseOwnerChecked = previousChecked
+		runLeaseLockAttempted = previousAttempted
+	}()
+
+	ownerChecked := make(chan struct{})
+	releaseOwner := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseOwner)
+		}
+	}()
+	runLeaseOwnerChecked = func(operation string) {
+		if operation != "save" {
+			return
+		}
+		close(ownerChecked)
+		<-releaseOwner
+	}
+	leaseA.HeartbeatAt = now
+	heartbeatDone := make(chan error, 1)
+	go func() {
+		heartbeatDone <- SaveRunLeaseIfOwner(runsDir, leaseA)
+	}()
+	waitRunLeaseSignal(t, ownerChecked, "heartbeat owner check")
+
+	lockAttempted := make(chan struct{}, 1)
+	runLeaseLockAttempted = func() {
+		lockAttempted <- struct{}{}
+	}
+	takeoverDone := make(chan error, 1)
+	go func() {
+		takeoverDone <- AcquireRunLease(runsDir, NewRunLease("run-B", now), now)
+	}()
+	waitRunLeaseSignal(t, lockAttempted, "takeover lock attempt")
+	select {
+	case err := <-takeoverDone:
+		t.Fatalf("takeover completed while heartbeat transaction held the lock: %v", err)
+	default:
+	}
+
+	close(releaseOwner)
+	released = true
+	if err := waitRunLeaseResult(t, heartbeatDone, "heartbeat"); err != nil {
+		t.Fatalf("SaveRunLeaseIfOwner: %v", err)
+	}
+	if err := waitRunLeaseResult(t, takeoverDone, "takeover"); err != nil {
+		t.Fatalf("AcquireRunLease B: %v", err)
+	}
+	assertRunLeaseHolder(t, runsDir, "run-B")
+}
+
+func TestRunLeaseCleanupSerializesOwnerCheckWithTakeover(t *testing.T) {
+	runsDir := t.TempDir()
+	now := time.Now()
+	leaseA := NewRunLease("run-A", now.Add(-10*time.Minute))
+	if err := saveRunLeaseFixture(runsDir, leaseA); err != nil {
+		t.Fatalf("saveRunLeaseFixture A: %v", err)
+	}
+
+	previousAlive := runLeaseProcessAlive
+	previousChecked := runLeaseOwnerChecked
+	previousAttempted := runLeaseLockAttempted
+	runLeaseProcessAlive = func(int) bool { return false }
+	defer func() {
+		runLeaseProcessAlive = previousAlive
+		runLeaseOwnerChecked = previousChecked
+		runLeaseLockAttempted = previousAttempted
+	}()
+
+	ownerChecked := make(chan struct{})
+	releaseOwner := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseOwner)
+		}
+	}()
+	runLeaseOwnerChecked = func(operation string) {
+		if operation != "remove" {
+			return
+		}
+		close(ownerChecked)
+		<-releaseOwner
+	}
+	cleanupDone := make(chan error, 1)
+	go func() {
+		cleanupDone <- RemoveRunLeaseIfOwner(runsDir, "run-A")
+	}()
+	waitRunLeaseSignal(t, ownerChecked, "cleanup owner check")
+
+	lockAttempted := make(chan struct{}, 1)
+	runLeaseLockAttempted = func() {
+		lockAttempted <- struct{}{}
+	}
+	takeoverDone := make(chan error, 1)
+	go func() {
+		takeoverDone <- AcquireRunLease(runsDir, NewRunLease("run-B", now), now)
+	}()
+	waitRunLeaseSignal(t, lockAttempted, "takeover lock attempt")
+	select {
+	case err := <-takeoverDone:
+		t.Fatalf("takeover completed while cleanup transaction held the lock: %v", err)
+	default:
+	}
+
+	close(releaseOwner)
+	released = true
+	if err := waitRunLeaseResult(t, cleanupDone, "cleanup"); err != nil {
+		t.Fatalf("RemoveRunLeaseIfOwner: %v", err)
+	}
+	if err := waitRunLeaseResult(t, takeoverDone, "takeover"); err != nil {
+		t.Fatalf("AcquireRunLease B: %v", err)
+	}
+	assertRunLeaseHolder(t, runsDir, "run-B")
+}
+
+func waitRunLeaseSignal(t *testing.T, signal <-chan struct{}, operation string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", operation)
+	}
+}
+
+func waitRunLeaseResult(t *testing.T, result <-chan error, operation string) error {
+	t.Helper()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", operation)
+		return nil
+	}
+}
+
+func assertRunLeaseHolder(t *testing.T, runsDir, runID string) {
+	t.Helper()
+	got, found, err := LoadRunLease(runsDir)
+	if err != nil || !found {
+		t.Fatalf("LoadRunLease: found=%v err=%v", found, err)
+	}
+	if got.RunID != runID {
+		t.Fatalf("lease holder = %q, want %q", got.RunID, runID)
+	}
+}
+
 func TestCancelRunLedgerLeavesNewHolderLeaseIntact(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
@@ -55,8 +217,8 @@ func TestCancelRunLedgerLeavesNewHolderLeaseIntact(t *testing.T) {
 	ledgerA := NewRunLedger("run-A", "cluster", "", ConcurrencyLimits{}, []TaskLedgerEntry{
 		{ID: "t1", Status: TaskStatusRunning},
 	}, now)
-	if err := SaveRunLease(runsDir, NewRunLease("run-B", now)); err != nil {
-		t.Fatalf("SaveRunLease B: %v", err)
+	if err := saveRunLeaseFixture(runsDir, NewRunLease("run-B", now)); err != nil {
+		t.Fatalf("saveRunLeaseFixture B: %v", err)
 	}
 
 	if _, err := CancelRunLedger(runsDir, ledgerA, "superseded", now); err != nil {
@@ -76,8 +238,8 @@ func TestOwnershipCheckedLeaseOpsHonorOwner(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now()
 	lease := NewRunLease("run-1", now)
-	if err := SaveRunLease(runsDir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(runsDir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	lease.HeartbeatAt = now.Add(time.Minute)
 	if err := SaveRunLeaseIfOwner(runsDir, lease); err != nil {
@@ -106,8 +268,8 @@ func TestAssessRunActivityAliveLocalProcessNotStale(t *testing.T) {
 	lease := NewRunLease("run-1", now)
 	lease.ProcessStart = "start-token-1"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Hour)
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	prevAlive := runLeaseProcessAlive
 	prevToken := runLeaseProcessStartToken
@@ -132,8 +294,8 @@ func TestAssessRunActivityReusedPIDDoesNotWedgeLease(t *testing.T) {
 	lease := NewRunLease("run-1", now)
 	lease.ProcessStart = "start-token-old"
 	lease.HeartbeatAt = now.Add(-ApplyLeaseStaleAfter - time.Hour)
-	if err := SaveRunLease(dir, lease); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := saveRunLeaseFixture(dir, lease); err != nil {
+		t.Fatalf("saveRunLeaseFixture: %v", err)
 	}
 	prevAlive := runLeaseProcessAlive
 	prevToken := runLeaseProcessStartToken

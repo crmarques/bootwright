@@ -1,5 +1,34 @@
 ---
 
+- name: Resolve exact HAProxy apply transition composite
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: load-balancer
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+        - /etc/sysctl.d/99-bootwright-haproxy.conf
+      labels:
+        bootwright.kind: load-balancer
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: load-balancer
+        container: "{{ bootwright_haproxy_container_name }}"
+        frontendPorts: >-
+          {{ bootwright_component.frontends
+             | map(attribute='ports')
+             | flatten
+             | map(attribute='listenPort')
+             | map('int')
+             | unique
+             | sort
+             | map('string')
+             | map('regex_replace', '$', '/tcp')
+             | join(',') }}
+  changed_when: false
+
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -7,10 +36,20 @@
   vars:
     bootwright_gate_container_name: "{{ bootwright_haproxy_container_name }}"
 
+- name: Revalidate host operation before HAProxy package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Install HAProxy container runtime
   ansible.builtin.package:
     name: podman
     state: present
+
+- name: Revalidate host operation before HAProxy sysctl and path mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Enable HAProxy VIP binding
   ansible.posix.sysctl:
@@ -36,6 +75,11 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Revalidate host operation and endpoints before HAProxy container mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
   register: bootwright_haproxy_config
 
 - name: Run HAProxy container
@@ -53,6 +97,11 @@
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
       bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
+
+- name: Revalidate host operation and endpoints before HAProxy firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
     volumes:
       - "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z"
     command:
@@ -69,6 +118,22 @@
   loop: "{{ bootwright_component.frontends | map(attribute='ports') | flatten | map(attribute='listenPort') | unique | list }}"
   when: bootwright_firewalld_available | default(false)
 
+- name: Retire old-only HAProxy firewall endpoints
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false) | bool
+
+- name: Revalidate host operation before HAProxy ownership publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Record HAProxy ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -77,14 +142,12 @@
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
-        - /etc/sysctl.d/99-bootwright-haproxy.conf
-      labels:
-        bootwright.kind: load-balancer
-        bootwright.provider: "{{ bootwright_component.providerName }}"
-        bootwright.name: "{{ bootwright_component.name }}"
-      attributes:
-        componentKind: load-balancer
-        container: "{{ bootwright_haproxy_container_name }}"
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+
+- name: Complete durable HAProxy ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml

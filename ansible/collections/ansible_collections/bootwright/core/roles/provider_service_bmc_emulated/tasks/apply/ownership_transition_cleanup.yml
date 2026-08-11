@@ -1,0 +1,87 @@
+---
+- name: Revalidate BMC authority before old firewall mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.firewallManaged | default('false') == 'true'
+    - >-
+      bootwright_bmc_transition_record.attributes.redfishPort | int != bootwright_bmc_port | int
+      or not (bootwright_firewalld_available | default(false) | bool)
+
+- name: Close obsolete recorded BMC Redfish firewall port
+  ansible.posix.firewalld:
+    port: "{{ bootwright_bmc_transition_record.attributes.redfishPort | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.firewallManaged | default('false') == 'true'
+    - >-
+      bootwright_bmc_transition_record.attributes.redfishPort | int != bootwright_bmc_port | int
+      or not (bootwright_firewalld_available | default(false) | bool)
+
+- name: Revalidate BMC authority before old pool mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.libvirtURI != bootwright_bmc_libvirt_uri
+
+- name: Remove obsolete recorded BMC libvirt vmedia pool
+  community.libvirt.virt_pool:
+    name: "{{ bootwright_bmc_transition_record.attributes.pool }}"
+    uri: "{{ bootwright_bmc_transition_record.attributes.libvirtURI }}"
+    state: absent
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.libvirtURI != bootwright_bmc_libvirt_uri
+
+- name: Verify obsolete recorded BMC pool absence
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_bmc_transition_record.attributes.libvirtURI }}"
+      - pool-dumpxml
+      - "{{ bootwright_bmc_transition_record.attributes.pool }}"
+  register: bootwright_bmc_transition_old_pool_absence
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.libvirtURI != bootwright_bmc_libvirt_uri
+
+- name: Release obsolete exact BMC endpoint claims after cleanup proof
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: release_host_endpoint_claims.yml
+  vars:
+    bootwright_host_endpoint_release_candidates: >-
+      {{ bootwright_bmc_endpoint_transition.oldOnlyCandidates }}
+  when: bootwright_bmc_endpoint_transition.oldOnlyCandidates | length > 0
+
+- name: Retain only desired BMC endpoint claims after old cleanup
+  ansible.builtin.set_fact:
+    bootwright_bmc_endpoint_transition: >-
+      {{ bootwright_bmc_endpoint_transition
+         | combine({'retainedClaims': bootwright_bmc_endpoint_transition.desiredClaims}) }}
+  changed_when: false
+
+- name: Require obsolete recorded BMC pool absence before replacing evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_transition_old_pool_absence.rc is defined
+      - bootwright_bmc_transition_old_pool_absence.rc | int != 0
+      - bootwright_bmc_transition_old_pool_absence.stderr is defined
+      - >-
+        bootwright_bmc_transition_old_pool_absence.stderr
+        | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool')
+    fail_msg: >-
+      Refusing to replace the old BMC ownership record because the obsolete
+      libvirt pool did not have positive absence proof. The exact old record and
+      claim were retained; restore libvirt access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_bmc_apply_transition_needed | default(false) | bool
+    - bootwright_bmc_transition_record.attributes.libvirtURI != bootwright_bmc_libvirt_uri

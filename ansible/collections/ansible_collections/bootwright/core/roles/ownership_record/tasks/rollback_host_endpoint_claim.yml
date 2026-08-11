@@ -1,0 +1,60 @@
+---
+- name: Revalidate host operation before endpoint rollback
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Roll back exact host endpoint claim atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_host_endpoint_rollback.path }}"
+    state: "{{ bootwright_host_endpoint_rollback.previousAbsent | ternary('absent', 'present') }}"
+    desired_content: >-
+      {{ omit if (bootwright_host_endpoint_rollback.previousAbsent | bool)
+         else bootwright_host_endpoint_rollback.previousContent }}
+    expected_contents:
+      - "{{ bootwright_host_endpoint_rollback.desiredContent }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_host_endpoint_rollback_cas
+  failed_when: false
+
+- name: Re-probe rolled back host endpoint claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_rollback.path }}"
+    follow: false
+  register: bootwright_host_endpoint_rollback_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read restored host endpoint claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_endpoint_rollback.path }}"
+  register: bootwright_host_endpoint_rollback_content
+  changed_when: false
+  failed_when: false
+  when:
+    - not (bootwright_host_endpoint_rollback.previousAbsent | bool)
+    - bootwright_host_endpoint_rollback_stat.stat.exists | default(false) | bool
+
+- name: Require exact host endpoint rollback
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_rollback_cas.previous_sha256 is defined
+      - bootwright_host_endpoint_rollback_cas.current_sha256 is defined
+      - bootwright_host_endpoint_rollback_stat.stat.exists is defined
+      - >-
+        (bootwright_host_endpoint_rollback.previousAbsent | bool
+         and not (bootwright_host_endpoint_rollback_stat.stat.exists | bool)
+         and bootwright_host_endpoint_rollback_cas.current_sha256 == '')
+        or (
+          not (bootwright_host_endpoint_rollback.previousAbsent | bool)
+          and bootwright_host_endpoint_rollback_stat.stat.exists | bool
+          and bootwright_host_endpoint_rollback_content.content is defined
+          and (bootwright_host_endpoint_rollback_content.content | b64decode)
+              == bootwright_host_endpoint_rollback.previousContent
+        )
+    fail_msg: >-
+      Endpoint acquisition failed and this attempt could not atomically restore
+      {{ bootwright_host_endpoint_rollback.path }}. Inspect the exact endpoint,
+      operation, claim, and transition evidence before re-running
+      `{{ bootwright_mutating_invocation }}`. Never delete a competing slot.

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -711,6 +712,17 @@ func safetyFlagCoherenceCases() []safetyCase {
 		want:    []string{"bootwright diff --stage deps --through base --clusters " + safetyAdvancedCephCluster + " --adopt --output json --verbose --context matrix"},
 		deny:    []string{"input-history"},
 	}, {
+		name:    "destroy/verbose explicitly disables Ansible redaction in the preview",
+		args:    []string{"destroy", "--dry-run", "--output", "json", "--verbose", "--ask-become-pass=false"},
+		verdict: verdictAccepted,
+		want:    []string{"bootwright_no_log=false"},
+	}, {
+		name:     "destroy/Ceph ownership recovery carries the exact selected cluster and confirmed FSID",
+		baseline: safetyBaselineAdvanced,
+		args:     []string{"destroy", "--recover-ceph-ownership", safetyAdvancedCephCluster + "=2088ddee-875b-11f1-9b98-303ea72d7724", "--dry-run", "--output", "json", "--ask-become-pass=false"},
+		verdict:  verdictAccepted,
+		want:     []string{"bootwright_ceph_destroy_confirmed_fsids", safetyAdvancedCephCluster, "2088ddee-875b-11f1-9b98-303ea72d7724"},
+	}, {
 		name:    "apply/cluster install parallelism is part of the mutating flag matrix",
 		args:    []string{"apply", "--cluster-install-parallelism", "1", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
@@ -1300,14 +1312,20 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		seed:    seedUnreadableOwnershipRecord,
 		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
-		want:    []string{"could not be read", "Repair or remove the reported record file(s)"},
+		want:    []string{"could not be read", "Repair the reported evidence, or remove it only after proving it stale"},
 		deny:    []string{"--authorize unreadable-records to"},
 	}, {
 		name:    "apply/unreadable-records: a dry run forecasts the refusal its real counterpart makes",
 		seed:    seedUnreadableOwnershipRecord,
 		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--dry-run", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
-		want:    []string{"a real run refuses before any prompt", "could not be read"},
+		want:    []string{"a real run refuses before any prompt", "could not be read", "`bootwright apply --mode reconcile --stage infra --clusters dc1-metal-ocp --dry-run --ask-become-pass=false --trust-on-first-use=true --context matrix`"},
+	}, {
+		name:    "apply/noncanonical ownership: copied foreign-context evidence refuses before mutation",
+		seed:    seedForeignContextOwnershipRecord,
+		args:    []string{"apply", "--stage", "infra", "--clusters", "dc1-metal-ocp", "--authorize", "all", "--yes", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"noncanonical identity", "context=\"copied-context\"", "do not belong to this context", "remove it only after proving it stale", "`bootwright apply --mode reconcile --authorize all --yes --stage infra --clusters dc1-metal-ocp --ask-become-pass=false --trust-on-first-use=true --context matrix`", "no authorization skips this on apply"},
 	}, {
 		name:        "apply/cross-context degrading service: sibling ownership refuses with exact retry",
 		baseline:    safetyBaselineLibvirtKubeVirtHost,
@@ -1330,7 +1348,7 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		name:    "destroy/unowned-networks: the token arms the wider blast radius only when asked for",
 		args:    []string{"destroy", "--stage", "infra", "--authorize", "unowned-vms,unowned-networks", "--dry-run", "--output", "json", "--ask-become-pass=false"},
 		verdict: verdictAccepted,
-		want:    []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true"},
+		want:    []string{"bootwright_destroy_authorize_unowned_vms=true", "bootwright_destroy_authorize_unowned_networks=true", "PersistentVolumeClaim"},
 	}, {
 		name:    "destroy/shared-infra: a storage consumer conflict refuses and names its token",
 		args:    []string{"destroy", "--stage", "infra", "--clusters", "ceph-storage", "--yes", "--ask-become-pass=false"},
@@ -1487,6 +1505,13 @@ func safetyAuthorizationTokenCases() []safetyCase {
 		want:    []string{"current.lease.json", "rm -f"},
 		deny:    []string{"Continue with destroy?", "Confirm this DESTRUCTIVE action"},
 	}, {
+		name:    "destroy/a remote stale run lease refuses automatic takeover and preserves the exact retry",
+		seed:    seedRemoteStaleRunLease,
+		args:    []string{"destroy", "--ask-become-pass=false"},
+		verdict: verdictRefusal,
+		want:    []string{"remote-controller", "refusing automatic takeover", "only after proving", "sudo rm -f", "re-run `bootwright destroy", "--context matrix"},
+		deny:    []string{"Continue with destroy?", "Confirm this DESTRUCTIVE action"},
+	}, {
 		name:    "destroy/stale-input: a clean input reports the token had no effect",
 		args:    []string{"destroy", "--stage", "clusters", "--authorize", "stale-input", "--yes", "--ask-become-pass=false"},
 		verdict: verdictRefusal,
@@ -1515,6 +1540,22 @@ func seedActiveMutatingRunLease(t *testing.T, ctx workspace.Context) {
 			t.Errorf("close active mutating run lease: %v", err)
 		}
 	})
+}
+
+func seedRemoteStaleRunLease(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	lease := workflow.NewRunLease("destroy-remote-stale", time.Now().UTC().Add(-10*time.Minute))
+	lease.Hostname = "remote-controller"
+	data, err := json.MarshalIndent(lease, "", "  ")
+	if err != nil {
+		t.Fatalf("encode remote stale run lease: %v", err)
+	}
+	if err := os.MkdirAll(ctx.RunsDir, 0o700); err != nil {
+		t.Fatalf("create runs dir: %v", err)
+	}
+	if err := os.WriteFile(workflow.LeasePath(ctx.RunsDir), append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write remote stale run lease: %v", err)
+	}
 }
 
 func seedRetiredFieldInStoredInput(t *testing.T, ctx workspace.Context) {
@@ -1667,7 +1708,7 @@ func safetyScopeClosureCases() []safetyCase {
 		deny:    []string{"DESTROY"},
 	}, {
 		name:    "plan/greenfield/one DC previews without mutating",
-		args:    []string{"plan", "--clusters", "dc1-metal-ocp,dc1-child-ocp", "--ask-become-pass=false"},
+		args:    []string{"plan", "--clusters", "dc1-metal-ocp,dc1-child-ocp"},
 		verdict: verdictAccepted,
 	}, {
 		name:    "diff/recorded/greenfield/full reports never-applied and writes no records",
@@ -1718,6 +1759,26 @@ func safetyStartingStateCases() []safetyCase {
 		verdict:     verdictRefusal,
 		typedRemedy: convergeremedy.ActionReconcileSameSelection,
 		want:        []string{"dc1-metal-ocp"},
+	}, {
+		name:        "apply/current convergence evidence copied from another context refuses before mutation",
+		seed:        seedCopiedContextConvergeEvidence,
+		args:        []string{"apply", "--stage", "add-ons", "--clusters", "dc1-metal-ocp", "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		remedy:      remedySameSelection,
+		typedRemedy: convergeremedy.ActionRetrySameInvocation,
+		want:        []string{"cannot trust convergence safety evidence", "owner.context", "copied-context", "no apply mode or authorization adopts", "--mode reconcile", "--stage add-ons", "--clusters dc1-metal-ocp", "--context matrix"},
+		deny:        []string{"--mode rebuild", "--authorize data-loss"},
+	}, {
+		name:        "apply/current convergence payload with exact authority has executable rebuild remedy",
+		seed:        seedInvalidCurrentConvergePayload,
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedCephCluster, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		remedy:      remedySameSelection,
+		typedRemedy: convergeremedy.ActionRebuildSameSelection,
+		want:        []string{"cannot verify current safety evidence payload", "desiredHash", "authority and selected target identity match", "--mode rebuild", "--authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedCephCluster, "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			reexecuteHermeticRemedy(t, output, "cannot verify current safety evidence payload", false)
+		},
 	}, {
 		name:        "apply/shared controller DNS scope names exact all-consumer retry",
 		baseline:    safetyBaselineLibvirtKubeVirtHost,
@@ -2244,6 +2305,10 @@ func seedSharedControllerDNSConsumers(t *testing.T, ctx workspace.Context) {
 func seedFailingControllerDNSProof(t *testing.T, ctx workspace.Context) {
 	t.Helper()
 	seedRunnableSafetyMutation(t, ctx)
+	fallback, err := exec.LookPath("ansible-playbook")
+	if err != nil {
+		t.Fatalf("locate canonical Ansible test stub: %v", err)
+	}
 	dir := t.TempDir()
 	gate := filepath.Join(dir, "controller-dns-repaired")
 	script := `#!/bin/sh
@@ -2262,18 +2327,23 @@ case " $* " in
     exit 42
     ;;
 esac
-exit 0
+exec "$BOOTWRIGHT_SAFETY_FALLBACK_ANSIBLE_PLAYBOOK" "$@"
 `
 	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(script), 0o700); err != nil {
 		t.Fatalf("write controller DNS proof stub: %v", err)
 	}
 	t.Setenv("BOOTWRIGHT_SAFETY_CONTROLLER_DNS_GATE", gate)
+	t.Setenv("BOOTWRIGHT_SAFETY_FALLBACK_ANSIBLE_PLAYBOOK", fallback)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func seedFailingControllerDNSMutation(t *testing.T, ctx workspace.Context) {
 	t.Helper()
 	seedRunnableSafetyMutation(t, ctx)
+	fallback, err := exec.LookPath("ansible-playbook")
+	if err != nil {
+		t.Fatalf("locate canonical Ansible test stub: %v", err)
+	}
 	dir := t.TempDir()
 	gate := filepath.Join(dir, "controller-dns-mutated")
 	script := `#!/bin/sh
@@ -2287,12 +2357,13 @@ case " $* " in
     exit 42
     ;;
 esac
-exit 0
+exec "$BOOTWRIGHT_SAFETY_FALLBACK_ANSIBLE_PLAYBOOK" "$@"
 `
 	if err := os.WriteFile(filepath.Join(dir, "ansible-playbook"), []byte(script), 0o700); err != nil {
 		t.Fatalf("write controller DNS mutation stub: %v", err)
 	}
 	t.Setenv("BOOTWRIGHT_SAFETY_CONTROLLER_DNS_MUTATION_GATE", gate)
+	t.Setenv("BOOTWRIGHT_SAFETY_FALLBACK_ANSIBLE_PLAYBOOK", fallback)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
@@ -2682,6 +2753,60 @@ func seedSuccessfulApply(t *testing.T, ctx workspace.Context) {
 	}
 }
 
+func seedCopiedContextConvergeEvidence(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state: %v", err)
+	}
+	tasks, err := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state)
+	if err != nil {
+		t.Fatalf("plan apply tasks: %v", err)
+	}
+	for _, task := range tasks {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddon || task.Entry.Cluster != "dc1-metal-ocp" {
+			continue
+		}
+		resourceID := task.Entry.Kind + "/" + task.Entry.ID
+		record, found, err := workflow.LoadConvergeSafetyRecord(ctx.RunsDir, resourceID)
+		if err != nil || !found {
+			t.Fatalf("load convergence record %s: found=%v err=%v", resourceID, found, err)
+		}
+		record.Owner.Context = "copied-context"
+		if err := workflow.SaveConvergeSafetyRecord(ctx.RunsDir, record); err != nil {
+			t.Fatalf("save copied-context convergence record %s: %v", resourceID, err)
+		}
+		return
+	}
+	t.Fatal("no dc1-metal-ocp add-on task was available for copied-context evidence")
+}
+
+func seedInvalidCurrentConvergePayload(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	seedSuccessfulApply(t, ctx)
+	state, err := desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
+	if err != nil {
+		t.Fatalf("load desired state: %v", err)
+	}
+	for _, pool := range state.StoragePools {
+		if pool.Spec.StorageClusterRef.Name != safetyAdvancedCephCluster {
+			continue
+		}
+		resourceID := "StoragePool/" + safetyAdvancedCephCluster + "." + pool.Metadata.Name
+		record, found, err := workflow.LoadConvergeSafetyRecord(ctx.RunsDir, resourceID)
+		if err != nil || !found {
+			t.Fatalf("load convergence record %s: found=%v err=%v", resourceID, found, err)
+		}
+		record.DesiredHash = "sha256:short"
+		if err := workflow.SaveConvergeSafetyRecord(ctx.RunsDir, record); err != nil {
+			t.Fatalf("save invalid convergence payload %s: %v", resourceID, err)
+		}
+		return
+	}
+	t.Fatalf("no StoragePool belongs to %s", safetyAdvancedCephCluster)
+}
+
 func seedProtectionAfterApply(t *testing.T, ctx workspace.Context) {
 	t.Helper()
 	seedSuccessfulApply(t, ctx)
@@ -2867,5 +2992,20 @@ func seedUnreadableOwnershipRecord(t *testing.T, ctx workspace.Context) {
 	}
 	if err := os.WriteFile(corrupt, []byte("{ not json"), 0o600); err != nil {
 		t.Fatalf("write corrupt ownership record: %v", err)
+	}
+}
+
+func seedForeignContextOwnershipRecord(t *testing.T, ctx workspace.Context) {
+	t.Helper()
+	if err := ownership.SaveResource(ctx.OwnershipDir, ownership.ResourceRecord{
+		Kind:       string(ownership.KindStorageCluster),
+		Name:       "ceph-storage",
+		Owner:      ownership.Owner,
+		Context:    "copied-context",
+		Cluster:    "ceph-storage",
+		Host:       "ceph-dc1-0",
+		Attributes: map[string]string{"seedHost": "ceph-dc1-0"},
+	}); err != nil {
+		t.Fatalf("save foreign-context ownership record: %v", err)
 	}
 }

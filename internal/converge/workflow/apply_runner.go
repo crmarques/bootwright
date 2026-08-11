@@ -85,7 +85,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if task.Entry.Kind == ApplyTaskKindNodeConfigApply {
 		return runOneNodeConfigTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
-	if skipped, reason, err := provisioningPlaybookConvergeSkip(runsDir, opts.ContextName, runID, task); err != nil {
+	if skipped, reason, err := provisioningPlaybookConvergeSkip(runsDir, opts.ContextName, runID, opts.ApplyMode, task); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	} else if skipped {
 		return applyTaskResult{id: task.Entry.ID, skipped: true, skippedReason: reason}
@@ -238,24 +238,33 @@ func restoreClusterInstallRecordOnSkip(clustersDir, cluster string, prior Cluste
 	return nil
 }
 
-func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, task ApplyTask) (bool, string, error) {
+func provisioningPlaybookConvergeSkip(runsDir, contextName, runID string, mode ApplyMode, task ApplyTask) (bool, string, error) {
 	if task.ExecutionClass == ApplyTaskExecutionLiveProof || !task.SkipWhenConverged || strings.TrimSpace(runsDir) == "" {
 		return false, "", nil
 	}
 	record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
-	if err != nil || !found {
-		return false, "", nil
+	if err != nil {
+		return false, "", untrustedConvergenceEvidence(runsDir, applyTaskSafetyResourceID(task), err)
 	}
-	if record.Status != ConvergeSafetyStatusReconciled && record.Status != ConvergeSafetyStatusSkipped {
+	if !found {
 		return false, "", nil
 	}
 	desiredHash, err := ApplyTaskDesiredHash(task)
 	if err != nil {
 		return false, "", err
 	}
-	class, err := classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+	class, err := classifyApplyTaskWithRecordForContext(task, runsDir, contextName, record, desiredHash)
 	if err != nil {
-		return false, "", err
+		if !rebuildConsumesConvergencePayload(mode, err) {
+			return false, "", err
+		}
+		class = ConvergeSafetyDrift
+	}
+	if class == ConvergeSafetyForeign || class == ConvergeSafetyUnknown {
+		return false, "", fmt.Errorf("cannot execute %s because its convergence safety evidence is %s; no apply mode or authorization adopts it", task.Entry.Label, class)
+	}
+	if record.Status != ConvergeSafetyStatusReconciled && record.Status != ConvergeSafetyStatusSkipped {
+		return false, "", nil
 	}
 	if class != ConvergeSafetyMatch {
 		return false, "", nil

@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render/installer"
 	"github.com/crmarques/bootwright/internal/render/inventory"
 	"github.com/crmarques/bootwright/internal/roles"
+	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 )
 
 type (
@@ -57,6 +58,10 @@ func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.Stat
 
 func ComponentPins(state v1alpha1.State) []inventory.ComponentPin {
 	return inventory.ComponentPins(state)
+}
+
+func InfraComponentServiceSelection(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {
+	return inventory.InfraComponentServiceSelection(state, service)
 }
 
 func SSHCommonArgWords(knownHostsPath string, passwordAuth bool, preferredIdentityFile string) []string {

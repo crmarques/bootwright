@@ -221,20 +221,15 @@ func LoadRunLease(runsDir string) (RunLease, bool, error) {
 	return lease, true, nil
 }
 
-func SaveRunLease(runsDir string, lease RunLease) error {
-	path := LeasePath(runsDir)
+func runLeaseBytes(lease RunLease) ([]byte, error) {
 	data, err := json.MarshalIndent(lease, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode apply lease: %w", err)
+		return nil, fmt.Errorf("encode apply lease: %w", err)
 	}
-	data = append(data, '\n')
-	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
-		return fmt.Errorf("write apply lease: %w", err)
-	}
-	return nil
+	return append(data, '\n'), nil
 }
 
-func RemoveRunLease(runsDir string) error {
+func removeRunLease(runsDir string) error {
 	err := os.Remove(LeasePath(runsDir))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -251,29 +246,76 @@ func isLeaseNotOwned(err error) bool {
 	return errors.Is(err, ErrLeaseNotOwned)
 }
 
-func SaveRunLeaseIfOwner(runsDir string, lease RunLease) error {
-	existing, found, err := LoadRunLease(runsDir)
+var (
+	runLeaseLockAttempted = func() {}
+	runLeaseOwnerChecked  = func(string) {}
+)
+
+func withRunLeaseLock(runsDir string, action func() error) (result error) {
+	lockPath := LeasePath(runsDir) + ".lock"
+	if err := safefs.EnsureDir(filepath.Dir(lockPath), 0o700); err != nil {
+		return fmt.Errorf("create apply lease lock directory: %w", err)
+	}
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return err
+		return fmt.Errorf("open apply lease lock: %w", err)
 	}
-	if !found || existing.RunID != lease.RunID {
-		return ErrLeaseNotOwned
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("chmod apply lease lock: %w", err)
 	}
-	return SaveRunLease(runsDir, lease)
+	runLeaseLockAttempted()
+	if err := lockRunLeaseFile(file); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("lock apply lease transaction: %w", err)
+	}
+	defer func() {
+		if err := unlockRunLeaseFile(file); err != nil {
+			result = errors.Join(result, fmt.Errorf("unlock apply lease transaction: %w", err))
+		}
+		if err := file.Close(); err != nil {
+			result = errors.Join(result, fmt.Errorf("close apply lease lock: %w", err))
+		}
+	}()
+	return action()
+}
+
+func SaveRunLeaseIfOwner(runsDir string, lease RunLease) error {
+	return withRunLeaseLock(runsDir, func() error {
+		existing, found, err := LoadRunLease(runsDir)
+		if err != nil {
+			return err
+		}
+		if !found || existing.RunID != lease.RunID {
+			return ErrLeaseNotOwned
+		}
+		runLeaseOwnerChecked("save")
+		data, err := runLeaseBytes(lease)
+		if err != nil {
+			return err
+		}
+		if err := safefs.WriteFileEnsuringDir(LeasePath(runsDir), data, 0o600); err != nil {
+			return fmt.Errorf("write apply lease: %w", err)
+		}
+		return nil
+	})
 }
 
 func RemoveRunLeaseIfOwner(runsDir, runID string) error {
-	existing, found, err := LoadRunLease(runsDir)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return nil
-	}
-	if existing.RunID != runID {
-		return ErrLeaseNotOwned
-	}
-	return RemoveRunLease(runsDir)
+	return withRunLeaseLock(runsDir, func() error {
+		existing, found, err := LoadRunLease(runsDir)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		if existing.RunID != runID {
+			return ErrLeaseNotOwned
+		}
+		runLeaseOwnerChecked("remove")
+		return removeRunLease(runsDir)
+	})
 }
 
 func leaseLiveness(lease RunLease, now time.Time) (RunActivityState, string) {
@@ -298,39 +340,66 @@ func leaseFresh(lease RunLease, now time.Time) bool {
 }
 
 func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
-	path := LeasePath(runsDir)
-	existing, found, err := LoadRunLease(runsDir)
-	if err != nil {
-		return err
-	}
-	if found {
-		if leaseFresh(existing, now) {
-			return fmt.Errorf("a mutating run (%s) is still running; inspect it with bootwright status --watch", existing.RunID)
+	return withRunLeaseLock(runsDir, func() error {
+		path := LeasePath(runsDir)
+		existing, found, err := LoadRunLease(runsDir)
+		if err != nil {
+			return err
 		}
-		staleClaim := path + ".stale-" + lease.RunID
-		if err := os.Rename(path, staleClaim); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("claim stale apply lease: %w", err)
+		if found {
+			if leaseFresh(existing, now) {
+				return fmt.Errorf("a mutating run (%s) is still running; inspect it with bootwright status --watch", existing.RunID)
+			}
+			hostname, hostnameErr := os.Hostname()
+			if hostnameErr != nil || strings.TrimSpace(hostname) == "" || existing.Hostname != hostname {
+				ownerHost := strings.TrimSpace(existing.Hostname)
+				if ownerHost == "" {
+					ownerHost = "unknown host"
+				}
+				return fmt.Errorf("refusing automatic takeover of stale mutating run lease %s for run %s owned by %s: this controller cannot prove that controller's process has stopped; inspect that controller and lease, then repair it or remove the lease only after proving no such run remains active, using `sudo rm -f %s`", path, existing.RunID, ownerHost, path)
+			}
+			processStopped, processDetail := localLeaseProcessProvenStopped(existing)
+			if !processStopped {
+				return fmt.Errorf("refusing automatic takeover of stale mutating run lease %s for run %s owned by this controller: %s; this controller cannot prove the original process stopped; inspect the process and lease, then repair it or remove the lease only after proving no such run remains active, using `sudo rm -f %s`", path, existing.RunID, processDetail, path)
+			}
+			staleClaim := path + ".stale-" + lease.RunID
+			if err := os.Rename(path, staleClaim); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("claim stale apply lease: %w", err)
+			}
+			_ = os.Remove(staleClaim)
 		}
-		_ = os.Remove(staleClaim)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create apply lease directory: %w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod apply lease directory: %w", err)
-	}
-	data, err := json.MarshalIndent(lease, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode apply lease: %w", err)
-	}
-	data = append(data, '\n')
-	if err := safefs.WriteNewFile(path, data, 0o600); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("a mutating run acquired the apply lease concurrently; inspect it with bootwright status --watch")
+		data, err := runLeaseBytes(lease)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("acquire apply lease: %w", err)
+		if err := safefs.WriteNewFile(path, data, 0o600); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("a mutating run acquired the apply lease concurrently; inspect it with bootwright status --watch")
+			}
+			return fmt.Errorf("acquire apply lease: %w", err)
+		}
+		return nil
+	})
+}
+
+func localLeaseProcessProvenStopped(lease RunLease) (bool, string) {
+	if lease.PID <= 0 {
+		return true, "lease has no process ID"
 	}
-	return nil
+	if !runLeaseProcessAlive(lease.PID) {
+		return true, fmt.Sprintf("process %d is not running", lease.PID)
+	}
+	if lease.ProcessStart == "" {
+		return false, fmt.Sprintf("process %d is still running and the lease has no process-start identity", lease.PID)
+	}
+	currentStart, ok := runLeaseProcessStartToken(lease.PID)
+	if !ok || currentStart == "" {
+		return false, fmt.Sprintf("process %d is still running and its current process-start identity is unreadable", lease.PID)
+	}
+	if currentStart == lease.ProcessStart {
+		return false, fmt.Sprintf("process %d still matches the lease process-start identity", lease.PID)
+	}
+	return true, fmt.Sprintf("process %d has been reused by a different process", lease.PID)
 }
 
 func runLedgerBytes(ledger RunLedger) ([]byte, error) {
@@ -365,8 +434,8 @@ func ArchiveRunLedger(runsDir string, ledger RunLedger) error {
 }
 
 func archiveRunLedgerBytes(runsDir, runID string, data []byte) error {
-	if strings.TrimSpace(runID) == "" {
-		return fmt.Errorf("archive run ledger: run id is empty")
+	if err := validateRunIDPathSegment(runID); err != nil {
+		return fmt.Errorf("archive run ledger: %w", err)
 	}
 	path := filepath.Join(runsDir, "history", runID, "ledger.json")
 	if err := safefs.WriteFileEnsuringDir(path, data, 0o600); err != nil {
@@ -380,8 +449,8 @@ func ArchivedRunLedgerPath(runsDir, runID string) string {
 }
 
 func LoadArchivedRunLedger(runsDir, runID string) (RunLedger, bool, error) {
-	if strings.TrimSpace(runID) == "" {
-		return RunLedger{}, false, fmt.Errorf("load archived run ledger: run id is empty")
+	if err := validateRunIDPathSegment(runID); err != nil {
+		return RunLedger{}, false, fmt.Errorf("load archived run ledger: %w", err)
 	}
 	path := ArchivedRunLedgerPath(runsDir, runID)
 	data, err := os.ReadFile(path)
@@ -396,6 +465,16 @@ func LoadArchivedRunLedger(runsDir, runID string) (RunLedger, bool, error) {
 		return RunLedger{}, true, fmt.Errorf("decode archived run ledger %s: %w", path, err)
 	}
 	return ledger, true, nil
+}
+
+func validateRunIDPathSegment(runID string) error {
+	if strings.TrimSpace(runID) == "" {
+		return fmt.Errorf("run id is empty")
+	}
+	if strings.TrimSpace(runID) != runID || runID == "." || runID == ".." || filepath.Clean(runID) != runID || filepath.Base(runID) != runID || strings.ContainsRune(runID, '\x00') {
+		return fmt.Errorf("run id %q is not one clean non-dot path segment", runID)
+	}
+	return nil
 }
 
 func ArchivedRunIDs(runsDir string) []string {

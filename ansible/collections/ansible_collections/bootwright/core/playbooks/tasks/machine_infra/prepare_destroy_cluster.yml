@@ -64,9 +64,18 @@
     - name: Require a conclusive libvirt network probe before destroy
       ansible.builtin.assert:
         that:
+          - bootwright_libvirt_destroy_network_xml.rc is defined
           - >-
-            bootwright_libvirt_destroy_network_xml.rc | default(1) == 0
-            or (bootwright_libvirt_destroy_network_xml.stderr | default('')) is search('(Network not found|no network with matching name)')
+            (
+              bootwright_libvirt_destroy_network_xml.rc | default(1) == 0
+              and bootwright_libvirt_destroy_network_xml.stdout is defined
+            )
+            or (
+              bootwright_libvirt_destroy_network_xml.rc | default(1) != 0
+              and bootwright_libvirt_destroy_network_xml.stderr is defined
+              and (bootwright_libvirt_destroy_network_xml.stderr
+                   | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-network'))
+            )
         fail_msg: >-
           Could not determine whether libvirt network {{ bootwright_libvirt_network_name }}
           exists on {{ bootwright_libvirt_network_uri }}:
@@ -74,19 +83,28 @@
           Refusing to tear down or delete anything Bootwright cannot conclusively
           probe — the network and its ownership record would be removed while the
           network may still serve other machines. Fix libvirtd/connection access
-          and re-run destroy.
+          and retry the exact invocation `{{ bootwright_mutating_invocation }}`.
+
+    - name: Resolve live libvirt network identity for destroy
+      ansible.builtin.set_fact:
+        bootwright_libvirt_network_present: "{{ bootwright_libvirt_destroy_network_xml.rc == 0 }}"
+        bootwright_libvirt_network_identity: >-
+          {{
+            bootwright_libvirt_destroy_network_xml.stdout | default('')
+            | bootwright.core.bootwright_libvirt_resource_identity
+          }}
+      changed_when: false
 
     - name: Resolve libvirt network ownership for destroy
       ansible.builtin.set_fact:
-        bootwright_libvirt_network_present: "{{ bootwright_libvirt_destroy_network_xml.rc | default(1) == 0 }}"
         bootwright_libvirt_network_owned: >-
           {{
-            ((bootwright_libvirt_destroy_network_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
-             and (bootwright_libvirt_destroy_network_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>'))
-            or (bootwright_ownership_records | default([])
-                | selectattr('kind', 'equalto', 'libvirt-network')
-                | selectattr('name', 'equalto', bootwright_current_cluster.name)
-                | list | length > 0)
+            bootwright_libvirt_destroy_network_xml.rc == 0
+            and bootwright_libvirt_network_identity
+                == {
+                  'context': bootwright_clusters_dir | dirname | basename,
+                  'cluster': bootwright_current_cluster.name
+                }
           }}
       changed_when: false
 
@@ -96,10 +114,12 @@
           - bootwright_libvirt_network_owned | bool
         fail_msg: >-
           Refusing to remove libvirt network {{ bootwright_libvirt_network_name }}:
-          it carries no Bootwright ownership metadata for this context/cluster and
-          this context holds no ownership record for it, so it may belong to another
-          context whose VMs would lose networking. Verify and remove it manually,
-          or pass --authorize unowned-networks to remove it anyway.
+          its live XML does not carry exactly one Bootwright identity for this
+          context and cluster. A controller ownership record cannot override a
+          contradictory or malformed live identity because another context's VMs
+          could lose networking. Verify the live network, then either remove it
+          manually or deliberately retry with
+          `{{ bootwright_mutating_invocation }} --authorize unowned-networks`.
       when:
         - bootwright_libvirt_network_present | bool
         - not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)

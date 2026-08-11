@@ -1,0 +1,556 @@
+---
+- name: Validate BMC ownership gate inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_gate_mode in ['apply', 'destroy']
+      - bootwright_bmc_provider_name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_bmc_libvirt_uri | default('') | length > 0
+      - bootwright_bmc_claim_root | default('') == '/var/lib/bootwright/shared-services/bmc-emulator/' ~ bootwright_bmc_provider_name
+      - bootwright_bmc_claim_path | default('') == bootwright_bmc_claim_root ~ '/claim.json'
+      - bootwright_bmc_pool_name | default('') == 'bootwright-' ~ bootwright_bmc_provider_name ~ '-vmedia'
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing BMC emulator mutation because its provider-global claim, pool,
+      or libvirt identity is incomplete. Repair desired state or ownership
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe exact BMC provider-global claim before live classification
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Resolve BMC owner and transition claim identities
+  ansible.builtin.set_fact:
+    bootwright_bmc_gate_owner_supplied: >-
+      {{
+        bootwright_ownership_record | default({}) is mapping
+        and bootwright_ownership_record.kind | default('') == 'bmc-emulator'
+        and bootwright_ownership_record.name | default('') == bootwright_bmc_provider_name
+      }}
+    bootwright_bmc_gate_owner_claim: >-
+      {{
+        (bootwright_ownership_record | default({}))
+        | bootwright.core.bootwright_bmc_record_claim_identity(
+            bootwright_bmc_current_context,
+            bootwright_bmc_provider_name,
+            bootwright_host_name | default(inventory_hostname),
+            bootwright_provider_state_dir)
+      }}
+    bootwright_bmc_gate_transition_desired: >-
+      {{
+        bootwright_bmc_transition_desired
+        if (bootwright_bmc_transition_desired | default({}) is mapping
+            and bootwright_bmc_transition_desired | default({}) | length > 0)
+        else (bootwright_bmc_claim_transition.pending
+              if (bootwright_bmc_claim_transition | length > 0) else {})
+      }}
+  changed_when: false
+
+- name: Require coherent BMC owner claim and transition evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_gate_owner_supplied | bool)
+        or bootwright_bmc_gate_owner_claim | length > 0
+      - >-
+        bootwright_bmc_claim_record | length == 0
+        or not (bootwright_bmc_gate_owner_supplied | bool)
+        or bootwright_bmc_claim_transition | length > 0
+        or bootwright_bmc_gate_owner_claim == bootwright_bmc_claim_record
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or not (bootwright_bmc_gate_owner_supplied | bool)
+        or bootwright_bmc_gate_owner_claim in [
+          bootwright_bmc_claim_transition.active,
+          bootwright_bmc_claim_transition.pending
+        ]
+    fail_msg: >-
+      Refusing BMC emulator mutation because the live owner record and durable
+      full claim are neither the same exact composite nor the two validated
+      sides of one transition. Restore the exact owner, claim, and transition
+      evidence and re-run `{{ bootwright_mutating_invocation }}`; no mutation
+      discards the only authority for another URI, port, unit, or path.
+
+- name: Probe BMC systemd unit files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bootwright_bmc_redfish_unit_path }}"
+    - "{{ bootwright_bmc_vmedia_unit_path }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_bmc_unit_stats
+  changed_when: false
+  failed_when: false
+
+- name: Read existing BMC systemd unit files
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ bootwright_bmc_unit_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('<unknown>') }}"
+  register: bootwright_bmc_unit_contents
+  changed_when: false
+  failed_when: false
+  when: item.stat.exists | default(false) | bool
+
+- name: Require regular non-symlink BMC systemd unit paths
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.stat.exists is defined
+      - >-
+        not (item.stat.exists | bool)
+        or (
+          item.stat.isreg is defined
+          and item.stat.isreg | bool
+          and item.stat.islnk is defined
+          and not (item.stat.islnk | bool)
+        )
+    fail_msg: >-
+      Refusing BMC mutation because {{ item.item | default('a systemd unit path') }}
+      could not be proven absent or a regular non-symlink file. Repair that live
+      path and re-run `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_bmc_unit_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('<unknown>') }}"
+
+- name: Probe loaded BMC systemd unit identities
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --no-pager
+      - --property=LoadState
+      - --property=FragmentPath
+      - "{{ item.name }}"
+  loop:
+    - name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+      path: "{{ bootwright_bmc_redfish_unit_path }}"
+    - name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+      path: "{{ bootwright_bmc_vmedia_unit_path }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: bootwright_bmc_loaded_unit_probes
+  changed_when: false
+  failed_when: false
+
+- name: Reset loaded BMC systemd unit classification
+  ansible.builtin.set_fact:
+    bootwright_bmc_loaded_unit_identities: []
+  changed_when: false
+
+- name: Classify loaded BMC systemd unit identities
+  ansible.builtin.set_fact:
+    bootwright_bmc_loaded_unit_identities: >-
+      {{
+        (bootwright_bmc_loaded_unit_identities | default([]))
+        + [item.stdout
+           | default('')
+           | bootwright.core.bootwright_systemd_show_identity(item.item.path)]
+      }}
+  loop: "{{ bootwright_bmc_loaded_unit_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('<unknown>') }}"
+  changed_when: false
+
+- name: Probe mounts beneath BMC owned roots
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - -rn
+      - -o
+      - TARGET
+  register: bootwright_bmc_mount_probe
+  changed_when: false
+  failed_when: false
+
+- name: Classify mounts beneath BMC owned roots
+  ansible.builtin.set_fact:
+    bootwright_bmc_mount_identity: >-
+      {{
+        (bootwright_bmc_mount_probe.stdout_lines | default([])
+         | select('match', bootwright_bmc_mount_pattern)
+         | list | join('\n'))
+        | bootwright.core.bootwright_mount_targets(
+            [bootwright_bmc_root, bootwright_bmc_vmedia_root,
+             bootwright_bmc_claim_root])
+      }}
+  vars:
+    bootwright_bmc_mount_pattern: >-
+      ^({{ [bootwright_bmc_root, bootwright_bmc_vmedia_root,
+            bootwright_bmc_claim_root]
+           | map('regex_escape') | join('|') }})(/|$)
+  changed_when: false
+
+- name: Probe BMC libvirt vmedia pool XML
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_bmc_libvirt_uri }}"
+      - pool-dumpxml
+      - "{{ bootwright_bmc_pool_name }}"
+  register: bootwright_bmc_pool_probe
+  changed_when: false
+  failed_when: false
+
+- name: Probe BMC sushy runtime config
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_root }}/sushy.conf"
+  register: bootwright_bmc_config_stat
+  changed_when: false
+  failed_when: false
+
+- name: Probe BMC state roots
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bootwright_bmc_root }}"
+    - "{{ bootwright_bmc_vmedia_root }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_bmc_state_root_stats
+  changed_when: false
+  failed_when: false
+
+- name: Require conclusive regular BMC state roots
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.stat.exists is defined
+      - >-
+        not (item.stat.exists | bool)
+        or (
+          item.stat.isdir is defined
+          and item.stat.isdir | bool
+          and item.stat.islnk is defined
+          and not (item.stat.islnk | bool)
+        )
+    fail_msg: >-
+      Refusing BMC mutation because {{ item.item | default('a state root') }}
+      could not be proven absent or a directory that is not a symlink. Repair
+      the path and re-run `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_bmc_state_root_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('<unknown>') }}"
+
+- name: Read BMC sushy runtime config
+  ansible.builtin.slurp:
+    src: "{{ bootwright_bmc_root }}/sushy.conf"
+  register: bootwright_bmc_config_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_config_stat.stat.exists | default(false) | bool
+
+- name: Require conclusive BMC ownership probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_claim_root_stat.stat.exists is defined
+      - bootwright_bmc_claim_marker_stat.stat.exists is defined
+      - >-
+        not (bootwright_bmc_claim_root_stat.stat.exists | bool)
+        or (bootwright_bmc_claim_root_stat.stat.isdir | default(false) | bool
+            and not (bootwright_bmc_claim_root_stat.stat.islnk | default(false) | bool))
+      - >-
+        not (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+        or (bootwright_bmc_claim_marker_stat.stat.isreg | default(false) | bool
+            and not (bootwright_bmc_claim_marker_stat.stat.islnk | default(false) | bool)
+            and bootwright_bmc_claim_content.content is defined)
+      - bootwright_bmc_unit_stats.results | default([]) | length == 2
+      - >-
+        (bootwright_bmc_unit_contents.results | default([])
+         | rejectattr('content', 'defined') | rejectattr('skipped', 'defined')
+         | list | length) == 0
+      - bootwright_bmc_loaded_unit_probes.results | default([]) | length == 2
+      - >-
+        (bootwright_bmc_loaded_unit_probes.results | default([])
+         | rejectattr('rc', 'defined') | list | length) == 0
+      - >-
+        (bootwright_bmc_loaded_unit_probes.results | default([])
+         | selectattr('rc', 'defined')
+         | rejectattr('rc', 'equalto', 0) | list | length) == 0
+      - bootwright_bmc_loaded_unit_identities | default([]) | length == 2
+      - >-
+        (bootwright_bmc_loaded_unit_identities | default([])
+         | select('equalto', {}) | list | length) == 0
+      - bootwright_bmc_mount_probe.rc is defined
+      - bootwright_bmc_mount_probe.rc | int == 0
+      - bootwright_bmc_mount_probe.stdout is defined
+      - bootwright_bmc_mount_identity.valid | default(false) | bool
+      - bootwright_bmc_mount_identity.targets | default([]) | length == 0
+      - >-
+        bootwright_bmc_pool_probe.rc is defined
+        and bootwright_bmc_pool_probe.stdout is defined
+        and bootwright_bmc_pool_probe.stderr is defined
+        and (
+          bootwright_bmc_pool_probe.rc | int == 0
+          or (
+            bootwright_bmc_pool_probe.rc | int != 0
+            and (bootwright_bmc_pool_probe.stderr
+                 | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool'))
+          )
+        )
+      - bootwright_bmc_config_stat.stat.exists is defined
+      - >-
+        not (bootwright_bmc_config_stat.stat.exists | bool)
+        or (
+          bootwright_bmc_config_stat.stat.isreg | default(false) | bool
+          and not (bootwright_bmc_config_stat.stat.islnk | default(false) | bool)
+          and bootwright_bmc_config_content.content is defined
+        )
+      - bootwright_bmc_state_root_stats.results | default([]) | length == 2
+      - >-
+        (bootwright_bmc_state_root_stats.results | default([])
+         | selectattr('stat.exists', 'undefined') | list | length) == 0
+      - >-
+        (bootwright_bmc_state_root_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | rejectattr('stat.isdir', 'equalto', true) | list | length) == 0
+      - >-
+        (bootwright_bmc_state_root_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | selectattr('stat.islnk', 'equalto', true) | list | length) == 0
+    fail_msg: >-
+      Cannot conclusively read the BMC provider-global claim, unit files,
+      loaded systemd units, mounts, or vmedia pool on {{ inventory_hostname }},
+      or an unexpected mount exists beneath a BMC-owned root. No package,
+      config, service, pool, path, firewall, or ownership evidence was changed.
+      Restore host and libvirt access or remove only an independently verified
+      foreign mount, then re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve BMC live ownership evidence
+  ansible.builtin.set_fact:
+    bootwright_bmc_expected_identity:
+      context: "{{ bootwright_bmc_current_context }}"
+      provider: "{{ bootwright_bmc_provider_name }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+    bootwright_bmc_claim_context: >-
+      {{ bootwright_bmc_claim_content.content | default('') | b64decode | trim }}
+    bootwright_bmc_live_resource_present: >-
+      {{ (bootwright_bmc_unit_stats.results | default([])
+          | selectattr('stat.exists', 'defined')
+          | selectattr('stat.exists', 'equalto', true) | list | length > 0)
+         or (bootwright_bmc_loaded_unit_identities | default([])
+             | selectattr('present', 'defined')
+             | selectattr('present', 'equalto', true) | list | length > 0)
+         or (bootwright_bmc_pool_probe.rc | default(1) | int == 0) }}
+    bootwright_bmc_live_state_present: >-
+      {{
+        (bootwright_bmc_state_root_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true) | list | length > 0)
+        or (bootwright_bmc_config_stat.stat.exists | bool)
+      }}
+    bootwright_bmc_live_config_identity: >-
+      {{ (bootwright_bmc_config_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_bmc_sushy_config_identity }}
+    bootwright_bmc_live_vmedia_runtime: >-
+      {{ ((bootwright_bmc_unit_contents.results | default([{}, {}]))[1].content
+          | default('') | b64decode)
+         | bootwright.core.bootwright_bmc_vmedia_unit_runtime }}
+    bootwright_bmc_live_sushy_runtime: >-
+      {{ ((bootwright_bmc_unit_contents.results | default([{}, {}]))[0].content
+          | default('') | b64decode)
+         | bootwright.core.bootwright_bmc_sushy_unit_runtime }}
+    bootwright_bmc_live_pool_uuid: >-
+      {{ (bootwright_bmc_pool_probe.stdout | default(''))
+         | bootwright.core.bootwright_bmc_pool_uuid }}
+  changed_when: false
+
+- name: Refuse foreign or unprovable BMC provider-global replacement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_claim_root_stat.stat.exists | bool)
+        or bootwright_bmc_claim_record | length > 0
+        or (
+          bootwright_ownership_record | default({}) is mapping
+          and bootwright_ownership_record.kind | default('') == 'bmc-emulator'
+          and bootwright_ownership_record.owner | default('') == 'bootwright'
+          and bootwright_ownership_record.context | default('') == bootwright_bmc_current_context
+          and bootwright_ownership_record.host | default('') == (bootwright_host_name | default(inventory_hostname))
+          and bootwright_ownership_record.name | default('') == bootwright_bmc_provider_name
+        )
+        or (
+          not (bootwright_bmc_live_resource_present | bool)
+          and not (bootwright_bmc_live_state_present | bool)
+          and (
+            not (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+            or bootwright_bmc_claim_context == bootwright_bmc_current_context
+          )
+        )
+      - >-
+        not ((bootwright_bmc_live_resource_present | bool)
+             or (bootwright_bmc_live_state_present | bool))
+        or bootwright_bmc_claim_record | length > 0
+        or (
+          bootwright_ownership_record | default({}) is mapping
+          and bootwright_ownership_record.kind | default('') == 'bmc-emulator'
+          and bootwright_ownership_record.owner | default('') == 'bootwright'
+          and bootwright_ownership_record.context | default('') == bootwright_bmc_current_context
+          and bootwright_ownership_record.host | default('') == (bootwright_host_name | default(inventory_hostname))
+          and bootwright_ownership_record.name | default('') == bootwright_bmc_provider_name
+        )
+      - >-
+        (bootwright_bmc_unit_contents.results | default([])
+         | selectattr('content', 'defined')
+         | map(attribute='content') | map('b64decode')
+         | map('bootwright.core.bootwright_systemd_unit_identity')
+         | reject('equalto', bootwright_bmc_expected_identity)
+         | list | length) == 0
+      - >-
+        bootwright_bmc_pool_probe.rc | default(1) | int != 0
+        or (
+          (bootwright_bmc_pool_probe.stdout
+           | bootwright.core.bootwright_bmc_pool_identity)
+          == (bootwright_bmc_expected_identity
+              | combine({'type': 'dir',
+                         'name': bootwright_bmc_pool_name,
+                         'targetPath': bootwright_bmc_vmedia_root}))
+        )
+    fail_msg: >-
+      Refusing to {{ bootwright_bmc_gate_mode }} BMC emulator
+      {{ bootwright_bmc_provider_name }} because the provider-global claim,
+      unit identity, pool metadata, or pool target does not exactly match the
+      current context and host. A stale record may name another context's
+      replacement. Destroy it from its owning context or repair the evidence
+      after inspecting the live resources, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization token adopts,
+      redefines, or deletes unproven BMC resources.
+
+- name: Refuse ambiguous BMC pool alias during URI transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_apply_transition_needed | default(false) | bool)
+        or bootwright_bmc_transition_record.attributes.libvirtURI == bootwright_bmc_libvirt_uri
+        or not (bootwright_bmc_transition_old_pool_present | default(false) | bool)
+        or bootwright_bmc_pool_probe.rc | int != 0
+        or (
+          bootwright_bmc_transition_old_pool_uuid | default('') | length > 0
+          and bootwright_bmc_live_pool_uuid | length > 0
+          and bootwright_bmc_transition_old_pool_uuid != bootwright_bmc_live_pool_uuid
+        )
+    fail_msg: >-
+      Refusing BMC URI transition because the old and desired libvirt
+      connections expose the same or unprovable pool identity. No old runtime,
+      claim, path, firewall rule, or ownership record was changed. Use distinct
+      libvirt pool identities or restore conclusive access, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_bmc_gate_mode == 'apply'
+
+- name: Require firewalld access before BMC port transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_apply_transition_needed | default(false) | bool)
+        or bootwright_bmc_transition_record.attributes.firewallManaged | default('false') != 'true'
+        or bootwright_firewalld_available | default(false) | bool
+    fail_msg: >-
+      Refusing BMC firewall transition because firewalld is not conclusively
+      available to retire the recorded old rule after the desired runtime is
+      healthy. No BMC state was changed. Restore firewalld and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_bmc_gate_mode == 'apply'
+
+- name: Require live BMC runtime to match desired composite
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_bmc_config_stat.stat.exists | bool)
+        or bootwright_bmc_live_config_identity == {
+          'libvirtURI': bootwright_bmc_libvirt_uri,
+          'stateRoot': bootwright_bmc_root,
+          'pool': bootwright_bmc_pool_name,
+          'bindAddress': bootwright_bmc_bind,
+          'redfishPort': bootwright_bmc_port | string,
+          'authPath': bootwright_bmc_auth_path
+        }
+        or (
+          bootwright_bmc_gate_transition_desired is mapping
+          and bootwright_bmc_gate_transition_desired | length > 0
+          and bootwright_bmc_live_config_identity == {
+            'libvirtURI': bootwright_bmc_gate_transition_desired.attributes.libvirtURI,
+            'stateRoot': bootwright_bmc_gate_transition_desired.attributes.stateRoot,
+            'pool': bootwright_bmc_gate_transition_desired.attributes.pool,
+            'bindAddress': bootwright_bmc_gate_transition_desired.attributes.bindAddress,
+            'redfishPort': bootwright_bmc_gate_transition_desired.attributes.redfishPort | string,
+            'authPath': bootwright_bmc_gate_transition_desired.attributes.authPath
+          }
+        )
+      - >-
+        not (bootwright_bmc_unit_stats.results[1].stat.exists | bool)
+        or bootwright_bmc_live_vmedia_runtime == {
+          'context': bootwright_bmc_current_context,
+          'provider': bootwright_bmc_provider_name,
+          'host': (bootwright_host_name | default(inventory_hostname)),
+          'vMediaPort': bootwright_bmc_vmedia_port | string,
+          'vMediaRoot': bootwright_bmc_vmedia_root
+        }
+        or (
+          bootwright_bmc_gate_transition_desired is mapping
+          and bootwright_bmc_gate_transition_desired | length > 0
+          and bootwright_bmc_live_vmedia_runtime == {
+            'context': bootwright_bmc_current_context,
+            'provider': bootwright_bmc_provider_name,
+            'host': (bootwright_host_name | default(inventory_hostname)),
+            'vMediaPort': bootwright_bmc_gate_transition_desired.attributes.vMediaPort | string,
+            'vMediaRoot': bootwright_bmc_gate_transition_desired.attributes.vMediaRoot
+          }
+        )
+      - >-
+        not (bootwright_bmc_unit_stats.results[0].stat.exists | bool)
+        or bootwright_bmc_live_sushy_runtime == {
+          'context': bootwright_bmc_current_context,
+          'provider': bootwright_bmc_provider_name,
+          'host': (bootwright_host_name | default(inventory_hostname)),
+          'stateRoot': bootwright_bmc_root
+        }
+        or (
+          bootwright_bmc_gate_transition_desired is mapping
+          and bootwright_bmc_gate_transition_desired | length > 0
+          and bootwright_bmc_live_sushy_runtime == {
+            'context': bootwright_bmc_current_context,
+            'provider': bootwright_bmc_provider_name,
+            'host': (bootwright_host_name | default(inventory_hostname)),
+            'stateRoot': bootwright_bmc_gate_transition_desired.attributes.stateRoot
+          }
+        )
+    fail_msg: >-
+      Refusing BMC emulator apply because a live config or unit does not match
+      the exact desired composite and no validated old record authorized its
+      transition. Restore the exact record or live member, then re-run
+      `{{ bootwright_mutating_invocation }}`; no apply strands an old global
+      resource or adopts a partial foreign runtime.
+  when: bootwright_bmc_gate_mode == 'apply'
+
+- name: Resolve pre-mutation BMC provider-global claim
+  ansible.builtin.set_fact:
+    bootwright_bmc_preapply_claim:
+      apiVersion: bootwright.io/bmc-service-claim/v1alpha1
+      kind: bmc-emulator
+      name: "{{ bootwright_bmc_provider_name }}"
+      owner: bootwright
+      context: "{{ bootwright_bmc_current_context }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+      provider: "{{ bootwright_bmc_provider_name }}"
+      paths: >-
+        {{ bootwright_bmc_transition_record.paths
+           if (bootwright_bmc_transition_record | default({}) is mapping
+               and bootwright_bmc_transition_record | default({}) | length > 0)
+           else bootwright_bmc_desired_claim.paths }}
+      attributes: >-
+        {{ bootwright_bmc_transition_record.attributes
+           if (bootwright_bmc_transition_record | default({}) is mapping
+               and bootwright_bmc_transition_record | default({}) | length > 0)
+           else bootwright_bmc_desired_claim.attributes }}
+  changed_when: false
+  when: bootwright_bmc_gate_mode == 'apply'

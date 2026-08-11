@@ -64,9 +64,18 @@
 - name: Require a conclusive libvirt domain probe
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_apply_domain_xml.rc is defined
       - >-
-        bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
-        or (bootwright_libvirt_apply_domain_xml.stderr | default('')) is search('(Domain not found|failed to get domain)')
+        (
+          bootwright_libvirt_apply_domain_xml.rc | int == 0
+          and bootwright_libvirt_apply_domain_xml.stdout is defined
+        )
+        or (
+          bootwright_libvirt_apply_domain_xml.rc | int != 0
+          and bootwright_libvirt_apply_domain_xml.stderr is defined
+          and (bootwright_libvirt_apply_domain_xml.stderr
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Could not determine whether libvirt domain {{ bootwright_libvirt_domain_name }}
       exists on {{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}:
@@ -79,12 +88,16 @@
   ansible.builtin.set_fact:
     bootwright_libvirt_apply_owned: >-
       {{
-        (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
-        and (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>')
-        and (bootwright_libvirt_apply_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?machine>' ~ (bootwright_component.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?machine>')
+        (bootwright_libvirt_apply_domain_xml.stdout
+         | bootwright.core.bootwright_libvirt_resource_identity)
+        == {
+          'context': (bootwright_clusters_dir | dirname | basename),
+          'cluster': bootwright_current_cluster.name,
+          'machine': bootwright_component.name
+        }
       }}
   changed_when: false
-  when: bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+  when: bootwright_libvirt_apply_domain_xml.rc | int == 0
 
 - name: Refuse to mutate a non-Bootwright libvirt domain on apply
   ansible.builtin.assert:
@@ -98,7 +111,7 @@
       outside Bootwright only after establishing that is safe. No Bootwright
       retry command, apply mode, or authorization token adopts a foreign domain.
   when:
-    - bootwright_libvirt_apply_domain_xml.rc | default(1) == 0
+    - bootwright_libvirt_apply_domain_xml.rc | int == 0
     - (bootwright_apply_mode | default('reconcile')) != 'create'
 
 - name: Enforce libvirt domain apply mode against live state
@@ -138,10 +151,18 @@
 - name: Refuse managed OS disk reset when the libvirt domain could not be stopped
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_managed_os_reset_stop.rc is defined
       - >-
-        bootwright_libvirt_managed_os_reset_stop.rc | default(1) == 0
-        or (bootwright_libvirt_managed_os_reset_stop.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)')
+        bootwright_libvirt_managed_os_reset_stop.rc | int == 0
+        or (
+          bootwright_libvirt_managed_os_reset_stop.rc | int != 0
+          and (
+            (bootwright_libvirt_managed_os_reset_stop.stderr | default(''))
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')
+            or (bootwright_libvirt_managed_os_reset_stop.stderr | default(''))
+               is search('(?i)domain is not running')
+          )
+        )
     fail_msg: >-
       Refusing to delete and recreate the disks of libvirt domain
       {{ bootwright_libvirt_domain_name }} because `virsh destroy` failed: rc
@@ -168,10 +189,14 @@
 - name: Refuse managed OS disk reset when the libvirt domain could not be undefined
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_managed_os_reset_undefine.rc is defined
       - >-
-        bootwright_libvirt_managed_os_reset_undefine.rc | default(1) == 0
-        or (bootwright_libvirt_managed_os_reset_undefine.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        bootwright_libvirt_managed_os_reset_undefine.rc | int == 0
+        or (
+          bootwright_libvirt_managed_os_reset_undefine.rc | int != 0
+          and ((bootwright_libvirt_managed_os_reset_undefine.stderr | default(''))
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Refusing to delete and recreate the disks of libvirt domain
       {{ bootwright_libvirt_domain_name }} because `virsh undefine --keep-nvram`
@@ -198,10 +223,11 @@
 - name: Require proven reset libvirt domain absence before disk deletion
   ansible.builtin.assert:
     that:
-      - bootwright_libvirt_managed_os_reset_absence.rc | default(0) != 0
+      - bootwright_libvirt_managed_os_reset_absence.rc is defined
+      - bootwright_libvirt_managed_os_reset_absence.rc | int != 0
       - >-
         (bootwright_libvirt_managed_os_reset_absence.stderr | default(''))
-        is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')
     fail_msg: >-
       Refusing to delete and recreate the disks of libvirt domain
       {{ bootwright_libvirt_domain_name }} because its absence was not proven
@@ -362,20 +388,52 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve existing libvirt root disk probe evidence
+  ansible.builtin.set_fact:
+    bootwright_libvirt_root_disk_present: >-
+      {{
+        (bootwright_libvirt_machine_disk_locations.results[0].stat.exists | default(false))
+        or (bootwright_libvirt_machine_disk_locations.results[1].stat.exists | default(false))
+      }}
+    bootwright_libvirt_root_disk_virtual_size: >-
+      {{
+        bootwright_libvirt_root_disk_info.stdout | default('')
+        | bootwright.core.bootwright_qemu_image_virtual_size
+      }}
+  changed_when: false
+
+- name: Require a conclusive existing libvirt root disk probe
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (bootwright_libvirt_root_disk_present | bool)
+        or (
+          bootwright_libvirt_root_disk_info.rc is defined
+          and bootwright_libvirt_root_disk_info.rc == 0
+          and bootwright_libvirt_root_disk_info.stdout is defined
+          and (bootwright_libvirt_root_disk_virtual_size | int) >= 0
+        )
+    fail_msg: >-
+      Could not read valid qemu-img metadata for the existing root disk of
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}.
+      Refusing to change its ownership or redefine its domain while the disk's
+      identity and size are unproven. Restore access to the image and qemu-img,
+      then retry the exact invocation `{{ bootwright_mutating_invocation }}`.
+
 - name: Refuse an in-place libvirt root disk resize
   ansible.builtin.assert:
     that:
-      - ((bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] | int) == ((bootwright_component.profile.diskGiB | int) * 1073741824)
+      - (bootwright_libvirt_root_disk_virtual_size | int) == ((bootwright_component.profile.diskGiB | int) * 1073741824)
     fail_msg: >-
       Machine {{ bootwright_component.name }} declares profile diskGiB={{ bootwright_component.profile.diskGiB }}
       ({{ (bootwright_component.profile.diskGiB | int) * 1073741824 }} bytes) but its provisioned root disk is
-      {{ (bootwright_libvirt_root_disk_info.stdout | from_json)['virtual-size'] }} bytes. Bootwright does not
+      {{ bootwright_libvirt_root_disk_virtual_size }} bytes. Bootwright does not
       resize a provisioned root disk in place — the guest partitions would not follow.
       Rebuild exactly this selected work set with
       `{{ bootwright_apply_rebuild_invocation }}`
       to change its root disk size.
   when:
-    - bootwright_libvirt_root_disk_info.rc | default(1) == 0
+    - bootwright_libvirt_root_disk_present | bool
     - not (bootwright_libvirt_managed_os_reset | bool)
 
 - name: Create machine disk

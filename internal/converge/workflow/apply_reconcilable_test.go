@@ -12,10 +12,13 @@ func saveRecordWithHashes(t *testing.T, runsDir string, task ApplyTask, desiredH
 	record := ConvergeSafetyRecord{
 		APIVersion:     ConvergeSafetyAPIVersion,
 		ResourceID:     applyTaskSafetyResourceID(task),
+		ResourceKind:   task.Entry.Kind,
+		TaskID:         task.Entry.ID,
+		TaskKind:       task.Entry.Kind,
 		DesiredHash:    desiredHash,
 		StructuralHash: structuralHash,
 		HashSchema:     ConvergeHashSchema,
-		Owner:          ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
+		Owner:          ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner, Context: "test"},
 		Status:         ConvergeSafetyStatusReconciled,
 		UpdatedAt:      time.Unix(0, 0).UTC(),
 	}
@@ -51,7 +54,7 @@ func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 		map[string]any{"id": "s1", "devices": []string{"/dev/sdb", "/dev/sdc"}},
 		map[string]any{"id": "s1"},
 	)
-	objs, err := ClassifyApplyObjects([]ApplyTask{added}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{added}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -70,7 +73,7 @@ func TestReconcilableDeviceDriftIsNotStructural(t *testing.T) {
 		map[string]any{"id": "s2", "devices": []string{"/dev/sdb"}},
 		map[string]any{"id": "s2"},
 	)
-	objs2, err := ClassifyApplyObjects([]ApplyTask{structural}, runsDir)
+	objs2, err := ClassifyApplyObjects([]ApplyTask{structural}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -95,7 +98,7 @@ func TestMissingStructuralHashFallsBackToStructural(t *testing.T) {
 		map[string]any{"id": "s1", "devices": []string{"/dev/sdb", "/dev/sdc"}},
 		map[string]any{"id": "s1"},
 	)
-	objs, err := ClassifyApplyObjects([]ApplyTask{added}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{added}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -132,7 +135,7 @@ func TestIBMCallHomeDriftIsReconcilable(t *testing.T) {
 		storageClusterDesiredHashVars(state, "demo"),
 		storageClusterStructuralHashVars(state, "demo"),
 	)
-	objects, err := ClassifyApplyObjects([]ApplyTask{updated}, runsDir)
+	objects, err := ClassifyApplyObjects([]ApplyTask{updated}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

@@ -1,0 +1,59 @@
+---
+- name: Validate required host endpoint claim set
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_require_set: >-
+      {{ bootwright_host_endpoint_required_claims | default([])
+         | bootwright.core.bootwright_host_endpoint_claim_set }}
+  changed_when: false
+
+- name: Require valid sorted host endpoint claim set
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_require_set.valid | default(false) | bool
+    fail_msg: >-
+      Refusing the next shared-service mutation because its required endpoint
+      set is malformed, duplicate, or unsorted. Re-run
+      `{{ bootwright_mutating_invocation }}` after repairing controller inputs.
+
+- name: Revalidate host operation before full endpoint reservation recheck
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Re-read atomic host endpoint registry before mutation
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_registry_required_content
+  changed_when: false
+  failed_when: false
+
+- name: Classify required atomic host endpoint registry
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_required: >-
+      {{ (bootwright_host_endpoint_registry_required_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_registry_any }}
+  changed_when: false
+
+- name: Require complete host endpoint reservation before mutation
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_required_content.content is defined
+      - bootwright_host_endpoint_registry_required | length > 0
+      - >-
+        (bootwright_host_endpoint_require_set.claims
+         | difference(bootwright_host_endpoint_registry_required.claims | default([])))
+        | length == 0
+    fail_msg: >-
+      Refusing the next shared-service mutation because the atomic host
+      endpoint registry no longer contains the complete exact selected endpoint
+      set. Per-endpoint slots and service evidence were retained. Inspect
+      endpoints.json and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Recheck every exact host endpoint claim
+  ansible.builtin.include_tasks: require_host_endpoint_claim.yml
+  loop: "{{ bootwright_host_endpoint_require_set.claims }}"
+  loop_control:
+    loop_var: bootwright_host_endpoint_required_claim
+    label: >-
+      {{ bootwright_host_endpoint_required_claim.protocol }}/{{
+         bootwright_host_endpoint_required_claim.port }}

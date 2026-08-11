@@ -39,7 +39,7 @@ func TestStateCheckOmitsStorageWhenStagePlansNoStorageTask(t *testing.T) {
 	runsDir := t.TempDir()
 	state := stateCheckScopeState()
 
-	report, err := StateCheck(nil, ApplyTarget{}, state, runsDir)
+	report, err := StateCheck(nil, ApplyTarget{}, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck (no storage task): %v", err)
 	}
@@ -60,7 +60,7 @@ func TestStateCheckOmitsStorageWhenStagePlansNoStorageTask(t *testing.T) {
 		},
 		State: state,
 	}
-	report, err = StateCheck([]ApplyTask{storageTask}, ApplyTarget{}, state, runsDir)
+	report, err = StateCheck([]ApplyTask{storageTask}, ApplyTarget{}, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck (with storage task): %v", err)
 	}

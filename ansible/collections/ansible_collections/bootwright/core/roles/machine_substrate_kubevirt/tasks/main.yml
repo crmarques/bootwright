@@ -137,17 +137,49 @@
   changed_when: false
   failed_when: false
 
+- name: Classify existing KubeVirt VirtualMachine probe payload
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_vm_payload: >-
+      {{ bootwright_kubevirt_vm_probe.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe }}
+  changed_when: false
+
 - name: Require a conclusive KubeVirt VirtualMachine probe
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_kubevirt_vm_probe.rc | default(1)) == 0
-        or 'NotFound' in (bootwright_kubevirt_vm_probe.stderr | default(''))
+        (
+          bootwright_kubevirt_vm_probe.rc is defined
+          and (bootwright_kubevirt_vm_probe.rc | int) == 0
+          and bootwright_kubevirt_vm_payload.valid | bool
+          and bootwright_kubevirt_vm_payload.value.get('apiVersion', '') == 'kubevirt.io/v1'
+          and bootwright_kubevirt_vm_payload.value.get('kind', '') == 'VirtualMachine'
+          and bootwright_kubevirt_vm_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_vm_name
+          and bootwright_kubevirt_vm_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        )
+        or (
+          bootwright_kubevirt_vm_probe.rc is defined
+          and (bootwright_kubevirt_vm_probe.rc | int) != 0
+          and 'NotFound' in (bootwright_kubevirt_vm_probe.stderr | default(''))
+        )
     fail_msg: >-
       Could not determine whether VirtualMachine {{ bootwright_kubevirt_vm_name }}
       exists in namespace {{ bootwright_kubevirt_namespace }}:
-      {{ bootwright_kubevirt_vm_probe.stderr | default('kubectl get failed with no detail') }}.
-      Refusing to apply because ownership cannot be proven.
+      {{
+        (
+          bootwright_kubevirt_vm_payload.reason
+          | default('kubectl returned a JSON object for a different resource identity', true)
+        )
+        if (
+          bootwright_kubevirt_vm_probe.rc is defined
+          and (bootwright_kubevirt_vm_probe.rc | int) == 0
+        )
+        else (
+          bootwright_kubevirt_vm_probe.stderr
+          | default('kubectl get failed with no detail', true)
+        )
+      }}.
+      Refusing to apply because ownership cannot be proven. Fix host-cluster access, then
+      re-run `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
 
 - name: Read existing KubeVirt root DataVolume identity
   ansible.builtin.command:
@@ -166,38 +198,78 @@
   changed_when: false
   failed_when: false
 
+- name: Classify existing KubeVirt root DataVolume probe payload
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_root_dv_payload: >-
+      {{ bootwright_kubevirt_root_dv_probe.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe }}
+  changed_when: false
+
 - name: Require a conclusive KubeVirt root DataVolume probe
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_kubevirt_root_dv_probe.rc | default(1)) == 0
-        or 'NotFound' in (bootwright_kubevirt_root_dv_probe.stderr | default(''))
+        (
+          bootwright_kubevirt_root_dv_probe.rc is defined
+          and (bootwright_kubevirt_root_dv_probe.rc | int) == 0
+          and bootwright_kubevirt_root_dv_payload.valid | bool
+          and bootwright_kubevirt_root_dv_payload.value.get('apiVersion', '') == 'cdi.kubevirt.io/v1beta1'
+          and bootwright_kubevirt_root_dv_payload.value.get('kind', '') == 'DataVolume'
+          and bootwright_kubevirt_root_dv_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_root_dv_name
+          and bootwright_kubevirt_root_dv_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        )
+        or (
+          bootwright_kubevirt_root_dv_probe.rc is defined
+          and (bootwright_kubevirt_root_dv_probe.rc | int) != 0
+          and 'NotFound' in (bootwright_kubevirt_root_dv_probe.stderr | default(''))
+        )
     fail_msg: >-
       Could not determine whether DataVolume {{ bootwright_kubevirt_root_dv_name }}
       exists in namespace {{ bootwright_kubevirt_namespace }}:
-      {{ bootwright_kubevirt_root_dv_probe.stderr | default('kubectl get failed with no detail') }}.
-      Refusing to apply because ownership cannot be proven.
+      {{
+        (
+          bootwright_kubevirt_root_dv_payload.reason
+          | default('kubectl returned a JSON object for a different resource identity', true)
+        )
+        if (
+          bootwright_kubevirt_root_dv_probe.rc is defined
+          and (bootwright_kubevirt_root_dv_probe.rc | int) == 0
+        )
+        else (
+          bootwright_kubevirt_root_dv_probe.stderr
+          | default('kubectl get failed with no detail', true)
+        )
+      }}.
+      Refusing to apply because ownership cannot be proven. Fix host-cluster access, then
+      re-run `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
 
 - name: Resolve KubeVirt live resource documents
   ansible.builtin.set_fact:
     bootwright_kubevirt_vm_live: >-
       {{
-        (bootwright_kubevirt_vm_probe.stdout | from_json)
-        if (bootwright_kubevirt_vm_probe.rc | default(1)) == 0
+        bootwright_kubevirt_vm_payload.value
+        if (
+          bootwright_kubevirt_vm_probe.rc is defined
+          and (bootwright_kubevirt_vm_probe.rc | int) == 0
+        )
         else {}
       }}
     bootwright_kubevirt_root_dv_live: >-
       {{
-        (bootwright_kubevirt_root_dv_probe.stdout | from_json)
-        if (bootwright_kubevirt_root_dv_probe.rc | default(1)) == 0
+        bootwright_kubevirt_root_dv_payload.value
+        if (
+          bootwright_kubevirt_root_dv_probe.rc is defined
+          and (bootwright_kubevirt_root_dv_probe.rc | int) == 0
+        )
         else {}
       }}
   changed_when: false
 
 - name: Resolve KubeVirt live resource ownership
   ansible.builtin.set_fact:
-    bootwright_kubevirt_vm_exists: "{{ (bootwright_kubevirt_vm_probe.rc | default(1)) == 0 }}"
-    bootwright_kubevirt_root_dv_exists: "{{ (bootwright_kubevirt_root_dv_probe.rc | default(1)) == 0 }}"
+    bootwright_kubevirt_vm_exists: >-
+      {{ bootwright_kubevirt_vm_probe.rc is defined and (bootwright_kubevirt_vm_probe.rc | int) == 0 }}
+    bootwright_kubevirt_root_dv_exists: >-
+      {{ bootwright_kubevirt_root_dv_probe.rc is defined and (bootwright_kubevirt_root_dv_probe.rc | int) == 0 }}
     bootwright_kubevirt_vm_owned: >-
       {{
         (bootwright_kubevirt_vm_probe.rc | default(1)) != 0
@@ -280,6 +352,65 @@
     - not (bootwright_kubevirt_rebuild_authorized | bool)
     - bootwright_kubevirt_storage_class | length > 0
 
+- name: Require a conclusive reused KubeVirt root claim volume mode probe
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_root_claim_mode_probe.rc | default(1)) == 0
+      - (bootwright_kubevirt_root_claim_mode_probe.stdout | default('') | trim) | length > 0
+      - (bootwright_kubevirt_root_claim_mode_probe.stdout | default('') | trim) in ['Block', 'Filesystem']
+    fail_msg: >-
+      Cannot safely reuse KubeVirt root claim
+      {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_root_dv_name }} because its
+      live volumeMode could not be read conclusively:
+      {{
+        (bootwright_kubevirt_root_claim_mode_probe.stderr | default('') | trim)
+        | default(
+            'the probe returned unsupported volumeMode '
+            ~ (
+              (bootwright_kubevirt_root_claim_mode_probe.stdout | default('') | trim)
+              | default('<empty>', true)
+            ),
+            true
+          )
+      }}.
+      Refusing to apply a VirtualMachine against storage whose immutable shape is unknown.
+      Restore a readable matching claim, then re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+  when:
+    - bootwright_kubevirt_root_dv_exists | bool
+    - not (bootwright_kubevirt_rebuild_authorized | bool)
+    - bootwright_kubevirt_storage_class | length > 0
+
+- name: Require a conclusive KubeVirt storage profile volume mode probe
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_storage_profile_mode_probe.rc | default(1)) == 0
+      - (bootwright_kubevirt_storage_profile_mode_probe.stdout | default('') | trim) | length > 0
+      - (bootwright_kubevirt_storage_profile_mode_probe.stdout | default('') | trim) in ['Block', 'Filesystem']
+    fail_msg: >-
+      Cannot safely reuse KubeVirt root claim
+      {{ bootwright_kubevirt_namespace }}/{{ bootwright_kubevirt_root_dv_name }} because
+      StorageProfile {{ bootwright_kubevirt_storage_class }} did not return a conclusive
+      volumeMode:
+      {{
+        (bootwright_kubevirt_storage_profile_mode_probe.stderr | default('') | trim)
+        | default(
+            'the probe returned unsupported volumeMode '
+            ~ (
+              (bootwright_kubevirt_storage_profile_mode_probe.stdout | default('') | trim)
+              | default('<empty>', true)
+            ),
+            true
+          )
+      }}.
+      Refusing to apply a VirtualMachine until the existing claim can be compared with its
+      current storage profile. Restore the StorageProfile, then re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply invocation') }}`.
+  when:
+    - bootwright_kubevirt_root_dv_exists | bool
+    - not (bootwright_kubevirt_rebuild_authorized | bool)
+    - bootwright_kubevirt_storage_class | length > 0
+
 - name: Resolve reused KubeVirt root claim volume mode
   ansible.builtin.set_fact:
     bootwright_kubevirt_root_claim_mode: >-
@@ -309,8 +440,7 @@
   when:
     - bootwright_kubevirt_root_dv_exists | bool
     - not (bootwright_kubevirt_rebuild_authorized | bool)
-    - bootwright_kubevirt_root_claim_mode | length > 0
-    - bootwright_kubevirt_storage_profile_mode | length > 0
+    - bootwright_kubevirt_storage_class | length > 0
 
 - name: Stop KubeVirt VirtualMachine for authorized rebuild
   ansible.builtin.command:

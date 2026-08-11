@@ -11,14 +11,14 @@ func TestRemoveApplyTaskConvergeSafetyResetsToMissing(t *testing.T) {
 	}
 	saveStateCheckRecord(t, runsDir, task, hash, ConvergeSafetyOwner)
 
-	if class, err := classifyApplyTaskState(task, runsDir); err != nil || class != ConvergeSafetyMatch {
+	if class, err := classifyApplyTaskState(task, runsDir, "test"); err != nil || class != ConvergeSafetyMatch {
 		t.Fatalf("precondition: recorded task should match, got %q err=%v", class, err)
 	}
 
 	if err := RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
 		t.Fatalf("RemoveApplyTaskConvergeSafety: %v", err)
 	}
-	if class, err := classifyApplyTaskState(task, runsDir); err != nil || class != ConvergeSafetyMissing {
+	if class, err := classifyApplyTaskState(task, runsDir, "test"); err != nil || class != ConvergeSafetyMissing {
 		t.Fatalf("after removal the task must classify missing, got %q err=%v", class, err)
 	}
 	if err := RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {

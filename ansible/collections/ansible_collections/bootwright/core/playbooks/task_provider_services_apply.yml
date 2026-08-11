@@ -29,6 +29,9 @@
         | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
+    bootwright_machine_shared_provider_services: >-
+      {{ bootwright_machine_provider_services
+         | selectattr('kind', 'equalto', 'bmc') | list }}
 
   tasks:
     - name: Skip when host serves no provider work
@@ -36,6 +39,12 @@
       when:
         - bootwright_machine_provider_services | length == 0
         - bootwright_machine_setup_roles | length == 0
+
+    - name: Acquire command-wide host operation before shared provider mutation
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: acquire_host_shared_service_operation.yml
+      when: bootwright_machine_shared_provider_services | length > 0
 
     - name: Apply base host packages
       ansible.builtin.import_role:
@@ -48,10 +57,6 @@
       loop_control:
         loop_var: bootwright_machine_setup
         label: "{{ bootwright_machine_setup.machineRef }}/{{ bootwright_machine_setup.applyRole }}"
-
-    - name: Persist host proxy settings
-      ansible.builtin.import_role:
-        name: bootwright.core.machine_proxy
 
     - name: Apply provider service roles
       ansible.builtin.include_role:

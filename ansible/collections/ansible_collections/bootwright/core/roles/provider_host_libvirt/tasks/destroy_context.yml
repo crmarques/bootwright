@@ -54,10 +54,17 @@
   ansible.builtin.assert:
     quiet: true
     that:
+      - item.rc is defined
       - >-
-        item.rc | default(1) == 0
-        or (item.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        (
+          item.rc | int == 0
+          and item.stdout is defined
+        )
+        or (
+          item.rc | int != 0
+          and ((item.stderr | default(''))
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Refusing the current-context libvirt sweep because block devices for domain
       {{ item.bootwright_libvirt_domain_name | default('<unknown>') }} could not
@@ -74,10 +81,17 @@
   ansible.builtin.assert:
     quiet: true
     that:
+      - item.rc is defined
       - >-
-        item.rc | default(1) == 0
-        or (item.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        (
+          item.rc | int == 0
+          and item.stdout is defined
+        )
+        or (
+          item.rc | int != 0
+          and ((item.stderr | default(''))
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Refusing the current-context libvirt sweep because ownership metadata for
       domain {{ item.bootwright_libvirt_domain_name | default('<unknown>') }}
@@ -190,8 +204,10 @@
   failed_when:
     - bootwright_libvirt_context_domain_stop.rc != 0
     - >-
-      not ((bootwright_libvirt_context_domain_stop.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)'))
+      not (((bootwright_libvirt_context_domain_stop.stderr | default(''))
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+           or ((bootwright_libvirt_context_domain_stop.stderr | default(''))
+               is search('(?i)domain is not running')))
 
 - name: Undefine current-context libvirt domains
   ansible.builtin.command:
@@ -208,7 +224,7 @@
     - bootwright_libvirt_context_domain_undefine.rc != 0
     - >-
       not ((bootwright_libvirt_context_domain_undefine.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)'))
+           | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
 
 - name: Verify swept current-context libvirt domains are absent
   ansible.builtin.command:
@@ -227,10 +243,11 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - item.rc | default(0) != 0
+      - item.rc is defined
+      - item.rc | int != 0
       - >-
         (item.stderr | default(''))
-        is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')
     fail_msg: >-
       Refusing to delete current-context libvirt storage or ownership because
       domain {{ item.item | default('<unknown>') }} was not proven absent after

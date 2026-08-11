@@ -1,0 +1,66 @@
+---
+- name: Resolve stable steady claim for one infra-component transition side
+  ansible.builtin.set_fact:
+    bootwright_infra_endpoint_side_steady_claim:
+      apiVersion: bootwright.io/infra-component-service-claim/v1alpha1
+      kind: infra-component
+      name: >-
+        {{ bootwright_infra_endpoint_side.provider }}-{{ bootwright_infra_endpoint_side.name }}
+      owner: bootwright
+      context: "{{ bootwright_infra_global_claim_next.context }}"
+      host: "{{ bootwright_infra_global_claim_next.host }}"
+      state: steady
+      active: "{{ bootwright_infra_endpoint_side }}"
+  changed_when: false
+
+- name: Resolve stable endpoint digest and ports for one transition side
+  ansible.builtin.set_fact:
+    bootwright_infra_endpoint_side_digest: >-
+      {{ bootwright_infra_endpoint_side_steady_claim
+         | bootwright.core.bootwright_bmc_claim_digest }}
+    bootwright_infra_endpoint_side_ports: >-
+      {{ bootwright_infra_endpoint_side_steady_claim
+         | bootwright.core.bootwright_infra_component_global_ports }}
+  changed_when: false
+
+- name: Require stable endpoint authority for one transition side
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_endpoint_side_digest is match('^sha256:[a-f0-9]{64}$')
+      - bootwright_infra_endpoint_side_ports.valid | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component endpoint acquisition because one exact transition
+      side cannot produce a stable steady digest and canonical endpoint list.
+      No endpoint listener or service was changed. Repair the global claim and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Add stable endpoint claims for one transition side
+  ansible.builtin.set_fact:
+    bootwright_infra_endpoint_claim_map: >-
+      {{ bootwright_infra_endpoint_claim_map
+         | combine({bootwright_infra_endpoint_slot: bootwright_infra_endpoint_claim}) }}
+    bootwright_host_endpoint_allowed_claim_digests: >-
+      {{ (bootwright_host_endpoint_allowed_claim_digests
+          + [bootwright_infra_endpoint_side_digest]) | unique | list }}
+    bootwright_infra_endpoint_release_candidates: >-
+      {{ bootwright_infra_endpoint_release_candidates
+         + [bootwright_infra_endpoint_claim] }}
+  vars:
+    bootwright_infra_endpoint_protocol: "{{ item.split('/')[1] }}"
+    bootwright_infra_endpoint_port: "{{ item.split('/')[0] | int }}"
+    bootwright_infra_endpoint_slot: >-
+      {{ bootwright_infra_endpoint_protocol }}-{{ '%05d' | format(bootwright_infra_endpoint_port | int) }}
+    bootwright_infra_endpoint_claim: >-
+      {{ bootwright_infra_endpoint_protocol
+         | bootwright.core.bootwright_host_endpoint_claim(
+             bootwright_infra_endpoint_port,
+             'infra-component',
+             bootwright_infra_global_claim_next.name,
+             bootwright_infra_global_claim_next.context,
+             bootwright_infra_global_claim_next.host,
+             bootwright_infra_endpoint_side_digest) }}
+  loop: "{{ bootwright_infra_endpoint_side_ports.ports }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false

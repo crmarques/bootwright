@@ -35,12 +35,15 @@ operator explicitly asked for it.** Everything else follows.
   help/probes — confirm the current set) never mutate a provider, BMC, cluster,
   storage, disk, or durable record beyond a documented narrow runtime write.
 - A command that finds drift, foreign ownership, unknown state, a failed probe,
-  or any ambiguity it is not authorized to resolve **fails closed** — it mutates
-  nothing and stops before the first side effect.
+  or any ambiguity it is not authorized to resolve **fails closed**. The
+  complete records preflight stops before any run side effect; a task-local live
+  gate stops before changing that target or consequence. Independent authorized
+  branches may already have completed and are not rolled back.
 - Bare `apply` is the **safe reconcile** default: create missing, skip proven
-  matches without re-running, converge reconcilable drift in place, fail closed
-  on structural drift or foreign ownership. A previously-successful run must run
-  end to end mutating nothing.
+  matches where a concrete probe supports a skip, converge reconcilable drift in
+  place, and fail closed on structural drift or foreign ownership. Tasks without
+  a conclusive live probe may re-run idempotently. A previously successful run
+  must cause no unintended state change; it need not execute zero tasks.
 - `apply --mode create` is the **greenfield assert**: additionally fail closed if
   any selected object already exists. `apply --mode rebuild` is the only
   **break-glass** mode: rebuild drifted owned objects, create missing ones, leave
@@ -142,22 +145,22 @@ Prompt-specific additions:
 
 ## The Baseline Environment
 
-Ground every scenario in a representative **advanced** estate, not a toy
-single-cluster one — the contract must hold where scope closure, stretch
-arbitration, and nested substrates interact. Take as the baseline a two-site
-Environment (two data centers declared as sites, machines placed per site) with:
+Render the sibling `bootwright-template-inputs` repository first and use its
+`environment-ha/rendered/example-lab` inputs as the primary baseline. Validate
+that rendered tree without editing either repository; add separately distributed
+catalog inputs only in a temporary copy when its README requires them. Inventory
+the resulting kinds and counts instead of assuming the template shape from
+memory.
 
-- one **stretched Ceph** storage cluster arbitrated across both DCs, with
-  pools, filesystems, object gateways, and exports riding on it,
-- two **bare-metal OpenShift** clusters in each DC (four in all), and
-- one **virtualized OpenShift** cluster nested inside each bare-metal OCP (four
-  in all, each riding on its host cluster's substrate),
-
-plus the supporting graph: machines and images, managed-OS installs, entitlements,
-secrets, network configs, infra services, and add-ons. Derive scoped selections —
-a single DC, one cluster, one machine, a nested guest, or the stretched Ceph
-alone — so scope narrowing, cross-DC blast radius, and host-to-guest ordering
-are exercised, never assumed.
+That baseline is deliberately an **advanced** estate rather than a toy
+single-cluster one: a two-site Environment, stretched Ceph, physical
+ContainerClusters, nested KubeVirt ContainerClusters, machines, managed-OS
+installs, entitlements, secrets, networks, shared infrastructure services, and
+add-ons. Derive scoped selections — one site, one cluster, one machine, a nested
+guest, or the stretched Ceph alone — so scope narrowing, cross-site blast
+radius, and host-to-guest ordering are exercised, never assumed. If the sibling
+repository is unavailable, construct the smallest fixture with those same
+relationships and record that substitution as a coverage limitation.
 
 The full `examples/` set is the mandatory drift and regression baseline
 alongside it: enumerate the example directories, inventory the kinds and flows
@@ -192,7 +195,8 @@ floor, not the ceiling — extend it:
 
 - First apply, full success; first apply failing partway (before records; after
   some side effects; at each distinct stage a failure can land).
-- Re-apply unchanged (must be a proven no-op end to end); re-apply with
+- Re-apply unchanged (concrete matches skip and rerun tasks make no unintended
+  change); re-apply with
   reconcilable drift vs. structurally-immutable change vs. data-loss change.
 - Apply → destroy → apply again (records cleared so objects recreate, not
   skip-as-matched; `--mode create` no longer refuses).
@@ -293,6 +297,15 @@ destroy scope leaking beyond ownership and selection; storage sub-objects
 reconcile in place, or destructive paths leaving permissive state behind (e.g.
 `mon_allow_pool_delete`).
 
+For every external mutation, trace the final live probe rather than stopping at
+a controller record. Require a successful positive-absence result or exact live
+manager/context/provider/cluster/machine/component identity, including every
+volume in a composite resource. Inject permission, transport, parse, missing
+success-field, symlink/non-regular-path, and name-reuse failures. A suppressed
+Ansible result's `.failed` field is not proof of success; key on the module's
+success-only payload. Confirm stale record names cannot override contradictory
+live identity and that no evidence is cleared after a failed or skipped remover.
+
 **Correctness bugs and unhandled cases.** Resources not loaded, loaded twice,
 or loaded outside the selection; missing or duplicate reference validation;
 nondeterministic rendering; wrong machine, MAC, hostname, endpoint, DNS, proxy,
@@ -339,11 +352,29 @@ violate a convention:
   combination, starting state, selected scope) asserting the expected verdict —
   no-op, fail-closed refusal, or authorized mutation — for every case traced
   above, built on the advanced baseline so stretch arbitration, cross-DC scope
-  closure, and host-to-guest ordering are exercised.
+  closure, and host-to-guest ordering are exercised. Every `apply`/`destroy`
+  flag has a real matrix verdict; do not create an exemption list.
+- **Provider mutation closure.** Require an exact machine-readable registration
+  for every state-capable provider/boot/media/ownership task: path, task name,
+  action, class, named safety surface, and ordered gate/mutation/evidence anchor.
+  Treat every include or import as a state-capable delegated boundary unless its
+  target is exhaustively registered. Meta-tests reject new, missing, dead, or
+  unordered entries and unsupported providers.
 - **Fail-closed default.** Where a registry or classifier routes mutations, a
   meta-test asserting every registered mutating path has an authorization
   classification and an actionable refusal — so a new path that forgets one
   fails the build.
+- **Evidence mutation matrix.** For every durable record or marker that can
+  authorize a skip, rebuild, teardown, release, or recovery, mutate each identity
+  and state field in turn and exercise missing, malformed, noncanonical, and
+  future-enum values. Every variant must refuse before the first remote or
+  durable side effect; only the real writer's output may reach `match`.
+- **Boundary and interleaving tests.** Inject failure immediately before and
+  after each durable lifecycle boundary, then prove the exact retry resumes or
+  refuses safely. Use deterministic barriers around lease compare/update/remove
+  operations so stale-takeover and old-holder interleavings are tested without
+  timing sleeps; require fencing before every external mutation or refuse
+  cross-host automatic takeover.
 - **Agent instructions.** Record any new invariant where future implementers
   will read it: `AGENTS.md`/specs for the rule, a constraint row in
   `.agents/knowledge/KNOWLEDGE.md`, and the checklist expectation that new

@@ -1,38 +1,387 @@
 ---
-- name: Load chrony package list
-  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
-
-- name: Remove Bootwright chrony config
-  ansible.builtin.file:
-    path: "{{ bootwright_chrony_conf_file }}"
-    state: absent
-  register: bootwright_chrony_config
-
-- name: Restart chrony service
-  ansible.builtin.service:
-    name: "{{ bootwright_chrony_service }}"
-    state: restarted
-  when: bootwright_chrony_config.changed
-  failed_when: false
-
-- name: Close NTP port on host firewall
-  ansible.posix.firewalld:
-    port: "{{ bootwright_component.port | int }}/udp"
-    state: disabled
-    permanent: true
-    immediate: true
-  when: bootwright_firewalld_available | default(false)
-  failed_when: false
-
-- name: Remove chrony state directory
-  ansible.builtin.file:
-    path: "{{ bootwright_chrony_root }}"
-    state: absent
-
-- name: Remove NTP ownership record
+- name: Validate the live NTP ownership record before teardown
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
+    tasks_from: validate_resource.yml
   vars:
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+
+- name: Resolve NTP external cleanup phase
+  ansible.builtin.set_fact:
+    bootwright_ntp_destroy_owner_composite: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_record_composite(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_complete: >-
+      {{ bootwright_ownership_validated_stat.stat.exists | default(false) | bool
+         and (bootwright_ownership_validated_record.attributes | default({})).get(
+               'destroyPhase', '') == 'external-cleanup-complete' }}
+    bootwright_infra_destroy_expected_owner: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_record: "{{ bootwright_ownership_validated_record }}"
+  changed_when: false
+
+- name: Require exact NTP ownership ledger before teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_ntp_destroy_owner_composite | length > 0
+          and bootwright_ntp_destroy_owner_composite.kind == 'ntp'
+          and bootwright_ntp_destroy_owner_composite.name
+              == bootwright_component.providerName ~ '-' ~ bootwright_component.name
+        )
+    fail_msg: >-
+      Refusing NTP teardown because its owner is not one exact supported
+      current-context NTP composite with canonical state, config path, labels,
+      service, UDP port, and optional completed cleanup phase. No state was
+      changed. Restore trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Prove declared NTP live ownership before teardown
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_destroy_gate.yml
+  vars:
+    bootwright_infra_destroy_provider: "{{ bootwright_component.providerName }}"
+    bootwright_infra_destroy_name: "{{ bootwright_component.name }}"
+    bootwright_infra_destroy_kind: ntp
+    bootwright_infra_destroy_state_dir: "{{ bootwright_chrony_root }}"
+    bootwright_infra_destroy_container: ""
+    bootwright_infra_destroy_extra_paths: []
+    bootwright_ownership_destroy_attrs: {}
+
+- name: Refuse NTP teardown across an ambiguous replay boundary
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_infra_destroy_state_stat.stat.exists | bool
+        or not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_infra_destroy_phase_complete | bool
+    fail_msg: >-
+      Refusing NTP teardown because its exact ownership record is present but
+      its final current-context state marker is absent across an unproven replay
+      boundary. No NTP config, service, firewall rule, state, or evidence was
+      removed. Restore the marker or completed phase from trusted evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve authoritative NTP destroy composite
+  ansible.builtin.set_fact:
+    bootwright_ntp_destroy_services: >-
+      {{ bootwright_infra_global_claim_next.targets
+         | map(attribute='attributes.service') | unique | sort | list }}
+    bootwright_ntp_destroy_config_paths: >-
+      {{ bootwright_infra_global_claim_next.targets
+         | map(attribute='paths') | flatten
+         | reject('equalto', bootwright_chrony_root)
+         | unique | sort | list }}
+    bootwright_ntp_destroy_ports: >-
+      {{ bootwright_infra_destroy_global_ports
+         | select('match', '^[1-9][0-9]{0,4}/udp$')
+         | map('regex_replace', '/udp$', '')
+         | map('int') | unique | sort | list }}
+  changed_when: false
+
+- name: Require one exact supported NTP service and config path
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ntp_destroy_services | length == 1
+      - bootwright_ntp_destroy_services | first in ['chrony', 'chronyd']
+      - bootwright_ntp_destroy_config_paths | length == 1
+      - >-
+        bootwright_ntp_destroy_config_paths | first
+        == (
+          '/etc/chrony/conf.d/bootwright-'
+          if bootwright_ntp_destroy_services | first == 'chrony'
+          else '/etc/chrony.d/bootwright-'
+        ) ~ bootwright_component.providerName ~ '-' ~ bootwright_component.name ~ '.conf'
+      - bootwright_ntp_destroy_ports | length > 0
+    fail_msg: >-
+      Refusing NTP teardown because its authoritative transition contains more
+      than one host service/config implementation or a non-canonical path/UDP
+      ledger. Reconcile the exact recorded implementation first, then re-run
+      `{{ bootwright_mutating_invocation }}`; no teardown guesses which host
+      service to restart.
+
+- name: Resolve exact NTP teardown runtime
+  ansible.builtin.set_fact:
+    bootwright_chrony_service: "{{ bootwright_ntp_destroy_services | first }}"
+    bootwright_chrony_conf_file: "{{ bootwright_ntp_destroy_config_paths | first }}"
+    bootwright_chrony_restart_marker: "{{ bootwright_chrony_root }}/.destroy-restart-required"
+    bootwright_chrony_restart_identity: >-
+      {{ (bootwright_clusters_dir | dirname | basename) ~ '|'
+         ~ bootwright_component.providerName ~ '|' ~ bootwright_component.name
+         ~ '|' ~ (bootwright_ntp_destroy_services | first) ~ '|'
+         ~ (bootwright_ntp_destroy_config_paths | first) }}
+  changed_when: false
+
+- name: Require a conclusive firewalld probe before NTP teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_firewalld_probe.stat.exists is defined
+      - bootwright_firewalld_available is defined
+      - >-
+        not (bootwright_firewalld_probe.stat.exists | bool)
+        or (
+          bootwright_firewalld_probe.stat.isreg | default(false) | bool
+          and not (bootwright_firewalld_probe.stat.islnk | default(false) | bool)
+          and bootwright_firewalld_probe.stat.executable | default(false) | bool
+          and bootwright_firewalld_state.rc is defined
+          and bootwright_firewalld_state.stdout is defined
+          and bootwright_firewalld_state.stderr is defined
+          and (
+            (bootwright_firewalld_state.rc | int == 0
+             and bootwright_firewalld_state.stdout | trim == 'running')
+            or bootwright_firewalld_state.rc | int == 252
+          )
+        )
+      - bootwright_firewalld_available | bool
+    fail_msg: >-
+      Cannot conclusively use firewalld before NTP teardown on
+      {{ inventory_hostname }}. No NTP service, UDP endpoint, or ownership
+      evidence was changed. Restore firewalld access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_infra_destroy_state_stat.stat.exists | bool
+    - not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe exact NTP config before teardown
+  ansible.builtin.stat:
+    path: "{{ bootwright_chrony_conf_file }}"
+    follow: false
+  register: bootwright_chrony_config_stat
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Require exact NTP config live authority
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_chrony_config_stat.stat.exists is defined
+      - >-
+        not (bootwright_chrony_config_stat.stat.exists | bool)
+        or (
+          bootwright_infra_destroy_state_stat.stat.exists | bool
+          and bootwright_chrony_config_stat.stat.isreg | default(false) | bool
+          and not (bootwright_chrony_config_stat.stat.islnk | default(false) | bool)
+        )
+    fail_msg: >-
+      Refusing NTP teardown because its exact config is unreadable, linked, or
+      survives without the current-context state claim. No config, service,
+      firewall, state, or evidence was changed. Restore exact evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe chrony service and durable restart boundary
+  ansible.builtin.service_facts:
+  register: bootwright_chrony_service_probe
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe durable chrony restart boundary
+  ansible.builtin.stat:
+    path: "{{ bootwright_chrony_restart_marker }}"
+    follow: false
+  register: bootwright_chrony_restart_marker_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read durable chrony restart boundary
+  ansible.builtin.slurp:
+    src: "{{ bootwright_chrony_restart_marker }}"
+  register: bootwright_chrony_restart_marker_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_chrony_restart_marker_stat.stat.exists | default(false) | bool
+
+- name: Resolve exact chrony service observations
+  ansible.builtin.set_fact:
+    bootwright_chrony_service_observations: >-
+      {{ [
+           bootwright_chrony_service_probe.ansible_facts.services.get(
+             bootwright_chrony_service, {}),
+           bootwright_chrony_service_probe.ansible_facts.services.get(
+             bootwright_chrony_service ~ '.service', {})
+         ] | reject('equalto', {}) | list
+         if not (bootwright_infra_destroy_phase_complete | bool)
+         else [] }}
+  changed_when: false
+
+- name: Require conclusive chrony service and restart-boundary evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_chrony_restart_marker_stat.stat.exists is defined
+      - >-
+        bootwright_infra_destroy_phase_complete | bool
+        or (
+          bootwright_chrony_service_probe.ansible_facts.services is defined
+          and bootwright_chrony_service_probe.ansible_facts.services is mapping
+          and (bootwright_chrony_service_observations
+               | rejectattr('state', 'defined') | list | length) == 0
+          and (bootwright_chrony_service_observations
+               | map(attribute='state')
+               | difference(['running', 'stopped']) | list | length) == 0
+        )
+      - >-
+        not (bootwright_chrony_restart_marker_stat.stat.exists | bool)
+        or (
+          bootwright_chrony_restart_marker_stat.stat.isreg | default(false) | bool
+          and not (bootwright_chrony_restart_marker_stat.stat.islnk | default(false) | bool)
+          and bootwright_chrony_restart_marker_content.content is defined
+          and (bootwright_chrony_restart_marker_content.content | b64decode | trim)
+              == bootwright_chrony_restart_identity
+        )
+    fail_msg: >-
+      Refusing NTP teardown because the service inventory or durable restart
+      boundary is unreadable, foreign, or contradictory. No NTP config, service,
+      firewall, state, or evidence was changed. Restore exact host access and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Tear down NTP before deleting its ownership evidence
+  block:
+    - name: Revalidate NTP host operation before config cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Persist required chrony restart before config removal
+      ansible.builtin.copy:
+        dest: "{{ bootwright_chrony_restart_marker }}"
+        content: "{{ bootwright_chrony_restart_identity }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+      register: bootwright_chrony_restart_marker_written
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - not (bootwright_chrony_restart_marker_stat.stat.exists | bool)
+        - >-
+          bootwright_chrony_service_observations
+          | selectattr('state', 'equalto', 'running') | list | length > 0
+
+    - name: Remove exact Bootwright chrony config
+      ansible.builtin.file:
+        path: "{{ bootwright_chrony_conf_file }}"
+        state: absent
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Revalidate NTP host operation before service restart
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Restart chrony service after config removal
+      ansible.builtin.service:
+        name: "{{ bootwright_chrony_service }}"
+        state: restarted
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - >-
+          bootwright_chrony_restart_marker_stat.stat.exists | bool
+          or bootwright_chrony_restart_marker_written.changed | default(false) | bool
+
+    - name: Verify chrony after required restart
+      ansible.builtin.service_facts:
+      register: bootwright_chrony_restart_verification
+      changed_when: false
+      failed_when: false
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - >-
+          bootwright_chrony_restart_marker_stat.stat.exists | bool
+          or bootwright_chrony_restart_marker_written.changed | default(false) | bool
+
+    - name: Require chrony running after required restart
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_chrony_restart_verification.ansible_facts.services is defined
+          - bootwright_chrony_restart_verification.ansible_facts.services is mapping
+          - >-
+            [
+              bootwright_chrony_restart_verification.ansible_facts.services.get(
+                bootwright_chrony_service, {}),
+              bootwright_chrony_restart_verification.ansible_facts.services.get(
+                bootwright_chrony_service ~ '.service', {})
+            ] | selectattr('state', 'defined')
+              | selectattr('state', 'equalto', 'running') | list | length > 0
+        fail_msg: >-
+          Chrony did not report running after its required configuration restart.
+          The durable restart boundary and all ownership evidence were retained.
+          Restore service-manager access and re-run
+          `{{ bootwright_mutating_invocation }}`.
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - >-
+          bootwright_chrony_restart_marker_stat.stat.exists | bool
+          or bootwright_chrony_restart_marker_written.changed | default(false) | bool
+
+    - name: Revalidate NTP host operation before restart-boundary cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Clear completed chrony restart boundary
+      ansible.builtin.file:
+        path: "{{ bootwright_chrony_restart_marker }}"
+        state: absent
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - >-
+          bootwright_chrony_restart_marker_stat.stat.exists | bool
+          or bootwright_chrony_restart_marker_written.changed | default(false) | bool
+
+    - name: Revalidate NTP host operation before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate NTP endpoint authority before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Close authoritative NTP ports on host firewall
+      ansible.posix.firewalld:
+        port: "{{ item | int }}/udp"
+        state: disabled
+        permanent: true
+        immediate: true
+      loop: "{{ bootwright_ntp_destroy_ports }}"
+      loop_control:
+        label: "{{ item }}/udp"
+      when:
+        - bootwright_infra_destroy_state_stat.stat.exists | bool
+        - bootwright_firewalld_available | bool
+        - not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Complete NTP evidence retirement after external cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: complete_infra_component_destroy.yml
+      vars:
+        bootwright_infra_destroy_state_path: "{{ bootwright_chrony_root }}"
+        bootwright_ownership_expected_record: "{{ bootwright_infra_destroy_expected_owner }}"
+  rescue:
+    - name: Refuse NTP evidence deletion after teardown failure
+      ansible.builtin.fail:
+        msg: >-
+          NTP teardown failed at
+          {{ ansible_failed_task.name | default('an unknown task') }}:
+          {{ ansible_failed_result.msg | default('no failure detail was returned') }}.
+          Bootwright retained the ownership record or final context marker needed
+          for an exact retry. Restore access to the failed host service and re-run
+          `{{ bootwright_mutating_invocation }}`.

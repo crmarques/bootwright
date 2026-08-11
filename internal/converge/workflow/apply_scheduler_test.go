@@ -193,8 +193,8 @@ func TestRunPreparedDestroyTaskGraphAllowsCleanupAfterEmptyTaskSkips(t *testing.
 		t.Fatalf("PlanDestroyTasks: %v", err)
 	}
 	registration := destroyTaskByID(t, tasks, destroyMachineRegistrationTaskID)
-	if DestroyTaskNeedsCompletionProof(registration.Entry) {
-		t.Fatalf("empty machine-registration task unexpectedly needs completion proof: %+v", registration.Entry)
+	if !DestroyTaskNeedsCompletionProof(registration.Entry) {
+		t.Fatalf("registered machine-registration task lost its completion-proof contract: %+v", registration.Entry)
 	}
 	prepared := PreparedApplyTaskGraph{
 		RunID:     "destroy-empty-dependency-test",

@@ -10,8 +10,8 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func printApplyTransitionLedger(stdout io.Writer, tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode, reinstallClusters []string) {
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+func printApplyTransitionLedger(stdout io.Writer, tasks []workflow.ApplyTask, runsDir, contextName string, mode workflow.ApplyMode, reinstallClusters []string) {
+	objects, err := workflow.ClassifyApplyObjectsForMode(tasks, runsDir, contextName, mode)
 	if err != nil {
 		cliout.NewContinuation(stdout).Warning("change plan", "could not classify objects against run records: "+err.Error()+"; the real run recomputes this and fails closed on the same error")
 		return

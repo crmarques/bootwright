@@ -1,0 +1,67 @@
+---
+- name: Require exact infra-component destroy completion inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_state_path | default('') == bootwright_infra_destroy_state_dir
+      - bootwright_infra_destroy_state_path is match('^/var/lib/bootwright/contexts/[A-Za-z0-9_.-]+/managed-services/[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_expected_record is mapping
+      - bootwright_infra_global_claim_next | default({}) | length > 0
+      - bootwright_infra_global_claim_next.state | default('') == 'destroying'
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing infra-component destroy completion because its exact state root,
+      owner snapshot, authoritative destroying claim, or retry command is
+      missing. External cleanup evidence was retained. Repair the task inputs
+      and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before cleanup phase publication
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Persist completed infra-component external cleanup
+  ansible.builtin.include_tasks: mark_infra_component_external_cleanup.yml
+
+- name: Revalidate host operation before final state removal
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Remove final context-marked infra-component state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_infra_destroy_state_path }}"
+    state: absent
+
+- name: Re-probe removed final infra-component state directory
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_destroy_state_path }}"
+    follow: false
+  register: bootwright_infra_destroy_completed_state_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require final infra-component state directory absent
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_completed_state_stat.stat.exists is defined
+      - not (bootwright_infra_destroy_completed_state_stat.stat.exists | bool)
+    fail_msg: >-
+      Infra-component external cleanup completed, but its exact final state root
+      was not proven absent. The cleanup-phase owner and local/global transition
+      evidence remain. Restore host access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Retire exact local infra-component destroy transition
+  ansible.builtin.include_tasks: retire_infra_component_destroy_transition.yml
+
+- name: Retire exact host-global infra-component destroy authority
+  ansible.builtin.include_tasks: retire_infra_component_global_claim.yml
+
+- name: Revalidate host operation before final controller owner removal
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Remove exact infra-component cleanup-phase owner last
+  ansible.builtin.include_tasks: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_infra_destroy_transition_name }}"
+    bootwright_ownership_role: owner
+    bootwright_ownership_expected_record: "{{ bootwright_infra_destroy_phase_record }}"

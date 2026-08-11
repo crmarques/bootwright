@@ -53,7 +53,8 @@ GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race -timeout 1800s
 BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
 BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
-BOOTWRIGHT_FILTER_TEST_ROOT = $(BOOTWRIGHT_COLLECTION_ROOT)/tests/unit/plugins/filter
+BOOTWRIGHT_PLUGIN_TEST_ROOT = $(BOOTWRIGHT_COLLECTION_ROOT)/tests/unit/plugins
+BOOTWRIGHT_PLUGIN_TEST_SUITES = filter callback modules
 ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=$(ANSIBLE_LOCAL_TEMP_DIR) ANSIBLE_REMOTE_TEMP=$(ANSIBLE_REMOTE_TEMP_DIR) ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.check_become \
@@ -278,9 +279,12 @@ go-mod-tidy-check:
 
 python-test:
 	@set -e; \
-	trap 'find $(BOOTWRIGHT_FILTER_TEST_ROOT) scripts -type d -name __pycache__ -prune -exec rm -rf {} +' EXIT; \
-	cd $(BOOTWRIGHT_FILTER_TEST_ROOT) && python3 -m unittest discover -v; \
-	cd - >/dev/null; \
+	trap 'find $(BOOTWRIGHT_PLUGIN_TEST_ROOT) scripts -type d -name __pycache__ -prune -exec rm -rf {} +' EXIT; \
+	for suite in $(BOOTWRIGHT_PLUGIN_TEST_SUITES); do \
+		test_root="$(BOOTWRIGHT_PLUGIN_TEST_ROOT)/$$suite"; \
+		test -d "$$test_root" || { printf '%s\n' "missing Python plugin test suite: $$test_root"; exit 1; }; \
+		(cd "$$test_root" && $(PYTHON) -m unittest discover -v); \
+	done; \
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 
 ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)

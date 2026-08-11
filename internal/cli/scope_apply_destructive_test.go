@@ -442,7 +442,7 @@ func classifiedSubObjectDriftObjects(t *testing.T) []workflow.ObjectClassificati
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir, "ctx")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

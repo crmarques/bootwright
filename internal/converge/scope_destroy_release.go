@@ -27,9 +27,11 @@ type InfraComponentDestroyDecision struct {
 }
 
 type InfraComponentServiceRef struct {
-	Name string
-	Kind string
-	Host string
+	Name             string
+	Kind             string
+	Host             string
+	SelectionDigests []string
+	ClaimDigests     []string
 }
 
 func PlanInfraComponentDestroyBlocks(selfContext string, services []InfraComponentServiceRef, records []ownership.ResourceRecord, artifactServerOnly bool) (InfraComponentDestroyDecision, error) {

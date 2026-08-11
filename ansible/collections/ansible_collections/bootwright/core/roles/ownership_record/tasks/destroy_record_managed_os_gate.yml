@@ -1,0 +1,54 @@
+---
+- name: Validate recorded managed OS identity
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_record.cluster | default('') | length > 0
+      - bootwright_ownership_record.machine | default('') | length > 0
+      - bootwright_ownership_destroy_name == bootwright_ownership_record.cluster ~ '-' ~ bootwright_ownership_record.machine
+      - bootwright_ownership_destroy_paths | length > 0
+      - >-
+        not (bootwright_declared_managed_os_cleanup_verified | default(false) | bool)
+        or (bootwright_ownership_destroy_paths
+            | bootwright.core.bootwright_declared_managed_os_paths(
+                bootwright_provider_state_dir ~ '/os-install/' ~ bootwright_ownership_record.cluster ~ '/' ~ bootwright_ownership_record.machine,
+                bootwright_declared_managed_os_stage_path | default('')
+              ))
+    fail_msg: >-
+      Refusing recorded managed-OS artifact teardown because its cluster,
+      machine, and record name are contradictory. Repair the record and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe recorded managed OS artifact paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ bootwright_ownership_destroy_paths }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_ownership_managed_os_path_stats
+  changed_when: false
+  failed_when: false
+
+- name: Require safe recorded managed OS artifact paths
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (bootwright_ownership_managed_os_path_stats.results | default([])
+         | selectattr('stat.exists', 'undefined') | list | length) == 0
+      - >-
+        (bootwright_ownership_managed_os_path_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | selectattr('stat.islnk', 'defined')
+         | selectattr('stat.islnk', 'equalto', true) | list | length) == 0
+      - >-
+        bootwright_declared_managed_os_cleanup_verified | default(false) | bool
+        or (bootwright_ownership_managed_os_path_stats.results | default([])
+            | selectattr('stat.exists', 'defined')
+            | selectattr('stat.exists', 'equalto', true) | list | length) == 0
+    fail_msg: >-
+      Refusing managed-os-install/{{ bootwright_ownership_destroy_name }}
+      cleanup because a canonical controller-local artifact path could not be
+      conclusively read or is a symlink. Repair the path and re-run
+      `{{ bootwright_mutating_invocation }}`.

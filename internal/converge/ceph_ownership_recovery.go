@@ -49,7 +49,7 @@ func ParseDestroyCephOwnershipRecovery(value string) (map[string]string, error) 
 	return confirmed, nil
 }
 
-func ValidateDestroyCephOwnershipRecovery(state v1alpha1.State, storageWorkNames []string, records []ownership.ResourceRecord, confirmed map[string]string) error {
+func ValidateDestroyCephOwnershipRecovery(state v1alpha1.State, storageWorkNames []string, ownershipDir, contextName string, records []ownership.ResourceRecord, confirmed map[string]string) error {
 	if len(confirmed) == 0 {
 		return nil
 	}
@@ -73,7 +73,16 @@ func ValidateDestroyCephOwnershipRecovery(state v1alpha1.State, storageWorkNames
 			return fmt.Errorf("--recover-ceph-ownership names StorageCluster %q, which is not a selected managed Ceph cluster", name)
 		}
 		seedHost := render.StorageSeedHostName(cluster)
-		if conflict := conflictingCephOwnershipRecoveryRecord(records, name, seedHost); conflict != "" {
+		record, exists, loadErr := ownership.LoadOwnerResource(ownershipDir, string(ownership.KindStorageCluster), name)
+		if loadErr != nil {
+			return &CephOwnershipRecoveryConflictError{Cluster: name, SeedHost: seedHost, Detail: loadErr.Error()}
+		}
+		if exists {
+			if conflict := conflictingCephOwnershipRecoveryRecord(record, contextName, name, seedHost, confirmed[name]); conflict != "" {
+				return &CephOwnershipRecoveryConflictError{Cluster: name, SeedHost: seedHost, Detail: conflict}
+			}
+		}
+		if conflict := conflictingCephOwnershipRecoveryRecords(records, contextName, name, seedHost, confirmed[name]); conflict != "" {
 			return &CephOwnershipRecoveryConflictError{Cluster: name, SeedHost: seedHost, Detail: conflict}
 		}
 	}
@@ -92,19 +101,48 @@ func ApplyDestroyCephOwnershipRecoveryExtraVar(plan *WorkflowPlan, confirmed map
 	return nil
 }
 
-func conflictingCephOwnershipRecoveryRecord(records []ownership.ResourceRecord, clusterName, seedHost string) string {
+func conflictingCephOwnershipRecoveryRecords(records []ownership.ResourceRecord, contextName, clusterName, seedHost, confirmedFSID string) string {
 	for _, record := range records {
 		if record.Kind != string(ownership.KindStorageCluster) || record.Name != clusterName {
 			continue
 		}
-		if record.Owner == ownership.Owner &&
-			!record.IsReference() &&
-			record.Cluster == clusterName &&
-			record.Host == seedHost &&
-			record.Attributes["seedHost"] == seedHost {
-			continue
+		if conflict := conflictingCephOwnershipRecoveryRecord(record, contextName, clusterName, seedHost, confirmedFSID); conflict != "" {
+			return conflict
 		}
-		return fmt.Sprintf("owner=%q role=%q cluster=%q host=%q seedHost=%q", record.Owner, record.EffectiveRole(), record.Cluster, record.Host, record.Attributes["seedHost"])
 	}
 	return ""
+}
+
+func conflictingCephOwnershipRecoveryRecord(record ownership.ResourceRecord, contextName, clusterName, seedHost, confirmedFSID string) string {
+	var conflicts []string
+	checks := []struct {
+		field string
+		got   string
+		want  string
+	}{
+		{field: "apiVersion", got: record.APIVersion, want: "bootwright.io/ownership/v1alpha1"},
+		{field: "kind", got: record.Kind, want: string(ownership.KindStorageCluster)},
+		{field: "name", got: record.Name, want: clusterName},
+		{field: "owner", got: record.Owner, want: ownership.Owner},
+		{field: "role", got: record.EffectiveRole(), want: ownership.RoleOwner},
+		{field: "context", got: record.Context, want: contextName},
+		{field: "cluster", got: record.Cluster, want: clusterName},
+		{field: "host", got: record.Host, want: seedHost},
+		{field: "attributes.seedHost", got: record.Attributes["seedHost"], want: seedHost},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			conflicts = append(conflicts, fmt.Sprintf("%s=%q, want %q", check.field, check.got, check.want))
+		}
+	}
+	fsid := strings.TrimSpace(record.Attributes["fsid"])
+	if fsid != "" {
+		switch {
+		case !cephFSIDPattern.MatchString(fsid):
+			conflicts = append(conflicts, fmt.Sprintf("attributes.fsid=%q is not a UUID", fsid))
+		case !strings.EqualFold(fsid, confirmedFSID):
+			conflicts = append(conflicts, fmt.Sprintf("attributes.fsid=%q, want confirmed fsid %q", fsid, confirmedFSID))
+		}
+	}
+	return strings.Join(conflicts, "; ")
 }

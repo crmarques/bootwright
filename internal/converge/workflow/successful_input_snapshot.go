@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 )
 
 const successfulInputSnapshotAPIVersion = "bootwright.io/successful-input/v1"
+const successfulInputSnapshotFirstSchema = 4
 
 type successfulInputSnapshot struct {
 	APIVersion string          `json:"apiVersion"`
@@ -32,6 +35,9 @@ func successfulInputSnapshotPath(runsDir, runID, resourceID string) string {
 func saveSuccessfulInputSnapshot(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, input []byte) error {
 	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(runID) == "" {
 		return nil
+	}
+	if err := validateRunIDPathSegment(runID); err != nil {
+		return fmt.Errorf("write successful input snapshot: %w", err)
 	}
 	if strings.TrimSpace(resourceID) == "" || strings.TrimSpace(taskID) == "" || strings.TrimSpace(taskKind) == "" || !json.Valid(input) {
 		return fmt.Errorf("write successful input snapshot: run, resource, task identity and valid input are required")
@@ -75,16 +81,22 @@ func saveSuccessfulInputSnapshot(runsDir, runID, resourceID, taskID, taskKind st
 	return nil
 }
 
-func successfulInputSnapshotMatches(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, currentInput []byte) (bool, error) {
+func successfulInputSnapshotMatches(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, desiredHash string, currentInput []byte) (bool, error) {
 	if hashSchema != ConvergeHashSchema-1 {
 		return false, fmt.Errorf("successful input snapshot schema %d cannot prove a schema-%d record", hashSchema, ConvergeHashSchema)
 	}
-	return successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind, taskStatus, hashSchema, currentInput)
+	if hashSchema < successfulInputSnapshotFirstSchema {
+		return false, fmt.Errorf("hash schema %d predates immutable successful-input snapshots", hashSchema)
+	}
+	return successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind, taskStatus, hashSchema, desiredHash, currentInput)
 }
 
-func successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, currentInput []byte) (bool, error) {
-	if strings.TrimSpace(runID) == "" {
-		return false, fmt.Errorf("successful input snapshot has no run identity")
+func successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, taskID, taskKind string, taskStatus TaskStatus, hashSchema int, desiredHash string, currentInput []byte) (bool, error) {
+	if err := validateRunIDPathSegment(runID); err != nil {
+		return false, fmt.Errorf("successful input snapshot: %w", err)
+	}
+	if !convergeSafetyHash.MatchString(desiredHash) {
+		return false, fmt.Errorf("successful input snapshot recorded desired hash %q is not a sha256 digest", desiredHash)
 	}
 	path := successfulInputSnapshotPath(runsDir, runID, resourceID)
 	data, err := os.ReadFile(path)
@@ -128,11 +140,19 @@ func successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, resourceID, ta
 	if err != nil {
 		return false, fmt.Errorf("successful input snapshot %s has invalid input: %w", path, err)
 	}
+	if successfulInputDigest(snapshotInput) != desiredHash {
+		return false, fmt.Errorf("successful input snapshot %s does not match its recorded desired hash", path)
+	}
 	canonicalCurrent, err := canonicalSuccessfulInput(currentInput)
 	if err != nil {
 		return false, err
 	}
 	return bytes.Equal(snapshotInput, canonicalCurrent), nil
+}
+
+func successfulInputDigest(input []byte) string {
+	sum := sha256.Sum256(input)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func canonicalSuccessfulInput(input []byte) (json.RawMessage, error) {

@@ -1,0 +1,153 @@
+---
+- name: Group exact host endpoint release candidates
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_release_set: >-
+      {{ bootwright_host_endpoint_release_candidates | default([])
+         | bootwright.core.bootwright_host_endpoint_claim_groups }}
+  changed_when: false
+
+- name: Require valid host endpoint release candidates
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_release_set.valid | default(false) | bool
+    fail_msg: >-
+      Refusing endpoint evidence removal because its exact candidate set is
+      malformed. Endpoint claims were retained. Re-run
+      `{{ bootwright_mutating_invocation }}` after repairing trusted evidence.
+
+- name: Release grouped exact host endpoint claims
+  ansible.builtin.include_tasks: release_host_endpoint_claim.yml
+  loop: "{{ bootwright_host_endpoint_release_set.groups }}"
+  loop_control:
+    loop_var: bootwright_host_endpoint_release_group
+    label: >-
+      {{ bootwright_host_endpoint_release_group.protocol }}/{{
+         bootwright_host_endpoint_release_group.port }}
+
+- name: Revalidate host operation before full endpoint reservation release
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Probe atomic host endpoint registry for release
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/endpoints.json
+    follow: false
+  register: bootwright_host_endpoint_registry_release_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read atomic host endpoint registry for release
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_registry_release_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_registry_release_stat.stat.exists | default(false) | bool
+
+- name: Classify atomic host endpoint registry for release
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_release_current: >-
+      {{ (bootwright_host_endpoint_registry_release_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_registry_any }}
+  changed_when: false
+
+- name: Require safe atomic host endpoint registry for release
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_release_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_endpoint_registry_release_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_registry_release_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_endpoint_registry_release_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_endpoint_registry_release_content.content is defined
+          and bootwright_host_endpoint_registry_release_current | length > 0
+        )
+    fail_msg: >-
+      Refusing full endpoint reservation release because endpoints.json is
+      unreadable, malformed, linked, or non-regular. It was retained. Inspect
+      the registry and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve atomic host endpoint registry after release
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_release_next: >-
+      {{ bootwright_host_endpoint_registry_release_current
+         | bootwright.core.bootwright_host_endpoint_registry_remove(
+             bootwright_host_endpoint_release_candidates) }}
+  changed_when: false
+
+- name: Require exact atomic host endpoint registry release transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_registry_release_next.valid | default(false) | bool
+    fail_msg: >-
+      Refusing full endpoint reservation release because the live registry has
+      an unexpected slot for this logical owner or composite. The registry was
+      retained. Inspect it and re-run `{{ bootwright_mutating_invocation }}`;
+      no cleanup removes a replacement reservation.
+
+- name: Resolve remaining atomic host endpoint registry content
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_registry_release_next_content: >-
+      {{ ((bootwright_host_endpoint_registry_release_next.registry | to_nice_json) ~ '\n')
+         if (bootwright_host_endpoint_registry_release_next.registry | length > 0)
+         else '' }}
+  changed_when: false
+
+- name: Atomically release full host endpoint reservation
+  bootwright.core.claim_cas:
+    path: /var/lib/bootwright/shared-services/endpoints.json
+    state: >-
+      {{ (bootwright_host_endpoint_registry_release_next.registry | length > 0)
+         | ternary('present', 'absent') }}
+    desired_content: >-
+      {{ bootwright_host_endpoint_registry_release_next_content
+         if (bootwright_host_endpoint_registry_release_next.registry | length > 0)
+         else omit }}
+    expected_contents:
+      - "{{ bootwright_host_endpoint_registry_release_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_host_endpoint_registry_release_cas
+  failed_when: false
+  when: bootwright_host_endpoint_registry_release_stat.stat.exists | bool
+
+- name: Re-read remaining atomic host endpoint registry
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_registry_remaining_content
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_host_endpoint_registry_release_stat.stat.exists | bool
+    - bootwright_host_endpoint_registry_release_next.registry | length > 0
+
+- name: Require exact atomic host endpoint registry release
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_host_endpoint_registry_release_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_registry_release_cas.previous_sha256 is defined
+          and bootwright_host_endpoint_registry_release_cas.current_sha256 is defined
+          and (
+            (bootwright_host_endpoint_registry_release_next.registry | length == 0
+             and bootwright_host_endpoint_registry_release_cas.current_sha256 == '')
+            or (
+              bootwright_host_endpoint_registry_release_next.registry | length > 0
+              and bootwright_host_endpoint_registry_remaining_content.content is defined
+              and (bootwright_host_endpoint_registry_remaining_content.content | b64decode
+                   | bootwright.core.bootwright_host_endpoint_registry_any)
+                  == bootwright_host_endpoint_registry_release_next.registry
+            )
+          )
+        )
+    fail_msg: >-
+      Per-endpoint cleanup completed, but the atomic full endpoint reservation
+      could not be released exactly. CAS detail:
+      {{ bootwright_host_endpoint_registry_release_cas.msg | default('winner differs') }}.
+      Inspect endpoints.json and re-run `{{ bootwright_mutating_invocation }}`.

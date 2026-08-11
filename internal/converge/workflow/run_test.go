@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -111,6 +112,7 @@ func writeFakeAgentISOInstallerVersion(spec ansible.RunSpec) error {
 }
 
 func (f *fakeRunner) Command(spec ansible.RunSpec) []string {
+	f.lastSpec = spec
 	executable := spec.Executable
 	if executable == "" {
 		executable = "ansible-playbook"
@@ -175,6 +177,38 @@ func TestRunDryRunDoesNotInvokeRunner(t *testing.T) {
 	}
 }
 
+func TestRunDryRunDoesNotProjectHeldHostMutationAuthority(t *testing.T) {
+	baseDir := t.TempDir()
+	runsDir := filepath.Join(baseDir, "runs")
+	guard, err := AcquireCommandRunLease(context.Background(), runsDir, "apply")
+	if err != nil {
+		t.Fatalf("AcquireCommandRunLease: %v", err)
+	}
+	defer func() { _ = guard.Close() }()
+	runner := &fakeRunner{}
+	if _, err := Run(context.Background(), RunOptions{
+		State:              minimalState(),
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: filepath.Join(baseDir, "managed-services"),
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		BundleDir:          filepath.Join(baseDir, "bundle"),
+		Playbook:           "bootwright.core.workflow_infra_apply",
+		ArtifactsBaseName:  "infra",
+		DryRun:             true,
+		RunLease:           guard,
+	}, runner, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, pair := range runner.lastSpec.ExtraVarPairs {
+		if strings.Contains(pair, HostMutationLeaseExtraVar) {
+			t.Fatalf("dry-run projected host mutation authority: %q", pair)
+		}
+	}
+}
+
 func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	renderedDir := t.TempDir()
 	runner := &fakeRunner{}
@@ -199,6 +233,103 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	}
 	if reporter.dryRunLabel != "" {
 		t.Fatalf("non-dry-run must not report dry-run, got %q", reporter.dryRunLabel)
+	}
+	for _, pair := range runner.lastSpec.ExtraVarPairs {
+		if strings.Contains(pair, HostMutationLeaseExtraVar) {
+			t.Fatalf("run without a held mutation lease projected host authority: %q", pair)
+		}
+	}
+}
+
+func TestRunProjectsExactHeldHostMutationLease(t *testing.T) {
+	baseDir := t.TempDir()
+	runsDir := filepath.Join(baseDir, "runs")
+	guard, err := AcquireCommandRunLease(context.Background(), runsDir, "apply")
+	if err != nil {
+		t.Fatalf("AcquireCommandRunLease: %v", err)
+	}
+	defer func() { _ = guard.Close() }()
+	want, err := guard.HostMutationLease()
+	if err != nil {
+		t.Fatalf("HostMutationLease: %v", err)
+	}
+	runner := &fakeRunner{}
+	if _, err := Run(context.Background(), RunOptions{
+		State:              minimalState(),
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: filepath.Join(baseDir, "managed-services"),
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		BundleDir:          filepath.Join(baseDir, "bundle"),
+		Playbook:           "bootwright.core.workflow_infra_apply",
+		ArtifactsBaseName:  "infra",
+		RunLease:           guard,
+	}, runner, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	var got HostMutationLeaseIdentity
+	found := false
+	for _, pair := range runner.lastSpec.ExtraVarPairs {
+		if !strings.Contains(pair, `"`+HostMutationLeaseExtraVar+`"`) {
+			continue
+		}
+		var wrapper map[string]HostMutationLeaseIdentity
+		if err := json.Unmarshal([]byte(pair), &wrapper); err != nil {
+			t.Fatalf("decode projected host mutation lease %q: %v", pair, err)
+		}
+		got, found = wrapper[HostMutationLeaseExtraVar]
+		break
+	}
+	if !found {
+		t.Fatalf("RunSpec.ExtraVarPairs lacks %s: %v", HostMutationLeaseExtraVar, runner.lastSpec.ExtraVarPairs)
+	}
+	if got != want {
+		t.Fatalf("projected host mutation identity = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunFinalizerRendersRecordOnlyHostFromPreMutationSnapshot(t *testing.T) {
+	baseDir := t.TempDir()
+	runner := &fakeRunner{onRun: func(spec ansible.RunSpec) error {
+		contents, err := os.ReadFile(spec.Inventory)
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(string(contents), "orphan-provider") {
+			return fmt.Errorf("pre-mutation record-only host is absent from finalizer inventory: %s", contents)
+		}
+		return nil
+	}}
+	if _, err := Run(context.Background(), RunOptions{
+		State:              v1alpha1.State{},
+		RenderedDir:        filepath.Join(baseDir, "rendered"),
+		ClustersDir:        filepath.Join(baseDir, "clusters"),
+		RunsDir:            filepath.Join(baseDir, "runs"),
+		SecretsDir:         filepath.Join(baseDir, "secrets"),
+		ManagedServicesDir: filepath.Join(baseDir, "managed-services"),
+		ProviderStateDir:   filepath.Join(baseDir, "provider-state"),
+		OwnershipDir:       filepath.Join(baseDir, "empty-current-ownership"),
+		BundleDir:          filepath.Join(baseDir, "bundle"),
+		Playbook:           roles.PlaybookTaskHostSharedServiceFinalize,
+		ArtifactsBaseName:  "host-finalizer",
+		Limit:              "orphan-provider",
+		OwnershipRecordsSnapshot: []ownership.ResourceRecord{{
+			APIVersion: "bootwright.io/ownership/v1alpha1",
+			Kind:       string(ownership.KindBMCEmulator),
+			Name:       "provider-a",
+			Owner:      ownership.Owner,
+			Context:    "matrix",
+			Host:       "orphan-provider",
+			HostFacts:  map[string]string{"ansible_connection": "local"},
+		}},
+		UseOwnershipRecordsSnapshot: true,
+	}, runner, nil); err != nil {
+		t.Fatalf("Run finalizer from pre-mutation snapshot: %v", err)
+	}
+	if !runner.runCalled {
+		t.Fatal("record-only finalizer host was skipped")
 	}
 }
 

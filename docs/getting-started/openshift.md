@@ -229,15 +229,16 @@ bootwright status --watch
 `apply --yes` prepares the libvirt substrate, creates and boots the node VM
 through the emulated Redfish BMC, runs the OpenShift agent install to completion,
 and applies any bound add-ons. `status --watch` refreshes until the run reaches a
-terminal state. Re-running `apply` later is safe — matching work is skipped.
+terminal state. Re-running `apply` later is safe: concrete-probe work can skip,
+and configuration tasks re-run idempotently.
 
 ### If apply fails
 
-Run `bootwright status`: on a failed run it reports the failed task, the log
-path for it, and prints the exact scoped command to re-run. Fix the cause, then
-re-run the printed command — completed work is recorded and skipped, so the run
-resumes where it stopped; neither `destroy` nor `--mode rebuild` is the
-recovery path for a partial apply. See
+Run `bootwright status`: on a failed run it reports the failed task and log, then
+prints the validated ordered recovery steps for that failure boundary. Fix the
+cause and run those steps in order. They preserve the original scope but may
+change a partial `create` to `reconcile`; neither `destroy` nor `--mode rebuild`
+is the recovery path for an ordinary partial apply. See
 [Apply failed partway](../troubleshooting.md#apply-failed-partway).
 
 ## Access The Cluster

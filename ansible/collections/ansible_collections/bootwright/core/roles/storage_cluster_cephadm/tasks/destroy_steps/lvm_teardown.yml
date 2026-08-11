@@ -1,4 +1,19 @@
 ---
+- name: Probe the holder types on the Ceph devices this teardown wipes
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - TYPE
+      - "{{ item }}"
+  register: bootwright_ceph_teardown_holders
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_ceph_lvm_teardown_devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
 - name: Resolve the volume groups standing on the Ceph devices this teardown wipes
   ansible.builtin.command:
     argv:
@@ -7,7 +22,8 @@
       - --readonly
       - --options
       - vg_name
-      - "{{ item }}"
+      - --select
+      - "pv_name={{ item }}"
   register: bootwright_ceph_teardown_pvs
   changed_when: false
   failed_when: false
@@ -20,6 +36,12 @@
     that:
       - (bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'defined') | list | length)
         == (bootwright_ceph_lvm_teardown_devices | default([]) | length)
+      - (bootwright_ceph_teardown_pvs.results | default([]) | selectattr('rc', 'equalto', 0) | list | length)
+        == (bootwright_ceph_lvm_teardown_devices | default([]) | length)
+      - (bootwright_ceph_teardown_holders.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_lvm_teardown_devices | default([]) | length)
+      - (bootwright_ceph_teardown_holders.results | default([]) | selectattr('rc', 'equalto', 0) | list | length)
+        == (bootwright_ceph_lvm_teardown_devices | default([]) | length)
     fail_msg: >-
       Refusing to wipe the Ceph devices of
       {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
@@ -31,7 +53,38 @@
       resolves no volume groups: nothing is deactivated, nothing is removed, and the OSD
       volume groups survive the wipe that follows — which is what leaves a destroyed node
       still showing its Ceph logical volumes in lsblk. Failing closed instead.
+      Probe results: {{ bootwright_ceph_teardown_pvs.results | default([]) }};
+      holder results: {{ bootwright_ceph_teardown_holders.results | default([]) }}.
+      Repair the named probe failure, then re-run
+      `{{ bootwright_mutating_invocation }}`. No authorization treats a failed LVM probe
+      as an empty device.
     quiet: true
+
+- name: Refuse to wipe an LVM-backed device whose volume group cannot be resolved
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          bootwright_ceph_teardown_holders.results | default([])
+          | selectattr('item', 'equalto', item.item)
+          | map(attribute='stdout_lines') | first | default([])
+          | map('trim') | select('equalto', 'lvm') | list | length
+        ) == 0
+        or (item.stdout | default('') | trim | length > 0)
+    fail_msg: >-
+      Refusing to wipe {{ item.item }} for storage cluster
+      {{ bootwright_selected_storage_cluster.name }} on
+      {{ bootwright_current_storage_host.hostname }}: lsblk reports an LVM holder, but the
+      successful read-only pvs query resolved no volume group for that exact device. The
+      LVM stack therefore cannot be proven to come down before wipefs. This can mean the PV
+      is on a child partition or that LVM's device view is incomplete. Inspect it with
+      `lsblk {{ item.item }}` and `pvs -o pv_name,vg_name`, repair or remove the mapping
+      deliberately, then re-run `{{ bootwright_mutating_invocation }}`. No authorization
+      permits wiping through an unresolved LVM holder.
+    quiet: true
+  loop: "{{ bootwright_ceph_teardown_pvs.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 - name: Resolve the Ceph volume groups this teardown must take down before the wipe
   ansible.builtin.set_fact:
@@ -64,6 +117,24 @@
   loop: "{{ bootwright_ceph_teardown_owned_vgs | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to continue when Ceph LVM ownership tags cannot be read
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_teardown_lv_tags.results | default([]) | selectattr('rc', 'defined') | list | length)
+        == (bootwright_ceph_teardown_owned_vgs | default([]) | length)
+      - (bootwright_ceph_teardown_lv_tags.results | default([]) | selectattr('rc', 'equalto', 0) | list | length)
+        == (bootwright_ceph_teardown_owned_vgs | default([]) | length)
+    fail_msg: >-
+      Refusing to remove or wipe Ceph LVM state for storage cluster
+      {{ bootwright_selected_storage_cluster.name }} on
+      {{ bootwright_current_storage_host.hostname }} because the read-only ownership-tag
+      probe did not succeed for every volume group this teardown would remove:
+      {{ bootwright_ceph_teardown_lv_tags.results | default([]) }}. No LVM or disk mutation
+      followed this failed identity probe. Repair LVM access, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization treats unreadable tags as
+      evidence that a volume group is unowned.
+    quiet: true
 
 - name: Resolve the Ceph cluster identity that owns the OSD devices this teardown wipes
   ansible.builtin.set_fact:

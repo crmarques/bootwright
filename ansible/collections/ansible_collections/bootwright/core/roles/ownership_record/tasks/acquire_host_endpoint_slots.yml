@@ -1,0 +1,84 @@
+---
+- name: Validate sorted host endpoint slot acquisition set
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_acquire_set: >-
+      {{ bootwright_host_endpoint_desired_claims | default([])
+         | bootwright.core.bootwright_host_endpoint_claim_set }}
+    bootwright_host_endpoint_acquire_journal: []
+  changed_when: false
+
+- name: Require exact host endpoint slot acquisition inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_acquire_set.valid | default(false) | bool
+      - >-
+        bootwright_host_endpoint_allowed_claim_digests | default([]) | length > 0
+      - >-
+        (bootwright_host_endpoint_allowed_claim_digests | default([])
+         | reject('match', '^sha256:[a-f0-9]{64}$') | list | length) == 0
+    fail_msg: >-
+      Refusing shared endpoint slot acquisition because its sorted unique
+      endpoint documents or allowed claim digests are invalid. No endpoint or
+      service state was changed. Repair the selected consequence set and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before endpoint slot acquisition
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Read complete host endpoint reservation before slot acquisition
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_endpoint_slot_registry_content
+  changed_when: false
+  failed_when: false
+
+- name: Classify complete host endpoint reservation before slot acquisition
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_slot_registry: >-
+      {{ (bootwright_host_endpoint_slot_registry_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_registry_any }}
+  changed_when: false
+
+- name: Require complete reservation before endpoint slot acquisition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_slot_registry_content.content is defined
+      - bootwright_host_endpoint_slot_registry | length > 0
+      - >-
+        (bootwright_host_endpoint_acquire_set.claims
+         | difference(bootwright_host_endpoint_slot_registry.claims | default([])))
+        | length == 0
+    fail_msg: >-
+      Refusing shared endpoint slot acquisition because endpoints.json no
+      longer contains the exact complete selected consequence set. No slot or
+      service was changed. Restore the aggregate reservation and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Acquire sorted exact host endpoint slots
+  block:
+    - name: Acquire one exact host endpoint claim
+      ansible.builtin.include_tasks: acquire_host_endpoint_claim.yml
+      loop: "{{ bootwright_host_endpoint_acquire_set.claims }}"
+      loop_control:
+        loop_var: bootwright_host_endpoint_desired_claim
+        label: >-
+          {{ bootwright_host_endpoint_desired_claim.protocol }}/{{
+             bootwright_host_endpoint_desired_claim.port }}
+  rescue:
+    - name: Roll back only endpoint claims changed by this attempt
+      ansible.builtin.include_tasks: rollback_host_endpoint_claim.yml
+      loop: "{{ bootwright_host_endpoint_acquire_journal | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_host_endpoint_rollback
+        label: "{{ bootwright_host_endpoint_rollback.path }}"
+
+    - name: Refuse after exact endpoint slot acquisition rollback
+      ansible.builtin.fail:
+        msg: >-
+          Refusing shared-service mutation because not every selected host
+          endpoint slot could be atomically claimed. Only this attempt's exact
+          slot changes were rolled back; durable aggregate, service claim, and
+          transition evidence was retained. Inspect the conflicting endpoint
+          claim and re-run `{{ bootwright_mutating_invocation }}`.

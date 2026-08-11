@@ -1,0 +1,95 @@
+---
+- name: Revalidate host operation before endpoint release
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Resolve releasable host endpoint claim path
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_release_path: >-
+      /var/lib/bootwright/shared-services/endpoints/{{
+        bootwright_host_endpoint_release_group.protocol }}-{{
+        bootwright_host_endpoint_release_group.port }}.json
+  changed_when: false
+
+- name: Probe releasable host endpoint claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_release_path }}"
+    follow: false
+  register: bootwright_host_endpoint_release_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read releasable host endpoint claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_endpoint_release_path }}"
+  register: bootwright_host_endpoint_release_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_release_stat.stat.exists | default(false) | bool
+
+- name: Classify releasable host endpoint claim
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_release_current: >-
+      {{ (bootwright_host_endpoint_release_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_claim_any }}
+  changed_when: false
+
+- name: Require absent or exact releasable host endpoint claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_release_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_endpoint_release_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_release_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_endpoint_release_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_endpoint_release_content.content is defined
+          and bootwright_host_endpoint_release_current
+              in bootwright_host_endpoint_release_group.claims
+        )
+    fail_msg: >-
+      Refusing endpoint claim removal because
+      {{ bootwright_host_endpoint_release_path }} is unreadable, malformed, or
+      now belongs to another exact composite. No competing endpoint evidence
+      was removed. Inspect it and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Atomically release exact host endpoint claim
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_host_endpoint_release_path }}"
+    state: absent
+    expected_contents:
+      - "{{ bootwright_host_endpoint_release_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_host_endpoint_release_cas
+  failed_when: false
+  when: bootwright_host_endpoint_release_stat.stat.exists | bool
+
+- name: Re-probe released host endpoint claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_release_path }}"
+    follow: false
+  register: bootwright_host_endpoint_released_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require exact host endpoint claim release
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_released_stat.stat.exists is defined
+      - not (bootwright_host_endpoint_released_stat.stat.exists | bool)
+      - >-
+        not (bootwright_host_endpoint_release_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_release_cas.previous_sha256 is defined
+          and bootwright_host_endpoint_release_cas.current_sha256 is defined
+          and bootwright_host_endpoint_release_cas.current_sha256 == ''
+        )
+    fail_msg: >-
+      Shared endpoint cleanup completed, but the exact endpoint claim could not
+      be atomically released. CAS detail:
+      {{ bootwright_host_endpoint_release_cas.msg | default('winner differs') }}.
+      Inspect the slot and re-run `{{ bootwright_mutating_invocation }}`; never
+      remove a replacement claim.

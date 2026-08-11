@@ -26,9 +26,10 @@ orthogonal choices.
 **`--mode create|reconcile|rebuild`** (on `apply`/`plan`) states *intent*:
 `create` asserts a greenfield run and fails if any selected object already
 exists; `reconcile` (the default) creates what is missing, skips what matches,
-and fails closed on drift; `rebuild` is break-glass recovery for
-Bootwright-owned drift it knows how to rebuild — managed-OS reinstall,
-owned-Ceph wipe-and-rebuild, drifted owned-object rebuild. See
+converges drift that is reconcilable in place, and fails closed on structural
+(destructive-identity) drift or foreign ownership; `rebuild` is break-glass
+recovery for Bootwright-owned drift it knows how to rebuild — managed-OS
+reinstall, owned-Ceph wipe-and-rebuild, drifted owned-object rebuild. See
 [Apply modes](../concepts/index.md#apply-modes) for the full model.
 
 **`--authorize <token>`** (on `apply`/`plan`, `destroy`, and
@@ -43,7 +44,7 @@ nothing else; the `accepted by` column is normative:
 | `protected` | acting on state whose Environment sets `destroyProtection: protected` or lists the kind in `protectedKinds` — and "covers" follows the consequence, so a machine-layer teardown trips a protected `ContainerCluster` or `StorageCluster` exactly as the clusters stage does | `destroy` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster — a `ContainerCluster` with an install record or a provisioned managed `StorageCluster` | `destroy` |
 | `unowned-vms` | tearing down VMs that match the Bootwright naming but carry no ownership marker | `destroy` |
-| `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context | `destroy` |
+| `unowned-networks` | removing an unowned libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim, which may still be in use by another context | `destroy` |
 | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while the node holds no Bootwright OSD ownership record for it — on `apply` under `--reclaim-devices`, and on `destroy` | `apply`, `destroy` |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls — fsid-scoped, zaps no disk | `apply` |
 | `unreachable-nodes` | acting on a node the run proves it could not contact — skipping it on `destroy`, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` — never a refusal that does not prove absence (a rejected identity, an unresolvable address, an unreadable diagnostic) | `destroy`, `storage-cluster replace-arbiter` |
@@ -768,10 +769,11 @@ bootwright destroy --stage infra --clusters ceph-storage \
   --authorize data-loss,unowned-vms --yes
 ```
 
-The cluster's **libvirt network** and its **KubeVirt DataVolumes** are a
+The cluster's **libvirt network**, **KubeVirt DataVolumes**, and their
+**PersistentVolumeClaims** are a
 separate token, `--authorize unowned-networks`, because their blast radius is
-wider: removing an unowned libvirt network can strand VMs of another context
-that use it. Authorizing VMs never authorizes networks.
+wider: removing unowned network or storage can strand VMs of another context
+that use it. Authorizing VMs never authorizes network or storage deletion.
 
 ```text
 bootwright destroy --stage infra --clusters ceph-storage \
@@ -862,7 +864,10 @@ incomplete even when independent cleanup steps can continue.
 `--authorize unreachable-nodes` lets the teardown proceed on the nodes it can
 reach: an unreachable node is skipped rather than aborting the play. The token
 names exactly the risk it accepts — a skipped node leaves the cluster only
-*partially* destroyed — and needs no second flag.
+*partially* destroyed — and needs no second flag. The command still exits
+non-zero and retains the skipped target's ownership, convergence, install,
+access, and substrate-release evidence; authorization permits accurate partial
+bookkeeping, not a false successful completion.
 
 **The teardown has to prove the node is absent before the token may skip it.**
 It skips only what the probe evidence positively shows could not be contacted —
@@ -925,29 +930,20 @@ not produce the same per-node completion proof.
     token enables a record-only Ceph teardown, and the normal device ownership,
     data-loss and in-use gates remain unchanged.
 
-### Never-provisioned clusters tear down automatically
+### KubeVirt guest absence is proved through the host API
 
-A cluster that was **never provisioned** — for example a nested KubeVirt cluster
-whose host cluster never came up — has no per-machine ownership record, because
-Bootwright writes that record only after the substrate is actually created. Its
-substrate teardown is a clean no-op that consults the local record set and never
-contacts the (possibly nonexistent) host, so a plain `destroy` completes it
-without `--authorize unreachable-nodes` and without requiring the host to be reachable.
+A missing per-machine controller record is not evidence that a nested guest was
+never created. Every selected KubeVirt guest teardown therefore requires the
+captured host-cluster kubeconfig and a reachable API, then proves each VM,
+DataVolume, and PVC either exactly owned or positively `NotFound` before it
+changes state or clears retry evidence.
 
-A host cluster that holds **no captured kubeconfig** counts as unavailable in
-exactly the same way, whether it never finished installing or an earlier destroy
-already removed its install state. Machine-substrate teardown continues past it
-rather than failing on the missing file, so a partially failed destroy stays
-re-runnable. `apply` is the opposite: it refuses before running anything and
-names the host cluster to converge first, because guests cannot be created
-through an API it cannot reach.
-
-`--authorize unreachable-nodes` is therefore only needed for a node substrate Bootwright
-**did** record but can no longer reach. A KubeVirt host-cluster API is not a
-skippable node: if it is unreachable — or its kubeconfig is gone — while
-Bootwright still records a guest, destroy cannot prove the VM or its DataVolumes
-absent, so it fails closed and retains the ownership and cluster runtime records
-for retry.
+If the host cluster never came up, its kubeconfig was lost, or its API is
+unreachable, destroy fails closed even when no guest ownership record exists.
+Restore host access and re-run the same destroy invocation so Bootwright can
+prove absence. `--authorize unreachable-nodes` cannot turn an unavailable
+cluster API, an unreadable response, or a missing controller record into proof
+that a guest is absent.
 
 ### Managed bare-metal is torn down locally, wiped on reinstall
 
@@ -955,9 +951,11 @@ Bare-metal machines are operator-owned hardware, so Bootwright never deletes a
 physical machine at destroy time. For a managed-OS bare-metal node, the substrate
 teardown is **local state cleanup**: it drops the managed-OS install record and
 provider state so the next apply performs a fresh install, whose kickstart
-`clearpart --all` reclaims the OS disk on reinstall. Destroy never fails closed
-here and never contacts the node — so `destroy --stage infra` completes and a
-re-apply from scratch is unblocked.
+`clearpart --all` reclaims the OS disk on reinstall. Destroy never contacts the
+node or deletes the hardware. The local cleanup still fails closed when the
+managed-OS evidence is unreadable, malformed, unsafe to remove, or belongs to a
+different identity. Repair the reported evidence and repeat the exact destroy
+invocation; once cleanup succeeds, a re-apply from scratch is unblocked.
 
 Because the OS disk is reclaimed on reinstall rather than at destroy time, a node
 that is destroyed but **not** re-applied keeps its old OS on disk. If you are

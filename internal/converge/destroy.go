@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,6 +59,31 @@ func LoadContextOwnershipRecordsWithWarnings(ownershipDir, contextName string) (
 
 func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, playbook string, plan WorkflowPlan, artifactsBaseName string, check bool, becomePasswordFile string, dryRun bool, streamAnsible bool, label string, reporter workflow.Reporter, runLease *workflow.CommandRunLease, recordRunLedger bool, invocationArgs []string) (workflow.RunResult, string, error) {
 	logPath := workflow.DestroyLogPath(ctx.RunsDir, artifactsBaseName)
+	artifactServerDestroy := playbook == InfraDestroyArtifactServerPlaybook
+	var artifactRecords []ownership.ResourceRecord
+	var artifactOwnerHosts []string
+	if artifactServerDestroy && !dryRun && !plan.NoRemoteWork {
+		if runLease == nil {
+			return workflow.RunResult{}, logPath, fmt.Errorf("artifact-server destroy requires a caller-owned mutating run lease through completion proof and convergence-evidence cleanup")
+		}
+		var warnings []error
+		var err error
+		artifactRecords, warnings, err = LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		if err != nil {
+			return workflow.RunResult{}, logPath, fmt.Errorf("load artifact-server ownership evidence: %w", err)
+		}
+		if len(warnings) > 0 {
+			parts := make([]string, 0, len(warnings))
+			for _, warning := range warnings {
+				parts = append(parts, warning.Error())
+			}
+			return workflow.RunResult{}, logPath, fmt.Errorf("cannot prove artifact-server ownership because ownership evidence was unreadable: %s", strings.Join(parts, "; "))
+		}
+		artifactOwnerHosts, err = artifactServerOwnerHosts(artifactRecords, ctx.Name, plan.ExtraVarPairs)
+		if err != nil {
+			return workflow.RunResult{}, logPath, err
+		}
+	}
 	runner := ansible.CommandRunner{}
 	if streamAnsible {
 		runner = ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
@@ -78,8 +105,96 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 	opts.RecordRunLedger = recordRunLedger
 	opts.RunLease = runLease
 	opts.InvocationArgs = append([]string(nil), invocationArgs...)
+	opts.ClassifyUnreachable = artifactServerDestroy
+	if artifactServerDestroy && !dryRun && !plan.NoRemoteWork {
+		expectedHosts := append([]string(nil), render.HostGroupMembersWithOwnershipRecords(plan.State, artifactRecords)[plan.Limit]...)
+		sort.Strings(expectedHosts)
+		opts.PostRunFinalizer = func(result workflow.RunResult) error {
+			proofPath := filepath.Join(result.Render.ArtifactsDir, artifactsBaseName, ansible.RunResultName)
+			if err := workflow.RequireDestroyCompletionEvidence(proofPath, "destroy.infra-artifact-server", expectedHosts); err != nil {
+				return err
+			}
+			if err := runLease.RequireOwned(); err != nil {
+				return err
+			}
+			return resetArtifactServerConvergenceEvidence(ctx.RunsDir, artifactOwnerHosts)
+		}
+	}
 	result, err := workflow.Run(cmdCtx, opts, runner, reporter)
 	return result, logPath, err
+}
+
+func resetArtifactServerConvergenceEvidence(runsDir string, hosts []string) error {
+	for _, host := range hosts {
+		task := workflow.ApplyTask{Entry: workflow.TaskLedgerEntry{
+			ID:   "infra-component." + host,
+			Kind: workflow.ApplyTaskKindInfraComponentServices,
+		}}
+		if err := workflow.RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
+			return fmt.Errorf("remove artifact-server convergence evidence for host %s: %w", host, err)
+		}
+	}
+	return nil
+}
+
+func artifactServerOwnerHosts(records []ownership.ResourceRecord, contextName string, extraVars []string) ([]string, error) {
+	selected, constrained, err := artifactServerReclaimSelection(extraVars)
+	if err != nil {
+		return nil, err
+	}
+	found := map[string]bool{}
+	hosts := map[string]bool{}
+	for _, record := range records {
+		if record.Kind != ownershipInfraComponentKind || record.Labels["bootwright.kind"] != artifactServerRecordKindLabel || record.IsReference() {
+			continue
+		}
+		if constrained && !selected[record.Name] {
+			continue
+		}
+		provider := strings.TrimSpace(record.Labels["bootwright.provider"])
+		component := strings.TrimSpace(record.Labels["bootwright.name"])
+		if record.APIVersion != "bootwright.io/ownership/v1alpha1" || record.Owner != ownership.Owner || record.EffectiveRole() != ownership.RoleOwner || record.Context != contextName || strings.TrimSpace(record.Host) == "" || strings.TrimSpace(record.Provider) == "" || record.Provider != provider || component == "" || record.Name != provider+"-"+component || record.Attributes["componentKind"] != artifactServerRecordKindLabel {
+			return nil, fmt.Errorf("refusing artifact-server destroy because owner record %s does not have exact current-context API, owner, role, host, provider, component, and artifact identity", record.Name)
+		}
+		found[record.Name] = true
+		hosts[record.Host] = true
+	}
+	if constrained {
+		for name := range selected {
+			if !found[name] {
+				return nil, fmt.Errorf("refusing artifact-server reclaim because selected owner record %s is missing or does not have exact artifact identity", name)
+			}
+		}
+	}
+	out := make([]string, 0, len(hosts))
+	for host := range hosts {
+		out = append(out, host)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func artifactServerReclaimSelection(extraVars []string) (map[string]bool, bool, error) {
+	selected := map[string]bool{}
+	constrained := false
+	for _, pair := range extraVars {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok || name != InfraComponentReclaimExtraVar {
+			continue
+		}
+		if constrained {
+			return nil, false, fmt.Errorf("artifact-server reclaim selection was specified more than once")
+		}
+		constrained = true
+		for _, item := range strings.Split(value, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" || selected[item] {
+				return nil, false, fmt.Errorf("artifact-server reclaim selection contains an empty or duplicate owner record identity")
+			}
+			selected[item] = true
+		}
+	}
+	return selected, constrained, nil
 }
 
 func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scopeName string, clusterScope string, plan WorkflowPlan, check bool, becomePasswordFile string, streamAnsible bool, label string, reporter workflow.ApplyReporter, runLease *workflow.CommandRunLease, invocationArgs []string) (render.Result, workflow.RunLedger, string, error) {
@@ -262,107 +377,6 @@ func substrateReleaseConfirmed(cluster string, runScope Scope, state v1alpha1.St
 		if name == cluster {
 			return true
 		}
-	}
-	return false
-}
-
-func ResetMachineConvergeRecordsAfterDestroy(runsDir, clustersDir string, state v1alpha1.State, machineProvision map[string]bool, succeededDestroyKinds workflow.DestroyOutcome, destroyRunID string, purgeHistory, skipUnreachable bool) []error {
-	include := destroyKindIncluded(succeededDestroyKinds)
-	if !include(workflow.DestroyTaskKindMachineInfra, "") {
-		return nil
-	}
-	target := InfraScope.ApplyTarget()
-	target.MachineProvision = machineProvision
-	tasks, err := workflow.PlanApplyTasksChecked(target, state)
-	if err != nil {
-		return []error{fmt.Errorf("plan machine converge-record reset: %w", err)}
-	}
-	var problems []error
-	for _, task := range tasks {
-		if destroyKindForApplyTaskKind(task.Entry.Kind) != workflow.DestroyTaskKindMachineInfra {
-			continue
-		}
-		if err := workflow.RemoveApplyTaskConvergeSafety(runsDir, task); err != nil {
-			problems = append(problems, fmt.Errorf("remove converge record for %s: %w", task.Entry.ID, err))
-		}
-	}
-	if !skipUnreachable {
-		for _, cluster := range workflow.MachineSubstrateClusters(tasks) {
-			var released []string
-			for _, name := range workflow.ClusterSubstrateMachineNames(state, cluster) {
-				if machineProvision[name] {
-					released = append(released, name)
-				}
-			}
-			if err := workflow.MarkSubstrateMachinesReleased(runsDir, cluster, released, time.Now()); err != nil {
-				problems = append(problems, fmt.Errorf("record substrate release for %s: %w", cluster, err))
-			}
-		}
-	}
-	if purgeHistory && !skipUnreachable {
-		machineNames := make([]string, 0, len(machineProvision))
-		for name := range machineProvision {
-			machineNames = append(machineNames, name)
-		}
-		if err := purgeRunHistoryForComponents(runsDir, nil, machineNames, destroyRunID); err != nil {
-			problems = append(problems, fmt.Errorf("purge run history: %w", err))
-		}
-	}
-	return append(problems, pruneDestroyedClusterStateDirs(clustersDir, workflow.MachineSubstrateClusters(tasks))...)
-}
-
-func destroyKindIncluded(succeeded workflow.DestroyOutcome) func(string, string) bool {
-	if succeeded == nil {
-		return func(string, string) bool { return true }
-	}
-	return func(kind, cluster string) bool {
-		if kind == "" {
-			return false
-		}
-		if succeeded.Covers(kind, cluster) {
-			return true
-		}
-		switch kind {
-		case workflow.DestroyTaskKindContainerCluster, workflow.DestroyTaskKindStorageCluster, workflow.DestroyTaskKindStorageNodeAccess:
-			return succeeded.Covers(workflow.DestroyTaskKindMachineInfra, cluster)
-		default:
-			return false
-		}
-	}
-}
-
-func destroyKindForApplyTaskKind(kind string) string {
-	switch kind {
-	case workflow.ApplyTaskKindStorageNodeAccess:
-		return workflow.DestroyTaskKindStorageNodeAccess
-	case workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
-		return workflow.DestroyTaskKindStorageCluster
-	case workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindBootstrapWait, workflow.ApplyTaskKindInstallWait,
-		workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindNodeConfigApply, workflow.ApplyTaskKindClusterAddon,
-		workflow.ApplyTaskKindHostVirtctl:
-		return workflow.DestroyTaskKindContainerCluster
-	case workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindMachineInfraFinalize,
-		workflow.ApplyTaskKindMachineRegistration, workflow.ApplyTaskKindMachineRepositories,
-		workflow.ApplyTaskKindPlaybook:
-		return workflow.DestroyTaskKindMachineInfra
-	case workflow.ApplyTaskKindInfraComponentServices:
-		return workflow.DestroyTaskKindInfraComponents
-	case workflow.ApplyTaskKindControllerNameResolution:
-		return workflow.DestroyTaskKindControllerNameResolution
-	case workflow.ApplyTaskKindProvider:
-		return workflow.DestroyTaskKindProviderServices
-	default:
-		return ""
-	}
-}
-
-func isPartialStorageTask(task workflow.ApplyTask, partial map[string]bool) bool {
-	if len(partial) == 0 {
-		return false
-	}
-	switch task.Entry.Kind {
-	case workflow.ApplyTaskKindStorageNodeAccess, workflow.ApplyTaskKindStorageInfra, workflow.ApplyTaskKindStorageCluster:
-		return partial[task.Entry.Cluster]
 	}
 	return false
 }

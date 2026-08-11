@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
@@ -38,9 +39,10 @@ func selectedInfraComponentServiceRefs(state v1alpha1.State, artifactServerOnly,
 			continue
 		}
 		out = append(out, converge.InfraComponentServiceRef{
-			Name: strings.TrimSpace(service.Identity.ProviderName) + "-" + strings.TrimSpace(service.Identity.Name),
-			Kind: service.Identity.Kind,
-			Host: service.MachineRef,
+			Name:             strings.TrimSpace(service.Identity.ProviderName) + "-" + strings.TrimSpace(service.Identity.Name),
+			Kind:             service.Identity.Kind,
+			Host:             service.MachineRef,
+			SelectionDigests: []string{infraComponentSharedServiceSelectionDigest(state, service)},
 		})
 	}
 	return out
@@ -53,6 +55,25 @@ func selectedControllerNameResolutionServiceRefs(state v1alpha1.State, hosts map
 		if service.Kind == v1alpha1.ComponentSlotNameResolution {
 			out = append(out, service)
 		}
+	}
+	return out
+}
+
+func selectedBMCEmulatorServiceRefs(state v1alpha1.State, hosts map[string]bool) []converge.InfraComponentServiceRef {
+	var out []converge.InfraComponentServiceRef
+	for _, service := range stategraph.ResolveMachineServices(state).Services {
+		if !service.IsProviderService() || strings.TrimSpace(service.Identity.Name) != "emulated" || strings.TrimSpace(service.MachineRef) == "" {
+			continue
+		}
+		if hosts != nil && !hosts[service.MachineRef] {
+			continue
+		}
+		out = append(out, converge.InfraComponentServiceRef{
+			Kind:             string(ownership.KindBMCEmulator),
+			Name:             strings.TrimSpace(service.Identity.ProviderName),
+			Host:             strings.TrimSpace(service.MachineRef),
+			SelectionDigests: []string{bmcSharedServiceSelectionDigest(state, service)},
+		})
 	}
 	return out
 }

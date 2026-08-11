@@ -48,14 +48,16 @@ it fires with actionable guidance (power the nodes on, or re-run with
 node wipes a device. Under `--authorize unreachable-nodes` the assert is skipped and
 `meta: end_host` drops the unreachable host instead.
 
-**Semantics: unreachable is not a failure.** `any_errors_fatal` is kept
+**Semantics: unreachable may drain but is not completion.** `any_errors_fatal` is kept
 literally `true` so a genuine task failure (seed ownership refusal, device
 gate) aborts every host before any wipe. Unreachable hosts are tolerated only
 by the tasks that opt in with `ignore_unreachable` (the probe, and the
 deferred gather under `--authorize unreachable-nodes`, which also tolerates a host that
-flapped down after the probe). When every node was skipped, no host remains
-and the downstream wipe tasks are a clean no-op — exactly the
-never-provisioned-cluster teardown.
+flapped down after the probe). The controller still marks selected work partial
+and retains its convergence/install/ownership and access evidence;
+`ignore_unreachable` must never turn an Ansible zero exit into an OK destroy
+ledger entry. A truly never-provisioned target is a no-op only when controller
+and live absence evidence prove there is no selected resource to remove.
 
 **Constraint: proxy facts before the probe.** `machine_proxy` `facts` runs in
 `pre_tasks`; it is controller-side only (set_fact plus a

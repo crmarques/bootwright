@@ -3,6 +3,7 @@ package workflow
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,7 @@ import (
 )
 
 const (
+	HostMutationLeaseExtraVar     = "bootwright_host_mutation_lease"
 	runtimeSecretsDirName         = "secrets"
 	runtimeHostKubeconfigDirName  = "host-kubeconfigs"
 	runtimeSecretsSweptMarkerName = ".runtime-secrets-swept"
@@ -34,53 +36,58 @@ const (
 )
 
 type RunOptions struct {
-	State                      v1alpha1.State
-	RenderedDir                string
-	ClustersDir                string
-	RunsDir                    string
-	RenderDir                  string
-	ContextName                string
-	SecretsDir                 string
-	PreferredIdentityFile      string
-	SSHUser                    string
-	SSHSudoPassword            string
-	SSHUserForProvisioned      bool
-	ManagedServicesDir         string
-	ProviderStateDir           string
-	OwnershipDir               string
-	Executable                 string
-	BundleDir                  string
-	Playbook                   string
-	Limit                      string
-	Forks                      int
-	ExtraVarPairs              []string
-	Tags                       []string
-	SkipTags                   []string
-	RolesPath                  string
-	CollectionsPath            string
-	ArtifactsRoot              string
-	OutputLogPath              string
-	ArtifactsBaseName          string
-	Check                      bool
-	AskBecomePass              bool
-	BecomePasswordFile         string
-	UseControllingTTY          bool
-	DryRun                     bool
-	ResolveInstaller           bool
-	Label                      string
-	AcquireRunLease            bool
-	RecordRunLedger            bool
-	RunLease                   *CommandRunLease
-	ApplyMode                  ApplyMode
-	OverrideAckedReinstalls    []string
-	SelectedMachines           []string
-	InvocationArgs             []string
-	InterruptionRecovery       RunRecoveryPlan
-	ResolveRecovery            RunRecoveryResolver
-	ClusterAvailabilityChecker ClusterAvailabilityChecker
-	StreamAnsible              bool
-	SkipNoHostsBeforeRender    bool
-	addonStepResources         *addonStepResourcePool
+	State                       v1alpha1.State
+	RenderedDir                 string
+	ClustersDir                 string
+	RunsDir                     string
+	RenderDir                   string
+	ContextName                 string
+	SecretsDir                  string
+	PreferredIdentityFile       string
+	SSHUser                     string
+	SSHSudoPassword             string
+	SSHUserForProvisioned       bool
+	ManagedServicesDir          string
+	ProviderStateDir            string
+	OwnershipDir                string
+	OwnershipRecordsSnapshot    []ownership.ResourceRecord
+	UseOwnershipRecordsSnapshot bool
+	Executable                  string
+	BundleDir                   string
+	Playbook                    string
+	Limit                       string
+	Forks                       int
+	ExtraVarPairs               []string
+	Tags                        []string
+	SkipTags                    []string
+	RolesPath                   string
+	CollectionsPath             string
+	ArtifactsRoot               string
+	OutputLogPath               string
+	ArtifactsBaseName           string
+	Check                       bool
+	AskBecomePass               bool
+	BecomePasswordFile          string
+	UseControllingTTY           bool
+	DryRun                      bool
+	ResolveInstaller            bool
+	Label                       string
+	AcquireRunLease             bool
+	RecordRunLedger             bool
+	RunLease                    *CommandRunLease
+	ApplyMode                   ApplyMode
+	OverrideAckedReinstalls     []string
+	SelectedMachines            []string
+	InvocationArgs              []string
+	InterruptionRecovery        RunRecoveryPlan
+	ResolveRecovery             RunRecoveryResolver
+	ClusterAvailabilityChecker  ClusterAvailabilityChecker
+	StreamAnsible               bool
+	SkipNoHostsBeforeRender     bool
+	ClassifyUnreachable         bool
+	PostRunFinalizer            func(RunResult) error
+	HostMutationLeaseFinalizer  bool
+	addonStepResources          *addonStepResourcePool
 }
 
 type RunResult struct {
@@ -124,7 +131,14 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		opts.RecordRunLedger = true
 	}
 	if !opts.DryRun && opts.RunLease != nil {
-		bound, release, err := opts.RunLease.BindContext(ctx)
+		var bound context.Context
+		var release func()
+		var err error
+		if opts.HostMutationLeaseFinalizer {
+			bound, release, err = opts.RunLease.BindCleanupContext(ctx)
+		} else {
+			bound, release, err = opts.RunLease.BindContext(ctx)
+		}
 		if err != nil {
 			if ownedLease != nil {
 				_ = ownedLease.Close()
@@ -148,9 +162,15 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if reporter != nil {
 		reporter.RenderStart()
 	}
-	ownershipRecords, err := loadOwnershipRecordsForRun(opts.Playbook, ownershipDir, opts.ContextName)
-	if err != nil {
-		return RunResult{}, err
+	var ownershipRecords []ownership.ResourceRecord
+	if opts.UseOwnershipRecordsSnapshot {
+		ownershipRecords = append([]ownership.ResourceRecord(nil), opts.OwnershipRecordsSnapshot...)
+	} else {
+		var err error
+		ownershipRecords, err = loadOwnershipRecordsForRun(opts.Playbook, ownershipDir, opts.ContextName)
+		if err != nil {
+			return RunResult{}, err
+		}
 	}
 	if !opts.DryRun && opts.SkipNoHostsBeforeRender && strings.TrimSpace(opts.RenderDir) != "" && LimitMatchesNoHostsWithOwnershipRecords(opts.Limit, opts.State, ownershipRecords) {
 		label := opts.Label
@@ -184,12 +204,12 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	defer os.RemoveAll(hostKubeconfigDir)
 	result = RunResult{}
 	tolerateMissing := playbookToleratesMissingKubeVirtHostKubeconfig(opts.Playbook)
-	err = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, tolerateMissing, func(paths map[string]string) error {
+	runErr = withMaterializedKubeVirtHostKubeconfigs(contextName, opts.ClustersDir, hostKubeconfigDir, hostClusters, tolerateMissing, func(paths map[string]string) error {
 		var runErr error
 		result, runErr = runWithRuntimeSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, paths, runner, reporter)
 		return runErr
 	})
-	return result, err
+	return result, runErr
 }
 
 func sshSudoPasswordEnv(password string) map[string]string {
@@ -242,33 +262,48 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 	if artifactsRoot == "" {
 		artifactsRoot = result.ArtifactsDir
 	}
+	extraVarPairs := append([]string(nil), opts.ExtraVarPairs...)
+	if !opts.DryRun && opts.RunLease != nil {
+		identity, err := opts.RunLease.HostMutationLease()
+		if err != nil {
+			return RunResult{Render: result}, err
+		}
+		encoded, err := json.Marshal(map[string]HostMutationLeaseIdentity{
+			HostMutationLeaseExtraVar: identity,
+		})
+		if err != nil {
+			return RunResult{Render: result}, fmt.Errorf("encode host mutation lease: %w", err)
+		}
+		extraVarPairs = append(extraVarPairs, string(encoded))
+	}
 	spec, err := runconfig.NewRunSpec(runconfig.RunSpecConfig{
-		Executable:         opts.Executable,
-		BundleDir:          opts.BundleDir,
-		RenderedDir:        renderDir,
-		ClustersDir:        opts.ClustersDir,
-		RunsDir:            opts.RunsDir,
-		SecretsDir:         runSecretsDir,
-		ManagedServicesDir: opts.ManagedServicesDir,
-		ProviderStateDir:   opts.ProviderStateDir,
-		OwnershipDir:       ownershipDir,
-		InventoryPath:      result.InventoryPath,
-		VarsPath:           result.VarsPath,
-		Playbook:           opts.Playbook,
-		Limit:              opts.Limit,
-		Forks:              opts.Forks,
-		ExtraVarPairs:      opts.ExtraVarPairs,
-		Tags:               opts.Tags,
-		SkipTags:           opts.SkipTags,
-		RolesPath:          opts.RolesPath,
-		CollectionsPath:    opts.CollectionsPath,
-		ArtifactsDir:       filepath.Join(artifactsRoot, opts.ArtifactsBaseName),
-		OutputLogPath:      opts.OutputLogPath,
-		Check:              opts.Check,
-		AskBecomePass:      opts.AskBecomePass,
-		BecomePasswordFile: opts.BecomePasswordFile,
-		UseControllingTTY:  opts.UseControllingTTY,
-		ExtraEnv:           sshSudoPasswordEnv(opts.SSHSudoPassword),
+		Executable:          opts.Executable,
+		BundleDir:           opts.BundleDir,
+		RenderedDir:         renderDir,
+		ClustersDir:         opts.ClustersDir,
+		RunsDir:             opts.RunsDir,
+		SecretsDir:          runSecretsDir,
+		ManagedServicesDir:  opts.ManagedServicesDir,
+		ProviderStateDir:    opts.ProviderStateDir,
+		OwnershipDir:        ownershipDir,
+		InventoryPath:       result.InventoryPath,
+		VarsPath:            result.VarsPath,
+		Playbook:            opts.Playbook,
+		Limit:               opts.Limit,
+		Forks:               opts.Forks,
+		ExtraVarPairs:       extraVarPairs,
+		Tags:                opts.Tags,
+		SkipTags:            opts.SkipTags,
+		RolesPath:           opts.RolesPath,
+		CollectionsPath:     opts.CollectionsPath,
+		ArtifactsDir:        filepath.Join(artifactsRoot, opts.ArtifactsBaseName),
+		OutputLogPath:       opts.OutputLogPath,
+		Check:               opts.Check,
+		AskBecomePass:       opts.AskBecomePass,
+		BecomePasswordFile:  opts.BecomePasswordFile,
+		UseControllingTTY:   opts.UseControllingTTY,
+		ClassifyUnreachable: opts.ClassifyUnreachable,
+		ExtraEnv:            sshSudoPasswordEnv(opts.SSHSudoPassword),
 	})
 	if err != nil {
 		return RunResult{Render: result}, err
@@ -357,7 +392,11 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 		go func() { runDone <- runner.Run(ctx, spec) }()
 		select {
 		case err := <-runDone:
-			return RunResult{Render: result, Command: command}, finishLedger(err)
+			runResult := RunResult{Render: result, Command: command}
+			if err == nil && opts.PostRunFinalizer != nil {
+				err = opts.PostRunFinalizer(runResult)
+			}
+			return runResult, finishLedger(err)
 		case err := <-opts.RunLease.Errors():
 			<-runDone
 			if err == nil {
@@ -372,7 +411,13 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 	if err := runner.Run(ctx, spec); err != nil {
 		return RunResult{Render: result, Command: command}, err
 	}
-	return RunResult{Render: result, Command: command}, nil
+	runResult := RunResult{Render: result, Command: command}
+	if opts.PostRunFinalizer != nil {
+		if err := opts.PostRunFinalizer(runResult); err != nil {
+			return runResult, err
+		}
+	}
+	return runResult, nil
 }
 
 func loadOwnershipRecordsForRun(playbook, ownershipDir, contextName string) ([]ownership.ResourceRecord, error) {

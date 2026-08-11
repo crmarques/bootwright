@@ -294,13 +294,33 @@
       - --readonly
       - --options
       - vg_name
-      - "{{ item }}"
+      - --select
+      - "pv_name={{ item }}"
   register: bootwright_ceph_reclaim_pvs
   changed_when: false
   failed_when: false
   loop: "{{ bootwright_ceph_reclaim_lvm | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to reclaim an LVM device whose volume group cannot be resolved
+  ansible.builtin.assert:
+    that:
+      - item.rc | default(1) | int == 0
+      - item.stdout | default('') | trim | length > 0
+    fail_msg: >-
+      Refusing to reclaim {{ item.item }} on
+      {{ bootwright_current_storage_host.hostname }}: lsblk reports an LVM holder, but the
+      read-only pvs query did not resolve an exact volume group (rc
+      {{ item.rc | default('unknown') }}; {{ item.stderr | default('') | trim }}). The LVM
+      stack therefore cannot be proven to come down before wipefs. Inspect the device with
+      `lsblk {{ item.item }}` and `pvs -o pv_name,vg_name`, repair or remove the mapping
+      deliberately, then re-run `{{ bootwright_mutating_invocation }}`. Neither data-loss
+      nor unowned-devices authorization permits wiping through an unresolved LVM holder.
+    quiet: true
+  loop: "{{ bootwright_ceph_reclaim_pvs.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 - name: Resolve the volume groups to remove with the reclaimed OSD devices
   ansible.builtin.set_fact:

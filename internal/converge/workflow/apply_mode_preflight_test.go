@@ -45,7 +45,7 @@ func preflightObjects(t *testing.T, runsDir string) []ObjectClassification {
 	saveStateCheckRecord(t, runsDir, match, matchHash, ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
-	objs, err := ClassifyApplyObjects([]ApplyTask{match, drift, foreign, missing}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{match, drift, foreign, missing}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 		t.Fatalf("create error must name --mode create: %v", err)
 	}
 	missing := classifyTask("addon.demo.new", "clusterAddon", "demo")
-	objs2, err := ClassifyApplyObjects([]ApplyTask{missing}, t.TempDir())
+	objs2, err := ClassifyApplyObjects([]ApplyTask{missing}, t.TempDir(), "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestEvaluateApplyModePreflightContinueFailsStructuralDriftAndForeign(t *tes
 	saveStateCheckRecord(t, runsDir, addonDrift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 	saveStateCheckRecord(t, runsDir, osDrift, "sha256:stale", ConvergeSafetyOwner)
-	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, foreign, osDrift}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, foreign, osDrift}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestEvaluateApplyModePreflightContinueReconcilesReconfigureOnlyDrift(t *tes
 	nodeCfgDrift := classifyTask("nodeconfig.demo", ApplyTaskKindNodeConfigApply, "demo")
 	saveStateCheckRecord(t, runsDir, addonDrift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, nodeCfgDrift, "sha256:stale", ConvergeSafetyOwner)
-	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, nodeCfgDrift}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{addonDrift, nodeCfgDrift}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestEvaluateApplyModePreflightContinueAllMatchProceeds(t *testing.T) {
 		}
 		saveStateCheckRecord(t, runsDir, task, h, ConvergeSafetyOwner)
 	}
-	objs, err := ClassifyApplyObjects([]ApplyTask{a, b}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{a, b}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestOverrideDestructiveDriftedObjects(t *testing.T) {
 	}
 	saveStateCheckRecord(t, runsDir, matchedStorage, matchedHash, ConvergeSafetyOwner)
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{infra, provider, storage, matchedStorage, missingCluster}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{infra, provider, storage, matchedStorage, missingCluster}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestOverrideDestructiveMachineSubstrate(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, managedOS, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, storage, "sha256:stale", ConvergeSafetyOwner)
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{managedOS, storage}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{managedOS, storage}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}

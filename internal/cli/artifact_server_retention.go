@@ -34,11 +34,11 @@ func installOnlyArtifactServerTargets(state v1alpha1.State) []converge.ArtifactS
 	return out
 }
 
-func reclaimApplyArtifactServers(runContext context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []converge.ArtifactServerReclaimTarget, reporter *workflowReporter, runLease *workflow.CommandRunLease, enabled bool) {
+func reclaimApplyArtifactServers(runContext context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []converge.ArtifactServerReclaimTarget, executionExtraVarPairs []string, reporter *workflowReporter, runLease *workflow.CommandRunLease, enabled bool) {
 	if !enabled {
 		return
 	}
-	if err := converge.ReclaimInstallOnlyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, executable, bundleDir, becomePasswordFile, state, targets, reporter, runLease); err != nil {
+	if err := converge.ReclaimInstallOnlyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, executable, bundleDir, becomePasswordFile, state, targets, executionExtraVarPairs, reporter, runLease); err != nil {
 		cliout.NewContinuation(stdout).Warning("artifact-server reclaim", err.Error())
 	}
 }

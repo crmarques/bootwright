@@ -136,7 +136,9 @@ func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io
 	if err := saveLedger(); err != nil {
 		if ownsLease {
 			stopLeaseHeartbeat()
-			_ = RemoveRunLease(runsDir)
+			if removeErr := RemoveRunLeaseIfOwner(runsDir, runID); removeErr != nil && !isLeaseNotOwned(removeErr) {
+				return ledger, fmt.Errorf("%w; additionally failed to release the mutating run lease: %v", err, removeErr)
+			}
 		}
 		return ledger, err
 	}

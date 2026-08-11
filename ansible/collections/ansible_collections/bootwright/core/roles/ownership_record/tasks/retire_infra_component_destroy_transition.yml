@@ -1,0 +1,143 @@
+---
+- name: Validate infra-component destroy transition retirement inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_transition_name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_infra_destroy_transition_claim_path | default('') | length > 0
+      - bootwright_infra_destroy_transition_record_path | default('') | length > 0
+      - bootwright_infra_destroy_transition_claim | default({}) is mapping
+      - bootwright_infra_destroy_transition_record | default({}) is mapping
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing to retire infra-component apply-transition evidence because its
+      exact preflight identity is missing. The completed cleanup owner record
+      was retained. Repair the task inputs and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy') }}`.
+
+- name: Revalidate infra-component destroy transition files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ bootwright_infra_destroy_transition_claim_path }}"
+    - "{{ bootwright_infra_destroy_transition_record_path }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_infra_destroy_transition_retire_stats
+  changed_when: false
+  failed_when: false
+
+- name: Read infra-component destroy transition files before retirement
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ bootwright_infra_destroy_transition_retire_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: bootwright_infra_destroy_transition_retire_contents
+  changed_when: false
+  failed_when: false
+  when: item.stat.exists | default(false) | bool
+
+- name: Classify infra-component destroy transition files before retirement
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_transition_retire_claim: >-
+      {{ (bootwright_infra_destroy_transition_retire_contents.results[0].content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_destroy_transition_context,
+             bootwright_infra_destroy_transition_host,
+             bootwright_managed_services_dir) }}
+    bootwright_infra_destroy_transition_retire_record: >-
+      {{ (bootwright_infra_destroy_transition_retire_contents.results[1].content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_record(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require unchanged infra-component destroy transition files
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_transition_retire_stats.results | default([]) | length == 2
+      - >-
+        bootwright_infra_destroy_transition_retire_stats.results
+        | selectattr('stat.exists', 'undefined') | list | length == 0
+      - >-
+        (bootwright_infra_destroy_transition_retire_stats.results[0].stat.exists | bool)
+        == (bootwright_infra_destroy_transition_claim | length > 0)
+      - >-
+        not (bootwright_infra_destroy_transition_retire_stats.results[0].stat.exists | bool)
+        or bootwright_infra_destroy_transition_retire_claim
+            == bootwright_infra_destroy_transition_claim
+      - >-
+        (bootwright_infra_destroy_transition_retire_stats.results[1].stat.exists | bool)
+        == (bootwright_infra_destroy_transition_record | length > 0)
+      - >-
+        not (bootwright_infra_destroy_transition_retire_stats.results[1].stat.exists | bool)
+        or bootwright_infra_destroy_transition_retire_record
+            == bootwright_infra_destroy_transition_record
+    fail_msg: >-
+      Refusing to retire infra-component apply-transition evidence because a
+      live file changed, appeared, disappeared, became unreadable, linked, or
+      future-shaped after teardown preflight. The completed cleanup owner record
+      was retained. Inspect the live evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Remove exact infra-component transition recovery record
+  vars:
+    bootwright_ownership_kind: infra-component-transition
+    bootwright_ownership_name: "{{ bootwright_infra_destroy_transition_name }}"
+    bootwright_ownership_role: owner
+    bootwright_ownership_expected_record: >-
+      {{ bootwright_infra_destroy_transition_record.record }}
+  block:
+    - name: Revalidate host operation before transition recovery retirement
+      ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+    - name: Remove exact infra-component transition recovery ownership
+      ansible.builtin.include_tasks: remove_resource.yml
+  when: bootwright_infra_destroy_transition_record | length > 0
+
+- name: Revalidate host operation before local transition claim retirement
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Retire exact infra-component destroy transition claim atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_destroy_transition_claim_path }}"
+    state: absent
+    expected_contents:
+      - >-
+        {{ bootwright_infra_destroy_transition_retire_contents.results[0].content
+           | b64decode }}
+    allow_absent: false
+    create_parents: false
+    trusted_root: /var/lib/bootwright
+  register: bootwright_infra_destroy_transition_claim_cas
+  failed_when: false
+  when: bootwright_infra_destroy_transition_claim | length > 0
+
+- name: Re-probe retired infra-component destroy transition claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_destroy_transition_claim_path }}"
+    follow: false
+  register: bootwright_infra_destroy_transition_retired_stat
+  changed_when: false
+  failed_when: false
+
+- name: Prove exact infra-component destroy transition claim retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_transition_retired_stat.stat.exists is defined
+      - not (bootwright_infra_destroy_transition_retired_stat.stat.exists | bool)
+      - >-
+        bootwright_infra_destroy_transition_claim | length == 0
+        or (
+          bootwright_infra_destroy_transition_claim_cas.current_sha256 is defined
+          and bootwright_infra_destroy_transition_claim_cas.current_sha256 == ''
+        )
+    fail_msg: >-
+      Refusing later authoritative evidence retirement because the exact local
+      infra-component transition was not proven absent after CAS. The global
+      destroying claim and final controller owner remain. Inspect CAS detail
+      {{ bootwright_infra_destroy_transition_claim_cas.msg | default('winner differs') }}
+      and re-run `{{ bootwright_mutating_invocation }}`.

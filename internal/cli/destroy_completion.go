@@ -35,6 +35,9 @@ func destroyGraphCompletion(ledger workflow.RunLedger, invocation resolvedInvoca
 		if task.Status != workflow.TaskStatusSkipped || !workflow.IsDestroyTaskKind(task.Kind) || !workflow.DestroyTaskNeedsCompletionProof(task) {
 			continue
 		}
+		if len(task.ResourceKeys) == 0 {
+			continue
+		}
 		label := task.Label
 		if label == "" {
 			label = task.ID

@@ -1,0 +1,94 @@
+---
+- name: Resolve selected host consequence binding for BMC
+  ansible.builtin.set_fact:
+    bootwright_bmc_selected_host_consequences: >-
+      {{ bootwright_host_operation_selection.consequences | default([])
+         | selectattr('kind', 'equalto', 'bmc-emulator')
+         | selectattr('name', 'equalto', bootwright_bmc_provider_name)
+         | list }}
+    bootwright_bmc_has_rendered_selection: >-
+      {{ not (bootwright_bmc_record_only_destroy | default(false) | bool)
+         and bootwright_component is defined
+         and bootwright_component is mapping
+         and bootwright_component.bmcEmulated | default({}) is mapping
+         and bootwright_component.bmcEmulated | default({}) | length > 0
+         and bootwright_component.realisation | default('') | length > 0
+         and bootwright_component.applyRole | default('') | length > 0
+         and bootwright_component.destroyRole | default('') | length > 0
+         and bootwright_component.bmcRole | default('') | length > 0 }}
+  changed_when: false
+
+- name: Resolve exact rendered BMC selection consequence
+  ansible.builtin.set_fact:
+    bootwright_bmc_rendered_selection_consequence:
+      apiVersion: bootwright.io/bmc-service-selection/v1alpha1
+      kind: bmc-emulator
+      provider: "{{ bootwright_bmc_provider_name }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+      realisation: "{{ bootwright_component.realisation }}"
+      applyRole: "{{ bootwright_component.applyRole }}"
+      destroyRole: "{{ bootwright_component.destroyRole }}"
+      bmcRole: "{{ bootwright_component.bmcRole }}"
+      sushyToolsVersion: "{{ bootwright_component.bmcEmulated.sushyToolsVersion }}"
+      configKey: >-
+        {{ bootwright_component.bmcEmulated.protocol ~ '|' ~
+           bootwright_component.bmcEmulated.libvirtURI ~ '|' ~
+           bootwright_component.bmcEmulated.bindAddress ~ '|' ~
+           (bootwright_component.bmcEmulated.port | string) ~ '|' ~
+           (bootwright_component.bmcEmulated.vMediaPort | string) ~ '|' ~
+           bootwright_component.bmcEmulated.credentialsRef }}
+  changed_when: false
+  when: bootwright_bmc_has_rendered_selection | bool
+
+- name: Resolve exact rendered BMC selection digest
+  ansible.builtin.set_fact:
+    bootwright_bmc_rendered_selection_digest: >-
+      {{ bootwright_bmc_rendered_selection_consequence
+         | bootwright.core.bootwright_bmc_claim_digest }}
+  changed_when: false
+  when: bootwright_bmc_has_rendered_selection | bool
+
+- name: Resolve exact record-backed BMC selection digest
+  ansible.builtin.set_fact:
+    bootwright_bmc_record_selection_digest: >-
+      {{ ((bootwright_ownership_record
+           | bootwright.core.bootwright_bmc_record_claim_identity(
+               bootwright_bmc_current_context,
+               bootwright_bmc_provider_name,
+               bootwright_host_name | default(inventory_hostname),
+               bootwright_provider_state_dir))
+          | bootwright.core.bootwright_bmc_consequence_digest)
+         if (bootwright_bmc_record_only_destroy | default(false) | bool)
+         else '' }}
+  changed_when: false
+
+- name: Require exact BMC composite in selected host consequence set
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_selected_host_consequences | length == 1
+      - >-
+        (
+          bootwright_bmc_has_rendered_selection | bool
+          and bootwright_bmc_rendered_selection_digest
+              in bootwright_bmc_selected_host_consequences[0].selectionDigests
+        )
+        or (
+          not (bootwright_bmc_has_rendered_selection | bool)
+          and bootwright_bmc_record_selection_digest | length > 0
+          and bootwright_bmc_record_selection_digest
+              in bootwright_bmc_selected_host_consequences[0].selectionDigests
+        )
+      - >-
+        bootwright_bmc_selected_host_consequences[0].claimDigests is not defined
+        or (
+          (bootwright_bmc_selected_host_consequences[0].claimDigests
+           | difference(bootwright_bmc_operation_claim_digests))
+          | length == 0
+        )
+    fail_msg: >-
+      Refusing BMC mutation because the command-wide host operation does not
+      bind every exact active and desired BMC physical consequence selected for
+      provider {{ bootwright_bmc_provider_name }}. No endpoint reservation,
+      claim, runtime, or owner evidence was changed. Re-render the selected host
+      manifest and re-run `{{ bootwright_mutating_invocation }}`.

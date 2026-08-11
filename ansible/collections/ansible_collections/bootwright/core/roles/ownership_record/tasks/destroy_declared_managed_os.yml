@@ -1,0 +1,72 @@
+---
+- name: Validate declared managed OS cleanup identity
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_declared_managed_os_cluster | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_declared_managed_os_machine | default('') is match('^[A-Za-z0-9_.-]+$')
+      - >-
+        bootwright_declared_managed_os_root | default('')
+        == bootwright_provider_state_dir ~ '/os-install/' ~ bootwright_declared_managed_os_cluster ~ '/' ~ bootwright_declared_managed_os_machine
+    fail_msg: >-
+      Refusing managed-OS cleanup because desired cluster, machine, or canonical
+      controller-local artifact path is incomplete. Repair desired state and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve exact declared managed OS ownership records
+  ansible.builtin.set_fact:
+    bootwright_declared_managed_os_name: "{{ bootwright_declared_managed_os_cluster }}-{{ bootwright_declared_managed_os_machine }}"
+    bootwright_declared_managed_os_records: >-
+      {{
+        (bootwright_ownership_records_by_kind | default({})).get('managed-os-install', [])
+        | selectattr('name', 'equalto', bootwright_declared_managed_os_cluster ~ '-' ~ bootwright_declared_managed_os_machine)
+        | list
+      }}
+  changed_when: false
+
+- name: Require at most one declared managed OS ownership record
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_declared_managed_os_records | length <= 1
+    fail_msg: >-
+      Refusing managed-OS cleanup because more than one record claims
+      {{ bootwright_declared_managed_os_name }}. Repair the contradictory
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe unrecorded declared managed OS artifact root
+  ansible.builtin.stat:
+    path: "{{ bootwright_declared_managed_os_root }}"
+  register: bootwright_declared_managed_os_unrecorded_stat
+  changed_when: false
+  failed_when: false
+  when: bootwright_declared_managed_os_records | length == 0
+
+- name: Refuse unrecorded present managed OS artifacts
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_declared_managed_os_unrecorded_stat.stat.exists is defined
+      - not (bootwright_declared_managed_os_unrecorded_stat.stat.exists | bool)
+    fail_msg: >-
+      Refusing to delete present managed-OS artifacts at
+      {{ bootwright_declared_managed_os_root }} because no exact canonical
+      ownership record authorizes them. Restore the record from trusted evidence
+      or inspect and remove the artifacts manually, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_declared_managed_os_records | length == 0
+
+- name: Destroy exactly recorded declared managed OS artifacts
+  ansible.builtin.include_tasks: destroy_resource.yml
+  vars:
+    bootwright_ownership_record: >-
+      {{
+        bootwright_declared_managed_os_records[0]
+        | combine({
+            'paths': ([bootwright_declared_managed_os_root]
+                      + (bootwright_declared_managed_os_records[0].paths | default([])))
+                     | unique | list
+          })
+      }}
+    bootwright_declared_managed_os_cleanup_verified: true
+  when: bootwright_declared_managed_os_records | length == 1

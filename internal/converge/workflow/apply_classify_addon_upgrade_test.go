@@ -72,7 +72,7 @@ func TestAddonPullSecretResourceKeyUpgradeIsNotARefusal(t *testing.T) {
 		t.Fatal("fixture planned no add-on tasks")
 	}
 
-	objects, err := ClassifyApplyObjects(tasks, runsDir)
+	objects, err := ClassifyApplyObjects(tasks, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestAddonPullSecretResourceKeyUpgradeStateCheckReportsReconcilable(t *testi
 		}
 		saveStateCheckRecord(t, runsDir, tasks[i], preUpgradeAddonRecordHash(t, tasks[i]), ConvergeSafetyOwner)
 	}
-	report, err := StateCheck(tasks, target, state, runsDir)
+	report, err := StateCheck(tasks, target, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}

@@ -103,7 +103,7 @@ func TestFailedGenericApplyPreservesPriorConvergenceRecord(t *testing.T) {
 			if result.err == nil {
 				t.Fatal("failed apply task returned no error")
 			}
-			objects, err := ClassifyApplyObjects([]ApplyTask{task}, runsDir)
+			objects, err := ClassifyApplyObjects([]ApplyTask{task}, runsDir, "test")
 			if err != nil {
 				t.Fatalf("classify after failure: %v", err)
 			}
@@ -301,7 +301,7 @@ func TestFailedApplyGraphPreservesPriorSuccessfulStorageSubObjectEvidence(t *tes
 	if err != nil {
 		t.Fatalf("storage subobject hash input: %v", err)
 	}
-	matched, err := successfulInputSnapshotMatchesRecordedSchema(runsDir, "prior-run", sub.resourceID(), first.Entry.ID, first.Entry.Kind, TaskStatusOK, ConvergeHashSchema, input)
+	matched, err := successfulInputSnapshotMatchesRecordedSchema(runsDir, "prior-run", sub.resourceID(), first.Entry.ID, first.Entry.Kind, TaskStatusOK, ConvergeHashSchema, successfulInputDigest(input), input)
 	if err != nil {
 		t.Fatalf("prove retained storage subobject evidence: %v", err)
 	}
@@ -397,7 +397,7 @@ func assertCurrentTaskEvidenceIsProvable(t *testing.T, runsDir, runID string, ta
 	if err != nil {
 		t.Fatalf("task hash input: %v", err)
 	}
-	matched, err := successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, applyTaskSafetyResourceID(task), task.Entry.ID, task.Entry.Kind, status, ConvergeHashSchema, input)
+	matched, err := successfulInputSnapshotMatchesRecordedSchema(runsDir, runID, applyTaskSafetyResourceID(task), task.Entry.ID, task.Entry.Kind, status, ConvergeHashSchema, successfulInputDigest(input), input)
 	if err != nil {
 		t.Fatalf("prove retained task evidence: %v", err)
 	}

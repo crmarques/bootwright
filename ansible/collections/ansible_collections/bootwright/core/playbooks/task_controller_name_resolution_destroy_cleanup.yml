@@ -60,3 +60,6 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.name }}"
+
+    - name: Finalize controller name-resolution cleanup proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

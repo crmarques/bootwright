@@ -356,21 +356,3 @@ learned; this file records what it still owes.
   closure. Add deterministic counters for render, ownership-load, secret
   materialization, and runner launches; preserve per-cluster ledger outcomes and
   independent-cluster concurrency.
-
-## B-089 — Normal Ceph destroy trusts existence-only controller ownership
-
-- Status: open
-- Area: storage / ownership safety
-- Origin: terminal destroy-attestation review 2026-08-10
-- Severity: high
-- Problem: the normal reachable-seed path in `destroy_steps/cluster_gate.yml`
-  uses only `storage-cluster/<name>.json` existence in its ownership decision.
-  Its surviving-host adoption path rejects a nonempty fsid mismatch but accepts
-  an empty, malformed, or identity-mismatched record. The dead-seed path and the
-  apply incomplete-bootstrap gate already require the full apiVersion, kind,
-  name, owner role, context, cluster, host, seedHost, and fsid identity, so the
-  weaker normal path contradicts the stated controller ownership contract.
-- Exit: decode the controller record once through a strict reusable classifier,
-  require the same exact identity on every destroy authority path, and add
-  reachable-seed plus survivor-adoption fixtures for malformed, reference,
-  foreign-context, wrong-seed, missing-fsid, and matching owner records.

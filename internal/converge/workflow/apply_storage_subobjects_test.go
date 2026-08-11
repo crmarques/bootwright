@@ -69,7 +69,7 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 	}
 	classifyPool := func(t *testing.T, runsDir string, state v1alpha1.State) ObjectClassification {
 		t.Helper()
-		objs, err := ClassifyApplyObjects([]ApplyTask{clusterTask(state)}, runsDir)
+		objs, err := ClassifyApplyObjects([]ApplyTask{clusterTask(state)}, runsDir, "test")
 		if err != nil {
 			t.Fatalf("classify: %v", err)
 		}
@@ -113,13 +113,16 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 		t.Fatalf("desired hash: %v", err)
 	}
 	structuralLess := ConvergeSafetyRecord{
-		APIVersion:  ConvergeSafetyAPIVersion,
-		ResourceID:  "StoragePool/demo.p1",
-		DesiredHash: desired,
-		HashSchema:  ConvergeHashSchema,
-		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
-		Status:      ConvergeSafetyStatusReconciled,
-		UpdatedAt:   now.UTC(),
+		APIVersion:   ConvergeSafetyAPIVersion,
+		ResourceID:   "StoragePool/demo.p1",
+		ResourceKind: storageSubObjectKindPool,
+		TaskID:       "storage.demo",
+		TaskKind:     ApplyTaskKindStorageCluster,
+		DesiredHash:  desired,
+		HashSchema:   ConvergeHashSchema,
+		Owner:        ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner, Context: "test"},
+		Status:       ConvergeSafetyStatusReconciled,
+		UpdatedAt:    now.UTC(),
 	}
 	if err := SaveConvergeSafetyRecord(legacyDir, structuralLess); err != nil {
 		t.Fatalf("save structural-less record: %v", err)
@@ -131,19 +134,22 @@ func TestStorageSubObjectPoolSizeIsReconcilableTypeIsStructural(t *testing.T) {
 
 	preSchemaDir := t.TempDir()
 	preSchema := ConvergeSafetyRecord{
-		APIVersion:  ConvergeSafetyAPIVersion,
-		ResourceID:  "StoragePool/demo.p1",
-		DesiredHash: desired,
-		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
-		Status:      ConvergeSafetyStatusReconciled,
-		UpdatedAt:   now.UTC(),
+		APIVersion:   ConvergeSafetyAPIVersion,
+		ResourceID:   "StoragePool/demo.p1",
+		ResourceKind: storageSubObjectKindPool,
+		TaskID:       "storage.demo",
+		TaskKind:     ApplyTaskKindStorageCluster,
+		DesiredHash:  desired,
+		Owner:        ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner, Context: "test"},
+		Status:       ConvergeSafetyStatusReconciled,
+		UpdatedAt:    now.UTC(),
 	}
 	if err := SaveConvergeSafetyRecord(preSchemaDir, preSchema); err != nil {
 		t.Fatalf("save pre-schema record: %v", err)
 	}
 	preSchemaClassified := classifyPool(t, preSchemaDir, stateWith(storageSubObjectTestPool("p1", 2)))
 	if !preSchemaClassified.HasStructuralDrift() || preSchemaClassified.HasReconcilableDrift() {
-		t.Fatalf("a pre-schema record must fail closed as structural drift, never silently reconcile: structural=%v reconcilable=%v", preSchemaClassified.HasStructuralDrift(), preSchemaClassified.HasReconcilableDrift())
+		t.Fatalf("an exact-authority pre-schema record must fail closed as structural drift, never silently reconcile: structural=%v reconcilable=%v", preSchemaClassified.HasStructuralDrift(), preSchemaClassified.HasReconcilableDrift())
 	}
 }
 
@@ -209,7 +215,7 @@ func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 		State:           grown,
 		DesiredHashVars: storageClusterDesiredHashVars(grown, "demo"),
 	}
-	objs, err := ClassifyApplyObjects([]ApplyTask{grownTask}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{grownTask}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -267,7 +273,7 @@ func TestClassifyApplyObjectsExpandsStorageNFSExports(t *testing.T) {
 		State:           grown,
 		DesiredHashVars: storageClusterDesiredHashVars(grown, "demo"),
 	}
-	objs, err := ClassifyApplyObjects([]ApplyTask{grownTask}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{grownTask}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -305,7 +311,7 @@ func TestClassifyApplyObjectsReportsSubObjectDrift(t *testing.T) {
 		State:           drifted,
 		DesiredHashVars: storageClusterDesiredHashVars(drifted, "demo"),
 	}
-	objs, err := ClassifyApplyObjects([]ApplyTask{task}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{task}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}
@@ -341,7 +347,7 @@ func TestRemoveStorageSubObjectsConvergeSafetyResetsRecords(t *testing.T) {
 	if _, found, _ := LoadConvergeSafetyRecord(runsDir, sub.resourceID()); found {
 		t.Fatal("record must be gone after destroy reset")
 	}
-	class, err := classifyStorageSubObject(state, sub, runsDir)
+	class, err := classifyStorageSubObject(state, sub, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

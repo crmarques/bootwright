@@ -8,6 +8,7 @@
     bootwright_kubevirt_root_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root"
     bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-agent-iso"
     bootwright_kubevirt_iso_source_dv_name: "{{ bootwright_current_cluster.name }}-agent-iso-source"
+    bootwright_kubevirt_context_name: "{{ bootwright_clusters_dir | dirname | basename }}"
     bootwright_kubevirt_cluster_scope_teardown: "{{ bootwright_destroy_machine_scope is not defined }}"
   changed_when: false
 
@@ -47,55 +48,63 @@
       }}
   changed_when: false
 
-- name: Resolve KubeVirt machine ownership record presence
-  ansible.builtin.set_fact:
-    bootwright_kubevirt_machine_recorded: >-
-      {{
-        (bootwright_ownership_records_by_kind | default({})).get('kubevirt-machine', [])
-        | selectattr('name', 'equalto', bootwright_kubevirt_vm_name)
-        | list | length > 0
-      }}
-  changed_when: false
-
-- name: Require a captured kubeconfig for the recorded KubeVirt guest
+- name: Require a captured kubeconfig for the selected KubeVirt guest
   ansible.builtin.assert:
     that:
       - bootwright_kubevirt_host_kubeconfig_available | bool
     fail_msg: >-
-      Cannot destroy recorded KubeVirt guest {{ bootwright_kubevirt_vm_name }}: host cluster
+      Cannot destroy selected KubeVirt guest {{ bootwright_kubevirt_vm_name }}: host cluster
       {{ bootwright_kubevirt_host_cluster | default('<external>', true) }} has no captured
-      kubeconfig in this context, so the guest cannot be deleted or proven absent. Restore
-      the host cluster and retry.
-  when: bootwright_kubevirt_machine_recorded | default(false) | bool
+      kubeconfig in this context. A missing controller ownership record does not prove the
+      guest absent, and destroy will retain its evidence rather than report success over an
+      unprobed host. Restore host access, then re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
 
 - name: Require the KubeVirt host cluster to be reachable
   ansible.builtin.assert:
     that:
       - bootwright_kubevirt_host_reachable | bool
     fail_msg: >-
-      Cannot destroy recorded KubeVirt guest {{ bootwright_kubevirt_vm_name }}: host cluster
-      {{ bootwright_kubevirt_host_cluster | default('<external>', true) }} is unreachable, and
-      --authorize unreachable-nodes cannot prove the guest absent. Power the host on and retry.
-  when:
-    - bootwright_kubevirt_machine_recorded | default(false) | bool
-    - bootwright_kubevirt_host_kubeconfig_available | bool
+      Cannot destroy selected KubeVirt guest {{ bootwright_kubevirt_vm_name }}: host cluster
+      {{ bootwright_kubevirt_host_cluster | default('<external>', true) }} is unreachable.
+      A missing controller ownership record and --authorize unreachable-nodes cannot prove the
+      guest absent, so destroy will retain its evidence. Restore host access, then re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
 
-- name: Note never-provisioned KubeVirt guest on an unavailable host cluster
-  ansible.builtin.debug:
-    msg: >-
-      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}: no kubevirt-machine
-      ownership record, and host cluster
-      {{ bootwright_kubevirt_host_cluster | default('<external>', true) }}
-      {{ 'has no captured kubeconfig' if not (bootwright_kubevirt_host_kubeconfig_available | bool) else 'is unreachable' }}
-      — the guest was never provisioned, so substrate teardown is a no-op.
-  when:
-    - not (bootwright_kubevirt_machine_recorded | default(false) | bool)
-    - not (bootwright_kubevirt_host_reachable | bool)
+- name: Resolve KubeVirt destroy storage targets
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_destroy_storage_targets: >-
+      {{
+        [
+          {
+            'name': bootwright_kubevirt_root_dv_name,
+            'node': bootwright_component.name,
+            'role': 'root'
+          },
+          {
+            'name': bootwright_kubevirt_iso_dv_name,
+            'node': bootwright_component.name,
+            'role': 'agent-iso'
+          }
+        ]
+        + (
+          [
+            {
+              'name': bootwright_kubevirt_iso_source_dv_name,
+              'node': '',
+              'role': 'agent-iso-source'
+            }
+          ]
+          if (bootwright_kubevirt_cluster_scope_teardown | bool)
+          else []
+        )
+      }}
+  changed_when: false
 
 - name: Tear down KubeVirt guest on the reachable host cluster
   when: bootwright_kubevirt_host_reachable | bool
   block:
-    - name: Read KubeVirt VirtualMachine ownership label
+    - name: Read KubeVirt VirtualMachine identity
       ansible.builtin.command:
         argv:
           - kubectl
@@ -107,43 +116,100 @@
           - virtualmachine
           - "{{ bootwright_kubevirt_vm_name }}"
           - -o
-          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-      register: bootwright_kubevirt_vm_owner
+          - json
+      register: bootwright_kubevirt_vm_probe
       changed_when: false
       failed_when: false
+
+    - name: Classify KubeVirt VirtualMachine probe payload
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_vm_payload: >-
+          {{ bootwright_kubevirt_vm_probe.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe }}
+      changed_when: false
 
     - name: Resolve whether the host cluster serves the VirtualMachine API at all
       ansible.builtin.set_fact:
         bootwright_kubevirt_vm_api_absent: >-
-          {{ ("doesn't have a resource type" in (bootwright_kubevirt_vm_owner.stderr | default('')))
+          {{ (bootwright_kubevirt_vm_probe.rc is defined)
+             and ((bootwright_kubevirt_vm_probe.rc | int) != 0)
+             and ("doesn't have a resource type" in (bootwright_kubevirt_vm_probe.stderr | default('')))
              and ('unable to retrieve the complete list of server APIs'
-                  not in (bootwright_kubevirt_vm_owner.stderr | default(''))) }}
+                  not in (bootwright_kubevirt_vm_probe.stderr | default(''))) }}
       changed_when: false
 
     - name: Require a conclusive KubeVirt VirtualMachine probe
       ansible.builtin.assert:
         that:
           - >-
-            (bootwright_kubevirt_vm_owner.rc | default(1)) == 0
-            or 'NotFound' in (bootwright_kubevirt_vm_owner.stderr | default(''))
-            or (bootwright_kubevirt_vm_api_absent | default(false) | bool)
+            (
+              bootwright_kubevirt_vm_probe.rc is defined
+              and (bootwright_kubevirt_vm_probe.rc | int) == 0
+              and bootwright_kubevirt_vm_payload.valid | bool
+              and bootwright_kubevirt_vm_payload.value.get('apiVersion', '') == 'kubevirt.io/v1'
+              and bootwright_kubevirt_vm_payload.value.get('kind', '') == 'VirtualMachine'
+              and bootwright_kubevirt_vm_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_vm_name
+              and bootwright_kubevirt_vm_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+            )
+            or (
+              bootwright_kubevirt_vm_probe.rc is defined
+              and (bootwright_kubevirt_vm_probe.rc | int) != 0
+              and (
+                'NotFound' in (bootwright_kubevirt_vm_probe.stderr | default(''))
+                or (bootwright_kubevirt_vm_api_absent | default(false) | bool)
+              )
+            )
         fail_msg: >-
           Could not determine whether VirtualMachine {{ bootwright_kubevirt_vm_name }}
           in namespace {{ bootwright_kubevirt_namespace }} exists:
-          {{ bootwright_kubevirt_vm_owner.stderr | default('kubectl get failed with no detail') }}.
+          {{
+            (
+              bootwright_kubevirt_vm_payload.reason
+              | default('kubectl returned a JSON object for a different resource identity', true)
+            )
+            if (
+              bootwright_kubevirt_vm_probe.rc is defined
+              and (bootwright_kubevirt_vm_probe.rc | int) == 0
+            )
+            else (
+              bootwright_kubevirt_vm_probe.stderr
+              | default('kubectl get failed with no detail', true)
+            )
+          }}.
           Refusing to treat it as absent — that would skip its teardown and drop
           its ownership record while the VM may still run. A NotFound answer, or a host
           cluster whose API discovery completed and serves no VirtualMachine resource type
           at all, is conclusive absence; this error is neither — a probe that failed while
           API discovery was incomplete may only be missing the API group that serves the
-          guest. Fix host-cluster kubeconfig access and re-run destroy.
+          guest. Fix host-cluster access, then re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
+
+    - name: Resolve KubeVirt VirtualMachine live identity
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_vm_live: >-
+          {{
+            bootwright_kubevirt_vm_payload.value
+            if (
+              bootwright_kubevirt_vm_probe.rc is defined
+              and (bootwright_kubevirt_vm_probe.rc | int) == 0
+            )
+            else {}
+          }}
+      changed_when: false
 
     - name: Resolve KubeVirt VirtualMachine ownership for destroy
       ansible.builtin.set_fact:
-        bootwright_kubevirt_vm_present: "{{ (bootwright_kubevirt_vm_owner.rc | default(1)) == 0 }}"
+        bootwright_kubevirt_vm_present: >-
+          {{ bootwright_kubevirt_vm_probe.rc is defined and (bootwright_kubevirt_vm_probe.rc | int) == 0 }}
         bootwright_kubevirt_destroy_owned: >-
-          {{ (bootwright_kubevirt_vm_owner.rc | default(1)) != 0
-             or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright' }}
+          {{
+            (bootwright_kubevirt_vm_probe.rc | default(1)) != 0
+            or (
+              bootwright_kubevirt_vm_live.get('metadata', {}).get('labels', {}).get('bootwright.io/managed-by', '') == 'bootwright'
+              and bootwright_kubevirt_vm_live.get('metadata', {}).get('labels', {}).get('bootwright.io/context', '') == bootwright_kubevirt_context_name
+              and bootwright_kubevirt_vm_live.get('metadata', {}).get('labels', {}).get('bootwright.io/cluster', '') == bootwright_current_cluster.name
+              and bootwright_kubevirt_vm_live.get('metadata', {}).get('labels', {}).get('bootwright.io/node', '') == bootwright_component.name
+            )
+          }}
       changed_when: false
 
     - name: Note already-absent KubeVirt VirtualMachine
@@ -165,20 +231,408 @@
           - bootwright_kubevirt_destroy_owned | default(false) | bool
         fail_msg: >-
           Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
-          {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
-          bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --authorize unowned-vms to delete it anyway.
+          {{ bootwright_kubevirt_namespace }}: its live managed-by, context, cluster, and node
+          labels do not exactly identify this Bootwright target. Re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }} --authorize unowned-vms`
+          to delete this same-named foreign or tampered VM intentionally.
       when: not (bootwright_destroy_authorize_unowned_vms | default(false) | bool)
 
     - name: Warn before force-deleting an unowned KubeVirt VirtualMachine
       ansible.builtin.debug:
         msg: >-
           --authorize unowned-vms: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
-          namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
-          bootwright.io/managed-by=bootwright ownership label.
+          namespace {{ bootwright_kubevirt_namespace }} despite live labels that do not exactly
+          match this context, cluster, and node.
       when:
         - bootwright_destroy_authorize_unowned_vms | default(false) | bool
         - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
+
+    - name: Read KubeVirt DataVolume identities
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - get
+          - datavolume
+          - "{{ item.name }}"
+          - -o
+          - json
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      register: bootwright_kubevirt_dv_probe
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Read KubeVirt PersistentVolumeClaim identities
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ bootwright_kubevirt_kubeconfig }}"
+          - -n
+          - "{{ bootwright_kubevirt_namespace }}"
+          - get
+          - persistentvolumeclaim
+          - "{{ item.name }}"
+          - -o
+          - json
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      register: bootwright_kubevirt_pvc_probe
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Require conclusive KubeVirt DataVolume probes
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              item.rc is defined
+              and (item.rc | int) == 0
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).valid | bool
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('apiVersion', '') == 'cdi.kubevirt.io/v1beta1'
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('kind', '') == 'DataVolume'
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('metadata', {}).get('name', '') == item.item.name
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+            )
+            or (
+              item.rc is defined
+              and (item.rc | int) != 0
+              and (
+                'NotFound' in (item.stderr | default(''))
+                or (
+                  "doesn't have a resource type" in (item.stderr | default(''))
+                  and ('unable to retrieve the complete list of server APIs'
+                       not in (item.stderr | default('')))
+                )
+              )
+            )
+        fail_msg: >-
+          Could not determine whether DataVolume {{ item.item.name }} in namespace
+          {{ bootwright_kubevirt_namespace }} exists:
+          {{
+            (
+              (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).reason
+              | default('kubectl returned a JSON object for a different resource identity', true)
+            )
+            if (item.rc is defined and (item.rc | int) == 0)
+            else (item.stderr | default('kubectl get failed with no detail', true))
+          }}.
+          Refusing to treat it as absent — its teardown would be silently
+          skipped. A NotFound answer, or a host cluster whose API discovery completed and
+          serves no DataVolume resource type at all, is conclusive absence; this error is
+          neither. Fix host-cluster access, then re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_dv_probe.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Require conclusive KubeVirt PersistentVolumeClaim probes
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              item.rc is defined
+              and (item.rc | int) == 0
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).valid | bool
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('apiVersion', '') == 'v1'
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('kind', '') == 'PersistentVolumeClaim'
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('metadata', {}).get('name', '') == item.item.name
+              and (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+            )
+            or (
+              item.rc is defined
+              and (item.rc | int) != 0
+              and 'NotFound' in (item.stderr | default(''))
+            )
+        fail_msg: >-
+          Could not determine whether PersistentVolumeClaim {{ item.item.name }} in namespace
+          {{ bootwright_kubevirt_namespace }} exists:
+          {{
+            (
+              (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).reason
+              | default('kubectl returned a JSON object for a different resource identity', true)
+            )
+            if (item.rc is defined and (item.rc | int) == 0)
+            else (item.stderr | default('kubectl get failed with no detail', true))
+          }}.
+          Refusing to treat it as absent because destroy would otherwise erase the
+          DataVolume and controller evidence while storage may remain. Fix host-cluster
+          access, then re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Initialize KubeVirt storage identity maps
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_dv_live_by_name: {}
+        bootwright_kubevirt_pvc_live_by_name: {}
+        bootwright_kubevirt_dv_owned_by_name: {}
+        bootwright_kubevirt_pvc_exact_identity_by_name: {}
+        bootwright_kubevirt_pvc_dv_identity_by_name: {}
+      changed_when: false
+
+    - name: Resolve KubeVirt live DataVolume identities
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_dv_live_by_name: >-
+          {{
+            bootwright_kubevirt_dv_live_by_name
+            | combine(
+                {
+                  item.item.name: (
+                    (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value
+                    if (item.rc is defined and (item.rc | int) == 0)
+                    else {}
+                  )
+                }
+              )
+          }}
+      loop: "{{ bootwright_kubevirt_dv_probe.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: Resolve KubeVirt live PersistentVolumeClaim identities
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_pvc_live_by_name: >-
+          {{
+            bootwright_kubevirt_pvc_live_by_name
+            | combine(
+                {
+                  item.item.name: (
+                    (item.stdout | default('') | bootwright.core.bootwright_kubernetes_object_probe).value
+                    if (item.rc is defined and (item.rc | int) == 0)
+                    else {}
+                  )
+                }
+              )
+          }}
+      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: Resolve exact KubeVirt DataVolume identities
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_dv_owned_by_name: >-
+          {{
+            bootwright_kubevirt_dv_owned_by_name
+            | combine(
+                {
+                  item.name: (
+                    (bootwright_kubevirt_dv_live_by_name.get(item.name, {}) | length == 0)
+                    or (
+                      bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/managed-by', '') == 'bootwright'
+                      and bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/context', '') == bootwright_kubevirt_context_name
+                      and bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/cluster', '') == bootwright_current_cluster.name
+                      and bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/role', '') == item.role
+                      and (
+                        (
+                          item.node | length > 0
+                          and bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/node', '') == item.node
+                        )
+                        or (
+                          item.node | length == 0
+                          and 'bootwright.io/node' not in bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                        )
+                      )
+                    )
+                  )
+                }
+              )
+          }}
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: Resolve exact KubeVirt PersistentVolumeClaim identities
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_pvc_exact_identity_by_name: >-
+          {{
+            bootwright_kubevirt_pvc_exact_identity_by_name
+            | combine(
+                {
+                  item.name: (
+                    bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/managed-by', '') == 'bootwright'
+                    and bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/context', '') == bootwright_kubevirt_context_name
+                    and bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/cluster', '') == bootwright_current_cluster.name
+                    and bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/role', '') == item.role
+                    and (
+                      (
+                        item.node | length > 0
+                        and bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {}).get('bootwright.io/node', '') == item.node
+                      )
+                      or (
+                        item.node | length == 0
+                        and 'bootwright.io/node' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                      )
+                    )
+                  )
+                }
+              )
+          }}
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: Resolve KubeVirt PersistentVolumeClaim DataVolume identities
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_pvc_dv_identity_by_name: >-
+          {{
+            bootwright_kubevirt_pvc_dv_identity_by_name
+            | combine(
+                {
+                  item.name: (
+                    bootwright_kubevirt_pvc_live_by_name.get(item.name, {}) | length > 0
+                    and bootwright_kubevirt_dv_live_by_name.get(item.name, {}) | length > 0
+                    and bootwright_kubevirt_dv_owned_by_name.get(item.name, false) | bool
+                    and bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('uid', '') | length > 0
+                    and 'bootwright.io/managed-by' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                    and 'bootwright.io/context' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                    and 'bootwright.io/cluster' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                    and 'bootwright.io/node' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                    and 'bootwright.io/role' not in bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('labels', {})
+                    and (
+                      bootwright_kubevirt_pvc_live_by_name.get(item.name, {}).get('metadata', {}).get('ownerReferences', [])
+                      | selectattr('apiVersion', 'equalto', bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('apiVersion', ''))
+                      | selectattr('kind', 'equalto', 'DataVolume')
+                      | selectattr('name', 'equalto', item.name)
+                      | selectattr('uid', 'equalto', bootwright_kubevirt_dv_live_by_name.get(item.name, {}).get('metadata', {}).get('uid', ''))
+                      | list | length > 0
+                    )
+                  )
+                }
+              )
+          }}
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: Refuse to delete a foreign KubeVirt DataVolume
+      ansible.builtin.assert:
+        that:
+          - bootwright_kubevirt_dv_owned_by_name.get(item.name, false) | bool
+        fail_msg: >-
+          Refusing to delete DataVolume {{ item.name }} in namespace
+          {{ bootwright_kubevirt_namespace }}: its live managed-by, context, cluster, role,
+          and node labels do not exactly identify this Bootwright target. Re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }} --authorize unowned-networks`
+          to delete this same-named foreign or tampered storage intentionally.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
+
+    - name: Warn before force-deleting an unowned KubeVirt DataVolume
+      ansible.builtin.debug:
+        msg: >-
+          --authorize unowned-networks: deleting DataVolume {{ item.name }} in namespace
+          {{ bootwright_kubevirt_namespace }} despite live labels that do not exactly match
+          this context, cluster, role, and node.
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
+        - bootwright_kubevirt_dv_live_by_name.get(item.name, {}) | length > 0
+        - not (bootwright_kubevirt_dv_owned_by_name.get(item.name, false) | bool)
+
+    - name: Refuse to delete a foreign KubeVirt PersistentVolumeClaim
+      ansible.builtin.assert:
+        that:
+          - >-
+            bootwright_kubevirt_pvc_live_by_name.get(item.name, {}) | length == 0
+            or bootwright_kubevirt_pvc_exact_identity_by_name.get(item.name, false) | bool
+            or bootwright_kubevirt_pvc_dv_identity_by_name.get(item.name, false) | bool
+        fail_msg: >-
+          Refusing to delete PersistentVolumeClaim {{ item.name }} in namespace
+          {{ bootwright_kubevirt_namespace }}: it neither carries this target's exact
+          managed-by, context, cluster, role, and node identity nor has an exact live
+          ownerReference to this target's verified DataVolume. Re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }} --authorize unowned-networks`
+          to delete this same-named foreign or tampered claim intentionally.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
+
+    - name: Warn before force-deleting an unowned KubeVirt PersistentVolumeClaim
+      ansible.builtin.debug:
+        msg: >-
+          --authorize unowned-networks: deleting PersistentVolumeClaim {{ item.name }} in
+          namespace {{ bootwright_kubevirt_namespace }} despite an identity that does not
+          exactly match this context, cluster, role, and node.
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
+        - bootwright_kubevirt_pvc_live_by_name.get(item.name, {}) | length > 0
+        - not (bootwright_kubevirt_pvc_exact_identity_by_name.get(item.name, false) | bool)
+        - not (bootwright_kubevirt_pvc_dv_identity_by_name.get(item.name, false) | bool)
+
+    - name: Stamp inherited KubeVirt PersistentVolumeClaim identities
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [
+              'kubectl',
+              '--kubeconfig', bootwright_kubevirt_kubeconfig,
+              '-n', bootwright_kubevirt_namespace,
+              'label', 'persistentvolumeclaim', item.name,
+              'bootwright.io/managed-by=bootwright',
+              'bootwright.io/context=' ~ bootwright_kubevirt_context_name,
+              'bootwright.io/cluster=' ~ bootwright_current_cluster.name,
+              'bootwright.io/role=' ~ item.role
+            ]
+            + (
+              ['bootwright.io/node=' ~ item.node]
+              if item.node | length > 0
+              else []
+            )
+            + ['--overwrite']
+          }}
+      loop: "{{ bootwright_kubevirt_destroy_storage_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: bootwright_kubevirt_pvc_identity_stamp
+      changed_when: >-
+        (bootwright_kubevirt_pvc_identity_stamp.rc | default(1)) == 0
+        and 'not labeled' not in (bootwright_kubevirt_pvc_identity_stamp.stdout | default(''))
+      failed_when: false
+      when:
+        - not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
+        - not (bootwright_kubevirt_pvc_exact_identity_by_name.get(item.name, false) | bool)
+        - bootwright_kubevirt_pvc_dv_identity_by_name.get(item.name, false) | bool
+
+    - name: Require inherited KubeVirt PersistentVolumeClaim identity stamps
+      ansible.builtin.assert:
+        that:
+          - item.skipped | default(false) | bool or (item.rc | default(1)) == 0
+        fail_msg: >-
+          Could not preserve the exact Bootwright identity on PersistentVolumeClaim
+          {{ item.item.name }} before deleting its DataVolume:
+          {{ item.stderr | default('kubectl label failed with no detail') }}.
+          Refusing to erase the live ownership evidence a retry needs. Fix host-cluster
+          access, then re-run
+          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
+        quiet: true
+      loop: "{{ bootwright_kubevirt_pvc_identity_stamp.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
 
     - name: Delete KubeVirt VirtualMachine
       ansible.builtin.command:
@@ -196,145 +650,6 @@
       changed_when: "'deleted' in (bootwright_kubevirt_vm_delete.stdout | default(''))"
       when: bootwright_kubevirt_vm_present | bool
 
-    - name: Read KubeVirt DataVolume ownership labels
-      ansible.builtin.command:
-        argv:
-          - kubectl
-          - --kubeconfig
-          - "{{ bootwright_kubevirt_kubeconfig }}"
-          - -n
-          - "{{ bootwright_kubevirt_namespace }}"
-          - get
-          - datavolume
-          - "{{ item }}"
-          - -o
-          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-      loop: >-
-        {{
-          [bootwright_kubevirt_root_dv_name, bootwright_kubevirt_iso_dv_name]
-          + (
-            [bootwright_kubevirt_iso_source_dv_name]
-            if (bootwright_kubevirt_cluster_scope_teardown | bool)
-            else []
-          )
-        }}
-      register: bootwright_kubevirt_dv_owner
-      changed_when: false
-      failed_when: false
-
-    - name: Read KubeVirt PersistentVolumeClaim ownership labels
-      ansible.builtin.command:
-        argv:
-          - kubectl
-          - --kubeconfig
-          - "{{ bootwright_kubevirt_kubeconfig }}"
-          - -n
-          - "{{ bootwright_kubevirt_namespace }}"
-          - get
-          - persistentvolumeclaim
-          - "{{ item }}"
-          - -o
-          - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
-      loop: >-
-        {{
-          [bootwright_kubevirt_root_dv_name, bootwright_kubevirt_iso_dv_name]
-          + (
-            [bootwright_kubevirt_iso_source_dv_name]
-            if (bootwright_kubevirt_cluster_scope_teardown | bool)
-            else []
-          )
-        }}
-      register: bootwright_kubevirt_pvc_probe
-      changed_when: false
-      failed_when: false
-
-    - name: Require conclusive KubeVirt DataVolume probes
-      ansible.builtin.assert:
-        that:
-          - >-
-            (item.rc | default(1)) == 0
-            or 'NotFound' in (item.stderr | default(''))
-            or (("doesn't have a resource type" in (item.stderr | default('')))
-                and ('unable to retrieve the complete list of server APIs'
-                     not in (item.stderr | default(''))))
-        fail_msg: >-
-          Could not determine whether DataVolume {{ item.item }} in namespace
-          {{ bootwright_kubevirt_namespace }} exists:
-          {{ item.stderr | default('kubectl get failed with no detail') }}.
-          Refusing to treat it as absent — its teardown would be silently
-          skipped. A NotFound answer, or a host cluster whose API discovery completed and
-          serves no DataVolume resource type at all, is conclusive absence; this error is
-          neither. Fix host-cluster kubeconfig access and re-run destroy.
-        quiet: true
-      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-
-    - name: Refuse to delete a non-Bootwright KubeVirt DataVolume
-      ansible.builtin.assert:
-        that:
-          - (item.rc | default(1)) != 0 or (item.stdout | default('') | trim) == 'bootwright'
-        fail_msg: >-
-          Refusing to delete DataVolume {{ item.item }} in namespace
-          {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
-          bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
-          Pass --authorize unowned-networks to delete it anyway.
-        quiet: true
-      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
-
-    - name: Warn before force-deleting an unowned KubeVirt DataVolume
-      ansible.builtin.debug:
-        msg: >-
-          --authorize unowned-networks: deleting DataVolume {{ item.item }} in namespace
-          {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
-          bootwright.io/managed-by=bootwright ownership label.
-      loop: "{{ bootwright_kubevirt_dv_owner.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when:
-        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
-        - (item.rc | default(1)) == 0
-        - (item.stdout | default('') | trim) != 'bootwright'
-
-    - name: Refuse to delete a non-Bootwright KubeVirt PersistentVolumeClaim
-      ansible.builtin.assert:
-        that:
-          - >-
-            (item.rc | default(1)) != 0
-            or (item.stdout | default('') | trim) | length == 0
-            or (item.stdout | default('') | trim) == 'bootwright'
-        fail_msg: >-
-          Refusing to delete PersistentVolumeClaim {{ item.item }} in namespace
-          {{ bootwright_kubevirt_namespace }}: it exists and is labelled
-          bootwright.io/managed-by={{ item.stdout | default('') | trim }}, so it belongs to
-          another owner. A claim orphaned by a Bootwright DataVolume carries no ownership
-          label of its own and is purged without a token; this one names someone else.
-          Pass --authorize unowned-networks to delete it anyway.
-        quiet: true
-      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when: not (bootwright_destroy_authorize_unowned_networks | default(false) | bool)
-
-    - name: Warn before force-deleting an unowned KubeVirt PersistentVolumeClaim
-      ansible.builtin.debug:
-        msg: >-
-          --authorize unowned-networks: deleting PersistentVolumeClaim {{ item.item }} in
-          namespace {{ bootwright_kubevirt_namespace }} despite a
-          bootwright.io/managed-by={{ item.stdout | default('') | trim }} ownership label
-          naming another owner.
-      loop: "{{ bootwright_kubevirt_pvc_probe.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when:
-        - bootwright_destroy_authorize_unowned_networks | default(false) | bool
-        - (item.rc | default(1)) == 0
-        - (item.stdout | default('') | trim) | length > 0
-        - (item.stdout | default('') | trim) != 'bootwright'
-
     - name: Delete KubeVirt DataVolumes
       ansible.builtin.command:
         argv:
@@ -351,7 +666,7 @@
       register: bootwright_kubevirt_dv_delete
       changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
       when: >-
-        bootwright_kubevirt_dv_owner.results
+        bootwright_kubevirt_dv_probe.results
         | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | list | length > 0
@@ -364,7 +679,7 @@
         bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_root_dv_name }}"
       when: >-
         bootwright_kubevirt_pvc_probe.results
-        | selectattr('item', 'equalto', bootwright_kubevirt_root_dv_name)
+        | selectattr('item.name', 'equalto', bootwright_kubevirt_root_dv_name)
         | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | list | length > 0
@@ -377,7 +692,7 @@
         bootwright_kubevirt_media_pvc_name: "{{ bootwright_kubevirt_iso_dv_name }}"
       when: >-
         bootwright_kubevirt_pvc_probe.results
-        | selectattr('item', 'equalto', bootwright_kubevirt_iso_dv_name)
+        | selectattr('item.name', 'equalto', bootwright_kubevirt_iso_dv_name)
         | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | list | length > 0
@@ -399,8 +714,8 @@
       when:
         - bootwright_kubevirt_cluster_scope_teardown | bool
         - >-
-          bootwright_kubevirt_dv_owner.results
-          | selectattr('item', 'equalto', bootwright_kubevirt_iso_source_dv_name)
+          bootwright_kubevirt_dv_probe.results
+          | selectattr('item.name', 'equalto', bootwright_kubevirt_iso_source_dv_name)
           | selectattr('rc', 'defined')
           | selectattr('rc', 'equalto', 0)
           | list | length > 0
@@ -415,7 +730,7 @@
         - bootwright_kubevirt_cluster_scope_teardown | bool
         - >-
           bootwright_kubevirt_pvc_probe.results
-          | selectattr('item', 'equalto', bootwright_kubevirt_iso_source_dv_name)
+          | selectattr('item.name', 'equalto', bootwright_kubevirt_iso_source_dv_name)
           | selectattr('rc', 'defined')
           | selectattr('rc', 'equalto', 0)
           | list | length > 0

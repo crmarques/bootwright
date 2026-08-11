@@ -23,6 +23,8 @@ func TestRunPreparedDestroyTaskGraphRunsStepsToLogs(t *testing.T) {
 	if err := os.WriteFile(executable, []byte(`#!/bin/sh
 echo destroy-stdout-line
 echo destroy-stderr-line >&2
+mkdir -p "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+printf '%s\n' '{"schemaVersion":1,"status":"terminal","processedHosts":[],"hosts":{}}' > "$BOOTWRIGHT_ANSIBLE_ARTIFACTS/run-result.jsonl"
 `), 0o755); err != nil {
 		t.Fatalf("write fake ansible-playbook: %v", err)
 	}

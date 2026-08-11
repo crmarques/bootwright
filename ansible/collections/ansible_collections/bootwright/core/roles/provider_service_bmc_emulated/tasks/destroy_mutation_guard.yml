@@ -1,0 +1,31 @@
+---
+- name: Revalidate host-wide operation before BMC destroy mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Revalidate exact BMC endpoint claims before destroy mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_endpoint_claims.yml
+  vars:
+    bootwright_host_endpoint_required_claims: >-
+      {{ bootwright_bmc_endpoint_transition.retainedClaims }}
+
+- name: Re-probe exact BMC destroy evidence before mutation
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Require unchanged exact BMC destroy evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_claim_record == bootwright_bmc_destroy_claim_snapshot
+      - >-
+        bootwright_bmc_claim_transition
+        == bootwright_bmc_destroy_transition_snapshot
+      - bootwright_bmc_claim_context == bootwright_bmc_destroy_marker_snapshot
+    fail_msg: >-
+      Refusing the next BMC teardown mutation because the exact host operation,
+      endpoint slots, full claim, transition, or legacy marker changed after
+      admission. No later BMC side effect ran. Inspect the winning evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.

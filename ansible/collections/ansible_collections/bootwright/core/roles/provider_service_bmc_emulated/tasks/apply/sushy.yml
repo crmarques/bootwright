@@ -1,43 +1,6 @@
 ---
-- name: Probe existing libvirt vmedia storage pool
-  ansible.builtin.command:
-    argv:
-      - virsh
-      - -c
-      - "{{ bootwright_bmc_libvirt_uri }}"
-      - pool-dumpxml
-      - "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
-  register: bootwright_bmc_vmedia_pool_probe
-  changed_when: false
-  failed_when: false
-
-- name: Determine whether libvirt vmedia storage pool must be redefined
-  ansible.builtin.set_fact:
-    bootwright_bmc_vmedia_pool_redefine: "{{ ((bootwright_bmc_vmedia_pool_probe.rc | default(1) | int) == 0) and (('<path>' ~ bootwright_bmc_vmedia_root ~ '</path>') not in (bootwright_bmc_vmedia_pool_probe.stdout | default(''))) }}"
-  changed_when: false
-
-- name: Stop sushy-emulator before redefining vmedia storage pool
-  ansible.builtin.systemd_service:
-    name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
-    state: stopped
-  failed_when: false
-  when: bootwright_bmc_vmedia_pool_redefine | bool
-
-- name: Deactivate mismatched libvirt vmedia storage pool
-  community.libvirt.virt_pool:
-    name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
-    uri: "{{ bootwright_bmc_libvirt_uri }}"
-    state: inactive
-  failed_when: false
-  when: bootwright_bmc_vmedia_pool_redefine | bool
-
-- name: Undefine mismatched libvirt vmedia storage pool
-  community.libvirt.virt_pool:
-    name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
-    uri: "{{ bootwright_bmc_libvirt_uri }}"
-    state: absent
-  failed_when: false
-  when: bootwright_bmc_vmedia_pool_redefine | bool
+- name: Revalidate BMC authority before pool definition
+  ansible.builtin.include_tasks: ../mutation_guard.yml
 
 - name: Define libvirt vmedia storage pool
   community.libvirt.virt_pool:
@@ -47,11 +10,17 @@
     xml: "{{ lookup('ansible.builtin.template', 'vmedia/pool.xml.j2') }}"
   register: bootwright_bmc_vmedia_pool_define
 
+- name: Revalidate BMC authority before pool autostart mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Enable autostart on libvirt vmedia storage pool
   community.libvirt.virt_pool:
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
     uri: "{{ bootwright_bmc_libvirt_uri }}"
     autostart: true
+
+- name: Revalidate BMC authority before pool activation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
 
 - name: Activate libvirt vmedia storage pool
   community.libvirt.virt_pool:
@@ -59,6 +28,9 @@
     uri: "{{ bootwright_bmc_libvirt_uri }}"
     state: active
   register: bootwright_bmc_vmedia_pool_activate
+
+- name: Revalidate BMC authority before sushy config mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
 
 - name: Write sushy-emulator config
   ansible.builtin.template:
@@ -69,6 +41,9 @@
     mode: "0644"
   register: bootwright_bmc_sushy_conf
 
+- name: Revalidate BMC authority before sushy unit mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Write sushy-emulator systemd unit
   ansible.builtin.template:
     src: sushy/systemd.service.j2
@@ -78,10 +53,17 @@
     mode: "0644"
   register: bootwright_bmc_sushy_unit
 
+- name: Revalidate BMC authority before sushy daemon reload
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when: bootwright_bmc_sushy_unit.changed
+
 - name: Reload systemd manager when sushy unit changed
   ansible.builtin.systemd_service:
     daemon_reload: true
   when: bootwright_bmc_sushy_unit.changed
+
+- name: Revalidate BMC authority before sushy service mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
 
 - name: Ensure sushy-emulator service is running
   ansible.builtin.systemd_service:
@@ -93,7 +75,6 @@
             or bootwright_bmc_sushy_unit.changed
             or bootwright_bmc_sushy_pip.changed | default(false)
             or bootwright_bmc_sushy_restorecon.changed | default(false)
-            or bootwright_bmc_vmedia_pool_redefine | default(false) | bool
             or bootwright_bmc_vmedia_pool_define.changed | default(false)
             or bootwright_bmc_vmedia_pool_activate.changed | default(false))
         else 'started'
@@ -114,6 +95,10 @@
   delay: 2
   until: bootwright_bmc_sushy_ready.status == 200
   no_log: "{{ (bootwright_no_log | default(true) | bool) and ((bootwright_bmc_cred_path | length) > 0) }}"
+
+- name: Revalidate BMC authority before Redfish firewall mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when: bootwright_firewalld_available | default(false)
 
 - name: Open Redfish port on host firewall
   ansible.posix.firewalld:

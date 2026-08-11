@@ -87,20 +87,22 @@ func bracketControllerNameResolutionDestroy(scopeName string, extraVars []string
 		return steps
 	}
 	preflight := destroyStep{
-		id:         destroyControllerNameResolutionPreflightTaskID,
-		kind:       DestroyTaskKindControllerNameResolution,
-		label:      "Controller name resolution preflight",
-		playbook:   roles.PlaybookTaskControllerNameResolutionDestroyPreflight,
-		limit:      render.GroupControllerHosts,
-		forksLimit: render.GroupControllerHosts,
+		id:              destroyControllerNameResolutionPreflightTaskID,
+		kind:            DestroyTaskKindControllerNameResolution,
+		label:           "Controller name resolution preflight",
+		playbook:        roles.PlaybookTaskControllerNameResolutionDestroyPreflight,
+		limit:           render.GroupControllerHosts,
+		forksLimit:      render.GroupControllerHosts,
+		completionLimit: render.GroupControllerHosts,
 	}
 	cleanup := destroyStep{
-		id:         destroyControllerNameResolutionCleanupTaskID,
-		kind:       DestroyTaskKindControllerNameResolution,
-		label:      "Controller name resolution cleanup",
-		playbook:   roles.PlaybookTaskControllerNameResolutionDestroyCleanup,
-		limit:      render.GroupControllerHosts,
-		forksLimit: render.GroupControllerHosts,
+		id:              destroyControllerNameResolutionCleanupTaskID,
+		kind:            DestroyTaskKindControllerNameResolution,
+		label:           "Controller name resolution cleanup",
+		playbook:        roles.PlaybookTaskControllerNameResolutionDestroyCleanup,
+		limit:           render.GroupControllerHosts,
+		forksLimit:      render.GroupControllerHosts,
+		completionLimit: render.GroupControllerHosts,
 	}
 	bracketed := make([]destroyStep, 0, len(steps)+2)
 	bracketed = append(bracketed, preflight)
@@ -187,12 +189,13 @@ func infraDestroySteps(state v1alpha1.State, facts destroyGraphFacts, work destr
 func infraMachineDestroySteps() []destroyStep {
 	return []destroyStep{
 		{
-			id:         destroyMachineRegistrationTaskID,
-			kind:       DestroyTaskKindMachineRegistration,
-			label:      "Machine registration",
-			playbook:   roles.PlaybookTaskMachineRegistrationDeregister,
-			limit:      render.GroupStorageHosts,
-			forksLimit: render.GroupStorageHosts,
+			id:              destroyMachineRegistrationTaskID,
+			kind:            DestroyTaskKindMachineRegistration,
+			label:           "Machine registration",
+			playbook:        roles.PlaybookTaskMachineRegistrationDeregister,
+			limit:           render.GroupStorageHosts,
+			forksLimit:      render.GroupStorageHosts,
+			completionLimit: render.GroupStorageHosts,
 		},
 		{
 			id:                   destroyMachineInfraTaskID,
@@ -200,6 +203,7 @@ func infraMachineDestroySteps() []destroyStep {
 			label:                "Machine infrastructure",
 			playbook:             roles.PlaybookTaskMachineInfraDestroy,
 			limit:                machineInfraDestroyLimit(),
+			completionLimit:      machineInfraDestroyLimit(),
 			orderingDependencies: []string{destroyMachineRegistrationTaskID},
 		},
 	}
@@ -312,6 +316,7 @@ func infraComponentsDestroyStep(ordering []string) destroyStep {
 		label:                "Infra component services",
 		playbook:             roles.PlaybookTaskInfraComponentServicesDestroy,
 		forksLimit:           render.GroupInfraComponentHosts,
+		completionLimit:      render.GroupInfraComponentHosts,
 		orderingDependencies: ordering,
 	}
 }
@@ -323,6 +328,7 @@ func providerServicesDestroyStep(ordering []string) destroyStep {
 		label:                "Provider services",
 		playbook:             roles.PlaybookTaskProviderServicesDestroy,
 		forksLimit:           render.GroupProviderHosts,
+		completionLimit:      render.GroupProviderHosts,
 		orderingDependencies: ordering,
 	}
 }
@@ -347,6 +353,7 @@ type destroyStep struct {
 	playbook             string
 	limit                string
 	forksLimit           string
+	completionLimit      string
 	hostSlotKey          string
 	resourceKeys         []string
 	dependencies         []string
@@ -378,12 +385,19 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		}
 	}
 	tasks := make([]ApplyTask, 0, len(planned))
+	hostGroups := render.HostGroupMembers(state)
 	for _, step := range planned {
+		resourceKeys := append([]string(nil), step.resourceKeys...)
+		if len(resourceKeys) == 0 && step.forksLimit != "" {
+			for _, host := range hostGroups[step.forksLimit] {
+				resourceKeys = append(resourceKeys, DestroyMachineResourceKeyPrefix+host)
+			}
+		}
 		entry := TaskLedgerEntry{
 			ID:                   step.id,
 			Kind:                 step.kind,
 			Label:                step.label,
-			ResourceKeys:         step.resourceKeys,
+			ResourceKeys:         resourceKeys,
 			Status:               TaskStatusPending,
 			Dependencies:         destroyEmittedDependencies(step.dependencies, emitted),
 			SuccessDependencies:  destroyEmittedDependencies(step.successDependencies, emitted),
@@ -398,14 +412,15 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 			entry.HostSlotCount = 1
 		}
 		tasks = append(tasks, ApplyTask{
-			Entry:         entry,
-			Playbook:      step.playbook,
-			Limit:         taskLimit,
-			Forks:         destroyStepForks(state, step, taskLimit),
-			ExtraVarPairs: destroyTaskExtraVars(extraVars, step),
-			HostSlotKey:   step.hostSlotKey,
-			HostSlotCount: destroyStepHostSlotCount(step),
-			State:         state,
+			Entry:               entry,
+			Playbook:            step.playbook,
+			Limit:               taskLimit,
+			CompletionHostLimit: step.completionLimit,
+			Forks:               destroyStepForks(state, step, taskLimit),
+			ExtraVarPairs:       destroyTaskExtraVars(extraVars, step),
+			HostSlotKey:         step.hostSlotKey,
+			HostSlotCount:       destroyStepHostSlotCount(step),
+			State:               state,
 		})
 	}
 	partitionControllerNameResolutionCleanupDependencies(tasks)
@@ -428,7 +443,7 @@ func partitionControllerNameResolutionCleanupDependencies(tasks []ApplyTask) {
 		successDependencies := append([]string(nil), tasks[i].Entry.SuccessDependencies...)
 		for _, dependency := range tasks[i].Entry.Dependencies {
 			entry, ok := entries[dependency]
-			if ok && DestroyTaskNeedsCompletionProof(entry) {
+			if ok && DestroyTaskNeedsCompletionProof(entry) && len(entry.ResourceKeys) > 0 {
 				successDependencies = appendUniqueString(successDependencies, dependency)
 				continue
 			}
@@ -751,7 +766,7 @@ func DestroyTaskMachineKeys(task TaskLedgerEntry) []string {
 }
 
 func DestroyTaskNeedsCompletionProof(task TaskLedgerEntry) bool {
-	return len(DestroyTaskClusterKeys(task)) > 0 || len(DestroyTaskMachineKeys(task)) > 0 || task.Cluster != "" || task.Node != "" || len(task.Nodes) > 0
+	return IsDestroyTaskKind(task.Kind)
 }
 
 var destroyTaskKinds = map[string]bool{

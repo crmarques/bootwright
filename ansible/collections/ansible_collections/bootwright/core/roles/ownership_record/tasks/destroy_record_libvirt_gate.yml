@@ -1,0 +1,87 @@
+---
+- name: Validate recorded libvirt identity fields
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_record.cluster | default('') | length > 0
+      - bootwright_ownership_destroy_attrs.uri | default('') | length > 0
+      - >-
+        (bootwright_ownership_destroy_kind == 'libvirt-domain'
+         and bootwright_ownership_record.machine | default('') | length > 0
+         and bootwright_ownership_destroy_attrs.domain | default('') == bootwright_ownership_destroy_name
+         and bootwright_ownership_destroy_paths == [
+           bootwright_clusters_dir ~ '/' ~ bootwright_ownership_record.cluster ~ '/runtime/provider-state/libvirt/machines/' ~ bootwright_ownership_record.machine,
+           '/var/lib/libvirt/images/bootwright/' ~ (bootwright_clusters_dir | dirname | basename) ~ '/clusters/' ~ bootwright_ownership_record.cluster ~ '/machines/' ~ bootwright_ownership_record.machine
+         ])
+        or (bootwright_ownership_destroy_kind == 'libvirt-network'
+            and bootwright_ownership_destroy_attrs.network | default('') | length > 0
+            and bootwright_ownership_destroy_name == bootwright_ownership_record.cluster
+            and bootwright_ownership_destroy_paths == [])
+    fail_msg: >-
+      Refusing recorded libvirt teardown because its controller identity lacks
+      an exact cluster, machine/name, resource name, URI, or canonical current-
+      context path list. Repair the record
+      and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe recorded live libvirt resource XML
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_ownership_destroy_attrs.uri }}"
+      - "{{ 'dumpxml' if bootwright_ownership_destroy_kind == 'libvirt-domain' else 'net-dumpxml' }}"
+      - "{{ bootwright_ownership_destroy_attrs.domain if bootwright_ownership_destroy_kind == 'libvirt-domain' else bootwright_ownership_destroy_attrs.network }}"
+  register: bootwright_ownership_libvirt_live_probe
+  changed_when: false
+  failed_when: false
+
+- name: Require conclusive recorded libvirt live probe
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_ownership_libvirt_live_probe.rc is defined
+        and bootwright_ownership_libvirt_live_probe.stdout is defined
+        and bootwright_ownership_libvirt_live_probe.stderr is defined
+        and (
+          bootwright_ownership_libvirt_live_probe.rc | int == 0
+          or (
+            bootwright_ownership_libvirt_live_probe.rc | int != 0
+            and (bootwright_ownership_libvirt_live_probe.stderr
+                 | bootwright.core.bootwright_libvirt_explicit_absence(bootwright_ownership_destroy_kind))
+          )
+        )
+    fail_msg: >-
+      Cannot prove whether recorded {{ bootwright_ownership_destroy_kind }}/{{ bootwright_ownership_destroy_name }}
+      still exists because its libvirt XML probe failed. No runtime, path, or
+      ownership evidence was removed. Restore libvirt access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve expected recorded libvirt identity
+  ansible.builtin.set_fact:
+    bootwright_ownership_libvirt_expected_identity: >-
+      {{ {'context': (bootwright_clusters_dir | dirname | basename),
+          'cluster': bootwright_ownership_record.cluster}
+         | combine({'machine': bootwright_ownership_record.machine}
+                   if bootwright_ownership_destroy_kind == 'libvirt-domain'
+                   else {}) }}
+  changed_when: false
+
+- name: Refuse foreign recorded libvirt replacement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_ownership_libvirt_live_probe.rc | default(1) | int != 0
+        or (bootwright_ownership_libvirt_live_probe.stdout
+            | bootwright.core.bootwright_libvirt_resource_identity)
+           == bootwright_ownership_libvirt_expected_identity
+    fail_msg: >-
+      Refusing to destroy live {{ bootwright_ownership_destroy_kind }}/{{ bootwright_ownership_destroy_name }}
+      because its exact libvirt metadata does not match context
+      {{ bootwright_clusters_dir | dirname | basename }}, cluster
+      {{ bootwright_ownership_record.cluster }}{% if bootwright_ownership_destroy_kind == 'libvirt-domain' %},
+      machine {{ bootwright_ownership_record.machine }}{% endif %}. The stale
+      record may name a foreign replacement. Destroy it from its owning context
+      or repair the evidence after inspecting the live XML, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization token deletes it.

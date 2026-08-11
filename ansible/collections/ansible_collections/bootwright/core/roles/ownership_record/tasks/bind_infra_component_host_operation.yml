@@ -1,0 +1,85 @@
+---
+- name: Revalidate host operation before infra-component selection binding
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Resolve exact infra-component operation side
+  ansible.builtin.set_fact:
+    bootwright_infra_operation_side: >-
+      {{ bootwright_infra_global_claim_next.active
+         if bootwright_infra_global_claim_next.state | default('') == 'steady'
+         else (
+           bootwright_infra_global_claim_next.desired
+           if bootwright_infra_global_claim_next.state | default('') == 'applying'
+           else (bootwright_infra_global_claim_next.targets | default([]) | first | default({}))
+         ) }}
+    bootwright_infra_operation_claim_digest_decision: >-
+      {{ bootwright_infra_global_claim_next
+         | bootwright.core.bootwright_infra_component_global_claim_digests(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Resolve selected infra-component host consequence
+  ansible.builtin.set_fact:
+    bootwright_infra_selected_host_consequences: >-
+      {{ bootwright_host_operation_selection.consequences | default([])
+         | selectattr('kind', 'equalto', bootwright_infra_operation_side.kind | default(''))
+         | selectattr('name', 'equalto', bootwright_infra_global_claim_next.name | default(''))
+         | list }}
+    bootwright_infra_operation_selection_record: >-
+      {{ bootwright_infra_component_selection_record
+         if (bootwright_infra_component_selection_record | default({}) is mapping
+             and bootwright_infra_component_selection_record | default({}) | length > 0)
+         else (
+           bootwright_ownership_expected_record
+           if (bootwright_ownership_expected_record | default({}) is mapping
+               and bootwright_ownership_expected_record | default({}) | length > 0)
+           else (bootwright_ownership_validated_record | default({}))
+         ) }}
+  changed_when: false
+
+- name: Resolve rendered infra-component selection digest
+  ansible.builtin.set_fact:
+    bootwright_infra_operation_selection_digest: >-
+      {{ (bootwright_component
+          | bootwright.core.bootwright_infra_component_selection_digest(
+              bootwright_host_name | default(inventory_hostname)))
+         if not (bootwright_infra_component_record_only | default(false) | bool)
+         else (
+           (bootwright_infra_operation_selection_record
+            | bootwright.core.bootwright_infra_component_record_digests(
+                bootwright_managed_services_dir)).selectionDigest | default('')
+           if bootwright_infra_operation_selection_record.kind | default('') == 'infra-component'
+           else (
+             bootwright_infra_operation_selection_record
+             | bootwright.core.bootwright_infra_component_transition_record_digest(
+                 bootwright_managed_services_dir)
+           )
+         ) }}
+  changed_when: false
+
+- name: Require exact infra-component composite in selected host consequence set
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_operation_side | length > 0
+      - bootwright_infra_operation_claim_digest_decision.valid | default(false) | bool
+      - bootwright_infra_operation_selection_digest is match('^sha256:[a-f0-9]{64}$')
+      - bootwright_infra_selected_host_consequences | length == 1
+      - >-
+        bootwright_infra_operation_selection_digest
+        in bootwright_infra_selected_host_consequences[0].selectionDigests
+      - >-
+        bootwright_infra_selected_host_consequences[0].claimDigests is not defined
+        or (
+          (bootwright_infra_selected_host_consequences[0].claimDigests
+           | difference(bootwright_infra_operation_claim_digest_decision.digests))
+          | length == 0
+        )
+    fail_msg: >-
+      Refusing infra-component mutation because the command-wide host operation
+      does not bind this exact rendered input or recovery record and every exact
+      active, desired, or destroy-side physical consequence for
+      {{ bootwright_infra_global_claim_next.name | default('the selected component') }}.
+      No endpoint reservation, component state, or owner evidence was changed.
+      Re-render the selected host manifest and re-run
+      `{{ bootwright_mutating_invocation }}`.

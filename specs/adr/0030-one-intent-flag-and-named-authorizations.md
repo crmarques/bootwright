@@ -92,8 +92,9 @@ which risks the operator has authorized. Nothing else gates destruction.
 `apply` and `plan` take one single-valued `--mode`:
 
 - `create` asserts a greenfield run and fails if any selected object exists.
-- `reconcile` (default) creates what is missing, skips what matches, and fails
-  closed on drift.
+- `reconcile` (default) creates what is missing, skips what matches, converges
+  drift that is reconcilable in place, and fails closed on structural
+  (destructive-identity) drift or foreign ownership.
 - `rebuild` authorizes Bootwright-owned destructive re-convergence of drifted
   owned objects, and never adopts a foreign one.
 
@@ -121,7 +122,7 @@ else:
 | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection` or `spec.safety.protectedKinds` |
 | `installed-cluster-node` | `destroy --machines` naming a node of an installed cluster (either kind, per ADR 0031) |
 | `unowned-vms` | tearing down libvirt/KubeVirt/vSphere VMs that match the Bootwright naming but carry no ownership marker |
-| `unowned-networks` | removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context |
+| `unowned-networks` | removing an unowned libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim, which may still be in use by another context |
 | `unowned-devices` | wiping a declared OSD device carrying signatures or LVM/dm-crypt holders that this node has no Bootwright OSD ownership record for (both verbs, per ADR 0034) |
 | `foreign-daemons` | removing another Ceph cluster's cephadm daemons, units and `/var/lib/ceph` state from a storage node this apply enrolls (apply only, per ADR 0038) |
 | `unreachable-nodes` | acting on a node the run proves it could not contact: skipping it on destroy, retiring a replaced arbiter offline on `storage-cluster replace-arbiter` |
@@ -140,7 +141,7 @@ authorization applies only to a real run.
 `--include-unowned` splits into two tokens deliberately. Its own help text
 conceded that the network half "may still be in use by another context's VMs":
 deleting a VM that matches Bootwright's naming affects this context's fleet,
-while deleting the cluster's libvirt network or its KubeVirt DataVolumes can
+while deleting the cluster's libvirt network, its KubeVirt DataVolumes, or their PersistentVolumeClaims can
 strand a neighbouring context's running VMs. Those are different blast radii
 and now cost different words. The Ansible side carries them as two extra-vars,
 so authorizing VMs cannot lift a network refusal.

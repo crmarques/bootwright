@@ -4,7 +4,56 @@
     that:
       - bootwright_ownership_record.kind | default('') | length > 0
       - bootwright_ownership_record.name | default('') | length > 0
-    fail_msg: "ownership resource destroy needs a record with kind and name"
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Ownership resource destroy needs a record with kind and name and the exact
+      controller-built retry invocation. Repair the task inputs and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright destroy') }}`.
+
+- name: Refuse generic recorded infra-component teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_record.kind | default('') != 'infra-component'
+    fail_msg: >-
+      Refusing generic infra-component teardown because only the six fixed
+      hardened component roles may interpret and mutate their exact recorded
+      composites. No container, service, firewall endpoint, shared host setting,
+      path, state marker, or ownership record was changed. Re-run the exact
+      command `{{ bootwright_mutating_invocation }}` so the infra-component
+      playbook can preflight every candidate and survivor before fixed-role
+      dispatch.
+
+- name: Resolve ownership destroy fields
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: "{{ bootwright_ownership_record.kind }}"
+    bootwright_ownership_name: "{{ bootwright_ownership_record.name }}"
+    bootwright_ownership_role: "{{ bootwright_ownership_record.role | default('owner', true) }}"
+  changed_when: false
+
+- name: Validate live ownership evidence before recorded resource mutation
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Require claimed partial BMC evidence to remain record-free
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - not (bootwright_ownership_validated_stat.stat.exists | bool)
+    fail_msg: >-
+      Refusing claimed partial BMC teardown because an ownership record appeared
+      after the exact no-record durable-claim gate. No live member or evidence
+      was changed. Re-read the current ownership state and re-run
+      `{{ bootwright_mutating_invocation }}`; this recovery path never races or
+      replaces a newly recorded provider service.
+  when: bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool
+
+- name: Prefer validated live ownership evidence
+  ansible.builtin.set_fact:
+    bootwright_ownership_record: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else bootwright_ownership_record }}
+  changed_when: false
 
 - name: Resolve ownership destroy fields
   ansible.builtin.set_fact:
@@ -13,6 +62,50 @@
     bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
     bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
   changed_when: false
+
+- name: Revalidate recorded resource before teardown
+  ansible.builtin.include_tasks: destroy_record_gate.yml
+
+- name: Require live record or positive all-members-absent replay
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_ownership_validated_stat.stat.exists | bool
+        or (bootwright_ownership_destroy_kind == 'bmc-emulator'
+            and bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool)
+        or (bootwright_ownership_destroy_kind == 'bmc-emulator'
+            and bootwright_ownership_bmc_replay_absent | default(false) | bool)
+        or (bootwright_ownership_destroy_kind == 'infra-component'
+            and bootwright_ownership_infra_replay_absent | default(false) | bool)
+    fail_msg: >-
+      Refusing recorded resource teardown because its live ownership record is
+      absent and not every destructive member has positive absence proof from a
+      completed desired teardown. Restore exact evidence and re-run
+      {{ bootwright_mutating_invocation }}.
+
+- name: Resolve no-mutation recorded teardown replay
+  ansible.builtin.set_fact:
+    bootwright_ownership_destroy_replay_absent: >-
+      {{
+        (bootwright_ownership_destroy_kind == 'bmc-emulator'
+         and bootwright_ownership_bmc_replay_absent | default(false) | bool)
+        or (bootwright_ownership_destroy_kind == 'infra-component'
+            and bootwright_ownership_infra_replay_absent | default(false) | bool)
+      }}
+  changed_when: false
+
+- name: Acquire exact BMC endpoint authority for recorded or claim-backed teardown
+  ansible.builtin.include_tasks: ../../provider_service_bmc_emulated/tasks/destroy_endpoint_claims.yml
+  when:
+    - bootwright_ownership_destroy_kind == 'bmc-emulator'
+    - not (bootwright_ownership_bmc_replay_absent | default(false) | bool)
+
+- name: Destroy exact BMC provider-global composite
+  ansible.builtin.include_tasks: ../../provider_service_bmc_emulated/tasks/destroy_owned.yml
+  when:
+    - bootwright_ownership_destroy_kind == 'bmc-emulator'
+    - not (bootwright_ownership_bmc_replay_absent | default(false) | bool)
 
 - name: Stop recorded libvirt domain
   ansible.builtin.command:
@@ -27,8 +120,10 @@
   failed_when:
     - bootwright_ownership_libvirt_domain_stop.rc != 0
     - >-
-      not ((bootwright_ownership_libvirt_domain_stop.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)'))
+      not (((bootwright_ownership_libvirt_domain_stop.stderr | default(''))
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+           or ((bootwright_ownership_libvirt_domain_stop.stderr | default(''))
+               is search('(?i)domain is not running')))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-domain'
     - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
@@ -47,7 +142,7 @@
     - bootwright_ownership_libvirt_domain_undefine.rc != 0
     - >-
       not ((bootwright_ownership_libvirt_domain_undefine.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)'))
+           | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-domain'
     - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
@@ -65,8 +160,10 @@
   failed_when:
     - bootwright_ownership_libvirt_network_stop.rc != 0
     - >-
-      not ((bootwright_ownership_libvirt_network_stop.stderr | default(''))
-           is search('(?i)(Network not found|failed to get network|no network with matching name|network is not active)'))
+      not (((bootwright_ownership_libvirt_network_stop.stderr | default(''))
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-network'))
+           or ((bootwright_ownership_libvirt_network_stop.stderr | default(''))
+               is search('(?i)network is not active')))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-network'
     - bootwright_ownership_destroy_attrs.network | default('') | length > 0
@@ -85,29 +182,10 @@
     - bootwright_ownership_libvirt_network_undefine.rc != 0
     - >-
       not ((bootwright_ownership_libvirt_network_undefine.stderr | default(''))
-           is search('(?i)(Network not found|failed to get network|no network with matching name)'))
+           | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-network'))
   when:
     - bootwright_ownership_destroy_kind == 'libvirt-network'
     - bootwright_ownership_destroy_attrs.network | default('') | length > 0
-
-- name: Stop recorded systemd units
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: stopped
-    enabled: false
-    daemon_reload: true
-  register: bootwright_ownership_systemd_stop
-  failed_when:
-    - bootwright_ownership_systemd_stop.failed | default(false) | bool
-    - >-
-      'Could not find the requested service'
-      not in (bootwright_ownership_systemd_stop.msg | default(''))
-  loop:
-    - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
-    - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
-  loop_control:
-    label: "{{ item }}"
-  when: item | length > 0
 
 - name: Remove recorded podman container
   containers.podman.podman_container:
@@ -115,6 +193,7 @@
     state: absent
   when:
     - bootwright_ownership_destroy_attrs.container | default('') | length > 0
+    - not (bootwright_ownership_destroy_replay_absent | default(false) | bool)
 
 - name: Close recorded firewalld ports
   ansible.posix.firewalld:
@@ -129,20 +208,15 @@
           bootwright_ownership_destroy_attrs.udpPort | default(''),
           ((bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp')
           if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0
-          else '',
-          ((bootwright_ownership_destroy_attrs.vMediaPort
-             | default(bootwright_ownership_destroy_attrs.vmediaPort)
-             | default('') | string) ~ '/tcp')
-          if (bootwright_ownership_destroy_attrs.vMediaPort
-              | default(bootwright_ownership_destroy_attrs.vmediaPort)
-              | default('') | string | length) > 0
           else ''
       ]
     }}
   loop_control:
     label: "{{ item }}"
   when:
+    - bootwright_ownership_destroy_kind != 'bmc-emulator'
     - item | length > 0
+    - not (bootwright_ownership_destroy_replay_absent | default(false) | bool)
 
 - name: Resolve mount-safe recorded owned paths
   ansible.builtin.set_fact:
@@ -173,7 +247,9 @@
   register: bootwright_ownership_destroy_mounts
   changed_when: false
   when:
+    - bootwright_ownership_destroy_kind != 'bmc-emulator'
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
+    - not (bootwright_ownership_destroy_replay_absent | default(false) | bool)
 
 - name: Unmount active mounts under recorded owned paths
   ansible.posix.mount:
@@ -191,7 +267,9 @@
   loop_control:
     label: "{{ item }}"
   when:
+    - bootwright_ownership_destroy_kind != 'bmc-emulator'
     - bootwright_ownership_destroy_mount_paths | default([]) | length > 0
+    - not (bootwright_ownership_destroy_replay_absent | default(false) | bool)
 
 - name: Remove recorded owned paths
   ansible.builtin.file:
@@ -201,6 +279,7 @@
   loop_control:
     label: "{{ item }}"
   when:
+    - bootwright_ownership_destroy_kind != 'bmc-emulator'
     - item | length > 0
     - "'..' not in item"
     - >-
@@ -209,6 +288,13 @@
       or (bootwright_managed_services_dir | default('') | length > 0 and item.startswith(bootwright_managed_services_dir ~ '/'))
       or (bootwright_clusters_dir | default('') | length > 0 and item.startswith(bootwright_clusters_dir ~ '/'))
       or (bootwright_ownership_dir | default('') | length > 0 and item.startswith(bootwright_ownership_dir ~ '/'))
+    - not (bootwright_ownership_destroy_replay_absent | default(false) | bool)
+
+- name: Revalidate host operation before BMC owner record removal
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+  when:
+    - bootwright_ownership_destroy_kind == 'bmc-emulator'
+    - not (bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool)
 
 - name: Remove destroyed ownership resource record
   ansible.builtin.include_role:
@@ -217,3 +303,5 @@
   vars:
     bootwright_ownership_kind: "{{ bootwright_ownership_destroy_kind }}"
     bootwright_ownership_name: "{{ bootwright_ownership_destroy_name }}"
+    bootwright_ownership_expected_record: "{{ bootwright_ownership_record }}"
+  when: not (bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool)

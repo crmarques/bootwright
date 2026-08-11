@@ -19,8 +19,10 @@ operator explicitly asked for it.** Everything else follows.
   confirm the current set) never mutate a provider, BMC, cluster, storage, disk,
   or any durable record.
 - A command that finds drift, foreign ownership, unknown state, a failed probe, or
-  any ambiguity it is not explicitly authorized to resolve **fails closed** —
-  it mutates nothing and stops before the first side effect.
+  any ambiguity it is not explicitly authorized to resolve **fails closed**. The
+  complete records preflight stops before any run side effect; a task-local live
+  gate stops before changing that target or consequence. Independent authorized
+  branches may already have completed and are not rolled back.
 - No matching object is destroyed to be recreated. Forcing a clean rebuild of a
   matching object is `destroy` then `apply`, never an `apply` flag.
 - A destructive path runs only when the command, its flags, and the selected
@@ -76,7 +78,9 @@ its documented meaning, whether it changes state or only gates/skips, and whethe
 survives renames — bind each role to the present flag name from `--help`:
 
 - The **safe-reconcile default** (bare `apply`): create missing, skip proven
-  matches without re-running, fail closed on drift and foreign ownership.
+  matches where a concrete probe supports it, let other tasks re-run
+  idempotently, and fail closed on drift and foreign ownership without changing
+  the affected target.
 - The **greenfield assert** (e.g. `--mode create`): additionally fail closed if any
   selected object already exists or shows ownership evidence.
 - The **break-glass drift rebuild** (e.g. `--mode rebuild`): rebuild only
@@ -167,7 +171,14 @@ merely violate a convention — efficiency over breadth:
   bare-metal OCP per DC, one nested virtualized OCP each), not a single-cluster
   fixture, so it exercises stretch arbitration, cross-DC scope closure, and
   host-to-guest substrate ordering. New flags, kinds, and topologies extend the
-  table; the suite is the regression net for the whole contract.
+  table; every `apply`/`destroy` flag needs a real matrix verdict and there is no
+  exemption list. The suite is the regression net for the whole contract.
+- **Provider mutation closure.** Require an exact machine-readable registration
+  for every state-capable provider/boot/media/ownership task: path, task name,
+  action, class, named safety surface, and ordered gate/mutation/evidence anchor.
+  Treat every include or import as a state-capable delegated boundary unless its
+  target is exhaustively registered. Meta-tests reject new, missing, dead, or
+  unordered entries and unsupported providers.
 - **Fail-closed default.** Every mutating operation classifies its authorization
   and defaults to refusal until explicitly authorized. Where a registry or
   classifier already routes mutations, add a meta-test asserting every registered

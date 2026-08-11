@@ -273,14 +273,9 @@ func TestConvergeSafetyClassification(t *testing.T) {
 			want: ConvergeSafetyMissing,
 		},
 		{
-			name:   "match",
+			name:   "current schema requires contextual validation",
 			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, HashSchema: ConvergeHashSchema, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
-			want:   ConvergeSafetyMatch,
-		},
-		{
-			name:   "drift",
-			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: "sha256:old", HashSchema: ConvergeHashSchema, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
-			want:   ConvergeSafetyDrift,
+			want:   ConvergeSafetyUnknown,
 		},
 		{
 			name:   "foreign",

@@ -32,16 +32,46 @@
   changed_when: false
 
 - name: Refuse unreadable NTP service claim
-  ansible.builtin.fail:
-    msg: >-
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_chrony_claim_root.stat.exists is defined
+      - bootwright_chrony_context_marker.stat.exists is defined
+      - >-
+        not (bootwright_chrony_claim_root.stat.exists | bool)
+        or (
+          bootwright_chrony_claim_root.stat.isdir | default(false) | bool
+          and not (bootwright_chrony_claim_root.stat.islnk | default(false) | bool)
+        )
+      - >-
+        not (bootwright_chrony_context_marker.stat.exists | bool)
+        or (
+          bootwright_chrony_context_marker.stat.isreg | default(false) | bool
+          and not (bootwright_chrony_context_marker.stat.islnk | default(false) | bool)
+          and bootwright_chrony_context_marker_content.content is defined
+        )
+    fail_msg: >-
       Cannot prove which context owns NTP service
       {{ bootwright_component.providerName }}/{{ bootwright_component.name }} because its claim on
       {{ inventory_hostname }} is unreadable. Repair access to {{ bootwright_chrony_root }},
       then re-run `{{ bootwright_mutating_invocation }}`.
-  when:
-    - (bootwright_chrony_claim_root.failed | default(false) | bool)
-      or (bootwright_chrony_context_marker.failed | default(false) | bool)
-      or (bootwright_chrony_context_marker_content.failed | default(false) | bool)
+
+- name: Refuse malformed NTP service context claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_chrony_context_marker.stat.exists | default(false) | bool)
+        or (
+          bootwright_chrony_existing_context is match('^[A-Za-z0-9_.-]+$')
+          and (bootwright_chrony_context_marker_content.content | b64decode)
+              == bootwright_chrony_existing_context ~ '\n'
+        )
+    fail_msg: >-
+      Refusing NTP apply because the existing service claim is not one exact
+      canonical context line. No transition, service claim, or NTP state was
+      changed. Restore the exact claim and re-run
+      `{{ bootwright_mutating_invocation }}`.
 
 - name: Refuse unclaimed existing NTP service state
   ansible.builtin.fail:
@@ -77,21 +107,96 @@
     bootwright_gate_owned: >-
       {{ (bootwright_chrony_existing_context | trim) == bootwright_chrony_current_context }}
 
-- name: Create NTP ownership-claim directory
+- name: Resolve desired NTP ownership transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: ntp
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_chrony_root }}"
+        - "{{ bootwright_chrony_conf_file }}"
+      labels:
+        bootwright.kind: ntp
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: ntp
+        service: "{{ bootwright_chrony_service }}"
+        port: "{{ bootwright_component.port | int }}/udp"
+  changed_when: false
+
+- name: Probe host-global NTP claim before transition publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: probe_infra_component_global_claim.yml
+
+- name: Publish NTP ownership transition before service claim
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: begin_infra_component_transition.yml
+
+- name: Revalidate host operation before NTP service claim
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Acquire NTP service claim atomically before mutation
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_chrony_root }}/.bootwright-context"
+    state: present
+    desired_content: "{{ bootwright_chrony_current_context }}\n"
+    expected_contents: >-
+      {{ [bootwright_chrony_context_marker_content.content | b64decode]
+         if (bootwright_chrony_context_marker.stat.exists | default(false) | bool)
+         else [] }}
+    allow_absent: >-
+      {{ not (bootwright_chrony_context_marker.stat.exists | default(false) | bool) }}
+    create_parents: true
+    trusted_root: /var/lib/bootwright
+  register: bootwright_chrony_context_claim_cas
+  failed_when: false
+
+- name: Re-read atomic NTP service claim winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_chrony_root }}/.bootwright-context"
+  register: bootwright_chrony_context_winner
+  changed_when: false
+  failed_when: false
+
+- name: Require exact atomic NTP service claim winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_chrony_context_claim_cas.current_sha256 is defined
+      - bootwright_chrony_context_winner.content is defined
+      - >-
+        (bootwright_chrony_context_winner.content | b64decode)
+        == bootwright_chrony_current_context ~ '\n'
+    fail_msg: >-
+      Refusing NTP apply because the atomic service-claim winner could not be
+      re-read as this exact context before the first NTP mutation. The durable
+      transition was retained. Inspect the competing claim and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before NTP path normalization
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Normalize NTP ownership-claim directory after exact claim
   ansible.builtin.file:
     path: "{{ bootwright_chrony_root }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+    follow: false
 
-- name: Claim NTP service for this context before mutation
-  ansible.builtin.copy:
-    dest: "{{ bootwright_chrony_root }}/.bootwright-context"
-    content: "{{ bootwright_clusters_dir | dirname | basename }}\n"
-    owner: root
-    group: root
-    mode: "0600"
+- name: Revalidate host operation before NTP package and configuration mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Install chrony packages
   ansible.builtin.package:
@@ -124,6 +229,11 @@
     mode: "0644"
   register: bootwright_chrony_config
 
+- name: Revalidate host operation and endpoint before NTP service mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Enable and start chrony service
   ansible.builtin.service:
     name: "{{ bootwright_chrony_service }}"
@@ -136,6 +246,11 @@
     state: restarted
   when: bootwright_chrony_include.changed or bootwright_chrony_config.changed
 
+- name: Revalidate host operation and endpoint before NTP firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Open NTP port on host firewall
   ansible.posix.firewalld:
     port: "{{ bootwright_component.port | int }}/udp"
@@ -143,6 +258,22 @@
     permanent: true
     immediate: true
   when: bootwright_firewalld_available | default(false)
+
+- name: Retire old-only NTP firewall endpoints
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false) | bool
+
+- name: Revalidate host operation before NTP ownership publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Record NTP service ownership
   ansible.builtin.include_role:
@@ -152,11 +283,12 @@
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_chrony_root }}"
-        - "{{ bootwright_chrony_conf_file }}"
-      attributes:
-        componentKind: ntp
-        service: "{{ bootwright_chrony_service }}"
-        port: "{{ bootwright_component.port | int }}/udp"
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+
+- name: Complete durable NTP ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml

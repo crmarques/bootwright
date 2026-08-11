@@ -127,11 +127,20 @@ compares an old desired hash directly with a new one. Each fresh convergence
 record writes its exact, non-secret hash input under
 `runs/history/<run-id>/successful-inputs/`; the record, snapshot, and archived
 `ok` ledger must agree on run, resource, one task identity, terminal status, and
-the immediately preceding schema. Only byte-equivalent canonical JSON may be
-rebaselined. Missing, unreadable, failed-run, mismatched, or duplicate evidence
-is unknown and fails closed; different valid input is drift. The immutable file
-writer refuses replacement. This lets a future projection fix preserve a true
-match without forging a baseline or turning absent evidence into permission.
+the immediately preceding schema. Snapshots first exist at hash schema 4, so a
+schema-3 record can never rebaseline. The canonical record path must be a
+readable regular non-symlink file. Before any schema branch or history-path
+access, the record API, resource/task identity, Bootwright manager, and exact
+context must match. A mismatched identity is external recovery and no rebuild
+bypass; an exact-identity payload or proof failure may be rebuilt explicitly.
+Snapshot-capable legacy evidence additionally requires a clean one-segment run
+ID, valid status and hash syntax, and a desired hash equal to the canonical
+snapshot-input digest before snapshot or ledger proof is accepted. Only
+byte-equivalent canonical JSON may be rebaselined. Missing, unreadable,
+failed-run, mismatched, or duplicate evidence is unknown and fails closed;
+different valid input is drift. The immutable file writer refuses replacement.
+This lets a future projection fix preserve a true match without forging a
+baseline or turning absent evidence into permission.
 
 **An unchanged task keeps its strongest successful-run proof:** apply task and
 storage sub-object record writers first compare the complete current-schema

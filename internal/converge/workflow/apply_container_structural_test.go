@@ -37,7 +37,7 @@ func TestContainerClusterDay2EditsAreReconcilable(t *testing.T) {
 	}
 	classify := func(t *testing.T, runsDir string, state v1alpha1.State) ObjectClassification {
 		t.Helper()
-		objs, err := ClassifyApplyObjects(installTasks(state), runsDir)
+		objs, err := ClassifyApplyObjects(installTasks(state), runsDir, "test")
 		if err != nil {
 			t.Fatalf("classify: %v", err)
 		}

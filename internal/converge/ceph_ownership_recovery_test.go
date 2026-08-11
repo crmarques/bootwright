@@ -1,6 +1,8 @@
 package converge
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -42,31 +44,101 @@ func TestValidateDestroyCephOwnershipRecoveryAllowsMissingRecordAndRejectsConfli
 	cluster := cephRecoveryTestCluster()
 	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
 	seedHost := render.StorageSeedHostName(cluster)
-	record := ownership.ResourceRecord{
-		Kind:    string(ownership.KindStorageCluster),
-		Name:    cluster.Metadata.Name,
-		Owner:   ownership.Owner,
-		Host:    seedHost,
-		Cluster: cluster.Metadata.Name,
+	valid := ownership.ResourceRecord{
+		APIVersion: "bootwright.io/ownership/v1alpha1",
+		Kind:       string(ownership.KindStorageCluster),
+		Name:       cluster.Metadata.Name,
+		Owner:      ownership.Owner,
+		Context:    "lab",
+		Host:       seedHost,
+		Cluster:    cluster.Metadata.Name,
 		Attributes: map[string]string{
 			"seedHost": seedHost,
 		},
 	}
 	confirmed := map[string]string{cluster.Metadata.Name: cephRecoveryTestFSID}
+	root := t.TempDir()
 
-	if err := ValidateDestroyCephOwnershipRecovery(state, nil, []ownership.ResourceRecord{record}, confirmed); err != nil {
+	if err := ValidateDestroyCephOwnershipRecovery(state, nil, root, "lab", []ownership.ResourceRecord{valid}, confirmed); err != nil {
 		t.Fatalf("valid recovery evidence refused: %v", err)
 	}
-	if err := ValidateDestroyCephOwnershipRecovery(state, []string{}, []ownership.ResourceRecord{record}, confirmed); err == nil || !strings.Contains(err.Error(), "not a selected managed Ceph cluster") {
+	if err := ValidateDestroyCephOwnershipRecovery(state, []string{}, root, "lab", []ownership.ResourceRecord{valid}, confirmed); err == nil || !strings.Contains(err.Error(), "not a selected managed Ceph cluster") {
 		t.Fatalf("out-of-scope recovery error = %v", err)
 	}
-	if err := ValidateDestroyCephOwnershipRecovery(state, nil, nil, confirmed); err != nil {
+	if err := ValidateDestroyCephOwnershipRecovery(state, nil, root, "lab", nil, confirmed); err != nil {
 		t.Fatalf("missing-record recovery refused: %v", err)
 	}
-	record.Attributes["seedHost"] = "storage__ceph-a__other"
-	if err := ValidateDestroyCephOwnershipRecovery(state, nil, []ownership.ResourceRecord{record}, confirmed); err == nil || !strings.Contains(err.Error(), "ownership evidence conflicts") {
-		t.Fatalf("wrong-seed recovery error = %v", err)
+
+	mutations := []struct {
+		name   string
+		mutate func(*ownership.ResourceRecord)
+		want   string
+	}{
+		{name: "api version", mutate: func(record *ownership.ResourceRecord) { record.APIVersion = "other/v1" }, want: "apiVersion"},
+		{name: "owner", mutate: func(record *ownership.ResourceRecord) { record.Owner = "other" }, want: "owner"},
+		{name: "reference role", mutate: func(record *ownership.ResourceRecord) { record.Role = ownership.RoleReference }, want: "role"},
+		{name: "context", mutate: func(record *ownership.ResourceRecord) { record.Context = "other" }, want: "context"},
+		{name: "cluster", mutate: func(record *ownership.ResourceRecord) { record.Cluster = "other" }, want: "cluster"},
+		{name: "host", mutate: func(record *ownership.ResourceRecord) { record.Host = "other" }, want: "host"},
+		{name: "seed host", mutate: func(record *ownership.ResourceRecord) { record.Attributes["seedHost"] = "other" }, want: "attributes.seedHost"},
+		{name: "invalid fsid", mutate: func(record *ownership.ResourceRecord) { record.Attributes["fsid"] = "invalid" }, want: "not a UUID"},
+		{name: "mismatched fsid", mutate: func(record *ownership.ResourceRecord) {
+			record.Attributes["fsid"] = "1088ddee-875b-11f1-9b98-303ea72d7724"
+		}, want: "confirmed fsid"},
 	}
+	for _, test := range mutations {
+		t.Run(test.name, func(t *testing.T) {
+			record := valid
+			record.Attributes = map[string]string{"seedHost": seedHost}
+			test.mutate(&record)
+			err := ValidateDestroyCephOwnershipRecovery(state, nil, root, "lab", []ownership.ResourceRecord{record}, confirmed)
+			if err == nil || !strings.Contains(err.Error(), "ownership evidence conflicts") || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("conflicting recovery error = %v, want ownership conflict naming %q", err, test.want)
+			}
+		})
+	}
+
+	for _, fsid := range []string{"", cephRecoveryTestFSID} {
+		t.Run("canonical record "+fsid, func(t *testing.T) {
+			caseRoot := t.TempDir()
+			record := valid
+			record.Attributes = map[string]string{"seedHost": seedHost, "fsid": fsid}
+			if err := ownership.SaveResource(caseRoot, record); err != nil {
+				t.Fatalf("SaveResource: %v", err)
+			}
+			if err := ValidateDestroyCephOwnershipRecovery(state, nil, caseRoot, "lab", []ownership.ResourceRecord{record}, confirmed); err != nil {
+				t.Fatalf("canonical recovery evidence refused: %v", err)
+			}
+		})
+	}
+
+	t.Run("malformed canonical record", func(t *testing.T) {
+		caseRoot := t.TempDir()
+		path := filepath.Join(caseRoot, ownership.ResourceDirName, string(ownership.KindStorageCluster), cluster.Metadata.Name+".json")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create record dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(`{broken`), 0o600); err != nil {
+			t.Fatalf("write malformed record: %v", err)
+		}
+		err := ValidateDestroyCephOwnershipRecovery(state, nil, caseRoot, "lab", nil, confirmed)
+		if err == nil || !strings.Contains(err.Error(), "decode ownership resource") {
+			t.Fatalf("malformed canonical recovery error = %v", err)
+		}
+	})
+
+	t.Run("foreign canonical context", func(t *testing.T) {
+		caseRoot := t.TempDir()
+		record := valid
+		record.Context = "other"
+		if err := ownership.SaveResource(caseRoot, record); err != nil {
+			t.Fatalf("SaveResource: %v", err)
+		}
+		err := ValidateDestroyCephOwnershipRecovery(state, nil, caseRoot, "lab", nil, confirmed)
+		if err == nil || !strings.Contains(err.Error(), "context") {
+			t.Fatalf("foreign-context canonical recovery error = %v", err)
+		}
+	})
 }
 
 func TestApplyDestroyCephOwnershipRecoveryExtraVar(t *testing.T) {

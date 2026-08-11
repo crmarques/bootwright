@@ -1,4 +1,17 @@
 ---
+- name: Prove declared infra component live ownership before teardown
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_destroy_gate.yml
+  vars:
+    bootwright_infra_destroy_provider: "{{ bootwright_component.providerName }}"
+    bootwright_infra_destroy_name: "{{ bootwright_component.name }}"
+    bootwright_infra_destroy_kind: "{{ bootwright_component_teardown_kind }}"
+    bootwright_infra_destroy_state_dir: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    bootwright_infra_destroy_container: "{{ bootwright_component_teardown_container }}"
+    bootwright_infra_destroy_extra_paths: []
+    bootwright_ownership_destroy_attrs: {}
+
 - name: Remove infra component container
   containers.podman.podman_container:
     name: "{{ bootwright_component_teardown_container }}"
@@ -12,4 +25,5 @@
       - "label=bootwright.kind={{ bootwright_component_teardown_kind }}"
       - "label=bootwright.provider={{ bootwright_component.providerName }}"
       - "label=bootwright.name={{ bootwright_component.name }}"
+      - "label=bootwright.context={{ bootwright_clusters_dir | dirname | basename }}"
     bootwright_process_cleanup_mark_changed: false

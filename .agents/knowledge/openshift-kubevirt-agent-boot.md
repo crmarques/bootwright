@@ -163,6 +163,25 @@ advice used to delete the DataVolume, immediately recreate it, and stall against
 the claim the deletion had not finished releasing. Pinned by
 `TestKubeVirtRebuildPurgesTheRootClaimItsDataVolumeLeavesBehind`.
 
+Guest teardown may encounter a CDI-created PVC without Bootwright labels. It
+accepts that claim only when its ownerReference exactly names the already
+verified DataVolume by API, kind, name, and UID, then stamps the full
+manager/context/cluster/node/role identity on the PVC before deleting the
+DataVolume. Missing records or host access never substitute for this live proof.
+Apply likewise treats failed or malformed existing-PVC and StorageProfile
+probes as unknown; the selected storage class must return the exact `Block` or
+`Filesystem` volume-mode enum before any VM mutation.
+
+Boot-time VM and agent-media reuse follows the same rule. A successful kubectl
+probe is usable only after the shared non-throwing classifier proves the exact
+supported API version, kind, namespace, name, UID, labels shape, and owner
+reference shape; `NotFound` is absence only with a nonzero command result. The
+legacy unlabeled-media path additionally requires a regular non-symlink
+controller record with the exact ownership API, effective owner role, context,
+host, provider, cluster, machine, namespace, VM, and root-DataVolume identity.
+A failed stat/slurp, malformed record, copied record, or wrong live envelope
+refuses with the rendered mutating invocation before media deletion.
+
 **Constraint (a blank root disk that never provisions is a storage condition, not
 a KubeVirt one):** the root DataVolume wait was a bare
 `kubectl wait --for=condition=Ready --timeout=10m` with no registered result and

@@ -129,7 +129,7 @@ func ArtifactServerReclaimPreview(ownershipDir, contextName, clustersDir string,
 	return selectArtifactServerReclaims(targets, ownedInfraComponentRecords(records), blocked, clustersDir)
 }
 
-func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []ArtifactServerReclaimTarget, reporter workflow.Reporter, runLease *workflow.CommandRunLease) error {
+func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir, executable, bundleDir, becomePasswordFile string, state v1alpha1.State, targets []ArtifactServerReclaimTarget, executionExtraVarPairs []string, reporter workflow.Reporter, runLease *workflow.CommandRunLease) error {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -153,6 +153,7 @@ func ReclaimInstallOnlyArtifactServers(cmdCtx context.Context, stdout, stderr io
 		return nil
 	}
 	plan := PrepareInfraArtifactServerDestroyWorkflow(state, false, false, records)
+	plan.ExtraVarPairs = append(plan.ExtraVarPairs, executionExtraVarPairs...)
 	ApplyInfraComponentReclaimExtraVar(&plan, reclaim)
 	if plan.NoRemoteWork {
 		return nil

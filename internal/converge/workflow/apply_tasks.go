@@ -136,28 +136,29 @@ func (t ApplyTarget) FabricHostIncluded(host string) bool {
 }
 
 type ApplyTask struct {
-	Entry              TaskLedgerEntry
-	Playbook           string
-	Limit              string
-	Forks              int
-	RedfishSlots       int
-	HostSlotKey        string
-	HostSlotCount      int
-	ExtraVarPairs      []string
-	Tags               []string
-	SkipTags           []string
-	Timeout            time.Duration
-	RolesPath          string
-	CollectionsPath    string
-	SkipWhenConverged  bool
-	ExecutionClass     ApplyTaskExecutionClass
-	FailureRemedy      remedy.Request
-	State              v1alpha1.State
-	DesiredHashState   *v1alpha1.State
-	DesiredHashVars    any
-	StructuralHashVars any
-	Extension          *extensionplan.ExtensionPlan
-	hashes             *applyTaskHashCache
+	Entry               TaskLedgerEntry
+	Playbook            string
+	Limit               string
+	CompletionHostLimit string
+	Forks               int
+	RedfishSlots        int
+	HostSlotKey         string
+	HostSlotCount       int
+	ExtraVarPairs       []string
+	Tags                []string
+	SkipTags            []string
+	Timeout             time.Duration
+	RolesPath           string
+	CollectionsPath     string
+	SkipWhenConverged   bool
+	ExecutionClass      ApplyTaskExecutionClass
+	FailureRemedy       remedy.Request
+	State               v1alpha1.State
+	DesiredHashState    *v1alpha1.State
+	DesiredHashVars     any
+	StructuralHashVars  any
+	Extension           *extensionplan.ExtensionPlan
+	hashes              *applyTaskHashCache
 }
 
 type applyTaskResult struct {

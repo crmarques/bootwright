@@ -1,0 +1,108 @@
+---
+- name: Validate live ownership resource lookup inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_dir | default('') | length > 0
+      - bootwright_ownership_kind | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_role | default('owner') in ['owner', 'reference']
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Live ownership validation needs a safe kind, name, ownership directory,
+      role, and exact controller-built retry invocation. Repair the task inputs
+      and re-run `{{ bootwright_mutating_invocation | default('the same bootwright mutation') }}`.
+
+- name: Resolve live ownership resource validation path
+  ansible.builtin.set_fact:
+    bootwright_ownership_validated_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_ownership_validated_path: >-
+      {{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{
+        (bootwright_ownership_name ~ '@' ~ (bootwright_clusters_dir | dirname | basename))
+        if (bootwright_ownership_role | default('owner')) == 'reference'
+        else bootwright_ownership_name
+      }}.json
+    bootwright_ownership_validated_record: {}
+  changed_when: false
+
+- name: Inspect live ownership resource evidence
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_validated_path }}"
+  register: bootwright_ownership_validated_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require safe live ownership resource evidence path
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists is defined
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_ownership_validated_stat.stat.isreg | default(false) | bool
+          and not (bootwright_ownership_validated_stat.stat.islnk | default(false) | bool)
+        )
+    fail_msg: >-
+      Refusing resource mutation because {{ bootwright_ownership_validated_path }}
+      could not be proven absent or a regular non-symlink ownership record.
+      Restore exact trusted evidence and re-run {{ bootwright_mutating_invocation }}.
+
+- name: Read live ownership resource evidence
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ownership_validated_path }}"
+  register: bootwright_ownership_validated_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_ownership_validated_stat.stat.exists | bool
+
+- name: Require readable live ownership resource evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_content.content is defined
+    fail_msg: >-
+      Refusing resource mutation because the regular ownership record at
+      {{ bootwright_ownership_validated_path }} is unreadable. Restore it and
+      re-run {{ bootwright_mutating_invocation }}.
+  when: bootwright_ownership_validated_stat.stat.exists | bool
+
+- name: Decode live ownership resource evidence
+  when: bootwright_ownership_validated_stat.stat.exists | bool
+  block:
+    - name: Parse live ownership resource evidence
+      ansible.builtin.set_fact:
+        bootwright_ownership_validated_record: >-
+          {{ bootwright_ownership_validated_content.content | b64decode | from_json }}
+      changed_when: false
+  rescue:
+    - name: Refuse malformed live ownership resource evidence
+      ansible.builtin.fail:
+        msg: >-
+          Refusing resource mutation because {{ bootwright_ownership_validated_path }}
+          is not readable JSON. Restore exact trusted evidence and re-run
+          {{ bootwright_mutating_invocation }}.
+
+- name: Require exact live ownership resource authority
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_record is mapping
+      - bootwright_ownership_validated_record.apiVersion | default('') == 'bootwright.io/ownership/v1alpha1'
+      - bootwright_ownership_validated_record.kind | default('') == bootwright_ownership_kind
+      - bootwright_ownership_validated_record.name | default('') == bootwright_ownership_name
+      - bootwright_ownership_validated_record.owner | default('') == 'bootwright'
+      - bootwright_ownership_validated_record.context | default('') == bootwright_ownership_validated_context
+      - >-
+        bootwright_ownership_validated_record.host | default('')
+        == bootwright_host_name | default(inventory_hostname)
+      - bootwright_ownership_validated_record.role | default('owner', true) == bootwright_ownership_role | default('owner')
+      - >-
+        bootwright_ownership_expected_record is not defined
+        or bootwright_ownership_validated_record == bootwright_ownership_expected_record
+    fail_msg: >-
+      Refusing resource mutation because live ownership evidence does not
+      exactly match API, kind, name, manager, context, host, effective role, and
+      the exact controller snapshot supplied for this mutation.
+      Restore exact trusted evidence and re-run {{ bootwright_mutating_invocation }}.
+  when: bootwright_ownership_validated_stat.stat.exists | bool

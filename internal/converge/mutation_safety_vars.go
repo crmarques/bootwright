@@ -74,6 +74,8 @@ var mutationSafetyVars = []mutationSafetyVarContract{
 	{Name: "bootwright_infra_component_reclaim_records", Class: mutationSafetyVarAuthorization},
 	{Name: "bootwright_infra_component_service_scope", Class: mutationSafetyVarScope},
 	{Name: "bootwright_infra_destroy_context_sweep", Class: mutationSafetyVarScope},
+	{Name: "bootwright_host_mutation_lease", Class: mutationSafetyVarExecution},
+	{Name: "bootwright_host_shared_service_manifest", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_install_wait_target", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_machine_infra_records_only", Class: mutationSafetyVarExecution},
 	{Name: "bootwright_ocp_rebuild_authorized_clusters", Class: mutationSafetyVarAuthorization},

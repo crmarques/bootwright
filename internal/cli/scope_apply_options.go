@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"errors"
-
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -13,9 +11,6 @@ type scopeApplyOptions struct {
 	long          string
 	example       string
 	defaultPlan   bool
-	hideDryRun    bool
-	hideApproval  bool
-	hideExecFlags bool
 	stageSelector bool
 	commandLabel  string
 	action        string
@@ -54,15 +49,47 @@ func resolveScopeApplyLabels(scope converge.Scope, options scopeApplyOptions) sc
 	return labels
 }
 
-func resolveScopeApplyIntent(output string, defaultPlan, dryRun bool, modeFlag string, authorizeFlag []string) (workflow.ApplyMode, *authorizations, error) {
+func resolveScopeApplyRunScope(scope converge.Scope, options scopeApplyOptions, stage, through, action, commandLabel, machinesScope, clusterScope string) (converge.Scope, string, error) {
+	runScope := scope
+	runCommandLabel := commandLabel
+	if options.stageSelector {
+		var err error
+		switch {
+		case stage != "" && through != "":
+			runScope, err = converge.ApplyRangeScope(stage, through)
+			runCommandLabel = converge.ApplyRangeCommandLabel(stage, through, action, commandLabel)
+		case through != "":
+			runScope, err = converge.ApplyThroughScope(through)
+			runCommandLabel = converge.ApplyThroughCommandLabel(through, action, commandLabel)
+		default:
+			runScope, err = converge.ApplyStageScope(stage)
+			runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
+		}
+		if err != nil {
+			return converge.Scope{}, "", failErr(2, err)
+		}
+	}
+	if machinesScope == "" {
+		return runScope, runCommandLabel, nil
+	}
+	stageProvided := stage != "" || through != ""
+	var err error
+	runScope, err = machineApplyRunScope(machinesScope, clusterScope, stageProvided, runScope)
+	if err != nil {
+		return converge.Scope{}, "", err
+	}
+	if !stageProvided {
+		runCommandLabel = "machines " + action
+	}
+	return runScope, runCommandLabel, nil
+}
+
+func resolveScopeApplyIntent(output string, dryRun bool, modeFlag string, authorizeFlag []string) (workflow.ApplyMode, *authorizations, error) {
 	if err := validateOutputFormat(output); err != nil {
 		return "", nil, failErr(2, err)
 	}
 	if output == outputJSON && !dryRun {
 		return "", nil, failErr(2, mutatingJSONDryRunConflict(authorizeVerbApply))
-	}
-	if defaultPlan && !dryRun {
-		return "", nil, failErr(2, errors.New("plan is always read-only"))
 	}
 	mode, err := parseApplyMode(modeFlag)
 	if err != nil {

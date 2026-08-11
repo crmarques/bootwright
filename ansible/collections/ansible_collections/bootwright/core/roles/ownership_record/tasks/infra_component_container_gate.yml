@@ -1,4 +1,7 @@
 ---
+- name: "Probe host-global claim for {{ bootwright_component.name }}"
+  ansible.builtin.include_tasks: probe_infra_component_global_claim.yml
+
 - name: "Probe Bootwright-owned container for {{ bootwright_component.name }}"
   ansible.builtin.command:
     argv:
@@ -51,8 +54,26 @@
   when: bootwright_infra_component_claim_marker.stat.exists | default(false) | bool
 
 - name: "Refuse unreadable container ownership probes for {{ bootwright_component.name }}"
-  ansible.builtin.fail:
-    msg: >-
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_gate_owned_probe_missing_binary | bool
+        or (
+          bootwright_infra_component_owned_probe.rc is defined
+          and bootwright_infra_component_owned_probe.stdout is defined
+          and bootwright_infra_component_owned_probe.stderr is defined
+          and bootwright_infra_component_owned_probe.rc | int == 0
+        )
+      - >-
+        bootwright_gate_name_probe_missing_binary | bool
+        or (
+          bootwright_infra_component_name_probe.rc is defined
+          and bootwright_infra_component_name_probe.stdout is defined
+          and bootwright_infra_component_name_probe.stderr is defined
+          and bootwright_infra_component_name_probe.rc | int == 0
+        )
+    fail_msg: >-
       Cannot prove whether {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
       already exists because its Podman ownership probes failed on {{ inventory_hostname }}.
       Repair Podman access, then re-run `{{ bootwright_mutating_invocation }}`.
@@ -61,24 +82,31 @@
       {{ (bootwright_infra_component_owned_probe.msg | default('')) is search('(?i)(No such file or directory|not found)') }}
     bootwright_gate_name_probe_missing_binary: >-
       {{ (bootwright_infra_component_name_probe.msg | default('')) is search('(?i)(No such file or directory|not found)') }}
-  when:
-    - >-
-      (bootwright_infra_component_owned_probe.rc | default(1) | int != 0
-       and not (bootwright_gate_owned_probe_missing_binary | bool))
-      or (bootwright_infra_component_name_probe.rc | default(1) | int != 0
-          and not (bootwright_gate_name_probe_missing_binary | bool))
 
 - name: "Refuse unreadable service context claim for {{ bootwright_component.name }}"
-  ansible.builtin.fail:
-    msg: >-
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_component_claim_root.stat.exists is defined
+      - bootwright_infra_component_claim_marker.stat.exists is defined
+      - >-
+        not (bootwright_infra_component_claim_root.stat.exists | bool)
+        or (
+          bootwright_infra_component_claim_root.stat.isdir | default(false) | bool
+          and not (bootwright_infra_component_claim_root.stat.islnk | default(false) | bool)
+        )
+      - >-
+        not (bootwright_infra_component_claim_marker.stat.exists | bool)
+        or (
+          bootwright_infra_component_claim_marker.stat.isreg | default(false) | bool
+          and not (bootwright_infra_component_claim_marker.stat.islnk | default(false) | bool)
+          and bootwright_infra_component_claim_content.content is defined
+        )
+    fail_msg: >-
       Cannot prove which context owns {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
       because its service claim on {{ inventory_hostname }} is unreadable.
       Repair access to {{ bootwright_managed_services_dir }}/{{ bootwright_component.name }},
       then re-run `{{ bootwright_mutating_invocation }}`.
-  when:
-    - (bootwright_infra_component_claim_root.failed | default(false) | bool)
-      or (bootwright_infra_component_claim_marker.failed | default(false) | bool)
-      or (bootwright_infra_component_claim_content.failed | default(false) | bool)
 
 - name: "Read owning context from existing {{ bootwright_component.name }} container"
   ansible.builtin.command:
@@ -95,14 +123,40 @@
   when: (bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0
 
 - name: "Refuse unreadable owning context for {{ bootwright_component.name }}"
-  ansible.builtin.fail:
-    msg: >-
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_component_context_probe.rc is defined
+      - bootwright_infra_component_context_probe.stdout is defined
+      - bootwright_infra_component_context_probe.stderr is defined
+      - bootwright_infra_component_context_probe.rc | int == 0
+    fail_msg: >-
       Cannot prove which context owns the existing {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
       container on {{ inventory_hostname }} because Podman inspect failed.
       Repair Podman access, then re-run `{{ bootwright_mutating_invocation }}`.
   when:
     - bootwright_infra_component_context_probe is not skipped
-    - bootwright_infra_component_context_probe.rc | default(1) | int != 0
+
+- name: "Classify existing container context for {{ bootwright_component.name }}"
+  ansible.builtin.set_fact:
+    bootwright_gate_container_context_decision: >-
+      {{ (bootwright_infra_component_context_probe.stdout | default(''))
+         | bootwright.core.bootwright_podman_container_context
+         if (bootwright_infra_component_context_probe.stdout | default('') | trim) | length > 0
+         else {'valid': true, 'context': ''} }}
+  changed_when: false
+
+- name: "Refuse malformed existing container identity for {{ bootwright_component.name }}"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_gate_container_context_decision.valid | default(false) | bool
+    fail_msg: >-
+      Cannot prove which context owns the existing
+      {{ bootwright_component.providerName }}/{{ bootwright_component.name }}
+      container because Podman returned malformed or ambiguous inspect JSON.
+      No transition, claim, or role state was changed. Repair Podman state and
+      re-run `{{ bootwright_mutating_invocation }}`.
 
 - name: "Resolve apply-mode gate facts for {{ bootwright_component.name }}"
   ansible.builtin.set_fact:
@@ -112,15 +166,28 @@
       {{ ((bootwright_infra_component_owned_probe.stdout | default('') | trim) | length > 0)
          or ((bootwright_infra_component_name_probe.stdout | default('') | trim) | length > 0) }}
     bootwright_gate_existing_context: >-
-      {{
-        (((bootwright_infra_component_context_probe.stdout | default('[]') | from_json | first).Config.Labels | default({}, true)).get('bootwright.context', ''))
-        if (bootwright_infra_component_context_probe.stdout | default('') | trim) | length > 0
-        else ''
-      }}
+      {{ bootwright_gate_container_context_decision.context | default('') }}
     bootwright_gate_claim_context: >-
       {{ bootwright_infra_component_claim_content.content | default('') | b64decode | trim }}
     bootwright_gate_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
   changed_when: false
+
+- name: "Refuse malformed service context claim for {{ bootwright_component.name }}"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_infra_component_claim_marker.stat.exists | default(false) | bool)
+        or (
+          bootwright_gate_claim_context is match('^[A-Za-z0-9_.-]+$')
+          and (bootwright_infra_component_claim_content.content | b64decode)
+              == bootwright_gate_claim_context ~ '\n'
+        )
+    fail_msg: >-
+      Refusing infra-component apply because the existing service claim is not
+      one exact canonical context line. No transition, service claim, or role
+      state was changed. Restore the exact claim and re-run
+      `{{ bootwright_mutating_invocation }}`.
 
 - name: "Refuse unclaimed existing service state for {{ bootwright_component.name }}"
   ansible.builtin.fail:
@@ -172,18 +239,55 @@
 - name: "Enforce apply mode for {{ bootwright_component.name }}"
   ansible.builtin.include_tasks: apply_mode_gate.yml
 
-- name: "Create service claim directory for {{ bootwright_component.name }}"
+- name: "Publish exact transition before service claim for {{ bootwright_component.name }}"
+  ansible.builtin.include_tasks: begin_infra_component_transition.yml
+
+- name: "Revalidate host operation before service claim for {{ bootwright_component.name }}"
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: "Acquire service claim atomically before mutation for {{ bootwright_component.name }}"
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
+    state: present
+    desired_content: "{{ bootwright_gate_current_context }}\n"
+    expected_contents: >-
+      {{ [bootwright_infra_component_claim_content.content | b64decode]
+         if (bootwright_infra_component_claim_marker.stat.exists | default(false) | bool)
+         else [] }}
+    allow_absent: >-
+      {{ not (bootwright_infra_component_claim_marker.stat.exists | default(false) | bool) }}
+    create_parents: true
+    trusted_root: /var/lib/bootwright
+  register: bootwright_infra_component_context_claim_cas
+  failed_when: false
+
+- name: "Re-read atomic service claim winner for {{ bootwright_component.name }}"
+  ansible.builtin.slurp:
+    src: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
+  register: bootwright_infra_component_claim_winner
+  changed_when: false
+  failed_when: false
+
+- name: "Require exact atomic service claim winner for {{ bootwright_component.name }}"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_component_context_claim_cas.current_sha256 is defined
+      - bootwright_infra_component_claim_winner.content is defined
+      - >-
+        (bootwright_infra_component_claim_winner.content | b64decode)
+        == bootwright_gate_current_context ~ '\n'
+    fail_msg: >-
+      Refusing infra-component apply because the atomic service-claim winner
+      could not be re-read as this exact context before the first role mutation.
+      The durable transition was retained. Inspect the competing claim and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: "Normalize service claim directory after exact claim for {{ bootwright_component.name }}"
   ansible.builtin.file:
     path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
-
-- name: "Claim service for this context before mutation for {{ bootwright_component.name }}"
-  ansible.builtin.copy:
-    dest: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/.bootwright-context"
-    content: "{{ bootwright_gate_current_context }}\n"
-    owner: root
-    group: root
-    mode: "0600"
+    follow: false

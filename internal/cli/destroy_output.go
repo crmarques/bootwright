@@ -56,7 +56,7 @@ func destroyRequiredAuthorizations(auth *authorizations, gates destroyGateForeca
 	forecast.consult(authorizeProtected, gates.protected, gates.protectedReason)
 	forecast.consult(authorizeDataLoss, gates.dataLoss, gates.dataLossReason)
 	forecast.mayConsult(authorizeUnownedVMs, converge.ScopeTearsMachineLayer(gates.runScope), "this run tears the machine layer down; whether a VM matching the Bootwright naming carries no ownership marker is decided on the provider, so a preview cannot settle it")
-	forecast.mayConsult(authorizeUnownedNetworks, converge.ScopeTearsMachineLayer(gates.runScope), "this run tears the machine layer down; whether a libvirt network or KubeVirt DataVolume is unowned is decided on the provider, so a preview cannot settle it")
+	forecast.mayConsult(authorizeUnownedNetworks, converge.ScopeTearsMachineLayer(gates.runScope), "this run tears the machine layer down; whether a libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim is unowned is decided on the provider, so a preview cannot settle it")
 	forecast.mayConsult(authorizeUnownedDevices, converge.ScopeTearsClusterLayer(gates.runScope), "this run tears the cluster layer down; whether a declared OSD device carries signatures or holders without a Bootwright OSD ownership record is decided on the node, so a preview cannot settle it")
 	forecast.mayConsult(authorizeUnreachableNodes, !gates.noRemoteWork, "whether a selected node proves unreachable is decided when the run contacts it, so a preview cannot settle it")
 	return forecast.list()

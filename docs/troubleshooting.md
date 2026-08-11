@@ -192,21 +192,23 @@ context secret store or in operator files. Two common early-workflow blockers:
 
 ## Apply failed partway
 
-When `apply` exits non-zero after the run has started, the work is resumable —
-objects that already converged are recorded and skip on the next run. Do **not**
-reach for `--mode rebuild` or `destroy`; those are for drift and rebuilds, not a
-resumable interruption.
+When `apply` exits non-zero after the run has started, the work is resumable.
+Concrete-probe tasks that already completed can skip; configuration work may
+re-run idempotently. Do **not** reach for `--mode rebuild` or `destroy`; those are
+for drift and rebuilds, not a resumable interruption.
 
-Run `bootwright status`: on a failed run it prints the shell-quoted exact
-invocation recorded when that run started, including `--context`, selection,
-mode, effect flags, authorizations, SSH overrides, and whether you originally
-passed `--yes`, plus the log path of each failed task under
-`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/`. It never adds
-`--yes` for you. Read that log, fix the cause, then re-run the printed command —
-completed objects skip or re-run idempotently, and only the failed and pending
-work runs again. A ledger written by an older build without exact argv produces
-command-free guidance; recover the invocation from your shell or automation
-history rather than widening it from the ledger's display label.
+Run `bootwright status`: on a failed run it prints the log path of each failed
+task under
+`/var/lib/bootwright/contexts/<context>/runs/history/<run-id>/` and the validated,
+shell-quoted recovery steps recorded for that task boundary. Those steps retain
+`--context`, selection, effect flags, authorizations, SSH overrides, and the
+original confirmation choice; status never adds `--yes`. They are deliberately
+separate from the immutable original invocation kept for audit: a partial
+`--mode create` run resumes as `reconcile`, and a prerequisite failure can put a
+repair step before the exact resume. Read the logs, fix the cause, then run the
+steps in order. A legacy, incomplete, or malformed ledger without a valid typed
+recovery plan produces command-free guidance; recover the operation from your
+shell or automation history rather than widening it from a display label.
 
 See [Ownership and Safety](advanced/ownership-and-safety.md) for why the rerun is
 safe, and [Operations and Recovery](advanced/operations.md) only for the drift
@@ -225,9 +227,14 @@ ledger and logs live under `/var/lib/bootwright/contexts/<context>/runs/`.
 
 - **A still-live process** should be allowed to finish, or stopped deliberately,
   before you start another apply.
-- **A stale lease** (the previous Bootwright process exited without updating the
-  ledger) is reported by `status`; the next `apply` or `destroy` marks that run
-  cancelled before continuing.
+- **A locally proven stale lease** (the previous Bootwright process exited
+  without updating the ledger) is reported by `status`; the next `apply` or
+  `destroy` marks that run cancelled before continuing.
+- **A stale lease from another or unknown controller, or one whose local PID is
+  live but its process identity cannot be verified,** is never taken over
+  automatically. Inspect the controller, process, and lease path named by the
+  refusal. Repair or remove the lease only after proving no such run remains
+  active, then re-run the exact command printed by Bootwright.
 
 ## A run takes far longer than expected
 
@@ -815,15 +822,14 @@ On nodes Bootwright did not install, `dnf install gdisk` once per host is enough
 `dnf provides */sgdisk` says which repository carries it and whether that
 repository is enabled on the host.
 
-## A destroy reported complete but a node still carries the cluster
+## A destroy remains partial and a node still carries the cluster
 
-`destroy` ends with `[OK] destroy: complete` and a partial-destroy warning, and
-one node still has everything:
+`destroy` exits non-zero with a partial-destroy error and one node still has
+everything:
 
 ```text
-[OK] destroy: complete
-[WARN] partial destroy: storage cluster(s) ceph-prd-01 left partially destroyed:
-unreachable node(s) were skipped, ... Skipped node(s): node-01.
+[ERROR] storage teardown remains partial for cluster(s) ceph-prd-01; keeping
+ownership, access, converge records, captured secrets and history ...
 ```
 
 ```text
@@ -831,9 +837,10 @@ $ bootwright cluster exec --name ceph-prd-01 --node node-01 -- sudo pvs -o pv_na
   /dev/nvme0n1 ceph-96d04ef1-... osd-block-d50ffa4e-...
 ```
 
-The `[OK]` is the *run* status; the `[WARN]` is the outcome. A skipped node is
-never wiped, its Ceph daemons are never stopped, and it keeps serving the cluster
-the run reported destroyed. Read the warning: it names the skipped nodes.
+The error is deliberate completion bookkeeping. A skipped node is never wiped,
+its Ceph daemons are never stopped, and it can keep serving the partially
+destroyed cluster. The diagnostic names every skipped node and keeps the exact
+retry plus all evidence needed to run it.
 
 Wiping those disks by hand fails while the daemons hold them:
 

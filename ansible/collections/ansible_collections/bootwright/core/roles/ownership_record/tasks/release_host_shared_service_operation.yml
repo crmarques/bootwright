@@ -1,0 +1,90 @@
+---
+- name: Resolve expected host-wide operation for finalization
+  ansible.builtin.import_tasks: resolve_host_shared_service_operation.yml
+
+- name: Probe host-wide shared-service operation for finalization
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_operation_guard_path }}"
+    follow: false
+  register: bootwright_host_operation_finalize_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read host-wide shared-service operation for finalization
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_operation_guard_path }}"
+  register: bootwright_host_operation_finalize_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_operation_finalize_stat.stat.exists | default(false) | bool
+
+- name: Classify host-wide shared-service operation for finalization
+  ansible.builtin.set_fact:
+    bootwright_host_operation_finalize_guard: >-
+      {{ (bootwright_host_operation_finalize_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_operation_guard_any }}
+  changed_when: false
+
+- name: Require absent or exact host-wide operation before finalization
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_operation_finalize_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_operation_finalize_stat.stat.exists | bool)
+        or (
+          bootwright_host_operation_finalize_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_operation_finalize_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_operation_finalize_content.content is defined
+          and bootwright_host_operation_finalize_guard == bootwright_host_operation_guard
+        )
+    fail_msg: >-
+      Refusing host-wide operation finalization because the canonical guard is
+      unreadable, malformed, or belongs to another controller attempt. It was
+      retained. Inspect the winning guard and durable endpoint, transition,
+      claim, and owner evidence, then re-run
+      `{{ bootwright_mutating_invocation }}`; no finalizer removes another run's
+      token.
+
+- name: Atomically finalize exact host-wide shared-service operation
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_host_operation_guard_path }}"
+    state: absent
+    expected_contents:
+      - "{{ bootwright_host_operation_guard_content }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_host_operation_finalize_cas
+  failed_when: false
+  when: bootwright_host_operation_finalize_stat.stat.exists | bool
+
+- name: Require exact host-wide shared-service operation finalization
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_host_operation_finalize_stat.stat.exists | bool)
+        or (
+          bootwright_host_operation_finalize_cas.previous_sha256 is defined
+          and bootwright_host_operation_finalize_cas.current_sha256 is defined
+          and bootwright_host_operation_finalize_cas.current_sha256 == ''
+        )
+    fail_msg: >-
+      The command reached its host finalizer, but its exact host-wide operation
+      guard was not atomically removed. CAS detail:
+      {{ bootwright_host_operation_finalize_cas.msg | default('winner differs') }}.
+      Inspect the current guard and durable service evidence, then re-run
+      `{{ bootwright_mutating_invocation }}`. Never remove another run's guard.
+
+- name: Publish host-wide shared-service operation finalization proof
+  ansible.builtin.set_fact:
+    bootwright_host_operation_finalization_proof:
+      apiVersion: bootwright.io/host-shared-service-finalization/v1alpha1
+      kind: host-shared-service-finalization
+      host: "{{ bootwright_host_operation_host }}"
+      token: "{{ bootwright_host_operation_guard.lease.token }}"
+      released: true
+      initiallyAbsent: >-
+        {{ not (bootwright_host_operation_finalize_stat.stat.exists | bool) }}
+  changed_when: false

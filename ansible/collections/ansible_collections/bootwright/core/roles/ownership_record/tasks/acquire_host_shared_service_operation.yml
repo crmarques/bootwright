@@ -1,0 +1,72 @@
+---
+- name: Resolve expected host-wide shared-service operation guard
+  ansible.builtin.import_tasks: resolve_host_shared_service_operation.yml
+
+- name: Initialize host-wide shared-service operation acquisition
+  ansible.builtin.set_fact:
+    bootwright_host_operation_guard_acquired: false
+  changed_when: false
+
+- name: Acquire unique host-wide shared-service operation guard atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_host_operation_guard_path }}"
+    state: present
+    desired_content: "{{ bootwright_host_operation_guard_content }}"
+    expected_contents: []
+    allow_absent: true
+    create_parents: true
+    trusted_root: /
+  register: bootwright_host_operation_guard_cas
+  failed_when: false
+
+- name: Re-probe host-wide shared-service operation winner
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_operation_guard_path }}"
+    follow: false
+  register: bootwright_host_operation_guard_winner_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read host-wide shared-service operation winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_operation_guard_path }}"
+  register: bootwright_host_operation_guard_winner_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_operation_guard_winner_stat.stat.exists | default(false) | bool
+
+- name: Classify host-wide shared-service operation winner
+  ansible.builtin.set_fact:
+    bootwright_host_operation_guard_winner: >-
+      {{ (bootwright_host_operation_guard_winner_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_operation_guard_any }}
+  changed_when: false
+
+- name: Require this controller to own the host-wide shared-service operation
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_operation_guard_cas.previous_sha256 is defined
+      - bootwright_host_operation_guard_cas.current_sha256 is defined
+      - bootwright_host_operation_guard_winner_stat.stat.exists is defined
+      - bootwright_host_operation_guard_winner_stat.stat.exists | bool
+      - bootwright_host_operation_guard_winner_stat.stat.isreg | default(false) | bool
+      - not (bootwright_host_operation_guard_winner_stat.stat.islnk | default(false) | bool)
+      - bootwright_host_operation_guard_winner_content.content is defined
+      - bootwright_host_operation_guard_winner == bootwright_host_operation_guard
+    fail_msg: >-
+      Refusing {{ bootwright_host_operation_selection.command | default('shared-service mutation') }}
+      because another controller run owns the host-wide operation guard, or the
+      winner is unreadable, malformed, or different. Winner:
+      {{ bootwright_host_operation_guard_winner | default('unreadable') }}. CAS
+      detail: {{ bootwright_host_operation_guard_cas.msg | default('winner differs') }}.
+      Prove the recorded controller process is dead and inspect all durable
+      endpoint, transition, claim, and owner evidence before running
+      `sudo rm -- {{ bootwright_host_operation_guard_path }}`; then re-run the exact command
+      `{{ bootwright_mutating_invocation }}`. No authorization adopts or expires
+      another controller's operation.
+
+- name: Mark host-wide shared-service operation acquired
+  ansible.builtin.set_fact:
+    bootwright_host_operation_guard_acquired: true
+  changed_when: false

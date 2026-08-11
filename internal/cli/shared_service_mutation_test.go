@@ -54,35 +54,46 @@ func TestSelectedControllerNameResolutionServiceRefsAreExact(t *testing.T) {
 	}
 }
 
-func TestInfraComponentDestroyConsequenceUsesSelectedMachines(t *testing.T) {
+func TestControllerOnlyApplyProofDoesNotCreateRemoteHostManifest(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "sno-libvirt-redfish")})
+	if err != nil {
+		t.Fatalf("load controller resolver fixture: %v", err)
+	}
+	result, err := prepareApplySharedServiceMutation(
+		context.Background(),
+		"matrix",
+		state,
+		clusteraccess.Selection{RenderState: state},
+		converge.Scope{Name: "controller-only", PhaseNames: []string{converge.PhaseMachines}, NoAnsible: true},
+		true,
+		resolvedInvocation{verb: invocationApply, contextName: "matrix"},
+	)
+	if err != nil {
+		t.Fatalf("prepare controller-only shared-service proof: %v", err)
+	}
+	if len(result.manifest) != 0 {
+		t.Fatalf("controller-only proof projected remote host mutation authority: %+v", result.manifest)
+	}
+}
+
+func TestInfraComponentDestroyConsequenceSkipsMachineScopedPlan(t *testing.T) {
 	state := loadSharedServiceTestState(t)
 	all := selectedInfraComponentServiceRefs(state, false, false, nil)
 	if len(all) == 0 {
 		t.Fatalf("fixture needs an infra-component service, got %+v", all)
 	}
-	wantedHost := all[0].Host
 	records := []ownership.ResourceRecord{
-		{Kind: "infra-component", Name: all[0].Name, Host: wantedHost},
+		{Kind: "infra-component", Name: all[0].Name, Host: all[0].Host},
 		{Kind: "infra-component", Name: "InfraComponent-unselected", Host: "unselected-host"},
 	}
 	sel := clusteraccess.Selection{
 		RenderState:      state,
 		MachineSelection: true,
-		MachineProvision: map[string]bool{wantedHost: true},
+		MachineProvision: map[string]bool{all[0].Host: true},
 	}
 	refs, selectedRecords := infraComponentDestroyConsequence(state, sel, converge.InfraScope, false, false, records)
-	if len(refs) == 0 || len(selectedRecords) == 0 {
-		t.Fatalf("selected host consequence missing: refs=%+v records=%+v", refs, selectedRecords)
-	}
-	for _, ref := range refs {
-		if ref.Host != wantedHost {
-			t.Fatalf("unselected service entered consequence: %+v", ref)
-		}
-	}
-	for _, record := range selectedRecords {
-		if record.Host != wantedHost {
-			t.Fatalf("unselected record entered consequence: %+v", record)
-		}
+	if len(refs) != 0 || len(selectedRecords) != 0 {
+		t.Fatalf("machine-scoped destroy plans no shared-service mutator and must acquire no shared-service consequence: refs=%+v records=%+v", refs, selectedRecords)
 	}
 }
 
@@ -157,11 +168,10 @@ func TestPrepareDestroySharedServiceMutationScansSiblingControllerClaimsAfterLea
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ownership.SaveResource(hub.OwnershipDir, ownership.ResourceRecord{
-		Kind:  string(ownership.KindControllerNameResolver),
-		Name:  "hub-controller-route",
-		Owner: ownership.Owner,
-	}); err != nil {
+	hubRecord := controllerResolverConsequenceRecord("InfraComponent-hub-route", "resolver-host")
+	hubRecord.Owner = ownership.Owner
+	hubRecord.Context = "hub"
+	if err := ownership.SaveResource(hub.OwnershipDir, hubRecord); err != nil {
 		t.Fatal(err)
 	}
 	auth, err := parseAuthorizations([]string{authorizeSharedInfra}, authorizeVerbDestroy)
@@ -177,10 +187,7 @@ func TestPrepareDestroySharedServiceMutationScansSiblingControllerClaimsAfterLea
 			askBecomePass: false,
 		},
 	}
-	currentRecord := ownership.ResourceRecord{
-		Kind: string(ownership.KindControllerNameResolver),
-		Name: "spoke-controller-route",
-	}
+	currentRecord := controllerResolverConsequenceRecord("InfraComponent-spoke-route", "resolver-host")
 	result, refusal := prepareDestroySharedServiceMutation(
 		context.Background(), "spoke", v1alpha1.State{}, clusteraccess.Selection{RenderState: v1alpha1.State{}},
 		converge.InfraScope, false, false, false, []ownership.ResourceRecord{currentRecord}, auth, invocation,
@@ -198,7 +205,7 @@ func TestPrepareDestroySharedServiceMutationScansSiblingControllerClaimsAfterLea
 	if result.lease == nil || result.lease.RequireOwned() != nil {
 		t.Fatalf("sibling scan did not run under an owned shared-service lease: %+v", result)
 	}
-	for _, want := range []string{"hub", "hub-controller-route", "no authorization token", "bootwright destroy"} {
+	for _, want := range []string{"hub", hubRecord.Name, "no authorization token", "bootwright destroy"} {
 		if !strings.Contains(refusal.Error(), want) {
 			t.Fatalf("controller claim refusal %q missing %q", refusal, want)
 		}
@@ -220,11 +227,10 @@ func TestPrepareDestroySharedServiceMutationForecastsSiblingControllerClaimsWith
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ownership.SaveResource(hub.OwnershipDir, ownership.ResourceRecord{
-		Kind:  string(ownership.KindControllerNameResolver),
-		Name:  "hub-controller-route",
-		Owner: ownership.Owner,
-	}); err != nil {
+	hubRecord := controllerResolverConsequenceRecord("InfraComponent-hub-route", "resolver-host")
+	hubRecord.Owner = ownership.Owner
+	hubRecord.Context = "hub"
+	if err := ownership.SaveResource(hub.OwnershipDir, hubRecord); err != nil {
 		t.Fatal(err)
 	}
 	auth, err := parseAuthorizations(nil, authorizeVerbDestroy)
@@ -242,10 +248,7 @@ func TestPrepareDestroySharedServiceMutationForecastsSiblingControllerClaimsWith
 			askBecomePass: false,
 		},
 	}
-	currentRecord := ownership.ResourceRecord{
-		Kind: string(ownership.KindControllerNameResolver),
-		Name: "spoke-controller-route",
-	}
+	currentRecord := controllerResolverConsequenceRecord("InfraComponent-spoke-route", "resolver-host")
 	result, err := prepareDestroySharedServiceMutation(
 		context.Background(), "spoke", v1alpha1.State{}, clusteraccess.Selection{RenderState: v1alpha1.State{}},
 		converge.InfraScope, false, true, false, []ownership.ResourceRecord{currentRecord}, auth, invocation,
@@ -259,8 +262,11 @@ func TestPrepareDestroySharedServiceMutationForecastsSiblingControllerClaimsWith
 	if result.refusal == nil {
 		t.Fatal("dry-run omitted the sibling controller claim refusal")
 	}
+	if len(result.manifest) != 0 {
+		t.Fatalf("controller-only record cleanup projected remote host mutation authority: %+v", result.manifest)
+	}
 	formatted := applyInstallRemedialError(result.refusal, invocation).Error()
-	for _, want := range []string{"hub", "hub-controller-route", "bootwright destroy", "--dry-run", "--output json", "--context spoke"} {
+	for _, want := range []string{"hub", hubRecord.Name, "bootwright destroy", "--dry-run", "--output json", "--context spoke"} {
 		if !strings.Contains(formatted, want) {
 			t.Fatalf("dry-run controller claim forecast %q missing %q", formatted, want)
 		}

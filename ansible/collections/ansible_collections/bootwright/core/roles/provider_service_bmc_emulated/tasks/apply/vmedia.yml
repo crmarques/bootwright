@@ -1,4 +1,7 @@
 ---
+- name: Revalidate BMC authority before vmedia unit mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Write vmedia HTTP systemd unit
   ansible.builtin.template:
     src: vmedia/systemd.service.j2
@@ -8,10 +11,17 @@
     mode: "0644"
   register: bootwright_bmc_vmedia_unit
 
+- name: Revalidate BMC authority before vmedia daemon reload
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when: bootwright_bmc_vmedia_unit.changed
+
 - name: Reload systemd when vmedia unit changed
   ansible.builtin.systemd_service:
     daemon_reload: true
   when: bootwright_bmc_vmedia_unit.changed
+
+- name: Revalidate BMC authority before vmedia service mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
 
 - name: Ensure vmedia HTTP service is running
   ansible.builtin.systemd_service:

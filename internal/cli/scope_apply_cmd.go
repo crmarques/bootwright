@@ -44,23 +44,20 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		Example: labels.example,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", options.defaultPlan, flagDryRunUsage)
-	if options.hideDryRun {
-		_ = cmd.Flags().MarkHidden("dry-run")
-	}
-	if usesAnsible {
-		addAskBecomePassFlag(cmd, &askBecomePass)
-	}
-	if !options.hideApproval {
+	if !options.defaultPlan {
+		cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
+		if usesAnsible {
+			addAskBecomePassFlag(cmd, &askBecomePass)
+		}
 		addYesFlag(cmd, &yes, action)
 		addTrustOnFirstUseFlag(cmd, &trustOnFirstUse)
+		addVerboseFlag(cmd, &verbose)
 	}
-	addVerboseFlag(cmd, &verbose)
 	addModeFlag(cmd, &modeFlag, action)
 	addClusterInstallParallelismFlag(cmd, &clusterInstallParallelism)
 	addAuthorizeFlag(cmd, &authorizeFlag, authorizeVerbApply)
 	if usesAnsible {
-		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to WIPE in-band before a managed-Ceph apply, or the single word "+converge.ReclaimDevicesAll+" to select every declared OSD device of the selected owned cluster(s) (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); only wipes a selected device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
+		cmd.Flags().StringVar(&reclaimDevices, "reclaim-devices", "", "comma-separated block-device paths to select for an in-band WIPE before a managed-Ceph apply, or the single word "+converge.ReclaimDevicesAll+" to select every declared OSD device of the selected owned cluster(s) (recover owned OSD disks whose on-node marker was lost by a managed-OS reinstall); plan forecasts that apply and wipes nothing; apply only wipes a selected device that is a declared OSD device of a Bootwright-owned cluster, is not mounted or a system disk, and is on a host whose OSD marker does not already record it — irreversible data loss")
 		registerFlagCompletion(cmd, "reclaim-devices", []string{converge.ReclaimDevicesAll})
 	}
 	if options.stageSelector {
@@ -84,11 +81,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			flag.Usage = flagOutputUsage
 		}
 	}
-	if options.hideExecFlags {
-		for _, name := range []string{"reclaim-devices", "ask-become-pass", "verbose"} {
-			_ = cmd.Flags().MarkHidden(name)
-		}
-	}
 	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
 		var runLease, sharedServiceLease *workflow.CommandRunLease
 		defer func() {
@@ -99,40 +91,14 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if c.Flags().Changed("cluster-install-parallelism") && clusterInstallParallelism < 1 {
 			return failErr(2, errors.New("--cluster-install-parallelism must be a positive integer"))
 		}
-		mode, auth, err := resolveScopeApplyIntent(flags.output, options.defaultPlan, dryRun, modeFlag, authorizeFlag)
+		mode, auth, err := resolveScopeApplyIntent(flags.output, dryRun, modeFlag, authorizeFlag)
 		if err != nil {
 			return err
 		}
 		override := mode == workflow.ApplyModeRebuild
-		runScope := scope
-		runCommandLabel := commandLabel
-		if options.stageSelector {
-			var err error
-			switch {
-			case stage != "" && through != "":
-				runScope, err = converge.ApplyRangeScope(stage, through)
-				runCommandLabel = converge.ApplyRangeCommandLabel(stage, through, action, commandLabel)
-			case through != "":
-				runScope, err = converge.ApplyThroughScope(through)
-				runCommandLabel = converge.ApplyThroughCommandLabel(through, action, commandLabel)
-			default:
-				runScope, err = converge.ApplyStageScope(stage)
-				runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
-			}
-			if err != nil {
-				return failErr(2, err)
-			}
-		}
-		if machinesScope != "" {
-			stageProvided := stage != "" || through != ""
-			var merr error
-			runScope, merr = machineApplyRunScope(machinesScope, flags.clusterScope, stageProvided, runScope)
-			if merr != nil {
-				return merr
-			}
-			if !stageProvided {
-				runCommandLabel = "machines " + action
-			}
+		runScope, runCommandLabel, err := resolveScopeApplyRunScope(scope, options, stage, through, action, commandLabel, machinesScope, flags.clusterScope)
+		if err != nil {
+			return err
 		}
 		selection := runSelection{stage: stage, through: through, clusters: flags.clusterScope, machines: machinesScope}
 		if err := converge.ValidateReclaimDevicesFlag(reclaimDevices); err != nil {
@@ -221,8 +187,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if flags.output == outputJSON {
 			jsonReinstallDrift := applyJSONReinstallDrift(mode, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			jsonRequiredAuth := applyRequiredAuthorizations(auth, ctx.Name, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, jsonReinstallDrift, reclaimDevices, provisionedStorageTenants, ownershipRecords)
-			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
-			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
+			jsonRefusals := applyGateForecastRefusals(state, plan.State, tasks, ctx.RunsDir, ctx.Name, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, jsonReinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
+			return runScopeDryRunJSONAuthorized(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, converge.BuildDryRunTransitions(tasks, ctx.RunsDir, ctx.Name, mode, jsonReinstallDrift), workflow.AnsibleForksForLimit(plan.State, plan.Limit), jsonRequiredAuth, dryRunDisclosure{refusals: jsonRefusals})
 		}
 		var destructiveOverride []string
 		var substrateResetClusters []string
@@ -230,7 +196,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		var ocpReinstallAcked []string
 		forecastReleasedReinstallDataLoss(stdout, dryRun, ctx.RunsDir, plan.State, tasks)
 		if !dryRun {
-			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
+			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir, ctx.Name)
 			if err != nil {
 				return failErr(1, applyModePreflightRefusal(err, invocation))
 			}
@@ -333,6 +299,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if err := appendMutatingInvocationExtraVars(&plan, invocation, reclaimDevices); err != nil {
 				return failErr(1, err)
 			}
+			if err := appendHostSharedServiceManifestExtraVar(&plan, sharedMutation.manifest); err != nil {
+				return failErr(1, err)
+			}
 			if err := appendControllerNameResolutionInvocationExtraVars(tasks, invocation); err != nil {
 				return failErr(1, err)
 			}
@@ -348,9 +317,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			if mode == workflow.ApplyModeRebuild {
 				reinstallDrift = workflow.OverrideReinstallInputDriftedClusters(clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks)
 			}
-			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, mode, reinstallDrift)
+			printApplyTransitionLedger(stdout, tasks, ctx.RunsDir, ctx.Name, mode, reinstallDrift)
 			printApplyAvailabilityCaveat(stdout, mode, clustersDir, tasks)
-			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
+			printApplyGateForecast(stdout, state, plan.State, tasks, ctx.RunsDir, ctx.Name, clustersDir, mode, auth.has(authorizeDataLoss), auth.has(authorizeUnownedDevices), reclaimDevices, sel, reinstallDrift, ctx.OwnershipDir, ownershipRecords, ownershipSkipped, sharedMutation.refusal, &invocation)
 			printArtifactServerReclaimNotice(stdout, artifactReclaimPreview)
 			printRequiredAuthorizations(stdout, applyRequiredAuthorizations(auth, ctx.Name, mode, state, plan.State, tasks, ctx.RunsDir, clustersDir, reinstallDrift, reclaimDevices, provisionedStorageTenants, ownershipRecords))
 			warnUnusedAuthorizations(stdout, auth, true)
@@ -373,6 +342,19 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err := requireSharedServiceMutationLease(sharedServiceLease, "before apply execution"); err != nil {
 			return failErr(1, err)
 		}
+		if len(sharedMutation.manifest) > 0 {
+			defer func() {
+				returnErr = finishHostSharedServiceOperations(returnErr, func() error {
+					if err := requireSharedServiceMutationLease(sharedServiceLease, "before host-wide operation finalization"); err != nil {
+						return err
+					}
+					if err := converge.FinalizeHostSharedServiceOperations(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, plan, sharedMutation.manifest, ownershipRecords, reporter, runLease, invocation.args()); err != nil {
+						return hostSharedServiceFinalizationRefusal(err, invocation)
+					}
+					return nil
+				})
+			}()
+		}
 		renderResult, bundleResult, ledger, err := converge.ExecuteApply(runContext, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 		if err != nil {
 			if hasApplyInstallRemedy(err) {
@@ -386,7 +368,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err := requireSharedServiceMutationLease(sharedServiceLease, "before post-apply cleanup"); err != nil {
 			return failErr(1, err)
 		}
-		reclaimApplyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, sharedMutation.artifactServerTargets, reporter, runLease, usesAnsible)
+		reclaimApplyArtifactServers(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundleResult.Dir, become.PasswordFile, state, sharedMutation.artifactServerTargets, plan.ExtraVarPairs, reporter, runLease, usesAnsible)
 		printScopedApplyResult(stdout, ctx, clustersDir, usesAnsible, bundleResult, plan, renderResult, ledger)
 		return nil
 	}

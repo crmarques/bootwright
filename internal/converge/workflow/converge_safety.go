@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -72,14 +73,88 @@ type ConvergeSafetyRecord struct {
 	UpdatedAt               time.Time                   `json:"updatedAt"`
 }
 
+type convergeSafetyRecordIdentity struct {
+	ResourceID   string
+	ResourceKind string
+	TaskID       string
+	TaskKind     string
+	OwnerContext string
+}
+
+func validateCurrentConvergeSafetyRecord(record ConvergeSafetyRecord, expected convergeSafetyRecordIdentity) error {
+	if record.HashSchema != ConvergeHashSchema {
+		return fmt.Errorf("current convergence safety record for %s is invalid: hashSchema is %v, want %v", expected.ResourceID, record.HashSchema, ConvergeHashSchema)
+	}
+	if err := validateConvergeSafetyRecordAuthority(record, expected); err != nil {
+		return err
+	}
+	return validateConvergeSafetyRecordPayload(record, expected.ResourceID)
+}
+
+func validateConvergeSafetyRecordAuthority(record ConvergeSafetyRecord, expected convergeSafetyRecordIdentity) error {
+	resourceID := expected.ResourceID
+	invalid := func(field string, value any, want any) error {
+		return fmt.Errorf("convergence safety record for %s has untrusted authority or target identity: %s is %v, want %v", resourceID, field, value, want)
+	}
+	if record.APIVersion != ConvergeSafetyAPIVersion {
+		return invalid("apiVersion", record.APIVersion, ConvergeSafetyAPIVersion)
+	}
+	if record.ResourceID != expected.ResourceID {
+		return invalid("resourceID", record.ResourceID, expected.ResourceID)
+	}
+	if record.ResourceKind != expected.ResourceKind {
+		return invalid("resourceKind", record.ResourceKind, expected.ResourceKind)
+	}
+	if record.TaskID != expected.TaskID {
+		return invalid("taskID", record.TaskID, expected.TaskID)
+	}
+	if record.TaskKind != expected.TaskKind {
+		return invalid("taskKind", record.TaskKind, expected.TaskKind)
+	}
+	if record.Owner.Manager != ConvergeSafetyOwner {
+		return invalid("owner.manager", record.Owner.Manager, ConvergeSafetyOwner)
+	}
+	contextName := effectiveContextName(expected.OwnerContext)
+	if record.Owner.Context != contextName {
+		return invalid("owner.context", record.Owner.Context, contextName)
+	}
+	return nil
+}
+
+func validateConvergeSafetyRecordPayload(record ConvergeSafetyRecord, resourceID string) error {
+	switch record.Status {
+	case ConvergeSafetyStatusCreated, ConvergeSafetyStatusReconciled, ConvergeSafetyStatusSkipped:
+	default:
+		return fmt.Errorf("current convergence safety record for %s is invalid: status %q is not created, reconciled, or skipped", resourceID, record.Status)
+	}
+	if !convergeSafetyHash.MatchString(record.DesiredHash) {
+		return fmt.Errorf("current convergence safety record for %s is invalid: desiredHash %q is not a sha256 digest", resourceID, record.DesiredHash)
+	}
+	if record.StructuralHash != "" && !convergeSafetyHash.MatchString(record.StructuralHash) {
+		return fmt.Errorf("current convergence safety record for %s is invalid: structuralHash %q is not a sha256 digest", resourceID, record.StructuralHash)
+	}
+	if record.TiebreakerInvariantHash != "" && !convergeSafetyHash.MatchString(record.TiebreakerInvariantHash) {
+		return fmt.Errorf("current convergence safety record for %s is invalid: tiebreakerInvariantHash %q is not a sha256 digest", resourceID, record.TiebreakerInvariantHash)
+	}
+	return nil
+}
+
+func untrustedConvergenceEvidence(runsDir, resourceID string, cause error) error {
+	return &UntrustedConvergenceEvidenceError{
+		ResourceID: resourceID,
+		RecordPath: ConvergeSafetyRecordPath(runsDir, resourceID),
+		Cause:      cause,
+	}
+}
+
 func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord, bool, error) {
 	path := ConvergeSafetyRecordPath(runsDir, resourceID)
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return ConvergeSafetyRecord{}, false, nil
-	}
+	data, found, err := readConvergeSafetyRecordFile(path)
 	if err != nil {
-		return ConvergeSafetyRecord{}, false, fmt.Errorf("read converge safety record: %w", err)
+		return ConvergeSafetyRecord{}, found, err
+	}
+	if !found {
+		return ConvergeSafetyRecord{}, false, nil
 	}
 	var record ConvergeSafetyRecord
 	if err := json.Unmarshal(data, &record); err != nil {
@@ -90,18 +165,36 @@ func LoadConvergeSafetyRecord(runsDir, resourceID string) (ConvergeSafetyRecord,
 
 func loadConvergeSafetyRecordLenient(runsDir, resourceID string) (ConvergeSafetyRecord, bool, string, error) {
 	path := ConvergeSafetyRecordPath(runsDir, resourceID)
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return ConvergeSafetyRecord{}, false, "", nil
-	}
+	data, found, err := readConvergeSafetyRecordFile(path)
 	if err != nil {
-		return ConvergeSafetyRecord{}, false, fmt.Sprintf("read converge safety record %s: %v", path, err), nil
+		return ConvergeSafetyRecord{}, false, err.Error(), nil
+	}
+	if !found {
+		return ConvergeSafetyRecord{}, false, "", nil
 	}
 	var record ConvergeSafetyRecord
 	if err := json.Unmarshal(data, &record); err != nil {
 		return ConvergeSafetyRecord{}, false, fmt.Sprintf("decode converge safety record %s: %v", path, err), nil
 	}
 	return record, true, "", nil
+}
+
+func readConvergeSafetyRecordFile(path string) ([]byte, bool, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, fmt.Errorf("inspect converge safety record %s: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, true, fmt.Errorf("converge safety record %s is not a regular non-symlink file", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, true, fmt.Errorf("read converge safety record %s: %w", path, err)
+	}
+	return data, true, nil
 }
 
 func SaveConvergeSafetyRecord(runsDir string, record ConvergeSafetyRecord) error {
@@ -223,6 +316,16 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 		ResourceKeys: append([]string(nil), task.Entry.ResourceKeys...),
 		UpdatedAt:    now.UTC(),
 	}
+	identity := convergeSafetyRecordIdentity{
+		ResourceID:   resourceID,
+		ResourceKind: task.Entry.Kind,
+		TaskID:       task.Entry.ID,
+		TaskKind:     task.Entry.Kind,
+		OwnerContext: contextName,
+	}
+	if err := validateCurrentConvergeSafetyRecord(record, identity); err != nil {
+		return err
+	}
 	retained, err := retainCurrentConvergeSafetyEvidence(runsDir, record, input)
 	if err != nil {
 		return err
@@ -241,26 +344,22 @@ func retainCurrentConvergeSafetyEvidence(runsDir string, expected ConvergeSafety
 	if err != nil || !found {
 		return false, err
 	}
-	if record.APIVersion != expected.APIVersion ||
-		record.ResourceID != expected.ResourceID ||
-		record.ResourceKind != expected.ResourceKind ||
-		record.TaskID != expected.TaskID ||
-		record.TaskKind != expected.TaskKind ||
+	identity := convergeSafetyRecordIdentity{
+		ResourceID:   expected.ResourceID,
+		ResourceKind: expected.ResourceKind,
+		TaskID:       expected.TaskID,
+		TaskKind:     expected.TaskKind,
+		OwnerContext: expected.Owner.Context,
+	}
+	if validateCurrentConvergeSafetyRecord(record, identity) != nil ||
 		record.DesiredHash != expected.DesiredHash ||
 		record.StructuralHash != expected.StructuralHash ||
 		record.TiebreakerInvariantHash != expected.TiebreakerInvariantHash ||
-		record.HashSchema != ConvergeHashSchema ||
-		record.Owner != expected.Owner ||
 		!maps.Equal(record.TiebreakerNodes, expected.TiebreakerNodes) ||
 		!slices.Equal(record.ResourceKeys, expected.ResourceKeys) {
 		return false, nil
 	}
-	switch record.Status {
-	case ConvergeSafetyStatusCreated, ConvergeSafetyStatusReconciled, ConvergeSafetyStatusSkipped:
-	default:
-		return false, nil
-	}
-	matched, proofErr := successfulInputSnapshotMatchesRecordedSchema(runsDir, record.RunID, record.ResourceID, record.TaskID, record.TaskKind, successfulTaskStatus(record.Status), record.HashSchema, input)
+	matched, proofErr := successfulInputSnapshotMatchesRecordedSchema(runsDir, record.RunID, record.ResourceID, record.TaskID, record.TaskKind, successfulTaskStatus(record.Status), record.HashSchema, record.DesiredHash, input)
 	if proofErr != nil {
 		return false, nil
 	}
@@ -290,7 +389,7 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 		if !found {
 			continue
 		}
-		rebaselinable, err := convergeRecordRebaselinable(runsDir, record, applyTaskByID(before, task.Entry.ID), task)
+		rebaselinable, err := convergeRecordRebaselinable(runsDir, contextName, record, applyTaskByID(before, task.Entry.ID), task)
 		if err != nil {
 			return nil, err
 		}
@@ -306,15 +405,18 @@ func RefreshStorageClusterConvergeSafety(runsDir, contextName, runID, cluster st
 	return carried, nil
 }
 
-func convergeRecordRebaselinable(runsDir string, record ConvergeSafetyRecord, before *ApplyTask, after ApplyTask) (bool, error) {
-	matched, err := recordMatchesTask(runsDir, record, before)
+func convergeRecordRebaselinable(runsDir, contextName string, record ConvergeSafetyRecord, before *ApplyTask, after ApplyTask) (bool, error) {
+	if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+		return false, nil
+	}
+	matched, err := recordMatchesTask(runsDir, contextName, record, before)
 	if err != nil {
 		return false, err
 	}
 	if matched {
 		return true, nil
 	}
-	matched, err = recordMatchesTask(runsDir, record, &after)
+	matched, err = recordMatchesTask(runsDir, contextName, record, &after)
 	if err != nil {
 		return false, err
 	}
@@ -345,7 +447,7 @@ func applyTaskByID(tasks []ApplyTask, id string) *ApplyTask {
 	return nil
 }
 
-func recordMatchesTask(runsDir string, record ConvergeSafetyRecord, task *ApplyTask) (bool, error) {
+func recordMatchesTask(runsDir, contextName string, record ConvergeSafetyRecord, task *ApplyTask) (bool, error) {
 	if task == nil {
 		return false, nil
 	}
@@ -353,7 +455,7 @@ func recordMatchesTask(runsDir string, record ConvergeSafetyRecord, task *ApplyT
 	if err != nil {
 		return false, err
 	}
-	class, err := classifyApplyTaskWithRecord(*task, runsDir, record, desiredHash)
+	class, err := classifyApplyTaskWithRecordForContext(*task, runsDir, contextName, record, desiredHash)
 	if err != nil {
 		return false, err
 	}
@@ -649,8 +751,8 @@ func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManag
 	if record.Owner.Manager != ownerManager {
 		return ConvergeSafetyForeign
 	}
-	if record.HashSchema == ConvergeHashSchema && record.DesiredHash == desiredHash {
-		return ConvergeSafetyMatch
+	if record.HashSchema == ConvergeHashSchema {
+		return ConvergeSafetyUnknown
 	}
 	return ConvergeSafetyDrift
 }
@@ -663,26 +765,61 @@ func successfulTaskStatus(status ConvergeSafetyStatus) TaskStatus {
 }
 
 func classifyApplyTaskWithRecord(task ApplyTask, runsDir string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
-	class := ClassifyConvergeSafety(record, desiredHash, ConvergeSafetyOwner)
-	if class == ConvergeSafetyMissing || class == ConvergeSafetyForeign || record.HashSchema != ConvergeHashSchema-1 {
-		return class, nil
-	}
 	resourceID := applyTaskSafetyResourceID(task)
-	if record.ResourceID != resourceID || record.TaskID != task.Entry.ID || record.TaskKind != task.Entry.Kind {
-		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: resourceID, Cause: fmt.Errorf("the converge record has ambiguous resource or task identity")}
+	if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+		return ConvergeSafetyForeign, nil
 	}
-	input, err := applyTaskDesiredHashInput(task)
-	if err != nil {
-		return ConvergeSafetyUnknown, err
+	return ConvergeSafetyUnknown, untrustedConvergenceEvidence(runsDir, resourceID, fmt.Errorf("the context-free classifier cannot verify exact owner.context"))
+}
+
+func classifyApplyTaskWithRecordForContext(task ApplyTask, runsDir, contextName string, record ConvergeSafetyRecord, desiredHash string) (ConvergeSafetyClassification, error) {
+	identity := convergeSafetyRecordIdentity{
+		ResourceID:   applyTaskSafetyResourceID(task),
+		ResourceKind: task.Entry.Kind,
+		TaskID:       task.Entry.ID,
+		TaskKind:     task.Entry.Kind,
+		OwnerContext: contextName,
 	}
-	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, resourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(record.Status), record.HashSchema, input)
-	if err != nil {
-		return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: resourceID, Cause: err}
+	if strings.TrimSpace(record.Owner.Manager) != "" && record.Owner.Manager != ConvergeSafetyOwner {
+		return ConvergeSafetyForeign, nil
 	}
-	if matched {
-		return ConvergeSafetyMatch, nil
+	if err := validateConvergeSafetyRecordAuthority(record, identity); err != nil {
+		return ConvergeSafetyUnknown, untrustedConvergenceEvidence(runsDir, identity.ResourceID, err)
 	}
-	return ConvergeSafetyDrift, nil
+	switch record.HashSchema {
+	case ConvergeHashSchema:
+		if err := validateConvergeSafetyRecordPayload(record, identity.ResourceID); err != nil {
+			return ConvergeSafetyUnknown, &CurrentConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if record.DesiredHash == desiredHash {
+			return ConvergeSafetyMatch, nil
+		}
+		return ConvergeSafetyDrift, nil
+	case ConvergeHashSchema - 1:
+		if record.HashSchema < successfulInputSnapshotFirstSchema {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: fmt.Errorf("hash schema %d predates immutable successful-input snapshots", record.HashSchema)}
+		}
+		if err := validateConvergeSafetyRecordPayload(record, identity.ResourceID); err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if err := validateRunIDPathSegment(record.RunID); err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		input, err := applyTaskDesiredHashInput(task)
+		if err != nil {
+			return ConvergeSafetyUnknown, err
+		}
+		matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, identity.ResourceID, task.Entry.ID, task.Entry.Kind, successfulTaskStatus(record.Status), record.HashSchema, record.DesiredHash, input)
+		if err != nil {
+			return ConvergeSafetyUnknown, &LegacyConvergenceEvidenceError{ResourceID: identity.ResourceID, Cause: err}
+		}
+		if matched {
+			return ConvergeSafetyMatch, nil
+		}
+		return ConvergeSafetyDrift, nil
+	default:
+		return ConvergeSafetyDrift, nil
+	}
 }
 
 func applyTaskSafetyResourceID(task ApplyTask) string {
@@ -693,6 +830,7 @@ func applyTaskSafetyResourceID(task ApplyTask) string {
 }
 
 var convergeSafetySafeName = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
+var convergeSafetyHash = regexp.MustCompile(`\Asha256:[0-9a-f]{64}\z`)
 
 func convergeSafetyRecordFileName(resourceID string) string {
 	clean := strings.Trim(convergeSafetySafeName.ReplaceAllString(resourceID, "-"), "-")

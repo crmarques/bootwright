@@ -5,14 +5,108 @@
       - bootwright_ownership_dir | default('') | length > 0
       - bootwright_ownership_kind | default('') is match('^[A-Za-z0-9_.-]+$')
       - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
-    fail_msg: "ownership resource removal needs safe kind, name, and bootwright_ownership_dir"
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Ownership resource removal needs safe kind, name, and ownership directory.
+      Repair the exact identity and re-run the same bootwright invocation:
+      `{{ bootwright_mutating_invocation | default('the same bootwright mutation') }}`.
 
-- name: Remove ownership resource record
-  ansible.builtin.file:
-    path: >-
+- name: Resolve ownership resource removal path
+  ansible.builtin.set_fact:
+    bootwright_ownership_remove_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_ownership_remove_path: >-
       {{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{
         (bootwright_ownership_name ~ '@' ~ (bootwright_clusters_dir | dirname | basename))
         if (bootwright_ownership_role | default('owner')) == 'reference'
         else bootwright_ownership_name
       }}.json
+  changed_when: false
+
+- name: Inspect ownership resource before removal
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_remove_path }}"
+  register: bootwright_ownership_remove_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require safe ownership resource path before removal
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_remove_stat.stat.exists is defined
+      - >-
+        not (bootwright_ownership_remove_stat.stat.exists | bool)
+        or (
+          bootwright_ownership_remove_stat.stat.isreg | default(false) | bool
+          and not (bootwright_ownership_remove_stat.stat.islnk | default(false) | bool)
+        )
+    fail_msg: >-
+      Refusing ownership evidence removal because
+      {{ bootwright_ownership_remove_path }} could not be proven absent or a
+      regular non-symlink file. Restore safe evidence-store access and re-run
+      {{ bootwright_mutating_invocation }}.
+
+- name: Read ownership resource before removal
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ownership_remove_path }}"
+  register: bootwright_ownership_remove_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_ownership_remove_stat.stat.exists | bool
+
+- name: Require readable ownership resource before removal
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_remove_content.content is defined
+    fail_msg: >-
+      Refusing ownership evidence removal because the regular record at
+      {{ bootwright_ownership_remove_path }} could not be read. Restore the
+      exact record and re-run {{ bootwright_mutating_invocation }}.
+  when: bootwright_ownership_remove_stat.stat.exists | bool
+
+- name: Decode ownership resource before removal
+  when: bootwright_ownership_remove_stat.stat.exists | bool
+  block:
+    - name: Parse ownership resource removal evidence
+      ansible.builtin.set_fact:
+        bootwright_ownership_remove_record: >-
+          {{ bootwright_ownership_remove_content.content | b64decode | from_json }}
+      changed_when: false
+  rescue:
+    - name: Refuse malformed ownership resource removal evidence
+      ansible.builtin.fail:
+        msg: >-
+          Refusing ownership evidence removal because
+          {{ bootwright_ownership_remove_path }} is not readable JSON. Restore
+          exact trusted evidence and re-run {{ bootwright_mutating_invocation }}.
+
+- name: Require exact ownership resource authority before removal
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_remove_record is mapping
+      - bootwright_ownership_remove_record.apiVersion | default('') == 'bootwright.io/ownership/v1alpha1'
+      - bootwright_ownership_remove_record.kind | default('') == bootwright_ownership_kind
+      - bootwright_ownership_remove_record.name | default('') == bootwright_ownership_name
+      - bootwright_ownership_remove_record.owner | default('') == 'bootwright'
+      - bootwright_ownership_remove_record.context | default('') == bootwright_ownership_remove_context
+      - >-
+        bootwright_ownership_remove_record.host | default('')
+        == bootwright_host_name | default(inventory_hostname)
+      - bootwright_ownership_remove_record.role | default('owner', true) == bootwright_ownership_role | default('owner')
+      - >-
+        bootwright_ownership_expected_record is not defined
+        or bootwright_ownership_remove_record == bootwright_ownership_expected_record
+    fail_msg: >-
+      Refusing ownership evidence removal because the live record does not
+      exactly match API, kind, name, manager, context, host, effective role, and the
+      exact record composite gated before mutation.
+      Restore the exact record from trusted evidence and re-run
+      {{ bootwright_mutating_invocation }}.
+  when: bootwright_ownership_remove_stat.stat.exists | bool
+
+- name: Remove ownership resource record
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_remove_path }}"
     state: absent

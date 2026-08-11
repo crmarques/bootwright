@@ -1,5 +1,244 @@
 ---
 
+- name: Validate the existing mirror-registry ownership record before trust mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+
+- name: Resolve mirror-registry ownership transition inputs
+  ansible.builtin.set_fact:
+    bootwright_registry_mirror_credentials_path: >-
+      {{
+        (bootwright_secrets_dir ~ '/' ~ bootwright_environment.mirror.credentialsRef)
+        if (bootwright_environment.mirror | default({})).credentialsRef | default('') | length > 0
+        else ''
+      }}
+    bootwright_registry_mirror_trust_path: >-
+      {{
+        (bootwright_secrets_dir ~ '/' ~ bootwright_environment.mirror.trustBundleRef)
+        if (bootwright_environment.mirror | default({})).trustBundleRef | default('') | length > 0
+        else ''
+      }}
+    bootwright_registry_trust_desired_checksum: >-
+      {{ (lookup('ansible.builtin.file', bootwright_secrets_dir ~ '/' ~ bootwright_environment.mirror.trustBundleRef, rstrip=False) | hash('sha256'))
+         if (bootwright_environment.mirror | default({})).trustBundleRef | default('') | length > 0 else '' }}
+  changed_when: false
+
+- name: Resolve desired mirror-registry ownership transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: registry
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_registry_mirror_root }}"
+      labels:
+        bootwright.kind: registry
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: registry
+        container: "{{ bootwright_registry_mirror_container_name }}"
+        port: "{{ bootwright_component.port | int }}/tcp"
+        trustAnchor: >-
+          {{ bootwright_registry_mirror_trust_anchor
+             if (bootwright_registry_mirror_trust_path | length) > 0 else '' }}
+        trustBundleSHA256: "{{ bootwright_registry_trust_desired_checksum }}"
+  changed_when: false
+
+- name: Load mirror registry package list
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+- name: Load mirror credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.support_credentials
+    tasks_from: load
+  vars:
+    bootwright_creds_path: "{{ bootwright_registry_mirror_credentials_path }}"
+    bootwright_creds_var: bootwright_registry_mirror_credentials
+    bootwright_creds_label: "registry mirror credentialsRef {{ bootwright_registry_mirror_credentials_path }}"
+  when: (bootwright_registry_mirror_credentials_path | length) > 0
+
+- name: Resolve desired and recorded mirror-registry trust evidence
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_desired_checksum: >-
+      {{ (lookup('ansible.builtin.file', bootwright_registry_mirror_trust_path, rstrip=False) | hash('sha256'))
+         if (bootwright_registry_mirror_trust_path | length) > 0 else '' }}
+    bootwright_registry_trust_recorded_anchor: >-
+      {{ (bootwright_ownership_validated_record.attributes | default({})).trustAnchor | default('')
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else '' }}
+    bootwright_registry_trust_recorded_checksum: >-
+      {{ (bootwright_ownership_validated_record.attributes | default({})).trustBundleSHA256 | default('')
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else '' }}
+    bootwright_registry_trust_refresh_marker: "{{ bootwright_registry_mirror_root }}/.ca-trust-refresh-pending"
+  changed_when: false
+
+- name: Probe the mirror-registry trust anchor before apply
+  ansible.builtin.stat:
+    path: "{{ bootwright_registry_mirror_trust_anchor }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: bootwright_registry_trust_anchor_before_apply
+  changed_when: false
+  failed_when: false
+
+- name: Probe the durable mirror-registry trust transition before apply
+  ansible.builtin.stat:
+    path: "{{ bootwright_registry_trust_refresh_marker }}"
+    follow: false
+  register: bootwright_registry_trust_marker_before_apply
+  changed_when: false
+  failed_when: false
+
+- name: Read the durable mirror-registry trust transition before apply
+  ansible.builtin.slurp:
+    src: "{{ bootwright_registry_trust_refresh_marker }}"
+  register: bootwright_registry_trust_marker_content_before_apply
+  changed_when: false
+  failed_when: false
+  when: bootwright_registry_trust_marker_before_apply.stat.exists | default(false) | bool
+
+- name: Require exact mirror-registry trust transition evidence before apply
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_registry_trust_anchor_before_apply.stat.exists is defined
+      - bootwright_registry_trust_marker_before_apply.stat.exists is defined
+      - (bootwright_clusters_dir | dirname | basename) is match('^[A-Za-z0-9_.-]+$')
+      - >-
+        (
+          bootwright_registry_trust_recorded_anchor | length == 0
+          and bootwright_registry_trust_recorded_checksum | length == 0
+        )
+        or (
+          bootwright_registry_trust_recorded_anchor == bootwright_registry_mirror_trust_anchor
+          and bootwright_registry_trust_recorded_checksum is match('^[a-f0-9]{64}$')
+        )
+      - >-
+        not (bootwright_registry_trust_marker_before_apply.stat.exists | bool)
+        or (
+          bootwright_registry_trust_marker_before_apply.stat.isreg | default(false) | bool
+          and not (bootwright_registry_trust_marker_before_apply.stat.islnk | default(false) | bool)
+          and bootwright_registry_trust_marker_before_apply.stat.pw_name | default('') == 'root'
+          and bootwright_registry_trust_marker_before_apply.stat.gr_name | default('') == 'root'
+          and bootwright_registry_trust_marker_before_apply.stat.mode | default('') == '0600'
+          and bootwright_registry_trust_marker_content_before_apply.content is defined
+          and (
+            bootwright_registry_trust_marker_content_before_apply.content
+            | b64decode
+            | trim
+          ) is match(bootwright_registry_trust_marker_pattern)
+        )
+      - >-
+        (
+          bootwright_registry_trust_desired_checksum | length == 0
+          and bootwright_registry_trust_recorded_checksum | length == 0
+          and not (bootwright_registry_trust_marker_before_apply.stat.exists | bool)
+        )
+        or not (bootwright_registry_trust_anchor_before_apply.stat.exists | bool)
+        or (
+          bootwright_registry_trust_anchor_before_apply.stat.isreg | default(false) | bool
+          and not (bootwright_registry_trust_anchor_before_apply.stat.islnk | default(false) | bool)
+          and bootwright_registry_trust_anchor_before_apply.stat.checksum is defined
+          and bootwright_registry_trust_anchor_before_apply.stat.checksum
+              in bootwright_registry_trust_authorized_checksums
+          and (
+            bootwright_registry_trust_recorded_checksum | length > 0
+            or bootwright_registry_trust_marker_before_apply.stat.exists | bool
+          )
+        )
+    fail_msg: >-
+      Refusing mirror-registry trust mutation because the anchor, ownership
+      record, or durable refresh marker is foreign, malformed, a symlink, or
+      does not prove this exact context, provider, component, path, and SHA-256
+      content. No trust anchor or trust store was changed. Restore the exact
+      evidence, then re-run `{{ bootwright_mutating_invocation }}`; no apply
+      authorization adopts unproven host trust.
+  vars:
+    bootwright_registry_trust_marker_content: >-
+      {{ bootwright_registry_trust_marker_content_before_apply.content | default('') | b64decode | trim }}
+    bootwright_registry_trust_marker_pattern: >-
+      ^{{ (bootwright_clusters_dir | dirname | basename) | regex_escape }}\|{{ bootwright_component.providerName | regex_escape }}\|{{ bootwright_component.name | regex_escape }}\|{{ bootwright_registry_mirror_trust_anchor | regex_escape }}\|[a-f0-9]{64}\|(install|remove)$
+    bootwright_registry_trust_marker_checksum: >-
+      {{ (bootwright_registry_trust_marker_content.split('|')[4])
+         if (
+           bootwright_registry_trust_marker_before_apply.stat.exists | default(false) | bool
+           and bootwright_registry_trust_marker_content
+               is match(bootwright_registry_trust_marker_pattern)
+         )
+         else '' }}
+    bootwright_registry_trust_authorized_checksums: >-
+      {{ [bootwright_registry_trust_desired_checksum,
+          bootwright_registry_trust_recorded_checksum,
+          bootwright_registry_trust_marker_checksum]
+         | reject('equalto', '') | unique | list }}
+
+- name: Resolve mirror-registry trust transition state
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_marker_content: >-
+      {{ bootwright_registry_trust_marker_content_before_apply.content | default('') | b64decode | trim }}
+    bootwright_registry_trust_marker_checksum: >-
+      {{ (bootwright_registry_trust_marker_content_before_apply.content | b64decode | trim).split('|')[4]
+         if (bootwright_registry_trust_marker_before_apply.stat.exists | default(false) | bool)
+         else '' }}
+    bootwright_registry_trust_transition_required: >-
+      {{
+        bootwright_registry_trust_marker_before_apply.stat.exists | bool
+        or (
+          bootwright_registry_trust_desired_checksum | length > 0
+          and not (
+            bootwright_registry_trust_recorded_anchor == bootwright_registry_mirror_trust_anchor
+            and bootwright_registry_trust_recorded_checksum == bootwright_registry_trust_desired_checksum
+            and bootwright_registry_trust_anchor_before_apply.stat.exists | bool
+            and bootwright_registry_trust_anchor_before_apply.stat.isreg | default(false) | bool
+            and not (bootwright_registry_trust_anchor_before_apply.stat.islnk | default(false) | bool)
+            and bootwright_registry_trust_anchor_before_apply.stat.checksum
+                == bootwright_registry_trust_desired_checksum
+            and bootwright_registry_trust_anchor_before_apply.stat.pw_name | default('') == 'root'
+            and bootwright_registry_trust_anchor_before_apply.stat.gr_name | default('') == 'root'
+            and bootwright_registry_trust_anchor_before_apply.stat.mode | default('') == '0644'
+          )
+        )
+        or (
+          bootwright_registry_trust_desired_checksum | length == 0
+          and bootwright_registry_trust_recorded_checksum | length > 0
+        )
+      }}
+  changed_when: false
+
+- name: Resolve exact mirror-registry trust transition identity
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_transition_action: >-
+      {{ 'install' if (bootwright_registry_trust_desired_checksum | length) > 0 else 'remove' }}
+    bootwright_registry_trust_transition_checksum: >-
+      {{ bootwright_registry_trust_desired_checksum
+         if (bootwright_registry_trust_desired_checksum | length) > 0
+         else (
+           bootwright_registry_trust_anchor_before_apply.stat.checksum
+           if (bootwright_registry_trust_anchor_before_apply.stat.exists | default(false) | bool)
+           else (bootwright_registry_trust_marker_checksum
+                 if (bootwright_registry_trust_marker_checksum | length) > 0
+                 else bootwright_registry_trust_recorded_checksum)
+         ) }}
+  changed_when: false
+  when: bootwright_registry_trust_transition_required | bool
+
+- name: Resolve durable mirror-registry trust transition content
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_transition_identity: >-
+      {{ (bootwright_clusters_dir | dirname | basename) ~ '|' ~
+         bootwright_component.providerName ~ '|' ~ bootwright_component.name ~ '|' ~
+         bootwright_registry_mirror_trust_anchor ~ '|' ~
+         bootwright_registry_trust_transition_checksum ~ '|' ~
+         bootwright_registry_trust_transition_action }}
+  changed_when: false
+  when: bootwright_registry_trust_transition_required | bool
+
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -7,13 +246,20 @@
   vars:
     bootwright_gate_container_name: "{{ bootwright_registry_mirror_container_name }}"
 
-- name: Load mirror registry package list
-  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+- name: Revalidate host operation before mirror-registry package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Install mirror registry packages
   ansible.builtin.package:
     name: "{{ bootwright_registry_mirror_packages }}"
     state: present
+
+- name: Revalidate host operation before mirror-registry path mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Create mirror registry directories
   ansible.builtin.file:
@@ -32,32 +278,6 @@
     - path: "{{ bootwright_registry_mirror_certs_dir }}"
       mode: "0755"
 
-- name: Resolve mirror credentials path
-  ansible.builtin.set_fact:
-    bootwright_registry_mirror_credentials_path: >-
-      {{
-        (bootwright_secrets_dir ~ '/' ~ bootwright_environment.mirror.credentialsRef)
-        if (bootwright_environment.mirror | default({})).credentialsRef | default('') | length > 0
-        else ''
-      }}
-    bootwright_registry_mirror_trust_path: >-
-      {{
-        (bootwright_secrets_dir ~ '/' ~ bootwright_environment.mirror.trustBundleRef)
-        if (bootwright_environment.mirror | default({})).trustBundleRef | default('') | length > 0
-        else ''
-      }}
-  changed_when: false
-
-- name: Load mirror credentials
-  ansible.builtin.include_role:
-    name: bootwright.core.support_credentials
-    tasks_from: load
-  vars:
-    bootwright_creds_path: "{{ bootwright_registry_mirror_credentials_path }}"
-    bootwright_creds_var: bootwright_registry_mirror_credentials
-    bootwright_creds_label: "registry mirror credentialsRef {{ bootwright_registry_mirror_credentials_path }}"
-  when: (bootwright_registry_mirror_credentials_path | length) > 0
-
 - name: Converge mirror htpasswd
   ansible.builtin.include_role:
     name: bootwright.core.support_htpasswd
@@ -66,13 +286,86 @@
     bootwright_htpasswd_credentials: "{{ bootwright_registry_mirror_credentials }}"
   when: (bootwright_registry_mirror_credentials_path | length) > 0
 
-- name: Install registry trust bundle on host
+- name: Revalidate host operation before mirror-registry trust mutation
   ansible.builtin.include_role:
-    name: bootwright.core.support_ca_trust
-  vars:
-    bootwright_ca_trust_source: "{{ bootwright_registry_mirror_trust_path }}"
-    bootwright_ca_trust_anchor: "{{ bootwright_registry_mirror_trust_anchor }}"
-  when: (bootwright_registry_mirror_trust_path | length) > 0
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Persist mirror-registry trust transition before host trust mutation
+  ansible.builtin.copy:
+    dest: "{{ bootwright_registry_trust_refresh_marker }}"
+    content: "{{ bootwright_registry_trust_transition_identity }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+  when: bootwright_registry_trust_transition_required | bool
+
+- name: Install exact mirror-registry trust anchor
+  ansible.builtin.copy:
+    src: "{{ bootwright_registry_mirror_trust_path }}"
+    dest: "{{ bootwright_registry_mirror_trust_anchor }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - bootwright_registry_trust_transition_required | bool
+    - bootwright_registry_trust_transition_action == 'install'
+
+- name: Remove previously managed mirror-registry trust anchor
+  ansible.builtin.file:
+    path: "{{ bootwright_registry_mirror_trust_anchor }}"
+    state: absent
+  when:
+    - bootwright_registry_trust_transition_required | bool
+    - bootwright_registry_trust_transition_action == 'remove'
+
+- name: Refresh host trust for the pending mirror-registry transition
+  ansible.builtin.command:
+    argv:
+      - update-ca-trust
+  changed_when: true
+  when: bootwright_registry_trust_transition_required | bool
+
+- name: Probe completed mirror-registry trust transition
+  ansible.builtin.stat:
+    path: "{{ bootwright_registry_mirror_trust_anchor }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: bootwright_registry_trust_anchor_after_apply
+  changed_when: false
+  failed_when: false
+  when: bootwright_registry_trust_transition_required | bool
+
+- name: Require completed mirror-registry trust transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_registry_trust_anchor_after_apply.stat.exists is defined
+      - >-
+        (
+          bootwright_registry_trust_transition_action == 'install'
+          and bootwright_registry_trust_anchor_after_apply.stat.exists | bool
+          and bootwright_registry_trust_anchor_after_apply.stat.isreg | default(false) | bool
+          and not (bootwright_registry_trust_anchor_after_apply.stat.islnk | default(false) | bool)
+          and bootwright_registry_trust_anchor_after_apply.stat.checksum is defined
+          and bootwright_registry_trust_anchor_after_apply.stat.checksum
+              == bootwright_registry_trust_desired_checksum
+        )
+        or (
+          bootwright_registry_trust_transition_action == 'remove'
+          and not (bootwright_registry_trust_anchor_after_apply.stat.exists | bool)
+        )
+    fail_msg: >-
+      Mirror-registry trust refresh completed without proving the exact desired
+      anchor state on {{ inventory_hostname }}. The durable transition marker
+      and prior ownership record were retained. Restore host trust access and
+      re-run `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_registry_trust_transition_required | bool
+
+- name: Revalidate host operation and endpoint before mirror-registry container mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
 
 - name: Run mirror registry container
   containers.podman.podman_container:
@@ -97,6 +390,11 @@
       - "{{ bootwright_registry_mirror_data_dir }}:/var/lib/registry:Z"
       - "{{ bootwright_registry_mirror_auth_dir }}:/auth:ro,Z"
 
+- name: Revalidate host operation and endpoint before mirror-registry firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Open mirror registry port on host firewall
   ansible.posix.firewalld:
     port: "{{ bootwright_component.port | int }}/tcp"
@@ -104,6 +402,22 @@
     permanent: true
     immediate: true
   when: bootwright_firewalld_available | default(false)
+
+- name: Retire old-only mirror-registry firewall endpoints
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false) | bool
+
+- name: Revalidate host operation before mirror-registry ownership publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Record mirror registry ownership
   ansible.builtin.include_role:
@@ -113,14 +427,18 @@
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_registry_mirror_root }}"
-      labels:
-        bootwright.kind: registry
-        bootwright.provider: "{{ bootwright_component.providerName }}"
-        bootwright.name: "{{ bootwright_component.name }}"
-      attributes:
-        componentKind: registry
-        container: "{{ bootwright_registry_mirror_container_name }}"
-        port: "{{ bootwright_component.port | int }}/tcp"
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+
+- name: Complete durable mirror-registry ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml
+  vars:
+    bootwright_infra_completion_boundary_path: >-
+      {{ bootwright_registry_trust_refresh_marker
+         if bootwright_registry_trust_transition_required | bool else '' }}
+    bootwright_infra_completion_boundary_expected_content: >-
+      {{ bootwright_registry_trust_transition_identity ~ '\n' }}

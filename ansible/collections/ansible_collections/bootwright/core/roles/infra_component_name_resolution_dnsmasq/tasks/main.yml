@@ -1,5 +1,24 @@
 ---
 
+- name: Resolve desired dnsmasq ownership transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: nameResolution
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_dnsmasq_root }}"
+      labels:
+        bootwright.kind: nameResolution
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: nameResolution
+        container: "{{ bootwright_dnsmasq_container_name }}"
+        port: 53/tcp
+        udpPort: 53/udp
+  changed_when: false
+
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -7,11 +26,21 @@
   vars:
     bootwright_gate_container_name: "{{ bootwright_dnsmasq_container_name }}"
 
+- name: Revalidate host operation before dnsmasq package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Install dnsmasq packages
   ansible.builtin.package:
     name:
       - podman
     state: present
+
+- name: Revalidate host operation before dnsmasq path and configuration mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Create dnsmasq state directories
   ansible.builtin.file:
@@ -32,6 +61,11 @@
     group: root
     mode: "0644"
   register: bootwright_dnsmasq_config
+
+- name: Revalidate host operation and endpoints before dnsmasq container mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
 
 - name: Run dnsmasq container
   containers.podman.podman_container:
@@ -68,6 +102,11 @@
     or ((ansible_all_ipv4_addresses is defined)
         and (bootwright_component.bindAddress in ansible_all_ipv4_addresses))
 
+- name: Revalidate host operation and endpoints before DNS firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Open DNS port on host firewall
   ansible.posix.firewalld:
     port: "{{ item }}"
@@ -81,6 +120,22 @@
     label: "{{ item }}"
   when: bootwright_firewalld_available | default(false)
 
+- name: Close retired dnsmasq ports on host firewall
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false)
+
+- name: Revalidate host operation before dnsmasq ownership publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Record DNS service ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -89,15 +144,12 @@
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_dnsmasq_root }}"
-      labels:
-        bootwright.kind: nameResolution
-        bootwright.provider: "{{ bootwright_component.providerName }}"
-        bootwright.name: "{{ bootwright_component.name }}"
-      attributes:
-        componentKind: nameResolution
-        container: "{{ bootwright_dnsmasq_container_name }}"
-        port: 53/tcp
-        udpPort: 53/udp
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+
+- name: Complete durable dnsmasq ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml

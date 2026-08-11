@@ -79,11 +79,11 @@ var authorizationTokens = []authorizationToken{{
 	elsewhere:  "apply never adopts an unowned VM in any mode, so use destroy for the exact affected scope with --authorize unowned-vms first",
 }, {
 	name:       authorizeUnownedNetworks,
-	gloss:      "an unowned libvirt network or KubeVirt DataVolume another context may still use",
-	authorizes: "removing an unowned libvirt network or KubeVirt DataVolume, which may still be in use by another context",
-	inert:      "this run removes no libvirt network or KubeVirt DataVolume (their ownership refusals live in the infra stage)",
+	gloss:      "an unowned libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim another context may use",
+	authorizes: "removing an unowned libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim, which may still be in use by another context",
+	inert:      "this run removes no libvirt network, KubeVirt DataVolume, or PersistentVolumeClaim (their ownership refusals live in the infra stage)",
 	verbs:      []string{authorizeVerbDestroy},
-	elsewhere:  "apply never removes a network or a DataVolume; only destroy does",
+	elsewhere:  "apply never removes a network, DataVolume, or PersistentVolumeClaim; only destroy does",
 }, {
 	name:       authorizeUnownedDevices,
 	gloss:      "an OSD device holding data with no Bootwright OSD ownership record for this node",
@@ -180,11 +180,15 @@ func authorizationInertReason(name string) string {
 	return "this run has no gate for it"
 }
 
-func flagAuthorizeUsage(verb string) string {
-	return "authorize a named risk; repeatable and comma-separated, and --yes authorizes none of them. Tokens " + verb + " accepts: " + strings.Join(authorizationTokenNamesForVerb(verb), ", ") + ". What each one unblocks is in the Authorizations section of --help"
+func flagAuthorizeUsage(verb, surface string, approvable bool) string {
+	usage := "authorize a named risk; repeatable and comma-separated."
+	if approvable {
+		usage += " --yes authorizes none of them."
+	}
+	return usage + " Tokens " + surface + " accepts: " + strings.Join(authorizationTokenNamesForVerb(verb), ", ") + ". What each one unblocks is in the Authorizations section of --help"
 }
 
-func authorizationsHelpSection(verb string, approvable bool) string {
+func authorizationsHelpSection(verb, surface string, approvable bool) string {
 	accepted := authorizationTokenNamesForVerb(verb)
 	width := 0
 	for _, name := range accepted {
@@ -200,7 +204,7 @@ func authorizationsHelpSection(verb string, approvable bool) string {
 		"Authorizations:",
 		"  Each token unblocks exactly one refusal and nothing else; \"" + authorizeAll + "\" stands in",
 		scope,
-		"  Tokens " + verb + " accepts:",
+		"  Tokens " + surface + " accepts:",
 		"",
 	}
 	for _, name := range accepted {
@@ -211,7 +215,7 @@ func authorizationsHelpSection(verb string, approvable bool) string {
 }
 
 func longHelpWithAuthorizations(cmd *cobra.Command, verb string) string {
-	section := authorizationsHelpSection(verb, cmd.Flags().Lookup("yes") != nil)
+	section := authorizationsHelpSection(verb, cmd.Name(), cmd.Flags().Lookup("yes") != nil)
 	base := strings.TrimRight(cmd.Long, "\n")
 	if base == "" {
 		base = strings.TrimRight(cmd.Short, "\n")
@@ -224,7 +228,7 @@ func longHelpWithAuthorizations(cmd *cobra.Command, verb string) string {
 
 func addAuthorizeFlag(cmd *cobra.Command, p *[]string, verb string) {
 	cmd.Long = longHelpWithAuthorizations(cmd, verb)
-	cmd.Flags().StringSliceVar(p, "authorize", nil, flagAuthorizeUsage(verb))
+	cmd.Flags().StringSliceVar(p, "authorize", nil, flagAuthorizeUsage(verb, cmd.Name(), cmd.Flags().Lookup("yes") != nil))
 	registerFlagCompletion(cmd, "authorize", authorizationTokenNamesForVerb(verb))
 }
 

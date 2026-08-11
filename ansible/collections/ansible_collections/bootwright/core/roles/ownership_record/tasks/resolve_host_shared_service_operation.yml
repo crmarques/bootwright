@@ -1,0 +1,34 @@
+---
+- name: Resolve exact host-wide shared-service operation guard
+  ansible.builtin.set_fact:
+    bootwright_host_operation_guard_path: /var/lib/bootwright/shared-services/operation.json
+    bootwright_host_operation_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_host_operation_host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+    bootwright_host_operation_selection: >-
+      {{ (bootwright_host_shared_service_manifest | default({})).get(
+           bootwright_host_name | default(inventory_hostname), {}) }}
+    bootwright_host_operation_guard: >-
+      {{ bootwright_host_mutation_lease | default({})
+         | bootwright.core.bootwright_host_operation_guard(
+             (bootwright_host_shared_service_manifest | default({})).get(
+               bootwright_host_name | default(inventory_hostname), {}),
+             bootwright_mutating_invocation | default('')) }}
+  changed_when: false
+
+- name: Resolve canonical host-wide shared-service operation content
+  ansible.builtin.set_fact:
+    bootwright_host_operation_guard_content: >-
+      {{ (bootwright_host_operation_guard | to_nice_json) ~ '\n' }}
+  changed_when: false
+
+- name: Require exact host-wide shared-service operation input
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_operation_guard | length > 0
+    fail_msg: >-
+      Refusing the shared-service mutation because its unique controller lease,
+      context, host, operation, invocation, or exact selected host consequence
+      set is missing or future-shaped. No host operation guard or service state
+      was changed. Repair the controller invocation and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright command') }}`.

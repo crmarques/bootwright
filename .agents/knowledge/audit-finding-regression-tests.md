@@ -10,12 +10,14 @@ files map their own IDs.
 stale window and lost its lease must stop refreshing/removing it so it never
 clobbers the new holder. Invariant: heartbeat uses `SaveRunLeaseIfOwner`,
 cleanup uses `RemoveRunLeaseIfOwner`, both treating `ErrLeaseNotOwned` as
-stop-not-fail. Tests, in
+stop-not-fail. Both ownership checks and their save/remove operations hold the
+same cross-process transaction lock as acquisition. Tests, in
 `internal/converge/workflow/lease_core_audit_test.go`:
 `TestOwnershipCheckedLeaseOpsLeaveNewHolderIntact`,
 `TestCancelRunLedgerLeavesNewHolderLeaseIntact`,
-`TestOwnershipCheckedLeaseOpsHonorOwner` (the file's other three functions
-cover unrelated invariants).
+`TestOwnershipCheckedLeaseOpsHonorOwner`,
+`TestRunLeaseHeartbeatSerializesOwnerCheckWithTakeover`, and
+`TestRunLeaseCleanupSerializesOwnerCheckWithTakeover`.
 
 **M8 — scoped-apply hash must be scope-independent.** The virtctl task hashed
 its carried State, which is the `--clusters`-filtered set on a scoped run, so

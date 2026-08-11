@@ -1,0 +1,294 @@
+---
+- name: Validate infra component destroy gate inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_provider | default('') | length > 0
+      - bootwright_infra_destroy_name | default('') | length > 0
+      - bootwright_infra_destroy_kind | default('') | length > 0
+      - bootwright_infra_destroy_state_dir | default('') == bootwright_managed_services_dir ~ '/' ~ bootwright_infra_destroy_name
+    fail_msg: >-
+      Refusing infra-component teardown because its exact provider, name, kind,
+      or context-owned state path is missing or contradictory. No service state
+      was changed. Repair the desired state or ownership evidence, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve infra component transition teardown identity
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_transition_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_infra_destroy_transition_host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+    bootwright_infra_destroy_transition_name: >-
+      {{ bootwright_infra_destroy_provider }}-{{ bootwright_infra_destroy_name }}
+    bootwright_infra_destroy_transition_claim_path: >-
+      {{ bootwright_ownership_dir }}/transitions/infra-component/{{ bootwright_infra_destroy_provider }}-{{ bootwright_infra_destroy_name }}.json
+    bootwright_infra_destroy_transition_record_path: >-
+      {{ bootwright_ownership_dir }}/resources/infra-component-transition/{{ bootwright_infra_destroy_provider }}-{{ bootwright_infra_destroy_name }}.json
+  changed_when: false
+
+- name: Probe infra component transition teardown evidence
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ bootwright_infra_destroy_transition_claim_path }}"
+    - "{{ bootwright_infra_destroy_transition_record_path }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_infra_destroy_transition_stats
+  changed_when: false
+  failed_when: false
+
+- name: Read infra component transition teardown evidence
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ bootwright_infra_destroy_transition_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: bootwright_infra_destroy_transition_contents
+  changed_when: false
+  failed_when: false
+  when: item.stat.exists | default(false) | bool
+
+- name: Resolve exact infra component transition teardown evidence
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_transition_claim: >-
+      {{ (bootwright_infra_destroy_transition_contents.results[0].content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_destroy_transition_context,
+             bootwright_infra_destroy_transition_host,
+             bootwright_managed_services_dir) }}
+    bootwright_infra_destroy_transition_record: >-
+      {{ (bootwright_infra_destroy_transition_contents.results[1].content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_record(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact infra component transition teardown evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_transition_stats.results | default([]) | length == 2
+      - >-
+        bootwright_infra_destroy_transition_stats.results
+        | selectattr('stat.exists', 'undefined') | list | length == 0
+      - >-
+        not (bootwright_infra_destroy_transition_stats.results[0].stat.exists | bool)
+        or (
+          bootwright_infra_destroy_transition_stats.results[0].stat.isreg | default(false) | bool
+          and not (bootwright_infra_destroy_transition_stats.results[0].stat.islnk | default(false) | bool)
+          and bootwright_infra_destroy_transition_claim | length > 0
+          and bootwright_infra_destroy_transition_claim.name
+              == bootwright_infra_destroy_transition_name
+          and bootwright_infra_destroy_transition_claim.desired.kind
+              == bootwright_infra_destroy_kind
+          and bootwright_infra_destroy_transition_claim.desired.provider
+              == bootwright_infra_destroy_provider
+          and bootwright_infra_destroy_transition_claim.desired.name
+              == bootwright_infra_destroy_name
+        )
+      - >-
+        not (bootwright_infra_destroy_transition_stats.results[1].stat.exists | bool)
+        or (
+          bootwright_infra_destroy_transition_stats.results[1].stat.isreg | default(false) | bool
+          and not (bootwright_infra_destroy_transition_stats.results[1].stat.islnk | default(false) | bool)
+          and bootwright_infra_destroy_transition_record | length > 0
+          and bootwright_infra_destroy_transition_record.name
+              == bootwright_infra_destroy_transition_name
+          and bootwright_infra_destroy_transition_record.kind
+              == bootwright_infra_destroy_kind
+          and bootwright_infra_destroy_transition_record.claimPath
+              == bootwright_infra_destroy_transition_claim_path
+          and bootwright_infra_destroy_transition_stats.results[0].stat.exists | bool
+        )
+    fail_msg: >-
+      Refusing infra-component teardown because its durable apply transition or
+      recovery ownership record is unreadable, linked, foreign, malformed, or
+      contradicts this exact context, host, provider, component, and kind. No
+      component, firewall endpoint, state, or ownership evidence was changed.
+      Restore the exact transition pair and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve infra component transition teardown ports
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_transition_port_decision: >-
+      {{ bootwright_infra_destroy_transition_claim
+         | bootwright.core.bootwright_infra_component_transition_ports
+         if (bootwright_infra_destroy_transition_stats.results[0].stat.exists | bool)
+         else {'valid': true, 'ports': []} }}
+    bootwright_infra_destroy_transition_ports: >-
+      {{ (bootwright_infra_destroy_transition_claim
+          | bootwright.core.bootwright_infra_component_transition_ports).ports | default([])
+         if (bootwright_infra_destroy_transition_stats.results[0].stat.exists | bool)
+         else [] }}
+  changed_when: false
+
+- name: Require exact infra component transition teardown port ledger
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_transition_port_decision.valid | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component teardown because its durable apply transition
+      does not contain one exact canonical firewall endpoint ledger. No service
+      or evidence was changed. Restore the exact transition and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe infra component state root
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_destroy_state_dir }}"
+  register: bootwright_infra_destroy_state_stat
+  changed_when: false
+  failed_when: false
+
+- name: Probe infra component context marker
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_destroy_state_dir }}/.bootwright-context"
+  register: bootwright_infra_destroy_marker_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read infra component context marker
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_destroy_state_dir }}/.bootwright-context"
+  register: bootwright_infra_destroy_marker_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_destroy_marker_stat.stat.exists | default(false) | bool
+
+- name: Probe same-named infra component container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - "{{ bootwright_infra_destroy_container }}"
+  register: bootwright_infra_destroy_container_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_destroy_container | default('') | length > 0
+
+- name: Probe additional recorded infra component paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ bootwright_infra_destroy_extra_paths | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_infra_destroy_extra_path_stats
+  changed_when: false
+  failed_when: false
+
+- name: Require conclusive infra component ownership probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_state_stat.stat.exists is defined
+      - bootwright_infra_destroy_marker_stat.stat.exists is defined
+      - >-
+        not (bootwright_infra_destroy_state_stat.stat.exists | bool)
+        or (bootwright_infra_destroy_state_stat.stat.isdir | default(false) | bool
+            and not (bootwright_infra_destroy_state_stat.stat.islnk | default(false) | bool))
+      - >-
+        not (bootwright_infra_destroy_marker_stat.stat.exists | bool)
+        or (bootwright_infra_destroy_marker_stat.stat.isreg | default(false) | bool
+            and not (bootwright_infra_destroy_marker_stat.stat.islnk | default(false) | bool)
+            and bootwright_infra_destroy_marker_content.content is defined)
+      - >-
+        (bootwright_infra_destroy_container | default('') | length == 0)
+        or (
+          bootwright_infra_destroy_container_probe.rc is defined
+          and bootwright_infra_destroy_container_probe.stdout is defined
+          and bootwright_infra_destroy_container_probe.stderr is defined
+          and (
+            bootwright_infra_destroy_container_probe.rc | int == 0
+            or (
+              bootwright_infra_destroy_container_probe.rc | int != 0
+              and (bootwright_infra_destroy_container_probe.stderr
+                   | bootwright.core.bootwright_podman_explicit_absence)
+            )
+          )
+        )
+      - >-
+        (bootwright_infra_destroy_extra_path_stats.results | default([])
+         | selectattr('stat.exists', 'undefined') | list | length) == 0
+    fail_msg: >-
+      Cannot conclusively read the live state, context marker, container, or
+      recorded paths for infra-component {{ bootwright_infra_destroy_provider }}/{{ bootwright_infra_destroy_name }}
+      on {{ inventory_hostname }}. No container, config, firewall rule, path, or
+      ownership evidence was removed. Restore host access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve infra component live ownership identity
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_infra_destroy_claim_context: >-
+      {{ bootwright_infra_destroy_marker_content.content | default('') | b64decode | trim }}
+    bootwright_infra_destroy_container_identity_valid: >-
+      {{ (bootwright_infra_destroy_container_probe.stdout | default(''))
+         | bootwright.core.bootwright_podman_container_identity(
+             {'bootwright.context': (bootwright_clusters_dir | dirname | basename),
+              'bootwright.kind': bootwright_infra_destroy_kind,
+              'bootwright.provider': bootwright_infra_destroy_provider,
+              'bootwright.name': bootwright_infra_destroy_name}) }}
+  changed_when: false
+
+- name: Resolve infra component positive-absence replay
+  ansible.builtin.set_fact:
+    bootwright_ownership_infra_replay_absent: >-
+      {{
+        bootwright_ownership_validated_stat is defined
+        and not (bootwright_ownership_validated_stat.stat.exists | default(true) | bool)
+        and not (bootwright_infra_destroy_state_stat.stat.exists | bool)
+        and (
+          bootwright_infra_destroy_container | default('') | length == 0
+          or (
+            bootwright_infra_destroy_container_probe.rc is defined
+            and bootwright_infra_destroy_container_probe.rc | int != 0
+            and bootwright_infra_destroy_container_probe.stderr is defined
+            and (bootwright_infra_destroy_container_probe.stderr
+                 | bootwright.core.bootwright_podman_explicit_absence)
+          )
+        )
+        and (bootwright_infra_destroy_extra_path_stats.results | default([])
+             | selectattr('stat.exists', 'defined')
+             | selectattr('stat.exists', 'equalto', true) | list | length) == 0
+      }}
+  changed_when: false
+
+- name: Refuse foreign or unprovable infra component replacement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_infra_destroy_state_stat.stat.exists | bool)
+        or (
+          bootwright_infra_destroy_marker_stat.stat.exists | default(false) | bool
+          and bootwright_infra_destroy_claim_context == bootwright_infra_destroy_current_context
+        )
+      - >-
+        bootwright_infra_destroy_container_probe.rc | default(1) | int != 0
+        or (
+          bootwright_infra_destroy_state_stat.stat.exists | bool
+          and bootwright_infra_destroy_container_identity_valid | bool
+        )
+      - >-
+        (bootwright_infra_destroy_extra_path_stats.results | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists', 'equalto', true)
+         | list | length) == 0
+      - >-
+        (bootwright_ownership_destroy_attrs | default({})).port is not defined
+        or bootwright_ownership_infra_replay_absent | bool
+      - >-
+        (bootwright_ownership_destroy_attrs | default({})).udpPort is not defined
+        or bootwright_ownership_infra_replay_absent | bool
+    fail_msg: >-
+      Refusing to tear down infra-component {{ bootwright_infra_destroy_provider }}/{{ bootwright_infra_destroy_name }}
+      because its live context claim, container labels, or additional recorded
+      paths or record-only firewall ports do not prove the exact current-context identity. This can be a
+      foreign replacement of stale controller evidence. No state was changed.
+      Destroy it from its owning context or repair the evidence after inspecting
+      the live service, then re-run `{{ bootwright_mutating_invocation }}`; no
+      authorization token adopts or deletes unproven service state.
+
+- name: Begin authoritative infra-component destroy transition
+  ansible.builtin.include_tasks: begin_infra_component_destroy_transition.yml

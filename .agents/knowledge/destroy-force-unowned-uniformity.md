@@ -10,7 +10,8 @@
   `not (bootwright_destroy_authorize_unowned_vms ...)` in its `when`.
 - `destroy --authorize unowned-networks`
   (`bootwright_destroy_authorize_unowned_networks`) covers the shared substrate
-  those VMs use: the cluster's libvirt network and its KubeVirt DataVolumes.
+  those VMs use: the cluster's libvirt network, its KubeVirt DataVolumes, and
+  their PersistentVolumeClaims.
 
 Neither var may appear in the other half's `when`: authorizing VMs must never
 lift a network refusal. Without a token, a marker mismatch stays fail-closed.
@@ -18,7 +19,8 @@ lift a network refusal. Without a token, a marker mismatch stays fail-closed.
 **Why:** ownership markers are the only thing separating Bootwright-owned
 resources from foreign ones with the same name, so the escape hatch must work
 identically across substrates. It is split in two because an unowned libvirt
-network (or DataVolume) may still be in use by *another context's* VMs — a
+network, DataVolume, or PersistentVolumeClaim may still be in use by *another
+context's* VMs — a
 strictly wider blast radius than deleting one VM that matches this context's
 naming, and one an operator must accept in its own words. The guards stay gated
 on resource presence, so a missing resource is a clean no-op rather than a

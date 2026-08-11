@@ -5,6 +5,9 @@ Wants=libvirtd.service network-online.target
 
 [Service]
 Type=simple
+Environment=BOOTWRIGHT_CONTEXT={{ bootwright_bmc_current_context }}
+Environment=BOOTWRIGHT_PROVIDER={{ bootwright_bmc_provider_name }}
+Environment=BOOTWRIGHT_HOST={{ bootwright_host_name | default(inventory_hostname) }}
 Environment=TMPDIR={{ bootwright_bmc_temp_root }}
 Environment=TMP={{ bootwright_bmc_temp_root }}
 Environment=TEMP={{ bootwright_bmc_temp_root }}

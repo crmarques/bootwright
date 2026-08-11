@@ -33,7 +33,11 @@ green from an unchanged-but-unverified tree.
 
 **python-test:** stdlib `unittest discover` only, so the check works on any
 Python 3 install without a venv; pytest, if installed locally, discovers the
-same TestCase classes.
+same TestCase classes. Plugin tests stay in their semantic sibling suites under
+`tests/unit/plugins/{filter,callback,modules}`; the Makefile enumerates each
+suite explicitly because unittest discovery does not recurse through those
+non-package directories. `TestPythonTestDiscoversEveryPluginUnitSuite` fails
+when a new test-bearing plugin suite is omitted.
 
 **Lint duty split:** yamllint (via `.yamllint`) handles YAML formatting;
 ansible-lint handles Ansible semantics (idempotency, no_log,

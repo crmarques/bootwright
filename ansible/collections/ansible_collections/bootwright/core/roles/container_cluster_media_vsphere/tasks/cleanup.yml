@@ -2,6 +2,106 @@
 - name: Clean up vSphere virtual media
   when: bootwright_vsphere_media_action == 'cleanup'
   block:
+    - name: Resolve expected vSphere virtual media cleanup authority
+      ansible.builtin.set_fact:
+        bootwright_vsphere_media_datastore: "{{ bootwright_vsphere_media_fetch | regex_replace('^\\[(.+)\\] .*$', '\\1') }}"
+        bootwright_vsphere_media_datastore_path: "{{ bootwright_vsphere_media_fetch | regex_replace('^\\[.+\\] ', '') }}"
+      changed_when: false
+
+    - name: Probe recorded vSphere virtual media
+      ansible.builtin.stat:
+        path: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
+      register: bootwright_vsphere_media_record_stat
+      failed_when: false
+
+    - name: Require a safe vSphere virtual media ownership record path before cleanup
+      ansible.builtin.assert:
+        that:
+          - bootwright_vsphere_media_record_stat.stat.exists is defined
+          - >-
+            not (bootwright_vsphere_media_record_stat.stat.exists | default(false) | bool)
+            or (
+              bootwright_vsphere_media_record_stat.stat.isreg is defined
+              and bootwright_vsphere_media_record_stat.stat.isreg | bool
+              and bootwright_vsphere_media_record_stat.stat.islnk is defined
+              and not (bootwright_vsphere_media_record_stat.stat.islnk | bool)
+            )
+          - >-
+            (bootwright_vsphere_media_record_stat.stat.exists | default(false) | bool)
+            or not (bootwright_vsphere_media_record_stat.stat.islnk | default(false) | bool)
+        fail_msg: >-
+          Refusing vSphere virtual media cleanup for
+          {{ bootwright_vsphere_media_record_name }} because its ownership-record
+          path could not be proven absent or a regular non-symlink file. Restore
+          safe record-store access and exact trusted evidence, then retry the
+          exact invocation `{{ bootwright_mutating_invocation }}`. No apply mode
+          or authorization permits an unproven record path.
+
+    - name: Read recorded vSphere virtual media
+      ansible.builtin.slurp:
+        src: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
+      register: bootwright_vsphere_media_record_raw
+      failed_when: false
+      when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
+
+    - name: Require readable vSphere virtual media ownership evidence before cleanup
+      ansible.builtin.assert:
+        that:
+          - bootwright_vsphere_media_record_raw.content is defined
+        fail_msg: >-
+          Refusing vSphere virtual media cleanup for
+          {{ bootwright_vsphere_media_record_name }} because its regular ownership
+          record could not be read. Restore record-store access or the exact
+          record from trusted evidence, then retry the exact invocation
+          `{{ bootwright_mutating_invocation }}`. No apply mode or authorization
+          treats an unreadable record as absent.
+      when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
+
+    - name: Decode recorded vSphere virtual media
+      block:
+        - name: Parse recorded vSphere virtual media
+          ansible.builtin.set_fact:
+            bootwright_vsphere_media_record: "{{ bootwright_vsphere_media_record_raw.content | b64decode | from_json }}"
+          changed_when: false
+      rescue:
+        - name: Refuse malformed vSphere virtual media cleanup evidence
+          ansible.builtin.fail:
+            msg: >-
+              Refusing vSphere virtual media cleanup for
+              {{ bootwright_vsphere_media_record_name }} because its ownership
+              record is not readable JSON. Restore the exact record from trusted
+              evidence or prove and remove it manually, then retry the exact
+              invocation `{{ bootwright_mutating_invocation }}`.
+      when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
+
+    - name: Require exact vSphere virtual media ownership before cleanup
+      ansible.builtin.assert:
+        that:
+          - >-
+            bootwright_vsphere_media_record
+            | bootwright.core.bootwright_vsphere_vmedia_record_authorized(
+                bootwright_clusters_dir | dirname | basename,
+                bootwright_current_cluster.name,
+                bootwright_component.name,
+                bootwright_vsphere_media_record_name,
+                bootwright_component.providerName,
+                bootwright_vsphere_media.server,
+                bootwright_vsphere_media.topology.datacenter,
+                bootwright_vsphere_media_datastore,
+                bootwright_vsphere_media_datastore_path,
+                bootwright_vsphere_media_stage_path
+              )
+        fail_msg: >-
+          Refusing vSphere virtual media cleanup for
+          {{ bootwright_vsphere_media_record_name }} because its ownership record
+          does not exactly match the current ownership API, owner, context,
+          provider, cluster, machine, vCenter placement, and authorized staging
+          paths. Restore the exact record from trusted evidence or clean the media
+          under its original desired state, then retry the exact invocation
+          `{{ bootwright_mutating_invocation }}`. No apply mode or authorization
+          permits a foreign or path-ambiguous record.
+      when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
+
     - name: Remove vSphere virtual media drive
       block:
         - name: Remove vSphere virtual media drive
@@ -42,41 +142,31 @@
             ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
           no_log: "{{ bootwright_no_log | default(true) | bool }}"
 
-    - name: Probe recorded vSphere virtual media
-      ansible.builtin.stat:
-        path: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
-      register: bootwright_vsphere_media_record_stat
-
-    - name: Read recorded vSphere virtual media
-      ansible.builtin.slurp:
-        src: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
-      register: bootwright_vsphere_media_record_raw
+    - name: Delete uploaded vSphere virtual media before releasing evidence
       when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
-
-    - name: Parse recorded vSphere virtual media
-      ansible.builtin.set_fact:
-        bootwright_vsphere_media_record: "{{ bootwright_vsphere_media_record_raw.content | b64decode | from_json }}"
-      changed_when: false
-      when: bootwright_vsphere_media_record_stat.stat.exists | default(false)
-
-    - name: Delete uploaded vSphere virtual media from the datastore
-      community.vmware.vsphere_file:
-        hostname: "{{ bootwright_vsphere_media.server }}"
-        username: "{{ bootwright_vsphere_media_credentials.username }}"
-        password: "{{ bootwright_vsphere_media_credentials.password }}"
-        validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
-        datacenter: "{{ bootwright_vsphere_media_record.attributes.datacenter | default(bootwright_vsphere_media.topology.datacenter) }}"
-        datastore: "{{ bootwright_vsphere_media_record.attributes.datastore | default('') }}"
-        path: "{{ bootwright_vsphere_media_record.attributes.path | default('') }}"
-        state: absent
-      vars:
-        ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-      failed_when: false
-      no_log: "{{ bootwright_no_log | default(true) | bool }}"
-      when:
-        - bootwright_vsphere_media_record_stat.stat.exists | default(false)
-        - bootwright_vsphere_media_record.attributes.datastore | default('') | length > 0
-        - bootwright_vsphere_media_record.attributes.path | default('') | length > 0
+      block:
+        - name: Delete uploaded vSphere virtual media from the datastore
+          community.vmware.vsphere_file:
+            hostname: "{{ bootwright_vsphere_media.server }}"
+            username: "{{ bootwright_vsphere_media_credentials.username }}"
+            password: "{{ bootwright_vsphere_media_credentials.password }}"
+            validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
+            datacenter: "{{ bootwright_vsphere_media_record.attributes.datacenter }}"
+            datastore: "{{ bootwright_vsphere_media_record.attributes.datastore }}"
+            path: "{{ bootwright_vsphere_media_record.attributes.path }}"
+            state: absent
+          vars:
+            ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+          no_log: "{{ bootwright_no_log | default(true) | bool }}"
+      rescue:
+        - name: Refuse vSphere virtual media evidence cleanup after datastore failure
+          ansible.builtin.fail:
+            msg: >-
+              Refusing to delete local staging state or ownership for vSphere
+              virtual media {{ bootwright_vsphere_media_record_name }} because
+              vCenter did not remove its recorded datastore file. Restore vCenter
+              access and permissions or remove the file safely, then retry the
+              exact invocation `{{ bootwright_mutating_invocation }}`.
 
     - name: Remove recorded vSphere virtual media staging paths and record
       ansible.builtin.include_role:
@@ -84,4 +174,5 @@
         tasks_from: destroy_resource.yml
       vars:
         bootwright_ownership_record: "{{ bootwright_vsphere_media_record }}"
+        bootwright_vsphere_vmedia_teardown_verified: true
       when: bootwright_vsphere_media_record_stat.stat.exists | default(false)

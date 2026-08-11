@@ -1,4 +1,7 @@
 ---
+- name: Revalidate BMC authority before state directory mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Create BMC state directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -11,6 +14,9 @@
     - "{{ bootwright_bmc_root }}/state"
     - "{{ bootwright_bmc_vmedia_root }}"
 
+- name: Revalidate BMC authority before temp directory mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Create BMC emulator temp directory
   ansible.builtin.file:
     path: "{{ bootwright_bmc_temp_root }}"
@@ -22,10 +28,17 @@
 - name: Load BMC package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
+- name: Revalidate BMC authority before package mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Install BMC packages
   ansible.builtin.package:
     name: "{{ bootwright_bmc_packages }}"
     state: present
+
+- name: Revalidate BMC authority before vmedia label mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when: ansible_selinux.status | default('disabled') == 'enabled'
 
 - name: Restore BMC vmedia storage labels
   ansible.builtin.command:
@@ -37,6 +50,9 @@
   changed_when: bootwright_bmc_vmedia_restorecon.stdout | length > 0
   when: ansible_selinux.status | default('disabled') == 'enabled'
 
+- name: Revalidate BMC authority before virtualenv mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Create sushy-tools virtualenv
   ansible.builtin.command:
     argv:
@@ -47,6 +63,9 @@
       - "{{ bootwright_bmc_root }}/venv"
     creates: "{{ bootwright_bmc_root }}/venv/bin/python"
 
+- name: Revalidate BMC authority before Python package mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+
 - name: Install sushy-tools into virtualenv
   ansible.builtin.pip:
     name: sushy-tools
@@ -55,12 +74,20 @@
     extra_args: --no-deps
   register: bootwright_bmc_sushy_pip
 
+- name: Revalidate BMC authority before SELinux policy mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when: ansible_selinux.status | default('disabled') == 'enabled'
+
 - name: Ensure SELinux file context labels venv binaries as bin_t
   community.general.sefcontext:
     target: "{{ bootwright_bmc_root }}/venv/bin(/.*)?"
     setype: bin_t
     state: present
   register: bootwright_bmc_sushy_sefcontext
+  when: ansible_selinux.status | default('disabled') == 'enabled'
+
+- name: Revalidate BMC authority before venv label mutation
+  ansible.builtin.include_tasks: ../mutation_guard.yml
   when: ansible_selinux.status | default('disabled') == 'enabled'
 
 - name: Apply SELinux labels to venv binaries

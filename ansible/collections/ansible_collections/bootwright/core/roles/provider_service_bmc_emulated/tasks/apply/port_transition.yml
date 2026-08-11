@@ -1,0 +1,44 @@
+---
+- name: Resolve BMC cross-port transition stops
+  ansible.builtin.set_fact:
+    bootwright_bmc_stop_old_vmedia_for_redfish: >-
+      {{ bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+         and bootwright_bmc_apply_transition_envelope.pending.attributes.redfishPort
+             == bootwright_bmc_apply_transition_envelope.active.attributes.vMediaPort
+         and bootwright_bmc_apply_transition_envelope.pending.attributes.redfishPort
+             != bootwright_bmc_apply_transition_envelope.active.attributes.redfishPort }}
+    bootwright_bmc_stop_old_redfish_for_vmedia: >-
+      {{ bootwright_bmc_apply_transition_envelope | default({}) | length > 0
+         and bootwright_bmc_apply_transition_envelope.pending.attributes.vMediaPort
+             == bootwright_bmc_apply_transition_envelope.active.attributes.redfishPort
+         and bootwright_bmc_apply_transition_envelope.pending.attributes.vMediaPort
+             != bootwright_bmc_apply_transition_envelope.active.attributes.vMediaPort }}
+  changed_when: false
+
+- name: Revalidate BMC authority before cross-port vmedia stop
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when:
+    - bootwright_bmc_stop_old_vmedia_for_redfish | bool
+    - bootwright_bmc_loaded_unit_identities[1].present | bool
+
+- name: Stop old vmedia unit blocking desired Redfish port
+  ansible.builtin.systemd_service:
+    name: "{{ bootwright_bmc_apply_transition_envelope.active.attributes.vMediaUnit }}"
+    state: stopped
+  when:
+    - bootwright_bmc_stop_old_vmedia_for_redfish | bool
+    - bootwright_bmc_loaded_unit_identities[1].present | bool
+
+- name: Revalidate BMC authority before cross-port Redfish stop
+  ansible.builtin.include_tasks: ../mutation_guard.yml
+  when:
+    - bootwright_bmc_stop_old_redfish_for_vmedia | bool
+    - bootwright_bmc_loaded_unit_identities[0].present | bool
+
+- name: Stop old Redfish unit blocking desired vmedia port
+  ansible.builtin.systemd_service:
+    name: "{{ bootwright_bmc_apply_transition_envelope.active.attributes.redfishUnit }}"
+    state: stopped
+  when:
+    - bootwright_bmc_stop_old_redfish_for_vmedia | bool
+    - bootwright_bmc_loaded_unit_identities[0].present | bool

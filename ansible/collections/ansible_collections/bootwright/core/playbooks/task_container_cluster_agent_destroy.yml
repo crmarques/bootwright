@@ -27,3 +27,6 @@
       when: >-
         bootwright_destroy_container_cluster is not defined
         or bootwright_current_cluster.name == bootwright_destroy_container_cluster
+
+    - name: Finalize container cluster record destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

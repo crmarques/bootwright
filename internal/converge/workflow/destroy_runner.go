@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/remedy"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/roles"
 )
 
@@ -30,6 +32,7 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	taskOpts.OutputLogPath = TaskLogPath(runsDir, runID, task.Entry)
 	taskOpts.AcquireRunLease = false
 	taskOpts.SkipNoHostsBeforeRender = true
+	taskOpts.ClassifyUnreachable = task.Entry.Kind != DestroyTaskKindStorageCluster
 	if runnerFactory == nil {
 		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 			return ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
@@ -41,11 +44,149 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			return runOneStorageDestroyTask(ctx, stdout, stderr, taskRoot, taskOpts, task, expected, runnerFactory)
 		}
 	}
+	expectedHosts, expectedErr := expectedNonStorageDestroyHosts(taskOpts, task)
+	if expectedErr != nil {
+		return failedDestroyTaskResult(taskOpts, task, false, expectedErr)
+	}
 	result, err := Run(ctx, taskOpts, runnerFactory(stdout, stderr), nil)
 	if err != nil {
 		return failedDestroyTaskResult(taskOpts, task, result.Skipped, err)
 	}
+	if err := requireNonStorageDestroyCompletion(taskOpts, task, result.Skipped, expectedHosts); err != nil {
+		return failedDestroyTaskResult(taskOpts, task, result.Skipped, err)
+	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped}
+}
+
+type PartialDestroyOutcomeError struct {
+	TaskID       string
+	Hosts        []string
+	EvidencePath string
+	Cause        error
+}
+
+func (e *PartialDestroyOutcomeError) Error() string {
+	if len(e.Hosts) > 0 {
+		return fmt.Sprintf("destroy task %s remains partial because unreachable host(s) %s were skipped; retaining convergence, install, ownership, access, and substrate evidence for an exact retry", e.TaskID, strings.Join(e.Hosts, ", "))
+	}
+	return fmt.Sprintf("cannot prove destroy task %s completed every selected host: %v (evidence: %s); retaining convergence, install, ownership, access, and substrate evidence for an exact retry", e.TaskID, e.Cause, e.EvidencePath)
+}
+
+func (e *PartialDestroyOutcomeError) Unwrap() error {
+	return e.Cause
+}
+
+func (e *PartialDestroyOutcomeError) Remedy() remedy.Request {
+	return remedy.Request{Action: remedy.ActionRetrySameInvocation}
+}
+
+func requireNonStorageDestroyCompletion(opts RunOptions, task ApplyTask, skipped bool, expectedHosts []string) error {
+	if task.Entry.Kind == DestroyTaskKindStorageCluster {
+		return nil
+	}
+	if skipped && len(expectedHosts) == 0 && len(task.Entry.ResourceKeys) == 0 {
+		return nil
+	}
+	path := filepath.Join(opts.ArtifactsRoot, ansible.RunResultName)
+	return RequireDestroyCompletionEvidence(path, task.Entry.ID, expectedHosts)
+}
+
+func RequireDestroyCompletionEvidence(path, taskID string, expectedHosts []string) error {
+	records, err := ansible.ReadRunResultForHosts(path, expectedHosts)
+	if err != nil {
+		return &PartialDestroyOutcomeError{TaskID: taskID, EvidencePath: path, Cause: err}
+	}
+	hostSet := map[string]bool{}
+	completed := map[string]bool{}
+	for _, record := range records {
+		if record.Completion {
+			completed[record.Host] = true
+		}
+	}
+	for _, record := range records {
+		if record.Status == "unreachable" || (record.Status == "probe-unreachable" && !completed[record.Host]) {
+			hostSet[record.Host] = true
+		}
+	}
+	hosts := make([]string, 0, len(hostSet))
+	for host := range hostSet {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	if len(hosts) > 0 {
+		return &PartialDestroyOutcomeError{TaskID: taskID, Hosts: hosts, EvidencePath: path}
+	}
+	return nil
+}
+
+func expectedNonStorageDestroyHosts(opts RunOptions, task ApplyTask) ([]string, error) {
+	if task.Entry.Kind == DestroyTaskKindStorageCluster {
+		return nil, nil
+	}
+	records, err := loadOwnershipRecordsForRun(task.Playbook, opts.OwnershipDir, opts.ContextName)
+	if err != nil {
+		return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: err}
+	}
+	members := render.HostGroupMembersWithOwnershipRecords(task.State, records)
+	hostSet := map[string]bool{}
+	for _, hosts := range members {
+		for _, host := range hosts {
+			hostSet[host] = true
+		}
+	}
+	completionLimit := strings.TrimSpace(task.CompletionHostLimit)
+	if completionLimit == "" {
+		return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: errors.New("selected destroy task has no exact completion play-host limit for completion proof")}
+	}
+	completionHosts, err := exactDestroyLimitHosts(completionLimit, members, hostSet)
+	if err != nil {
+		return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: fmt.Errorf("destroy completion play-host limit: %w", err)}
+	}
+	selected := completionHosts
+	limit := strings.TrimSpace(task.Limit)
+	if limit != "" {
+		limitedHosts, err := exactDestroyLimitHosts(limit, members, hostSet)
+		if err != nil {
+			return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: fmt.Errorf("destroy inventory limit: %w", err)}
+		}
+		selected = map[string]bool{}
+		for host := range completionHosts {
+			if limitedHosts[host] {
+				selected[host] = true
+			}
+		}
+	}
+	hosts := make([]string, 0, len(selected))
+	for host := range selected {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	if len(hosts) == 0 && len(task.Entry.ResourceKeys) > 0 {
+		return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: errors.New("selected destroy task resolved no exact play hosts for completion proof")}
+	}
+	return hosts, nil
+}
+
+func exactDestroyLimitHosts(limit string, members map[string][]string, hostSet map[string]bool) (map[string]bool, error) {
+	selected := map[string]bool{}
+	for _, token := range strings.Split(limit, ":") {
+		token = strings.TrimSpace(token)
+		if token == "" || strings.ContainsAny(token, "!,*&?[]") {
+			return nil, fmt.Errorf("%q is not an exact host/group union", limit)
+		}
+		if hosts, ok := members[token]; ok {
+			for _, host := range hosts {
+				selected[host] = true
+			}
+			continue
+		}
+		if hostSet[token] {
+			selected[token] = true
+			continue
+		}
+		return nil, fmt.Errorf("identity %q has no exact selected host or group", token)
+	}
+	return selected, nil
 }
 
 func runOneStorageDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, taskRoot string, taskOpts RunOptions, task ApplyTask, expected map[string][]string, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
@@ -173,8 +314,21 @@ func failedDestroyTaskResult(opts RunOptions, task ApplyTask, skipped bool, err 
 		id:      task.Entry.ID,
 		skipped: skipped,
 		failure: failure,
-		err:     fmt.Errorf("%s failed: %s (log: %s)", task.Entry.Label, failure, opts.OutputLogPath),
+		err:     &destroyTaskFailureError{message: fmt.Sprintf("%s failed: %s (log: %s)", task.Entry.Label, failure, opts.OutputLogPath), cause: err},
 	}
+}
+
+type destroyTaskFailureError struct {
+	message string
+	cause   error
+}
+
+func (e *destroyTaskFailureError) Error() string {
+	return e.message
+}
+
+func (e *destroyTaskFailureError) Unwrap() error {
+	return e.cause
 }
 
 func pendingStorageDestroyNames(expected map[string][]string, recovered map[string]StorageDestroyClusterResult) []string {

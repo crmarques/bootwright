@@ -117,7 +117,7 @@ func TestApplyTaskHashCacheIsConcurrencySafe(t *testing.T) {
 func TestClassifyApplyObjectsWarmsTheTaskHashCache(t *testing.T) {
 	runsDir := t.TempDir()
 	tasks := []ApplyTask{hashCacheTask()}
-	if _, err := ClassifyApplyObjects(tasks, runsDir); err != nil {
+	if _, err := ClassifyApplyObjects(tasks, runsDir, "test"); err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}
 	if tasks[0].hashes == nil {

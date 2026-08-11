@@ -61,9 +61,28 @@ func TestAuthorizationTokensCarryAShortGloss(t *testing.T) {
 	}
 }
 
+func TestUnownedNetworksAuthorizationPublishesEveryStorageConsequence(t *testing.T) {
+	token, ok := authorizationTokenByName(authorizeUnownedNetworks)
+	if !ok {
+		t.Fatal("unowned-networks authorization is not registered")
+	}
+	for _, consequence := range []string{"libvirt network", "KubeVirt DataVolume", "PersistentVolumeClaim"} {
+		if !strings.Contains(token.gloss, consequence) || !strings.Contains(token.authorizes, consequence) || !strings.Contains(token.inert, consequence) {
+			t.Fatalf("unowned-networks does not publish %q in every operator-facing meaning: %+v", consequence, token)
+		}
+	}
+	stdout, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "PersistentVolumeClaim") {
+		t.Fatalf("destroy help omits the PVC deletion consequence:\n%s", stdout)
+	}
+}
+
 func TestAuthorizeFlagUsageNamesTokensWithoutTheirProse(t *testing.T) {
 	for _, verb := range authorizationVerbs() {
-		usage := flagAuthorizeUsage(verb)
+		usage := flagAuthorizeUsage(verb, verb, true)
 		if strings.Contains(usage, "\n") {
 			t.Errorf("--authorize usage for %s spans several lines; flag usage is one line", verb)
 		}
@@ -78,6 +97,23 @@ func TestAuthorizeFlagUsageNamesTokensWithoutTheirProse(t *testing.T) {
 			if token.authorizes != token.gloss && strings.Contains(usage, token.authorizes) {
 				t.Errorf("--authorize usage for %s carries the full prose of %s; that prose belongs to the refusal and the spec", verb, name)
 			}
+		}
+	}
+}
+
+func TestPlanAuthorizationHelpNamesPlanAndNoUnavailableYesFlag(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "plan", "--help")
+	if code != 0 {
+		t.Fatalf("plan --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"Tokens plan accepts:", "What each one unblocks"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("plan authorization help missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, stale := range []string{"Tokens apply accepts:", "--yes authorizes none"} {
+		if strings.Contains(stdout, stale) {
+			t.Fatalf("plan authorization help advertises unavailable apply surface %q:\n%s", stale, stdout)
 		}
 	}
 }

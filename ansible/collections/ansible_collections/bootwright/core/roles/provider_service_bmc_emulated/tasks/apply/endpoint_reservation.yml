@@ -1,0 +1,10 @@
+---
+- name: Reserve complete active and pending BMC endpoint consequence set
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: reserve_host_endpoint_claims.yml
+  vars:
+    bootwright_host_endpoint_desired_claims: >-
+      {{ bootwright_bmc_endpoint_transition.retainedClaims }}
+    bootwright_host_endpoint_allowed_claim_digests: >-
+      {{ bootwright_bmc_endpoint_transition.allowedDigests }}

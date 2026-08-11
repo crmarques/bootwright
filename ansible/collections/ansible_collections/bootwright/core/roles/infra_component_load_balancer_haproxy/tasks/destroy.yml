@@ -1,51 +1,698 @@
 ---
-- name: Remove HAProxy container and reap orphans
+- name: Validate the live HAProxy ownership record before teardown
   ansible.builtin.include_role:
-    name: bootwright.core.support_component_teardown
-    tasks_from: container.yml
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
   vars:
-    bootwright_component_teardown_container: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
-    bootwright_component_teardown_kind: load-balancer
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
 
-- name: Remove load balancer state directory
-  ansible.builtin.file:
-    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
-    state: absent
+- name: Resolve HAProxy external cleanup phase
+  ansible.builtin.set_fact:
+    bootwright_haproxy_destroy_owner_composite: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_record_composite(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_complete: >-
+      {{ bootwright_ownership_validated_stat.stat.exists | default(false) | bool
+         and (bootwright_ownership_validated_record.attributes | default({})).get(
+               'destroyPhase', '') == 'external-cleanup-complete' }}
+    bootwright_infra_destroy_expected_owner: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_record: "{{ bootwright_ownership_validated_record }}"
+  changed_when: false
 
-- name: List remaining bootwright HAProxy containers
+- name: Require exact HAProxy ownership ledger before teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_haproxy_destroy_owner_composite | length > 0
+          and bootwright_haproxy_destroy_owner_composite.kind == 'load-balancer'
+          and bootwright_haproxy_destroy_owner_composite.name
+              == bootwright_component.providerName ~ '-' ~ bootwright_component.name
+        )
+    fail_msg: >-
+      Refusing HAProxy teardown because its owner is not one exact supported
+      current-context HAProxy composite with canonical paths, labels, container,
+      frontend ports, and optional completed cleanup phase. No state was changed.
+      Restore trusted evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Prove declared HAProxy live ownership before teardown
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_destroy_gate.yml
+  vars:
+    bootwright_infra_destroy_provider: "{{ bootwright_component.providerName }}"
+    bootwright_infra_destroy_name: "{{ bootwright_component.name }}"
+    bootwright_infra_destroy_kind: load-balancer
+    bootwright_infra_destroy_state_dir: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    bootwright_infra_destroy_container: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_infra_destroy_extra_paths: []
+    bootwright_ownership_destroy_attrs: {}
+
+- name: Refuse HAProxy teardown across an ambiguous replay boundary
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_infra_destroy_state_stat.stat.exists | bool
+        or not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_infra_destroy_phase_complete | bool
+    fail_msg: >-
+      Refusing HAProxy teardown because its exact ownership record is present
+      but its final current-context state marker is absent. No container,
+      global sysctl state, firewall rule, service state, or ownership evidence
+      was removed. Restore the marker from trusted evidence or complete the
+      external cleanup deliberately, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization guesses which
+      prior teardown step removed it.
+
+- name: Require a conclusive firewalld probe before HAProxy teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_firewalld_probe.stat.exists is defined
+      - bootwright_firewalld_available is defined
+      - >-
+        bootwright_infra_destroy_global_ports | length == 0
+        or bootwright_firewalld_available | bool
+      - >-
+        not (bootwright_firewalld_probe.stat.exists | bool)
+        or (
+          bootwright_firewalld_probe.stat.isreg | default(false) | bool
+          and not (bootwright_firewalld_probe.stat.islnk | default(false) | bool)
+          and bootwright_firewalld_probe.stat.executable | default(false) | bool
+          and bootwright_firewalld_state.rc is defined
+          and bootwright_firewalld_state.stdout is defined
+          and bootwright_firewalld_state.stderr is defined
+          and (
+            (bootwright_firewalld_state.rc | int == 0
+             and bootwright_firewalld_state.stdout | trim == 'running')
+            or bootwright_firewalld_state.rc | int == 252
+          )
+        )
+      - >-
+        bootwright_firewalld_available | bool
+        == (
+          bootwright_firewalld_probe.stat.exists | bool
+          and bootwright_firewalld_state.rc | default(252) | int == 0
+          and bootwright_firewalld_state.stdout | default('') | trim == 'running'
+        )
+    fail_msg: >-
+      Cannot conclusively determine whether firewalld is running before
+      tearing down HAProxy on {{ inventory_hostname }}. No HAProxy container,
+      global sysctl state, firewall rule, service state, or ownership evidence
+      was removed. Restore firewalld access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_infra_destroy_state_stat.stat.exists | bool
+    - not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe the shared HAProxy sysctl drop-in
+  ansible.builtin.stat:
+    path: /etc/sysctl.d/99-bootwright-haproxy.conf
+    follow: false
+  register: bootwright_haproxy_sysctl_stat
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Read the shared HAProxy sysctl drop-in
+  ansible.builtin.slurp:
+    src: /etc/sysctl.d/99-bootwright-haproxy.conf
+  register: bootwright_haproxy_sysctl_content
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_haproxy_sysctl_stat.stat.exists | default(false) | bool
+    - bootwright_haproxy_sysctl_stat.stat.isreg | default(false) | bool
+    - not (bootwright_haproxy_sysctl_stat.stat.islnk | default(false) | bool)
+    - not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Require conclusive shared HAProxy sysctl ownership
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_haproxy_sysctl_stat.stat.exists is defined
+      - >-
+        not (bootwright_haproxy_sysctl_stat.stat.exists | bool)
+        or (
+          bootwright_haproxy_sysctl_stat.stat.isreg | default(false) | bool
+          and not (bootwright_haproxy_sysctl_stat.stat.islnk | default(false) | bool)
+          and bootwright_haproxy_sysctl_content.content is defined
+          and (
+            bootwright_haproxy_sysctl_content.content
+            | b64decode
+            | trim
+          ) is match('^net\\.ipv4\\.ip_nonlocal_bind\\s*=\\s*1$')
+        )
+    fail_msg: >-
+      Cannot prove that /etc/sysctl.d/99-bootwright-haproxy.conf is absent or
+      the exact regular non-symlink HAProxy setting managed by Bootwright on
+      {{ inventory_hostname }}. No HAProxy container, global sysctl state,
+      firewall rule, service state, or ownership evidence was removed. Restore
+      the exact live state and re-run `{{ bootwright_mutating_invocation }}`;
+      no authorization deletes an unproven global host setting.
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Prove Podman can enumerate HAProxy containers before teardown
   ansible.builtin.command:
     argv:
       - podman
       - ps
       - -aq
+      - --no-trunc
       - --filter
       - name=bootwright-haproxy-
-  register: bootwright_haproxy_remaining
+  register: bootwright_haproxy_preflight
   changed_when: false
   failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
 
-- name: Remove HAProxy sysctl drop-in when no instances remain
-  ansible.builtin.file:
-    path: /etc/sysctl.d/99-bootwright-haproxy.conf
-    state: absent
-  when: (bootwright_haproxy_remaining.stdout | default('') | trim) | length == 0
+- name: Require conclusive Podman access before HAProxy teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_haproxy_preflight.rc is defined
+      - bootwright_haproxy_preflight.rc | int == 0
+      - bootwright_haproxy_preflight.stdout is defined
+      - bootwright_haproxy_preflight.stderr is defined
+    fail_msg: >-
+      Cannot conclusively enumerate HAProxy containers with Podman on
+      {{ inventory_hostname }}. No HAProxy container, global sysctl state,
+      firewall rule, service state, or ownership evidence was removed. Restore
+      Podman access and re-run `{{ bootwright_mutating_invocation }}`.
+  when: not (bootwright_infra_destroy_phase_complete | bool)
 
-- name: Close HAProxy frontend ports on host firewall (firewalld)
-  ansible.posix.firewalld:
-    port: "{{ item }}/tcp"
-    state: disabled
-    permanent: true
-    immediate: true
-  loop: "{{ bootwright_component.frontends | map(attribute='ports') | flatten | map(attribute='listenPort') | unique | list }}"
+- name: Resolve declared HAProxy consumers before teardown
+  ansible.builtin.set_fact:
+    bootwright_haproxy_declared_consumers: >-
+      {{ bootwright_host_infra_component_services_all
+         | default([])
+         | selectattr('destroyRole', 'defined')
+         | selectattr('destroyRole', 'equalto', 'bootwright.core.infra_component_load_balancer_haproxy')
+         | list }}
+    bootwright_haproxy_recorded_consumers: >-
+      {{ [bootwright_ownership_validated_record]
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else [] }}
+  changed_when: false
+
+- name: Resolve recorded HAProxy consumers before teardown
+  ansible.builtin.set_fact:
+    bootwright_haproxy_recorded_consumers: >-
+      {{ bootwright_haproxy_recorded_consumers + [item] }}
+  loop: "{{ bootwright_host_infra_component_ownership_records | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('invalid-record') }}"
   when:
-    - bootwright_firewalld_available | default(false)
-    - (bootwright_haproxy_remaining.stdout | default('') | trim) | length == 0
-  failed_when: false
+    - item.kind | default('') == 'infra-component'
+    - item.role | default('owner', true) != 'reference'
+    - (item.labels | default({})).get('bootwright.kind', '') == 'load-balancer'
+    - item.name not in (bootwright_haproxy_recorded_consumers | map(attribute='name') | list)
+  changed_when: false
 
-- name: Remove HAProxy ownership record
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
-  vars:
-    bootwright_ownership_kind: infra-component
-    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+- name: Require exact recorded HAProxy consumer identities
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.apiVersion | default('') == 'bootwright.io/ownership/v1alpha1'
+      - item.owner | default('') == 'bootwright'
+      - item.context | default('') == bootwright_clusters_dir | dirname | basename
+      - item.host | default('') == bootwright_host_name | default(inventory_hostname)
+      - item.provider | default('') is match('^[A-Za-z0-9_.-]+$')
+      - item.name | default('') == item.provider ~ '-' ~ (item.labels | default({})).get('bootwright.name', '')
+      - (item.labels | default({})).get('bootwright.provider', '') == item.provider
+      - (item.labels | default({})).get('bootwright.name', '') is match('^[A-Za-z0-9_.-]+$')
+      - (item.attributes | default({})).componentKind | default('') == 'load-balancer'
+      - >-
+        (item.attributes | default({})).container | default('')
+        == 'bootwright-haproxy-' ~ item.provider ~ '-'
+           ~ (item.labels | default({})).get('bootwright.name', '')
+    fail_msg: >-
+      Refusing HAProxy teardown because current-context ownership record
+      {{ item.name | default('unknown') }} does not identify one exact managed
+      HAProxy container. No HAProxy container, global sysctl state, firewall
+      rule, service state, or ownership evidence was removed. Repair the exact
+      record from trusted evidence, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_haproxy_recorded_consumers }}"
+  loop_control:
+    label: "{{ item.name | default('invalid-record') }}"
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe declared HAProxy consumers before teardown
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - "bootwright-haproxy-{{ item.providerName }}-{{ item.name }}"
+  loop: "{{ bootwright_haproxy_declared_consumers }}"
+  loop_control:
+    label: "{{ item.providerName }}/{{ item.name }}"
+  register: bootwright_haproxy_declared_consumer_probes
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe recorded HAProxy consumers before teardown
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - "{{ item.attributes.container }}"
+  loop: "{{ bootwright_haproxy_recorded_consumers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: bootwright_haproxy_recorded_consumer_probes
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Require conclusive declared HAProxy consumer probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.rc is defined
+      - item.stdout is defined
+      - item.stderr is defined
+      - >-
+        (
+          item.rc | int == 0
+          and (
+            item.stdout
+            | bootwright.core.bootwright_podman_container_identity(
+                {'bootwright.context': (bootwright_clusters_dir | dirname | basename),
+                 'bootwright.kind': 'load-balancer',
+                 'bootwright.provider': item.item.providerName,
+                 'bootwright.name': item.item.name})
+          )
+        )
+        or (
+          item.rc | int != 0
+          and (item.stderr | bootwright.core.bootwright_podman_explicit_absence)
+        )
+      - >-
+        item.rc | int != 0
+        or (
+          (item.stdout | from_json | first).Id | default('')
+          is match('^[a-f0-9]{64}$')
+        )
+    fail_msg: >-
+      Refusing HAProxy teardown because declared consumer
+      {{ item.item.providerName }}/{{ item.item.name }} is foreign or its live
+      state cannot be proven. No HAProxy container, global sysctl state,
+      firewall rule, service state, or ownership evidence was removed. Restore
+      exact Podman access or destroy the foreign service from its owning
+      context, then re-run `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_haproxy_declared_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.providerName }}/{{ item.item.name }}"
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Require conclusive recorded HAProxy consumer probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.rc is defined
+      - item.stdout is defined
+      - item.stderr is defined
+      - >-
+        (
+          item.rc | int == 0
+          and (
+            item.stdout
+            | bootwright.core.bootwright_podman_container_identity(
+                {'bootwright.context': (bootwright_clusters_dir | dirname | basename),
+                 'bootwright.kind': 'load-balancer',
+                 'bootwright.provider': item.item.provider,
+                 'bootwright.name': (item.item.labels | default({})).get('bootwright.name', '')})
+          )
+        )
+        or (
+          item.rc | int != 0
+          and (item.stderr | bootwright.core.bootwright_podman_explicit_absence)
+        )
+      - >-
+        item.rc | int != 0
+        or (
+          (item.stdout | from_json | first).Id | default('')
+          is match('^[a-f0-9]{64}$')
+        )
+      - >-
+        (
+          item.rc | int != 0
+          and (
+            item.item.provider != bootwright_component.providerName
+            or (item.item.labels | default({})).get('bootwright.name', '')
+               != bootwright_component.name
+          )
+        )
+        or (
+          (item.item.attributes | default({})).frontendPorts is defined
+          and item.item.attributes.frontendPorts is string
+          and item.item.attributes.frontendPorts | length > 0
+          and item.item.attributes.frontendPorts
+              is match('^[1-9][0-9]{0,4}/tcp(,[1-9][0-9]{0,4}/tcp)*$')
+          and (
+            item.item.attributes.frontendPorts
+            | split(',')
+            | map('regex_replace', '/tcp$', '')
+            | map('int')
+            | list
+          ) == (
+            item.item.attributes.frontendPorts
+            | split(',')
+            | map('regex_replace', '/tcp$', '')
+            | map('int')
+            | unique
+            | sort
+            | list
+          )
+          and (
+            item.item.attributes.frontendPorts
+            | split(',')
+            | map('regex_replace', '/tcp$', '')
+            | map('int')
+            | max
+          ) <= 65535
+        )
+    fail_msg: >-
+      Refusing HAProxy teardown because recorded consumer
+      {{ item.item.name }} is foreign, cannot be proven absent, or lacks its
+      exact canonical frontend-port ledger. No HAProxy container, global
+      sysctl state, firewall rule, service state, or ownership evidence was
+      removed. Restore the exact record and Podman state from trusted evidence,
+      then re-run `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_haproxy_recorded_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Resolve exactly known HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_known_container_ids: []
+    bootwright_haproxy_selected_container_ids: []
+  changed_when: false
+
+- name: Include declared HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_known_container_ids: >-
+      {{ bootwright_haproxy_known_container_ids
+         + [(item.stdout | from_json | first).Id] }}
+  loop: "{{ bootwright_haproxy_declared_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.providerName }}/{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+  changed_when: false
+
+- name: Resolve selected declared HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_selected_container_ids: >-
+      {{ bootwright_haproxy_selected_container_ids
+         + [(item.stdout | from_json | first).Id] }}
+  loop: "{{ bootwright_haproxy_declared_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.providerName }}/{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+    - item.item.providerName == bootwright_component.providerName
+    - item.item.name == bootwright_component.name
+  changed_when: false
+
+- name: Include recorded HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_known_container_ids: >-
+      {{ bootwright_haproxy_known_container_ids
+         + [(item.stdout | from_json | first).Id] }}
+  loop: "{{ bootwright_haproxy_recorded_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+  changed_when: false
+
+- name: Resolve selected recorded HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_selected_container_ids: >-
+      {{ bootwright_haproxy_selected_container_ids
+         + [(item.stdout | from_json | first).Id] }}
+  loop: "{{ bootwright_haproxy_recorded_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+    - item.item.provider == bootwright_component.providerName
+    - >-
+      (item.item.labels | default({})).get('bootwright.name', '')
+      == bootwright_component.name
+  changed_when: false
+
+- name: Require every HAProxy container to have exact current-context evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_haproxy_preflight.stdout_lines | default([])
+        | difference(bootwright_haproxy_known_container_ids | unique | list)
+        | length == 0
+    fail_msg: >-
+      Refusing HAProxy teardown because Podman enumerated a bootwright-haproxy
+      container without exact current-context desired state or ownership
+      evidence. No HAProxy container, global sysctl state, firewall rule,
+      service state, or ownership evidence was removed. Destroy the foreign
+      service from its owning context or restore its exact evidence, then
+      re-run `{{ bootwright_mutating_invocation }}`.
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Resolve exact surviving HAProxy container IDs
+  ansible.builtin.set_fact:
+    bootwright_haproxy_surviving_container_ids: >-
+      {{ (bootwright_haproxy_known_container_ids | unique | list)
+         | difference(bootwright_haproxy_selected_container_ids | unique | list) }}
+  changed_when: false
+
+- name: Resolve surviving HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_surviving_frontend_ports: []
+  changed_when: false
+
+- name: Include surviving declared HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_surviving_frontend_ports: >-
+      {{ bootwright_haproxy_surviving_frontend_ports
+         + (item.item.frontends
+            | map(attribute='ports')
+            | flatten
+            | map(attribute='listenPort')
+            | map('int')
+            | list) }}
+  loop: "{{ bootwright_haproxy_declared_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.providerName }}/{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+    - >-
+      item.item.providerName != bootwright_component.providerName
+      or item.item.name != bootwright_component.name
+  changed_when: false
+
+- name: Include surviving recorded HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_surviving_frontend_ports: >-
+      {{ bootwright_haproxy_surviving_frontend_ports
+         + (item.item.attributes.frontendPorts
+            | split(',')
+            | map('regex_replace', '/tcp$', '')
+            | map('int')
+            | list) }}
+  loop: "{{ bootwright_haproxy_recorded_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.rc | int == 0
+    - >-
+      item.item.provider != bootwright_component.providerName
+      or (item.item.labels | default({})).get('bootwright.name', '') != bootwright_component.name
+  changed_when: false
+
+- name: Canonicalize surviving HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_surviving_frontend_ports: >-
+      {{ bootwright_haproxy_surviving_frontend_ports | unique | sort | list }}
+  changed_when: false
+
+- name: Resolve selected HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_selected_frontend_ports: >-
+      {{ bootwright_component.frontends
+         | map(attribute='ports')
+         | flatten
+         | map(attribute='listenPort')
+         | map('int')
+         | unique
+         | sort
+         | list }}
+  changed_when: false
+
+- name: Include recorded selected HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_selected_frontend_ports: >-
+      {{ (bootwright_haproxy_selected_frontend_ports
+          + (item.item.attributes.frontendPorts
+             | split(',')
+             | map('regex_replace', '/tcp$', '')
+             | map('int')
+             | list))
+         | unique
+         | sort
+         | list }}
+  loop: "{{ bootwright_haproxy_recorded_consumer_probes.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - item.item.provider == bootwright_component.providerName
+    - >-
+      (item.item.labels | default({})).get('bootwright.name', '')
+      == bootwright_component.name
+  changed_when: false
+
+- name: Include authoritative HAProxy frontend ports
+  ansible.builtin.set_fact:
+    bootwright_haproxy_selected_frontend_ports: >-
+      {{ (bootwright_haproxy_selected_frontend_ports
+          + (bootwright_infra_destroy_global_ports
+             | select('match', '^[1-9][0-9]{0,4}/tcp$')
+             | map('regex_replace', '/tcp$', '')
+             | map('int')
+             | list))
+         | unique | sort | list }}
+  changed_when: false
+
+- name: Tear down HAProxy before deleting its ownership evidence
+  block:
+    - name: Revalidate HAProxy host operation before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate HAProxy endpoint authority before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Remove HAProxy container and reap orphans
+      ansible.builtin.include_role:
+        name: bootwright.core.support_component_teardown
+        tasks_from: container.yml
+      vars:
+        bootwright_component_teardown_container: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+        bootwright_component_teardown_kind: load-balancer
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: List remaining bootwright HAProxy containers
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - -aq
+          - --no-trunc
+          - --filter
+          - name=bootwright-haproxy-
+      register: bootwright_haproxy_remaining
+      changed_when: false
+      failed_when: false
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Require conclusive remaining HAProxy container state
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_haproxy_remaining.rc is defined
+          - bootwright_haproxy_remaining.rc | int == 0
+          - bootwright_haproxy_remaining.stdout is defined
+          - bootwright_haproxy_remaining.stderr is defined
+          - >-
+            bootwright_haproxy_remaining.stdout_lines | default([])
+            | difference(bootwright_haproxy_surviving_container_ids)
+            | length == 0
+        fail_msg: >-
+          Cannot conclusively enumerate the HAProxy containers remaining on
+          {{ inventory_hostname }} after removing the selected instance. No
+          shared sysctl, firewall rule, state directory, or ownership evidence
+          was removed. Restore Podman access and re-run
+          `{{ bootwright_mutating_invocation }}`.
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Revalidate HAProxy host operation before shared sysctl cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Remove HAProxy sysctl drop-in when no instances remain
+      ansible.builtin.file:
+        path: /etc/sysctl.d/99-bootwright-haproxy.conf
+        state: absent
+      when:
+        - bootwright_infra_destroy_state_stat.stat.exists | bool
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - (bootwright_haproxy_remaining.stdout | trim) | length == 0
+
+    - name: Revalidate HAProxy host operation before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate HAProxy endpoint authority before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Close HAProxy frontend ports on host firewall (firewalld)
+      ansible.posix.firewalld:
+        port: "{{ item }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      loop: "{{ bootwright_haproxy_selected_frontend_ports }}"
+      when:
+        - bootwright_infra_destroy_state_stat.stat.exists | bool
+        - bootwright_firewalld_available | bool
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - item | int not in bootwright_haproxy_surviving_frontend_ports
+
+    - name: Complete HAProxy evidence retirement after external cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: complete_infra_component_destroy.yml
+      vars:
+        bootwright_infra_destroy_state_path: >-
+          {{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}
+        bootwright_ownership_expected_record: "{{ bootwright_infra_destroy_expected_owner }}"
+  rescue:
+    - name: Refuse HAProxy evidence deletion after teardown failure
+      ansible.builtin.fail:
+        msg: >-
+          HAProxy teardown failed at {{ ansible_failed_task.name | default('an unknown task') }}:
+          {{ ansible_failed_result.msg | default('no failure detail was returned') }}.
+          Bootwright retained the ownership record or final context marker
+          needed for an exact retry. Restore access to the failed host service
+          and re-run the exact command
+          `{{ bootwright_mutating_invocation }}`.

@@ -1,0 +1,127 @@
+---
+- name: Resolve exact BMC transition destroy composites
+  ansible.builtin.set_fact:
+    bootwright_bmc_transition_destroy_composites:
+      - "{{ bootwright_bmc_claim_transition.active }}"
+      - "{{ bootwright_bmc_claim_transition.pending }}"
+  changed_when: false
+
+- name: Re-probe every BMC transition pool immediately before removal
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ item.attributes.libvirtURI }}"
+      - pool-dumpxml
+      - "{{ item.attributes.pool }}"
+  loop: "{{ bootwright_bmc_transition_destroy_composites }}"
+  loop_control:
+    label: "{{ item.attributes.libvirtURI }}/{{ item.attributes.pool }}"
+  register: bootwright_bmc_transition_pool_rechecks
+  changed_when: false
+  failed_when: false
+
+- name: Require exact or absent BMC transition pools before removal
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.rc is defined
+      - item.stdout is defined
+      - item.stderr is defined
+      - >-
+        (
+          item.rc | int == 0
+          and (
+            item.stdout | bootwright.core.bootwright_bmc_pool_identity
+          ) == {
+            'context': bootwright_bmc_current_context,
+            'provider': bootwright_bmc_provider_name,
+            'host': (bootwright_host_name | default(inventory_hostname)),
+            'type': 'dir',
+            'name': item.item.attributes.pool,
+            'targetPath': item.item.attributes.vMediaRoot
+          }
+        )
+        or (
+          item.rc | int != 0
+          and (
+            item.stderr
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool')
+          )
+        )
+    fail_msg: >-
+      Refusing BMC transition teardown because pool
+      {{ item.item.attributes.libvirtURI | default('<unknown-uri>') }}/{{ item.item.attributes.pool | default('<unknown-pool>') }}
+      changed or could not be conclusively re-probed immediately before
+      removal. Both transition sides and ownership evidence were retained.
+      Repair libvirt access and re-run `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_bmc_transition_pool_rechecks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.attributes.libvirtURI | default('<unknown-uri>') }}"
+
+- name: Revalidate BMC destroy authority before transition pool mutation
+  ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+- name: Remove exact BMC transition pools
+  community.libvirt.virt_pool:
+    name: "{{ item.item.attributes.pool }}"
+    uri: "{{ item.item.attributes.libvirtURI }}"
+    state: absent
+  loop: "{{ bootwright_bmc_transition_pool_rechecks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.attributes.libvirtURI }}/{{ item.item.attributes.pool }}"
+  when: item.rc | int == 0
+
+- name: Verify every BMC transition pool is absent
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ item.attributes.libvirtURI }}"
+      - pool-dumpxml
+      - "{{ item.attributes.pool }}"
+  loop: "{{ bootwright_bmc_transition_destroy_composites }}"
+  loop_control:
+    label: "{{ item.attributes.libvirtURI }}/{{ item.attributes.pool }}"
+  register: bootwright_bmc_transition_pool_absence
+  changed_when: false
+  failed_when: false
+
+- name: Require every BMC transition pool absent
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.rc is defined
+      - item.rc | int != 0
+      - item.stderr is defined
+      - >-
+        item.stderr
+        | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool')
+    fail_msg: >-
+      BMC transition pool
+      {{ item.item.attributes.libvirtURI | default('<unknown-uri>') }}/{{ item.item.attributes.pool | default('<unknown-pool>') }}
+      lacks positive absence proof. Transition and ownership evidence were
+      retained; restore libvirt access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  loop: "{{ bootwright_bmc_transition_pool_absence.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.attributes.libvirtURI | default('<unknown-uri>') }}"
+
+- name: Revalidate BMC destroy authority before transition firewall mutation
+  ansible.builtin.include_tasks: destroy_mutation_guard.yml
+  when:
+    - >-
+      bootwright_bmc_transition_destroy_composites
+      | selectattr('attributes.firewallManaged', 'equalto', 'true')
+      | list | length > 0
+
+- name: Close exact BMC transition firewall ports
+  ansible.posix.firewalld:
+    port: "{{ item.attributes.redfishPort | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_bmc_transition_destroy_composites }}"
+  loop_control:
+    label: "{{ item.attributes.redfishPort }}/tcp"
+  when: item.attributes.firewallManaged == 'true'

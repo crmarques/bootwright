@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 from collections.abc import Mapping
 
@@ -8,6 +9,124 @@ from ansible.errors import AnsibleFilterError
 _PROOF = "ceph-lvm-quiet-v2"
 _SCAN_SCOPE = "all-node-pvs"
 _FSID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_MISSING = object()
+
+
+def _evidence_expected_string(value, name):
+    if not isinstance(value, str) or not value.strip():
+        raise AnsibleFilterError(f"Ceph ownership evidence needs a nonempty {name}")
+    return value.strip()
+
+
+def _evidence_document(raw_json, present, path_safe, label):
+    result = {
+        "present": present,
+        "readable": False,
+        "identityValid": False,
+        "fsid": "",
+        "fsidEmpty": False,
+        "fsidValid": False,
+        "valid": False,
+        "blockers": [],
+    }
+    if not isinstance(present, bool):
+        raise AnsibleFilterError("Ceph ownership evidence present must be a boolean")
+    if not isinstance(path_safe, bool):
+        raise AnsibleFilterError("Ceph ownership evidence path-safe verdict must be a boolean")
+    if not present:
+        result["blockers"].append(f"{label} is missing")
+        return result, None
+    if not path_safe:
+        result["blockers"].append(f"{label} path must be an inspected regular non-symlink file")
+        return result, None
+    if not isinstance(raw_json, (str, bytes, bytearray)):
+        raise AnsibleFilterError(f"{label} JSON must be text or bytes")
+    if not raw_json or (isinstance(raw_json, str) and not raw_json.strip()):
+        result["blockers"].append(f"{label} is empty")
+        return result, None
+    try:
+        document = json.loads(raw_json)
+    except (ValueError, RecursionError):
+        result["blockers"].append(f"{label} is not valid JSON")
+        return result, None
+    if not isinstance(document, Mapping):
+        result["blockers"].append(f"{label} must be a JSON object")
+        return result, None
+    result["readable"] = True
+    return result, document
+
+
+def _effective_evidence_role(value):
+    if value is _MISSING:
+        return "owner"
+    if not isinstance(value, str):
+        return ""
+    return value.strip() or "owner"
+
+
+def _evidence_fsid(value):
+    if value is _MISSING:
+        return "", False, True
+    if not isinstance(value, str):
+        return "", False, False
+    value = value.strip()
+    return value, bool(_FSID.fullmatch(value)), not value
+
+
+def bootwright_ceph_controller_owner_evidence(raw_json, present, path_safe, expected_context, expected_cluster, expected_seed):
+    expected_context = _evidence_expected_string(expected_context, "expected context")
+    expected_cluster = _evidence_expected_string(expected_cluster, "expected cluster")
+    expected_seed = _evidence_expected_string(expected_seed, "expected seed")
+    label = "controller ownership record"
+    result, document = _evidence_document(raw_json, present, path_safe, label)
+    if document is None:
+        return result
+    identity_checks = (
+        (document.get("apiVersion") == "bootwright.io/ownership/v1alpha1", f"{label} apiVersion must be bootwright.io/ownership/v1alpha1"),
+        (document.get("kind") == "storage-cluster", f"{label} kind must be storage-cluster"),
+        (document.get("name") == expected_cluster, f"{label} name must be {expected_cluster}"),
+        (document.get("owner") == "bootwright", f"{label} owner must be bootwright"),
+        (_effective_evidence_role(document.get("role", _MISSING)) == "owner", f"{label} role must resolve to owner"),
+        (document.get("context") == expected_context, f"{label} context must be {expected_context}"),
+        (document.get("cluster") == expected_cluster, f"{label} cluster must be {expected_cluster}"),
+        (document.get("host") == expected_seed, f"{label} host must be {expected_seed}"),
+    )
+    for valid, blocker in identity_checks:
+        if not valid:
+            result["blockers"].append(blocker)
+    attributes = document.get("attributes")
+    if not isinstance(attributes, Mapping):
+        result["blockers"].append(f"{label} attributes must be a JSON object")
+        attributes = {}
+    if attributes.get("seedHost") != expected_seed:
+        result["blockers"].append(f"{label} attributes.seedHost must be {expected_seed}")
+    result["identityValid"] = len(result["blockers"]) == 0
+    result["fsid"], result["fsidValid"], result["fsidEmpty"] = _evidence_fsid(attributes.get("fsid", _MISSING))
+    if not result["fsidValid"]:
+        result["blockers"].append(f"{label} attributes.fsid must be a UUID")
+    result["valid"] = result["identityValid"] and result["fsidValid"]
+    return result
+
+
+def bootwright_ceph_host_marker_evidence(raw_json, present, path_safe, expected_cluster):
+    expected_cluster = _evidence_expected_string(expected_cluster, "expected cluster")
+    label = "Ceph ownership marker"
+    result, document = _evidence_document(raw_json, present, path_safe, label)
+    if document is None:
+        return result
+    identity_checks = (
+        (document.get("manager") == "bootwright", f"{label} manager must be bootwright"),
+        (document.get("cluster") == expected_cluster, f"{label} cluster must be {expected_cluster}"),
+    )
+    for valid, blocker in identity_checks:
+        if not valid:
+            result["blockers"].append(blocker)
+    result["identityValid"] = len(result["blockers"]) == 0
+    result["fsid"], result["fsidValid"], result["fsidEmpty"] = _evidence_fsid(document.get("fsid", _MISSING))
+    if not result["fsidValid"]:
+        result["blockers"].append(f"{label} fsid must be a UUID")
+    result["valid"] = result["identityValid"] and result["fsidValid"]
+    return result
 
 
 def _required_string(entry, key):
@@ -170,4 +289,8 @@ def bootwright_storage_destroy_attestation(entries, terminal, allow_unreachable)
 
 class FilterModule:
     def filters(self):
-        return {"bootwright_storage_destroy_attestation": bootwright_storage_destroy_attestation}
+        return {
+            "bootwright_ceph_controller_owner_evidence": bootwright_ceph_controller_owner_evidence,
+            "bootwright_ceph_host_marker_evidence": bootwright_ceph_host_marker_evidence,
+            "bootwright_storage_destroy_attestation": bootwright_storage_destroy_attestation,
+        }

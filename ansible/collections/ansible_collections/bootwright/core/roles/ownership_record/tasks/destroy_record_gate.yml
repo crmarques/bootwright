@@ -1,0 +1,246 @@
+---
+- name: Require exact current-context ownership record authority
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_record is mapping
+      - bootwright_ownership_record.apiVersion | default('') == 'bootwright.io/ownership/v1alpha1'
+      - bootwright_ownership_record.kind | default('') in ['libvirt-domain', 'libvirt-network', 'managed-os-install', 'infra-component', 'bmc-emulator', 'vsphere-vmedia']
+      - bootwright_ownership_record.name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_record.owner | default('') == 'bootwright'
+      - bootwright_ownership_record.context | default('') == bootwright_clusters_dir | dirname | basename
+      - bootwright_ownership_record.host | default('') == bootwright_host_name | default(inventory_hostname)
+      - bootwright_ownership_record.role | default('owner', true) == 'owner'
+      - bootwright_ownership_record.attributes | default({}) is mapping
+      - bootwright_ownership_record.paths | default([]) is sequence
+      - bootwright_ownership_record.paths | default([]) is not string
+    fail_msg: >-
+      Refusing recorded resource teardown because the supplied evidence does not
+      exactly match the ownership API, kind, name, manager, effective owner role,
+      current context, and current host. No live resource, path, or ownership
+      record was changed. Repair the exact evidence and re-run
+      `{{ bootwright_mutating_invocation }}`; no destroy authorization consumes
+      contradictory ownership evidence.
+
+- name: Gate recorded libvirt resource by live identity
+  ansible.builtin.include_tasks: destroy_record_libvirt_gate.yml
+  when: bootwright_ownership_destroy_kind in ['libvirt-domain', 'libvirt-network']
+
+- name: Gate recorded managed OS artifacts by live identity
+  ansible.builtin.include_tasks: destroy_record_managed_os_gate.yml
+  when: bootwright_ownership_destroy_kind == 'managed-os-install'
+
+- name: Gate recorded infra component by live identity
+  ansible.builtin.include_tasks: infra_component_destroy_gate.yml
+  vars:
+    bootwright_infra_destroy_provider: "{{ bootwright_ownership_record.provider | default('') }}"
+    bootwright_infra_destroy_name: "{{ (bootwright_ownership_record.labels | default({})).get('bootwright.name', '') }}"
+    bootwright_infra_destroy_kind: "{{ (bootwright_ownership_record.labels | default({})).get('bootwright.kind', '') }}"
+    bootwright_infra_destroy_state_dir: "{{ bootwright_ownership_destroy_paths | first | default('') }}"
+    bootwright_infra_destroy_container: "{{ bootwright_ownership_destroy_attrs.container | default('') }}"
+    bootwright_infra_destroy_extra_paths: "{{ bootwright_ownership_destroy_paths[1:] }}"
+  when: bootwright_ownership_destroy_kind == 'infra-component'
+
+- name: Validate recorded BMC emulator live identity fields
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_record.provider | default('') == bootwright_ownership_destroy_name
+      - bootwright_ownership_destroy_attrs.libvirtURI | default('') | length > 0
+      - bootwright_ownership_destroy_attrs.bindAddress | default('') | length > 0
+      - >-
+        bootwright_ownership_destroy_attrs.authPath | default('') in
+        ['', bootwright_ownership_destroy_attrs.stateRoot | default('') ~ '/htpasswd']
+      - bootwright_ownership_destroy_attrs.pool | default('') == 'bootwright-' ~ bootwright_ownership_destroy_name ~ '-vmedia'
+      - bootwright_ownership_destroy_attrs.claimPath | default('') == '/var/lib/bootwright/shared-services/bmc-emulator/' ~ bootwright_ownership_destroy_name
+      - bootwright_ownership_destroy_attrs.stateRoot | default('') == bootwright_provider_state_dir ~ '/bmc/' ~ bootwright_ownership_destroy_name
+      - >-
+        bootwright_ownership_destroy_attrs.vMediaRoot | default('')
+        == '/var/lib/libvirt/images/bootwright/' ~ (bootwright_clusters_dir | dirname | basename) ~ '/bmc/' ~ bootwright_ownership_destroy_name ~ '/vmedia'
+      - >-
+        bootwright_ownership_destroy_attrs.keys() | list | sort
+        == ['authPath', 'bindAddress', 'claimPath', 'firewallManaged', 'libvirtURI', 'pool', 'redfishPort', 'redfishUnit',
+            'stateRoot', 'vMediaPort', 'vMediaRoot', 'vMediaUnit'] | sort
+      - bootwright_ownership_destroy_attrs.redfishUnit == 'bootwright-sushy-' ~ bootwright_ownership_destroy_name ~ '.service'
+      - bootwright_ownership_destroy_attrs.vMediaUnit == 'bootwright-vmedia-' ~ bootwright_ownership_destroy_name ~ '.service'
+      - bootwright_ownership_destroy_attrs.redfishPort | string is match('^[1-9][0-9]{0,4}$')
+      - bootwright_ownership_destroy_attrs.vMediaPort | string is match('^[1-9][0-9]{0,4}$')
+      - bootwright_ownership_destroy_attrs.redfishPort | int <= 65535
+      - bootwright_ownership_destroy_attrs.vMediaPort | int <= 65535
+      - bootwright_ownership_destroy_attrs.redfishPort | int != bootwright_ownership_destroy_attrs.vMediaPort | int
+      - bootwright_ownership_destroy_attrs.firewallManaged in ['true', 'false']
+      - >-
+        bootwright_ownership_destroy_paths == [
+          bootwright_ownership_destroy_attrs.stateRoot,
+          bootwright_ownership_destroy_attrs.vMediaRoot,
+          '/etc/systemd/system/' ~ bootwright_ownership_destroy_attrs.redfishUnit,
+          '/etc/systemd/system/' ~ bootwright_ownership_destroy_attrs.vMediaUnit,
+          bootwright_ownership_destroy_attrs.claimPath
+        ]
+    fail_msg: >-
+      Refusing recorded BMC emulator teardown because the record does not carry
+      one exact provider, libvirt URI, pool, claim, state root, and vmedia root.
+      Repair the record from trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Resolve recorded BMC emulator gate inputs
+  ansible.builtin.set_fact:
+    bootwright_bmc_provider_name: "{{ bootwright_ownership_destroy_name }}"
+    bootwright_bmc_libvirt_uri: "{{ bootwright_ownership_destroy_attrs.libvirtURI }}"
+    bootwright_bmc_pool_name: "{{ bootwright_ownership_destroy_attrs.pool }}"
+    bootwright_bmc_claim_root: "{{ bootwright_ownership_destroy_attrs.claimPath }}"
+    bootwright_bmc_root: "{{ bootwright_ownership_destroy_attrs.stateRoot }}"
+    bootwright_bmc_vmedia_root: "{{ bootwright_ownership_destroy_attrs.vMediaRoot }}"
+    bootwright_bmc_redfish_unit_path: "/etc/systemd/system/bootwright-sushy-{{ bootwright_ownership_destroy_name }}.service"
+    bootwright_bmc_vmedia_unit_path: "/etc/systemd/system/bootwright-vmedia-{{ bootwright_ownership_destroy_name }}.service"
+    bootwright_bmc_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_bmc_port: "{{ bootwright_ownership_destroy_attrs.redfishPort }}"
+    bootwright_bmc_vmedia_port: "{{ bootwright_ownership_destroy_attrs.vMediaPort }}"
+    bootwright_bmc_bind: "{{ bootwright_ownership_destroy_attrs.bindAddress }}"
+    bootwright_bmc_auth_path: "{{ bootwright_ownership_destroy_attrs.authPath }}"
+    bootwright_bmc_claim_path: "{{ bootwright_ownership_destroy_attrs.claimPath }}/claim.json"
+    bootwright_bmc_transition_path: "{{ bootwright_ownership_destroy_attrs.claimPath }}/transition.json"
+  changed_when: false
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Probe firewalld before recorded BMC teardown classification
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_base
+    tasks_from: firewalld_probe.yml
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Gate recorded BMC emulator by live identity
+  ansible.builtin.include_tasks: ../../provider_service_bmc_emulated/tasks/ownership_gate.yml
+  vars:
+    bootwright_bmc_gate_mode: destroy
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Probe every recorded BMC path for replay safety
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ bootwright_ownership_destroy_paths }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_ownership_bmc_path_stats
+  changed_when: false
+  failed_when: false
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Require conclusive recorded BMC path probes
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (bootwright_ownership_bmc_path_stats.results | default([])
+         | selectattr('stat.exists', 'undefined') | list | length) == 0
+    fail_msg: >-
+      Refusing recorded BMC teardown because at least one recorded path could
+      not be conclusively probed. Repair host access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Resolve recorded BMC all-members-absent replay
+  ansible.builtin.set_fact:
+    bootwright_ownership_bmc_replay_absent: >-
+      {{
+        not (bootwright_bmc_claim_root_stat.stat.exists | bool)
+        and not (bootwright_bmc_live_resource_present | bool)
+        and not (bootwright_bmc_config_stat.stat.exists | bool)
+        and (bootwright_ownership_bmc_path_stats.results | default([])
+             | selectattr('stat.exists', 'defined')
+             | selectattr('stat.exists', 'equalto', true) | list | length) == 0
+      }}
+  changed_when: false
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Bind recorded BMC composite to live config and unit evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_ownership_bmc_replay_absent | bool
+        or (
+          (
+            not (bootwright_bmc_config_stat.stat.exists | bool)
+            or bootwright_bmc_live_config_identity == {
+              'libvirtURI': bootwright_ownership_destroy_attrs.libvirtURI,
+              'stateRoot': bootwright_ownership_destroy_attrs.stateRoot,
+              'pool': bootwright_ownership_destroy_attrs.pool,
+              'bindAddress': bootwright_ownership_destroy_attrs.bindAddress,
+              'redfishPort': bootwright_ownership_destroy_attrs.redfishPort | string,
+              'authPath': bootwright_ownership_destroy_attrs.authPath
+            }
+            or (
+              bootwright_bmc_gate_transition_desired | default({}) is mapping
+              and bootwright_bmc_gate_transition_desired | default({}) | length > 0
+              and bootwright_bmc_live_config_identity == {
+                'libvirtURI': bootwright_bmc_gate_transition_desired.attributes.libvirtURI,
+                'stateRoot': bootwright_bmc_gate_transition_desired.attributes.stateRoot,
+                'pool': bootwright_bmc_gate_transition_desired.attributes.pool,
+                'bindAddress': bootwright_bmc_gate_transition_desired.attributes.bindAddress,
+                'redfishPort': bootwright_bmc_gate_transition_desired.attributes.redfishPort | string,
+                'authPath': bootwright_bmc_gate_transition_desired.attributes.authPath
+              }
+            )
+          )
+          and (
+            not (bootwright_bmc_unit_stats.results[1].stat.exists | bool)
+            or bootwright_bmc_live_vmedia_runtime == {
+              'context': (bootwright_clusters_dir | dirname | basename),
+              'provider': bootwright_ownership_destroy_name,
+              'host': (bootwright_host_name | default(inventory_hostname)),
+              'vMediaPort': bootwright_ownership_destroy_attrs.vMediaPort | string,
+              'vMediaRoot': bootwright_ownership_destroy_attrs.vMediaRoot
+            }
+            or (
+              bootwright_bmc_gate_transition_desired | default({}) is mapping
+              and bootwright_bmc_gate_transition_desired | default({}) | length > 0
+              and bootwright_bmc_live_vmedia_runtime == {
+                'context': (bootwright_clusters_dir | dirname | basename),
+                'provider': bootwright_ownership_destroy_name,
+                'host': (bootwright_host_name | default(inventory_hostname)),
+                'vMediaPort': bootwright_bmc_gate_transition_desired.attributes.vMediaPort | string,
+                'vMediaRoot': bootwright_bmc_gate_transition_desired.attributes.vMediaRoot
+              }
+            )
+          )
+          and (
+            not (bootwright_bmc_unit_stats.results[0].stat.exists | bool)
+            or bootwright_bmc_live_sushy_runtime == {
+              'context': (bootwright_clusters_dir | dirname | basename),
+              'provider': bootwright_ownership_destroy_name,
+              'host': (bootwright_host_name | default(inventory_hostname)),
+              'stateRoot': bootwright_ownership_destroy_attrs.stateRoot
+            }
+            or (
+              bootwright_bmc_gate_transition_desired | default({}) is mapping
+              and bootwright_bmc_gate_transition_desired | default({}) | length > 0
+              and bootwright_bmc_live_sushy_runtime == {
+                'context': (bootwright_clusters_dir | dirname | basename),
+                'provider': bootwright_ownership_destroy_name,
+                'host': (bootwright_host_name | default(inventory_hostname)),
+                'stateRoot': bootwright_bmc_gate_transition_desired.attributes.stateRoot
+              }
+            )
+          )
+        )
+    fail_msg: >-
+      Refusing recorded BMC emulator teardown because its firewall ports,
+      libvirt URI, pool, state roots, or unit paths do not exactly match the
+      readable live sushy config and vmedia unit. The record may be tampered or
+      stale, so no port, unit, pool, path, or evidence was changed. Restore exact
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_ownership_destroy_kind == 'bmc-emulator'
+
+- name: Require verified vSphere virtual media teardown handoff
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_vsphere_vmedia_teardown_verified | default(false) | bool
+    fail_msg: >-
+      Refusing generic vsphere-vmedia cleanup because no desired-state vCenter
+      operation supplied positive teardown proof. Restore the exact desired
+      vSphere identity and re-run `{{ bootwright_mutating_invocation }}`; an
+      orphan record is retained for an exact retry.
+  when: bootwright_ownership_destroy_kind == 'vsphere-vmedia'

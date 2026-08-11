@@ -1,0 +1,97 @@
+---
+- name: Resolve recorded infra-component transition preflight identity
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: infra-component-transition
+    bootwright_ownership_name: "{{ bootwright_infra_component_transition_snapshot.name }}"
+    bootwright_ownership_role: owner
+  changed_when: false
+
+- name: Revalidate recorded infra-component transition before dispatch
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
+  vars:
+    bootwright_ownership_expected_record: >-
+      {{ bootwright_infra_component_transition_snapshot }}
+
+- name: Classify exact recorded infra-component transition recovery
+  ansible.builtin.set_fact:
+    bootwright_infra_component_transition_recovery: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_transition_record(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact recorded infra-component transition recovery
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - bootwright_ownership_validated_record == bootwright_infra_component_transition_snapshot
+      - bootwright_infra_component_transition_recovery | length > 0
+      - >-
+        bootwright_infra_component_transition_recovery.claimPath
+        == bootwright_ownership_dir ~ '/transitions/infra-component/'
+           ~ bootwright_infra_component_transition_recovery.name ~ '.json'
+    fail_msg: >-
+      Refusing infra-component teardown because a transition recovery snapshot
+      no longer exactly matches one live current-context recovery record and its
+      canonical claim path. No component or evidence was changed. Restore the
+      exact record and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe exact recorded infra-component transition claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_component_transition_recovery.claimPath }}"
+    follow: false
+  register: bootwright_infra_component_transition_claim_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read exact recorded infra-component transition claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_component_transition_recovery.claimPath }}"
+  register: bootwright_infra_component_transition_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_component_transition_claim_stat.stat.exists | default(false) | bool
+
+- name: Classify exact recorded infra-component transition dispatch
+  ansible.builtin.set_fact:
+    bootwright_infra_component_transition_composite: >-
+      {{ (bootwright_infra_component_transition_claim_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_dispatch(
+             bootwright_clusters_dir | dirname | basename,
+             bootwright_host_name | default(inventory_hostname),
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact recorded infra-component transition dispatch
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_component_transition_claim_stat.stat.exists is defined
+      - bootwright_infra_component_transition_claim_stat.stat.exists | bool
+      - bootwright_infra_component_transition_claim_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_component_transition_claim_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_component_transition_claim_content.content is defined
+      - bootwright_infra_component_transition_composite | length > 0
+      - >-
+        bootwright_infra_component_transition_composite.name
+        == bootwright_infra_component_transition_recovery.name
+      - >-
+        bootwright_infra_component_transition_composite.kind
+        == bootwright_infra_component_transition_recovery.kind
+    fail_msg: >-
+      Refusing infra-component teardown because the recovery record does not
+      bind one readable regular non-symlink exact transition claim for this
+      context, host, provider, name, and supported component kind. No container,
+      service, firewall endpoint, path, or evidence was changed. Restore the
+      exact claim and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Retain preflighted recorded infra-component transition dispatch
+  ansible.builtin.set_fact:
+    bootwright_infra_component_transition_composites: >-
+      {{ bootwright_infra_component_transition_composites
+         + [bootwright_infra_component_transition_composite
+            | combine({'selectionRecord': bootwright_ownership_validated_record})] }}
+  changed_when: false

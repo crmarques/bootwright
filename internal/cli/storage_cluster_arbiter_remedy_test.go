@@ -55,7 +55,7 @@ func TestArbiterCreatePrerequisiteAndRetryPreservePreviewAndHostileArgv(t *testi
 	}
 	invocation := hostileArbiterInvocation()
 	liveErr := &arbiter.LivePlanError{Failure: arbiter.LivePlanStretchModeDisabled, Cluster: safetyAdvancedCephCluster}
-	message := arbiterLivePlanRefusal(liveErr, state, ctx.RunsDir, invocation).Error()
+	message := arbiterLivePlanRefusal(liveErr, state, ctx.RunsDir, ctx.Name, invocation).Error()
 	if !strings.Contains(message, "continuation remains read-only") || !strings.Contains(message, "separate explicit real apply decision") {
 		t.Fatalf("preview prerequisite did not distinguish preview from authorization to mutate:\n%s", message)
 	}
@@ -95,7 +95,7 @@ func TestArbiterCreatePrerequisiteAndRetryPreservePreviewAndHostileArgv(t *testi
 	realInvocation := invocation
 	realInvocation.flags.dryRun = false
 	realInvocation.flags.output = outputText
-	realMessage := arbiterLivePlanRefusal(liveErr, state, ctx.RunsDir, realInvocation).Error()
+	realMessage := arbiterLivePlanRefusal(liveErr, state, ctx.RunsDir, ctx.Name, realInvocation).Error()
 	realApply, err := realInvocation.applyClustersRetry([]string{safetyAdvancedCephCluster})
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestArbiterStretchDisabledWithRecordedStorageTaskOffersNoApply(t *testing.T
 	message := arbiterLivePlanRefusal(&arbiter.LivePlanError{
 		Failure: arbiter.LivePlanStretchModeDisabled,
 		Cluster: safetyAdvancedCephCluster,
-	}, state, ctx.RunsDir, hostileArbiterInvocation()).Error()
+	}, state, ctx.RunsDir, ctx.Name, hostileArbiterInvocation()).Error()
 	if !strings.Contains(message, "no bootwright retry command") {
 		t.Fatalf("recorded non-create transition must stay command-free:\n%s", message)
 	}
@@ -144,7 +144,7 @@ func TestArbiterExternalRepairsCarryExactEvidenceAndOriginalRetry(t *testing.T) 
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			message := arbiterLivePlanRefusal(tc.err, v1alpha1.State{}, t.TempDir(), invocation).Error()
+			message := arbiterLivePlanRefusal(tc.err, v1alpha1.State{}, t.TempDir(), invocation.contextName, invocation).Error()
 			if !strings.Contains(message, "`"+retry.String()+"`") {
 				t.Fatalf("external repair missing exact original retry:\n%s", message)
 			}
@@ -173,7 +173,7 @@ func TestArbiterTextRetryPreservesExplicitYesWithoutPreviewFlags(t *testing.T) {
 		Failure:    arbiter.LivePlanTiebreakerMissing,
 		Cluster:    "ceph",
 		DesiredMon: "arb-new",
-	}, v1alpha1.State{}, t.TempDir(), invocation).Error()
+	}, v1alpha1.State{}, t.TempDir(), invocation.contextName, invocation).Error()
 	if !strings.Contains(message, "`"+retry.String()+"`") {
 		t.Fatalf("text refusal missing exact retry:\n%s", message)
 	}
@@ -224,7 +224,7 @@ func TestArbiterRecordAndPrepareRemediesUseResolvedInvocation(t *testing.T) {
 }
 
 func TestArbiterStructuralPrepareDriftCarriesExactApplyAndReplacementRemedies(t *testing.T) {
-	objects := classifyRetryObject(t, workflow.ConvergeSafetyOwner, "sha256:stale")
+	objects := classifyRetryObject(t, workflow.ConvergeSafetyOwner, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	preflightErr := workflow.EvaluateApplyModePreflight(workflow.ApplyModeReconcile, objects)
 	if preflightErr == nil {
 		t.Fatal("structurally drifted prepare work must refuse")

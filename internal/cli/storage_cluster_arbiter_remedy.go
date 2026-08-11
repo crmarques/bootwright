@@ -12,14 +12,14 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/arbiter"
 )
 
-func arbiterLivePlanRefusal(err error, state v1alpha1.State, runsDir string, invocation resolvedInvocation) error {
+func arbiterLivePlanRefusal(err error, state v1alpha1.State, runsDir, contextName string, invocation resolvedInvocation) error {
 	var liveErr *arbiter.LivePlanError
 	if !errors.As(err, &liveErr) {
 		return err
 	}
 	switch liveErr.Failure {
 	case arbiter.LivePlanStretchModeDisabled:
-		action, proofErr := arbiterStorageCreatePrerequisite(state, runsDir, liveErr.Cluster)
+		action, proofErr := arbiterStorageCreatePrerequisite(state, runsDir, contextName, liveErr.Cluster)
 		if proofErr != nil {
 			return fmt.Errorf("%w; Bootwright could not prove that an apply would run the storage-cluster task and establish the authored stretch mode: %v. Inspect and repair the recorded convergence evidence before deciding whether this is an incomplete bootstrap or an unsupported live shape change; no bootwright retry command safely performs that transition", err, proofErr)
 		}
@@ -62,7 +62,7 @@ func arbiterLivePlanRefusal(err error, state v1alpha1.State, runsDir string, inv
 	}
 }
 
-func arbiterStorageCreatePrerequisite(state v1alpha1.State, runsDir, cluster string) (workflow.ApplyTransitionAction, error) {
+func arbiterStorageCreatePrerequisite(state v1alpha1.State, runsDir, contextName, cluster string) (workflow.ApplyTransitionAction, error) {
 	tasks, err := workflow.PlanApplyTasksChecked(converge.AllScope.ApplyTarget(), state)
 	if err != nil {
 		return "", err
@@ -76,7 +76,7 @@ func arbiterStorageCreatePrerequisite(state v1alpha1.State, runsDir, cluster str
 	if len(storageTasks) != 1 {
 		return "", fmt.Errorf("expected exactly one storage-cluster task for %s, found %d", cluster, len(storageTasks))
 	}
-	objects, err := workflow.ClassifyApplyObjects(storageTasks, runsDir)
+	objects, err := workflow.ClassifyApplyObjects(storageTasks, runsDir, contextName)
 	if err != nil {
 		return "", err
 	}

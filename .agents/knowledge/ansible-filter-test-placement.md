@@ -11,6 +11,9 @@ collection discovery and rejected because tests do not expose `FilterModule`.
 
 **Constraint:** keep filter unit tests under
 `tests/unit/plugins/filter`, outside the runtime plugin tree. `make python-test`
-discovers them there, and each test loads the authored filter implementation
-from `plugins/filter`. The bundle builder excludes `test_*.py` files regardless
-of their source-tree location.
+discovers them there, callback tests under the sibling `callback` suite, and
+module tests under the sibling `modules` suite; each test loads its authored
+plugin implementation from `plugins/<type>`. The Makefile must explicitly
+enumerate every test-bearing sibling because unittest does not recurse into
+non-package directories. The bundle builder excludes `test_*.py` files
+regardless of their source-tree location.

@@ -1,12 +1,17 @@
 # Ceph cluster ownership: the 3-factor gate, apply modes, and destroy scoping
 
 **Semantics:** Normal ownership of a cephadm cluster is 3-factor: the on-disk
-`/etc/ceph/ceph.conf` carries an fsid AND a Bootwright storage-cluster
-ownership record exists on the controller for this seed AND this host is the
-declared `seedHost`; the host-local marker must be present and its fsid must
-agree with the conf fsid. The record and marker are independent consistency
-checks. A seed with no ceph.conf at all has nothing to protect and is treated
-as owned only when the live fsid probe also finds no cluster.
+`/etc/ceph/ceph.conf` carries an fsid; the controller carries one readable,
+regular non-symlink canonical owner record whose API, kind, name, manager, effective owner role,
+context, cluster, host, recorded `seedHost`, and fsid exactly identify this
+declared cluster; and the host-local marker is a readable regular non-symlink JSON file whose manager,
+cluster, and fsid agree exactly. Existence alone proves nothing. Apply rebuild,
+reachable-seed destroy, dead-seed delegation, and survivor adoption all consume
+the same non-throwing record and marker classifiers before their first
+`rm-cluster`. Missing, unreadable, malformed, noncanonical, foreign, or
+incomplete evidence returns ordered blockers and fails closed. A seed with no
+ceph.conf at all has nothing to protect and is treated as owned only when the
+live fsid probe also finds no cluster.
 
 **Semantics (a dead seed may delegate proof, never authorization):** the
 declared seed remains the ownership authority whenever it answers. Under
@@ -14,10 +19,10 @@ declared seed remains the ownership authority whenever it answers. Under
 absent, the destroy play considers only reachable hosts rendered from the
 declared `mon` topology. Before the device gates, it reads the controller owner
 record plus the config and Bootwright marker on every reachable declared mon.
-The controller JSON must be readable and identify Bootwright owner role, the
+The controller JSON must be a readable regular non-symlink file and identify Bootwright owner role, the
 current context, `storage-cluster` kind/name, declared cluster and seed, and one
 valid fsid. Each reachable mon's `/etc/ceph/ceph.conf` and
-`/etc/ceph/.bootwright-owned` must be readable and identify that same
+`/etc/ceph/.bootwright-owned` must be a readable regular non-symlink file and identify that same
 cluster/fsid. Only then does the first matching mon in authored topology order
 become the ownership authority for the fsid-scoped orchestrator stop, per-host
 removal, settle gate and record release. Missing, unreadable, contradictory or
@@ -49,21 +54,29 @@ srv4204: foreign Ceph cluster fsid(s) 2744de24-… not owned by ceph-prd-01`
 silent skip, which hardened ENTRY to this branch against probes that never ran;
 this is what the branch does to the other five hosts once entered.
 `cluster_gate.yml` now scans every non-seed host for `/var/lib/ceph/<fsid>`
-directories whenever the seed resolved no fsid and fails closed on any, naming
-both exits (`--recover-ceph-ownership <cluster>=<fsid>`, or a manual
-fsid-scoped `cephadm rm-cluster`). No token relaxes it.
+directories whenever the seed resolved no fsid and fails closed on any. It names
+only usable exits: restore the exact controller/marker evidence from trusted
+prior state and repeat the exact destroy invocation, or run a manual fsid-scoped
+`cephadm rm-cluster` on each survivor. Recovery is not an exit in this shape:
+the clean seed has no ceph.conf against which
+`--recover-ceph-ownership <cluster>=<fsid>` can validate the attestation. No
+token relaxes it.
 
 **Semantics:** `destroy --recover-ceph-ownership
 <StorageCluster>=<fsid>[,...]` repairs both controller and host evidence. Go
-requires a selected declared managed cluster and refuses an existing context
-record that contradicts its declared seed; absence is recoverable. On the seed,
-Ansible requires an exact supplied-fsid match against `/etc/ceph/ceph.conf`,
-then writes the controller record on delegated localhost and the normal `0600`
-host marker before re-reading both through the unchanged destroy ownership
-decision. The supplied mapping is explicit operator attestation for that exact
-identity. A reachable live `ceph fsid` must equal the configuration fsid; it is
-used only to reject contradictory identity, never as authorization. Recovery
-never overwrites contradictory evidence or relaxes OSD device gates.
+requires a selected declared managed cluster and reads the exact canonical
+controller owner path without filtering by context. Absence is recoverable; an
+existing record must match every identity field above and may carry only an
+empty prerecord fsid or the supplied fsid. A reference, malformed record,
+foreign context, wrong API/name/host/seed, or different nonempty fsid refuses
+before Ansible or any write. On the seed, Ansible repeats that classification,
+requires an exact supplied-fsid match against `/etc/ceph/ceph.conf`, then
+writes the controller record on delegated localhost and the normal `0600` host
+marker before re-reading both through the unchanged destroy ownership decision.
+The supplied mapping is explicit operator attestation for that exact identity.
+A reachable live `ceph fsid` must equal the configuration fsid; it is used only
+to reject contradictory identity, never as authorization. Recovery never
+overwrites contradictory evidence or relaxes OSD device gates.
 
 **Root cause:** Storage-cluster resource-record includes originally inherited
 the seed host's connection. They therefore wrote, read, and removed the

@@ -1,0 +1,20 @@
+---
+- name: Initialize old-only infra-component endpoint claim retirement
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_release_candidates: []
+  changed_when: false
+
+- name: Select exact old-only infra-component endpoint claims
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_release_candidates: >-
+      {{ bootwright_host_endpoint_release_candidates + [item] }}
+  loop: "{{ bootwright_host_endpoint_desired_claims | default([]) }}"
+  loop_control:
+    label: "{{ item.protocol }}/{{ item.port }}"
+  when: >-
+    (item.port | string) ~ '/' ~ item.protocol
+    in bootwright_infra_transition_retire_ports | default([])
+  changed_when: false
+
+- name: Release exact old-only infra-component endpoint claims
+  ansible.builtin.include_tasks: release_host_endpoint_claims.yml

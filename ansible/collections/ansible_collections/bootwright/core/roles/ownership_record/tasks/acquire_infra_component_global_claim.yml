@@ -1,0 +1,89 @@
+---
+- name: Require exact prepared host-global infra-component transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_next | default({}) | length > 0
+      - bootwright_infra_global_claim_next.state == 'applying'
+      - bootwright_infra_global_claim_path | default('') | length > 0
+      - bootwright_host_operation_guard_acquired | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component apply because its exact prepared host-global
+      transition or exclusive host operation authority is missing. No global
+      transition or role state was changed. Repair the evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate exclusive host operation before global transition publication
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Resolve exact host-global infra-component transition content
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_next_content: >-
+      {{ (bootwright_infra_global_claim_next | to_nice_json) ~ '\n' }}
+  changed_when: false
+
+- name: Publish exact host-global infra-component transition atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    state: present
+    desired_content: "{{ bootwright_infra_global_claim_next_content }}"
+    expected_contents: >-
+      {{ [bootwright_infra_global_claim_content.content | b64decode]
+         if (bootwright_infra_global_claim_stat.stat.exists | default(false) | bool)
+         else [] }}
+    allow_absent: >-
+      {{ not (bootwright_infra_global_claim_stat.stat.exists | default(false) | bool) }}
+    create_parents: true
+    trusted_root: /
+  register: bootwright_infra_global_claim_cas
+  failed_when: false
+
+- name: Re-probe host-global infra-component transition winner
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_claim_winner_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read host-global infra-component transition winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_claim_winner_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_global_claim_winner_stat.stat.exists | default(false) | bool
+
+- name: Classify host-global infra-component transition winner
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_winner: >-
+      {{ (bootwright_infra_global_claim_winner_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact host-global infra-component transition winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_cas.current_sha256 is defined
+      - bootwright_infra_global_claim_winner_stat.stat.exists is defined
+      - bootwright_infra_global_claim_winner_stat.stat.exists | bool
+      - bootwright_infra_global_claim_winner_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_global_claim_winner_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_global_claim_winner_content.content is defined
+      - bootwright_infra_global_claim_winner == bootwright_infra_global_claim_next
+    fail_msg: >-
+      Refusing infra-component apply because atomic host-global transition
+      publication did not produce and re-read this exact operation composite.
+      CAS detail: {{ bootwright_infra_global_claim_cas.msg | default('winner did not match') }}.
+      The exclusive operation guard remains held for safe wrapper cleanup and no
+      role mutation followed. Inspect the competing claim, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Mark host-global infra-component transition published
+  ansible.builtin.set_fact:
+    bootwright_infra_global_transition_published: true
+  changed_when: false

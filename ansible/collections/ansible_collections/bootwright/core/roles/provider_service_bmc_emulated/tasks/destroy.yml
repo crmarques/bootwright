@@ -1,91 +1,215 @@
 ---
-- name: Resolve BMC state paths
+- name: Validate BMC destroy invocation inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      BMC destroy requires the exact controller-built CLI retry invocation.
+
+- name: Resolve BMC destroy facts
+  ansible.builtin.import_tasks: apply/facts.yml
+
+- name: Probe firewalld before BMC teardown classification
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_base
+    tasks_from: firewalld_probe.yml
+
+- name: Resolve exact BMC emulator owner record for desired destroy
   ansible.builtin.set_fact:
-    bootwright_bmc_provider_name: "{{ bootwright_component.providerName }}"
-    bootwright_bmc_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_component.providerName }}"
-    bootwright_bmc_vmedia_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/{{ bootwright_component.providerName }}/vmedia"
-    bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
-    bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
+    bootwright_bmc_destroy_records: >-
+      {{
+        (bootwright_ownership_records_by_kind | default({})).get('bmc-emulator', [])
+        | selectattr('name', 'equalto', bootwright_component.providerName)
+        | list
+      }}
   changed_when: false
 
-- name: Tear down BMC runtime before deleting state and ownership
-  block:
-    - name: Stop sushy-emulator service
-      ansible.builtin.systemd_service:
-        name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
-        state: stopped
-        enabled: false
-      register: bootwright_bmc_sushy_stop
-      failed_when:
-        - bootwright_bmc_sushy_stop.failed | default(false) | bool
-        - >-
-          'Could not find the requested service'
-          not in (bootwright_bmc_sushy_stop.msg | default(''))
+- name: Require one unambiguous BMC emulator owner record
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_destroy_records | length <= 1
+    fail_msg: >-
+      Refusing BMC emulator destroy because multiple ownership records claim
+      provider {{ bootwright_component.providerName }}. Repair the contradictory
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
 
-    - name: Close Redfish port on host firewall
-      ansible.posix.firewalld:
-        port: "{{ bootwright_bmc_port | int }}/tcp"
-        state: disabled
-        permanent: true
-        immediate: true
-      failed_when: false
+- name: Resolve recorded BMC emulator destroy fields
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: bmc-emulator
+    bootwright_ownership_name: "{{ bootwright_bmc_destroy_records[0].name | default('') }}"
+    bootwright_ownership_role: "{{ bootwright_bmc_destroy_records[0].role | default('owner', true) }}"
+  changed_when: false
+  when: bootwright_bmc_destroy_records | length == 1
 
-    - name: Stop vmedia HTTP service
-      ansible.builtin.systemd_service:
-        name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
-        state: stopped
-        enabled: false
-      register: bootwright_bmc_vmedia_stop
-      failed_when:
-        - bootwright_bmc_vmedia_stop.failed | default(false) | bool
-        - >-
-          'Could not find the requested service'
-          not in (bootwright_bmc_vmedia_stop.msg | default(''))
-
-    - name: Remove sushy + vmedia systemd units
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "/etc/systemd/system/bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
-        - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
-      register: bootwright_bmc_units_removed
-
-    - name: Reload systemd after removing BMC units
-      ansible.builtin.systemd_service:
-        daemon_reload: true
-      when: bootwright_bmc_units_removed.changed
-
-    - name: Destroy libvirt vmedia pool
-      community.libvirt.virt_pool:
-        name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
-        uri: "{{ bootwright_bmc_libvirt_uri }}"
-        state: absent
-
-  rescue:
-    - name: Refuse BMC state and ownership deletion after runtime teardown failure
-      ansible.builtin.fail:
-        msg: >-
-          Refusing to delete BMC state or ownership for provider
-          {{ bootwright_bmc_provider_name }} because
-          {{ ansible_failed_task.name | default('runtime teardown') }} failed:
-          {{ ansible_failed_result.msg | default('provider teardown failed with no detail') }}.
-          Restore service/libvirt access or remove that runtime safely, then
-          retry the exact invocation
-          `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`.
-
-- name: Remove BMC state directory
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ bootwright_bmc_root }}"
-    - "{{ bootwright_bmc_vmedia_root }}"
-
-- name: Remove BMC emulator ownership record
+- name: Validate live BMC owner record before desired teardown
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: remove_resource.yml
+    tasks_from: validate_resource.yml
+  when: bootwright_bmc_destroy_records | length == 1
+
+- name: Require live BMC owner record before desired teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - bootwright_ownership_validated_record == bootwright_bmc_destroy_records[0]
+    fail_msg: >-
+      Refusing desired BMC teardown because the selected inventory evidence does
+      not exactly match one live regular owner record. Restore exact trusted
+      evidence and re-run {{ bootwright_mutating_invocation }}.
+  when: bootwright_bmc_destroy_records | length == 1
+
+- name: Resolve validated BMC emulator destroy composite
+  ansible.builtin.set_fact:
+    bootwright_ownership_record: "{{ bootwright_ownership_validated_record }}"
+    bootwright_ownership_destroy_kind: bmc-emulator
+    bootwright_ownership_destroy_name: "{{ bootwright_ownership_validated_record.name }}"
+    bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_validated_record.attributes | default({}) }}"
+    bootwright_ownership_destroy_paths: "{{ bootwright_ownership_validated_record.paths | default([]) }}"
+  changed_when: false
+  when: bootwright_bmc_destroy_records | length == 1
+
+- name: Prove recorded BMC emulator ownership before desired destroy mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_record_gate.yml
   vars:
-    bootwright_ownership_kind: bmc-emulator
-    bootwright_ownership_name: "{{ bootwright_component.providerName }}"
+    bootwright_bmc_desired_destroy_verified: true
+  when: bootwright_bmc_destroy_records | length == 1
+
+- name: Probe exact BMC provider-global claim before unrecorded destroy
+  ansible.builtin.import_tasks: claim_probe.yml
+  when: bootwright_bmc_destroy_records | length == 0
+
+- name: Prove no unclaimed BMC emulator survives desired destroy
+  ansible.builtin.import_tasks: ownership_gate.yml
+  vars:
+    bootwright_bmc_gate_mode: destroy
+  when:
+    - bootwright_bmc_destroy_records | length == 0
+    - bootwright_bmc_claim_record | length == 0
+
+- name: Probe unrecorded BMC state root
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_root }}"
+  register: bootwright_bmc_unrecorded_state_stat
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_destroy_records | length == 0
+
+- name: Resolve exact claimed partial BMC destroy authority
+  ansible.builtin.set_fact:
+    bootwright_bmc_claimed_partial_destroy_detected: >-
+      {{
+        bootwright_bmc_destroy_records | length == 0
+        and bootwright_bmc_claim_record | length > 0
+      }}
+  changed_when: false
+  when: bootwright_bmc_destroy_records | length == 0
+
+- name: Resolve safe empty BMC claim-root recovery
+  ansible.builtin.set_fact:
+    bootwright_bmc_empty_claim_root_recovery: >-
+      {{
+        bootwright_bmc_destroy_records | length == 0
+        and bootwright_bmc_claim_record | length == 0
+        and bootwright_bmc_claim_root_stat.stat.exists | bool
+        and bootwright_bmc_claim_root_entries.stdout_lines | default([]) | length == 0
+        and bootwright_bmc_unrecorded_state_stat.stat.exists is defined
+        and not (bootwright_bmc_unrecorded_state_stat.stat.exists | bool)
+        and not (bootwright_bmc_live_resource_present | bool)
+        and not (bootwright_bmc_live_state_present | bool)
+      }}
+  changed_when: false
+  when: bootwright_bmc_destroy_records | length == 0
+
+- name: Refuse unrecorded BMC live or local state
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_unrecorded_state_stat.stat.exists is defined
+      - >-
+        not (bootwright_bmc_claim_root_stat.stat.exists | bool)
+        or bootwright_bmc_empty_claim_root_recovery | default(false) | bool
+      - not (bootwright_bmc_live_resource_present | bool)
+      - not (bootwright_bmc_live_state_present | bool)
+    fail_msg: >-
+      Refusing BMC emulator destroy because live service, claim, config, or
+      state exists without the exact owner record needed to bind its URI, pool,
+      ports, units, and paths, and no exact current-context durable claim proves
+      an interrupted first apply. Restore exact trusted evidence or remove only
+      independently proven stale state, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization adopts unclaimed
+      state.
+  when:
+    - bootwright_bmc_destroy_records | length == 0
+    - not (bootwright_bmc_claimed_partial_destroy_detected | bool)
+
+- name: Revalidate host operation before empty BMC claim-root recovery
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+  when: bootwright_bmc_empty_claim_root_recovery | default(false) | bool
+
+- name: Remove positively empty BMC provider-global claim root
+  ansible.builtin.command:
+    argv:
+      - rmdir
+      - "{{ bootwright_bmc_claim_root }}"
+  register: bootwright_bmc_empty_claim_root_remove
+  changed_when: bootwright_bmc_empty_claim_root_remove.rc == 0
+  failed_when: false
+  when: bootwright_bmc_empty_claim_root_recovery | default(false) | bool
+
+- name: Prove recovered empty BMC claim root absent
+  ansible.builtin.stat:
+    path: "{{ bootwright_bmc_claim_root }}"
+    follow: false
+  register: bootwright_bmc_empty_claim_root_absence
+  changed_when: false
+  failed_when: false
+  when: bootwright_bmc_empty_claim_root_recovery | default(false) | bool
+
+- name: Require empty BMC claim-root recovery completion
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_empty_claim_root_absence.stat.exists is defined
+      - not (bootwright_bmc_empty_claim_root_absence.stat.exists | bool)
+    fail_msg: >-
+      The BMC claim root was positively empty, but nonrecursive removal did not
+      complete. Inspect the path and re-run `{{ bootwright_mutating_invocation }}`;
+      Bootwright never recursively removes an unclaimed evidence root.
+  when: bootwright_bmc_empty_claim_root_recovery | default(false) | bool
+
+- name: Resolve exact claimed BMC record for partial teardown
+  ansible.builtin.set_fact:
+    bootwright_ownership_record: >-
+      {{ bootwright_bmc_claim_record
+         | combine({'apiVersion': 'bootwright.io/ownership/v1alpha1'}) }}
+  changed_when: false
+  when:
+    - bootwright_bmc_destroy_records | length == 0
+    - bootwright_bmc_claimed_partial_destroy_detected | bool
+
+- name: Destroy exact claimed partial BMC composite
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_bmc_desired_destroy_verified: true
+    bootwright_bmc_claimed_partial_destroy_verified: true
+  when:
+    - bootwright_bmc_destroy_records | length == 0
+    - bootwright_bmc_claimed_partial_destroy_detected | bool
+
+- name: Destroy exact recorded BMC composite and ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_bmc_desired_destroy_verified: true
+    bootwright_bmc_claimed_partial_destroy_verified: false
+  when: bootwright_bmc_destroy_records | length == 1

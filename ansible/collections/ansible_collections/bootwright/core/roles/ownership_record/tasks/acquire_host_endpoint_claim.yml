@@ -1,0 +1,136 @@
+---
+- name: Revalidate host operation before endpoint acquisition
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Resolve canonical host endpoint claim path and content
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_path: >-
+      /var/lib/bootwright/shared-services/endpoints/{{
+        bootwright_host_endpoint_desired_claim.protocol }}-{{
+        bootwright_host_endpoint_desired_claim.port }}.json
+    bootwright_host_endpoint_desired_content: >-
+      {{ (bootwright_host_endpoint_desired_claim | to_nice_json) ~ '\n' }}
+  changed_when: false
+
+- name: Probe current host endpoint claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_path }}"
+    follow: false
+  register: bootwright_host_endpoint_current_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read current host endpoint claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_endpoint_path }}"
+  register: bootwright_host_endpoint_current_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_current_stat.stat.exists | default(false) | bool
+
+- name: Classify current host endpoint claim
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_current_claim: >-
+      {{ (bootwright_host_endpoint_current_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_claim_any }}
+  changed_when: false
+
+- name: Require absent or exact same-owner endpoint claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_current_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_endpoint_current_stat.stat.exists | bool)
+        or (
+          bootwright_host_endpoint_current_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_endpoint_current_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_endpoint_current_content.content is defined
+          and bootwright_host_endpoint_current_claim | length > 0
+          and bootwright_host_endpoint_current_claim.protocol
+              == bootwright_host_endpoint_desired_claim.protocol
+          and bootwright_host_endpoint_current_claim.port
+              == bootwright_host_endpoint_desired_claim.port
+          and bootwright_host_endpoint_current_claim.owner
+              == bootwright_host_endpoint_desired_claim.owner
+          and bootwright_host_endpoint_current_claim.claimDigest
+              in bootwright_host_endpoint_allowed_claim_digests
+        )
+    fail_msg: >-
+      Refusing shared-service mutation because host endpoint
+      {{ bootwright_host_endpoint_desired_claim.protocol }}/{{
+         bootwright_host_endpoint_desired_claim.port }} is unreadable,
+      malformed, or claimed by another exact context, kind, name, host, or
+      composite. No endpoint listener, firewall rule, or service was changed.
+      Inspect that slot and re-run `{{ bootwright_mutating_invocation }}`; no
+      authorization overwrites a competing endpoint claim.
+
+- name: Atomically acquire exact host endpoint claim
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_host_endpoint_path }}"
+    state: present
+    desired_content: "{{ bootwright_host_endpoint_desired_content }}"
+    expected_contents: >-
+      {{ [bootwright_host_endpoint_current_content.content | b64decode]
+         if (bootwright_host_endpoint_current_stat.stat.exists | bool) else [] }}
+    allow_absent: "{{ not (bootwright_host_endpoint_current_stat.stat.exists | bool) }}"
+    create_parents: true
+    trusted_root: /
+  register: bootwright_host_endpoint_cas
+  failed_when: false
+
+- name: Re-probe exact host endpoint winner
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_path }}"
+    follow: false
+  register: bootwright_host_endpoint_winner_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read exact host endpoint winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_endpoint_path }}"
+  register: bootwright_host_endpoint_winner_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_winner_stat.stat.exists | default(false) | bool
+
+- name: Classify exact host endpoint winner
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_winner_claim: >-
+      {{ (bootwright_host_endpoint_winner_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_host_endpoint_claim_any }}
+  changed_when: false
+
+- name: Journal exact endpoint change for pre-mutation rollback
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_acquire_journal: >-
+      {{ bootwright_host_endpoint_acquire_journal + [{
+           'path': bootwright_host_endpoint_path,
+           'desiredContent': bootwright_host_endpoint_desired_content,
+           'previousAbsent': not (bootwright_host_endpoint_current_stat.stat.exists | bool),
+           'previousContent': (bootwright_host_endpoint_current_content.content | default('') | b64decode)
+         }] }}
+  changed_when: false
+  when: bootwright_host_endpoint_winner_claim == bootwright_host_endpoint_desired_claim
+
+- name: Require exact host endpoint CAS winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_cas.previous_sha256 is defined
+      - bootwright_host_endpoint_cas.current_sha256 is defined
+      - bootwright_host_endpoint_winner_stat.stat.exists is defined
+      - bootwright_host_endpoint_winner_stat.stat.exists | bool
+      - bootwright_host_endpoint_winner_stat.stat.isreg | default(false) | bool
+      - not (bootwright_host_endpoint_winner_stat.stat.islnk | default(false) | bool)
+      - bootwright_host_endpoint_winner_content.content is defined
+      - bootwright_host_endpoint_winner_claim == bootwright_host_endpoint_desired_claim
+    fail_msg: >-
+      Refusing shared-service mutation because another controller won or held
+      the atomic claim for endpoint
+      {{ bootwright_host_endpoint_desired_claim.protocol }}/{{
+         bootwright_host_endpoint_desired_claim.port }}. CAS detail:
+      {{ bootwright_host_endpoint_cas.msg | default('winner differs') }}. No
+      endpoint listener, firewall rule, or service was changed. Inspect the
+      winner and re-run `{{ bootwright_mutating_invocation }}`.

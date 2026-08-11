@@ -1,0 +1,202 @@
+---
+- name: Revalidate host operation before shared-service consequence preflight
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Require exact shared-service consequence preflight input
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_prepublication_candidate_family | default('') in ['bmc-emulator', 'infra-component']
+      - bootwright_host_prepublication_candidate | default({}) is mapping
+      - bootwright_host_prepublication_candidate | default({}) | length > 0
+    fail_msg: >-
+      Refusing shared-service mutation because the prepublication candidate is
+      missing, future-shaped, or does not name one supported service family. No
+      durable claim or service state was changed. Repair the selected input and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe canonical BMC shared-service evidence root
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/bmc-emulator
+    follow: false
+  register: bootwright_host_preflight_bmc_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Enumerate canonical BMC shared-service evidence
+  ansible.builtin.find:
+    paths: /var/lib/bootwright/shared-services/bmc-emulator
+    recurse: true
+    hidden: true
+    file_type: any
+    follow: false
+  register: bootwright_host_preflight_bmc_find
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_preflight_bmc_root_stat.stat.exists | default(false) | bool
+
+- name: Probe canonical infra-component claim root
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/infra-component/claims
+    follow: false
+  register: bootwright_host_preflight_infra_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Enumerate canonical infra-component claims
+  ansible.builtin.find:
+    paths: /var/lib/bootwright/shared-services/infra-component/claims
+    recurse: false
+    hidden: true
+    file_type: any
+    follow: false
+  register: bootwright_host_preflight_infra_find
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_preflight_infra_root_stat.stat.exists | default(false) | bool
+
+- name: Probe current-context infra-component transition root
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_dir }}/transitions/infra-component"
+    follow: false
+  register: bootwright_host_preflight_transition_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Enumerate current-context infra-component transitions
+  ansible.builtin.find:
+    paths: "{{ bootwright_ownership_dir }}/transitions/infra-component"
+    recurse: false
+    hidden: true
+    file_type: any
+    follow: false
+  register: bootwright_host_preflight_transition_find
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_preflight_transition_root_stat.stat.exists | default(false) | bool
+
+- name: Classify closed shared-service evidence paths
+  ansible.builtin.set_fact:
+    bootwright_host_prepublication_scan: >-
+      {{ (bootwright_host_preflight_bmc_root_stat.stat | default({}))
+         | bootwright.core.bootwright_host_shared_service_scan_paths(
+             bootwright_host_preflight_bmc_find.files | default([]),
+             (bootwright_host_preflight_infra_root_stat.stat | default({})),
+             bootwright_host_preflight_infra_find.files | default([]),
+             ((bootwright_host_preflight_transition_root_stat.stat | default({}))
+              | combine({'path': bootwright_ownership_dir ~ '/transitions/infra-component'})),
+             bootwright_host_preflight_transition_find.files | default([])) }}
+  changed_when: false
+
+- name: Refuse unsafe shared-service evidence topology
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_prepublication_scan.valid | default(false) | bool
+    fail_msg: >-
+      Refusing shared-service mutation because a canonical BMC or
+      infra-component claim root is unreadable, linked, foreign-owned, writable
+      by another user, unexpectedly populated, or contains a non-regular claim.
+      No durable claim or service state was changed. Repair the evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Read every canonical BMC shared-service document
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ bootwright_host_prepublication_scan.bmcDocumentPaths }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_host_preflight_bmc_documents_raw
+  changed_when: false
+  failed_when: false
+
+- name: Read every canonical infra-component document
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ bootwright_host_prepublication_scan.infraDocumentPaths }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bootwright_host_preflight_infra_documents_raw
+  changed_when: false
+  failed_when: false
+
+- name: Probe atomic host endpoint registry for prepublication
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/endpoints.json
+    follow: false
+  register: bootwright_host_preflight_endpoint_registry_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read atomic host endpoint registry for prepublication
+  ansible.builtin.slurp:
+    src: /var/lib/bootwright/shared-services/endpoints.json
+  register: bootwright_host_preflight_endpoint_registry_raw
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_preflight_endpoint_registry_stat.stat.exists | default(false) | bool
+
+- name: Require every shared-service evidence document readable
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_host_preflight_bmc_documents_raw.results | default([]) | length
+        == bootwright_host_prepublication_scan.bmcDocumentPaths | length
+      - >-
+        (bootwright_host_preflight_bmc_documents_raw.results | default([])
+         | rejectattr('content', 'defined') | list | length) == 0
+      - >-
+        bootwright_host_preflight_infra_documents_raw.results | default([]) | length
+        == bootwright_host_prepublication_scan.infraDocumentPaths | length
+      - >-
+        (bootwright_host_preflight_infra_documents_raw.results | default([])
+         | rejectattr('content', 'defined') | list | length) == 0
+      - bootwright_host_preflight_endpoint_registry_stat.stat.exists is defined
+      - >-
+        not (bootwright_host_preflight_endpoint_registry_stat.stat.exists | bool)
+        or (
+          bootwright_host_preflight_endpoint_registry_stat.stat.isreg | default(false) | bool
+          and not (bootwright_host_preflight_endpoint_registry_stat.stat.islnk | default(false) | bool)
+          and bootwright_host_preflight_endpoint_registry_stat.stat.pw_name | default('') == 'root'
+          and bootwright_host_preflight_endpoint_registry_stat.stat.gr_name | default('') == 'root'
+          and bootwright_host_preflight_endpoint_registry_stat.stat.mode | default('') == '0600'
+          and bootwright_host_preflight_endpoint_registry_raw.content is defined
+        )
+    fail_msg: >-
+      Refusing shared-service mutation because canonical BMC, infra-component,
+      or endpoint evidence changed during inspection or could not be read as one
+      regular root-owned document. No durable claim or service state was
+      changed. Inspect the competing writer and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve symmetric shared-service consequence conflicts
+  ansible.builtin.set_fact:
+    bootwright_host_prepublication_decision: >-
+      {{ bootwright_host_prepublication_candidate_family
+         | bootwright.core.bootwright_host_shared_service_prepublication_conflicts(
+             bootwright_host_prepublication_candidate,
+             (bootwright_host_preflight_bmc_documents_raw.results | default([])
+              | map(attribute='content') | map('b64decode') | list),
+             (bootwright_host_preflight_infra_documents_raw.results | default([])
+              | map(attribute='content') | map('b64decode') | list),
+             (bootwright_host_preflight_endpoint_registry_raw.content
+              | default('') | b64decode)) }}
+  changed_when: false
+
+- name: Refuse conflicting shared-service consequences before publication
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_prepublication_decision.valid | default(false) | bool
+      - bootwright_host_prepublication_decision.conflicts | default([]) | length == 0
+    fail_msg: >-
+      Refusing shared-service mutation because another logical owner already
+      claims an intersecting host service, path, container, trust anchor,
+      libvirt pool, or endpoint:
+      {{ bootwright_host_prepublication_decision.conflicts | default('malformed evidence') }}.
+      Complete or destroy that exact owner, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation after shared-service consequence preflight
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml

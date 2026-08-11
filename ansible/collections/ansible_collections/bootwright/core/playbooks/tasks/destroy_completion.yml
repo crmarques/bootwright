@@ -1,0 +1,5 @@
+---
+- name: Record Bootwright destroy completion
+  ansible.builtin.set_fact:
+    bootwright_destroy_completion_recorded: true
+  changed_when: false

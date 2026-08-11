@@ -16,12 +16,24 @@ and skips the guard, so first apply still creates. Apply fails closed with NO
 **Destroy-side verification per substrate:** libvirt reads the domain-XML
 marker; vSphere asserts the vCenter annotation (`bootwright:context=`,
 `bootwright:cluster=`, `bootwright:machine=`) before "Delete vSphere VM";
-KubeVirt re-verifies the `bootwright.io/managed-by` label on the
-VirtualMachine and each DataVolume (the namespace may host foreign workloads).
-Assert and delete are gated on object presence so destroy stays idempotent; a
-missing/mismatched marker fails closed and `bootwright_destroy_authorize_unowned_vms`
-is the explicit recovery relaxation (per-VM refusals only — never Ceph
-ownership or device data-safety gates).
+KubeVirt re-verifies the `bootwright.io/managed-by`, context, cluster, and node
+labels on the VirtualMachine and the manager, context, cluster, node, and
+volume-role labels on every DataVolume (the namespace may host foreign
+workloads). A PVC must carry that same exact label set or have no ownership
+labels and carry an exact ownerReference, including UID, to the already-verified
+DataVolume. Bootwright stamps the inherited identity durably on that PVC before
+deleting the DataVolume, so later PVC teardown never depends on vanished parent
+evidence. Each API read must either return a successful `NotFound` or a complete
+live object; a
+forbidden, transport, parse, or empty result is unknown, not absence. Assert and
+delete are gated on that conclusive classification so destroy stays idempotent;
+a libvirt `failed to get domain/network` prefix alone is likewise ambiguous and
+only an explicit `Domain/Network not found` or `no ... with matching name`
+diagnostic proves absence. The repo guard rejects that broad prefix anywhere in
+the Ansible collection. A missing/mismatched marker fails closed and
+`bootwright_destroy_authorize_unowned_vms` is the explicit recovery relaxation
+(per-VM refusals only — never failed probes, Ceph ownership, or device
+data-safety gates).
 
 **vSphere identity recorded before rename:** the apply path records a
 `vsphere-machine` ownership record carrying `vmName:`, `moid:`, `uuid:` and ISO
@@ -61,6 +73,16 @@ rescues name the failed external operation and the controller-rendered exact
 mutating invocation. Only firewall-port closure remains best effort: with the
 listener already removed, a stale allow rule exposes no process and does not
 authorize deleting a live provider resource.
+
+**A controller name locates; live identity authorizes:** provider objects can be
+removed and recreated under the same global name between runs. Apply, declared
+destroy, and record-only orphan sweep therefore re-read the live object and
+require the exact Bootwright manager, context, provider/cluster, machine or
+component, and role metadata before the first mutation. A stale record never
+overrides a contradictory libvirt XML description, KubeVirt label set, vSphere
+annotation, container label, or service claim. A suppressed probe is classified
+from success-only response fields, never `.failed`; an unsupported or
+inconclusive live classifier conservatively retains the resource and evidence.
 
 **Shared DVD cache must not join per-machine records:** the multi-GB source DVD
 staged once per cluster (throttle: 1) must never appear in a per-machine
@@ -104,7 +126,10 @@ TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown. Because the
 preparation play only iterates clusters the host holds machines for, its
 component/cluster resolution must span `bootwright_clusters` AND
 `bootwright_managed_os_install_groups` or a libvirt-hosted storage cluster loses
-the gate entirely.
+the gate entirely. The record can establish the expected address but cannot
+make a mismatched live XML owned: exact live context and cluster identity is
+required, and a contradictory network is refused even when a stale record has
+the same kind and name.
 
 **Bastion containers: ownership by live labels, not per-context records:** the
 bastion runs ONE global podman store shared by every context while ownership

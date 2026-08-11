@@ -62,7 +62,7 @@ func TestStateCheckDegradesOnCorruptConvergeSafetyRecord(t *testing.T) {
 		t.Fatalf("write corrupt record: %v", err)
 	}
 
-	report, err := StateCheck(tasks, target, state, runsDir)
+	report, err := StateCheck(tasks, target, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck aborted on a single corrupt record, want a degraded report: %v", err)
 	}

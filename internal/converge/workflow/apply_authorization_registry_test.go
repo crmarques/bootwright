@@ -266,13 +266,15 @@ func TestWrittenConvergeSafetyRecordClassifiesAsOwnedMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyTaskDesiredHash: %v", err)
 	}
-	if got := ClassifyConvergeSafety(record, hash, ConvergeSafetyOwner); got != ConvergeSafetyMatch {
-		t.Fatalf("a record this writer just wrote classifies as %q, want %q; the owner field the writer stamps and the one the classifier reads have diverged", got, ConvergeSafetyMatch)
+	if got, err := classifyApplyTaskWithRecordForContext(task, runsDir, "ctx", record, hash); err != nil || got != ConvergeSafetyMatch {
+		t.Fatalf("a record this writer just wrote classifies as %q, want %q; err=%v", got, ConvergeSafetyMatch, err)
 	}
-	if got := ClassifyConvergeSafety(record, "sha256:other", ConvergeSafetyOwner); got != ConvergeSafetyDrift {
-		t.Fatalf("a changed desired hash classifies as %q, want %q", got, ConvergeSafetyDrift)
+	changedHash := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if got, err := classifyApplyTaskWithRecordForContext(task, runsDir, "ctx", record, changedHash); err != nil || got != ConvergeSafetyDrift {
+		t.Fatalf("a changed desired hash classifies as %q, want %q; err=%v", got, ConvergeSafetyDrift, err)
 	}
-	if got := ClassifyConvergeSafety(record, hash, "someone-else"); got != ConvergeSafetyForeign {
-		t.Fatalf("a record owned by another manager classifies as %q, want %q; the foreign refusal must stay reachable", got, ConvergeSafetyForeign)
+	record.Owner.Manager = "someone-else"
+	if got, err := classifyApplyTaskWithRecordForContext(task, runsDir, "ctx", record, hash); err != nil || got != ConvergeSafetyForeign {
+		t.Fatalf("a record owned by another manager classifies as %q, want %q; err=%v", got, ConvergeSafetyForeign, err)
 	}
 }

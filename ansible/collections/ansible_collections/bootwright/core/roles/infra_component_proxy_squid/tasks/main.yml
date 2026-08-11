@@ -1,5 +1,23 @@
 ---
 
+- name: Resolve desired Squid ownership transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: proxy
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_squid_root }}"
+      labels:
+        bootwright.kind: proxy
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: proxy
+        container: "{{ bootwright_squid_container_name }}"
+        port: "{{ bootwright_component.port | int }}/tcp"
+  changed_when: false
+
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -10,10 +28,20 @@
 - name: Load Squid package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
+- name: Revalidate host operation before Squid package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Install Squid packages
   ansible.builtin.package:
     name: "{{ bootwright_squid_packages }}"
     state: present
+
+- name: Revalidate host operation before Squid path and configuration mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Create Squid directories
   ansible.builtin.file:
@@ -58,6 +86,11 @@
     mode: "0644"
   register: bootwright_squid_config
 
+- name: Revalidate host operation and endpoint before Squid container mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Run Squid container
   containers.podman.podman_container:
     name: "{{ bootwright_squid_container_name }}"
@@ -80,6 +113,11 @@
       - "{{ bootwright_squid_cache_dir }}:/var/spool/squid:Z"
       - "{{ bootwright_squid_logs_dir }}:/var/log/squid:Z"
 
+- name: Revalidate host operation and endpoint before Squid firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Open Squid port on host firewall (firewalld)
   ansible.posix.firewalld:
     port: "{{ bootwright_component.port | int }}/tcp"
@@ -87,6 +125,22 @@
     permanent: true
     immediate: true
   when: bootwright_firewalld_available | default(false)
+
+- name: Close retired Squid ports on host firewall (firewalld)
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false)
+
+- name: Revalidate host operation before Squid ownership publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Record Squid proxy ownership
   ansible.builtin.include_role:
@@ -96,14 +150,12 @@
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_squid_root }}"
-      labels:
-        bootwright.kind: proxy
-        bootwright.provider: "{{ bootwright_component.providerName }}"
-        bootwright.name: "{{ bootwright_component.name }}"
-      attributes:
-        componentKind: proxy
-        container: "{{ bootwright_squid_container_name }}"
-        port: "{{ bootwright_component.port | int }}/tcp"
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+
+- name: Complete durable Squid ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml

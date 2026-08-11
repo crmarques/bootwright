@@ -1,0 +1,120 @@
+---
+- name: Revalidate exclusive host operation before consequence scan
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Probe canonical host-global infra-component claim directory
+  ansible.builtin.stat:
+    path: /var/lib/bootwright/shared-services/infra-component/claims
+    follow: false
+  register: bootwright_infra_all_claims_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Enumerate canonical host-global infra-component claims
+  ansible.builtin.find:
+    paths: /var/lib/bootwright/shared-services/infra-component/claims
+    recurse: false
+    hidden: true
+    file_type: any
+    follow: false
+  register: bootwright_infra_all_claims_find
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_all_claims_root_stat.stat.exists | default(false) | bool
+
+- name: Require a closed canonical host-global claim directory
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_all_claims_root_stat.stat.exists is defined
+      - >-
+        not (bootwright_infra_all_claims_root_stat.stat.exists | bool)
+        or (
+          bootwright_infra_all_claims_root_stat.stat.isdir | default(false) | bool
+          and not (bootwright_infra_all_claims_root_stat.stat.islnk | default(false) | bool)
+          and bootwright_infra_all_claims_root_stat.stat.pw_name | default('') == 'root'
+          and bootwright_infra_all_claims_root_stat.stat.gr_name | default('') == 'root'
+          and bootwright_infra_all_claims_root_stat.stat.mode | default('') == '0700'
+          and bootwright_infra_all_claims_find.files is defined
+          and (bootwright_infra_all_claims_find.files
+               | rejectattr('isreg', 'defined') | list | length) == 0
+          and (bootwright_infra_all_claims_find.files
+               | rejectattr('isreg', 'equalto', true) | list | length) == 0
+          and (bootwright_infra_all_claims_find.files
+               | selectattr('islnk', 'defined')
+               | selectattr('islnk', 'equalto', true) | list | length) == 0
+        )
+    fail_msg: >-
+      Refusing infra-component mutation because the canonical claim directory is
+      unreadable, linked, foreign-owned, writable by another user, or contains a
+      non-regular entry. The outer host operation guard will be released without
+      changing component state. Repair the directory and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Read every canonical host-global infra-component claim
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ bootwright_infra_all_claims_find.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: bootwright_infra_all_claims_content
+  changed_when: false
+  failed_when: false
+
+- name: Initialize canonical host-global infra-component claim set
+  ansible.builtin.set_fact:
+    bootwright_infra_all_global_claims: []
+    bootwright_infra_all_global_claims_valid: true
+  changed_when: false
+
+- name: Classify every canonical host-global infra-component claim
+  ansible.builtin.set_fact:
+    bootwright_infra_all_global_claims: >-
+      {{ bootwright_infra_all_global_claims + [bootwright_infra_enumerated_claim] }}
+    bootwright_infra_all_global_claims_valid: >-
+      {{ bootwright_infra_all_global_claims_valid
+         and bootwright_infra_enumerated_claim | length > 0
+         and item.content is defined
+         and item.item.path
+             == '/var/lib/bootwright/shared-services/infra-component/claims/'
+                ~ (bootwright_infra_enumerated_claim
+                   | bootwright.core.bootwright_infra_component_global_claim_key(
+                       bootwright_managed_services_dir))
+                ~ '.json' }}
+  vars:
+    bootwright_infra_enumerated_claim: >-
+      {{ (item.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim_any(
+             bootwright_managed_services_dir) }}
+  loop: "{{ bootwright_infra_all_claims_content.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path | default('unreadable-claim') }}"
+  changed_when: false
+
+- name: Resolve host-global infra-component consequence conflicts
+  ansible.builtin.set_fact:
+    bootwright_infra_global_conflict_decision: >-
+      {{ bootwright_infra_all_global_claims
+         | bootwright.core.bootwright_infra_component_global_conflicts(
+             bootwright_infra_operation_claim,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Refuse host-global infra-component consequence collisions
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_all_global_claims_valid | bool
+      - bootwright_infra_global_conflict_decision.valid | default(false) | bool
+      - bootwright_infra_global_conflict_decision.conflicts | default([]) | length == 0
+    fail_msg: >-
+      Refusing infra-component mutation because a canonical durable claim is
+      malformed, is stored under the wrong digest, or another logical
+      component/context already owns an intersecting host service, path,
+      container, trust anchor, or endpoint:
+      {{ bootwright_infra_global_conflict_decision.conflicts | default('invalid claim set') }}.
+      Complete or destroy the owning component first, then re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate exclusive host operation after consequence scan
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml

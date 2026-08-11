@@ -1,5 +1,7 @@
 package workflow
 
+import "errors"
+
 type ObjectClassification struct {
 	ObjectKey      string                               `json:"objectKey"`
 	Kind           string                               `json:"kind"`
@@ -64,7 +66,15 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 	}
 }
 
-func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
+func ClassifyApplyObjects(tasks []ApplyTask, runsDir, contextName string) ([]ObjectClassification, error) {
+	return classifyApplyObjects(tasks, runsDir, contextName, "")
+}
+
+func ClassifyApplyObjectsForMode(tasks []ApplyTask, runsDir, contextName string, mode ApplyMode) ([]ObjectClassification, error) {
+	return classifyApplyObjects(tasks, runsDir, contextName, mode)
+}
+
+func classifyApplyObjects(tasks []ApplyTask, runsDir, contextName string, mode ApplyMode) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
 	add := func(kind, key, label, cluster string, class ConvergeSafetyClassification, reconcilable, tiebreakerOnly bool, shape stretchArbiterShape, taskID string) {
@@ -104,35 +114,55 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		}
 		record, found, err := LoadConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
 		if err != nil {
-			return nil, err
+			return nil, untrustedConvergenceEvidence(runsDir, applyTaskSafetyResourceID(task), err)
 		}
 		class := ConvergeSafetyMissing
+		rebuildEvidence := false
 		if found {
-			class, err = classifyApplyTaskWithRecord(task, runsDir, record, desiredHash)
+			class, err = classifyApplyTaskWithRecordForContext(task, runsDir, contextName, record, desiredHash)
+			if err != nil {
+				if !rebuildConsumesConvergencePayload(mode, err) {
+					return nil, err
+				}
+				class = ConvergeSafetyDrift
+				rebuildEvidence = true
+			}
+		}
+		reconcilable := false
+		if !rebuildEvidence {
+			reconcilable, err = taskDriftReconcilableWithRecord(task, record, found, class, desiredHash)
 			if err != nil {
 				return nil, err
 			}
 		}
-		reconcilable, err := taskDriftReconcilableWithRecord(task, record, found, class, desiredHash)
-		if err != nil {
-			return nil, err
+		tiebreakerOnly := false
+		shape := stretchArbiterUnchanged
+		if !rebuildEvidence {
+			tiebreakerOnly, err = taskTiebreakerOnlyStructuralDrift(task, record, found, class, reconcilable)
+			if err != nil {
+				return nil, err
+			}
+			shape = taskStretchArbiterShapeChange(task, record, found, class, reconcilable)
 		}
-		tiebreakerOnly, err := taskTiebreakerOnlyStructuralDrift(task, record, found, class, reconcilable)
-		if err != nil {
-			return nil, err
-		}
-		shape := taskStretchArbiterShapeChange(task, record, found, class, reconcilable)
 		add(kind, key, label, task.Entry.Cluster, class, reconcilable, tiebreakerOnly, shape, task.Entry.ID)
 		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
 			expandedStorage[task.Entry.Cluster] = true
 			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
-				subClass, err := classifyStorageSubObject(task.State, sub, runsDir)
+				subClass, err := classifyStorageSubObject(task.State, sub, runsDir, contextName)
+				subRebuildEvidence := false
 				if err != nil {
-					return nil, err
+					if !rebuildConsumesConvergencePayload(mode, err) {
+						return nil, err
+					}
+					subClass = ConvergeSafetyDrift
+					subRebuildEvidence = true
 				}
-				subReconcilable, err := storageSubObjectReconcilableDrift(task.State, sub, runsDir)
-				if err != nil {
-					return nil, err
+				subReconcilable := false
+				if !subRebuildEvidence {
+					subReconcilable, err = storageSubObjectReconcilableDrift(task.State, sub, runsDir, contextName)
+					if err != nil {
+						return nil, err
+					}
 				}
 				add(sub.Kind, sub.resourceID(), sub.resourceID(), task.Entry.Cluster, subClass, subReconcilable, false, stretchArbiterUnchanged, "")
 			}
@@ -146,6 +176,18 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 		out = append(out, *o)
 	}
 	return out, nil
+}
+
+func rebuildConsumesConvergencePayload(mode ApplyMode, err error) bool {
+	if mode != ApplyModeRebuild || err == nil {
+		return false
+	}
+	var current *CurrentConvergenceEvidenceError
+	if errors.As(err, &current) {
+		return true
+	}
+	var legacy *LegacyConvergenceEvidenceError
+	return errors.As(err, &legacy)
 }
 
 func taskDriftReconcilable(task ApplyTask, runsDir string, class ConvergeSafetyClassification) (bool, error) {

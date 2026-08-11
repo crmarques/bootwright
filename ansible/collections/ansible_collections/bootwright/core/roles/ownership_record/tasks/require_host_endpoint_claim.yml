@@ -1,0 +1,48 @@
+---
+- name: Revalidate host operation before endpoint recheck
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Resolve required host endpoint claim path
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_required_path: >-
+      /var/lib/bootwright/shared-services/endpoints/{{
+        bootwright_host_endpoint_required_claim.protocol }}-{{
+        bootwright_host_endpoint_required_claim.port }}.json
+  changed_when: false
+
+- name: Re-probe required host endpoint claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_host_endpoint_required_path }}"
+    follow: false
+  register: bootwright_host_endpoint_required_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read required host endpoint claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_host_endpoint_required_path }}"
+  register: bootwright_host_endpoint_required_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_host_endpoint_required_stat.stat.exists | default(false) | bool
+
+- name: Require unchanged exact host endpoint authority
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_host_endpoint_required_stat.stat.exists is defined
+      - bootwright_host_endpoint_required_stat.stat.exists | bool
+      - bootwright_host_endpoint_required_stat.stat.isreg | default(false) | bool
+      - not (bootwright_host_endpoint_required_stat.stat.islnk | default(false) | bool)
+      - bootwright_host_endpoint_required_content.content is defined
+      - >-
+        (bootwright_host_endpoint_required_content.content | b64decode
+         | bootwright.core.bootwright_host_endpoint_claim_any)
+        == bootwright_host_endpoint_required_claim
+    fail_msg: >-
+      Refusing the next shared-service mutation because endpoint
+      {{ bootwright_host_endpoint_required_claim.protocol }}/{{
+         bootwright_host_endpoint_required_claim.port }} no longer has the exact
+      context, kind, name, host, and composite claim gated for this run. Durable
+      evidence was retained. Inspect the winner and re-run
+      `{{ bootwright_mutating_invocation }}`.

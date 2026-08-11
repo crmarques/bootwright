@@ -102,24 +102,51 @@
   changed_when: false
   failed_when: false
 
+- name: Classify KubeVirt boot VirtualMachine probe
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_boot_vm_payload: >-
+      {{ bootwright_kubevirt_boot_vm_probe.stdout | default('')
+         | bootwright.core.bootwright_kubernetes_object_probe }}
+  changed_when: false
+
 - name: Require a conclusive KubeVirt boot VirtualMachine probe
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_kubevirt_boot_vm_probe.rc | default(1)) == 0
-        or 'NotFound' in (bootwright_kubevirt_boot_vm_probe.stderr | default(''))
+        (
+          bootwright_kubevirt_boot_vm_probe.rc is defined
+          and (bootwright_kubevirt_boot_vm_probe.rc | int) == 0
+          and bootwright_kubevirt_boot_vm_payload.valid | bool
+          and bootwright_kubevirt_boot_vm_payload.value.get('apiVersion', '') == 'kubevirt.io/v1'
+          and bootwright_kubevirt_boot_vm_payload.value.get('kind', '') == 'VirtualMachine'
+          and bootwright_kubevirt_boot_vm_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_vm_name
+          and bootwright_kubevirt_boot_vm_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        )
+        or (
+          bootwright_kubevirt_boot_vm_probe.rc is defined
+          and (bootwright_kubevirt_boot_vm_probe.rc | int) != 0
+          and 'NotFound' in (bootwright_kubevirt_boot_vm_probe.stderr | default(''))
+        )
     fail_msg: >-
       Could not determine whether VirtualMachine {{ bootwright_kubevirt_vm_name }}
       exists in namespace {{ bootwright_kubevirt_namespace }}:
-      {{ bootwright_kubevirt_boot_vm_probe.stderr | default('kubectl get failed with no detail') }}.
-      Refusing to boot because ownership cannot be proven.
+      {{
+        bootwright_kubevirt_boot_vm_payload.reason
+        if (bootwright_kubevirt_boot_vm_probe.rc is defined
+            and (bootwright_kubevirt_boot_vm_probe.rc | int) == 0)
+        else (bootwright_kubevirt_boot_vm_probe.stderr
+              | default('kubectl get failed with no detail', true))
+      }}. Refusing to boot because a malformed, wrong-identity, or failed probe
+      does not prove ownership or absence. Repair host-cluster access, then
+      re-run `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve KubeVirt boot VirtualMachine identity
   ansible.builtin.set_fact:
     bootwright_kubevirt_boot_vm_live: >-
       {{
-        (bootwright_kubevirt_boot_vm_probe.stdout | from_json)
-        if (bootwright_kubevirt_boot_vm_probe.rc | default(1)) == 0
+        bootwright_kubevirt_boot_vm_payload.value
+        if (bootwright_kubevirt_boot_vm_probe.rc is defined
+            and (bootwright_kubevirt_boot_vm_probe.rc | int) == 0)
         else {}
       }}
   changed_when: false
@@ -220,24 +247,51 @@
   changed_when: false
   failed_when: false
 
+- name: Classify KubeVirt agent ISO DataVolume probe
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_boot_iso_payload: >-
+      {{ bootwright_kubevirt_boot_iso_probe.stdout | default('')
+         | bootwright.core.bootwright_kubernetes_object_probe }}
+  changed_when: false
+
 - name: Require a conclusive KubeVirt agent ISO DataVolume probe
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_kubevirt_boot_iso_probe.rc | default(1)) == 0
-        or 'NotFound' in (bootwright_kubevirt_boot_iso_probe.stderr | default(''))
+        (
+          bootwright_kubevirt_boot_iso_probe.rc is defined
+          and (bootwright_kubevirt_boot_iso_probe.rc | int) == 0
+          and bootwright_kubevirt_boot_iso_payload.valid | bool
+          and bootwright_kubevirt_boot_iso_payload.value.get('apiVersion', '') == 'cdi.kubevirt.io/v1beta1'
+          and bootwright_kubevirt_boot_iso_payload.value.get('kind', '') == 'DataVolume'
+          and bootwright_kubevirt_boot_iso_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_iso_dv_name
+          and bootwright_kubevirt_boot_iso_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        )
+        or (
+          bootwright_kubevirt_boot_iso_probe.rc is defined
+          and (bootwright_kubevirt_boot_iso_probe.rc | int) != 0
+          and 'NotFound' in (bootwright_kubevirt_boot_iso_probe.stderr | default(''))
+        )
     fail_msg: >-
       Could not determine whether DataVolume {{ bootwright_kubevirt_iso_dv_name }}
       exists in namespace {{ bootwright_kubevirt_namespace }}:
-      {{ bootwright_kubevirt_boot_iso_probe.stderr | default('kubectl get failed with no detail') }}.
-      Refusing to replace it because ownership cannot be proven.
+      {{
+        bootwright_kubevirt_boot_iso_payload.reason
+        if (bootwright_kubevirt_boot_iso_probe.rc is defined
+            and (bootwright_kubevirt_boot_iso_probe.rc | int) == 0)
+        else (bootwright_kubevirt_boot_iso_probe.stderr
+              | default('kubectl get failed with no detail', true))
+      }}. Refusing to replace it because a malformed, wrong-identity, or failed
+      probe does not prove ownership or absence. Repair host-cluster access,
+      then re-run `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve KubeVirt agent ISO DataVolume identity
   ansible.builtin.set_fact:
     bootwright_kubevirt_boot_iso_live: >-
       {{
-        (bootwright_kubevirt_boot_iso_probe.stdout | from_json)
-        if (bootwright_kubevirt_boot_iso_probe.rc | default(1)) == 0
+        bootwright_kubevirt_boot_iso_payload.value
+        if (bootwright_kubevirt_boot_iso_probe.rc is defined
+            and (bootwright_kubevirt_boot_iso_probe.rc | int) == 0)
         else {}
       }}
   changed_when: false
@@ -255,7 +309,18 @@
         and 'bootwright.io/node' not in bootwright_kubevirt_boot_iso_live.get('metadata', {}).get('labels', {})
       }}
     bootwright_kubevirt_machine_recorded: false
+    bootwright_kubevirt_machine_record: {}
   changed_when: false
+
+- name: Inspect KubeVirt machine ownership record
+  ansible.builtin.stat:
+    path: "{{ bootwright_kubevirt_machine_record_path }}"
+    follow: false
+  register: bootwright_kubevirt_machine_record_stat
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
 
 - name: Read KubeVirt machine ownership record
   ansible.builtin.slurp:
@@ -264,18 +329,50 @@
   changed_when: false
   failed_when: false
   delegate_to: localhost
+  when:
+    - bootwright_kubevirt_boot_iso_legacy_candidate | bool
+    - bootwright_kubevirt_machine_record_stat.stat.exists | default(false) | bool
+    - bootwright_kubevirt_machine_record_stat.stat.isreg | default(false) | bool
+    - not (bootwright_kubevirt_machine_record_stat.stat.islnk | default(false) | bool)
+
+- name: Require safe readable KubeVirt machine ownership evidence
+  ansible.builtin.assert:
+    that:
+      - bootwright_kubevirt_machine_record_stat.stat.exists is defined
+      - >-
+        not (bootwright_kubevirt_machine_record_stat.stat.exists | default(true) | bool)
+        or (
+          bootwright_kubevirt_machine_record_stat.stat.isreg | default(false) | bool
+          and not (bootwright_kubevirt_machine_record_stat.stat.islnk | default(false) | bool)
+          and bootwright_kubevirt_machine_record_slurp.content is defined
+        )
+    fail_msg: >-
+      Refusing legacy KubeVirt media adoption because ownership evidence at
+      {{ bootwright_kubevirt_machine_record_path }} could not be proven absent
+      or read as a regular non-symlink file. No DataVolume was replaced. Repair
+      the exact record or remove it only after independently proving it stale,
+      then re-run `{{ bootwright_mutating_invocation }}`.
   when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
 
-- name: Resolve KubeVirt machine ownership record
-  ansible.builtin.set_fact:
-    bootwright_kubevirt_machine_record: >-
-      {{
-        (bootwright_kubevirt_machine_record_slurp.content | b64decode | from_json)
-        if bootwright_kubevirt_machine_record_slurp.content is defined
-        else {}
-      }}
-  changed_when: false
-  when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
+- name: Decode KubeVirt machine ownership record
+  block:
+    - name: Decode KubeVirt machine ownership JSON
+      ansible.builtin.set_fact:
+        bootwright_kubevirt_machine_record: >-
+          {{ bootwright_kubevirt_machine_record_slurp.content | b64decode | from_json }}
+      changed_when: false
+  rescue:
+    - name: Refuse malformed KubeVirt machine ownership evidence
+      ansible.builtin.fail:
+        msg: >-
+          Refusing legacy KubeVirt media adoption because ownership evidence at
+          {{ bootwright_kubevirt_machine_record_path }} is not readable JSON.
+          No DataVolume was replaced. Restore the exact trusted record or remove
+          it only after independently proving it stale, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+  when:
+    - bootwright_kubevirt_boot_iso_legacy_candidate | bool
+    - bootwright_kubevirt_machine_record_slurp.content is defined
 
 - name: Verify KubeVirt machine ownership record
   ansible.builtin.set_fact:
@@ -285,9 +382,22 @@
         and bootwright_kubevirt_machine_record.get('kind', '') == 'kubevirt-machine'
         and bootwright_kubevirt_machine_record.get('name', '') == bootwright_kubevirt_vm_name
         and bootwright_kubevirt_machine_record.get('owner', '') == 'bootwright'
+        and (
+          bootwright_kubevirt_machine_record.get('role', '') == ''
+          and (
+            bootwright_kubevirt_machine_record.role is not defined
+            or bootwright_kubevirt_machine_record.role is string
+          )
+        )
         and bootwright_kubevirt_machine_record.get('context', '') == bootwright_kubevirt_context_name
+        and bootwright_kubevirt_machine_record.get('host', '') == (bootwright_host_name | default(inventory_hostname))
+        and bootwright_kubevirt_machine_record.get('provider', '') == bootwright_component.providerName
         and bootwright_kubevirt_machine_record.get('cluster', '') == bootwright_current_cluster.name
         and bootwright_kubevirt_machine_record.get('machine', '') == bootwright_component.name
+        and bootwright_kubevirt_machine_record.get('attributes', {}) is mapping
+        and bootwright_kubevirt_machine_record.get('attributes', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        and bootwright_kubevirt_machine_record.get('attributes', {}).get('virtualMachine', '') == bootwright_kubevirt_vm_name
+        and bootwright_kubevirt_machine_record.get('attributes', {}).get('rootDataVolume', '') == bootwright_kubevirt_root_dv_name
       }}
   changed_when: false
   when: bootwright_kubevirt_boot_iso_legacy_candidate | bool
@@ -418,25 +528,54 @@
   failed_when: false
   when: bootwright_kubevirt_iso_source_shared | bool
 
+- name: Classify KubeVirt agent ISO source DataVolume probe
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_iso_source_payload: >-
+      {{ bootwright_kubevirt_iso_source_probe.stdout | default('')
+         | bootwright.core.bootwright_kubernetes_object_probe }}
+  changed_when: false
+  when: bootwright_kubevirt_iso_source_shared | bool
+
 - name: Require a conclusive KubeVirt agent ISO source DataVolume probe
   ansible.builtin.assert:
     that:
       - >-
-        (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0
-        or 'NotFound' in (bootwright_kubevirt_iso_source_probe.stderr | default(''))
+        (
+          bootwright_kubevirt_iso_source_probe.rc is defined
+          and (bootwright_kubevirt_iso_source_probe.rc | int) == 0
+          and bootwright_kubevirt_iso_source_payload.valid | bool
+          and bootwright_kubevirt_iso_source_payload.value.get('apiVersion', '') == 'cdi.kubevirt.io/v1beta1'
+          and bootwright_kubevirt_iso_source_payload.value.get('kind', '') == 'DataVolume'
+          and bootwright_kubevirt_iso_source_payload.value.get('metadata', {}).get('name', '') == bootwright_kubevirt_iso_source_dv_name
+          and bootwright_kubevirt_iso_source_payload.value.get('metadata', {}).get('namespace', '') == bootwright_kubevirt_namespace
+        )
+        or (
+          bootwright_kubevirt_iso_source_probe.rc is defined
+          and (bootwright_kubevirt_iso_source_probe.rc | int) != 0
+          and 'NotFound' in (bootwright_kubevirt_iso_source_probe.stderr | default(''))
+        )
     fail_msg: >-
       Could not determine whether DataVolume {{ bootwright_kubevirt_iso_source_dv_name }}
       exists in namespace {{ bootwright_kubevirt_namespace }}:
-      {{ bootwright_kubevirt_iso_source_probe.stderr | default('kubectl get failed with no detail') }}.
-      Refusing to replace the shared agent ISO media because ownership cannot be proven.
+      {{
+        bootwright_kubevirt_iso_source_payload.reason
+        if (bootwright_kubevirt_iso_source_probe.rc is defined
+            and (bootwright_kubevirt_iso_source_probe.rc | int) == 0)
+        else (bootwright_kubevirt_iso_source_probe.stderr
+              | default('kubectl get failed with no detail', true))
+      }}. Refusing to replace the shared agent ISO media because a malformed,
+      wrong-identity, or failed probe does not prove ownership or absence.
+      Repair host-cluster access, then re-run
+      `{{ bootwright_mutating_invocation }}`.
   when: bootwright_kubevirt_iso_source_shared | bool
 
 - name: Resolve KubeVirt agent ISO source DataVolume identity
   ansible.builtin.set_fact:
     bootwright_kubevirt_iso_source_live: >-
       {{
-        (bootwright_kubevirt_iso_source_probe.stdout | from_json)
-        if (bootwright_kubevirt_iso_source_probe.rc | default(1)) == 0
+        bootwright_kubevirt_iso_source_payload.value
+        if (bootwright_kubevirt_iso_source_probe.rc is defined
+            and (bootwright_kubevirt_iso_source_probe.rc | int) == 0)
         else {}
       }}
   changed_when: false

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -26,13 +26,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	)
 	labels := resolveScopeDestroyLabels(scope, options)
 	commandLabel := labels.commandLabel
-	cmd := &cobra.Command{
-		Use:     labels.use,
-		Short:   labels.short,
-		Long:    options.long,
-		Args:    cobra.NoArgs,
-		Example: options.example,
-	}
+	cmd := newScopeDestroyCommand(labels, options)
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, flagDryRunUsage)
 	addAskBecomePassFlag(cmd, &askBecomePass)
@@ -41,18 +35,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().StringVar(&cephRecovery, "recover-ceph-ownership", "", "recover missing Ceph controller and host ownership evidence before destroy, as comma-separated <StorageCluster>=<fsid> entries; requires a matching selected managed cluster and an exact /etc/ceph/ceph.conf fsid match, and refuses contradictory controller records. Does not bypass OSD-device safety checks and authorizes no named risk of its own")
 	cmd.Flags().BoolVar(&purgeHistory, "purge-history", false, "once a cluster's or machine's teardown succeeds, also delete its retained history: its whole state tree under this context's clusters/<name>/ (installer working directory, install/connection records, kubeconfig, captured cluster secrets) and its per-run task and flow logs under runs/. Scoped identically to --clusters/--machines; a fully successful unscoped destroy instead sweeps the context's whole run history — every archived run, earlier destroy attempts, and crashed runs that never archived a ledger — keeping only this destroy run's own record. Never touches a component outside that scope, a partially-destroyed cluster kept for retry, an unrelated run's shared ledger, or the provider state of a machine layer this run leaves standing (--stage clusters). Does not remove the destroy-authorization substrate-release record or the context's ownership/input-history stores")
 	addVerboseFlag(cmd, &verbose)
-	if options.stageSelector {
-		flags.executable = workspace.ResolveAnsiblePlaybook()
-		addOutputFlagDryRun(cmd, &flags.output)
-		cmd.Flags().StringVar(&stage, "stage", "", fmt.Sprintf("stage to destroy: %s (sub-phases %s are apply-only); default: full lifecycle teardown for the selected work set", strings.Join(converge.DestroyStageNames(), "|"), strings.Join(converge.SubPhaseStageNames(), "|")))
-		registerStageCompletion(cmd, converge.DestroyStageNames())
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy (default: all); without --stage, tears down the selected clusters and their exclusively owned infrastructure; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
-		registerClusterScopeCompletion(cmd, clusterKindAny)
-		cmd.Flags().StringVar(&machinesScope, "machines", "", flagMachinesDestroyUsage)
-		registerMachineScopeCompletion(cmd)
-	} else {
-		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
-	}
+	registerScopeDestroySelectionFlags(cmd, &flags, scope, options.stageSelector, &stage, &machinesScope)
 	cmd.RunE = func(c *cobra.Command, _ []string) (returnErr error) {
 		var runLease, sharedServiceLease *workflow.CommandRunLease
 		defer func() {
@@ -126,15 +109,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 				return failErr(1, err)
 			}
 		}
-		ownershipRecords, ownershipSkipped, err := converge.LoadContextOwnershipRecordsWithWarnings(ctx.OwnershipDir, ctx.Name)
+		allOwnershipRecords, ownershipSkipped, err := ownership.LoadResourcesWithWarnings(ctx.OwnershipDir)
 		if err != nil {
 			return failErr(1, err)
 		}
+		ownershipRecords := ownership.FilterByContext(allOwnershipRecords, ctx.Name)
 		unreadableRecordsReached := len(ownershipSkipped) > 0
 		if unreadableRecordsReached && !dryRun && !auth.allows(authorizeUnreadableRecords) {
 			return failErr(1, unreadableOwnershipRefusal(ctx, ownershipSkipped, invocation))
 		}
-		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ownershipRecords, confirmedCephFSIDs); err != nil {
+		if err := converge.ValidateDestroyCephOwnershipRecovery(sel.RenderState, sel.StorageWorkNames(), ctx.OwnershipDir, ctx.Name, allOwnershipRecords, confirmedCephFSIDs); err != nil {
 			return failErr(1, destroyCephOwnershipRecoveryRefusal(err, ctx.OwnershipDir, invocation))
 		}
 		if err := destroyScopeConflictGates(state, sel, runScope, fullDestroy, ctx.RunsDir, clustersDir, ownershipRecords, invocation); err != nil {
@@ -313,10 +297,26 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err := appendMutatingInvocationExtraVars(&plan, invocation, ""); err != nil {
 				return failErr(1, err)
 			}
+			if err := appendHostSharedServiceManifestExtraVar(&plan, sharedMutation.manifest); err != nil {
+				return failErr(1, err)
+			}
 		}
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
 		if err := requireSharedServiceMutationLease(sharedServiceLease, "before destroy execution"); err != nil {
 			return failErr(1, err)
+		}
+		if !dryRun && !plan.NoRemoteWork && len(sharedMutation.manifest) > 0 {
+			defer func() {
+				returnErr = finishHostSharedServiceOperations(returnErr, func() error {
+					if err := requireSharedServiceMutationLease(sharedServiceLease, "before host-wide operation finalization"); err != nil {
+						return err
+					}
+					if err := converge.FinalizeHostSharedServiceOperations(runContext, stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, become.PasswordFile, plan, sharedMutation.manifest, ownershipRecords, reporter, runLease, invocation.args()); err != nil {
+						return hostSharedServiceFinalizationRefusal(err, invocation)
+					}
+					return nil
+				})
+			}()
 		}
 		var renderResult render.Result
 		switch {

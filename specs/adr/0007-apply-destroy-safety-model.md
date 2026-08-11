@@ -89,6 +89,14 @@ target: ownership records on the controller, substrate markers (libvirt domain
 XML, vSphere annotations, KubeVirt labels, managed-OS install markers), and
 live container provenance labels for shared bastion services. Foreign fails
 closed in every mode; `--mode rebuild` rebuilds owned drift but never adopts.
+The controller record locates a live target but cannot overrule it. Every apply
+reuse and every declared or orphan removal re-probes the external object and
+accepts only a successful `NotFound` or exact live manager/context/resource
+identity; each disk or volume in a composite target is classified separately.
+A failed, forbidden, empty, malformed, or suppressed probe is unknown state,
+and a stale record with a matching name cannot authorize mutation of a foreign
+replacement. Evidence is removed only after the live remover succeeds or the
+same conclusive probe proves absence.
 Unprovable is not absent: a live host that answers SSH but rejects every probe
 identity (or presents a changed host key) cannot prove ownership either way,
 so the managed-OS install fails closed on it exactly as on a foreign host —
@@ -116,7 +124,7 @@ storage role wipes only clusters named in
 only under-authorize. Relaxations are narrow, explicit,
 and named one risk at a time: on destroy, `--authorize unowned-vms` lifts the
 per-VM marker refusals and `--authorize unowned-networks` lifts the refusals on
-the cluster's libvirt network and its KubeVirt DataVolumes (a wider blast radius,
+the cluster's libvirt network, its KubeVirt DataVolumes, and their PersistentVolumeClaims (a wider blast radius,
 so a separate word), and nothing relaxes device data-safety checks. A lost Ceph cluster marker is
 recovered only through an operator-supplied `<StorageCluster>=<fsid>`
 confirmation, because an ownership attestation naming an exact identity is
@@ -210,6 +218,15 @@ input; the arbiter verb passes the already-held lease into both embedded
 workflows. Losing the lease (takeover after a stall, or a failed heartbeat save)
 stops the run rather than risking a double mutator.
 
+Lease acquire, owner-checked heartbeat, and owner-checked removal are serialized
+as one cross-process transaction so a prior holder cannot overwrite or delete a
+replacement. Automatic stale takeover is limited to a lease identifying the
+current controller and positive proof that its recorded PID stopped or was
+reused with a different available process-start identity. A stale heartbeat
+with a live PID and missing or unreadable identity fails closed. Another or
+unknown controller requires operator inspection and manual repair or removal
+only after proving its run is no longer active.
+
 Apply/destroy work that can change a machine-hosted shared service also acquires
 a controller-global shared-service lease after resolving its exact consequence.
 It holds both leases through the decisive sibling-store scan, host mutation, and
@@ -217,6 +234,40 @@ evidence cleanup. The global layer closes the simultaneous-first-apply race
 between different contexts; the host-side context claim and container label
 close the partial-first-apply case after the lease is released. Nested runners
 bind cancellation from both leases instead of replacing the caller context.
+Self-contained service rendering does not waive this cross-context boundary:
+provider-global emulated-BMC units and pools use the same lease, durable claim,
+and live exact-identity refusal. The BMC claim is a full immutable service
+composite published before the first service-specific mutation: it binds the
+context and provider host, libvirt URI and pool, ports, units, paths,
+configuration identity, and firewall consequence. Recovery after interruption
+uses that persisted composite rather than current desired values. Teardown
+requires conclusive loaded-unit, pool, path, and mount evidence and retains the
+claim and controller record through systemd reload and absence verification.
+
+The controller-global lease is not a distributed lock. Each command that can
+mutate a shared host service also derives a unique attempt identity from its
+held command lease and acquires one atomic host-global operation guard before
+the first selected shared-host mutation. The guard binds the lease plus the
+controller-rendered, digest-bearing full host selection and stays held across
+all selected provider and infra-component plays. Every mutation boundary
+revalidates it; only a command-wide finalizer removes it after the last target
+or controller evidence mutation. A crash leaves an inspectable guard that no
+other controller, mode, or authorization may adopt or expire automatically.
+
+Before either service family publishes its first durable intent, it scans the
+other family's full claims and transitions plus the atomic endpoint registry.
+Durable claims are keyed and conflict-checked by physical consequence,
+including singleton daemons, global paths, pools, and protocol/port endpoints,
+rather than only by authored provider or component names. Each family publishes
+its reconstructible full claim/transition before its endpoint transition
+publishes one atomic active-plus-pending registry and sorted per-slot claims;
+old slots remain through runtime cleanup. Canonical operation, endpoint, claim,
+and transition documents use one exact-content CAS protocol with a
+persistent shared lock, symlink-safe directory walk, and no-replace absent
+publication. Existing-file CAS serializes cooperating Bootwright controllers;
+arbitrary root writers are outside that lock contract and are handled by exact
+re-read and fail-closed mutation gates. These layers close concurrent first
+acquisition, crash-recovery, cross-family, and sequential same-host collisions.
 
 ### Teardown makes maximal progress behind dependency-aware gates
 
@@ -231,10 +282,15 @@ so a failed stage does not block later independent cleanup. Only a few edges are
 hard dependencies, and the reason is always the same: proceeding would erase the
 evidence or the access a retry needs — deleting cluster kubeconfigs or install
 records while an owned VM remains, or deleting a KubeVirt host's substrate while
-its guests survive. An unreachable KubeVirt host holding a recorded guest fails
-closed even under `--authorize unreachable-nodes`; it is not evidence that the guest is
-absent. The decomposed task playbooks are constrained to
+its guests survive. An unreachable KubeVirt host, or a missing captured
+kubeconfig, fails closed for every selected guest even when its controller
+ownership record is missing and even under `--authorize unreachable-nodes`;
+neither condition is evidence that the guest is absent. The decomposed task playbooks are constrained to
 split-equals-monolith: same `--limit`, same extra-vars, own `hosts:` selector.
+An authorized unreachable host is a recorded partial outcome, never a successful
+dependency. Storage and non-storage branches alike retain convergence, install,
+ownership, access, and substrate-release evidence for the exact retry and return
+non-zero after unrelated work has drained.
 
 ## Consequences
 

@@ -1,0 +1,257 @@
+---
+- name: Resolve infra-component transition completion inputs
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_completion_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_infra_transition_completion_host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+    bootwright_infra_transition_completion_desired: >-
+      {{ bootwright_infra_transition_desired | default({})
+         | bootwright.core.bootwright_infra_component_transition_composite(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact infra-component transition completion inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_completion_desired | length > 0
+      - >-
+        (bootwright_infra_transition_claim
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_transition_completion_context,
+             bootwright_infra_transition_completion_host,
+             bootwright_managed_services_dir)) == bootwright_infra_transition_claim
+      - bootwright_infra_transition_claim.desired == bootwright_infra_transition_completion_desired
+      - bootwright_infra_transition_claim_path | default('') | length > 0
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing to complete infra-component apply because its exact desired
+      composite or durable transition authority is missing. The owner record and
+      transition claim were retained. Repair the task inputs and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply') }}`.
+
+- name: Resolve infra-component transition completion ownership identity
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: >-
+      {{ bootwright_infra_transition_completion_desired.provider }}-{{ bootwright_infra_transition_completion_desired.name }}
+    bootwright_ownership_role: owner
+  changed_when: false
+
+- name: Revalidate completed infra-component owner record
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Classify completed infra-component owner record
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_completed_owner: >-
+      {{ (bootwright_ownership_validated_record
+          | bootwright.core.bootwright_infra_component_record_composite(
+              bootwright_managed_services_dir)).transition | default({})
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else {} }}
+  changed_when: false
+
+- name: Require completed infra-component owner before claim retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - bootwright_infra_transition_completed_owner == bootwright_infra_transition_completion_desired
+    fail_msg: >-
+      Refusing to retire the durable infra-component transition because the live
+      owner record does not exactly describe the converged desired composite.
+      The transition claim was retained for an exact retry. Restore trusted
+      ownership evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Read completed infra-component transition recovery record
+  ansible.builtin.include_tasks: validate_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component-transition
+
+- name: Classify completed infra-component transition recovery record
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_completion_recovery: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_transition_record(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else {} }}
+    bootwright_infra_transition_completion_recovery_record: >-
+      {{ bootwright_ownership_validated_record }}
+  changed_when: false
+
+- name: Require exact recovery record before claim retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - bootwright_infra_transition_completion_recovery | length > 0
+      - bootwright_infra_transition_completion_recovery.name == bootwright_ownership_name
+      - >-
+        bootwright_infra_transition_completion_recovery.kind
+        == bootwright_infra_transition_completion_desired.kind
+      - >-
+        bootwright_infra_transition_completion_recovery.claimPath
+        == bootwright_infra_transition_claim_path
+    fail_msg: >-
+      Refusing to retire the infra-component transition because its recovery
+      ownership record is absent, changed, or future-shaped. The completed owner
+      and exact transition claim were retained. Restore trusted evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Inspect durable infra-component transition before retirement
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_transition_claim_path }}"
+    follow: false
+  register: bootwright_infra_transition_completion_claim_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read durable infra-component transition before retirement
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_transition_claim_path }}"
+  register: bootwright_infra_transition_completion_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_transition_completion_claim_stat.stat.exists | default(false) | bool
+
+- name: Require unchanged durable infra-component transition before retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_completion_claim_stat.stat.exists is defined
+      - bootwright_infra_transition_completion_claim_stat.stat.exists | bool
+      - bootwright_infra_transition_completion_claim_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_transition_completion_claim_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_transition_completion_claim_content.content is defined
+      - >-
+        ((bootwright_infra_transition_completion_claim_content.content | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_transition_completion_context,
+             bootwright_infra_transition_completion_host,
+             bootwright_managed_services_dir)) == bootwright_infra_transition_claim
+    fail_msg: >-
+      Refusing to retire the durable infra-component transition because its live
+      file changed or became unreadable after convergence. The exact owner record
+      was retained. Inspect the live claim and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before role-specific completion boundary cleanup
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Probe role-specific completion boundary while durable transition remains
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_completion_boundary_path }}"
+    follow: false
+  register: bootwright_infra_completion_boundary_stat
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Read role-specific completion boundary while durable transition remains
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_completion_boundary_path }}"
+  register: bootwright_infra_completion_boundary_content
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_infra_completion_boundary_path | default('') | length > 0
+    - bootwright_infra_completion_boundary_stat.stat.exists | default(false) | bool
+
+- name: Require exact role-specific completion boundary before cleanup
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_completion_boundary_stat.stat.exists is defined
+      - bootwright_infra_completion_boundary_stat.stat.exists | bool
+      - bootwright_infra_completion_boundary_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_completion_boundary_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_completion_boundary_content.content is defined
+      - >-
+        (bootwright_infra_completion_boundary_content.content | b64decode)
+        == bootwright_infra_completion_boundary_expected_content
+    fail_msg: >-
+      Refusing transition settlement because the role-specific completion
+      boundary is absent, unreadable, linked, or changed. The exact local and
+      host-global transitions and desired owner remain for retry. Restore the
+      boundary and re-run `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Clear exact role-specific completion boundary before transition settlement
+  ansible.builtin.file:
+    path: "{{ bootwright_infra_completion_boundary_path }}"
+    state: absent
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Prove role-specific completion boundary absent before transition settlement
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_completion_boundary_path }}"
+    follow: false
+  register: bootwright_infra_completion_boundary_removed_stat
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Require role-specific completion boundary cleanup while recovery remains
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_completion_boundary_removed_stat.stat.exists is defined
+      - not (bootwright_infra_completion_boundary_removed_stat.stat.exists | bool)
+    fail_msg: >-
+      Refusing transition settlement because the role-specific completion
+      boundary was not proven absent. Durable local/global transition evidence
+      remains. Restore host access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: bootwright_infra_completion_boundary_path | default('') | length > 0
+
+- name: Revalidate host operation before local transition evidence retirement
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Retire exact infra-component transition recovery record
+  ansible.builtin.include_tasks: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component-transition
+    bootwright_ownership_expected_record: >-
+      {{ bootwright_infra_transition_completion_recovery_record }}
+
+- name: Retire completed durable local infra-component transition atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_transition_claim_path }}"
+    state: absent
+    expected_contents:
+      - "{{ bootwright_infra_transition_completion_claim_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_infra_transition_completion_claim_cas
+  failed_when: false
+
+- name: Re-probe retired durable local infra-component transition
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_transition_claim_path }}"
+    follow: false
+  register: bootwright_infra_transition_completion_retired_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require exact durable local infra-component transition retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_completion_claim_cas.current_sha256 is defined
+      - bootwright_infra_transition_completion_claim_cas.current_sha256 == ''
+      - bootwright_infra_transition_completion_retired_stat.stat.exists is defined
+      - not (bootwright_infra_transition_completion_retired_stat.stat.exists | bool)
+    fail_msg: >-
+      Refusing to settle the host-global infra-component claim because the exact
+      local transition CAS did not prove its recovery file absent. The desired
+      owner and host-global applying claim were retained. Inspect the CAS detail
+      {{ bootwright_infra_transition_completion_claim_cas.msg | default('winner differs') }}
+      and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Retire old-only infra-component endpoint claims after external cleanup
+  ansible.builtin.include_tasks: retire_infra_component_endpoint_claims.yml
+
+- name: Settle authoritative host-global infra-component claim last in this role
+  ansible.builtin.include_tasks: settle_infra_component_global_claim.yml

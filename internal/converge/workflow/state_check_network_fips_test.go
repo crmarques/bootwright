@@ -44,7 +44,7 @@ func TestStateCheckClassifiesReferencedNetworkConfigNICEditAsRebuild(t *testing.
 	runsDir := t.TempDir()
 	recordStateCheckTask(t, runsDir, baseTask)
 
-	matched, err := StateCheck([]ApplyTask{baseTask}, ApplyTarget{}, base, runsDir)
+	matched, err := StateCheck([]ApplyTask{baseTask}, ApplyTarget{}, base, runsDir, "test")
 	if err != nil {
 		t.Fatalf("state check unchanged NetworkConfig: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestStateCheckClassifiesReferencedNetworkConfigNICEditAsRebuild(t *testing.
 	changedTask.State = changed
 	changedTask.StructuralHashVars = containerClusterInstallStructuralHashVars(changed)
 
-	report, err := StateCheck([]ApplyTask{changedTask}, ApplyTarget{}, changed, runsDir)
+	report, err := StateCheck([]ApplyTask{changedTask}, ApplyTarget{}, changed, runsDir, "test")
 	if err != nil {
 		t.Fatalf("state check changed NetworkConfig: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestStateCheckClassifiesCephFIPSPostureEditAsRebuild(t *testing.T) {
 	runsDir := t.TempDir()
 	recordStateCheckTask(t, runsDir, baseTask)
 
-	matched, err := StateCheck([]ApplyTask{baseTask}, ApplyTarget{}, base, runsDir)
+	matched, err := StateCheck([]ApplyTask{baseTask}, ApplyTarget{}, base, runsDir, "test")
 	if err != nil {
 		t.Fatalf("state check unchanged Ceph FIPS posture: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestStateCheckClassifiesCephFIPSPostureEditAsRebuild(t *testing.T) {
 	changedTask.Entry.ClusterKind = ApplyClusterKindStorage
 	changedTask.Entry.Label = "storage ceph-bm"
 
-	report, err := StateCheck([]ApplyTask{changedTask}, ApplyTarget{}, changed, runsDir)
+	report, err := StateCheck([]ApplyTask{changedTask}, ApplyTarget{}, changed, runsDir, "test")
 	if err != nil {
 		t.Fatalf("state check changed Ceph FIPS posture: %v", err)
 	}

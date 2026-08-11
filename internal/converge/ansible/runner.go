@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -340,27 +341,215 @@ func appendCallbackEnv(env []string, collectionsPath string, classifyUnreachable
 }
 
 type runResultRecord struct {
-	Status string `json:"status"`
+	SchemaVersion  int                             `json:"schemaVersion"`
+	Host           string                          `json:"host"`
+	Status         string                          `json:"status"`
+	Completion     bool                            `json:"completion"`
+	ProcessedHosts []string                        `json:"processedHosts"`
+	Hosts          map[string]RunResultHostSummary `json:"hosts"`
 }
 
-func runResultIsUnreachable(path string) bool {
+type RunResultRecord struct {
+	Host       string
+	Status     string
+	Completion bool
+}
+
+type RunResultHostSummary struct {
+	OK               int `json:"ok"`
+	Failed           int `json:"failed"`
+	Skipped          int `json:"skipped"`
+	Unreachable      int `json:"unreachable"`
+	ProbeUnreachable int `json:"probeUnreachable"`
+	Completed        int `json:"completed"`
+}
+
+func ReadRunResult(path string) ([]RunResultRecord, error) {
+	return readRunResult(path, nil, false)
+}
+
+func ReadRunResultForHosts(path string, expectedHosts []string) ([]RunResultRecord, error) {
+	return readRunResult(path, expectedHosts, true)
+}
+
+func readRunResult(path string, expectedHosts []string, bindExpected bool) ([]RunResultRecord, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect Ansible run result %s: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("ansible run result %s is not a regular non-symlink file", path)
+	}
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return nil, fmt.Errorf("read Ansible run result %s: %w", path, err)
 	}
-	sawUnreachable := false
-	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+	var out []RunResultRecord
+	observed := map[string]RunResultHostSummary{}
+	var terminal map[string]RunResultHostSummary
+	var terminalProcessed []string
+	terminalLine := -1
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	for lineNumber, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		var record runResultRecord
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return false
+		decoder := json.NewDecoder(strings.NewReader(line))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&record); err != nil {
+			return nil, fmt.Errorf("decode Ansible run result %s line %d: %w", path, lineNumber+1, err)
 		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			return nil, fmt.Errorf("decode Ansible run result %s line %d: trailing JSON value", path, lineNumber+1)
+		}
+		record.Host = strings.TrimSpace(record.Host)
+		record.Status = strings.TrimSpace(record.Status)
+		if record.Status == "terminal" {
+			if terminal != nil {
+				return nil, fmt.Errorf("ansible run result %s has duplicate terminal proof", path)
+			}
+			if record.SchemaVersion != 1 || record.Host != "" || record.Completion || record.Hosts == nil || record.ProcessedHosts == nil {
+				return nil, fmt.Errorf("ansible run result %s has invalid terminal proof", path)
+			}
+			terminal = record.Hosts
+			terminalProcessed = record.ProcessedHosts
+			terminalLine = lineNumber
+			continue
+		}
+		if record.SchemaVersion != 0 || record.Hosts != nil || record.ProcessedHosts != nil {
+			return nil, fmt.Errorf("ansible run result %s line %d has invalid event shape", path, lineNumber+1)
+		}
+		if record.Host == "" {
+			return nil, fmt.Errorf("ansible run result %s line %d has no host identity", path, lineNumber+1)
+		}
+		switch record.Status {
+		case "ok":
+			counts := observed[record.Host]
+			counts.OK++
+			if record.Completion {
+				counts.Completed++
+			}
+			observed[record.Host] = counts
+		case "failed":
+			if record.Completion {
+				return nil, fmt.Errorf("ansible run result %s line %d has completion on failed event", path, lineNumber+1)
+			}
+			counts := observed[record.Host]
+			counts.Failed++
+			observed[record.Host] = counts
+		case "skipped":
+			if record.Completion {
+				return nil, fmt.Errorf("ansible run result %s line %d has completion on skipped event", path, lineNumber+1)
+			}
+			counts := observed[record.Host]
+			counts.Skipped++
+			observed[record.Host] = counts
+		case "unreachable":
+			if record.Completion {
+				return nil, fmt.Errorf("ansible run result %s line %d has completion on unreachable event", path, lineNumber+1)
+			}
+			counts := observed[record.Host]
+			counts.Unreachable++
+			observed[record.Host] = counts
+		case "probe-unreachable":
+			if record.Completion {
+				return nil, fmt.Errorf("ansible run result %s line %d has completion on probe-unreachable event", path, lineNumber+1)
+			}
+			counts := observed[record.Host]
+			counts.ProbeUnreachable++
+			observed[record.Host] = counts
+		default:
+			return nil, fmt.Errorf("ansible run result %s line %d has invalid status %q", path, lineNumber+1, record.Status)
+		}
+		out = append(out, RunResultRecord{Host: record.Host, Status: record.Status, Completion: record.Completion})
+	}
+	if terminal == nil {
+		return nil, fmt.Errorf("ansible run result %s has no terminal proof", path)
+	}
+	if terminalLine != len(lines)-1 {
+		return nil, fmt.Errorf("ansible run result %s terminal proof is not the last record", path)
+	}
+	processed, err := normalizedRunResultHosts(terminalProcessed)
+	if err != nil {
+		return nil, fmt.Errorf("ansible run result %s terminal processed hosts: %w", path, err)
+	}
+	if len(terminal) != len(processed) {
+		return nil, fmt.Errorf("ansible run result %s terminal host set does not match its processed host set", path)
+	}
+	processedSet := make(map[string]bool, len(processed))
+	for _, host := range processed {
+		processedSet[host] = true
+	}
+	for host, counts := range terminal {
+		trimmed := strings.TrimSpace(host)
+		if host != trimmed || trimmed == "" || !processedSet[host] || counts.OK < 0 || counts.Failed < 0 || counts.Skipped < 0 || counts.Unreachable < 0 || counts.ProbeUnreachable < 0 || counts.Completed < 0 || observed[host] != counts {
+			return nil, fmt.Errorf("ansible run result %s terminal summary for host %q does not match its event stream", path, host)
+		}
+	}
+	for host := range observed {
+		if !processedSet[host] {
+			return nil, fmt.Errorf("ansible run result %s event host %q is absent from its processed host set", path, host)
+		}
+	}
+	if bindExpected {
+		expected, err := normalizedRunResultHosts(expectedHosts)
+		if err != nil {
+			return nil, fmt.Errorf("expected Ansible run-result hosts: %w", err)
+		}
+		if !slices.Equal(processed, expected) {
+			return nil, fmt.Errorf("ansible run result %s processed hosts %v do not match selected hosts %v", path, processed, expected)
+		}
+		for _, host := range expected {
+			counts := terminal[host]
+			if counts.Failed > 0 {
+				return nil, fmt.Errorf("ansible run result %s selected host %q has failed destroy events", path, host)
+			}
+			if counts.Unreachable > 0 {
+				if counts.Completed != 0 {
+					return nil, fmt.Errorf("ansible run result %s selected host %q has both decisive unreachable and completion evidence", path, host)
+				}
+				continue
+			}
+			if counts.Completed == 0 && counts.ProbeUnreachable > 0 {
+				continue
+			}
+			if counts.Completed != 1 {
+				return nil, fmt.Errorf("ansible run result %s selected host %q has %d exact destroy completion events, want 1", path, host, counts.Completed)
+			}
+		}
+	}
+	return out, nil
+}
+
+func normalizedRunResultHosts(hosts []string) ([]string, error) {
+	out := make([]string, 0, len(hosts))
+	seen := map[string]bool{}
+	for _, host := range hosts {
+		trimmed := strings.TrimSpace(host)
+		if host != trimmed || trimmed == "" || seen[trimmed] {
+			return nil, fmt.Errorf("host list contains invalid or duplicate identity %q", host)
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func runResultIsUnreachable(path string) bool {
+	records, err := ReadRunResult(path)
+	if err != nil {
+		return false
+	}
+	sawUnreachable := false
+	for _, record := range records {
 		switch record.Status {
 		case "unreachable":
 			sawUnreachable = true
-		case "skipped":
+		case "ok", "skipped", "probe-unreachable":
+		case "failed":
+			return false
 		default:
 			return false
 		}

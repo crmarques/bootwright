@@ -52,6 +52,9 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 			if name == converge.ApplyReclaimInvocationExtraVar && strings.Contains(want, "/dev/disk/by-id/osd one") {
 				want = converge.ApplyReclaimInvocationSentinel
 			}
+			if name == converge.ApplyFullInvocationExtraVar && strings.Contains(want, "/dev/disk/by-id/osd one") {
+				continue
+			}
 			if !strings.Contains(value, want) {
 				t.Fatalf("%s = %q, missing %q", name, value, want)
 			}
@@ -62,6 +65,9 @@ func TestMutatingInvocationExtraVarsPreserveResolvedApplyIntent(t *testing.T) {
 	rebuild := values[converge.ApplyRebuildInvocationExtraVar].(string)
 	if strings.Contains(full, "--stage") || strings.Contains(full, "--through") {
 		t.Fatalf("full retry retained a stage range: %q", values[converge.ApplyFullInvocationExtraVar])
+	}
+	if strings.Contains(full, "--reclaim-devices") || !strings.Contains(full, "--mode reconcile") {
+		t.Fatalf("full recovery retry retained one-shot device reclamation or omitted reconcile mode: %q", full)
 	}
 	if !strings.Contains(throughBase, "--through base") || strings.Contains(throughBase, "--stage") {
 		t.Fatalf("through-base retry = %q", values[converge.ApplyThroughBaseInvocationExtraVar])
@@ -177,7 +183,7 @@ func TestControllerNameResolutionTaskInvocationFactsMatchTypedRecovery(t *testin
 	}
 }
 
-func TestMutatingInvocationExtraVarsExposeOnlyExactDestroyRetry(t *testing.T) {
+func TestMutatingInvocationExtraVarsExposeExactDestroyRecovery(t *testing.T) {
 	invocation := resolvedInvocation{
 		verb:        invocationDestroy,
 		contextName: "prod",
@@ -201,6 +207,9 @@ func TestMutatingInvocationExtraVarsExposeOnlyExactDestroyRetry(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("destroy retry = %q, missing %q", got, want)
 		}
+	}
+	if _, exists := values[converge.ApplyFullInvocationExtraVar]; exists {
+		t.Fatalf("destroy published an unusable cross-verb apply recovery: %v", values)
 	}
 }
 

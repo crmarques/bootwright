@@ -1,0 +1,230 @@
+---
+- name: Require exclusive host operation before destroy transition publication
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Classify controller infra-component owner for destroy transition
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_owner_composite: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_record_composite(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+  changed_when: false
+
+- name: Resolve phase-free controller infra-component side
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_owner_side: >-
+      {{ bootwright_infra_destroy_owner_composite.transition
+         | combine({'attributes':
+             (bootwright_infra_destroy_owner_composite.transition.attributes
+              | dict2items
+              | rejectattr('key', 'equalto', 'destroyPhase')
+              | list
+              | items2dict)})
+         if bootwright_infra_destroy_owner_composite | length > 0
+         else {} }}
+    bootwright_infra_global_claim_context: "{{ bootwright_infra_destroy_transition_context }}"
+    bootwright_infra_global_claim_host: "{{ bootwright_infra_destroy_transition_host }}"
+    bootwright_infra_global_claim_key: >-
+      {{ bootwright_infra_destroy_provider
+         | bootwright.core.bootwright_infra_component_claim_digest(
+             bootwright_infra_destroy_name) }}
+    bootwright_infra_global_claim_path: >-
+      /var/lib/bootwright/shared-services/infra-component/claims/{{
+        bootwright_infra_destroy_provider
+        | bootwright.core.bootwright_infra_component_claim_digest(
+            bootwright_infra_destroy_name) }}.json
+  changed_when: false
+
+- name: Probe bounded Bootwright root before destroy claim publication
+  ansible.builtin.stat:
+    path: /var/lib/bootwright
+    follow: false
+  register: bootwright_infra_destroy_trusted_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Probe authoritative host-global infra-component destroy claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_claim_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read authoritative host-global infra-component destroy claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_global_claim_stat.stat.exists | default(false) | bool
+
+- name: Classify authoritative host-global infra-component destroy claim
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_existing: >-
+      {{ (bootwright_infra_global_claim_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact destroy transition inputs and global claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_key is match('^[a-f0-9]{64}$')
+      - bootwright_infra_destroy_trusted_root_stat.stat.exists is defined
+      - bootwright_infra_destroy_trusted_root_stat.stat.exists | bool
+      - bootwright_infra_destroy_trusted_root_stat.stat.isdir | default(false) | bool
+      - not (bootwright_infra_destroy_trusted_root_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_destroy_trusted_root_stat.stat.pw_name | default('') == 'root'
+      - bootwright_infra_destroy_trusted_root_stat.stat.gr_name | default('') == 'root'
+      - bootwright_infra_destroy_trusted_root_stat.stat.mode | default('') is match('^0[0-7][0145][0145]$')
+      - bootwright_infra_global_claim_stat.stat.exists is defined
+      - >-
+        not (bootwright_infra_global_claim_stat.stat.exists | bool)
+        or (
+          bootwright_infra_global_claim_stat.stat.isreg | default(false) | bool
+          and not (bootwright_infra_global_claim_stat.stat.islnk | default(false) | bool)
+          and bootwright_infra_global_claim_content.content is defined
+          and bootwright_infra_global_claim_existing | length > 0
+          and bootwright_infra_global_claim_existing.name
+              == bootwright_infra_destroy_transition_name
+        )
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+        or (
+          bootwright_infra_destroy_owner_composite | length > 0
+          and bootwright_infra_destroy_owner_composite.kind
+              == bootwright_infra_destroy_kind
+          and bootwright_infra_destroy_owner_composite.name
+              == bootwright_infra_destroy_transition_name
+        )
+      - >-
+        bootwright_infra_global_claim_existing | length > 0
+        or bootwright_infra_destroy_owner_side | length > 0
+        or bootwright_infra_destroy_transition_claim | length > 0
+    fail_msg: >-
+      Refusing infra-component teardown because no exact current-context owner,
+      apply transition, or authoritative host-global claim proves the selected
+      component, or the bounded trusted root/global claim is unreadable, linked,
+      foreign, malformed, or contradictory. No endpoint, component state, or
+      ownership evidence was changed. Restore trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve authoritative host-global infra-component destroy transition
+  ansible.builtin.set_fact:
+    bootwright_infra_global_claim_next: >-
+      {{ bootwright_infra_global_claim_existing
+         | bootwright.core.bootwright_infra_component_global_destroy_next(
+             bootwright_infra_destroy_owner_side,
+             bootwright_infra_destroy_transition_claim,
+             bootwright_infra_destroy_kind,
+             bootwright_infra_destroy_provider,
+             bootwright_infra_destroy_name,
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require closed authoritative infra-component destroy transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_next | length > 0
+      - bootwright_infra_global_claim_next.state | default('') == 'destroying'
+      - bootwright_infra_global_claim_next.name == bootwright_infra_destroy_transition_name
+    fail_msg: >-
+      Refusing infra-component teardown because the controller owner, local
+      transition, and host-global claim do not form one compatible exact destroy
+      side set. No endpoint or component state was changed. Inspect the competing
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Bind infra-component destroy transition to command selection
+  ansible.builtin.include_tasks: bind_infra_component_host_operation.yml
+
+- name: Preflight every shared-service consequence before infra destroy publication
+  ansible.builtin.include_tasks: preflight_host_shared_service_consequences.yml
+  vars:
+    bootwright_host_prepublication_candidate_family: infra-component
+    bootwright_host_prepublication_candidate: "{{ bootwright_infra_global_claim_next }}"
+
+- name: Refuse collisions before infra-component destroy transition publication
+  ansible.builtin.include_tasks: require_infra_component_global_consequences.yml
+  vars:
+    bootwright_infra_operation_claim: "{{ bootwright_infra_global_claim_next }}"
+
+- name: Publish authoritative host-global infra-component destroying claim atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    state: present
+    desired_content: "{{ (bootwright_infra_global_claim_next | to_nice_json) ~ '\n' }}"
+    expected_contents: >-
+      {{ [bootwright_infra_global_claim_content.content | b64decode]
+         if (bootwright_infra_global_claim_stat.stat.exists | bool)
+         else [] }}
+    allow_absent: "{{ not (bootwright_infra_global_claim_stat.stat.exists | bool) }}"
+    create_parents: true
+    trusted_root: /var/lib/bootwright
+  register: bootwright_infra_global_destroy_claim_cas
+  failed_when: false
+
+- name: Re-read authoritative host-global infra-component destroying winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_destroy_claim_winner_content
+  changed_when: false
+  failed_when: false
+
+- name: Classify authoritative host-global infra-component destroying winner
+  ansible.builtin.set_fact:
+    bootwright_infra_global_destroy_claim_winner: >-
+      {{ (bootwright_infra_global_destroy_claim_winner_content.content
+          | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact authoritative infra-component destroying winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_destroy_claim_cas.current_sha256 is defined
+      - bootwright_infra_global_destroy_claim_winner_content.content is defined
+      - bootwright_infra_global_destroy_claim_winner == bootwright_infra_global_claim_next
+    fail_msg: >-
+      Refusing infra-component teardown because atomic host-global transition
+      publication did not re-read this exact destroying side set. CAS detail:
+      {{ bootwright_infra_global_destroy_claim_cas.msg | default('winner differs') }}.
+      No endpoint or component mutation followed. Inspect the competing claim and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Acquire every destroy-side endpoint before external mutation
+  ansible.builtin.include_tasks: acquire_infra_component_endpoint_claims.yml
+
+- name: Resolve exact host-global infra-component destroy port ledger
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_global_port_decision: >-
+      {{ bootwright_infra_global_claim_next
+         | bootwright.core.bootwright_infra_component_global_ports }}
+    bootwright_infra_destroy_global_ports: >-
+      {{ (bootwright_infra_global_claim_next
+          | bootwright.core.bootwright_infra_component_global_ports).ports
+         | default([]) }}
+  changed_when: false
+
+- name: Require exact host-global infra-component destroy port ledger
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_destroy_global_port_decision.valid | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component teardown because its authoritative destroying
+      claim cannot produce one exact canonical endpoint ledger. No component or
+      firewall state was changed. Repair trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.

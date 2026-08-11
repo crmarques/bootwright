@@ -1,0 +1,113 @@
+---
+- name: Revalidate BMC authority before claim completion
+  ansible.builtin.import_tasks: mutation_guard.yml
+
+- name: Re-probe BMC claim before ownership completion
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Revalidate BMC owner record before claim completion
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
+  vars:
+    bootwright_ownership_kind: bmc-emulator
+    bootwright_ownership_name: "{{ bootwright_bmc_provider_name }}"
+    bootwright_ownership_role: owner
+
+- name: Require desired BMC owner before claim completion
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - >-
+        (bootwright_ownership_validated_record
+         | bootwright.core.bootwright_bmc_record_claim_identity(
+             bootwright_bmc_current_context,
+             bootwright_bmc_provider_name,
+             bootwright_host_name | default(inventory_hostname),
+             bootwright_provider_state_dir))
+        == bootwright_bmc_desired_claim
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or (
+          bootwright_bmc_claim_transition
+          == bootwright_bmc_apply_transition_envelope
+          and bootwright_bmc_claim_transition.pending == bootwright_bmc_desired_claim
+        )
+    fail_msg: >-
+      Refusing BMC claim completion because the live owner, claim, and
+      transition no longer prove the exact desired composite. Runtime and
+      evidence were retained. Re-read the competing state and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Atomically advance BMC full claim to desired state
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_bmc_claim_path }}"
+    state: present
+    desired_content: "{{ bootwright_bmc_desired_claim | to_nice_json }}\n"
+    expected_contents:
+      - "{{ bootwright_bmc_claim_document_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /
+  register: bootwright_bmc_complete_claim_cas
+  failed_when: false
+
+- name: Re-probe advanced BMC full claim
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Require desired BMC full claim CAS winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_complete_claim_cas.previous_sha256 is defined
+      - bootwright_bmc_complete_claim_cas.current_sha256 is defined
+      - bootwright_bmc_claim_record == bootwright_bmc_desired_claim
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or bootwright_bmc_claim_transition == bootwright_bmc_apply_transition_envelope
+    fail_msg: >-
+      Refusing BMC claim completion because another mutation won or held the
+      full-claim CAS: {{ bootwright_bmc_complete_claim_cas.msg | default('winner differs') }}.
+      The transition remains recoverable. Re-run
+      `{{ bootwright_mutating_invocation }}` after inspecting the winner.
+
+- name: Revalidate BMC authority before transition completion
+  ansible.builtin.import_tasks: mutation_guard.yml
+
+- name: Atomically complete exact BMC transition
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_bmc_transition_path }}"
+    state: absent
+    expected_contents: >-
+      {{
+        [bootwright_bmc_transition_document_content.content | b64decode]
+        if (bootwright_bmc_transition_document_stat.stat.exists | bool)
+        else []
+      }}
+    allow_absent: true
+    create_parents: false
+    trusted_root: /
+  register: bootwright_bmc_complete_transition_cas
+  failed_when: false
+
+- name: Re-probe completed BMC claim
+  ansible.builtin.import_tasks: claim_probe.yml
+
+- name: Require exact steady BMC claim after completion
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_complete_transition_cas.previous_sha256 is defined
+      - bootwright_bmc_complete_transition_cas.current_sha256 is defined
+      - bootwright_bmc_complete_transition_cas.current_sha256 == ''
+      - bootwright_bmc_claim_record == bootwright_bmc_desired_claim
+      - bootwright_bmc_claim_transition | length == 0
+      - bootwright_bmc_claim_context == bootwright_bmc_current_context
+    fail_msg: >-
+      BMC runtime converged, but the host-atomic claim did not settle on the
+      desired owner composite. Inspect the claim and re-run
+      `{{ bootwright_mutating_invocation }}`. CAS result:
+      {{ bootwright_bmc_complete_transition_cas.msg | default('winner differs') }}.
+      No later run may consume
+      contradictory transition evidence.

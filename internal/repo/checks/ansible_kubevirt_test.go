@@ -95,7 +95,7 @@ func TestKubeVirtBootUploadsSharedAgentISOOncePerCluster(t *testing.T) {
 	if !ok {
 		t.Fatalf("shared media probe verdict must be an assert, got %v", tasks[conclusiveIdx])
 	}
-	if got := fmt.Sprint(conclusive["that"]); !strings.Contains(got, "NotFound") || !strings.Contains(got, "rc | default(1)) == 0") {
+	if got := fmt.Sprint(conclusive["that"]); !strings.Contains(got, "NotFound") || !strings.Contains(got, "rc is defined") || !strings.Contains(got, "| int) == 0") || !strings.Contains(got, "| int) != 0") {
 		t.Fatalf("shared media probe must refuse on an unprobeable result instead of treating it as absent, got %v", conclusive["that"])
 	}
 
@@ -326,10 +326,46 @@ func TestKubeVirtRefusesAReusedRootClaimWhoseVolumeModeDriftedFromItsStorageProf
 
 	claimIdx := findAnsibleTask(t, tasks, "Read reused KubeVirt root claim volume mode")
 	profileIdx := findAnsibleTask(t, tasks, "Read KubeVirt storage profile volume mode")
+	claimConclusiveIdx := findAnsibleTask(t, tasks, "Require a conclusive reused KubeVirt root claim volume mode probe")
+	profileConclusiveIdx := findAnsibleTask(t, tasks, "Require a conclusive KubeVirt storage profile volume mode probe")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse a reused KubeVirt root claim whose volume mode drifted from its storage profile")
 	vmIdx := findAnsibleTask(t, tasks, "Apply KubeVirt VirtualMachine")
-	if claimIdx > refuseIdx || profileIdx > refuseIdx || refuseIdx > vmIdx {
-		t.Fatalf("the volume-mode refusal must probe both modes and fail before the VirtualMachine is applied (claim=%d profile=%d refuse=%d vm=%d)", claimIdx, profileIdx, refuseIdx, vmIdx)
+	if !(claimIdx < claimConclusiveIdx && profileIdx < profileConclusiveIdx && claimConclusiveIdx < refuseIdx && profileConclusiveIdx < refuseIdx && refuseIdx < vmIdx) {
+		t.Fatalf("both reused-volume probes must resolve conclusively before drift is judged and before the VirtualMachine is applied (claim=%d claimConclusive=%d profile=%d profileConclusive=%d refuse=%d vm=%d)", claimIdx, claimConclusiveIdx, profileIdx, profileConclusiveIdx, refuseIdx, vmIdx)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		probeIdx int
+		gateIdx  int
+	}{
+		{name: "root claim", probeIdx: claimIdx, gateIdx: claimConclusiveIdx},
+		{name: "storage profile", probeIdx: profileIdx, gateIdx: profileConclusiveIdx},
+	} {
+		if tasks[tc.probeIdx]["failed_when"] != false {
+			t.Fatalf("the %s probe must defer its verdict to an actionable assertion, got failed_when=%v", tc.name, tasks[tc.probeIdx]["failed_when"])
+		}
+		gate, ok := tasks[tc.gateIdx]["ansible.builtin.assert"].(map[string]any)
+		if !ok {
+			t.Fatalf("the %s probe verdict must be an assert, got %v", tc.name, tasks[tc.gateIdx])
+		}
+		that := fmt.Sprint(gate["that"])
+		for _, want := range []string{"rc | default(1)) == 0", "stdout", "length > 0", "Block", "Filesystem"} {
+			if !strings.Contains(that, want) {
+				t.Fatalf("the %s probe must require a successful nonempty live answer (missing %q), got %v", tc.name, want, gate["that"])
+			}
+		}
+		for _, want := range []string{"Refusing to apply", "bootwright_mutating_invocation", "same bootwright apply invocation"} {
+			if !strings.Contains(fmt.Sprint(gate["fail_msg"]), want) {
+				t.Fatalf("the %s probe refusal must fail closed with an exact retry (missing %q), got %v", tc.name, want, gate["fail_msg"])
+			}
+		}
+		guard := fmt.Sprint(tasks[tc.gateIdx]["when"])
+		for _, want := range []string{"bootwright_kubevirt_root_dv_exists", "bootwright_kubevirt_rebuild_authorized", "bootwright_kubevirt_storage_class"} {
+			if !strings.Contains(guard, want) {
+				t.Fatalf("the %s probe verdict must apply exactly to a reused configured-class disk (missing %q), got when=%v", tc.name, want, tasks[tc.gateIdx]["when"])
+			}
+		}
 	}
 
 	assertion, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
@@ -346,7 +382,7 @@ func TestKubeVirtRefusesAReusedRootClaimWhoseVolumeModeDriftedFromItsStorageProf
 		}
 	}
 	guard := fmt.Sprint(tasks[refuseIdx]["when"])
-	for _, want := range []string{"bootwright_kubevirt_root_dv_exists", "bootwright_kubevirt_rebuild_authorized"} {
+	for _, want := range []string{"bootwright_kubevirt_root_dv_exists", "bootwright_kubevirt_rebuild_authorized", "bootwright_kubevirt_storage_class"} {
 		if !strings.Contains(guard, want) {
 			t.Fatalf("the volume-mode refusal applies only to a claim this run reuses; an absent disk is about to be created correctly and an authorized rebuild deletes it first (missing %q), got when=%v", want, tasks[refuseIdx]["when"])
 		}
@@ -555,22 +591,33 @@ func TestKubeVirtDestroyReleasesSharedAgentISOSourceAtClusterScope(t *testing.T)
 	}
 
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Tear down KubeVirt guest on the reachable host cluster")], "block")
-	probeIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume ownership labels")
-	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt DataVolume")
+	probeIdx := findAnsibleTask(t, tasks, "Read KubeVirt DataVolume identities")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a foreign KubeVirt DataVolume")
 	sourceDeleteIdx := findAnsibleTask(t, tasks, "Delete the shared KubeVirt agent ISO source DataVolume")
 	if !(probeIdx < refuseIdx && refuseIdx < sourceDeleteIdx) {
 		t.Fatalf("shared media must be probed and ownership-verified before deletion (probe=%d refuse=%d sourceDelete=%d)", probeIdx, refuseIdx, sourceDeleteIdx)
 	}
 	probeLoop := fmt.Sprint(tasks[probeIdx]["loop"])
-	if !strings.Contains(probeLoop, "bootwright_kubevirt_iso_source_dv_name") || !strings.Contains(probeLoop, "bootwright_kubevirt_cluster_scope_teardown") {
-		t.Fatalf("the per-item DataVolume probe must cover the shared media exactly when the destroy is cluster-scoped, got loop=%v", tasks[probeIdx]["loop"])
+	if !strings.Contains(probeLoop, "bootwright_kubevirt_destroy_storage_targets") {
+		t.Fatalf("the per-item DataVolume probe must consume the scope-aware exact identity table, got loop=%v", tasks[probeIdx]["loop"])
 	}
 	sourceWhen := fmt.Sprint(tasks[sourceDeleteIdx]["when"])
 	if !strings.Contains(sourceWhen, "bootwright_kubevirt_cluster_scope_teardown") {
 		t.Fatalf("shared media deletion must be gated on cluster scope, got when=%v", tasks[sourceDeleteIdx]["when"])
 	}
-	if !strings.Contains(sourceWhen, "bootwright_kubevirt_dv_owner") || !strings.Contains(sourceWhen, "bootwright_kubevirt_iso_source_dv_name") {
+	if !strings.Contains(sourceWhen, "bootwright_kubevirt_dv_probe") || !strings.Contains(sourceWhen, "bootwright_kubevirt_iso_source_dv_name") {
 		t.Fatalf("shared media deletion must stay gated on its own per-item probe, got when=%v", tasks[sourceDeleteIdx]["when"])
+	}
+	targetsIdx := findAnsibleTask(t, topTasks, "Resolve KubeVirt destroy storage targets")
+	targets, ok := topTasks[targetsIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt destroy storage targets must be a set_fact, got %v", topTasks[targetsIdx])
+	}
+	sharedIdentity := fmt.Sprint(targets["bootwright_kubevirt_destroy_storage_targets"])
+	for _, want := range []string{"bootwright_kubevirt_iso_source_dv_name", "'node': ''", "'role': 'agent-iso-source'"} {
+		if !strings.Contains(sharedIdentity, want) {
+			t.Fatalf("the cluster-scoped shared source must use its exact node-less role identity (missing %q), got %v", want, targets["bootwright_kubevirt_destroy_storage_targets"])
+		}
 	}
 	sourceArgv := fmt.Sprint(tasks[sourceDeleteIdx]["ansible.builtin.command"])
 	if !strings.Contains(sourceArgv, "--ignore-not-found=true") {
@@ -587,10 +634,11 @@ func TestKubeVirtDestroyClearsTheClaimsItsDataVolumesLeaveBehind(t *testing.T) {
 	}
 
 	tasks := nestedAnsibleTasks(t, topTasks[blockIdx], "block")
-	claimProbeIdx := findAnsibleTask(t, tasks, "Read KubeVirt PersistentVolumeClaim ownership labels")
+	claimProbeIdx := findAnsibleTask(t, tasks, "Read KubeVirt PersistentVolumeClaim identities")
+	claimConclusiveIdx := findAnsibleTask(t, tasks, "Require conclusive KubeVirt PersistentVolumeClaim probes")
 	dvDeleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt DataVolumes")
-	if claimProbeIdx > dvDeleteIdx {
-		t.Fatalf("the claims must be probed before their DataVolumes are deleted, or the probe reads a state the run itself produced (probe=%d dvDelete=%d)", claimProbeIdx, dvDeleteIdx)
+	if !(claimProbeIdx < claimConclusiveIdx && claimConclusiveIdx < dvDeleteIdx) {
+		t.Fatalf("the claims must be conclusively probed before their DataVolumes are deleted, or a failed probe becomes absence (probe=%d conclusive=%d dvDelete=%d)", claimProbeIdx, claimConclusiveIdx, dvDeleteIdx)
 	}
 	claimProbe, ok := tasks[claimProbeIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -599,37 +647,94 @@ func TestKubeVirtDestroyClearsTheClaimsItsDataVolumesLeaveBehind(t *testing.T) {
 	if got := fmt.Sprint(claimProbe["argv"]); !strings.Contains(got, "persistentvolumeclaim") {
 		t.Fatalf("the claim probe must read the claim itself, not its DataVolume, got argv=%v", claimProbe["argv"])
 	}
-	if got := fmt.Sprint(claimProbe["argv"]); !strings.Contains(got, `bootwright\.io/managed-by`) {
-		t.Fatalf("the claim probe must read the ownership label in the same call presence is derived from, or the purges below delete a claim nothing ever proved was Bootwright's, got argv=%v", claimProbe["argv"])
+	if got := fmt.Sprint(claimProbe["argv"]); !strings.Contains(got, "json") || strings.Contains(got, "jsonpath") {
+		t.Fatalf("the claim probe must read the whole live identity document, not only managed-by, got argv=%v", claimProbe["argv"])
 	}
 	if tasks[claimProbeIdx]["failed_when"] != false {
 		t.Fatalf("the claim probe must record an absent claim instead of failing destroy, got failed_when=%v", tasks[claimProbeIdx]["failed_when"])
 	}
 	probeLoop := fmt.Sprint(tasks[claimProbeIdx]["loop"])
-	if !strings.Contains(probeLoop, "bootwright_kubevirt_cluster_scope_teardown") {
-		t.Fatalf("the claim probe must cover the shared media exactly when the destroy is cluster-scoped, got loop=%v", tasks[claimProbeIdx]["loop"])
+	if !strings.Contains(probeLoop, "bootwright_kubevirt_destroy_storage_targets") {
+		t.Fatalf("the claim probe must use the exact per-resource identity table, got loop=%v", tasks[claimProbeIdx]["loop"])
+	}
+	targetsIdx := findAnsibleTask(t, topTasks, "Resolve KubeVirt destroy storage targets")
+	targets, ok := topTasks[targetsIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt destroy storage targets must be a set_fact, got %v", topTasks[targetsIdx])
+	}
+	targetsExpr := fmt.Sprint(targets["bootwright_kubevirt_destroy_storage_targets"])
+	claimConclusive, ok := tasks[claimConclusiveIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the claim probe verdict must be an assert, got %v", tasks[claimConclusiveIdx])
+	}
+	claimConclusiveThat := fmt.Sprint(claimConclusive["that"])
+	for _, want := range []string{"NotFound", "item.rc is defined", "(item.rc | int) == 0", "(item.rc | int) != 0", "bootwright_kubernetes_object_probe", "PersistentVolumeClaim", "item.item.name", "bootwright_kubevirt_namespace"} {
+		if !strings.Contains(claimConclusiveThat, want) {
+			t.Fatalf("a claim probe may resolve only to an exact safely parsed live document or NotFound (missing %q), got %v", want, claimConclusive["that"])
+		}
+	}
+	for _, want := range []string{"Refusing to treat it as absent", "bootwright_kubernetes_object_probe", "bootwright_mutating_invocation"} {
+		if got := fmt.Sprint(claimConclusive["fail_msg"]); !strings.Contains(got, want) {
+			t.Fatalf("an inconclusive claim probe must preserve evidence and name the exact retry (missing %q), got %v", want, claimConclusive["fail_msg"])
+		}
+	}
+	if body := readRepoFile(t, kubeVirtSubstrateDestroyTasks); strings.Contains(body, "from_json") {
+		t.Fatal("KubeVirt destroy must never parse a successful live probe through throwing from_json; malformed output is an actionable unknown-state refusal")
 	}
 
-	claimRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt PersistentVolumeClaim")
+	claimExactIdx := findAnsibleTask(t, tasks, "Resolve exact KubeVirt PersistentVolumeClaim identities")
+	claimDVIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt PersistentVolumeClaim DataVolume identities")
+	claimRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a foreign KubeVirt PersistentVolumeClaim")
+	claimStampIdx := findAnsibleTask(t, tasks, "Stamp inherited KubeVirt PersistentVolumeClaim identities")
+	claimStampRequireIdx := findAnsibleTask(t, tasks, "Require inherited KubeVirt PersistentVolumeClaim identity stamps")
+	vmRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt VirtualMachine")
+	dvRefuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a foreign KubeVirt DataVolume")
 	if !(claimProbeIdx < claimRefuseIdx && claimRefuseIdx < dvDeleteIdx) {
 		t.Fatalf("each claim must be ownership-checked between its probe and the first deletion of this block, or the gate runs over state the run already changed (probe=%d refuse=%d dvDelete=%d)", claimProbeIdx, claimRefuseIdx, dvDeleteIdx)
+	}
+	if !(claimConclusiveIdx < claimExactIdx && claimExactIdx < claimDVIdx && claimDVIdx < claimRefuseIdx && claimRefuseIdx < claimStampIdx && claimStampIdx < claimStampRequireIdx && claimStampRequireIdx < dvDeleteIdx) {
+		t.Fatalf("claim identity must be proven and durably stamped before its DataVolume evidence is deleted (conclusive=%d exact=%d association=%d refuse=%d stamp=%d require=%d delete=%d)", claimConclusiveIdx, claimExactIdx, claimDVIdx, claimRefuseIdx, claimStampIdx, claimStampRequireIdx, dvDeleteIdx)
+	}
+	if !(vmRefuseIdx < claimStampIdx && dvRefuseIdx < claimStampIdx && claimRefuseIdx < claimStampIdx) {
+		t.Fatalf("every selected VM, DataVolume, and claim identity gate must pass before the first live mutation stamps retry evidence (vm=%d dv=%d pvc=%d stamp=%d)", vmRefuseIdx, dvRefuseIdx, claimRefuseIdx, claimStampIdx)
 	}
 	claimRefuse, ok := tasks[claimRefuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("the claim ownership gate must be an assert, got %v", tasks[claimRefuseIdx])
 	}
-	if got := fmt.Sprint(tasks[claimRefuseIdx]["loop"]); !strings.Contains(got, "bootwright_kubevirt_pvc_probe") {
-		t.Fatalf("the claim ownership gate must judge each claim by its own probe result, got loop=%v", tasks[claimRefuseIdx]["loop"])
+	if got := fmt.Sprint(tasks[claimRefuseIdx]["loop"]); !strings.Contains(got, "bootwright_kubevirt_destroy_storage_targets") {
+		t.Fatalf("the claim ownership gate must judge each exact target identity, got loop=%v", tasks[claimRefuseIdx]["loop"])
 	}
 	claimRefuseThat := fmt.Sprint(claimRefuse["that"])
-	if !strings.Contains(claimRefuseThat, "stdout") || !strings.Contains(claimRefuseThat, "'bootwright'") {
-		t.Fatalf("the claim ownership gate must compare the live managed-by label against bootwright, got that=%v", claimRefuse["that"])
+	for _, want := range []string{"bootwright_kubevirt_pvc_live_by_name", "bootwright_kubevirt_pvc_exact_identity_by_name", "bootwright_kubevirt_pvc_dv_identity_by_name"} {
+		if !strings.Contains(claimRefuseThat, want) {
+			t.Fatalf("the claim ownership gate must require absence, exact labels, or an exact DataVolume association (missing %q), got that=%v", want, claimRefuse["that"])
+		}
 	}
-	if !strings.Contains(claimRefuseThat, "length == 0") {
-		t.Fatalf("an unlabelled claim is the orphan these purges exist to clear — CDI leaves it behind carrying no label of its own — so the gate must pass an empty managed-by value and refuse only a label naming someone else, got that=%v", claimRefuse["that"])
+	claimExact, ok := tasks[claimExactIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("exact claim identity resolution must be a set_fact, got %v", tasks[claimExactIdx])
 	}
-	if !strings.Contains(fmt.Sprint(claimRefuse["fail_msg"]), "managed-by") {
-		t.Fatalf("the claim ownership gate message must name the managed-by label, got %v", claimRefuse["fail_msg"])
+	claimExactExpr := fmt.Sprint(claimExact["bootwright_kubevirt_pvc_exact_identity_by_name"])
+	for _, want := range []string{"bootwright.io/managed-by", "bootwright.io/context", "bootwright.io/cluster", "bootwright.io/role", "bootwright.io/node", "bootwright_kubevirt_context_name", "item.node"} {
+		if !strings.Contains(claimExactExpr, want) {
+			t.Fatalf("a directly labelled claim must match the whole target identity (missing %q), got %v", want, claimExact["bootwright_kubevirt_pvc_exact_identity_by_name"])
+		}
+	}
+	claimDV, ok := tasks[claimDVIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("claim DataVolume identity resolution must be a set_fact, got %v", tasks[claimDVIdx])
+	}
+	claimDVExpr := fmt.Sprint(claimDV["bootwright_kubevirt_pvc_dv_identity_by_name"])
+	for _, want := range []string{"bootwright_kubevirt_dv_owned_by_name", "ownerReferences", "apiVersion", "DataVolume", "name", "uid"} {
+		if !strings.Contains(claimDVExpr, want) {
+			t.Fatalf("an unlabelled CDI claim must be tied by UID to the exact verified DataVolume before it is adopted (missing %q), got %v", want, claimDV["bootwright_kubevirt_pvc_dv_identity_by_name"])
+		}
+	}
+	for _, want := range []string{"managed-by", "context", "cluster", "role", "node", "ownerReference", "bootwright_mutating_invocation", "--authorize unowned-networks"} {
+		if !strings.Contains(fmt.Sprint(claimRefuse["fail_msg"]), want) {
+			t.Fatalf("the claim ownership gate message must name the identity and exact retry (missing %q), got %v", want, claimRefuse["fail_msg"])
+		}
 	}
 	claimRefuseWhen := fmt.Sprint(tasks[claimRefuseIdx]["when"])
 	if !strings.Contains(claimRefuseWhen, "not (bootwright_destroy_authorize_unowned_networks") {
@@ -637,6 +742,25 @@ func TestKubeVirtDestroyClearsTheClaimsItsDataVolumesLeaveBehind(t *testing.T) {
 	}
 	if strings.Contains(claimRefuseWhen, "bootwright_destroy_authorize_unowned_vms") {
 		t.Fatalf("the claim ownership gate must not be lifted by the VM authorization, got when=%v", claimRefuseWhen)
+	}
+	stampArgv := fmt.Sprint(tasks[claimStampIdx]["ansible.builtin.command"])
+	for _, want := range []string{"persistentvolumeclaim", "bootwright.io/managed-by=bootwright", "bootwright.io/context=", "bootwright.io/cluster=", "bootwright.io/role=", "bootwright.io/node=", "--overwrite"} {
+		if !strings.Contains(stampArgv, want) {
+			t.Fatalf("an inherited claim identity must be durably stamped before its DataVolume is erased (missing %q), got %v", want, tasks[claimStampIdx])
+		}
+	}
+	stampWhen := fmt.Sprint(tasks[claimStampIdx]["when"])
+	for _, want := range []string{"bootwright_kubevirt_pvc_exact_identity_by_name", "bootwright_kubevirt_pvc_dv_identity_by_name", "bootwright_destroy_authorize_unowned_networks"} {
+		if !strings.Contains(stampWhen, want) {
+			t.Fatalf("claim identity stamping must be limited to conclusively inherited, non-forced identities (missing %q), got when=%v", want, tasks[claimStampIdx]["when"])
+		}
+	}
+	stampRequire, ok := tasks[claimStampRequireIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("claim identity stamp result must be asserted before deletion, got %v", tasks[claimStampRequireIdx])
+	}
+	if got := fmt.Sprint(stampRequire["fail_msg"]); !strings.Contains(got, "ownership evidence") || !strings.Contains(got, "bootwright_mutating_invocation") {
+		t.Fatalf("a failed identity stamp must preserve evidence and name the exact retry, got %v", stampRequire["fail_msg"])
 	}
 
 	for _, site := range []struct {
@@ -668,8 +792,8 @@ func TestKubeVirtDestroyClearsTheClaimsItsDataVolumesLeaveBehind(t *testing.T) {
 		if claimRefuseIdx > purgeIdx {
 			t.Fatalf("%q must run after the claim ownership gate, or a claim another context owns is deleted before anything judged it (refuse=%d purge=%d)", site.purge, claimRefuseIdx, purgeIdx)
 		}
-		if !strings.Contains(probeLoop, site.claim) {
-			t.Fatalf("the claim probe must cover %s, or its purge can never fire, got loop=%v", site.claim, tasks[claimProbeIdx]["loop"])
+		if !strings.Contains(targetsExpr, site.claim) {
+			t.Fatalf("the claim target table must cover %s, or its purge can never fire, got targets=%v", site.claim, targets["bootwright_kubevirt_destroy_storage_targets"])
 		}
 		include, ok := tasks[purgeIdx]["ansible.builtin.include_role"].(map[string]any)
 		if !ok {

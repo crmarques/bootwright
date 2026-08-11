@@ -1,28 +1,264 @@
 ---
-- name: Remove boot artifact server container and reap orphans
+- name: Validate the live artifact-server ownership record before teardown
   ansible.builtin.include_role:
-    name: bootwright.core.support_component_teardown
-    tasks_from: container.yml
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
   vars:
-    bootwright_component_teardown_container: "{{ bootwright_artifacts_container_name }}"
-    bootwright_component_teardown_kind: artifacts
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
 
-- name: Close boot artifact ports on host firewall
-  ansible.posix.firewalld:
-    port: "{{ item.port | int }}/tcp"
-    state: disabled
-    permanent: true
-    immediate: true
-  failed_when: false
-  loop: "{{ bootwright_component.listeners | default([]) }}"
-  loop_control:
-    label: "{{ item.protocol }}:{{ item.port }}"
+- name: Resolve artifact-server ownership attributes before teardown
+  ansible.builtin.set_fact:
+    bootwright_artifacts_destroy_attributes: >-
+      {{ bootwright_ownership_validated_record.attributes
+         if (
+           bootwright_ownership_validated_stat.stat.exists | default(false) | bool
+           and bootwright_ownership_validated_record.attributes is defined
+           and bootwright_ownership_validated_record.attributes is mapping
+         )
+         else {} }}
+  changed_when: false
+
+- name: Resolve artifact-server external cleanup phase
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_phase_complete: >-
+      {{ bootwright_ownership_validated_stat.stat.exists | default(false) | bool
+         and bootwright_artifacts_destroy_attributes.get('destroyPhase', '')
+             == 'external-cleanup-complete' }}
+    bootwright_infra_destroy_phase_record: "{{ bootwright_ownership_validated_record }}"
+    bootwright_infra_destroy_expected_owner: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+  changed_when: false
+
+- name: Require an exact artifact-server ownership ledger before teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_ownership_validated_record.provider | default('')
+           == bootwright_component.providerName
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_ownership_validated_record.paths | default([])
+           == [bootwright_artifacts_root]
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_ownership_validated_record.labels | default({})
+           == bootwright_artifacts_expected_labels
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_artifacts_destroy_attributes.componentKind | default('')
+           == 'artifacts'
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_artifacts_destroy_attributes.container | default('')
+           == bootwright_artifacts_container_name
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_artifacts_destroy_attributes.listenerPorts is defined
+          and bootwright_artifacts_destroy_attributes.listenerPorts is string
+          and bootwright_artifacts_destroy_attributes.listenerPorts
+              is match('^[1-9][0-9]{0,4}/tcp(,[1-9][0-9]{0,4}/tcp)*$')
+          and bootwright_artifacts_recorded_listener_ports
+              == (bootwright_artifacts_recorded_listener_ports | unique | sort | list)
+          and (bootwright_artifacts_recorded_listener_ports | min) >= 1
+          and (bootwright_artifacts_recorded_listener_ports | max) <= 65535
+        )
+      - >-
+        bootwright_artifacts_destroy_attributes.get('destroyPhase', '')
+        in ['', 'external-cleanup-complete']
+      - >-
+        bootwright_artifacts_destroy_attributes.keys()
+        | difference(['componentKind', 'container', 'listenerPorts', 'destroyPhase'])
+        | length == 0
+    fail_msg: >-
+      Refusing artifact-server teardown because its live current-context
+      ownership record does not exactly identify the managed state, container,
+      labels, canonical listener-port ledger, and optional completed cleanup
+      phase for {{ bootwright_component.providerName }}/{{ bootwright_component.name }}.
+      No container, firewall rule, state, or ownership evidence was removed.
+      Restore the exact record from trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  vars:
+    bootwright_artifacts_expected_labels:
+      bootwright.kind: artifacts
+      bootwright.provider: "{{ bootwright_component.providerName }}"
+      bootwright.name: "{{ bootwright_component.name }}"
+    bootwright_artifacts_recorded_listener_ports: >-
+      {{ bootwright_artifacts_destroy_attributes.get('listenerPorts', '')
+         | string
+         | split(',')
+         | map('regex_replace', '/tcp$', '')
+         | map('int')
+         | list }}
+
+- name: Resolve selected artifact-server listener ports
+  ansible.builtin.set_fact:
+    bootwright_artifacts_selected_listener_ports: >-
+      {{ ((bootwright_component.listeners | default([])
+           | map(attribute='port')
+           | map('int')
+           | list)
+          + (
+            bootwright_artifacts_destroy_attributes.listenerPorts
+            | default('')
+            | split(',')
+            | map('regex_replace', '/tcp$', '')
+            | map('int')
+            | list
+            if (bootwright_ownership_validated_stat.stat.exists | bool)
+            else []
+          ))
+         | unique
+         | sort
+         | list }}
+  changed_when: false
+
+- name: Prove declared artifact-server live ownership before teardown
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_destroy_gate.yml
+  vars:
+    bootwright_infra_destroy_provider: "{{ bootwright_component.providerName }}"
+    bootwright_infra_destroy_name: "{{ bootwright_component.name }}"
+    bootwright_infra_destroy_kind: artifacts
+    bootwright_infra_destroy_state_dir: "{{ bootwright_artifacts_root }}"
+    bootwright_infra_destroy_container: "{{ bootwright_artifacts_container_name }}"
+    bootwright_infra_destroy_extra_paths: []
+    bootwright_ownership_destroy_attrs: {}
+
+- name: Refuse artifact-server teardown across an ambiguous replay boundary
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_infra_destroy_state_stat.stat.exists | bool
+        or not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_infra_destroy_phase_complete | bool
+    fail_msg: >-
+      Refusing artifact-server teardown because its exact ownership record is
+      present but its final current-context state marker is absent. No
+      container, firewall rule, state, or ownership evidence was removed.
+      Restore the marker from trusted evidence or complete the external cleanup
+      deliberately, then re-run `{{ bootwright_mutating_invocation }}`; no
+      authorization guesses which prior teardown step removed it.
+
+- name: Include authoritative artifact-server listener ports
+  ansible.builtin.set_fact:
+    bootwright_artifacts_selected_listener_ports: >-
+      {{ (bootwright_artifacts_selected_listener_ports
+          + (bootwright_infra_destroy_global_ports
+             | select('match', '^[1-9][0-9]{0,4}/tcp$')
+             | map('regex_replace', '/tcp$', '')
+             | map('int')
+             | list))
+         | unique | sort | list }}
+  changed_when: false
+
+- name: Require a conclusive firewalld probe before artifact-server teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_firewalld_probe.stat.exists is defined
+      - bootwright_firewalld_available is defined
+      - >-
+        bootwright_artifacts_selected_listener_ports | length == 0
+        or bootwright_firewalld_available | bool
+      - >-
+        not (bootwright_firewalld_probe.stat.exists | bool)
+        or (
+          bootwright_firewalld_probe.stat.isreg | default(false) | bool
+          and not (bootwright_firewalld_probe.stat.islnk | default(false) | bool)
+          and bootwright_firewalld_probe.stat.executable | default(false) | bool
+          and bootwright_firewalld_state.rc is defined
+          and bootwright_firewalld_state.stdout is defined
+          and bootwright_firewalld_state.stderr is defined
+          and (
+            (bootwright_firewalld_state.rc | int == 0
+             and bootwright_firewalld_state.stdout | trim == 'running')
+            or bootwright_firewalld_state.rc | int == 252
+          )
+        )
+      - >-
+        bootwright_firewalld_available | bool
+        == (
+          bootwright_firewalld_probe.stat.exists | bool
+          and bootwright_firewalld_state.rc | default(252) | int == 0
+          and bootwright_firewalld_state.stdout | default('') | trim == 'running'
+        )
+    fail_msg: >-
+      Cannot conclusively determine whether firewalld is running before
+      tearing down the artifact server on {{ inventory_hostname }}. No artifact
+      server container, firewall rule, state, or ownership evidence was removed.
+      Restore firewalld access and re-run `{{ bootwright_mutating_invocation }}`.
   when:
-    - bootwright_firewalld_available | default(false)
+    - bootwright_infra_destroy_state_stat.stat.exists | bool
+    - not (bootwright_infra_destroy_phase_complete | bool)
 
-- name: Remove boot artifact state and ownership record
-  ansible.builtin.include_role:
-    name: bootwright.core.support_component_teardown
-    tasks_from: state.yml
-  vars:
-    bootwright_component_teardown_state_dir: "{{ bootwright_artifacts_root }}"
+- name: Tear down the artifact server before deleting its ownership evidence
+  block:
+    - name: Revalidate artifact-server host operation before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate artifact-server endpoint authority before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Remove boot artifact server container and reap orphans
+      ansible.builtin.include_role:
+        name: bootwright.core.support_component_teardown
+        tasks_from: container.yml
+      vars:
+        bootwright_component_teardown_container: "{{ bootwright_artifacts_container_name }}"
+        bootwright_component_teardown_kind: artifacts
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Revalidate artifact-server host operation before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate artifact-server endpoint authority before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Close boot artifact ports on host firewall
+      ansible.posix.firewalld:
+        port: "{{ item | int }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      loop: "{{ bootwright_artifacts_selected_listener_ports }}"
+      loop_control:
+        label: "{{ item }}/tcp"
+      when:
+        - bootwright_infra_destroy_state_stat.stat.exists | bool
+        - bootwright_firewalld_available | bool
+        - not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Complete artifact-server evidence retirement after external cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: complete_infra_component_destroy.yml
+      vars:
+        bootwright_infra_destroy_state_path: "{{ bootwright_artifacts_root }}"
+        bootwright_ownership_expected_record: "{{ bootwright_infra_destroy_expected_owner }}"
+  rescue:
+    - name: Refuse artifact-server evidence deletion after teardown failure
+      ansible.builtin.fail:
+        msg: >-
+          Artifact-server teardown failed at
+          {{ ansible_failed_task.name | default('an unknown task') }}:
+          {{ ansible_failed_result.msg | default('no failure detail was returned') }}.
+          Bootwright retained the ownership record or final context marker
+          needed for an exact retry. Restore access to the failed host service
+          and re-run the exact command
+          `{{ bootwright_mutating_invocation }}`.

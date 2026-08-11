@@ -1,0 +1,6 @@
+---
+- name: Reserve complete host endpoint consequence set
+  ansible.builtin.import_tasks: reserve_host_endpoint_claims.yml
+
+- name: Acquire exact host endpoint slots
+  ansible.builtin.import_tasks: acquire_host_endpoint_slots.yml

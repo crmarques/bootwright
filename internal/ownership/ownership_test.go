@@ -197,6 +197,83 @@ func TestFilterByContextEmptyContextKeepsAll(t *testing.T) {
 	}
 }
 
+func TestLoadOwnerResourceRequiresCanonicalReadableOwnerEvidence(t *testing.T) {
+	const (
+		kind = "storage-cluster"
+		name = "ceph-a"
+	)
+	valid := ResourceRecord{
+		APIVersion: "bootwright.io/ownership/v1alpha1",
+		Kind:       kind,
+		Name:       name,
+		Owner:      Owner,
+		Context:    "lab",
+		Host:       "storage__ceph-a__seed",
+		Cluster:    name,
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__seed"},
+	}
+
+	t.Run("missing", func(t *testing.T) {
+		if record, exists, err := LoadOwnerResource(t.TempDir(), kind, name); err != nil || exists {
+			t.Fatalf("missing owner resource = %+v, %v, %v; want zero, false, nil", record, exists, err)
+		}
+	})
+
+	t.Run("matching", func(t *testing.T) {
+		root := t.TempDir()
+		if err := SaveResource(root, valid); err != nil {
+			t.Fatalf("SaveResource: %v", err)
+		}
+		got, exists, err := LoadOwnerResource(root, kind, name)
+		if err != nil || !exists || got.Context != valid.Context || got.Host != valid.Host {
+			t.Fatalf("matching owner resource = %+v, %v, %v", got, exists, err)
+		}
+	})
+
+	for _, test := range []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{name: "malformed", content: `{not json`, want: "decode ownership resource"},
+		{name: "reference at owner path", content: `{"apiVersion":"bootwright.io/ownership/v1alpha1","kind":"storage-cluster","name":"ceph-a","owner":"bootwright","role":"reference","context":"lab"}`, want: "canonical path"},
+		{name: "wrong decoded kind", content: `{"apiVersion":"bootwright.io/ownership/v1alpha1","kind":"infra-component","name":"ceph-a","owner":"bootwright","context":"lab"}`, want: "canonical path"},
+		{name: "wrong decoded name", content: `{"apiVersion":"bootwright.io/ownership/v1alpha1","kind":"storage-cluster","name":"ceph-b","owner":"bootwright","context":"lab"}`, want: "canonical path"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, ResourceDirName, kind, name+".json")
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatalf("create ownership kind: %v", err)
+			}
+			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+				t.Fatalf("write owner resource: %v", err)
+			}
+			if _, _, err := LoadOwnerResource(root, kind, name); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("LoadOwnerResource error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+
+	t.Run("symlink", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, ResourceDirName, kind, name+".json")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create ownership kind: %v", err)
+		}
+		target := filepath.Join(t.TempDir(), "record.json")
+		if err := os.WriteFile(target, []byte(`{}`), 0o600); err != nil {
+			t.Fatalf("write symlink target: %v", err)
+		}
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatalf("create ownership symlink: %v", err)
+		}
+		if _, _, err := LoadOwnerResource(root, kind, name); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+			t.Fatalf("LoadOwnerResource symlink error = %v", err)
+		}
+	})
+}
+
 func TestLoadResourcesSkipsBadRecordWithoutDroppingGood(t *testing.T) {
 	root := t.TempDir()
 	good := ResourceRecord{Kind: "libvirt-domain", Name: "good-machine", Owner: Owner, Host: "h"}

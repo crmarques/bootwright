@@ -44,16 +44,25 @@ func TestKubeVirtDestroyReadsAMissingResourceTypeAsConclusiveAbsence(t *testing.
 func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve the Ceph clusters a non-seed storage host carries under no resolved fsid")
+	confStatIdx := findAnsibleTask(t, tasks, "Inspect the Ceph configuration a surviving storage host still carries")
 	confIdx := findAnsibleTask(t, tasks, "Read the Ceph configuration a surviving storage host still carries")
+	confGuardIdx := findAnsibleTask(t, tasks, "Refuse ambiguous Ceph configuration on a surviving storage host")
 	markerIdx := findAnsibleTask(t, tasks, "Read the Bootwright ownership marker a surviving storage host still carries")
-	recordIdx := findAnsibleTask(t, tasks, "Read the storage cluster ownership record fsid on the controller")
+	markerClassifyIdx := findAnsibleTask(t, tasks, "Classify the ownership marker evidence a surviving storage host still carries")
+	recordIdx := findAnsibleTask(t, tasks, "Classify Bootwright storage cluster ownership record on controller")
 	evidenceIdx := findAnsibleTask(t, tasks, "Resolve the cluster evidence the surviving storage hosts still carry")
 	decideIdx := findAnsibleTask(t, tasks, "Decide whether the surviving storage hosts prove the fsid this teardown resumes")
 	adoptIdx := findAnsibleTask(t, tasks, "Adopt the fsid the surviving storage hosts prove for a resumed teardown")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse a non-seed storage host still carrying a cluster the seed resolved no fsid for")
 	nonSeedRmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on non-seed hosts")
-	if !(resolveIdx < confIdx && confIdx < markerIdx && markerIdx < recordIdx && recordIdx < evidenceIdx && evidenceIdx < decideIdx && decideIdx < adoptIdx && adoptIdx < refuseIdx && refuseIdx < nonSeedRmIdx) {
-		t.Fatalf("the resume evidence must be read and judged between the carrier scan and the refusal, so an interrupted teardown continues while anything unproven still stops every host (resolve=%d conf=%d marker=%d record=%d evidence=%d decide=%d adopt=%d refuse=%d rm=%d)", resolveIdx, confIdx, markerIdx, recordIdx, evidenceIdx, decideIdx, adoptIdx, refuseIdx, nonSeedRmIdx)
+	if !(recordIdx < resolveIdx && resolveIdx < confStatIdx && confStatIdx < confIdx && confIdx < confGuardIdx && confGuardIdx < markerIdx && markerIdx < markerClassifyIdx && markerClassifyIdx < evidenceIdx && evidenceIdx < decideIdx && decideIdx < adoptIdx && adoptIdx < refuseIdx && refuseIdx < nonSeedRmIdx) {
+		t.Fatalf("the resume evidence must be read and judged between the carrier scan and the refusal, so an interrupted teardown continues while anything unproven still stops every host (record=%d resolve=%d conf=%d marker=%d markerClassify=%d evidence=%d decide=%d adopt=%d refuse=%d rm=%d)", recordIdx, resolveIdx, confIdx, markerIdx, markerClassifyIdx, evidenceIdx, decideIdx, adoptIdx, refuseIdx, nonSeedRmIdx)
+	}
+	confGate := fmt.Sprint(tasks[confGuardIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"stat.exists is defined", "stat.isreg", "stat.islnk", "nonseed_conf.content is defined", "bootwright_mutating_invocation", "No authorization"} {
+		if !strings.Contains(confGate, want) {
+			t.Errorf("survivor configuration must be conclusively absent or exact before fsid adoption; missing %q in %v", want, tasks[confGuardIdx])
+		}
 	}
 
 	adoptWhen := fmt.Sprint(tasks[adoptIdx]["when"])
@@ -71,11 +80,12 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 	}
 	decide := fmt.Sprint(tasks[decideIdx]["ansible.builtin.set_fact"])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_record.stat.exists",
+		"bootwright_ceph_destroy_record_evidence.valid",
+		"bootwright_ceph_destroy_record_evidence.blockers",
 		"bootwright_ceph_destroy_record_fsid",
 		"bootwright_ceph_destroy_surviving_conf_fsids",
 		"bootwright_ceph_destroy_surviving_marker_fsids",
-		"bootwright_ceph_destroy_surviving_marker_clusters",
+		"bootwright_ceph_destroy_surviving_marker_blockers",
 	} {
 		if !strings.Contains(decide, want) {
 			t.Errorf("the resume decision must weigh the controller record and every on-host contradiction, missing %q in the decide set_fact", want)
@@ -83,8 +93,10 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 	}
 
 	fail := fmt.Sprint(tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)["fail_msg"])
-	if !strings.Contains(fail, "bootwright_ceph_destroy_adoption_blockers") {
-		t.Errorf("a refusal after a failed resume must name what blocked it, or the operator cannot tell a foreign cluster from a missing record, got %v", fail)
+	for _, want := range []string{"bootwright_ceph_destroy_adoption_blockers", "bootwright_mutating_invocation", "not a usable bypass"} {
+		if !strings.Contains(fail, want) {
+			t.Errorf("a refusal after a failed resume must name what blocked it and a usable exact continuation; missing %q in %v", want, fail)
+		}
 	}
 
 	probeIdx := findAnsibleTask(t, tasks, "Probe the resumed cluster for a live manager from a surviving host")
@@ -115,8 +127,10 @@ func TestStorageCephadmDestroyResumesFromSurvivingHostsWhenTheSeedIsAlreadyClean
 func TestStorageCephadmDestroyRecoversAuthorityFromExactMonsWhenTheSeedIsAbsent(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 	recordIdx := findAnsibleTask(t, tasks, "Stat the controller ownership record for dead-seed recovery")
+	recordClassifyIdx := findAnsibleTask(t, tasks, "Classify the controller ownership record for dead-seed recovery")
 	confIdx := findAnsibleTask(t, tasks, "Stat Ceph configuration on a dead-seed recovery mon")
 	markerIdx := findAnsibleTask(t, tasks, "Stat the Bootwright marker on a dead-seed recovery mon")
+	markerClassifyIdx := findAnsibleTask(t, tasks, "Classify the Bootwright marker on a dead-seed recovery mon")
 	classifyIdx := findAnsibleTask(t, tasks, "Classify dead-seed recovery evidence on each reachable mon")
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve exact dead-seed recovery matches across reachable mons")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse dead-seed recovery without one exact ownership identity")
@@ -124,27 +138,36 @@ func TestStorageCephadmDestroyRecoversAuthorityFromExactMonsWhenTheSeedIsAbsent(
 	projectIdx := findAnsibleTask(t, tasks, "Project dead-seed ownership proof onto the elected mon")
 	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
-	if !(recordIdx < confIdx && confIdx < markerIdx && markerIdx < classifyIdx && classifyIdx < resolveIdx && resolveIdx < refuseIdx && refuseIdx < electIdx && electIdx < projectIdx && projectIdx < removeIdx && removeIdx < wipeIdx) {
-		t.Fatalf("dead-seed evidence must be read, classified and refused before authority projection or teardown (record=%d conf=%d marker=%d classify=%d resolve=%d refuse=%d elect=%d project=%d remove=%d wipe=%d)", recordIdx, confIdx, markerIdx, classifyIdx, resolveIdx, refuseIdx, electIdx, projectIdx, removeIdx, wipeIdx)
+	if !(recordIdx < recordClassifyIdx && recordClassifyIdx < confIdx && confIdx < markerIdx && markerIdx < markerClassifyIdx && markerClassifyIdx < classifyIdx && classifyIdx < resolveIdx && resolveIdx < refuseIdx && refuseIdx < electIdx && electIdx < projectIdx && projectIdx < removeIdx && removeIdx < wipeIdx) {
+		t.Fatalf("dead-seed evidence must be read, classified and refused before authority projection or teardown (record=%d recordClassify=%d conf=%d marker=%d markerClassify=%d classify=%d resolve=%d refuse=%d elect=%d project=%d remove=%d wipe=%d)", recordIdx, recordClassifyIdx, confIdx, markerIdx, markerClassifyIdx, classifyIdx, resolveIdx, refuseIdx, electIdx, projectIdx, removeIdx, wipeIdx)
 	}
 
 	record := tasks[recordIdx]
 	if record["delegate_to"] != "localhost" || record["become"] != false || record["changed_when"] != false || record["failed_when"] != false {
 		t.Fatalf("dead-seed controller evidence must be a tolerated read-only localhost probe, got %v", record)
 	}
+	recordClassify := fmt.Sprint(tasks[recordClassifyIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_ceph_controller_owner_evidence", "bootwright_clusters_dir", "bootwright_selected_storage_cluster.name", "bootwright_selected_storage_cluster.seedHost"} {
+		if !strings.Contains(recordClassify, want) {
+			t.Errorf("dead-seed controller evidence must use the shared exact classifier; missing %q in set_fact", want)
+		}
+	}
+	markerClassify := fmt.Sprint(tasks[markerClassifyIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_ceph_host_marker_evidence", "bootwright_selected_storage_cluster.name"} {
+		if !strings.Contains(markerClassify, want) {
+			t.Errorf("dead-seed marker evidence must use the shared exact classifier; missing %q in set_fact", want)
+		}
+	}
 	classify := fmt.Sprint(tasks[classifyIdx]["ansible.builtin.set_fact"])
 	for _, want := range []string{
-		"bootwright.io/ownership/v1alpha1",
-		"storage-cluster",
-		"bootwright_ceph_fallback_record.context",
-		"bootwright_ceph_fallback_record.cluster",
-		"bootwright_ceph_fallback_record.host",
-		"attributes",
-		"seedHost",
+		"bootwright_ceph_fallback_record_evidence.blockers",
+		"bootwright_ceph_fallback_record_fsid",
 		"bootwright_ceph_fallback_conf_fsid",
-		"bootwright_ceph_fallback_marker.manager",
-		"bootwright_ceph_fallback_marker.cluster",
+		"bootwright_ceph_fallback_marker_evidence.blockers",
 		"bootwright_ceph_fallback_marker_fsid",
+		"bootwright_ceph_fallback_conf_stat.stat.exists is not defined",
+		"bootwright_ceph_fallback_conf_stat.stat.isreg",
+		"bootwright_ceph_fallback_conf_stat.stat.islnk",
 	} {
 		if !strings.Contains(classify, want) {
 			t.Errorf("dead-seed ownership classification must bind controller, config and marker evidence exactly; missing %q in set_fact", want)

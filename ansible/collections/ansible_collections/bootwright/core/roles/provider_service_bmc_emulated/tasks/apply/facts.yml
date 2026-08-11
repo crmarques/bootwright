@@ -15,4 +15,15 @@
     bootwright_bmc_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_bmc_provider_name }}"
     bootwright_bmc_temp_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_bmc_provider_name }}/tmp"
     bootwright_bmc_vmedia_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/{{ bootwright_bmc_provider_name }}/vmedia"
+    bootwright_bmc_claim_root: "/var/lib/bootwright/shared-services/bmc-emulator/{{ bootwright_bmc_provider_name }}"
+    bootwright_bmc_claim_path: "/var/lib/bootwright/shared-services/bmc-emulator/{{ bootwright_bmc_provider_name }}/claim.json"
+    bootwright_bmc_transition_path: "/var/lib/bootwright/shared-services/bmc-emulator/{{ bootwright_bmc_provider_name }}/transition.json"
+    bootwright_bmc_redfish_unit_path: "/etc/systemd/system/bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+    bootwright_bmc_vmedia_unit_path: "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+    bootwright_bmc_pool_name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    bootwright_bmc_auth_path: >-
+      {{ (bootwright_provider_state_dir ~ '/bmc/' ~ bootwright_bmc_provider_name ~ '/htpasswd')
+         if (bootwright_component.bmcEmulated.credentialsRef | default('') | length > 0)
+         else '' }}
+    bootwright_bmc_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
   changed_when: false

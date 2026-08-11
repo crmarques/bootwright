@@ -1632,7 +1632,9 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 	factsTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/facts.yml")
 	packagesTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/packages.yml")
 	sushyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/sushy.yml")
+	gateTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/ownership_gate.yml")
 	destroyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy.yml")
+	destroyOwnedTasks := flattenAnsibleTasks(readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy_owned.yml"))
 	poolXML := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/vmedia/pool.xml.j2")
 	vmediaSystemd := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/vmedia/systemd.service.j2")
 	sushySystemd := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/sushy/systemd.service.j2")
@@ -1667,44 +1669,35 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 		t.Fatalf("%s must create private BMC temp root, got %v", packagesTasks[tempDirIdx]["name"], tempDir)
 	}
 
-	probeIdx := findAnsibleTask(t, sushyTasks, "Probe existing libvirt vmedia storage pool")
-	decideIdx := findAnsibleTask(t, sushyTasks, "Determine whether libvirt vmedia storage pool must be redefined")
-	stopIdx := findAnsibleTask(t, sushyTasks, "Stop sushy-emulator before redefining vmedia storage pool")
-	inactiveIdx := findAnsibleTask(t, sushyTasks, "Deactivate mismatched libvirt vmedia storage pool")
-	absentIdx := findAnsibleTask(t, sushyTasks, "Undefine mismatched libvirt vmedia storage pool")
+	probeIdx := findAnsibleTask(t, gateTasks, "Probe BMC libvirt vmedia pool XML")
+	refuseIdx := findAnsibleTask(t, gateTasks, "Refuse foreign or unprovable BMC provider-global replacement")
 	defineIdx := findAnsibleTask(t, sushyTasks, "Define libvirt vmedia storage pool")
 	activateIdx := findAnsibleTask(t, sushyTasks, "Activate libvirt vmedia storage pool")
 	ensureIdx := findAnsibleTask(t, sushyTasks, "Ensure sushy-emulator service is running")
-	if !(probeIdx < decideIdx && decideIdx < stopIdx && stopIdx < inactiveIdx && inactiveIdx < absentIdx && absentIdx < defineIdx && defineIdx < activateIdx && activateIdx < ensureIdx) {
-		t.Fatalf("sushy vmedia pool must be probed, redefined when mismatched, then activated before sushy starts")
+	if !(defineIdx < activateIdx && activateIdx < ensureIdx) {
+		t.Fatalf("sushy vmedia pool must be defined and activated before sushy starts")
 	}
-	probe, ok := sushyTasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	probe, ok := gateTasks[probeIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no command body", sushyTasks[probeIdx]["name"])
+		t.Fatalf("%s has no command body", gateTasks[probeIdx]["name"])
 	}
-	for _, want := range []string{"virsh", "-c", "{{ bootwright_bmc_libvirt_uri }}", "pool-dumpxml", "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"} {
+	for _, want := range []string{"virsh", "-c", "{{ bootwright_bmc_libvirt_uri }}", "pool-dumpxml", "{{ bootwright_bmc_pool_name }}"} {
 		if !stringListContains(probe["argv"], want) {
-			t.Fatalf("%s command missing %q: %v", sushyTasks[probeIdx]["name"], want, probe["argv"])
+			t.Fatalf("%s command missing %q: %v", gateTasks[probeIdx]["name"], want, probe["argv"])
 		}
 	}
-	decide, ok := sushyTasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s has no set_fact body", sushyTasks[decideIdx]["name"])
-	}
-	if got := fmt.Sprint(decide["bootwright_bmc_vmedia_pool_redefine"]); !strings.Contains(got, "bootwright_bmc_vmedia_root") || !strings.Contains(got, "<path>") {
-		t.Fatalf("%s must compare existing pool target path to bootwright_bmc_vmedia_root, got %v", sushyTasks[decideIdx]["name"], got)
-	}
-	for _, idx := range []int{stopIdx, inactiveIdx, absentIdx} {
-		if got := sushyTasks[idx]["when"]; got != "bootwright_bmc_vmedia_pool_redefine | bool" {
-			t.Fatalf("%s when got %v", sushyTasks[idx]["name"], got)
+	refusal := fmt.Sprint(gateTasks[refuseIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"bootwright_bmc_pool_identity", "bootwright_bmc_expected_identity", "bootwright_bmc_vmedia_root", "targetPath"} {
+		if !strings.Contains(refusal, want) {
+			t.Fatalf("pre-mutation pool ownership gate missing %q: %s", want, refusal)
 		}
 	}
 	ensure, ok := sushyTasks[ensureIdx]["ansible.builtin.systemd_service"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s has no systemd body", sushyTasks[ensureIdx]["name"])
 	}
-	if got := fmt.Sprint(ensure["state"]); !strings.Contains(got, "bootwright_bmc_vmedia_pool_redefine") || !strings.Contains(got, "bootwright_bmc_vmedia_pool_define.changed") || !strings.Contains(got, "bootwright_bmc_vmedia_pool_activate.changed") {
-		t.Fatalf("%s must restart on vmedia pool replacement, got %v", sushyTasks[ensureIdx]["name"], got)
+	if got := fmt.Sprint(ensure["state"]); !strings.Contains(got, "bootwright_bmc_vmedia_pool_define.changed") || !strings.Contains(got, "bootwright_bmc_vmedia_pool_activate.changed") {
+		t.Fatalf("%s must restart on owned vmedia pool reconciliation, got %v", sushyTasks[ensureIdx]["name"], got)
 	}
 
 	for _, body := range []string{poolXML, vmediaSystemd} {
@@ -1725,9 +1718,12 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 		}
 	}
 
-	destroyIdx := findAnsibleTask(t, destroyTasks, "Remove BMC state directory")
-	if !stringListContains(destroyTasks[destroyIdx]["loop"], "{{ bootwright_bmc_vmedia_root }}") {
-		t.Fatalf("%s must remove the separate vmedia root, got %v", destroyTasks[destroyIdx]["name"], destroyTasks[destroyIdx]["loop"])
+	if findAnsibleTask(t, destroyTasks, "Destroy exact recorded BMC composite and ownership") < 0 {
+		t.Fatal("desired BMC destroy must dispatch exact recorded teardown")
+	}
+	destroyIdx := findAnsibleTask(t, destroyOwnedTasks, "Remove exact BMC runtime paths while retaining durable claim")
+	if !stringListContains(destroyOwnedTasks[destroyIdx]["loop"], "{{ bootwright_ownership_destroy_attrs.vMediaRoot }}") {
+		t.Fatalf("%s must remove the separate recorded vmedia root, got %v", destroyOwnedTasks[destroyIdx]["name"], destroyOwnedTasks[destroyIdx]["loop"])
 	}
 }
 

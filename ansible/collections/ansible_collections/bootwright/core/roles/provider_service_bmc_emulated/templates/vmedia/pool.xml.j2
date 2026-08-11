@@ -1,5 +1,12 @@
 <pool type='dir'>
   <name>bootwright-{{ bootwright_bmc_provider_name }}-vmedia</name>
+  <metadata>
+    <bootwright:bmcService xmlns:bootwright='https://bootwright.io/libvirt/metadata/1.0'>
+      <bootwright:context>{{ bootwright_bmc_current_context }}</bootwright:context>
+      <bootwright:provider>{{ bootwright_bmc_provider_name }}</bootwright:provider>
+      <bootwright:host>{{ bootwright_host_name | default(inventory_hostname) }}</bootwright:host>
+    </bootwright:bmcService>
+  </metadata>
   <target>
     <path>{{ bootwright_bmc_vmedia_root }}</path>
   </target>

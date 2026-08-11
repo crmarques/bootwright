@@ -19,7 +19,7 @@ func TestClassifyApplyTransitions(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 	saveStateCheckRecord(t, runsDir, osMachine, "sha256:stale", ConvergeSafetyOwner)
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{create, match, recon, foreign, osMachine}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{create, match, recon, foreign, osMachine}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("classify: %v", err)
 	}

@@ -1,0 +1,108 @@
+---
+- name: Require exact infra-component global destroy retirement inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_claim_next | default({}) | length > 0
+      - bootwright_infra_global_claim_next.state | default('') == 'destroying'
+      - bootwright_infra_global_claim_path | default('') | length > 0
+      - bootwright_infra_endpoint_release_candidates | default([]) | length > 0
+      - bootwright_host_endpoint_desired_claims | default([]) | length > 0
+    fail_msg: >-
+      Refusing authoritative infra-component claim retirement because the exact
+      destroying side set, endpoint candidates, or canonical claim path is
+      missing. The global claim and final controller owner were retained. Repair
+      trusted evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Revalidate host operation before endpoint authority retirement
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Revalidate exact infra-component endpoint authority before retirement
+  ansible.builtin.include_tasks: require_infra_component_endpoint_claims.yml
+
+- name: Retire exact infra-component endpoint authority after external cleanup
+  ansible.builtin.include_tasks: release_host_endpoint_claims.yml
+  vars:
+    bootwright_host_endpoint_release_candidates: >-
+      {{ bootwright_infra_endpoint_release_candidates }}
+
+- name: Revalidate host operation before global claim retirement
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Re-probe authoritative host-global destroying claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_destroy_retire_stat
+  changed_when: false
+  failed_when: false
+
+- name: Re-read authoritative host-global destroying claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_global_claim_path }}"
+  register: bootwright_infra_global_destroy_retire_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_global_destroy_retire_stat.stat.exists | default(false) | bool
+
+- name: Classify authoritative host-global destroying claim before retirement
+  ansible.builtin.set_fact:
+    bootwright_infra_global_destroy_retire_live: >-
+      {{ (bootwright_infra_global_destroy_retire_content.content
+          | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_global_claim(
+             bootwright_infra_global_claim_context,
+             bootwright_infra_global_claim_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require unchanged authoritative destroying claim before retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_destroy_retire_stat.stat.exists is defined
+      - bootwright_infra_global_destroy_retire_stat.stat.exists | bool
+      - bootwright_infra_global_destroy_retire_stat.stat.isreg | default(false) | bool
+      - not (bootwright_infra_global_destroy_retire_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_global_destroy_retire_content.content is defined
+      - bootwright_infra_global_destroy_retire_live == bootwright_infra_global_claim_next
+    fail_msg: >-
+      Refusing host-global infra-component claim retirement because the exact
+      destroying claim changed, disappeared, became linked, or became unreadable
+      after external cleanup. The final cleanup-phase controller owner remains.
+      Restore trusted evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Retire exact host-global infra-component destroying claim atomically
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    state: absent
+    expected_contents:
+      - "{{ bootwright_infra_global_destroy_retire_content.content | b64decode }}"
+    allow_absent: false
+    create_parents: false
+    trusted_root: /var/lib/bootwright
+  register: bootwright_infra_global_destroy_retire_cas
+  failed_when: false
+
+- name: Re-probe retired host-global infra-component claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_global_claim_path }}"
+    follow: false
+  register: bootwright_infra_global_destroy_retired_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require exact host-global infra-component claim retirement
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_global_destroy_retire_cas.current_sha256 is defined
+      - bootwright_infra_global_destroy_retire_cas.current_sha256 == ''
+      - bootwright_infra_global_destroy_retired_stat.stat.exists is defined
+      - not (bootwright_infra_global_destroy_retired_stat.stat.exists | bool)
+    fail_msg: >-
+      External cleanup and endpoint retirement completed, but the exact
+      host-global destroying claim was not atomically removed. CAS detail:
+      {{ bootwright_infra_global_destroy_retire_cas.msg | default('winner differs') }}.
+      The cleanup-phase controller owner remains for exact retry. Inspect the
+      current claim and re-run `{{ bootwright_mutating_invocation }}`.

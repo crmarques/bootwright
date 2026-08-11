@@ -6,14 +6,51 @@
       - bootwright_component.configConsistent | bool
       - (bootwright_component.bmcEmulated.libvirtURI | default('') | length) > 0
       - (bootwright_component.bmcEmulated.port | default(0) | int) > 0
+      - (bootwright_component.bmcEmulated.port | int) <= 65535
       - (bootwright_component.bmcEmulated.vMediaPort | default(0) | int) > 0
+      - (bootwright_component.bmcEmulated.vMediaPort | int) <= 65535
+      - (bootwright_component.bmcEmulated.port | int) != (bootwright_component.bmcEmulated.vMediaPort | int)
+      - bootwright_mutating_invocation | default('') | length > 0
     fail_msg: >-
       bmc_emulated requires one provider-level BMC configuration. Check that all
       machines grouped under provider {{ bootwright_component.providerName }}
-      use matching libvirt URI, bind address, ports, auth, and sushy version.
+      use one valid libvirt URI, distinct ports in 1..65535, bind address, auth,
+      and sushy version, then re-run `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve BMC emulator facts
   ansible.builtin.import_tasks: apply/facts.yml
+
+- name: Reconcile exact recorded BMC composite before apply
+  ansible.builtin.import_tasks: apply/ownership_transition.yml
+
+- name: Prove BMC emulator ownership before apply mutation
+  ansible.builtin.import_tasks: ownership_gate.yml
+  vars:
+    bootwright_bmc_gate_mode: apply
+    bootwright_bmc_transition_desired: >-
+      {{ bootwright_bmc_transition_record
+         if (bootwright_bmc_apply_transition_needed | default(false) | bool)
+         else {} }}
+
+- name: Revalidate host-wide operation before BMC evidence publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Resolve exact BMC endpoints before durable intent publication
+  ansible.builtin.import_tasks: apply/endpoint_claims.yml
+
+- name: Publish host-atomic BMC claim before apply mutation
+  ansible.builtin.import_tasks: publish_claim.yml
+
+- name: Reserve complete BMC endpoint union after durable claim publication
+  ansible.builtin.import_tasks: apply/endpoint_reservation.yml
+
+- name: Acquire exact BMC endpoint slots after durable claim publication
+  ansible.builtin.import_tasks: apply/endpoint_slots.yml
+
+- name: Release old listeners blocking desired BMC cross-port transition
+  ansible.builtin.import_tasks: apply/port_transition.yml
 
 - name: Prepare BMC emulator host
   ansible.builtin.import_tasks: apply/packages.yml
@@ -27,6 +64,12 @@
 - name: Configure vmedia HTTP service
   ansible.builtin.import_tasks: apply/vmedia.yml
 
+- name: Retire obsolete recorded BMC members after desired runtime success
+  ansible.builtin.import_tasks: apply/ownership_transition_cleanup.yml
+
+- name: Revalidate BMC authority before owner record mutation
+  ansible.builtin.import_tasks: mutation_guard.yml
+
 - name: Record BMC emulator ownership
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -39,10 +82,22 @@
       paths:
         - "{{ bootwright_bmc_root }}"
         - "{{ bootwright_bmc_vmedia_root }}"
-        - "/etc/systemd/system/bootwright-sushy-{{ bootwright_component.providerName }}.service"
-        - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_component.providerName }}.service"
+        - "{{ bootwright_bmc_redfish_unit_path }}"
+        - "{{ bootwright_bmc_vmedia_unit_path }}"
+        - "{{ bootwright_bmc_claim_root }}"
       attributes:
         redfishUnit: "bootwright-sushy-{{ bootwright_component.providerName }}.service"
         vMediaUnit: "bootwright-vmedia-{{ bootwright_component.providerName }}.service"
         redfishPort: "{{ bootwright_component.bmcEmulated.port | string }}"
         vMediaPort: "{{ bootwright_component.bmcEmulated.vMediaPort | string }}"
+        libvirtURI: "{{ bootwright_bmc_libvirt_uri }}"
+        bindAddress: "{{ bootwright_bmc_bind }}"
+        authPath: "{{ bootwright_bmc_auth_path }}"
+        pool: "{{ bootwright_bmc_pool_name }}"
+        claimPath: "{{ bootwright_bmc_claim_root }}"
+        stateRoot: "{{ bootwright_bmc_root }}"
+        vMediaRoot: "{{ bootwright_bmc_vmedia_root }}"
+        firewallManaged: "{{ (bootwright_firewalld_available | default(false) | bool) | ternary('true', 'false') }}"
+
+- name: Complete host-atomic BMC claim after ownership success
+  ansible.builtin.import_tasks: complete_claim.yml

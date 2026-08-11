@@ -108,9 +108,54 @@ func TestDestroyRecoverCephOwnershipValidatesAndEmitsConfirmedFSID(t *testing.T)
 			t.Fatalf("conflicting recovery guidance missing %q: %s", want, stderr)
 		}
 	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*ownership.ResourceRecord)
+		want   string
+	}{
+		{name: "foreign context", mutate: func(record *ownership.ResourceRecord) { record.Context = "other" }, want: "context"},
+		{name: "wrong API", mutate: func(record *ownership.ResourceRecord) { record.APIVersion = "other/v1" }, want: "apiVersion"},
+		{name: "mismatched fsid", mutate: func(record *ownership.ResourceRecord) {
+			record.Attributes["fsid"] = "1088ddee-875b-11f1-9b98-303ea72d7724"
+		}, want: "confirmed fsid"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := ownership.ResourceRecord{
+				APIVersion: "bootwright.io/ownership/v1alpha1",
+				Kind:       string(ownership.KindStorageCluster),
+				Name:       cluster,
+				Owner:      ownership.Owner,
+				Context:    ctx.Name,
+				Host:       seedHost,
+				Cluster:    cluster,
+				Attributes: map[string]string{"seedHost": seedHost},
+			}
+			test.mutate(&candidate)
+			if err := ownership.SaveResource(ctx.OwnershipDir, candidate); err != nil {
+				t.Fatalf("save conflicting record: %v", err)
+			}
+			_, gotStderr, gotCode := runCLI(t,
+				"destroy",
+				"--clusters", cluster,
+				"--recover-ceph-ownership", cluster+"="+fsid,
+				"--dry-run",
+				"--ask-become-pass=false",
+			)
+			if gotCode != 1 || !strings.Contains(gotStderr, "ownership evidence conflicts") || !strings.Contains(gotStderr, test.want) {
+				t.Fatalf("conflicting recovery code=%d stderr=%q, want %q", gotCode, gotStderr, test.want)
+			}
+			commands := backtickedBootwrightCommands(gotStderr)
+			if len(commands) != 1 || !strings.Contains(commands[0], "--recover-ceph-ownership "+cluster+"="+fsid) {
+				t.Fatalf("conflicting recovery must retain one exact retry, got %v", commands)
+			}
+		})
+	}
 
 	record.Host = seedHost
+	record.Context = ctx.Name
+	record.APIVersion = "bootwright.io/ownership/v1alpha1"
 	record.Attributes["seedHost"] = seedHost
+	delete(record.Attributes, "fsid")
 	if err := ownership.SaveResource(ctx.OwnershipDir, record); err != nil {
 		t.Fatalf("replace storage ownership record: %v", err)
 	}

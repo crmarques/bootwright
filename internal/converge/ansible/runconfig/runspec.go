@@ -11,32 +11,33 @@ import (
 )
 
 type RunSpecConfig struct {
-	Executable         string
-	BundleDir          string
-	RenderedDir        string
-	ClustersDir        string
-	RunsDir            string
-	SecretsDir         string
-	ManagedServicesDir string
-	ProviderStateDir   string
-	OwnershipDir       string
-	InventoryPath      string
-	VarsPath           string
-	Playbook           string
-	Limit              string
-	Forks              int
-	ArtifactsDir       string
-	OutputLogPath      string
-	ExtraVarPairs      []string
-	Tags               []string
-	SkipTags           []string
-	RolesPath          string
-	CollectionsPath    string
-	Check              bool
-	AskBecomePass      bool
-	BecomePasswordFile string
-	UseControllingTTY  bool
-	ExtraEnv           map[string]string
+	Executable          string
+	BundleDir           string
+	RenderedDir         string
+	ClustersDir         string
+	RunsDir             string
+	SecretsDir          string
+	ManagedServicesDir  string
+	ProviderStateDir    string
+	OwnershipDir        string
+	InventoryPath       string
+	VarsPath            string
+	Playbook            string
+	Limit               string
+	Forks               int
+	ArtifactsDir        string
+	OutputLogPath       string
+	ExtraVarPairs       []string
+	Tags                []string
+	SkipTags            []string
+	RolesPath           string
+	CollectionsPath     string
+	Check               bool
+	AskBecomePass       bool
+	BecomePasswordFile  string
+	UseControllingTTY   bool
+	ClassifyUnreachable bool
+	ExtraEnv            map[string]string
 }
 
 func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
@@ -92,25 +93,26 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		collectionsPath = collectionsPath + string(os.PathListSeparator) + cfg.CollectionsPath
 	}
 	return ansible.RunSpec{
-		Executable:         cfg.Executable,
-		AnsibleCfg:         filepath.Join(cfg.BundleDir, bundle.AnsibleCfgRelPath),
-		RolesPath:          cfg.RolesPath,
-		CollectionsPath:    collectionsPath,
-		Inventory:          cfg.InventoryPath,
-		Playbook:           bundlePlaybook(cfg.BundleDir, cfg.Playbook),
-		Limit:              cfg.Limit,
-		Forks:              cfg.Forks,
-		ExtraVars:          cfg.VarsPath,
-		ExtraVarPairs:      pairs,
-		Tags:               cfg.Tags,
-		SkipTags:           cfg.SkipTags,
-		ArtifactsDir:       artifactsDirAbs,
-		OutputLogPath:      cfg.OutputLogPath,
-		Check:              cfg.Check,
-		AskBecomePass:      cfg.AskBecomePass,
-		BecomePasswordFile: cfg.BecomePasswordFile,
-		UseControllingTTY:  cfg.UseControllingTTY,
-		ExtraEnv:           cfg.ExtraEnv,
+		Executable:          cfg.Executable,
+		AnsibleCfg:          filepath.Join(cfg.BundleDir, bundle.AnsibleCfgRelPath),
+		RolesPath:           cfg.RolesPath,
+		CollectionsPath:     collectionsPath,
+		Inventory:           cfg.InventoryPath,
+		Playbook:            bundlePlaybook(cfg.BundleDir, cfg.Playbook),
+		Limit:               cfg.Limit,
+		Forks:               cfg.Forks,
+		ExtraVars:           cfg.VarsPath,
+		ExtraVarPairs:       pairs,
+		Tags:                cfg.Tags,
+		SkipTags:            cfg.SkipTags,
+		ArtifactsDir:        artifactsDirAbs,
+		OutputLogPath:       cfg.OutputLogPath,
+		Check:               cfg.Check,
+		AskBecomePass:       cfg.AskBecomePass,
+		BecomePasswordFile:  cfg.BecomePasswordFile,
+		UseControllingTTY:   cfg.UseControllingTTY,
+		ClassifyUnreachable: cfg.ClassifyUnreachable,
+		ExtraEnv:            cfg.ExtraEnv,
 	}, nil
 }
 

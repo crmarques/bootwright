@@ -264,15 +264,14 @@ bootwright destroy --clusters dc1-child-ocp,dc1-metal-ocp
 ```
 
 Selecting an installed parent without its installed child fails closed;
-No `--authorize` token widens the selected work set. If the parent API is unreachable,
-Bootwright keeps guest ownership and cluster runtime records even with
-`--authorize unreachable-nodes`, because host unreachability does not prove that the VM and
-DataVolumes are absent. A parent that holds no captured kubeconfig at all — it
-never finished installing, or an earlier destroy already removed its install
-state — is treated the same way: destroy continues for guests it never recorded
-and fails closed, naming the parent, for guests it did. A bare-metal parent selected in the same destroy retains
-its physical hardware and installed OS; only Bootwright-local lifecycle state is
-released.
+No `--authorize` token widens the selected work set. If the parent API is
+unreachable, or its captured kubeconfig is missing, Bootwright cannot prove any
+selected guest VM, DataVolume, or PVC absent. It fails closed even when the
+guest has no controller ownership record and even with
+`--authorize unreachable-nodes`; restore parent access and re-run the same
+destroy invocation. A bare-metal parent selected in the same destroy retains
+its physical hardware and installed OS; only Bootwright-local lifecycle state
+is released after its guest dependencies complete.
 
 ## virtctl is provisioned during the deps stage
 

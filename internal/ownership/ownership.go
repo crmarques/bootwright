@@ -60,7 +60,7 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 		Kind       string                     `json:"kind"`
 		Name       string                     `json:"name"`
 		Owner      string                     `json:"owner"`
-		Role       string                     `json:"role,omitempty"`
+		Role       json.RawMessage            `json:"role,omitempty"`
 		Context    string                     `json:"context,omitempty"`
 		Host       string                     `json:"host,omitempty"`
 		Provider   string                     `json:"provider,omitempty"`
@@ -75,12 +75,21 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
+	role := ""
+	if len(wire.Role) > 0 {
+		if string(wire.Role) == "null" {
+			return errors.New("role must be a string when present")
+		}
+		if err := json.Unmarshal(wire.Role, &role); err != nil {
+			return fmt.Errorf("role must be a string when present: %w", err)
+		}
+	}
 	*record = ResourceRecord{
 		APIVersion: wire.APIVersion,
 		Kind:       wire.Kind,
 		Name:       wire.Name,
 		Owner:      wire.Owner,
-		Role:       wire.Role,
+		Role:       role,
 		Context:    wire.Context,
 		Host:       wire.Host,
 		Provider:   wire.Provider,
@@ -166,6 +175,60 @@ func SaveResource(root string, record ResourceRecord) error {
 func LoadResources(root string) ([]ResourceRecord, error) {
 	records, _, err := LoadResourcesWithWarnings(root)
 	return records, err
+}
+
+func LoadOwnerResource(root, kind, name string) (ResourceRecord, bool, error) {
+	record := ResourceRecord{Kind: kind, Name: name, Role: RoleOwner}
+	path, err := ResourcePath(root, record)
+	if err != nil {
+		return ResourceRecord{}, false, err
+	}
+	for _, dir := range []string{root, filepath.Join(root, ResourceDirName), filepath.Dir(path)} {
+		info, err := os.Lstat(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			return ResourceRecord{}, false, nil
+		}
+		if err != nil {
+			return ResourceRecord{}, false, fmt.Errorf("inspect ownership directory %s: %w", dir, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ResourceRecord{}, false, fmt.Errorf("ownership directory %s is a symbolic link", dir)
+		}
+		if !info.IsDir() {
+			return ResourceRecord{}, false, fmt.Errorf("ownership directory %s is not a directory", dir)
+		}
+	}
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return ResourceRecord{}, false, nil
+	}
+	if err != nil {
+		return ResourceRecord{}, false, fmt.Errorf("inspect ownership resource %s: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return ResourceRecord{}, false, fmt.Errorf("ownership resource %s is a symbolic link", path)
+	}
+	if !info.Mode().IsRegular() {
+		return ResourceRecord{}, false, fmt.Errorf("ownership resource %s is not a regular file", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ResourceRecord{}, false, fmt.Errorf("read ownership resource %s: %w", path, err)
+	}
+	if err := json.Unmarshal(data, &record); err != nil {
+		return ResourceRecord{}, false, fmt.Errorf("decode ownership resource %s: %w", path, err)
+	}
+	if err := ValidateResource(record); err != nil {
+		return ResourceRecord{}, false, fmt.Errorf("validate ownership resource %s: %w", path, err)
+	}
+	expectedPath, err := ResourcePath(root, record)
+	if err != nil {
+		return ResourceRecord{}, false, fmt.Errorf("resolve ownership resource %s identity: %w", path, err)
+	}
+	if filepath.Clean(path) != filepath.Clean(expectedPath) {
+		return ResourceRecord{}, false, fmt.Errorf("ownership resource %s identity requires canonical path %s", path, expectedPath)
+	}
+	return record, true, nil
 }
 
 func LoadResourcesWithWarnings(root string) ([]ResourceRecord, []error, error) {

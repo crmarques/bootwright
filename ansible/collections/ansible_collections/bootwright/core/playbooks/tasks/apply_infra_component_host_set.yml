@@ -1,0 +1,22 @@
+---
+- name: Revalidate host operation before base package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Apply base host packages
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_base
+
+- name: Revalidate host operation before infra role mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Apply infra component service roles
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.applyRole }}"
+  loop: "{{ bootwright_host_infra_component_apply_targets }}"
+  loop_control:
+    loop_var: bootwright_component
+    label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.applyRole }}"

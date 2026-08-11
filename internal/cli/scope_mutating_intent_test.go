@@ -15,7 +15,7 @@ func TestMutatingJSONWithoutDryRunWinsBeforeOtherIntentValidation(t *testing.T) 
 		{
 			name: "apply",
 			run: func() error {
-				_, _, err := resolveScopeApplyIntent(outputJSON, false, false, "invalid-mode", []string{"invalid-token"})
+				_, _, err := resolveScopeApplyIntent(outputJSON, false, "invalid-mode", []string{"invalid-token"})
 				return err
 			},
 			want: "--output json is supported only with --dry-run for apply",

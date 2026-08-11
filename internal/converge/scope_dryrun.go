@@ -83,8 +83,8 @@ type DryRunTransition struct {
 	Action string `json:"action"`
 }
 
-func BuildDryRunTransitions(tasks []workflow.ApplyTask, runsDir string, mode workflow.ApplyMode, reinstallClusters []string) *DryRunTransitions {
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+func BuildDryRunTransitions(tasks []workflow.ApplyTask, runsDir, contextName string, mode workflow.ApplyMode, reinstallClusters []string) *DryRunTransitions {
+	objects, err := workflow.ClassifyApplyObjectsForMode(tasks, runsDir, contextName, mode)
 	if err != nil {
 		return &DryRunTransitions{Error: err.Error()}
 	}

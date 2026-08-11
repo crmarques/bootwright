@@ -1,0 +1,36 @@
+---
+- name: Initialize stable infra-component endpoint consequence set
+  ansible.builtin.set_fact:
+    bootwright_infra_endpoint_claim_map: {}
+    bootwright_infra_endpoint_release_candidates: []
+    bootwright_host_endpoint_allowed_claim_digests: []
+    bootwright_infra_endpoint_sides: >-
+      {{ [bootwright_infra_global_claim_next.active]
+         if bootwright_infra_global_claim_next.state == 'steady'
+         else (
+           bootwright_infra_global_claim_next.previous
+           + [bootwright_infra_global_claim_next.desired]
+           if bootwright_infra_global_claim_next.state == 'applying'
+           else bootwright_infra_global_claim_next.targets
+         ) }}
+  changed_when: false
+
+- name: Build stable endpoint consequences for every transition side
+  ansible.builtin.include_tasks: append_infra_component_side_endpoint_claims.yml
+  loop: "{{ bootwright_infra_endpoint_sides }}"
+  loop_control:
+    loop_var: bootwright_infra_endpoint_side
+    label: "{{ bootwright_infra_endpoint_side.kind }}/{{ bootwright_infra_endpoint_side.provider }}/{{ bootwright_infra_endpoint_side.name }}"
+
+- name: Resolve sorted stable infra-component endpoint consequence set
+  ansible.builtin.set_fact:
+    bootwright_host_endpoint_desired_claims: >-
+      {{ bootwright_infra_endpoint_claim_map
+         | dict2items
+         | sort(attribute='key')
+         | map(attribute='value')
+         | list }}
+  changed_when: false
+
+- name: Reserve complete infra-component endpoint union atomically
+  ansible.builtin.include_tasks: reserve_host_endpoint_claims.yml

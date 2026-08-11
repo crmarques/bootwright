@@ -13,14 +13,18 @@ what turns "forgot" into a red test.
 | You are adding | Register it in | Guard that fails otherwise |
 | --- | --- | --- |
 | an `--authorize` token | `authorizationTokens` (`internal/cli/authorize.go`), the `\| token \| authorizes \| accepted by \|` tables in `specs/state-model.md` and `docs/advanced/operations.md`, a `safetyMatrixCases()` row, and the verb's preview forecast | `authorize_contract_test.go`, `TestEveryTokenAVerbAcceptsIsNamedByItsPreviewForecast` |
-| a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising it, or `safetyMatrixFlagExemptions` naming the test that pins it instead; and a field emitted by `resolvedInvocation` so refusal retries preserve it | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix`, `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` |
+| a flag on `apply` or `destroy` | a `safetyMatrixCases()` row exercising its real verdict, and a field emitted by `resolvedInvocation` so refusal retries preserve it; there is no exemption registry | `TestEveryApplyDestroyFlagIsExercisedByTheSafetyMatrix`, `TestEveryApplyDestroyFlagIsPreservedByTheRetryBuilder` |
 | an apply task kind | `workflow.ApplyTaskKinds`, `controllerDNSDependencyClasses`, the reconfigure-only allowlist *or* `structuralRebuildConsequence`, `destroyKindForApplyTaskKind`, and `objectProtectedKind` when it is destructive | `TestApplyTaskKindsRegistryCoversEveryConstant`, `TestControllerDNSDependencyRegistryCoversEveryApplyTaskKind`, `TestEveryApplyTaskKindHasAnOverrideClassification`, `TestEveryApplyTaskKindMapsToARegisteredDestroyKind` |
 | an apply task execution class | the `ApplyTaskExecution*` constant set and `ActivityGraph.Add` validation that binds the class to its sole permitted task kind and exact mutation-control value | `TestApplyTaskExecutionClassRegistryCoversEveryConstant`, `TestApplyTaskExecutionClassPinsControllerMutationDecision` |
 | a destroy task kind | the `DestroyTaskKind*` constant set, `destroyTaskKinds`, and `destroyKindForApplyTaskKind` for every apply task whose convergence record it clears | `TestDestroyTaskKindsRegistryCoversEveryConstant`, `TestEveryApplyTaskKindMapsToARegisteredDestroyKind` |
 | a task dependency class | a `TaskLedgerEntry` field, `taskDependencyRefs`, `taskDependencySatisfied`, and every dependency graph consumer | `TestTaskDependencyPoliciesCoverEveryLedgerDependencyField` |
-| a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, and `substrateResetConsumers` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer` |
+| a substrate provider (or any consumer of the substrate release) | the machine-scoped predicate, `substrateResetConsumers`, and `providerMutationProviders` | `TestEverySubstrateResetConsumerIsMachineScoped`, `TestNoUnlistedSubstrateResetConsumer`, `TestEverySupportedProviderHasAMutationSafetyRegistry` |
+| a state-capable task in a provider adapter, provider boot/media role, ownership helper, or machine-infra dispatch | the exact path, task name, action, semantic class, named safety surface, and ordered anchor in `providerMutationTasks`; register the file in `providerMutationTaskFiles` and its gate→mutation→evidence policy in `providerMutationSurfaces`. Includes and imports are state-capable delegated boundaries unless their target is itself exhaustively registered | `TestEveryProviderStateChangingTaskFileIsRegistered`, `TestProviderMutationRegistryGatesBeforeSideEffectsAndDeletesEvidenceLast` |
 | a Go→Ansible intent, authorization, scope, or execution variable that controls mutation | `mutationSafetyVars` (`internal/converge/mutation_safety_vars.go`) and `ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md` | `TestMutationSafetyVarsStayClosedAcrossGoAnsibleAndDocs` |
-| a shared machine service slot | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed; every live cross-context mutator must also use the controller-global shared-service lease and durable host context claim | `internal/repo/checks/shared_service_classification_test.go`, `TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution`, `TestInfraComponentContainersCarryAndEnforceContextIdentity` |
+| a shared machine service slot, physical consequence, durable claim, transition, or endpoint | `selfContainedSharedServiceSlots` *or* accept that it degrades and fails closed; add an exact controller selection digest, include the consequence in the per-host manifest, acquire/revalidate the one command-wide host operation guard before mutation, classify both BMC and infra durable authorities before first publication, update the atomic full endpoint registry before sorted per-slot claims, and use `bootwright.core.claim_cas` for every canonical evidence write/removal. Register every new delegated or mutating task in `providerMutationTasks`/`providerMutationTaskFiles`/`providerMutationSurfaces`; never release the host guard in a role or play | `internal/repo/checks/shared_service_classification_test.go`, `TestSharedServiceMutatorsLeaseBeforeDecisiveScanAndExecution`, `TestBMCProviderPlayAcquiresHostOperationBeforeAnySharedMutation`, `TestBMCClaimAndLiveRuntimeProofPrecedeEveryServiceMutation`, `TestInfraComponentContainersCarryAndEnforceContextIdentity`, `TestEveryProviderStateChangingTaskFileIsRegistered` |
+| an ownership record writer or replacement path | enumerate and reject unreadable or noncanonical controller evidence before mutable execution; on the host read and require the exact API, kind, name, owner, effective role, and context before any directory creation or write | `TestApplyOwnershipEvidenceRequiresCurrentCanonicalIdentity`, `TestOwnershipHelperRefusesContradictoryEvidenceBeforeWriting` |
+| a provider lookup, same-name object reuse, or record-only orphan remover | one non-throwing classifier that accepts only a successful positive-absence result or the exact live manager/context/provider/cluster/machine/component identity; classify every composite member, key suppressed tasks on success-only payload fields, and remove controller evidence only after remover success or the same positive absence proof | `TestLibvirtNetworkApplyRequiresExactLiveIdentityBeforeMutation`, `TestLibvirtNetworkDestroyUsesOnlyExactLiveIdentity`, `TestLibvirtSafetyGatesDoNotTreatAmbiguousFailedToGetAsAbsence`, `TestKubeVirtDestroyVerifiesOwnershipLabel`, `TestKubeVirtBootProbesRequireExactNonThrowingLiveIdentity`, `TestVSphereMediaCleanupValidatesAuthorityBeforeMutationAndRetainsEvidence` |
+| a Ceph ownership path that can authorize `rm-cluster`, evidence replacement, or controller release | the shared `bootwright_ceph_controller_owner_evidence` and `bootwright_ceph_host_marker_evidence` classifiers; controller recovery must also use the canonical unfiltered Go owner loader | `TestEveryCephDestructiveAuthorityUsesExactSharedEvidence`, `TestValidateDestroyCephOwnershipRecoveryRejectsContradictoryEvidence` |
 | a gate that decides "may this run destroy X" | one named consequence predicate the gate, the refusal, the prompt choice **and** the preview all read | ADR 0031; `TestDestroyDataLossCoversEveryScopeThatDestroysOSDData` |
 | a refusal or next-step action | the object, the consequence in the kind's own vocabulary, and a CLI-rendered `bootwright …` invocation carrying the resolved run flags and any required token; every production Go package outside `internal/cli` returns typed or command-free evidence only, and CLI runtime code cannot hand-write one outside the central builder | `TestOnlyCLIConstructsMutatingBootwrightInvocations`, `TestCLIMutatingBootwrightTextStaysInTheResolvedBuilderOrHelp`, the `verdictRefusal` arm of `TestApplyDestroySafetyMatrix` |
 | an Ansible runtime retry or refusal | one of the CLI-produced `bootwright_*_invocation` facts in `vars-contract.md`; add a typed CLI variant when the existing facts cannot express the sanctioned retry | `TestAnsibleMutatingRemediesUseResolvedInvocationFacts` |
@@ -41,6 +45,12 @@ Three failure shapes recur often enough to name:
 - **A guard built on a value no CLI path produces.** A table that hand-builds a
   forecast struct or a partial `Selection` tests the function, not the contract.
   Drive the guard through `runCLI` or through the same constructor production uses.
+- **Filtering evidence before validating its identity.** A copied
+  foreign-context record then disappears from the current context's view and a
+  writer can replace it at the canonical path without ever observing the
+  contradiction. Enumerate first, validate exact API/owner/context and canonical
+  path, then filter only the trusted set. Dry-run may report invalid evidence but
+  must not use it as ownership proof.
 
 **Registry (`workflow.ApplyTaskKinds`).** The single list of mutating apply task
 kinds. `TestApplyTaskKindsRegistryCoversEveryConstant` parses `apply_tasks.go`
@@ -515,11 +525,11 @@ local and inherited-persistent flag set of `apply` and `destroy` and requires
 each one to appear in a row for that same verb, not merely somewhere in one
 shared-name set. Every persistent global therefore needs apply-side and
 destroy-side coverage independently. A flag must appear in a
-`safetyMatrixCases()` row, or in `safetyMatrixFlagExemptions` naming the test
-that pins it instead; `TestSafetyMatrixFlagExemptionsHoldOnlyLiveFlags` rejects a
-dead exemption. Before this, a new flag on either verb could ship with no
-scenario coverage at all — the matrix was comprehensive over *tokens* and merely
-incidental over *flags*.
+`safetyMatrixCases()` row that asserts its real verdict. There is deliberately
+no exemption map: a separate narrow test may deepen one flag's contract, but it
+cannot replace its matrix row. Before this guard, a new flag on either verb
+could ship with no scenario coverage at all — the matrix was comprehensive over
+*tokens* and merely incidental over *flags*.
 
 **The command lease encloses the input read and its locality decision.** A
 context must be resolved far enough to locate its lease before that lease can be

@@ -1,0 +1,492 @@
+---
+- name: Require exact BMC teardown preconditions
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_destroy_kind == 'bmc-emulator'
+      - bootwright_bmc_mount_identity.valid | default(false) | bool
+      - bootwright_bmc_mount_identity.targets | default([]) | length == 0
+      - bootwright_bmc_loaded_unit_identities | default([]) | length == 2
+      - >-
+        bootwright_ownership_destroy_attrs.firewallManaged == 'false'
+        or bootwright_firewalld_available | default(false) | bool
+      - >-
+        bootwright_bmc_claim_transition | default({}) | length == 0
+        or (
+          bootwright_bmc_claim_transition.active.attributes.firewallManaged == 'false'
+          and bootwright_bmc_claim_transition.pending.attributes.firewallManaged == 'false'
+        )
+        or bootwright_firewalld_available | default(false) | bool
+    fail_msg: >-
+      Refusing BMC emulator teardown because its exact loaded units, mount-free
+      roots, or recorded firewalld consequence could not be proven before the
+      first side effect. Restore host access and re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization consumes an
+      unknown runtime probe.
+
+- name: Recheck BMC ownership record immediately before teardown
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
+
+- name: Require exact BMC record snapshot immediately before teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (
+          bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool
+          and not (bootwright_ownership_validated_stat.stat.exists | bool)
+        )
+        or (
+          not (bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool)
+          and bootwright_ownership_validated_stat.stat.exists | bool
+          and bootwright_ownership_validated_record == bootwright_ownership_record
+        )
+    fail_msg: >-
+      Refusing BMC teardown because its owner-record snapshot changed after
+      classification. No BMC member was changed. Re-read current state and
+      re-run `{{ bootwright_mutating_invocation }}`; claimed recovery never
+      deletes a new record and recorded teardown never consumes a replacement.
+
+- name: Re-prove BMC claim units mounts and pool immediately before teardown
+  ansible.builtin.include_tasks: ownership_gate.yml
+  vars:
+    bootwright_bmc_gate_mode: destroy
+
+- name: Snapshot exact BMC evidence authorized for teardown
+  ansible.builtin.set_fact:
+    bootwright_bmc_destroy_claim_snapshot: "{{ bootwright_bmc_claim_record }}"
+    bootwright_bmc_destroy_transition_snapshot: "{{ bootwright_bmc_claim_transition }}"
+    bootwright_bmc_destroy_marker_snapshot: "{{ bootwright_bmc_claim_context }}"
+  changed_when: false
+
+- name: Teardown exact BMC provider-global composite
+  block:
+    - name: Revalidate BMC destroy authority before unit mutation
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+    - name: Stop exact loaded BMC systemd units
+      ansible.builtin.systemd_service:
+        name: "{{ item.name }}"
+        state: stopped
+        enabled: false
+        daemon_reload: false
+      loop:
+        - name: "{{ bootwright_ownership_destroy_attrs.redfishUnit }}"
+          present: "{{ bootwright_bmc_loaded_unit_identities[0].present | bool }}"
+        - name: "{{ bootwright_ownership_destroy_attrs.vMediaUnit }}"
+          present: "{{ bootwright_bmc_loaded_unit_identities[1].present | bool }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.present | bool
+
+    - name: Tear down both exact BMC transition consequences
+      ansible.builtin.include_tasks: destroy_transition.yml
+      when: bootwright_bmc_claim_transition | default({}) | length > 0
+
+    - name: Re-probe exact BMC libvirt pool immediately before removal
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - "{{ bootwright_ownership_destroy_attrs.libvirtURI }}"
+          - pool-dumpxml
+          - "{{ bootwright_ownership_destroy_attrs.pool }}"
+      register: bootwright_bmc_destroy_pool_recheck
+      changed_when: false
+      failed_when: false
+
+    - name: Require exact or absent BMC pool immediately before removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_pool_recheck.rc is defined
+          - bootwright_bmc_destroy_pool_recheck.stdout is defined
+          - bootwright_bmc_destroy_pool_recheck.stderr is defined
+          - >-
+            (
+              bootwright_bmc_destroy_pool_recheck.rc | int == 0
+              and (
+                bootwright_bmc_destroy_pool_recheck.stdout
+                | bootwright.core.bootwright_bmc_pool_identity
+              ) == {
+                'context': bootwright_bmc_current_context,
+                'provider': bootwright_bmc_provider_name,
+                'host': (bootwright_host_name | default(inventory_hostname)),
+                'type': 'dir',
+                'name': bootwright_ownership_destroy_attrs.pool,
+                'targetPath': bootwright_ownership_destroy_attrs.vMediaRoot
+              }
+            )
+            or (
+              bootwright_bmc_destroy_pool_recheck.rc | int != 0
+              and (
+                bootwright_bmc_destroy_pool_recheck.stderr
+                | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool')
+              )
+            )
+        fail_msg: >-
+          The recorded BMC pool changed or became unprobeable immediately
+          before removal. Claim and ownership evidence were retained; restore
+          libvirt access and re-run `{{ bootwright_mutating_invocation }}`.
+
+    - name: Revalidate BMC destroy authority before recorded pool mutation
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+    - name: Remove exact BMC libvirt vmedia pool
+      community.libvirt.virt_pool:
+        name: "{{ bootwright_ownership_destroy_attrs.pool }}"
+        uri: "{{ bootwright_ownership_destroy_attrs.libvirtURI }}"
+        state: absent
+      when: bootwright_bmc_destroy_pool_recheck.rc | int == 0
+
+    - name: Verify exact BMC libvirt vmedia pool absence
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - -c
+          - "{{ bootwright_ownership_destroy_attrs.libvirtURI }}"
+          - pool-dumpxml
+          - "{{ bootwright_ownership_destroy_attrs.pool }}"
+      register: bootwright_bmc_destroy_pool_absence
+      changed_when: false
+      failed_when: false
+
+    - name: Require exact BMC libvirt pool absence
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_pool_absence.rc is defined
+          - bootwright_bmc_destroy_pool_absence.rc | int != 0
+          - bootwright_bmc_destroy_pool_absence.stderr is defined
+          - >-
+            bootwright_bmc_destroy_pool_absence.stderr
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-pool')
+        fail_msg: >-
+          The exact recorded BMC libvirt pool did not have positive absence
+          proof after teardown.
+
+    - name: Revalidate BMC destroy authority before firewall mutation
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+      when: bootwright_ownership_destroy_attrs.firewallManaged == 'true'
+
+    - name: Close exact recorded BMC Redfish firewall port
+      ansible.posix.firewalld:
+        port: "{{ bootwright_ownership_destroy_attrs.redfishPort | int }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      when: bootwright_ownership_destroy_attrs.firewallManaged == 'true'
+
+    - name: Re-probe mounts beneath BMC roots immediately before path removal
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - -rn
+          - -o
+          - TARGET
+      register: bootwright_bmc_destroy_mount_recheck
+      changed_when: false
+      failed_when: false
+
+    - name: Require mount-free BMC roots immediately before path removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_mount_recheck.rc is defined
+          - bootwright_bmc_destroy_mount_recheck.rc | int == 0
+          - bootwright_bmc_destroy_mount_recheck.stdout is defined
+          - bootwright_bmc_destroy_mount_recheck_identity.valid | default(false) | bool
+          - bootwright_bmc_destroy_mount_recheck_identity.targets | default([]) | length == 0
+        fail_msg: >-
+          A BMC root became mounted or unprobeable immediately before recursive
+          path removal. No BMC path or ownership evidence was removed. Remove
+          only an independently verified foreign mount, then re-run
+          `{{ bootwright_mutating_invocation }}`.
+      vars:
+        bootwright_bmc_destroy_mount_recheck_lines: >-
+          {{
+            bootwright_bmc_destroy_mount_recheck.stdout_lines | default([])
+            | select('match', bootwright_bmc_destroy_mount_recheck_pattern)
+            | list | join('\n')
+          }}
+        bootwright_bmc_destroy_mount_recheck_pattern: >-
+          ^({{ [bootwright_ownership_destroy_attrs.stateRoot,
+                bootwright_ownership_destroy_attrs.vMediaRoot,
+                bootwright_ownership_destroy_attrs.claimPath]
+               | map('regex_escape') | join('|') }})(/|$)
+        bootwright_bmc_destroy_mount_recheck_identity: >-
+          {{
+            bootwright_bmc_destroy_mount_recheck_lines
+            | bootwright.core.bootwright_mount_targets([
+                bootwright_ownership_destroy_attrs.stateRoot,
+                bootwright_ownership_destroy_attrs.vMediaRoot,
+                bootwright_ownership_destroy_attrs.claimPath])
+          }}
+
+    - name: Revalidate BMC destroy authority before runtime path mutation
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+    - name: Remove exact BMC runtime paths while retaining durable claim
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ bootwright_ownership_destroy_attrs.stateRoot }}"
+        - "{{ bootwright_ownership_destroy_attrs.vMediaRoot }}"
+        - "/etc/systemd/system/{{ bootwright_ownership_destroy_attrs.redfishUnit }}"
+        - "/etc/systemd/system/{{ bootwright_ownership_destroy_attrs.vMediaUnit }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Revalidate BMC destroy authority before daemon reload
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+    - name: Reload systemd after exact BMC unit removal
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Probe removed BMC systemd units
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - --no-pager
+          - --property=LoadState
+          - --property=FragmentPath
+          - "{{ item.name }}"
+      loop:
+        - name: "{{ bootwright_ownership_destroy_attrs.redfishUnit }}"
+          path: "/etc/systemd/system/{{ bootwright_ownership_destroy_attrs.redfishUnit }}"
+        - name: "{{ bootwright_ownership_destroy_attrs.vMediaUnit }}"
+          path: "/etc/systemd/system/{{ bootwright_ownership_destroy_attrs.vMediaUnit }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: bootwright_bmc_destroy_unit_absence_probes
+      changed_when: false
+      failed_when: false
+
+    - name: Require removed BMC systemd units to be unloaded
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.rc is defined
+          - item.rc | int == 0
+          - >-
+            (item.stdout | default('')
+             | bootwright.core.bootwright_systemd_show_identity(item.item.path))
+            == {'present': false, 'loadState': 'not-found', 'fragmentPath': ''}
+        fail_msg: >-
+          Systemd did not positively prove {{ item.item.name | default('a BMC unit') }}
+          unloaded after its exact unit file was removed.
+      loop: "{{ bootwright_bmc_destroy_unit_absence_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name | default('<unknown>') }}"
+
+    - name: Recheck BMC record immediately before evidence removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: validate_resource.yml
+
+    - name: Re-probe BMC claim immediately before evidence removal
+      ansible.builtin.import_tasks: claim_probe.yml
+
+    - name: Require exact BMC evidence snapshots before claim removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (
+              bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool
+              and not (bootwright_ownership_validated_stat.stat.exists | bool)
+            )
+            or (
+              not (bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool)
+              and bootwright_ownership_validated_stat.stat.exists | bool
+              and bootwright_ownership_validated_record == bootwright_ownership_record
+            )
+          - bootwright_bmc_claim_record == bootwright_bmc_destroy_claim_snapshot
+          - bootwright_bmc_claim_transition == bootwright_bmc_destroy_transition_snapshot
+          - bootwright_bmc_claim_context == bootwright_bmc_destroy_marker_snapshot
+        fail_msg: >-
+          Ownership, claim, transition, or marker evidence changed during BMC
+          teardown. The competing evidence was retained. Inspect current state
+          and re-run `{{ bootwright_mutating_invocation }}`; no destroy removes
+          a claim it did not gate.
+
+    - name: Revalidate BMC destroy authority before endpoint evidence removal
+      ansible.builtin.include_tasks: destroy_mutation_guard.yml
+
+    - name: Release all exact BMC endpoint claims after teardown proof
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: release_host_endpoint_claims.yml
+      vars:
+        bootwright_host_endpoint_release_candidates: >-
+          {{ bootwright_bmc_endpoint_transition.allCandidates }}
+
+    - name: Revalidate host operation before BMC transition removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Atomically remove exact BMC transition after teardown
+      bootwright.core.claim_cas:
+        path: "{{ bootwright_bmc_transition_path }}"
+        state: absent
+        expected_contents: >-
+          {{
+            [bootwright_bmc_transition_document_content.content | b64decode]
+            if (bootwright_bmc_transition_document_stat.stat.exists | bool)
+            else []
+          }}
+        allow_absent: true
+        create_parents: false
+        trusted_root: /
+      register: bootwright_bmc_destroy_transition_cas
+      failed_when: false
+
+    - name: Require exact BMC transition CAS removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_transition_cas.previous_sha256 is defined
+          - bootwright_bmc_destroy_transition_cas.current_sha256 is defined
+          - bootwright_bmc_destroy_transition_cas.current_sha256 == ''
+        fail_msg: >-
+          Refusing to continue BMC evidence removal because another mutation
+          won or held the transition CAS:
+          {{ bootwright_bmc_destroy_transition_cas.msg | default('winner differs') }}.
+          Re-run `{{ bootwright_mutating_invocation }}` after inspecting it.
+
+    - name: Revalidate host operation before BMC full claim removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Atomically remove exact BMC full claim after teardown
+      bootwright.core.claim_cas:
+        path: "{{ bootwright_bmc_claim_path }}"
+        state: absent
+        expected_contents: >-
+          {{
+            [bootwright_bmc_claim_document_content.content | b64decode]
+            if (bootwright_bmc_claim_document_stat.stat.exists | bool)
+            else []
+          }}
+        allow_absent: true
+        create_parents: false
+        trusted_root: /
+      register: bootwright_bmc_destroy_claim_cas
+      failed_when: false
+
+    - name: Require exact BMC full claim CAS removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_claim_cas.previous_sha256 is defined
+          - bootwright_bmc_destroy_claim_cas.current_sha256 is defined
+          - bootwright_bmc_destroy_claim_cas.current_sha256 == ''
+        fail_msg: >-
+          Refusing to continue BMC evidence removal because another mutation
+          won or held the full-claim CAS:
+          {{ bootwright_bmc_destroy_claim_cas.msg | default('winner differs') }}.
+          Re-run `{{ bootwright_mutating_invocation }}` after inspecting it.
+
+    - name: Revalidate host operation before legacy BMC marker removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Atomically remove exact legacy BMC marker after teardown
+      bootwright.core.claim_cas:
+        path: "{{ bootwright_bmc_claim_root }}/.bootwright-context"
+        state: absent
+        expected_contents: >-
+          {{
+            [bootwright_bmc_claim_content.content | b64decode]
+            if (bootwright_bmc_claim_marker_stat.stat.exists | bool)
+            else []
+          }}
+        allow_absent: true
+        create_parents: false
+        trusted_root: /
+      register: bootwright_bmc_destroy_marker_cas
+      failed_when: false
+
+    - name: Require exact legacy BMC marker CAS removal
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_marker_cas.previous_sha256 is defined
+          - bootwright_bmc_destroy_marker_cas.current_sha256 is defined
+          - bootwright_bmc_destroy_marker_cas.current_sha256 == ''
+        fail_msg: >-
+          Refusing to continue BMC evidence removal because another mutation
+          won or held the legacy-marker CAS:
+          {{ bootwright_bmc_destroy_marker_cas.msg | default('winner differs') }}.
+          Re-run `{{ bootwright_mutating_invocation }}` after inspecting it.
+
+    - name: Revalidate host operation before empty BMC claim root removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Remove empty BMC provider-global claim root
+      ansible.builtin.command:
+        argv:
+          - rmdir
+          - "{{ bootwright_bmc_claim_root }}"
+      register: bootwright_bmc_destroy_claim_root_remove
+      changed_when: bootwright_bmc_destroy_claim_root_remove.rc == 0
+      failed_when: false
+      when: bootwright_bmc_claim_root_stat.stat.exists | bool
+
+    - name: Prove BMC provider-global claim root absent
+      ansible.builtin.stat:
+        path: "{{ bootwright_bmc_claim_root }}"
+      register: bootwright_bmc_destroy_claim_root_absence
+      changed_when: false
+      failed_when: false
+
+    - name: Require BMC provider-global claim root absence
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_bmc_destroy_claim_root_absence.stat.exists is defined
+          - not (bootwright_bmc_destroy_claim_root_absence.stat.exists | bool)
+        fail_msg: >-
+          The BMC claim root was not empty or could not be removed after its
+          exact CAS-protected evidence was released. Inspect unexpected entries
+          and re-run `{{ bootwright_mutating_invocation }}`; recursive deletion
+          is never used for this provider-global evidence root.
+
+    - name: Recheck claimed partial BMC record absence after claim removal
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: validate_resource.yml
+      when: bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool
+
+    - name: Require claimed partial BMC record to remain absent at completion
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - not (bootwright_ownership_validated_stat.stat.exists | bool)
+        fail_msg: >-
+          An ownership record appeared while claimed partial BMC teardown
+          completed. The new record was retained; inspect current state and
+          re-run `{{ bootwright_mutating_invocation }}`.
+      when: bootwright_bmc_claimed_partial_destroy_verified | default(false) | bool
+  rescue:
+    - name: Refuse incomplete BMC provider-global teardown
+      ansible.builtin.fail:
+        msg: >-
+          BMC emulator teardown stopped at
+          {{ ansible_failed_task.name | default('an unknown member') }}:
+          {{ ansible_failed_result.msg | default('the member did not satisfy its exact postcondition') }}.
+          The
+          durable claim or exact ownership record was retained whenever its
+          cleanup boundary had not completed. Repair the reported host,
+          systemd, libvirt, firewalld, or filesystem failure and re-run
+          `{{ bootwright_mutating_invocation }}`.

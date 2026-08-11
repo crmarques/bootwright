@@ -1,0 +1,54 @@
+---
+- name: Resolve exact BMC host endpoint transition set
+  ansible.builtin.set_fact:
+    bootwright_bmc_endpoint_transition: >-
+      {{ (bootwright_bmc_apply_transition_envelope.active
+          if (bootwright_bmc_apply_transition_envelope | default({}) | length > 0)
+          else bootwright_bmc_desired_claim)
+         | bootwright.core.bootwright_bmc_endpoint_transition(
+             bootwright_bmc_apply_transition_envelope.pending
+             if (bootwright_bmc_apply_transition_envelope | default({}) | length > 0)
+             else bootwright_bmc_desired_claim) }}
+  changed_when: false
+
+- name: Require exact BMC host endpoint transition set
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_endpoint_transition.valid | default(false) | bool
+      - bootwright_bmc_endpoint_transition.desiredClaims | length == 2
+      - bootwright_bmc_endpoint_transition.retainedClaims | length >= 2
+    fail_msg: >-
+      Refusing BMC apply because its Redfish and vMedia endpoint claims could
+      not be bound to the exact active and desired composites. No endpoint or
+      runtime was changed. Repair the desired and durable claim evidence, then
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve exact BMC operation consequence digests
+  ansible.builtin.set_fact:
+    bootwright_bmc_operation_claim_digests: >-
+      {{ [
+           (bootwright_bmc_apply_transition_envelope.active
+            if (bootwright_bmc_apply_transition_envelope | default({}) | length > 0)
+            else bootwright_bmc_desired_claim)
+           | bootwright.core.bootwright_bmc_consequence_digest,
+           (bootwright_bmc_apply_transition_envelope.pending
+            if (bootwright_bmc_apply_transition_envelope | default({}) | length > 0)
+            else bootwright_bmc_desired_claim)
+           | bootwright.core.bootwright_bmc_consequence_digest
+         ] | unique | sort }}
+  changed_when: false
+
+- name: Bind BMC apply to command-wide selected host consequences
+  ansible.builtin.import_tasks: ../operation_binding.yml
+
+- name: Preflight symmetric host consequences before BMC apply publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: preflight_host_shared_service_consequences.yml
+  vars:
+    bootwright_host_prepublication_candidate_family: bmc-emulator
+    bootwright_host_prepublication_candidate: >-
+      {{ bootwright_bmc_apply_transition_envelope
+         if (bootwright_bmc_apply_transition_envelope | default({}) | length > 0)
+         else bootwright_bmc_desired_claim }}

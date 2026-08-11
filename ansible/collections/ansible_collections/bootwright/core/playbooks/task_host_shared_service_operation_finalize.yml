@@ -1,0 +1,15 @@
+---
+- name: Finalize host-wide shared-service operations
+  hosts: bootwright_provider_hosts:bootwright_infra_component_hosts
+  strategy: linear
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Release this command's exact host-wide shared-service operation
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: release_host_shared_service_operation.yml
+
+    - name: Finalize host-wide shared-service operation proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

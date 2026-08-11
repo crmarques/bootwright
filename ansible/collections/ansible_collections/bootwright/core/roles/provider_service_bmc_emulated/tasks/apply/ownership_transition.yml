@@ -1,0 +1,209 @@
+---
+- name: Resolve desired BMC ownership composite
+  ansible.builtin.set_fact:
+    bootwright_bmc_desired_record_composite:
+      provider: "{{ bootwright_bmc_provider_name }}"
+      paths:
+        - "{{ bootwright_bmc_root }}"
+        - "{{ bootwright_bmc_vmedia_root }}"
+        - "{{ bootwright_bmc_redfish_unit_path }}"
+        - "{{ bootwright_bmc_vmedia_unit_path }}"
+        - "{{ bootwright_bmc_claim_root }}"
+      attributes:
+        redfishUnit: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+        vMediaUnit: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+        redfishPort: "{{ bootwright_bmc_port | string }}"
+        vMediaPort: "{{ bootwright_bmc_vmedia_port | string }}"
+        libvirtURI: "{{ bootwright_bmc_libvirt_uri }}"
+        bindAddress: "{{ bootwright_bmc_bind }}"
+        authPath: "{{ bootwright_bmc_auth_path }}"
+        pool: "{{ bootwright_bmc_pool_name }}"
+        claimPath: "{{ bootwright_bmc_claim_root }}"
+        stateRoot: "{{ bootwright_bmc_root }}"
+        vMediaRoot: "{{ bootwright_bmc_vmedia_root }}"
+        firewallManaged: "{{ (bootwright_firewalld_available | default(false) | bool) | ternary('true', 'false') }}"
+    bootwright_bmc_apply_records: >-
+      {{
+        (bootwright_ownership_records_by_kind | default({})).get('bmc-emulator', [])
+        | selectattr('name', 'equalto', bootwright_bmc_provider_name)
+        | list
+      }}
+    bootwright_ownership_kind: bmc-emulator
+    bootwright_ownership_name: "{{ bootwright_bmc_provider_name }}"
+    bootwright_ownership_role: owner
+  changed_when: false
+
+- name: Resolve durable desired BMC provider-global claim
+  ansible.builtin.set_fact:
+    bootwright_bmc_desired_claim:
+      apiVersion: bootwright.io/bmc-service-claim/v1alpha1
+      kind: bmc-emulator
+      name: "{{ bootwright_bmc_provider_name }}"
+      owner: bootwright
+      context: "{{ bootwright_bmc_current_context }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+      provider: "{{ bootwright_bmc_provider_name }}"
+      paths: "{{ bootwright_bmc_desired_record_composite.paths }}"
+      attributes: "{{ bootwright_bmc_desired_record_composite.attributes }}"
+  changed_when: false
+
+- name: Probe exact BMC provider-global claim before apply classification
+  ansible.builtin.import_tasks: ../claim_probe.yml
+
+- name: Validate exact live BMC owner record before apply
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
+
+- name: Bind BMC apply to one exact live owner record
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_bmc_apply_records | length <= 1
+      - >-
+        (
+          bootwright_ownership_validated_stat.stat.exists | bool
+          and bootwright_bmc_apply_records | length == 1
+          and bootwright_ownership_validated_record == bootwright_bmc_apply_records[0]
+        )
+        or (
+          not (bootwright_ownership_validated_stat.stat.exists | bool)
+          and bootwright_bmc_apply_records | length == 0
+        )
+    fail_msg: >-
+      Refusing BMC emulator apply because the controller inventory and the live
+      regular ownership record do not identify one exact provider composite.
+      Restore the exact record from trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`; no apply replaces missing,
+      contradictory, malformed, or foreign ownership evidence.
+
+- name: Resolve existing BMC ownership composite before apply
+  ansible.builtin.set_fact:
+    bootwright_ownership_record: "{{ bootwright_ownership_validated_record }}"
+    bootwright_ownership_destroy_kind: bmc-emulator
+    bootwright_ownership_destroy_name: "{{ bootwright_bmc_provider_name }}"
+    bootwright_ownership_destroy_attrs: >-
+      {{ bootwright_ownership_validated_record.attributes | default({}) }}
+    bootwright_ownership_destroy_paths: >-
+      {{ bootwright_ownership_validated_record.paths | default([]) }}
+  changed_when: false
+  when: bootwright_ownership_validated_stat.stat.exists | bool
+
+- name: Resolve claim-backed interrupted BMC ownership composite
+  ansible.builtin.set_fact:
+    bootwright_ownership_record: >-
+      {{ bootwright_bmc_claim_record
+         | combine({'apiVersion': 'bootwright.io/ownership/v1alpha1'}) }}
+    bootwright_ownership_destroy_kind: bmc-emulator
+    bootwright_ownership_destroy_name: "{{ bootwright_bmc_provider_name }}"
+    bootwright_ownership_destroy_attrs: "{{ bootwright_bmc_claim_record.attributes }}"
+    bootwright_ownership_destroy_paths: "{{ bootwright_bmc_claim_record.paths }}"
+  changed_when: false
+  when:
+    - not (bootwright_ownership_validated_stat.stat.exists | bool)
+    - bootwright_bmc_claim_record | length > 0
+
+- name: Prove existing BMC composite before apply or transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_record_gate.yml
+  vars:
+    bootwright_bmc_desired_destroy_verified: true
+    bootwright_bmc_transition_desired: "{{ bootwright_bmc_desired_record_composite }}"
+  when:
+    - bootwright_ownership_validated_stat.stat.exists | bool
+      or bootwright_bmc_claim_record | length > 0
+
+- name: Resolve explicit BMC desired-state transition
+  ansible.builtin.set_fact:
+    bootwright_bmc_transition_record: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else ((bootwright_bmc_claim_record
+                | combine({'apiVersion': 'bootwright.io/ownership/v1alpha1'}))
+               if (bootwright_bmc_claim_record | length > 0) else {}) }}
+    bootwright_bmc_transition_old_pool_present: >-
+      {{
+        (bootwright_ownership_validated_stat.stat.exists | bool
+         or bootwright_bmc_claim_record | length > 0)
+        and bootwright_bmc_pool_probe.rc is defined
+        and bootwright_bmc_pool_probe.rc | int == 0
+      }}
+    bootwright_bmc_transition_old_pool_uuid: >-
+      {{
+        (bootwright_bmc_pool_probe.stdout | default(''))
+        | bootwright.core.bootwright_bmc_pool_uuid
+      }}
+    bootwright_bmc_apply_transition_needed: >-
+      {{
+        (bootwright_ownership_validated_stat.stat.exists | bool
+         or bootwright_bmc_claim_record | length > 0)
+        and (
+          bootwright_ownership_record.provider | default('')
+            != bootwright_bmc_desired_record_composite.provider
+          or bootwright_ownership_record.paths | default([])
+            != bootwright_bmc_desired_record_composite.paths
+          or bootwright_ownership_record.attributes | default({})
+            != bootwright_bmc_desired_record_composite.attributes
+        )
+      }}
+  changed_when: false
+
+- name: Resolve durable BMC transition envelope
+  ansible.builtin.set_fact:
+    bootwright_bmc_transition_active_claim: >-
+      {{
+        (bootwright_bmc_transition_record
+         | bootwright.core.bootwright_bmc_record_claim_identity(
+             bootwright_bmc_current_context,
+             bootwright_bmc_provider_name,
+             bootwright_host_name | default(inventory_hostname),
+             bootwright_provider_state_dir))
+        if (bootwright_bmc_transition_record | default({}) is mapping
+            and bootwright_bmc_transition_record | default({}) | length > 0)
+        else {}
+      }}
+  changed_when: false
+
+- name: Require pending BMC transition to target current desired state
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or bootwright_bmc_claim_transition.pending == bootwright_bmc_desired_claim
+      - >-
+        bootwright_bmc_claim_transition | length == 0
+        or bootwright_bmc_transition_active_claim in [
+          bootwright_bmc_claim_transition.active,
+          bootwright_bmc_claim_transition.pending
+        ]
+    fail_msg: >-
+      Refusing BMC emulator apply because an interrupted transition targets a
+      different pending desired composite. Restore the desired inputs named by
+      the exact transition, re-run `{{ bootwright_mutating_invocation }}` to
+      complete it, then apply the newer desired state; no run discards an
+      interrupted URI, pool, port, unit, or path transition.
+
+- name: Build exact BMC apply transition envelope
+  ansible.builtin.set_fact:
+    bootwright_bmc_apply_transition_envelope: >-
+      {{
+        bootwright_bmc_claim_transition
+        if (bootwright_bmc_claim_transition | length > 0)
+        else ({
+          'apiVersion': 'bootwright.io/bmc-service-transition/v1alpha1',
+          'kind': 'bmc-emulator-transition',
+          'name': bootwright_bmc_provider_name,
+          'owner': 'bootwright',
+          'context': bootwright_bmc_current_context,
+          'host': (bootwright_host_name | default(inventory_hostname)),
+          'provider': bootwright_bmc_provider_name,
+          'active': bootwright_bmc_transition_active_claim,
+          'pending': bootwright_bmc_desired_claim
+        } if (bootwright_bmc_apply_transition_needed | bool) else {})
+      }}
+  changed_when: false
+
+- name: Restore desired BMC emulator facts after ownership transition
+  ansible.builtin.import_tasks: facts.yml

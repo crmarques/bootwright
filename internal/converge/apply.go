@@ -223,8 +223,8 @@ func PlanScopedApply(cmdCtx context.Context, runScope Scope, plan *WorkflowPlan,
 	return applyTarget, tasks, limits, dryRunTasks, nil
 }
 
-func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, runsDir string) ([]workflow.ObjectClassification, error) {
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, runsDir, contextName string) ([]workflow.ObjectClassification, error) {
+	objects, err := workflow.ClassifyApplyObjectsForMode(tasks, runsDir, contextName, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -234,8 +234,8 @@ func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, run
 	return objects, nil
 }
 
-func ArbiterPreparePreflight(tasks []workflow.ApplyTask, runsDir, cluster string) error {
-	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir)
+func ArbiterPreparePreflight(tasks []workflow.ApplyTask, runsDir, contextName, cluster string) error {
+	objects, err := workflow.ClassifyApplyObjects(tasks, runsDir, contextName)
 	if err != nil {
 		return err
 	}

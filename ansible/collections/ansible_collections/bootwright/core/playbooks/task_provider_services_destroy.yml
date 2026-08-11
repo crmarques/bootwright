@@ -29,8 +29,19 @@
         | map(attribute='providerName')
         | list
       }}
+    bootwright_machine_shared_provider_selected: >-
+      {{ (bootwright_machine_provider_services
+          | selectattr('kind', 'equalto', 'bmc') | list | length > 0)
+         or (bootwright_machine_provider_ownership_records
+             | selectattr('kind', 'equalto', 'bmc-emulator') | list | length > 0) }}
 
   tasks:
+    - name: Acquire command-wide host operation before shared provider teardown
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: acquire_host_shared_service_operation.yml
+      when: bootwright_machine_shared_provider_selected | bool
+
     - name: Destroy provider service roles
       ansible.builtin.include_role:
         name: "{{ bootwright_component.destroyRole }}"
@@ -44,10 +55,16 @@
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record
         tasks_from: destroy_resource.yml
+      vars:
+        bootwright_bmc_record_only_destroy: true
       loop: "{{ bootwright_machine_provider_ownership_records | reverse | list }}"
       loop_control:
         loop_var: bootwright_ownership_record
         label: "{{ bootwright_ownership_record.kind }}/{{ bootwright_ownership_record.name }}"
       when:
         - bootwright_ownership_record.kind == 'bmc-emulator'
-        - bootwright_destroy_cluster_scope is not defined or bootwright_ownership_record.name in bootwright_machine_provider_record_names
+        - bootwright_destroy_cluster_scope is not defined
+        - bootwright_ownership_record.name not in bootwright_machine_provider_record_names
+
+    - name: Finalize provider service destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

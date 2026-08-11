@@ -3,7 +3,7 @@
   hosts: bootwright_storage_hosts
   gather_facts: false
   become: true
-  ignore_unreachable: true
+  ignore_unreachable: "{{ bootwright_destroy_skip_unreachable | default(false) | bool }}"
   vars:
     bootwright_selected_storage_cluster: >-
       {{
@@ -15,19 +15,39 @@
         | default({})
       }}
   pre_tasks:
+    - name: Record completed no-op for hosts without managed storage nodes
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when: bootwright_storage_cluster_name | default('') | length == 0
+
     - name: End hosts that are not managed storage nodes
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') | length == 0
 
+    - name: Record completed no-op for root-managed storage node access
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when: bootwright_selected_storage_cluster.clusterSSH.user | default('root') == 'root'
+
     - name: End hosts whose storage cluster does not manage node accounts
       ansible.builtin.meta: end_host
       when: bootwright_selected_storage_cluster.clusterSSH.user | default('root') == 'root'
+
+    - name: Record completed no-op outside selected storage clusters
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_destroy_storage_scope is defined
+        - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
 
     - name: End hosts outside the selected storage clusters
       ansible.builtin.meta: end_host
       when:
         - bootwright_destroy_storage_scope is defined
         - bootwright_storage_cluster_name | default('') not in (bootwright_destroy_storage_scope | split(','))
+
+    - name: Record completed no-op outside selected machines
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_destroy_machine_scope is defined
+        - bootwright_storage_node_name | default('') not in (bootwright_destroy_machine_scope | split(','))
 
     - name: End hosts outside the selected machines
       ansible.builtin.meta: end_host
@@ -71,6 +91,12 @@
         - bootwright_node_access_reachable_probe.unreachable | default(false) | bool
         - bootwright_node_access_connection_available | bool
 
+    - name: Record completed node access teardown for nodes proved absent
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml
+      when:
+        - bootwright_node_access_reachable_probe.unreachable | default(false) | bool
+        - bootwright_node_access_node_absent | default(false) | bool
+
     - name: End nodes this node access teardown proved absent
       ansible.builtin.meta: end_host
       when:
@@ -95,6 +121,18 @@
           re-run destroy, or remove those authorized keys by hand before the hardware is reused.
       when: bootwright_node_access_reachable_probe.unreachable | default(false) | bool
 
+    - name: Refuse unauthorized unreachable node access teardown skip
+      ansible.builtin.fail:
+        msg: >-
+          Storage node {{ bootwright_storage_node_name | default(inventory_hostname) }}
+          could not be reached, so Bootwright cannot prove its orchestration
+          access was revoked. Re-run the exact destroy with
+          `--authorize unreachable-nodes` only if retaining that access and all
+          retry evidence is intentional.
+      when:
+        - bootwright_node_access_reachable_probe.unreachable | default(false) | bool
+        - not (bootwright_destroy_skip_unreachable | default(false) | bool)
+
     - name: End nodes Bootwright cannot reach or escalate on
       ansible.builtin.meta: end_host
       when: bootwright_node_access_reachable_probe.unreachable | default(false) | bool
@@ -103,3 +141,6 @@
       ansible.builtin.include_role:
         name: bootwright.core.storage_cluster_cephadm
         tasks_from: revoke_node_access.yml
+
+    - name: Finalize storage node access destroy proof
+      ansible.builtin.include_tasks: tasks/destroy_completion.yml

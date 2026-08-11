@@ -1,32 +1,429 @@
 ---
-- name: Remove mirror registry container and reap orphans
+- name: Validate the live mirror-registry ownership record before teardown
   ansible.builtin.include_role:
-    name: bootwright.core.support_component_teardown
-    tasks_from: container.yml
+    name: bootwright.core.ownership_record
+    tasks_from: validate_resource.yml
   vars:
-    bootwright_component_teardown_container: "{{ bootwright_registry_mirror_container_name }}"
-    bootwright_component_teardown_kind: registry
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
 
-- name: Remove mirror registry trust anchor
+- name: Resolve mirror-registry external cleanup phase
+  ansible.builtin.set_fact:
+    bootwright_registry_destroy_owner_composite: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_record_composite(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_complete: >-
+      {{ bootwright_ownership_validated_stat.stat.exists | default(false) | bool
+         and (bootwright_ownership_validated_record.attributes | default({})).get(
+               'destroyPhase', '') == 'external-cleanup-complete' }}
+    bootwright_infra_destroy_expected_owner: >-
+      {{ bootwright_ownership_validated_record
+         if (bootwright_ownership_validated_stat.stat.exists | default(false) | bool)
+         else {} }}
+    bootwright_infra_destroy_phase_record: "{{ bootwright_ownership_validated_record }}"
+  changed_when: false
+
+- name: Require exact mirror-registry ownership ledger before teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_registry_destroy_owner_composite | length > 0
+          and bootwright_registry_destroy_owner_composite.kind == 'registry'
+          and bootwright_registry_destroy_owner_composite.name
+              == bootwright_component.providerName ~ '-' ~ bootwright_component.name
+        )
+    fail_msg: >-
+      Refusing mirror-registry teardown because its owner is not one exact
+      supported current-context registry composite with canonical state, labels,
+      container, port, trust identity, and optional completed cleanup phase. No
+      state was changed. Restore trusted evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Prove declared mirror-registry live ownership before teardown
   ansible.builtin.include_role:
-    name: bootwright.core.support_ca_trust
-    tasks_from: remove.yml
+    name: bootwright.core.ownership_record
+    tasks_from: infra_component_destroy_gate.yml
   vars:
-    bootwright_ca_trust_anchor: "{{ bootwright_registry_mirror_trust_anchor }}"
+    bootwright_infra_destroy_provider: "{{ bootwright_component.providerName }}"
+    bootwright_infra_destroy_name: "{{ bootwright_component.name }}"
+    bootwright_infra_destroy_kind: registry
+    bootwright_infra_destroy_state_dir: "{{ bootwright_registry_mirror_root }}"
+    bootwright_infra_destroy_container: "{{ bootwright_registry_mirror_container_name }}"
+    bootwright_infra_destroy_extra_paths: []
+    bootwright_ownership_destroy_attrs: {}
 
-- name: Close mirror registry port on host firewall
-  ansible.posix.firewalld:
-    port: "{{ bootwright_component.port | int }}/tcp"
-    state: disabled
-    permanent: true
-    immediate: true
+- name: Refuse mirror-registry teardown across an ambiguous replay boundary
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_infra_destroy_state_stat.stat.exists | bool
+        or not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_infra_destroy_phase_complete | bool
+    fail_msg: >-
+      Refusing mirror-registry teardown because its exact ownership record is
+      present but its final current-context state marker is absent. No
+      container, trust anchor, firewall rule, state, or ownership evidence was
+      removed. Restore the marker from trusted evidence or complete the
+      external cleanup deliberately, then re-run
+      `{{ bootwright_mutating_invocation }}`; no authorization guesses which
+      prior teardown step removed it.
+
+- name: Require a conclusive firewalld probe before mirror-registry teardown
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_firewalld_probe.stat.exists is defined
+      - bootwright_firewalld_available is defined
+      - >-
+        bootwright_infra_destroy_global_ports | length == 0
+        or bootwright_firewalld_available | bool
+      - >-
+        not (bootwright_firewalld_probe.stat.exists | bool)
+        or (
+          bootwright_firewalld_probe.stat.isreg | default(false) | bool
+          and not (bootwright_firewalld_probe.stat.islnk | default(false) | bool)
+          and bootwright_firewalld_probe.stat.executable | default(false) | bool
+          and bootwright_firewalld_state.rc is defined
+          and bootwright_firewalld_state.stdout is defined
+          and bootwright_firewalld_state.stderr is defined
+          and (
+            (bootwright_firewalld_state.rc | int == 0
+             and bootwright_firewalld_state.stdout | trim == 'running')
+            or bootwright_firewalld_state.rc | int == 252
+          )
+        )
+      - >-
+        bootwright_firewalld_available | bool
+        == (
+          bootwright_firewalld_probe.stat.exists | bool
+          and bootwright_firewalld_state.rc | default(252) | int == 0
+          and bootwright_firewalld_state.stdout | default('') | trim == 'running'
+        )
+    fail_msg: >-
+      Cannot conclusively determine whether firewalld is running before
+      tearing down the mirror registry on {{ inventory_hostname }}. No registry
+      container, trust anchor, firewall rule, state, or ownership evidence was
+      removed. Restore firewalld access and re-run
+      `{{ bootwright_mutating_invocation }}`.
   when:
-    - bootwright_firewalld_available | default(false)
-  failed_when: false
+    - bootwright_infra_destroy_state_stat.stat.exists | bool
+    - not (bootwright_infra_destroy_phase_complete | bool)
 
-- name: Remove mirror registry state and ownership record
-  ansible.builtin.include_role:
-    name: bootwright.core.support_component_teardown
-    tasks_from: state.yml
+- name: Resolve authoritative mirror-registry trust and endpoint candidates
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_anchor_candidates: >-
+      {{ bootwright_infra_global_claim_next.targets
+         | map(attribute='attributes.trustAnchor')
+         | reject('equalto', '') | unique | sort | list }}
+    bootwright_registry_trust_checksum_candidates: >-
+      {{ bootwright_infra_global_claim_next.targets
+         | map(attribute='attributes.trustBundleSHA256')
+         | reject('equalto', '') | unique | sort | list }}
+    bootwright_registry_destroy_ports: >-
+      {{ bootwright_infra_destroy_global_ports
+         | select('match', '^[1-9][0-9]{0,4}/tcp$')
+         | map('regex_replace', '/tcp$', '')
+         | map('int') | unique | sort | list }}
+  changed_when: false
+
+- name: Require exact authoritative mirror-registry trust candidates
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_registry_trust_anchor_candidates | length <= 1
+      - >-
+        bootwright_registry_trust_anchor_candidates | length == 0
+        or bootwright_registry_trust_anchor_candidates | first
+            == bootwright_registry_mirror_trust_anchor
+      - >-
+        bootwright_registry_trust_checksum_candidates
+        | reject('match', '^[a-f0-9]{64}$') | list | length == 0
+      - bootwright_registry_destroy_ports | length > 0
+    fail_msg: >-
+      Refusing mirror-registry teardown because its authoritative transition has
+      contradictory trust anchors, malformed trust hashes, or no exact TCP
+      endpoint ledger. No registry or trust state was changed. Repair trusted
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve mirror-registry trust teardown authority
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_anchor_recorded: >-
+      {{ bootwright_registry_trust_anchor_candidates | first
+         if bootwright_registry_trust_anchor_candidates | length > 0 else '' }}
+    bootwright_registry_trust_checksum_recorded: >-
+      {{ bootwright_registry_trust_checksum_candidates | first
+         if bootwright_registry_trust_checksum_candidates | length > 0 else '' }}
+    bootwright_registry_trust_refresh_marker: "{{ bootwright_registry_mirror_root }}/.ca-trust-refresh-pending"
+    bootwright_registry_trust_managed: false
+  changed_when: false
+
+- name: Probe the recorded mirror-registry trust anchor
+  ansible.builtin.stat:
+    path: "{{ bootwright_registry_mirror_trust_anchor }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: bootwright_registry_trust_anchor_stat
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Probe the durable mirror-registry trust refresh boundary
+  ansible.builtin.stat:
+    path: "{{ bootwright_registry_trust_refresh_marker }}"
+    follow: false
+  register: bootwright_registry_trust_refresh_marker_stat
+  changed_when: false
+  failed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Read the durable mirror-registry trust refresh boundary
+  ansible.builtin.slurp:
+    src: "{{ bootwright_registry_trust_refresh_marker }}"
+  register: bootwright_registry_trust_refresh_marker_content
+  changed_when: false
+  failed_when: false
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - bootwright_registry_trust_refresh_marker_stat.stat.exists | default(false) | bool
+
+- name: Require exact mirror-registry trust teardown evidence
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_registry_trust_anchor_stat.stat.exists is defined
+      - bootwright_registry_trust_refresh_marker_stat.stat.exists is defined
+      - (bootwright_clusters_dir | dirname | basename) is match('^[A-Za-z0-9_.-]+$')
+      - >-
+        (
+          bootwright_registry_trust_anchor_recorded | length == 0
+          and bootwright_registry_trust_checksum_recorded | length == 0
+        )
+        or (
+          bootwright_registry_trust_anchor_recorded == bootwright_registry_mirror_trust_anchor
+          and bootwright_registry_trust_checksum_recorded is match('^[a-f0-9]{64}$')
+        )
+      - >-
+        not (bootwright_registry_trust_refresh_marker_stat.stat.exists | bool)
+        or (
+          bootwright_registry_trust_refresh_marker_stat.stat.isreg | default(false) | bool
+          and not (bootwright_registry_trust_refresh_marker_stat.stat.islnk | default(false) | bool)
+          and bootwright_registry_trust_refresh_marker_stat.stat.pw_name | default('') == 'root'
+          and bootwright_registry_trust_refresh_marker_stat.stat.gr_name | default('') == 'root'
+          and bootwright_registry_trust_refresh_marker_stat.stat.mode | default('') == '0600'
+          and bootwright_registry_trust_refresh_marker_content.content is defined
+          and (
+            bootwright_registry_trust_refresh_marker_content.content
+            | b64decode
+            | trim
+          ) is match(bootwright_registry_trust_marker_pattern)
+        )
+      - >-
+        not (bootwright_registry_trust_anchor_stat.stat.exists | bool)
+        or (
+          bootwright_infra_destroy_state_stat.stat.exists | bool
+          and
+          bootwright_registry_trust_anchor_stat.stat.isreg | default(false) | bool
+          and not (bootwright_registry_trust_anchor_stat.stat.islnk | default(false) | bool)
+          and bootwright_registry_trust_anchor_stat.stat.checksum is defined
+          and bootwright_registry_trust_anchor_stat.stat.checksum
+              in bootwright_registry_trust_authorized_checksums
+        )
+    fail_msg: >-
+      Refusing mirror-registry teardown because the host trust anchor or durable
+      trust-refresh boundary is not the exact regular non-symlink SHA-256
+      identity recorded for this context and component. No registry container,
+      trust anchor, firewall rule, state, or ownership evidence was changed.
+      Restore the exact evidence and re-run
+      `{{ bootwright_mutating_invocation }}`.
   vars:
-    bootwright_component_teardown_state_dir: "{{ bootwright_registry_mirror_root }}"
+    bootwright_registry_trust_marker_content: >-
+      {{ bootwright_registry_trust_refresh_marker_content.content | default('') | b64decode | trim }}
+    bootwright_registry_trust_marker_pattern: >-
+      ^{{ (bootwright_clusters_dir | dirname | basename) | regex_escape }}\|{{ bootwright_component.providerName | regex_escape }}\|{{ bootwright_component.name | regex_escape }}\|{{ bootwright_registry_mirror_trust_anchor | regex_escape }}\|[a-f0-9]{64}\|(install|remove)$
+    bootwright_registry_trust_marker_checksum: >-
+      {{ (bootwright_registry_trust_marker_content.split('|')[4])
+         if (
+           bootwright_registry_trust_refresh_marker_stat.stat.exists | default(false) | bool
+           and bootwright_registry_trust_marker_content
+               is match(bootwright_registry_trust_marker_pattern)
+         )
+         else '' }}
+    bootwright_registry_trust_authorized_checksums: >-
+      {{ (bootwright_registry_trust_checksum_candidates
+          + [bootwright_registry_trust_marker_checksum])
+         | reject('equalto', '') | unique | list }}
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Resolve exact mirror-registry trust removal identity
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_marker_content: >-
+      {{ bootwright_registry_trust_refresh_marker_content.content | default('') | b64decode | trim }}
+    bootwright_registry_trust_marker_checksum: >-
+      {{ (bootwright_registry_trust_refresh_marker_content.content | b64decode | trim).split('|')[4]
+         if (bootwright_registry_trust_refresh_marker_stat.stat.exists | default(false) | bool)
+         else '' }}
+    bootwright_registry_trust_managed: >-
+      {{ (bootwright_registry_trust_anchor_stat.stat.exists | default(false) | bool
+          and bootwright_registry_trust_anchor_recorded == bootwright_registry_mirror_trust_anchor
+          and bootwright_registry_trust_checksum_recorded is match('^[a-f0-9]{64}$'))
+         or bootwright_registry_trust_refresh_marker_stat.stat.exists | bool }}
+    bootwright_registry_trust_removal_checksum: >-
+      {{ bootwright_registry_trust_anchor_stat.stat.checksum
+         if (bootwright_registry_trust_anchor_stat.stat.exists | default(false) | bool)
+         else (
+           (bootwright_registry_trust_refresh_marker_content.content | b64decode | trim).split('|')[4]
+           if (bootwright_registry_trust_refresh_marker_stat.stat.exists | default(false) | bool)
+           else bootwright_registry_trust_checksum_recorded
+         ) }}
+  changed_when: false
+  when: not (bootwright_infra_destroy_phase_complete | bool)
+
+- name: Resolve durable mirror-registry trust removal content
+  ansible.builtin.set_fact:
+    bootwright_registry_trust_refresh_identity: >-
+      {{ (bootwright_clusters_dir | dirname | basename) ~ '|' ~
+         bootwright_component.providerName ~ '|' ~ bootwright_component.name ~ '|' ~
+         bootwright_registry_mirror_trust_anchor ~ '|' ~
+         bootwright_registry_trust_removal_checksum ~ '|remove' }}
+  changed_when: false
+  when:
+    - not (bootwright_infra_destroy_phase_complete | bool)
+    - bootwright_registry_trust_managed | bool
+
+- name: Tear down the mirror registry before deleting its ownership evidence
+  block:
+    - name: Revalidate mirror-registry host operation before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate mirror-registry endpoint authority before container cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Remove mirror registry container and reap orphans
+      ansible.builtin.include_role:
+        name: bootwright.core.support_component_teardown
+        tasks_from: container.yml
+      vars:
+        bootwright_component_teardown_container: "{{ bootwright_registry_mirror_container_name }}"
+        bootwright_component_teardown_kind: registry
+      when: not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Revalidate mirror-registry host operation before trust cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Persist required mirror-registry trust refresh before anchor removal
+      ansible.builtin.copy:
+        dest: "{{ bootwright_registry_trust_refresh_marker }}"
+        content: "{{ bootwright_registry_trust_refresh_identity }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Remove the exact mirror-registry trust anchor
+      ansible.builtin.file:
+        path: "{{ bootwright_registry_mirror_trust_anchor }}"
+        state: absent
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Refresh host trust after mirror-registry anchor removal
+      ansible.builtin.command:
+        argv:
+          - update-ca-trust
+      changed_when: true
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Probe removed mirror-registry trust anchor
+      ansible.builtin.stat:
+        path: "{{ bootwright_registry_mirror_trust_anchor }}"
+        follow: false
+      register: bootwright_registry_trust_anchor_after_destroy
+      changed_when: false
+      failed_when: false
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Require removed mirror-registry trust anchor
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bootwright_registry_trust_anchor_after_destroy.stat.exists is defined
+          - not (bootwright_registry_trust_anchor_after_destroy.stat.exists | bool)
+        fail_msg: >-
+          Mirror-registry trust refresh completed without proving the exact
+          anchor absent on {{ inventory_hostname }}. The durable removal marker
+          and ownership evidence were retained. Restore host trust access and
+          re-run `{{ bootwright_mutating_invocation }}`.
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Clear the completed mirror-registry trust refresh boundary
+      ansible.builtin.file:
+        path: "{{ bootwright_registry_trust_refresh_marker }}"
+        state: absent
+      when:
+        - not (bootwright_infra_destroy_phase_complete | bool)
+        - bootwright_registry_trust_managed | bool
+
+    - name: Revalidate mirror-registry host operation before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_host_shared_service_operation.yml
+
+    - name: Revalidate mirror-registry endpoint authority before firewall cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: require_infra_component_endpoint_claims.yml
+
+    - name: Close mirror registry ports on host firewall
+      ansible.posix.firewalld:
+        port: "{{ item | int }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      loop: "{{ bootwright_registry_destroy_ports }}"
+      loop_control:
+        label: "{{ item }}/tcp"
+      when:
+        - bootwright_infra_destroy_state_stat.stat.exists | bool
+        - bootwright_firewalld_available | bool
+        - not (bootwright_infra_destroy_phase_complete | bool)
+
+    - name: Complete mirror-registry evidence retirement after external cleanup
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: complete_infra_component_destroy.yml
+      vars:
+        bootwright_infra_destroy_state_path: "{{ bootwright_registry_mirror_root }}"
+        bootwright_ownership_expected_record: "{{ bootwright_infra_destroy_expected_owner }}"
+  rescue:
+    - name: Refuse mirror-registry evidence deletion after teardown failure
+      ansible.builtin.fail:
+        msg: >-
+          Mirror-registry teardown failed at
+          {{ ansible_failed_task.name | default('an unknown task') }}:
+          {{ ansible_failed_result.msg | default('no failure detail was returned') }}.
+          Bootwright retained the ownership record or final context marker
+          needed for an exact retry. Restore access to the failed host service
+          and re-run the exact command
+          `{{ bootwright_mutating_invocation }}`.

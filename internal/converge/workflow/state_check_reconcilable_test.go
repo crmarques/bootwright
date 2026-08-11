@@ -13,7 +13,7 @@ func TestStateCheckReportsReconcilableDrift(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, reconfigure, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, destructive, "sha256:stale", ConvergeSafetyOwner)
 
-	report, err := StateCheck([]ApplyTask{reconfigure, destructive}, ApplyTarget{}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{reconfigure, destructive}, ApplyTarget{}, v1alpha1.State{}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}

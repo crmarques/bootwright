@@ -39,20 +39,52 @@ func TestLegacyStorageSubObjectEvidenceCarriesTypedSameSelectionRebuild(t *testi
 		t.Fatal(err)
 	}
 	record := ConvergeSafetyRecord{
-		ResourceID:  sub.resourceID(),
-		TaskID:      "storage.demo",
-		TaskKind:    ApplyTaskKindStorageCluster,
-		DesiredHash: desiredHash,
-		HashSchema:  ConvergeHashSchema - 1,
-		Owner:       ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner},
-		Status:      ConvergeSafetyStatusReconciled,
-		RunID:       "missing-run",
+		APIVersion:   ConvergeSafetyAPIVersion,
+		ResourceID:   sub.resourceID(),
+		ResourceKind: sub.Kind,
+		TaskID:       "storage.demo",
+		TaskKind:     ApplyTaskKindStorageCluster,
+		DesiredHash:  desiredHash,
+		HashSchema:   ConvergeHashSchema - 1,
+		Owner:        ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner, Context: "ctx"},
+		Status:       ConvergeSafetyStatusReconciled,
+		RunID:        "missing-run",
 	}
-	class, err := classifyStorageSubObjectWithRecord(state, sub, t.TempDir(), record, desiredHash)
+	class, err := classifyStorageSubObjectWithRecordForContext(state, sub, t.TempDir(), "ctx", record, desiredHash)
 	if class != ConvergeSafetyUnknown || err == nil {
 		t.Fatalf("classification = %q, %v, want unknown typed refusal", class, err)
 	}
-	assertLegacyConvergenceEvidenceRemedy(t, err, sub.resourceID())
+	typed := assertLegacyConvergenceEvidenceRemedy(t, err, sub.resourceID())
+	if !strings.Contains(typed.Cause.Error(), "predates immutable successful-input snapshots") {
+		t.Fatalf("schema-3 cause = %v", typed.Cause)
+	}
+}
+
+func TestSchemaThreeRebuildRequiresExactAuthority(t *testing.T) {
+	task, record, _ := identityValidationTask(t)
+	record.HashSchema = ConvergeHashSchema - 1
+	record.RunID = "../never-read"
+	runsDir := t.TempDir()
+	if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
+		t.Fatal(err)
+	}
+	objects, err := ClassifyApplyObjectsForMode([]ApplyTask{task}, runsDir, "ctx", ApplyModeRebuild)
+	if err != nil || len(objects) != 1 || !objects[0].HasStructuralDrift() || objects[0].HasReconcilableDrift() {
+		t.Fatalf("exact schema-3 rebuild = %v, %v", objects, err)
+	}
+
+	record.Owner.Context = "copied-context"
+	if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
+		t.Fatal(err)
+	}
+	if objects, err := ClassifyApplyObjectsForMode([]ApplyTask{task}, runsDir, "ctx", ApplyModeRebuild); err == nil || objects != nil {
+		t.Fatalf("schema-3 rebuild adopted copied context: objects=%v err=%v", objects, err)
+	} else {
+		var untrusted *UntrustedConvergenceEvidenceError
+		if !errors.As(err, &untrusted) {
+			t.Fatalf("schema-3 copied context = %T, want untrusted: %v", err, err)
+		}
+	}
 }
 
 func storageSubObjectState() v1alpha1.State {

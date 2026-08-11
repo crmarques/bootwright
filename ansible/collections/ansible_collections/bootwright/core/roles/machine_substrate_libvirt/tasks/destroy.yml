@@ -20,9 +20,18 @@
 - name: Require a conclusive libvirt domain probe before destroy
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_destroy_domain_xml.rc is defined
       - >-
-        bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
-        or (bootwright_libvirt_destroy_domain_xml.stderr | default('')) is search('(failed to get domain|Domain not found|no domain with matching name)')
+        (
+          bootwright_libvirt_destroy_domain_xml.rc | int == 0
+          and bootwright_libvirt_destroy_domain_xml.stdout is defined
+        )
+        or (
+          bootwright_libvirt_destroy_domain_xml.rc | int != 0
+          and bootwright_libvirt_destroy_domain_xml.stderr is defined
+          and (bootwright_libvirt_destroy_domain_xml.stderr
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Could not determine whether libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
@@ -31,16 +40,20 @@
       Refusing to tear down or delete anything Bootwright cannot conclusively
       probe — the domain may still exist while its disks, state, and ownership
       record would be removed. Fix libvirtd/connection access and re-run
-      destroy.
+      `{{ bootwright_mutating_invocation }}`.
 
 - name: Resolve libvirt domain ownership for destroy
   ansible.builtin.set_fact:
     bootwright_libvirt_domain_present: "{{ bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0 }}"
     bootwright_libvirt_destroy_owned: >-
       {{
-        (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
-        and (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>')
-        and (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?machine>' ~ (bootwright_component.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?machine>')
+        (bootwright_libvirt_destroy_domain_xml.stdout | default('')
+         | bootwright.core.bootwright_libvirt_resource_identity)
+        == {
+          'context': (bootwright_clusters_dir | dirname | basename),
+          'cluster': bootwright_current_cluster.name,
+          'machine': bootwright_component.name
+        }
       }}
   changed_when: false
 
@@ -87,10 +100,18 @@
 - name: Refuse disk deletion when the libvirt domain could not be stopped
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_destroy_domain_stop.rc is defined
       - >-
-        bootwright_libvirt_destroy_domain_stop.rc | default(1) == 0
-        or (bootwright_libvirt_destroy_domain_stop.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name|domain is not running)')
+        bootwright_libvirt_destroy_domain_stop.rc | int == 0
+        or (
+          bootwright_libvirt_destroy_domain_stop.rc | int != 0
+          and (
+            (bootwright_libvirt_destroy_domain_stop.stderr | default(''))
+            | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')
+            or (bootwright_libvirt_destroy_domain_stop.stderr | default(''))
+               is search('(?i)domain is not running')
+          )
+        )
     fail_msg: >-
       Refusing to delete disks, state, or ownership for libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
@@ -118,10 +139,14 @@
 - name: Refuse disk deletion when the libvirt domain could not be undefined
   ansible.builtin.assert:
     that:
+      - bootwright_libvirt_destroy_domain_undefine.rc is defined
       - >-
-        bootwright_libvirt_destroy_domain_undefine.rc | default(1) == 0
-        or (bootwright_libvirt_destroy_domain_undefine.stderr | default(''))
-           is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        bootwright_libvirt_destroy_domain_undefine.rc | int == 0
+        or (
+          bootwright_libvirt_destroy_domain_undefine.rc | int != 0
+          and ((bootwright_libvirt_destroy_domain_undefine.stderr | default(''))
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain'))
+        )
     fail_msg: >-
       Refusing to delete disks, state, or ownership for libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
@@ -147,10 +172,11 @@
 - name: Require proven libvirt domain absence before disk deletion
   ansible.builtin.assert:
     that:
-      - bootwright_libvirt_destroy_domain_absence.rc | default(0) != 0
+      - bootwright_libvirt_destroy_domain_absence.rc is defined
+      - bootwright_libvirt_destroy_domain_absence.rc | int != 0
       - >-
         (bootwright_libvirt_destroy_domain_absence.stderr | default(''))
-        is search('(?i)(Domain not found|failed to get domain|no domain with matching name)')
+        | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-domain')
     fail_msg: >-
       Refusing to delete disks, state, or ownership for libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }} because
@@ -181,14 +207,12 @@
 - name: Remove managed OS install artifacts
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: destroy_resource.yml
+    tasks_from: destroy_declared_managed_os.yml
   vars:
-    bootwright_ownership_record:
-      kind: managed-os-install
-      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-      paths:
-        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-      attributes: {}
+    bootwright_declared_managed_os_cluster: "{{ bootwright_current_cluster.name }}"
+    bootwright_declared_managed_os_machine: "{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
   when: bootwright_component.osManaged | default(false) | bool
 
 - name: Probe remaining managed-OS install machines in this cluster

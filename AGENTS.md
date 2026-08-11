@@ -65,11 +65,20 @@ depends on them.
   compatibility shims, or legacy examples.
 - **State-change authorization.** A state change happens only when the operator
   explicitly asked for it. Every new state-changing command, flag, kind, or
-  provider must classify its authorization and default to refusal: drift,
-  foreign ownership, unknown state, or a failed probe fails closed before the
-  first side effect; a refusal names what was found, why it is unsafe, and the
+  provider must classify its authorization and default to refusal: the complete
+  records preflight refuses before any run side effect, while a task-local drift,
+  foreign-ownership, unknown-state, or failed-probe gate refuses before the first
+  side effect on that target or consequence. Independently authorized branches
+  may already have completed and are never represented as rolled back. A refusal
+  names what was found, why it is unsafe, and the
   exact `bootwright …` command that proceeds intentionally; and the case joins
-  the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`. Four
+  the safety matrix in `internal/cli/apply_destroy_safety_matrix_test.go`.
+  A controller record may locate an external target but cannot authorize
+  changing a same-name replacement: every mutation requires a successful
+  positive-absence result or exact live manager/context/resource identity, a
+  suppressed or failed probe is unknown, composite members are classified
+  separately, and evidence is cleared only after successful removal or that
+  same positive absence proof. Four
   rules make that closed over new code rather than a convention to remember:
   a gate keys on **what the run destroys and what it selected** — the resolved
   `clusteraccess.Selection` and the shared consequence predicate — never on a

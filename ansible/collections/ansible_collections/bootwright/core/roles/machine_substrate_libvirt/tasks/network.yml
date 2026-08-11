@@ -18,8 +18,73 @@
     bootwright_libvirt_bridge: "{{ bootwright_component.networkAttachment.libvirt.bridge }}"
     bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
     bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
+    bootwright_libvirt_network_uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
     bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"
   changed_when: false
+
+- name: Read live libvirt network definition before apply
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_network_uri }}"
+      - net-dumpxml
+      - "{{ bootwright_libvirt_network_name }}"
+  register: bootwright_libvirt_apply_network_xml
+  changed_when: false
+  failed_when: false
+
+- name: Require a conclusive libvirt network probe before apply
+  ansible.builtin.assert:
+    that:
+      - bootwright_libvirt_apply_network_xml.rc is defined
+      - >-
+        (
+          bootwright_libvirt_apply_network_xml.rc | default(1) == 0
+          and bootwright_libvirt_apply_network_xml.stdout is defined
+        )
+        or (
+          bootwright_libvirt_apply_network_xml.rc | default(1) != 0
+          and bootwright_libvirt_apply_network_xml.stderr is defined
+          and (bootwright_libvirt_apply_network_xml.stderr
+               | bootwright.core.bootwright_libvirt_explicit_absence('libvirt-network'))
+        )
+    fail_msg: >-
+      Could not determine whether libvirt network {{ bootwright_libvirt_network_name }}
+      exists on {{ bootwright_libvirt_network_uri }}:
+      {{ bootwright_libvirt_apply_network_xml.stderr | default('virsh net-dumpxml returned incomplete evidence') }}.
+      Refusing to define or activate a network whose live identity could not be
+      proven. Restore libvirt access, then retry the exact invocation
+      `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve live libvirt network identity before apply
+  ansible.builtin.set_fact:
+    bootwright_libvirt_apply_network_present: "{{ bootwright_libvirt_apply_network_xml.rc == 0 }}"
+    bootwright_libvirt_apply_network_identity: >-
+      {{
+        bootwright_libvirt_apply_network_xml.stdout | default('')
+        | bootwright.core.bootwright_libvirt_resource_identity
+      }}
+  changed_when: false
+
+- name: Refuse to redefine a foreign libvirt network
+  ansible.builtin.assert:
+    that:
+      - >-
+        bootwright_libvirt_apply_network_identity
+        == {
+          'context': bootwright_clusters_dir | dirname | basename,
+          'cluster': bootwright_current_cluster.name
+        }
+    fail_msg: >-
+      Refusing to apply over libvirt network {{ bootwright_libvirt_network_name }}:
+      it exists on {{ bootwright_libvirt_network_uri }} but its live XML does not
+      carry exactly one Bootwright identity for this context and cluster. It may
+      belong to another context or a foreign owner. Verify its provenance and
+      remove it outside Bootwright only after establishing that is safe, then
+      retry the exact invocation `{{ bootwright_mutating_invocation }}`. No apply
+      mode or authorization token adopts a foreign or unprovable network.
+  when: bootwright_libvirt_apply_network_present | bool
 
 - name: Resolve libvirt network machines
   ansible.builtin.set_fact:
@@ -56,7 +121,7 @@
   community.libvirt.virt_net:
     name: "{{ bootwright_libvirt_network_name }}"
     state: present
-    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+    uri: "{{ bootwright_libvirt_network_uri }}"
     xml: "{{ bootwright_libvirt_net_xml_slurp.content | b64decode }}"
 
 - name: Activate libvirt network
@@ -64,7 +129,7 @@
     name: "{{ bootwright_libvirt_network_name }}"
     state: active
     autostart: true
-    uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+    uri: "{{ bootwright_libvirt_network_uri }}"
 
 - name: Record libvirt network ownership
   ansible.builtin.include_role:
@@ -78,4 +143,4 @@
       cluster: "{{ bootwright_current_cluster.name }}"
       attributes:
         network: "{{ bootwright_libvirt_network_name }}"
-        uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+        uri: "{{ bootwright_libvirt_network_uri }}"

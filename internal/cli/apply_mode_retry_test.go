@@ -8,7 +8,7 @@ import (
 )
 
 func TestCreateStructuralRefusalEmitsARebuildThatClearsTheNamedGates(t *testing.T) {
-	objects := classifyRetryObject(t, workflow.ConvergeSafetyOwner, "sha256:stale")
+	objects := classifyRetryObject(t, workflow.ConvergeSafetyOwner, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	preflightErr := workflow.EvaluateApplyModePreflight(workflow.ApplyModeCreate, objects)
 	if preflightErr == nil {
 		t.Fatal("create must refuse a structurally drifted object")
@@ -43,7 +43,7 @@ func TestCreateStructuralRefusalEmitsARebuildThatClearsTheNamedGates(t *testing.
 }
 
 func TestCreateForeignRefusalEmitsNoBootwrightBypass(t *testing.T) {
-	objects := classifyRetryObject(t, "another-manager", "sha256:foreign")
+	objects := classifyRetryObject(t, "another-manager", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	preflightErr := workflow.EvaluateApplyModePreflight(workflow.ApplyModeCreate, objects)
 	if preflightErr == nil {
 		t.Fatal("create must refuse a foreign object")
@@ -87,11 +87,12 @@ func classifyRetryObject(t *testing.T, owner, recordedHash string) []workflow.Ob
 		TaskKind:     task.Entry.Kind,
 		DesiredHash:  recordedHash,
 		HashSchema:   workflow.ConvergeHashSchema,
-		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: owner},
+		Owner:        workflow.ConvergeSafetyOwnerIdentity{Manager: owner, Context: "test"},
+		Status:       workflow.ConvergeSafetyStatusReconciled,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir)
+	objects, err := workflow.ClassifyApplyObjects([]workflow.ApplyTask{task}, runsDir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

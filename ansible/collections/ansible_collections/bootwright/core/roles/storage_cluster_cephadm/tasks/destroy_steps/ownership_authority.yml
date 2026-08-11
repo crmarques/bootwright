@@ -23,27 +23,33 @@
     - not (bootwright_ceph_destroy_seed_reachable | default(true) | bool)
     - inventory_hostname in (bootwright_ceph_destroy_reachable_mon_hosts | default([]))
     - bootwright_ceph_fallback_record_stat.stat.exists | default(false) | bool
+    - bootwright_ceph_fallback_record_stat.stat.isreg | default(false) | bool
+    - not (bootwright_ceph_fallback_record_stat.stat.islnk | default(false) | bool)
 
-- name: Decode the controller ownership record for dead-seed recovery
-  block:
-    - name: Resolve the controller ownership record fields for dead-seed recovery
-      ansible.builtin.set_fact:
-        bootwright_ceph_fallback_record: >-
-          {{ bootwright_ceph_fallback_record_slurp.content | b64decode | from_json }}
-        bootwright_ceph_fallback_record_decode_failed: false
-      changed_when: false
-  rescue:
-    - name: Record an unreadable controller ownership record for dead-seed recovery
-      ansible.builtin.set_fact:
-        bootwright_ceph_fallback_record: {}
-        bootwright_ceph_fallback_record_decode_failed: true
-        bootwright_ceph_fallback_record_decode_error: >-
-          {{ ansible_failed_result.msg | default('JSON decoding failed without a diagnostic') }}
-      changed_when: false
+- name: Classify the controller ownership record for dead-seed recovery
+  ansible.builtin.set_fact:
+    bootwright_ceph_fallback_record_evidence: >-
+      {{
+        (bootwright_ceph_fallback_record_slurp.content | default('') | b64decode)
+        | bootwright.core.bootwright_ceph_controller_owner_evidence(
+            (bootwright_ceph_fallback_record_stat.stat.exists is not defined)
+            or (bootwright_ceph_fallback_record_stat.stat.exists | bool),
+            (bootwright_ceph_fallback_record_stat.stat.exists is defined)
+            and (
+              not (bootwright_ceph_fallback_record_stat.stat.exists | bool)
+              or (
+                bootwright_ceph_fallback_record_stat.stat.isreg | default(false) | bool
+                and not (bootwright_ceph_fallback_record_stat.stat.islnk | default(false) | bool)
+              )
+            ),
+            bootwright_clusters_dir | dirname | basename,
+            bootwright_selected_storage_cluster.name,
+            bootwright_selected_storage_cluster.seedHost)
+      }}
+  changed_when: false
   when:
     - not (bootwright_ceph_destroy_seed_reachable | default(true) | bool)
     - inventory_hostname in (bootwright_ceph_destroy_reachable_mon_hosts | default([]))
-    - (bootwright_ceph_fallback_record_slurp | default({})).content is defined
 
 - name: Stat Ceph configuration on a dead-seed recovery mon
   ansible.builtin.stat:
@@ -65,6 +71,8 @@
     - not (bootwright_ceph_destroy_seed_reachable | default(true) | bool)
     - inventory_hostname in (bootwright_ceph_destroy_reachable_mon_hosts | default([]))
     - bootwright_ceph_fallback_conf_stat.stat.exists | default(false) | bool
+    - bootwright_ceph_fallback_conf_stat.stat.isreg | default(false) | bool
+    - not (bootwright_ceph_fallback_conf_stat.stat.islnk | default(false) | bool)
 
 - name: Resolve Ceph configuration evidence on a dead-seed recovery mon
   ansible.builtin.set_fact:
@@ -98,79 +106,72 @@
     - not (bootwright_ceph_destroy_seed_reachable | default(true) | bool)
     - inventory_hostname in (bootwright_ceph_destroy_reachable_mon_hosts | default([]))
     - bootwright_ceph_fallback_marker_stat.stat.exists | default(false) | bool
+    - bootwright_ceph_fallback_marker_stat.stat.isreg | default(false) | bool
+    - not (bootwright_ceph_fallback_marker_stat.stat.islnk | default(false) | bool)
 
-- name: Decode the Bootwright marker on a dead-seed recovery mon
-  block:
-    - name: Resolve the Bootwright marker fields on a dead-seed recovery mon
-      ansible.builtin.set_fact:
-        bootwright_ceph_fallback_marker: >-
-          {{ bootwright_ceph_fallback_marker_slurp.content | b64decode | from_json }}
-        bootwright_ceph_fallback_marker_decode_failed: false
-      changed_when: false
-  rescue:
-    - name: Record an unreadable Bootwright marker on a dead-seed recovery mon
-      ansible.builtin.set_fact:
-        bootwright_ceph_fallback_marker: {}
-        bootwright_ceph_fallback_marker_decode_failed: true
-        bootwright_ceph_fallback_marker_decode_error: >-
-          {{ ansible_failed_result.msg | default('JSON decoding failed without a diagnostic') }}
-      changed_when: false
+- name: Classify the Bootwright marker on a dead-seed recovery mon
+  ansible.builtin.set_fact:
+    bootwright_ceph_fallback_marker_evidence: >-
+      {{
+        (bootwright_ceph_fallback_marker_slurp.content | default('') | b64decode)
+        | bootwright.core.bootwright_ceph_host_marker_evidence(
+            (bootwright_ceph_fallback_marker_stat.stat.exists is not defined)
+            or (bootwright_ceph_fallback_marker_stat.stat.exists | bool),
+            (bootwright_ceph_fallback_marker_stat.stat.exists is defined)
+            and (
+              not (bootwright_ceph_fallback_marker_stat.stat.exists | bool)
+              or (
+                bootwright_ceph_fallback_marker_stat.stat.isreg | default(false) | bool
+                and not (bootwright_ceph_fallback_marker_stat.stat.islnk | default(false) | bool)
+              )
+            ),
+            bootwright_selected_storage_cluster.name)
+      }}
+  changed_when: false
   when:
     - not (bootwright_ceph_destroy_seed_reachable | default(true) | bool)
     - inventory_hostname in (bootwright_ceph_destroy_reachable_mon_hosts | default([]))
-    - (bootwright_ceph_fallback_marker_slurp | default({})).content is defined
 
 - name: Classify dead-seed recovery evidence on each reachable mon
   vars:
     bootwright_ceph_fallback_record_path: "{{ bootwright_ownership_dir }}/resources/storage-cluster/{{ bootwright_selected_storage_cluster.name }}.json"
     bootwright_ceph_fallback_record_fsid: >-
-      {{ (bootwright_ceph_fallback_record.attributes | default({})).fsid | default('') | trim }}
+      {{ bootwright_ceph_fallback_record_evidence.fsid | default('') | trim }}
     bootwright_ceph_fallback_marker_fsid: >-
-      {{ bootwright_ceph_fallback_marker.fsid | default('') | trim }}
+      {{ bootwright_ceph_fallback_marker_evidence.fsid | default('') | trim }}
   ansible.builtin.set_fact:
     bootwright_ceph_fallback_evidence_blockers: >-
       {{
         ([inventory_hostname ~ ': the controller ownership-record stat failed: '
           ~ (bootwright_ceph_fallback_record_stat.msg | default('no diagnostic was recorded'))]
-         if (bootwright_ceph_fallback_record_stat.failed | default(false) | bool) else [])
+         if (bootwright_ceph_fallback_record_stat.stat.exists is not defined) else [])
         + ([inventory_hostname ~ ': the controller holds no ownership record at '
             ~ bootwright_ceph_fallback_record_path]
-           if not (bootwright_ceph_fallback_record_stat.stat.exists | default(false) | bool) else [])
+           if ((bootwright_ceph_fallback_record_stat.stat.exists is defined)
+               and not (bootwright_ceph_fallback_record_stat.stat.exists | bool)) else [])
         + ([inventory_hostname ~ ': the controller ownership record at '
             ~ bootwright_ceph_fallback_record_path ~ ' could not be read: '
             ~ (bootwright_ceph_fallback_record_slurp.msg | default('no diagnostic was recorded'))]
            if ((bootwright_ceph_fallback_record_stat.stat.exists | default(false) | bool)
                and ((bootwright_ceph_fallback_record_slurp.failed | default(false) | bool)
                     or (bootwright_ceph_fallback_record_slurp.content is not defined))) else [])
-        + ([inventory_hostname ~ ': the controller ownership record is not valid JSON: '
-            ~ (bootwright_ceph_fallback_record_decode_error | default('no diagnostic was recorded'))]
-           if (bootwright_ceph_fallback_record_decode_failed | default(false) | bool) else [])
-        + ([inventory_hostname ~ ': the controller ownership record does not identify owner bootwright, owner role, kind storage-cluster, cluster '
-            ~ bootwright_selected_storage_cluster.name ~ ', context '
-            ~ (bootwright_clusters_dir | dirname | basename) ~ ', and declared seed '
-            ~ bootwright_selected_storage_cluster.seedHost]
-           if ((bootwright_ceph_fallback_record | default({}) | length > 0)
-               and ((bootwright_ceph_fallback_record.apiVersion | default('') != 'bootwright.io/ownership/v1alpha1')
-                    or (bootwright_ceph_fallback_record.kind | default('') != 'storage-cluster')
-                    or (bootwright_ceph_fallback_record.name | default('') != bootwright_selected_storage_cluster.name)
-                    or (bootwright_ceph_fallback_record.owner | default('') != 'bootwright')
-                    or (bootwright_ceph_fallback_record.role | default('owner', true) != 'owner')
-                    or (bootwright_ceph_fallback_record.context | default('') != (bootwright_clusters_dir | dirname | basename))
-                    or (bootwright_ceph_fallback_record.cluster | default('') != bootwright_selected_storage_cluster.name)
-                    or (bootwright_ceph_fallback_record.host | default('') != bootwright_selected_storage_cluster.seedHost)
-                    or ((bootwright_ceph_fallback_record.attributes | default({})).seedHost | default('') != bootwright_selected_storage_cluster.seedHost)))
-           else [])
-        + ([inventory_hostname ~ ': the controller ownership record carries no valid fsid UUID']
-           if ((bootwright_ceph_fallback_record | default({}) | length > 0)
-               and not (bootwright_ceph_fallback_record_fsid is match('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'))) else [])
+        + (bootwright_ceph_fallback_record_evidence.blockers | default([])
+           | map('regex_replace', '^(.*)$', inventory_hostname ~ ': \\1') | list)
         + ([inventory_hostname ~ ': /etc/ceph/ceph.conf could not be inspected: '
             ~ (bootwright_ceph_fallback_conf_stat.msg | default('no diagnostic was recorded'))]
-           if (bootwright_ceph_fallback_conf_stat.failed | default(false) | bool) else [])
+           if (bootwright_ceph_fallback_conf_stat.stat.exists is not defined) else [])
         + ([inventory_hostname ~ ': /etc/ceph/ceph.conf is missing']
-           if not (bootwright_ceph_fallback_conf_stat.stat.exists | default(false) | bool) else [])
+           if ((bootwright_ceph_fallback_conf_stat.stat.exists is defined)
+               and not (bootwright_ceph_fallback_conf_stat.stat.exists | bool)) else [])
+        + ([inventory_hostname ~ ': /etc/ceph/ceph.conf must be a regular non-symlink file']
+           if ((bootwright_ceph_fallback_conf_stat.stat.exists | default(false) | bool)
+               and (not (bootwright_ceph_fallback_conf_stat.stat.isreg | default(false) | bool)
+                    or (bootwright_ceph_fallback_conf_stat.stat.islnk | default(false) | bool))) else [])
         + ([inventory_hostname ~ ': /etc/ceph/ceph.conf could not be read: '
             ~ (bootwright_ceph_fallback_conf_slurp.msg | default('no diagnostic was recorded'))]
            if ((bootwright_ceph_fallback_conf_stat.stat.exists | default(false) | bool)
+               and (bootwright_ceph_fallback_conf_stat.stat.isreg | default(false) | bool)
+               and not (bootwright_ceph_fallback_conf_stat.stat.islnk | default(false) | bool)
                and ((bootwright_ceph_fallback_conf_slurp.failed | default(false) | bool)
                     or (bootwright_ceph_fallback_conf_slurp.content is not defined))) else [])
         + ([inventory_hostname ~ ': /etc/ceph/ceph.conf carries no valid fsid UUID']
@@ -185,34 +186,24 @@
         + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path
             ~ ' could not be inspected: '
             ~ (bootwright_ceph_fallback_marker_stat.msg | default('no diagnostic was recorded'))]
-           if (bootwright_ceph_fallback_marker_stat.failed | default(false) | bool) else [])
+           if (bootwright_ceph_fallback_marker_stat.stat.exists is not defined) else [])
         + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path ~ ' is missing']
-           if not (bootwright_ceph_fallback_marker_stat.stat.exists | default(false) | bool) else [])
+           if ((bootwright_ceph_fallback_marker_stat.stat.exists is defined)
+               and not (bootwright_ceph_fallback_marker_stat.stat.exists | bool)) else [])
         + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path
             ~ ' could not be read: '
             ~ (bootwright_ceph_fallback_marker_slurp.msg | default('no diagnostic was recorded'))]
            if ((bootwright_ceph_fallback_marker_stat.stat.exists | default(false) | bool)
                and ((bootwright_ceph_fallback_marker_slurp.failed | default(false) | bool)
                     or (bootwright_ceph_fallback_marker_slurp.content is not defined))) else [])
-        + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path
-            ~ ' is not valid JSON: '
-            ~ (bootwright_ceph_fallback_marker_decode_error | default('no diagnostic was recorded'))]
-           if (bootwright_ceph_fallback_marker_decode_failed | default(false) | bool) else [])
-        + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path
-            ~ ' identifies manager ' ~ (bootwright_ceph_fallback_marker.manager | default('<missing>'))
-            ~ ' and cluster ' ~ (bootwright_ceph_fallback_marker.cluster | default('<missing>'))
-            ~ ' instead of manager bootwright and cluster '
-            ~ bootwright_selected_storage_cluster.name]
-           if ((bootwright_ceph_fallback_marker | default({}) | length > 0)
-               and ((bootwright_ceph_fallback_marker.manager | default('') != 'bootwright')
-                    or (bootwright_ceph_fallback_marker.cluster | default('') != bootwright_selected_storage_cluster.name))) else [])
+        + (bootwright_ceph_fallback_marker_evidence.blockers | default([])
+           | map('regex_replace', '^(.*)$', inventory_hostname ~ ': \\1') | list)
         + ([inventory_hostname ~ ': ' ~ bootwright_ceph_ownership_marker_path
             ~ ' names fsid ' ~ bootwright_ceph_fallback_marker_fsid
             ~ ', /etc/ceph/ceph.conf names ' ~ bootwright_ceph_fallback_conf_fsid
             ~ ', and the controller record names ' ~ bootwright_ceph_fallback_record_fsid]
-           if ((bootwright_ceph_fallback_marker | default({}) | length > 0)
-               and ((bootwright_ceph_fallback_marker_fsid | length == 0)
-                    or (bootwright_ceph_fallback_marker_fsid != bootwright_ceph_fallback_conf_fsid)
+           if ((bootwright_ceph_fallback_marker_evidence.valid | default(false) | bool)
+               and ((bootwright_ceph_fallback_marker_fsid != bootwright_ceph_fallback_conf_fsid)
                     or (bootwright_ceph_fallback_marker_fsid != bootwright_ceph_fallback_record_fsid))) else [])
       }}
   changed_when: false
@@ -255,7 +246,7 @@
       {{ bootwright_ceph_destroy_fallback_blockers
          | default(['no reachable mon supplied complete evidence'], true) | join('; ') }}.
       Power on the declared seed and re-run the same destroy invocation:
-      `{{ bootwright_mutating_invocation | default('the same bootwright destroy invocation') }}`,
+      `{{ bootwright_mutating_invocation }}`,
       or repair the named record/file/SSH fault from trusted evidence and re-run that exact
       invocation. If the
       controller record is missing, restore the seed and add
@@ -278,11 +269,11 @@
   ansible.builtin.set_fact:
     bootwright_ceph_destroy_owned: true
     bootwright_ceph_destroy_fsid: >-
-      {{ (bootwright_ceph_fallback_record.attributes | default({})).fsid | trim }}
+      {{ bootwright_ceph_fallback_record_evidence.fsid | trim }}
     bootwright_ceph_destroy_conf_fsid: >-
-      {{ (bootwright_ceph_fallback_record.attributes | default({})).fsid | trim }}
+      {{ bootwright_ceph_fallback_record_evidence.fsid | trim }}
     bootwright_ceph_destroy_owned_fsid: >-
-      {{ (bootwright_ceph_fallback_record.attributes | default({})).fsid | trim }}
+      {{ bootwright_ceph_fallback_record_evidence.fsid | trim }}
     bootwright_ceph_destroy_local_state: true
     bootwright_ceph_destroy_dead_seed_recovered: true
   changed_when: false

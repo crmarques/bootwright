@@ -60,7 +60,7 @@ func TestLibvirtNetworkDestroyGateIsClusterScoped(t *testing.T) {
 		t.Fatalf("conclusive network probe check must be an assert, got %v", gate[conclusiveIdx])
 	}
 	that := fmt.Sprint(conclusive["that"])
-	for _, want := range []string{"rc | default(1) == 0", "Network not found", "no network with matching name"} {
+	for _, want := range []string{"rc is defined", "rc | default(1) == 0", "stdout is defined", "stderr is defined", "bootwright.core.bootwright_libvirt_explicit_absence('libvirt-network')"} {
 		if !strings.Contains(that, want) {
 			t.Fatalf("conclusive network probe must accept only rc==0 or a network-absent stderr and refuse anything unprobeable, missing %q in %v", want, conclusive["that"])
 		}
@@ -101,8 +101,8 @@ func TestLibvirtNetworkDestroyGateIsClusterScoped(t *testing.T) {
 
 func TestLibvirtNetworkRemovalRunsAfterMachineSubstrateTeardown(t *testing.T) {
 	plays := readAnsiblePlays(t, machineInfraDestroyPlaybook)
-	if len(plays) != 3 {
-		t.Fatalf("task_machine_infra_destroy plays = %d, want 3", len(plays))
+	if len(plays) != 4 {
+		t.Fatalf("task_machine_infra_destroy plays = %d, want 4", len(plays))
 	}
 	if got := plays[1]["hosts"]; got != "bootwright_machine_task_hosts" {
 		t.Fatalf("play 1 must be the machine substrate teardown, got hosts=%v", got)

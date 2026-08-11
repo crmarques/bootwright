@@ -26,6 +26,61 @@
     bootwright_creds_var: bootwright_vsphere_credentials
     bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere.server }}"
 
+- name: Resolve recorded vSphere virtual media authority for destroy
+  ansible.builtin.set_fact:
+    bootwright_vsphere_vmedia_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('kind', 'equalto', 'vsphere-vmedia')
+        | selectattr('name', 'equalto', bootwright_vsphere_ownership_record_name)
+        | list
+      }}
+    bootwright_vsphere_vmedia_expected_datastore: >-
+      {{
+        bootwright_component.boot.agentIso.fetchUrl | default('')
+        | regex_replace('^\\[(.+)\\] .*$', '\\1')
+      }}
+    bootwright_vsphere_vmedia_expected_path: >-
+      {{
+        bootwright_component.boot.agentIso.fetchUrl | default('')
+        | regex_replace('^\\[.+\\] ', '')
+      }}
+    bootwright_vsphere_vmedia_expected_stage_path: >-
+      {{ bootwright_component.boot.agentIso.stagePath | default('') }}
+  changed_when: false
+
+- name: Require exact recorded vSphere virtual media ownership before destroy
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bootwright_vsphere_vmedia_record
+        | bootwright.core.bootwright_vsphere_vmedia_record_authorized(
+            bootwright_clusters_dir | dirname | basename,
+            bootwright_current_cluster.name,
+            bootwright_component.name,
+            bootwright_vsphere_ownership_record_name,
+            bootwright_component.providerName,
+            bootwright_vsphere.server,
+            bootwright_vsphere.topology.datacenter,
+            bootwright_vsphere_vmedia_expected_datastore,
+            bootwright_vsphere_vmedia_expected_path,
+            bootwright_vsphere_vmedia_expected_stage_path
+          )
+    fail_msg: >-
+      Refusing vSphere destroy for
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }} because
+      a virtual-media ownership record does not exactly match the current
+      ownership API, owner, context, provider, cluster, machine, vCenter
+      placement, and authorized staging paths. Restore the exact record from
+      trusted evidence or clean the media under its original desired state, then
+      retry the exact invocation `{{ bootwright_mutating_invocation }}`. No
+      destroy authorization permits a foreign or path-ambiguous media record.
+  loop: "{{ bootwright_vsphere_vmedia_records }}"
+  loop_control:
+    loop_var: bootwright_vsphere_vmedia_record
+    label: "{{ bootwright_vsphere_vmedia_record.name | default('<invalid>') }}"
+
 - name: Read vSphere VM ownership annotation
   community.vmware.vmware_guest_info:
     hostname: "{{ bootwright_vsphere.server }}"
@@ -113,26 +168,12 @@
   no_log: "{{ bootwright_no_log | default(true) | bool }}"
   when: bootwright_vsphere_vm_present | bool
 
-- name: Select recorded vSphere virtual media for this machine
-  ansible.builtin.set_fact:
-    bootwright_vsphere_vmedia_records: >-
-      {{
-        bootwright_ownership_records | default([])
-        | selectattr('kind', 'equalto', 'vsphere-vmedia')
-        | selectattr('name', 'equalto', bootwright_vsphere_ownership_record_name)
-        | list
-      }}
-  changed_when: false
-
 - name: Delete recorded vSphere virtual media from the datastore
   ansible.builtin.include_tasks: destroy_vmedia.yml
   loop: "{{ bootwright_vsphere_vmedia_records }}"
   loop_control:
     loop_var: bootwright_vsphere_vmedia_destroy_record
     label: "{{ bootwright_vsphere_vmedia_destroy_record.attributes.path | default('') }}"
-  when:
-    - bootwright_vsphere_vmedia_destroy_record.attributes.datastore | default('') | length > 0
-    - bootwright_vsphere_vmedia_destroy_record.attributes.path | default('') | length > 0
 
 - name: Remove recorded vSphere virtual media staging paths and records
   ansible.builtin.include_role:
@@ -140,6 +181,7 @@
     tasks_from: destroy_resource.yml
   vars:
     bootwright_ownership_record: "{{ bootwright_vsphere_vmedia_record }}"
+    bootwright_vsphere_vmedia_teardown_verified: true
   loop: "{{ bootwright_vsphere_vmedia_records }}"
   loop_control:
     loop_var: bootwright_vsphere_vmedia_record
@@ -156,14 +198,12 @@
 - name: Remove managed OS install artifacts
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: destroy_resource.yml
+    tasks_from: destroy_declared_managed_os.yml
   vars:
-    bootwright_ownership_record:
-      kind: managed-os-install
-      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
-      paths:
-        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
-      attributes: {}
+    bootwright_declared_managed_os_cluster: "{{ bootwright_current_cluster.name }}"
+    bootwright_declared_managed_os_machine: "{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+    bootwright_declared_managed_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
   when: bootwright_component.osManaged | default(false) | bool
 
 - name: Probe remaining managed-OS install machines in this cluster

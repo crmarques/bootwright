@@ -1779,17 +1779,86 @@ func TestStorageCephMonReadinessNamesAContainerRuntimeFault(t *testing.T) {
 	}
 }
 
+func TestEveryCephDestructiveAuthorityUsesExactSharedEvidence(t *testing.T) {
+	authorityPaths := []struct {
+		path string
+		want []string
+	}{
+		{
+			path: "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/apply_mode.yml",
+			want: []string{
+				"bootwright_ceph_controller_owner_evidence",
+				"bootwright_ceph_host_marker_evidence",
+				"bootwright_ceph_override_record_evidence.valid",
+				"bootwright_ceph_override_marker_evidence.valid",
+				"stat.isreg",
+				"stat.islnk",
+			},
+		},
+		{
+			path: "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/cluster_gate.yml",
+			want: []string{
+				"bootwright_ceph_controller_owner_evidence",
+				"bootwright_ceph_host_marker_evidence",
+				"bootwright_ceph_destroy_record_evidence.valid",
+				"bootwright_ceph_destroy_marker_evidence.valid",
+				"bootwright_ceph_destroy_surviving_marker_blockers",
+				"stat.isreg",
+				"stat.islnk",
+			},
+		},
+		{
+			path: "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/ownership_authority.yml",
+			want: []string{
+				"bootwright_ceph_controller_owner_evidence",
+				"bootwright_ceph_host_marker_evidence",
+				"bootwright_ceph_fallback_record_evidence.blockers",
+				"bootwright_ceph_fallback_marker_evidence.blockers",
+				"stat.isreg",
+				"stat.islnk",
+			},
+		},
+	}
+	for _, authority := range authorityPaths {
+		t.Run(authority.path, func(t *testing.T) {
+			body := readRepoFile(t, authority.path)
+			for _, want := range authority.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s must consume shared exact Ceph ownership evidence, missing %q", authority.path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	tasks := storageCephBootstrapTasks(t)
 
+	confStatIdx := findAnsibleTask(t, tasks, "Inspect existing Ceph configuration for override rebuild")
+	confReadIdx := findAnsibleTask(t, tasks, "Read existing Ceph configuration for override rebuild")
+	confRefuseIdx := findAnsibleTask(t, tasks, "Refuse an ambiguous existing Ceph configuration probe")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker for override rebuild")
+	recordClassifyIdx := findAnsibleTask(t, tasks, "Classify Bootwright storage cluster ownership evidence for override rebuild")
+	markerClassifyIdx := findAnsibleTask(t, tasks, "Classify Bootwright ownership marker for override rebuild")
 	decideIdx := findAnsibleTask(t, tasks, "Decide override rebuild ownership")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
 	rebuildIdx := findAnsibleTask(t, tasks, "Decide whether this cluster requires an authorized override rebuild")
 	deviceGateIdx := findAnsibleTask(t, tasks, "Refuse to wipe present Ceph devices without a valid Bootwright OSD record")
 	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")
-	if !(readIdx < decideIdx && decideIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < deviceGateIdx && deviceGateIdx < zapIdx) {
-		t.Fatalf("override rebuild must prove cluster and device ownership before zapping every host (read=%d decide=%d gate=%d rebuild=%d device=%d zap=%d)", readIdx, decideIdx, gateIdx, rebuildIdx, deviceGateIdx, zapIdx)
+	if !(confStatIdx < confReadIdx && confReadIdx < confRefuseIdx && confRefuseIdx < readIdx && readIdx < recordClassifyIdx && recordClassifyIdx < markerClassifyIdx && markerClassifyIdx < decideIdx && decideIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < deviceGateIdx && deviceGateIdx < zapIdx) {
+		t.Fatalf("override rebuild must prove cluster and device ownership before zapping every host (read=%d recordClassify=%d markerClassify=%d decide=%d gate=%d rebuild=%d device=%d zap=%d)", readIdx, recordClassifyIdx, markerClassifyIdx, decideIdx, gateIdx, rebuildIdx, deviceGateIdx, zapIdx)
+	}
+	confGate := fmt.Sprint(tasks[confRefuseIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"stat.exists is defined", "stat.isreg", "stat.islnk", "override_conf.content is defined", "bootwright_mutating_invocation", "No apply mode or authorization"} {
+		if !strings.Contains(confGate, want) {
+			t.Fatalf("override rebuild must fail closed when the Ceph configuration cannot be classified; missing %q in %v", want, tasks[confRefuseIdx])
+		}
+	}
+	if got := fmt.Sprint(tasks[recordClassifyIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_controller_owner_evidence") {
+		t.Fatalf("override rebuild controller evidence must use the shared exact classifier, got %v", tasks[recordClassifyIdx])
+	}
+	if got := fmt.Sprint(tasks[markerClassifyIdx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_host_marker_evidence") {
+		t.Fatalf("override rebuild marker evidence must use the shared exact classifier, got %v", tasks[markerClassifyIdx])
 	}
 
 	gate := tasks[gateIdx]
@@ -1832,7 +1901,9 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	}
 	owned := fmt.Sprint(decide["bootwright_ceph_override_owned"])
 	for _, want := range []string{
-		"bootwright_ceph_override_record.stat.exists",
+		"bootwright_ceph_override_record_evidence.valid",
+		"bootwright_ceph_override_record_evidence.fsid",
+		"bootwright_ceph_override_marker_evidence.valid",
 		"bootwright_selected_storage_cluster.seedHost",
 		"bootwright_ceph_override_fsid",
 		"bootwright_ceph_override_owned_fsid",
@@ -1892,25 +1963,25 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 
 	statIdx := findAnsibleTask(t, tasks, "Stat Bootwright storage cluster ownership record for override rebuild")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright storage cluster ownership record for override rebuild")
-	decodeIdx := findAnsibleTask(t, tasks, "Decode Bootwright storage cluster ownership record for override rebuild")
+	classifyIdx := findAnsibleTask(t, tasks, "Classify Bootwright storage cluster ownership evidence for override rebuild")
 	validateIdx := findAnsibleTask(t, tasks, "Validate incomplete-bootstrap controller ownership evidence")
 	detectIdx := findAnsibleTask(t, tasks, "Detect an incomplete Bootwright bootstrap eligible for override rebuild")
 	authorizeIdx := findAnsibleTask(t, tasks, "Decide whether the controller authorizes this exact incomplete bootstrap cleanup")
-	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership marker is missing")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to touch a Bootwright Ceph cluster whose ownership evidence is not exact")
 	gateIdx := findAnsibleTask(t, tasks, "Enforce apply mode for the Ceph cluster")
 	rebuildIdx := findAnsibleTask(t, tasks, "Decide whether this cluster requires an authorized override rebuild")
 	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild on every topology host")
 	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright Ceph ownership marker")
-	if !(statIdx < readIdx && readIdx < decodeIdx && decodeIdx < validateIdx && validateIdx < detectIdx && detectIdx < authorizeIdx && authorizeIdx < refuseIdx && refuseIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < zapIdx && zapIdx < stampIdx) {
-		t.Fatalf("exact controller evidence and positive authorization must precede the refusal, gate, cleanup, and marker stamp (stat=%d read=%d decode=%d validate=%d detect=%d authorize=%d refuse=%d gate=%d rebuild=%d zap=%d stamp=%d)", statIdx, readIdx, decodeIdx, validateIdx, detectIdx, authorizeIdx, refuseIdx, gateIdx, rebuildIdx, zapIdx, stampIdx)
+	if !(statIdx < readIdx && readIdx < classifyIdx && classifyIdx < validateIdx && validateIdx < detectIdx && detectIdx < authorizeIdx && authorizeIdx < refuseIdx && refuseIdx < gateIdx && gateIdx < rebuildIdx && rebuildIdx < zapIdx && zapIdx < stampIdx) {
+		t.Fatalf("exact controller evidence and positive authorization must precede the refusal, gate, cleanup, and marker stamp (stat=%d read=%d classify=%d validate=%d detect=%d authorize=%d refuse=%d gate=%d rebuild=%d zap=%d stamp=%d)", statIdx, readIdx, classifyIdx, validateIdx, detectIdx, authorizeIdx, refuseIdx, gateIdx, rebuildIdx, zapIdx, stampIdx)
 	}
 	if tasks[readIdx]["delegate_to"] != "localhost" || tasks[readIdx]["become"] != false || tasks[readIdx]["failed_when"] != false {
 		t.Fatalf("incomplete-bootstrap record read must be a non-mutating controller-local probe whose ambiguity reaches the explicit refusal, got %v", tasks[readIdx])
 	}
-	decode := fmt.Sprint(tasks[decodeIdx])
-	for _, want := range []string{"from_json", "rescue", "bootwright_ceph_override_record_decode_failed"} {
-		if !strings.Contains(decode, want) {
-			t.Fatalf("incomplete-bootstrap record decode must fail closed into explicit evidence classification; missing %q in %v", want, tasks[decodeIdx])
+	classify := fmt.Sprint(tasks[classifyIdx])
+	for _, want := range []string{"bootwright_ceph_controller_owner_evidence", "bootwright_selected_storage_cluster.name", "bootwright_selected_storage_cluster.seedHost"} {
+		if !strings.Contains(classify, want) {
+			t.Fatalf("incomplete-bootstrap record decode must use the shared non-throwing exact classifier; missing %q in %v", want, tasks[classifyIdx])
 		}
 	}
 	validate, ok := tasks[validateIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -1918,7 +1989,7 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 		t.Fatalf("incomplete-bootstrap record validation must be a set_fact, got %v", tasks[validateIdx])
 	}
 	validateExpr := fmt.Sprint(validate["bootwright_ceph_incomplete_bootstrap_record_valid"])
-	for _, want := range []string{"bootwright.io/ownership/v1alpha1", "storage-cluster", ".name", ".owner", ".role", ".context", ".cluster", ".host", ".seedHost", "bootwright_selected_storage_cluster.name", "bootwright_selected_storage_cluster.seedHost"} {
+	for _, want := range []string{"bootwright_ceph_override_record.failed", "bootwright_ceph_override_record_evidence.identityValid", "bootwright_ceph_override_record_evidence.fsidEmpty", "bootwright_ceph_override_record_evidence.fsidValid", "bootwright_ceph_override_fsid"} {
 		if !strings.Contains(validateExpr, want) {
 			t.Fatalf("incomplete-bootstrap record validation must prove exact owner identity and desired seed; missing %q in %v", want, validateExpr)
 		}
@@ -1931,7 +2002,8 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 	expr := fmt.Sprint(detect["bootwright_ceph_incomplete_bootstrap"])
 	for _, want := range []string{
 		"bootwright_ceph_incomplete_bootstrap_record_valid",
-		"bootwright_ceph_override_owned_fsid | default('') | length == 0",
+		"bootwright_ceph_override_marker_stat.failed",
+		"bootwright_ceph_override_marker_evidence.present",
 		"bootwright_ceph_override_reachable",
 		"bootwright_selected_storage_cluster.seedHost",
 	} {
@@ -1974,7 +2046,7 @@ func TestStorageCephadmRecoversIncompleteBootstrapUnderOverride(t *testing.T) {
 		t.Fatalf("missing-marker refusal must be a fail, got %v", tasks[refuseIdx])
 	}
 	when := fmt.Sprint(tasks[refuseIdx]["when"])
-	for _, want := range []string{"bootwright_selected_storage_cluster.seedHost", "bootwright_ceph_override_owned_fsid | default('') | length == 0", "not (bootwright_ceph_incomplete_bootstrap_cleanup_authorized"} {
+	for _, want := range []string{"bootwright_selected_storage_cluster.seedHost", "not (bootwright_ceph_override_marker_evidence.valid", "not (bootwright_ceph_incomplete_bootstrap_cleanup_authorized"} {
 		if !strings.Contains(when, want) {
 			t.Fatalf("missing-marker refusal must stay closed until the shared consequence predicate is true; missing %q in %v", want, tasks[refuseIdx]["when"])
 		}
@@ -1997,19 +2069,33 @@ func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
+	confStatIdx := findAnsibleTask(t, tasks, "Inspect existing Ceph configuration on seed host")
+	confProbeRefuseIdx := findAnsibleTask(t, tasks, "Refuse an ambiguous Ceph configuration probe on seed host")
 	confIdx := findAnsibleTask(t, tasks, "Resolve existing Ceph configuration fsid on seed host")
 	resolveRecoveryIdx := findAnsibleTask(t, tasks, "Resolve confirmed Ceph ownership recovery fsid on seed host")
+	classifyExistingIdx := findAnsibleTask(t, tasks, "Classify existing Ceph controller ownership before recovery")
+	inspectExistingMarkerIdx := findAnsibleTask(t, tasks, "Inspect existing Ceph ownership marker before recovery")
+	classifyExistingMarkerIdx := findAnsibleTask(t, tasks, "Classify existing Ceph ownership marker before recovery")
 	validateRecoveryIdx := findAnsibleTask(t, tasks, "Refuse Ceph ownership recovery without matching evidence")
 	recoverRecordIdx := findAnsibleTask(t, tasks, "Recover Bootwright storage cluster ownership record on controller")
 	recoverIdx := findAnsibleTask(t, tasks, "Recover Bootwright Ceph ownership marker on seed host")
 	recordIdx := findAnsibleTask(t, tasks, "Stat Bootwright storage cluster ownership record on controller")
+	classifyRecordIdx := findAnsibleTask(t, tasks, "Classify Bootwright storage cluster ownership record on controller")
+	markerStatIdx := findAnsibleTask(t, tasks, "Stat Bootwright Ceph ownership marker on seed host")
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker on seed host")
+	classifyMarkerIdx := findAnsibleTask(t, tasks, "Classify Bootwright ownership marker on seed host")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
 	rmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
-	if !(confIdx < resolveRecoveryIdx && resolveRecoveryIdx < validateRecoveryIdx && validateRecoveryIdx < recoverRecordIdx && recoverRecordIdx < recoverIdx && recoverIdx < recordIdx && recordIdx < readIdx && readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
-		t.Fatalf("ceph destroy must validate recovery, reconstruct and re-read ownership, and verify it before removing the cluster and wiping (conf=%d resolveRecovery=%d validateRecovery=%d recoverRecord=%d recoverMarker=%d record=%d read=%d decide=%d refuse=%d rm=%d wipe=%d)", confIdx, resolveRecoveryIdx, validateRecoveryIdx, recoverRecordIdx, recoverIdx, recordIdx, readIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
+	if !(confStatIdx < confProbeRefuseIdx && confProbeRefuseIdx < confIdx && confIdx < resolveRecoveryIdx && resolveRecoveryIdx < classifyExistingIdx && classifyExistingIdx < inspectExistingMarkerIdx && inspectExistingMarkerIdx < classifyExistingMarkerIdx && classifyExistingMarkerIdx < validateRecoveryIdx && validateRecoveryIdx < recoverRecordIdx && recoverRecordIdx < recoverIdx && recoverIdx < recordIdx && recordIdx < classifyRecordIdx && classifyRecordIdx < markerStatIdx && markerStatIdx < readIdx && readIdx < classifyMarkerIdx && classifyMarkerIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must classify before recovery, reject contradictory or unsafe marker evidence, reconstruct and re-read exact ownership, and verify it before removing the cluster and wiping (conf=%d resolveRecovery=%d existingClassify=%d existingMarker=%d existingMarkerClassify=%d validateRecovery=%d recoverRecord=%d recoverMarker=%d record=%d recordClassify=%d markerStat=%d read=%d markerClassify=%d decide=%d refuse=%d rm=%d wipe=%d)", confIdx, resolveRecoveryIdx, classifyExistingIdx, inspectExistingMarkerIdx, classifyExistingMarkerIdx, validateRecoveryIdx, recoverRecordIdx, recoverIdx, recordIdx, classifyRecordIdx, markerStatIdx, readIdx, classifyMarkerIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
+	}
+	confProbeGate := fmt.Sprint(tasks[confProbeRefuseIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"stat.exists is defined", "stat.isreg", "stat.islnk", "destroy_conf.content is defined", "bootwright_mutating_invocation", "No authorization or ownership-recovery"} {
+		if !strings.Contains(confProbeGate, want) {
+			t.Fatalf("Ceph destroy must prove configuration presence before ownership classification; missing %q in %v", want, tasks[confProbeRefuseIdx])
+		}
 	}
 
 	recoveryAssert, ok := tasks[validateRecoveryIdx]["ansible.builtin.assert"].(map[string]any)
@@ -2022,13 +2108,40 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 		"bootwright_ceph_destroy_confirmed_fsid",
 		"bootwright_ceph_fsid.stdout",
 		"bootwright_selected_storage_cluster.seedHost",
+		"bootwright_ceph_destroy_existing_record_evidence.identityValid",
+		"bootwright_ceph_destroy_existing_record_evidence.fsidEmpty",
+		"bootwright_ceph_destroy_existing_record_evidence.fsidValid",
+		"bootwright_ceph_destroy_existing_marker_evidence.valid",
+		"bootwright_ceph_destroy_existing_marker_evidence.fsid",
 	} {
 		if !strings.Contains(recoveryThat, want) {
 			t.Fatalf("ceph ownership recovery gate must require %s, got %v", want, recoveryAssert["that"])
 		}
 	}
+	existingMarkerClassify := fmt.Sprint(tasks[classifyExistingMarkerIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_ceph_host_marker_evidence", "stat.isreg", "stat.islnk"} {
+		if !strings.Contains(existingMarkerClassify, want) {
+			t.Fatalf("Ceph recovery must classify existing marker authority before overwriting it; missing %q in %v", want, tasks[classifyExistingMarkerIdx])
+		}
+	}
 	if strings.Contains(recoveryThat, "bootwright_ceph_destroy_record.stat.exists") {
 		t.Fatalf("ceph ownership recovery must be able to reconstruct a missing controller record, got %v", recoveryAssert["that"])
+	}
+	for _, idx := range []int{classifyExistingIdx, classifyRecordIdx} {
+		if got := fmt.Sprint(tasks[idx]["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_controller_owner_evidence") {
+			t.Fatalf("Ceph destroy controller evidence must consume the shared exact classifier, got %v", tasks[idx])
+		}
+		for _, want := range []string{"stat.isreg", "stat.islnk"} {
+			if got := fmt.Sprint(tasks[idx]["ansible.builtin.set_fact"]); !strings.Contains(got, want) {
+				t.Fatalf("Ceph destroy controller evidence must reject an unsafe path missing %q, got %v", want, tasks[idx])
+			}
+		}
+	}
+	markerClassify := fmt.Sprint(tasks[classifyMarkerIdx]["ansible.builtin.set_fact"])
+	for _, want := range []string{"bootwright_ceph_host_marker_evidence", "stat.isreg", "stat.islnk"} {
+		if !strings.Contains(markerClassify, want) {
+			t.Fatalf("Ceph destroy marker evidence must consume exact safe-path classification missing %q, got %v", want, tasks[classifyMarkerIdx])
+		}
 	}
 	recoveryRole, ok := tasks[recoverRecordIdx]["ansible.builtin.include_role"].(map[string]any)
 	if !ok {
@@ -2069,8 +2182,10 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 	}
 	owned := fmt.Sprint(decide["bootwright_ceph_destroy_owned"])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_conf_check.rc",
-		"bootwright_ceph_destroy_record.stat.exists",
+		"bootwright_ceph_destroy_conf_stat.stat.exists is defined",
+		"bootwright_ceph_destroy_record_evidence.valid",
+		"bootwright_ceph_destroy_record_evidence.fsid",
+		"bootwright_ceph_destroy_marker_evidence.valid",
 		"bootwright_selected_storage_cluster.seedHost",
 		"bootwright_ceph_destroy_conf_fsid",
 		"bootwright_ceph_fsid.stdout",
@@ -2078,9 +2193,6 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 		if !strings.Contains(owned, want) {
 			t.Fatalf("ceph destroy ownership decision must require %s, got %v", want, decide["bootwright_ceph_destroy_owned"])
 		}
-	}
-	if !strings.Contains(owned, "bootwright_ceph_destroy_owned_fsid | default('') | length > 0") {
-		t.Fatalf("ceph destroy ownership decision must require a present on-host marker fsid (no empty-marker fail-open), got %v", decide["bootwright_ceph_destroy_owned"])
 	}
 	if strings.Contains(owned, "bootwright_ceph_destroy_owned_fsid | default('') | length == 0") {
 		t.Fatalf("ceph destroy ownership decision must not treat an empty marker fsid as owned, got %v", decide["bootwright_ceph_destroy_owned"])
@@ -2107,12 +2219,34 @@ func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
 func TestStorageCephadmDestroyLiveFsidProbeIsBounded(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
 
-	confIdx := findAnsibleTask(t, tasks, "Check existing Ceph configuration on seed host")
+	confIdx := findAnsibleTask(t, tasks, "Inspect existing Ceph configuration on seed host")
+	readIdx := findAnsibleTask(t, tasks, "Read existing Ceph configuration on seed host")
+	guardIdx := findAnsibleTask(t, tasks, "Refuse an ambiguous Ceph configuration probe on seed host")
 	scanIdx := findAnsibleTask(t, tasks, "Scan the seed host for Ceph cluster directories")
 	stateIdx := findAnsibleTask(t, tasks, "Resolve whether the seed host still carries Ceph cluster state")
 	probeIdx := findAnsibleTask(t, tasks, "Check Ceph fsid on seed host")
-	if !(confIdx < stateIdx && scanIdx < stateIdx && stateIdx < probeIdx) {
-		t.Fatalf("ceph destroy must resolve the seed's local cluster state before probing it live (conf=%d scan=%d state=%d probe=%d)", confIdx, scanIdx, stateIdx, probeIdx)
+	if !(confIdx < readIdx && readIdx < guardIdx && guardIdx < stateIdx && scanIdx < stateIdx && stateIdx < probeIdx) {
+		t.Fatalf("ceph destroy must prove the seed configuration probe before resolving local state and probing it live (conf=%d read=%d guard=%d scan=%d state=%d probe=%d)", confIdx, readIdx, guardIdx, scanIdx, stateIdx, probeIdx)
+	}
+
+	if _, ok := tasks[confIdx]["ansible.builtin.stat"].(map[string]any); !ok {
+		t.Fatalf("ceph destroy configuration inspection must use stat, got %v", tasks[confIdx])
+	}
+	guard, ok := tasks[guardIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph destroy configuration probe guard must be an assert, got %v", tasks[guardIdx])
+	}
+	guardText := fmt.Sprint(guard)
+	for _, want := range []string{
+		"bootwright_ceph_destroy_conf_stat.stat.exists is defined",
+		"bootwright_ceph_destroy_conf_stat.stat.isreg",
+		"bootwright_ceph_destroy_conf_stat.stat.islnk",
+		"bootwright_ceph_destroy_conf.content is defined",
+		"bootwright_mutating_invocation",
+	} {
+		if !strings.Contains(guardText, want) {
+			t.Fatalf("ceph destroy configuration probe guard must require %s, got %v", want, guard)
+		}
 	}
 
 	state, ok := tasks[stateIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -2120,7 +2254,7 @@ func TestStorageCephadmDestroyLiveFsidProbeIsBounded(t *testing.T) {
 		t.Fatalf("seed local Ceph state must be a set_fact, got %v", tasks[stateIdx])
 	}
 	local := fmt.Sprint(state["bootwright_ceph_destroy_local_state"])
-	for _, want := range []string{"bootwright_ceph_destroy_conf_check.rc", "bootwright_ceph_destroy_state_dirs.files"} {
+	for _, want := range []string{"bootwright_ceph_destroy_conf_stat.stat.exists", "bootwright_ceph_destroy_state_dirs.files"} {
 		if !strings.Contains(local, want) {
 			t.Fatalf("seed local Ceph state must read %s: a seed carrying /var/lib/ceph/<fsid> but no ceph.conf still answers `ceph fsid`, and skipping the probe there would fail the ownership gate open, got %v", want, state["bootwright_ceph_destroy_local_state"])
 		}
@@ -2155,7 +2289,8 @@ func TestStorageCephadmDestroyOwnershipRefusalNamesItsEvidence(t *testing.T) {
 	}
 	unproven := fmt.Sprint(evidence["bootwright_ceph_destroy_unproven"])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_record.stat.exists",
+		"bootwright_ceph_destroy_record_evidence.blockers",
+		"bootwright_ceph_destroy_marker_evidence.blockers",
 		"bootwright_ceph_destroy_owned_fsid",
 		"bootwright_ceph_destroy_conf_fsid",
 		"bootwright_ceph_destroy_live_fsid",
@@ -2170,7 +2305,7 @@ func TestStorageCephadmDestroyOwnershipRefusalNamesItsEvidence(t *testing.T) {
 		t.Fatalf("ceph destroy ownership guard must be an assert, got %v", tasks[refuseIdx])
 	}
 	msg := fmt.Sprint(refuse["fail_msg"])
-	for _, want := range []string{"bootwright_ceph_destroy_unproven", "bootwright_ceph_destroy_evidence", "--recover-ceph-ownership"} {
+	for _, want := range []string{"bootwright_ceph_destroy_unproven", "bootwright_ceph_destroy_evidence", "--recover-ceph-ownership", "bootwright_mutating_invocation"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("ceph destroy ownership refusal must report %s: an operator cannot act on a refusal that lists three possible causes and names none, got %v", want, refuse["fail_msg"])
 		}
@@ -2376,12 +2511,25 @@ func TestStorageCephadmUnownedDeviceTokenGatesTheHoldersRefusal(t *testing.T) {
 func TestStorageCephadmReclaimTearsDownLVMBeforeTheWipe(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml"
 	tasks := readAnsibleTasks(t, path)
+	pvsIdx := findAnsibleTask(t, tasks, "Resolve the volume groups standing on the reclaimed OSD devices")
+	pvsGuardIdx := findAnsibleTask(t, tasks, "Refuse to reclaim an LVM device whose volume group cannot be resolved")
 	vgchangeIdx := findAnsibleTask(t, tasks, "Deactivate the volume groups on the reclaimed OSD devices")
 	vgremoveIdx := findAnsibleTask(t, tasks, "Remove the volume groups on the reclaimed OSD devices")
 	pvremoveIdx := findAnsibleTask(t, tasks, "Remove the physical volume labels from the reclaimed OSD devices")
 	wipeIdx := findAnsibleTask(t, tasks, "Reclaim named OSD devices by wiping signatures")
-	if !(vgchangeIdx < vgremoveIdx && vgremoveIdx < pvremoveIdx && pvremoveIdx < wipeIdx) {
+	if !(pvsIdx < pvsGuardIdx && pvsGuardIdx < vgchangeIdx && vgchangeIdx < vgremoveIdx && vgremoveIdx < pvremoveIdx && pvremoveIdx < wipeIdx) {
 		t.Fatalf("an authorized reclaim must take the LVM stack down before wipefs: wipefs clears the PV label but leaves active LVs mapped, and ceph-volume refuses a device with holders regardless of its signatures, so the reclaim would clear the gate and still yield zero OSDs (vgchange=%d vgremove=%d pvremove=%d wipe=%d)", vgchangeIdx, vgremoveIdx, pvremoveIdx, wipeIdx)
+	}
+	for _, want := range []string{"--select", "pv_name={{ item }}"} {
+		if got := fmt.Sprint(tasks[pvsIdx]["ansible.builtin.command"]); !strings.Contains(got, want) {
+			t.Fatalf("the reclaim LVM probe must distinguish an empty selection from a failed command; missing %q in %v", want, tasks[pvsIdx])
+		}
+	}
+	pvsGuard := fmt.Sprint(tasks[pvsGuardIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"item.rc", "item.stdout", "bootwright_mutating_invocation", "Neither data-loss nor unowned-devices"} {
+		if !strings.Contains(pvsGuard, want) {
+			t.Fatalf("the reclaim LVM probe must fail closed before wipefs; missing %q in %v", want, tasks[pvsGuardIdx])
+		}
 	}
 	for _, name := range []string{
 		"Reclaim named OSD devices by wiping signatures",
@@ -2944,11 +3092,40 @@ func TestStorageCephadmDestroyFailsClosedWhenADeviceProbeDidNotRun(t *testing.T)
 
 	lvm := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/lvm_teardown.yml")
 	guardIdx := findAnsibleTask(t, lvm, "Refuse to wipe when the volume group probe did not run for every device")
+	holderGuardIdx := findAnsibleTask(t, lvm, "Refuse to wipe an LVM-backed device whose volume group cannot be resolved")
 	resolveIdx := findAnsibleTask(t, lvm, "Resolve the Ceph volume groups this teardown must take down before the wipe")
-	if guardIdx > resolveIdx {
-		t.Fatalf("the volume group probe guard must precede the resolution that reads it (guard=%d resolve=%d)", guardIdx, resolveIdx)
+	if !(guardIdx < holderGuardIdx && holderGuardIdx < resolveIdx) {
+		t.Fatalf("the successful probe and exact LVM-holder mapping guards must precede the resolution that reads them (probe=%d holder=%d resolve=%d)", guardIdx, holderGuardIdx, resolveIdx)
 	}
 	assertProbeCompletenessGuard(t, lvm[guardIdx], "Refuse to wipe when the volume group probe did not run for every device", "bootwright_ceph_teardown_pvs", "bootwright_ceph_lvm_teardown_devices")
+	probeGuard := fmt.Sprint(lvm[guardIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"selectattr('rc', 'equalto', 0)", "bootwright_ceph_teardown_holders.results"} {
+		if !strings.Contains(probeGuard, want) {
+			t.Fatalf("the LVM probe guard must reject command failures and incomplete holder probes; missing %q in %v", want, lvm[guardIdx])
+		}
+	}
+	holderGuard := fmt.Sprint(lvm[holderGuardIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"bootwright_ceph_teardown_holders.results", "select('equalto', 'lvm')", "item.stdout", "bootwright_mutating_invocation", "No authorization"} {
+		if !strings.Contains(holderGuard, want) {
+			t.Fatalf("the LVM holder guard must refuse an unmapped holder before disk wipe; missing %q in %v", want, lvm[holderGuardIdx])
+		}
+	}
+	pvsIdx := findAnsibleTask(t, lvm, "Resolve the volume groups standing on the Ceph devices this teardown wipes")
+	pvsArgv := fmt.Sprint(lvm[pvsIdx]["ansible.builtin.command"])
+	for _, want := range []string{"--select", "pv_name={{ item }}"} {
+		if !strings.Contains(pvsArgv, want) {
+			t.Fatalf("the LVM probe must use a zero-row-success selection so absence differs from command failure; missing %q in %v", want, lvm[pvsIdx])
+		}
+	}
+	tagsIdx := findAnsibleTask(t, lvm, "Read the Ceph OSD tags of the volume groups this teardown owns")
+	tagsGuardIdx := findAnsibleTask(t, lvm, "Refuse to continue when Ceph LVM ownership tags cannot be read")
+	fsidResolveIdx := findAnsibleTask(t, lvm, "Resolve the Ceph cluster identity that owns the OSD devices this teardown wipes")
+	if !(tagsIdx < tagsGuardIdx && tagsGuardIdx < fsidResolveIdx) {
+		t.Fatalf("the tag probe must be accepted before its identity is consumed (tags=%d guard=%d resolve=%d)", tagsIdx, tagsGuardIdx, fsidResolveIdx)
+	}
+	if got := fmt.Sprint(lvm[tagsGuardIdx]["ansible.builtin.assert"]); !strings.Contains(got, "selectattr('rc', 'equalto', 0)") || !strings.Contains(got, "bootwright_mutating_invocation") {
+		t.Fatalf("the ownership-tag gate must fail closed with the exact retry, got %v", lvm[tagsGuardIdx])
+	}
 }
 
 func assertProbeCompletenessGuard(t *testing.T, task map[string]any, name, register, expected string) {
@@ -2967,12 +3144,20 @@ func assertProbeCompletenessGuard(t *testing.T, task map[string]any, name, regis
 
 func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(t *testing.T) {
 	tasks := storageCephDestroyTasks(t)
+	statIdx := findAnsibleTask(t, tasks, "Inspect existing Ceph configuration on seed host")
+	probeGuardIdx := findAnsibleTask(t, tasks, "Refuse an ambiguous Ceph configuration probe on seed host")
 	stateIdx := findAnsibleTask(t, tasks, "Resolve whether the seed host still carries Ceph cluster state")
 	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
 	unprovenIdx := findAnsibleTask(t, tasks, "Resolve the unproven Ceph destroy ownership evidence on seed host")
 	removeIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on the ownership authority host")
-	if !(stateIdx < decideIdx && decideIdx < unprovenIdx && unprovenIdx < removeIdx) {
+	if !(statIdx < probeGuardIdx && probeGuardIdx < stateIdx && stateIdx < decideIdx && decideIdx < unprovenIdx && unprovenIdx < removeIdx) {
 		t.Fatalf("the seed must resolve its local Ceph state before it decides ownership, and name its evidence before the removal that gate protects (state=%d decide=%d unproven=%d remove=%d)", stateIdx, decideIdx, unprovenIdx, removeIdx)
+	}
+	probeGate := fmt.Sprint(tasks[probeGuardIdx]["ansible.builtin.assert"])
+	for _, want := range []string{"stat.exists is defined", "stat.isreg", "stat.islnk", "destroy_conf.content is defined", "bootwright_mutating_invocation"} {
+		if !strings.Contains(probeGate, want) {
+			t.Fatalf("the already-destroyed branch needs conclusive configuration absence; missing %q in %v", want, tasks[probeGuardIdx])
+		}
 	}
 
 	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -2981,8 +3166,10 @@ func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(
 	}
 	owned := fmt.Sprint(decide["bootwright_ceph_destroy_owned"])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_conf_check.rc is defined",
+		"bootwright_ceph_destroy_conf_stat.stat.exists is defined",
+		"not (bootwright_ceph_destroy_conf_stat.stat.exists",
 		"bootwright_ceph_destroy_local_state",
+		"bootwright_ceph_destroy_conf_fsid",
 	} {
 		if !strings.Contains(owned, want) {
 			t.Errorf("the already-destroyed branch must require %q: a probe that never answered carries no rc and reads as \"no configuration\", which is exactly what a seed with nothing left reports, so the seed's cluster removal skips — and every other node's with it, because those are scoped to the fsid this seed resolves. Got %v", want, decide["bootwright_ceph_destroy_owned"])
@@ -2998,7 +3185,7 @@ func TestStorageCephadmDestroyProvesASeedHasNothingLeftBeforeSkippingItsRemoval(
 	}
 	reasons := fmt.Sprint(unproven["bootwright_ceph_destroy_unproven"])
 	for _, want := range []string{
-		"bootwright_ceph_destroy_conf_check.rc is not defined",
+		"bootwright_ceph_destroy_conf_stat.stat.exists is not defined",
 		"bootwright_ceph_fsid.rc is not defined",
 		"bootwright_ceph_destroy_local_state",
 	} {
@@ -3110,10 +3297,13 @@ func TestStorageCephadmDestroyRefusesPeersWhenTheSeedResolvesNoFsid(t *testing.T
 		t.Errorf("no --authorize token may relax this: skipping it leaves a live cluster on every peer while the run reports it destroyed, got when=%v", tasks[refuseIdx]["when"])
 	}
 	fail := fmt.Sprint(tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)["fail_msg"])
-	for _, want := range []string{"FOREIGN", "recover-ceph-ownership", "rm-cluster"} {
+	for _, want := range []string{"FOREIGN", "bootwright_mutating_invocation", "not a usable bypass", "rm-cluster"} {
 		if !strings.Contains(fail, want) {
-			t.Errorf("the refusal must name the misclassification it prevents and both exits, missing %q in %v", want, fail)
+			t.Errorf("the refusal must name the misclassification it prevents and its usable exits, missing %q in %v", want, fail)
 		}
+	}
+	if strings.Contains(fail, "--recover-ceph-ownership {{ bootwright_selected_storage_cluster.name }}=<fsid>") {
+		t.Errorf("a clean seed has no ceph.conf against which recovery can validate the fsid, so the refusal must not recommend an impossible recovery command, got %v", fail)
 	}
 
 	for _, name := range []string{
@@ -3958,8 +4148,30 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("override rebuild must run cephadm rm-cluster, got %v", rmCluster)
 	}
 	bootstrapStep := block[findAnsibleTask(t, block, "Bootstrap Ceph cluster when absent")]
-	if got := fmt.Sprint(bootstrapStep["when"]); !strings.Contains(got, "bootwright_ceph_conf_check.rc") || strings.Contains(got, "status_check") {
+	if got := fmt.Sprint(bootstrapStep["when"]); !strings.Contains(got, "not (bootwright_ceph_conf_present") || strings.Contains(got, ".rc") {
 		t.Fatalf("bootstrap must be gated solely on ceph.conf presence, got when=%v", bootstrapStep["when"])
+	}
+	confStatIdx := findAnsibleTask(t, block, "Inspect existing Ceph configuration before bootstrap")
+	confReadIdx := findAnsibleTask(t, block, "Read the existing Ceph configuration for the pre-record")
+	confProbeRefuseIdx := findAnsibleTask(t, block, "Refuse an ambiguous Ceph configuration before bootstrap")
+	confFSIDIdx := findAnsibleTask(t, block, "Resolve the existing Ceph fsid for the pre-record")
+	confFSIDRefuseIdx := findAnsibleTask(t, block, "Refuse existing Ceph configuration without an exact fsid")
+	confPresentIdx := findAnsibleTask(t, block, "Resolve whether a proven Ceph configuration already exists")
+	preRecordIdx := findAnsibleTask(t, block, "Pre-record storage cluster ownership before bootstrap")
+	bootstrapIdx := findAnsibleTask(t, block, "Bootstrap Ceph cluster when absent")
+	if !(confStatIdx < confReadIdx && confReadIdx < confProbeRefuseIdx && confProbeRefuseIdx < confFSIDIdx && confFSIDIdx < confFSIDRefuseIdx && confFSIDRefuseIdx < confPresentIdx && confPresentIdx < preRecordIdx && preRecordIdx < bootstrapIdx) {
+		t.Fatalf("a fresh exact configuration proof must precede the ownership pre-record and bootstrap (stat=%d read=%d probe=%d fsid=%d fsidGate=%d present=%d record=%d bootstrap=%d)", confStatIdx, confReadIdx, confProbeRefuseIdx, confFSIDIdx, confFSIDRefuseIdx, confPresentIdx, preRecordIdx, bootstrapIdx)
+	}
+	for idx, wants := range map[int][]string{
+		confProbeRefuseIdx: {"stat.exists is defined", "stat.isreg", "stat.islnk", "prerecord_conf.content is defined", "bootwright_mutating_invocation", "No apply mode or authorization"},
+		confFSIDRefuseIdx:  {"prerecord_fsid", "is match", "bootwright_mutating_invocation", "No apply mode or authorization"},
+	} {
+		gate := fmt.Sprint(block[idx]["ansible.builtin.assert"])
+		for _, want := range wants {
+			if !strings.Contains(gate, want) {
+				t.Fatalf("pre-bootstrap configuration gate %q is missing %q: %v", block[idx]["name"], want, block[idx])
+			}
+		}
 	}
 	resolveBootstrap := block[findAnsibleTask(t, block, "Resolve cephadm bootstrap command")]
 	bootstrapArgv := fmt.Sprint(resolveBootstrap["ansible.builtin.set_fact"])
@@ -5372,12 +5584,27 @@ func TestStorageRefusesNodesRunningAForeignCephadmCluster(t *testing.T) {
 
 	tasks := readAnsibleTasks(t, base+"phases/foreign_cluster.yml")
 	listIdx := findAnsibleTask(t, tasks, "List the cephadm systemd units the storage node carries")
+	listRefuseIdx := findAnsibleTask(t, tasks, "Refuse an unreadable cephadm unit inventory")
 	unitIdx := findAnsibleTask(t, tasks, "Resolve the cephadm cluster identities that own systemd units on the storage node")
+	confStatIdx := findAnsibleTask(t, tasks, "Inspect the Ceph configuration the storage node already carries")
+	confReadIdx := findAnsibleTask(t, tasks, "Read the Ceph configuration the storage node already carries")
+	confRefuseIdx := findAnsibleTask(t, tasks, "Refuse an ambiguous Ceph configuration on a storage node")
 	knownIdx := findAnsibleTask(t, tasks, "Resolve the Ceph cluster identities this apply may legitimately find on the storage node")
 	foreignIdx := findAnsibleTask(t, tasks, "Resolve the cephadm clusters on the storage node this apply does not own")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse a storage node that still runs a cephadm cluster this apply does not own")
-	if !(listIdx < unitIdx && unitIdx < knownIdx && knownIdx < foreignIdx && foreignIdx < refuseIdx) {
+	if !(listIdx < listRefuseIdx && listRefuseIdx < unitIdx && unitIdx < confStatIdx && confStatIdx < confReadIdx && confReadIdx < confRefuseIdx && confRefuseIdx < knownIdx && knownIdx < foreignIdx && foreignIdx < refuseIdx) {
 		t.Fatalf("the foreign-cluster gate must list the units, resolve their identities, resolve what this apply owns, subtract, then refuse")
+	}
+	for idx, wants := range map[int][]string{
+		listRefuseIdx: {"cephadm_units.rc", "stdout_lines", "bootwright_mutating_invocation", "No apply authorization"},
+		confRefuseIdx: {"stat.exists is defined", "stat.isreg", "stat.islnk", "host_conf.content is defined", "bootwright_mutating_invocation", "No apply authorization"},
+	} {
+		gate := fmt.Sprint(tasks[idx]["ansible.builtin.assert"])
+		for _, want := range wants {
+			if !strings.Contains(gate, want) {
+				t.Fatalf("foreign-cluster probe gate %q is missing %q: %v", tasks[idx]["name"], want, tasks[idx])
+			}
+		}
 	}
 
 	command, ok := tasks[listIdx]["ansible.builtin.command"].(map[string]any)
@@ -5395,11 +5622,10 @@ func TestStorageRefusesNodesRunningAForeignCephadmCluster(t *testing.T) {
 	if !ok {
 		t.Fatalf("the foreign-cluster gate must resolve the owned identities in a set_fact, got %v", tasks[knownIdx])
 	}
-	confIdx := findAnsibleTask(t, tasks, "Read the Ceph configuration the storage node already carries")
-	if confIdx > knownIdx {
-		t.Fatalf("the node's own cluster identity must be read before the owned set is resolved, got conf=%d known=%d", confIdx, knownIdx)
+	if confReadIdx > knownIdx {
+		t.Fatalf("the node's own cluster identity must be read before the owned set is resolved, got conf=%d known=%d", confReadIdx, knownIdx)
 	}
-	if got := fmt.Sprint(tasks[confIdx]["ansible.builtin.slurp"]); !strings.Contains(got, "/etc/ceph/ceph.conf") {
+	if got := fmt.Sprint(tasks[confReadIdx]["ansible.builtin.slurp"]); !strings.Contains(got, "/etc/ceph/ceph.conf") {
 		t.Fatalf("the gate must read this node's own cluster identity from its ceph.conf, got %v", got)
 	}
 	knownExpr := fmt.Sprint(known["bootwright_ceph_host_known_fsids"])

@@ -13,6 +13,21 @@
   changed_when: false
   failed_when: false
 
+- name: Refuse an unreadable cephadm unit inventory
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_host_cephadm_units.rc | default(1) | int == 0
+      - bootwright_ceph_host_cephadm_units.stdout_lines is defined
+    fail_msg: >-
+      Refusing storage cluster {{ bootwright_selected_storage_cluster.name }} because
+      {{ inventory_hostname }} did not return a complete cephadm systemd-unit inventory:
+      {{ bootwright_ceph_host_cephadm_units.msg
+         | default(bootwright_ceph_host_cephadm_units.stderr
+         | default('no diagnostic was recorded')) }}. No foreign cluster was removed and
+      this node is not proven safe for bootstrap. Repair systemd access, then re-run
+      `{{ bootwright_mutating_invocation }}`. No apply authorization converts a failed
+      inventory probe into an empty node.
+
 - name: Resolve the cephadm cluster identities that own systemd units on the storage node
   vars:
     bootwright_ceph_host_unit_prefix: '^ceph-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@'
@@ -26,12 +41,47 @@
          | unique | list }}
   changed_when: false
 
+- name: Inspect the Ceph configuration the storage node already carries
+  ansible.builtin.stat:
+    path: /etc/ceph/ceph.conf
+  register: bootwright_ceph_host_conf_stat
+  changed_when: false
+  failed_when: false
+
 - name: Read the Ceph configuration the storage node already carries
   ansible.builtin.slurp:
     src: /etc/ceph/ceph.conf
   register: bootwright_ceph_host_conf
   changed_when: false
   failed_when: false
+  when:
+    - bootwright_ceph_host_conf_stat.stat.exists | default(false) | bool
+    - bootwright_ceph_host_conf_stat.stat.isreg | default(false) | bool
+    - not (bootwright_ceph_host_conf_stat.stat.islnk | default(false) | bool)
+
+- name: Refuse an ambiguous Ceph configuration on a storage node
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_host_conf_stat.stat.exists is defined
+      - not (bootwright_ceph_host_conf_stat.failed | default(false) | bool)
+      - >-
+        not (bootwright_ceph_host_conf_stat.stat.exists | default(false) | bool)
+        or (
+          bootwright_ceph_host_conf_stat.stat.isreg | default(false) | bool
+          and not (bootwright_ceph_host_conf_stat.stat.islnk | default(false) | bool)
+          and not (bootwright_ceph_host_conf.failed | default(false) | bool)
+          and (bootwright_ceph_host_conf.content is defined)
+        )
+    fail_msg: >-
+      Refusing storage cluster {{ bootwright_selected_storage_cluster.name }} because
+      /etc/ceph/ceph.conf on {{ inventory_hostname }} could not be proven absent or read
+      as a regular non-symlink file. The probe reported
+      {{ bootwright_ceph_host_conf_stat.msg
+         | default(bootwright_ceph_host_conf.msg
+         | default('no diagnostic was recorded')) }}. No foreign cluster was removed and
+      this node is not proven safe for bootstrap. Repair access or the unsafe path, then
+      re-run `{{ bootwright_mutating_invocation }}`. No apply authorization treats
+      unreadable configuration as absence.
 
 - name: Resolve the Ceph cluster identities this apply may legitimately find on the storage node
   ansible.builtin.set_fact:

@@ -123,12 +123,13 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 		return nil
 	}
 	base := destroyStep{
-		id:         family.base,
-		kind:       family.kind,
-		label:      family.label,
-		playbook:   family.playbook,
-		limit:      render.GroupStorageHosts,
-		forksLimit: render.GroupStorageHosts,
+		id:              family.base,
+		kind:            family.kind,
+		label:           family.label,
+		playbook:        family.playbook,
+		limit:           render.GroupStorageHosts,
+		forksLimit:      render.GroupStorageHosts,
+		completionLimit: render.GroupStorageHosts,
 	}
 	if !work.fan {
 		base.resourceKeys = work.proofNames
@@ -148,6 +149,7 @@ func storageFamilySteps(state v1alpha1.State, work destroyStorageWork, family de
 		step.label = family.label + " " + cluster
 		step.limit = render.StorageClusterGroupName(cluster)
 		step.forksLimit = render.StorageClusterGroupName(cluster)
+		step.completionLimit = render.StorageClusterGroupName(cluster)
 		if work.proofNameSet[cluster] {
 			step.resourceKeys = destroyClusterResourceKeys(state, cluster)
 		}
@@ -206,12 +208,13 @@ func (f destroyGraphFacts) containerAllIDs(base string) []string {
 
 func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, playbook string, hard []string, ordering func(cluster string) []string) []destroyStep {
 	step := destroyStep{
-		id:           base,
-		kind:         kind,
-		label:        label,
-		playbook:     playbook,
-		forksLimit:   render.GroupOCPHosts,
-		dependencies: hard,
+		id:              base,
+		kind:            kind,
+		label:           label,
+		playbook:        playbook,
+		forksLimit:      render.GroupOCPHosts,
+		completionLimit: render.GroupOCPHosts,
+		dependencies:    hard,
 	}
 	if !facts.containerFanned() {
 		step.resourceKeys = facts.containerClusters
@@ -238,11 +241,12 @@ func containerClusterFamilySteps(facts destroyGraphFacts, base, kind, label, pla
 
 func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, ordering func(cluster string) []string, success func(cluster string) []string) ([]destroyStep, error) {
 	step := destroyStep{
-		id:       destroyMachineInfraTaskID,
-		kind:     DestroyTaskKindMachineInfra,
-		label:    "Machine infrastructure",
-		playbook: roles.PlaybookTaskMachineInfraDestroy,
-		limit:    machineInfraDestroyLimit(),
+		id:              destroyMachineInfraTaskID,
+		kind:            DestroyTaskKindMachineInfra,
+		label:           "Machine infrastructure",
+		playbook:        roles.PlaybookTaskMachineInfraDestroy,
+		limit:           machineInfraDestroyLimit(),
+		completionLimit: machineInfraDestroyLimit(),
 	}
 	if !facts.machineInfraFanned() {
 		levels, err := machineInfraDestroyLevels(state)
@@ -273,6 +277,7 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 		group := destroyMachineInfraClusterGroup(state, cluster)
 		fanned.limit = strings.Join([]string{group, render.GroupProviderHosts, render.GroupInfraHosts}, ":")
 		fanned.forksLimit = group
+		fanned.completionLimit = strings.Join([]string{group, render.GroupProviderHosts, render.GroupInfraHosts}, ":")
 		fanned.resourceKeys = destroyClusterResourceKeys(state, cluster)
 		fanned.hostSlotKey = destroyMachineInfraHostSlotKey(state, cluster)
 		for _, guest := range facts.guestsByHost[cluster] {
@@ -302,6 +307,7 @@ func machineInfraFamilySteps(state v1alpha1.State, facts destroyGraphFacts, orde
 		playbook:          roles.PlaybookTaskMachineInfraDestroy,
 		limit:             strings.Join([]string{render.GroupProviderHosts, render.GroupInfraHosts}, ":"),
 		forksLimit:        render.GroupProviderHosts,
+		completionLimit:   strings.Join([]string{render.GroupProviderHosts, render.GroupInfraHosts}, ":"),
 		dependencies:      []string{destroyMachineInfraTaskID},
 		extraVarOverrides: []string{MachineInfraRecordsOnlyExtraVar + "=true"},
 	})

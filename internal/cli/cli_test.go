@@ -78,6 +78,8 @@ set -eu
 inventory=
 limit=
 playbook=
+run_result_playbook=
+run_result_hosts=
 release_playbook=
 storage_scope=
 ownership_dir=
@@ -102,9 +104,27 @@ while [ "$#" -gt 0 ]; do
       ;;
     *task_storage_cluster_destroy_release*)
       release_playbook=$1
+      run_result_playbook=$1
       ;;
     *task_storage_cluster_destroy*)
       playbook=$1
+      run_result_playbook=$1
+      ;;
+    bootwright.core.*)
+      run_result_playbook=$1
+      case "$1" in
+        *task_controller_name_resolution_destroy_*) run_result_hosts=bootwright_controller_hosts ;;
+        *task_container_cluster_*_destroy) run_result_hosts=bootwright_ocp_hosts ;;
+        *task_infra_component_services_destroy) run_result_hosts=bootwright_infra_component_hosts ;;
+        *task_provider_services_destroy) run_result_hosts=bootwright_provider_hosts ;;
+        *task_machine_registration_deregister|*task_storage_node_access_destroy) run_result_hosts=bootwright_storage_hosts ;;
+        *task_machine_infra_destroy) run_result_hosts=bootwright_machine_task_hosts:bootwright_provider_hosts:bootwright_infra_hosts ;;
+        *task_host_shared_service_operation_finalize) run_result_hosts=bootwright_provider_hosts:bootwright_infra_component_hosts ;;
+        *workflow_infra_destroy_artifact_server) run_result_hosts=bootwright_infra_component_hosts ;;
+      esac
+      ;;
+    *playbooks/*.yml)
+      run_result_playbook=$1
       ;;
   esac
   shift
@@ -183,6 +203,92 @@ if [ -n "$playbook" ] && [ "${BOOTWRIGHT_TEST_STORAGE_RESULT_MODE:-valid}" != mi
     }
   ' "$inventory" > "$BOOTWRIGHT_ANSIBLE_ARTIFACTS/storage-destroy-result.json"
 fi
+case "${ANSIBLE_CALLBACKS_ENABLED:-}:$run_result_hosts" in
+  *bw_run_result*|*:bootwright_*)
+    if [ -n "$run_result_playbook" ]; then
+      play_host_limits=$run_result_hosts
+      if [ -z "$play_host_limits" ] && [ -f "$run_result_playbook" ]; then
+        play_host_limits=$(
+          awk '/^  hosts:/ { sub(/^  hosts:[[:space:]]*/, ""); print }' "$run_result_playbook"
+          awk '/^- import_playbook:/ { print $3 }' "$run_result_playbook" | while IFS= read -r imported; do
+            case "$imported" in
+              task_*destroy*.yml|task_machine_registration_deregister.yml)
+                awk '/^  hosts:/ { sub(/^  hosts:[[:space:]]*/, ""); print }' "${run_result_playbook%/*}/$imported"
+                ;;
+            esac
+          done
+        )
+        play_host_limits=$(printf '%s\n' "$play_host_limits" | paste -sd: -)
+      fi
+      mkdir -p "$BOOTWRIGHT_ANSIBLE_ARTIFACTS"
+      awk -v play="$play_host_limits" -v limit="$limit" '
+        BEGIN {
+          count=split(play, play_tokens, ":")
+          for (i=1; i<=count; i++) if (play_tokens[i] != "") play_identity[play_tokens[i]]=1
+          count=split(limit, limit_tokens, ":")
+          for (i=1; i<=count; i++) if (limit_tokens[i] != "") limit_identity[limit_tokens[i]]=1
+        }
+        /^        [^[:space:]][^:]*:/ {
+          group=$0
+          sub(/^        /, "", group)
+          sub(/:.*/, "", group)
+          in_group_hosts=0
+          next
+        }
+        /^            hosts:/ { in_group_hosts=1; next }
+        in_group_hosts && /^                [^[:space:]][^:]*:/ {
+          host=$0
+          sub(/^                /, "", host)
+          sub(/:.*/, "", host)
+          group_host[group SUBSEP host]=1
+          all_host[host]=1
+          next
+        }
+        in_group_hosts && $0 !~ /^                / { in_group_hosts=0 }
+        /^    hosts:/ { in_all_hosts=1; next }
+        in_all_hosts && /^        [^[:space:]][^:]*:/ {
+          host=$0
+          sub(/^        /, "", host)
+          sub(/:.*/, "", host)
+          all_host[host]=1
+          next
+        }
+        END {
+          for (key in group_host) {
+            split(key, part, SUBSEP)
+            if (play_identity[part[1]]) play_host[part[2]]=1
+            if (limit_identity[part[1]]) limit_host[part[2]]=1
+          }
+          for (host in all_host) {
+            if (play_identity[host]) play_host[host]=1
+            if (limit_identity[host]) limit_host[host]=1
+          }
+          for (host in play_host) {
+            if (limit == "" || limit_host[host]) {
+              selected_count++
+              selected[selected_count]=host
+            }
+          }
+          for (i=1; i<=selected_count; i++)
+            printf "{\"host\":\"%s\",\"status\":\"ok\",\"completion\":true}\n", selected[i]
+          printf "{\"schemaVersion\":1,\"status\":\"terminal\",\"processedHosts\":["
+          sep=""
+          for (i=1; i<=selected_count; i++) {
+            printf "%s\"%s\"", sep, selected[i]
+            sep=","
+          }
+          printf "],\"hosts\":{"
+          sep=""
+          for (i=1; i<=selected_count; i++) {
+            printf "%s\"%s\":{\"ok\":1,\"failed\":0,\"skipped\":0,\"unreachable\":0,\"probeUnreachable\":0,\"completed\":1}", sep, selected[i]
+            sep=","
+          }
+          printf "}}\n"
+        }
+      ' "$inventory" > "$BOOTWRIGHT_ANSIBLE_ARTIFACTS/run-result.jsonl"
+    fi
+    ;;
+esac
 printf '%s\n' 'ansible-playbook is stubbed in the cli test package' >&2
 exit 0
 `
@@ -827,7 +933,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		},
 		{
 			name: "plan",
-			args: []string{"plan", "--ask-become-pass=false"},
+			args: []string{"plan"},
 			want: []string{"Bootwright: plan", "Stages", "planned task(s)", "Prerequisites", "Cluster install", "Rendered artifacts", "Bundle"},
 		},
 		{
@@ -954,7 +1060,7 @@ func TestApplyThroughWithClusterScopeDryRunJSON(t *testing.T) {
 
 func TestPlanDryRunJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "plan", "--output", "json", "--ask-become-pass=false")
+	stdout, stderr, code := runCLI(t, "plan", "--output", "json")
 	if code != 0 {
 		t.Fatalf("plan json exited %d, stderr=%q", code, stderr)
 	}
@@ -4354,8 +4460,9 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
-	if err := workflow.SaveRunLease(ctx.RunsDir, workflow.NewRunLease("apply-test", time.Now().UTC())); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	leaseNow := time.Now().UTC()
+	if err := workflow.AcquireRunLease(ctx.RunsDir, workflow.NewRunLease("apply-test", leaseNow), leaseNow); err != nil {
+		t.Fatalf("AcquireRunLease: %v", err)
 	}
 
 	stdout, stderr, code := runCLI(t, "status")
@@ -4451,8 +4558,8 @@ func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
 	if err := workflow.SaveRunLedger(runsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
-	if err := workflow.SaveRunLease(runsDir, workflow.NewRunLease("apply-active", now)); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := workflow.AcquireRunLease(runsDir, workflow.NewRunLease("apply-active", now), now); err != nil {
+		t.Fatalf("AcquireRunLease: %v", err)
 	}
 
 	var stdout bytes.Buffer
@@ -4889,8 +4996,8 @@ func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
 	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
-	if err := workflow.SaveRunLease(ctx.RunsDir, workflow.NewRunLease("apply-active", now)); err != nil {
-		t.Fatalf("SaveRunLease: %v", err)
+	if err := workflow.AcquireRunLease(ctx.RunsDir, workflow.NewRunLease("apply-active", now), now); err != nil {
+		t.Fatalf("AcquireRunLease: %v", err)
 	}
 
 	stdout, stderr, code := runCLI(t,

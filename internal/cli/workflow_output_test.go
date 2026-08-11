@@ -3,29 +3,31 @@ package cli
 import (
 	"bytes"
 	"io"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/spf13/pflag"
 )
 
-func TestPlanHidesMutationOnlyFlags(t *testing.T) {
+func TestPlanLocalFlagSurfaceIsExplicit(t *testing.T) {
 	plan := newPlanCmd(nil, io.Discard, io.Discard)
-	for _, name := range []string{"reclaim-devices", "ask-become-pass", "verbose"} {
-		flag := plan.Flags().Lookup(name)
-		if flag == nil {
-			t.Fatalf("plan is missing flag %q", name)
+	plan.InitDefaultHelpFlag()
+	var got []string
+	plan.Flags().VisitAll(func(flag *pflag.Flag) {
+		got = append(got, flag.Name)
+		if flag.Hidden {
+			t.Errorf("plan flag %q is accepted but hidden", flag.Name)
 		}
-		if !flag.Hidden {
-			t.Fatalf("plan --help must hide mutation/execution-only flag %q", name)
-		}
+	})
+	sort.Strings(got)
+	want := []string{"authorize", "cluster-install-parallelism", "clusters", "help", "machines", "mode", "output", "reclaim-devices", "stage", "through"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("plan local flags = %v, want exact public surface %v", got, want)
 	}
-	for _, name := range []string{"mode", "authorize", "clusters", "cluster-install-parallelism"} {
-		flag := plan.Flags().Lookup(name)
-		if flag == nil || flag.Hidden {
-			t.Fatalf("plan should keep %q visible", name)
-		}
-	}
+
 	apply := newApplyCmd(nil, io.Discard, io.Discard)
 	if flag := apply.Flags().Lookup("reclaim-devices"); flag == nil || flag.Hidden {
 		t.Fatal("apply must keep --reclaim-devices visible")
@@ -33,6 +35,46 @@ func TestPlanHidesMutationOnlyFlags(t *testing.T) {
 	destroy := newDestroyCmd(nil, io.Discard, io.Discard)
 	if flag := destroy.Flags().Lookup("cluster-install-parallelism"); flag != nil {
 		t.Fatal("destroy must not accept --cluster-install-parallelism because its graph has no install chain")
+	}
+}
+
+func TestPlanRejectsApplyExecutionFlags(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "plan", "--dry-run=false")
+	if code != 2 || !strings.Contains(stdout+stderr, "unknown flag: --dry-run") {
+		t.Fatalf("plan --dry-run=false = exit %d, stdout=%q, stderr=%q; want unknown-flag exit 2", code, stdout, stderr)
+	}
+}
+
+func TestApplyPlanHelpStatesReconcileContract(t *testing.T) {
+	for _, verb := range []string{"apply", "plan"} {
+		t.Run(verb, func(t *testing.T) {
+			stdout, stderr, code := runCLI(t, verb, "--help")
+			if code != 0 {
+				t.Fatalf("%s --help exited %d: %s", verb, code, stderr)
+			}
+			help := stdout + stderr
+			for _, want := range []string{"converges drift that is reconcilable in place", "structural (destructive-identity) drift or foreign ownership"} {
+				if !strings.Contains(help, want) {
+					t.Fatalf("%s --help missing %q:\n%s", verb, want, help)
+				}
+			}
+		})
+	}
+}
+
+func TestPlanHelpDisclosesPersistentSSHSudoPrompt(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "plan", "--help")
+	if code != 0 {
+		t.Fatalf("plan --help exited %d: %s", code, stderr)
+	}
+	help := stdout + stderr
+	for _, want := range []string{"the persistent --ssh-ask-sudo-password flag still prompts", "before the command"} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("plan --help missing %q:\n%s", want, help)
+		}
+	}
+	if strings.Contains(help, "and never prompts") {
+		t.Fatalf("plan --help still promises that no prompt can occur:\n%s", help)
 	}
 }
 

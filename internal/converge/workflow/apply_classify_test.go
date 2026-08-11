@@ -19,7 +19,7 @@ func TestClassifyApplyObjectsGroupsContainerInstall(t *testing.T) {
 		saveStateCheckRecord(t, runsDir, task, h, ConvergeSafetyOwner)
 	}
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{iso, boot, wait}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{iso, boot, wait}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestClassifyApplyObjectsIndependentDriftAndForeign(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 
-	objs, err := ClassifyApplyObjects([]ApplyTask{match, drift, foreign}, runsDir)
+	objs, err := ClassifyApplyObjects([]ApplyTask{match, drift, foreign}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("ClassifyApplyObjects: %v", err)
 	}

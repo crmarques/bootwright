@@ -3046,6 +3046,18 @@ command. The rest are registered per command, on the verbs that reach machines.
   input cannot change after a mutating run classified it, a second mutator
   cannot enter during post-run cleanup, and a nested workflow cannot create an
   unlocked gap. Acquiring an unregistered mutating-command kind fails closed.
+  Lease acquisition, owner-checked heartbeat replacement, and owner-checked
+  removal serialize their read/compare/write transaction across controller
+  processes, so an old holder cannot overwrite or delete a replacement after
+  its ownership check. Automatic stale-lease takeover is allowed only when the
+  lease identifies the current controller, liveness classifies it stale, and
+  process evidence positively proves the recorded PID is absent or stopped, or
+  an available process-start identity proves the PID was reused. An old
+  heartbeat alone never authorizes takeover while that PID remains live; a live
+  PID with a missing or unreadable stored/current process identity fails closed.
+  A stale lease from another or unknown controller fails closed: the operator
+  must inspect that controller and repair or remove the lease only after proving
+  no such run remains active, then repeat the exact command.
   An apply or destroy whose resolved work set mutates a machine-hosted shared
   service additionally holds one controller-global shared-service lease across
   the decisive cross-context ownership scan, remote work, and evidence cleanup.
@@ -3053,6 +3065,47 @@ command. The rest are registered per command, on the verbs that reach machines.
   in different contexts otherwise both observe no sibling record and race the
   same host. The run stops if either lease is lost. Dry runs acquire neither
   lease and report a best-effort cross-context forecast.
+
+  A controller-global lease serializes work only among commands using the same
+  controller state. Before changing a shared service on a host, every real
+  apply or destroy therefore projects a unique attempt identity from its held
+  command lease and atomically acquires the canonical host-global operation
+  guard before the first selected shared-host mutation. The guard binds the
+  exact controller lease, run, command, context, host, and controller-rendered
+  host selection manifest; every selected logical consequence carries a digest
+  of the exact rendered input and record-only work additionally carries the
+  exact durable physical-claim digest. One guard remains held across all
+  provider and infra-component plays for that host. Every mutation class
+  rechecks it, and a separate command finalizer removes it only after all target
+  and controller evidence updates are terminal. A lost controller can leave
+  the guard behind. No heartbeat age, apply mode, authorization token, or
+  matching desired state adopts or expires another attempt. The next command
+  fails closed, names the guard and recorded owner, requires the operator to
+  prove that controller process stopped before removing only that guard, and
+  prints the exact original Bootwright retry.
+
+  Before publishing a first durable shared-service intent, the holder securely
+  scans the complete BMC claim/transition set, infra-component global/transition
+  set, and atomic host endpoint registry. Every family must understand the
+  physical consequences of the others. A malformed, unreadable, foreign, or
+  conflicting authority refuses before publication. The service family then
+  publishes a reconstructible full claim/transition before endpoint ownership
+  is reserved as one atomic complete set and reinforced by sorted protocol/port
+  slot claims; interrupted active-to-pending transitions retain the union until
+  old runtime cleanup succeeds. Durable consequence claims
+  remain after successful apply and are scanned after the operation guard is
+  released, so differently named or implemented services cannot sequentially
+  claim the same singleton daemon, path, pool, or protocol/port.
+
+  Canonical operation, endpoint, claim, and transition documents are changed
+  only by the shared exact-content CAS helper. It securely walks and, for
+  publication, creates root-owned non-writable directory components without
+  following symlinks; serializes cooperating Bootwright controllers with one
+  persistent host lock; publishes a previously absent file without replacement;
+  and accepts existing-file replacement or removal only from exact expected
+  bytes. That protocol does not claim to serialize an arbitrary out-of-band root
+  writer that ignores the lock, so each side effect re-reads exact durable
+  authority and any contradictory root-written state still fails closed.
 - Read-only verbs (`status`, `diff`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run
@@ -3139,6 +3192,46 @@ command. The rest are registered per command, on the verbs that reach machines.
   package/config/service mutation and container services carry the same context
   label. A failed first apply therefore cannot release the lease without leaving
   evidence that blocks a different context from taking over.
+  A `self-contained` slot is exempt only from selection-degradation checks; it
+  is not exempt from cross-context ownership or serialization. In particular,
+  a provider's emulated-BMC service and libvirt pool use provider-global names,
+  so apply and destroy hold the same global lease, require an exact durable host
+  claim, and refuse a missing, unreadable, or foreign live identity before
+  stopping, redefining, or deleting either resource. That claim is a regular
+  non-symlink JSON file written before the first BMC-specific side effect and
+  binds the ownership API, context, provider host, libvirt URI and pool, both
+  ports and unit paths, state roots, bind/auth settings, and whether Bootwright
+  opened the firewall rule. An interrupted first apply and a later desired-state
+  edit reconcile or destroy the persisted composite, never a composite inferred
+  from the new desired values. Destroy additionally proves both loaded systemd
+  units exact-or-absent and every BMC root mount-free before its first side
+  effect; it removes unit files, reloads and proves the units unloaded, then
+  removes the claim and exact controller record last. A probe failure, foreign
+  mount, transient unit, malformed claim, or claim/record replacement is a
+  refusal with the exact invocation to repeat after repair.
+- Before a non-dry-run apply can enter mutable execution, it enumerates every
+  ownership resource file in the context store. An unreadable, non-regular,
+  non-canonical-path, invalid, wrong-API, non-Bootwright-owner, missing-context,
+  or foreign-context record refuses the whole apply; no authorization bypasses
+  that refusal. A dry-run surfaces the same refusal and excludes the record from
+  every ownership-based forecast. The generic host-side ownership writer also
+  reads any existing target before creating a directory or writing: the target
+  must be a regular non-symlink JSON record with the exact API, kind, name,
+  Bootwright owner, effective role, and context the write would produce. It
+  never adopts or overwrites contradictory evidence. The refusal names the
+  evidence and exact invocation to repeat after the operator restores it or,
+  only after independently proving it stale, removes it.
+- A controller record identifies where to probe; it is never sufficient
+  authority to mutate a pre-existing provider object. Before apply reuses,
+  activates, resizes, replaces, or redefines a named VM, disk, network, media
+  object, pool, container, unit, or configuration, the provider role must obtain
+  a conclusive live result: positively absent, or present with the exact
+  Bootwright manager, current context, provider/cluster and machine or component
+  identity expected at that address. A failed, forbidden, malformed, empty, or
+  suppressed probe is unknown state, not absence, in every apply mode. A path
+  used as evidence must additionally be a regular non-symlink file.
+  Contradictory live identity always dominates a stale controller record, and
+  no mode or authorization adopts it.
 - A scoped `destroy` fails closed the same way on shared provider-service
   conflicts. No `--authorize` token widens the selection there; the remedy is
   to widen or narrow `--clusters`.
@@ -3162,10 +3255,12 @@ command. The rest are registered per command, on the verbs that reach machines.
 - `--mode`, on `apply`/`plan`, is the single-valued intent axis:
   `create` asserts a greenfield run and fails if any selected object already
   exists; `reconcile` (the default) creates what is missing, skips what matches,
-  and fails closed on drift; `rebuild` authorizes Bootwright-owned destructive
-  re-convergence of drifted owned objects and never adopts a foreign one. The
-  value is stamped verbatim into the `bootwright_apply_mode` extra-var, so the
-  CLI, plan composition, and the per-role Ansible gates share one vocabulary.
+  converges drift that is reconcilable in place, and fails closed on structural
+  (destructive-identity) drift or foreign ownership; `rebuild` authorizes
+  Bootwright-owned destructive re-convergence of drifted owned objects and never
+  adopts a foreign one. The value is stamped verbatim into the
+  `bootwright_apply_mode` extra-var, so the CLI, plan composition, and the
+  per-role Ansible gates share one vocabulary.
   An unrecognized value is a usage error (exit 2) listing the three.
   `destroy` has no `--mode`: teardown has one intent.
 - `--stage` accepts two family names, `infra` and `clusters`, which decompose
@@ -3347,6 +3442,18 @@ command. The rest are registered per command, on the verbs that reach machines.
   through the still-live host before either the host cluster's own machine
   substrate or its kubeconfig and runtime are removed. Machine teardown orders
   KubeVirt tenants before their host clusters and rejects a host-reference cycle.
+- Declared teardown and record-only orphan sweeps use controller records only to
+  discover candidates. Immediately before the first side effect they positively
+  prove each live candidate absent or require its exact Bootwright manager,
+  current context, provider/cluster, machine/component and role identity. Every
+  member of a composite resource, including a KubeVirt VM and each DataVolume or
+  PVC, is classified independently. `NotFound` is absence only when the provider
+  request itself succeeded; a failed, forbidden, malformed, empty, or suppressed
+  probe is unknown. A stale name-only record never overrides contradictory live
+  metadata, and a resource kind without a conclusive live classifier is retained
+  with an actionable refusal rather than swept. The remover must then succeed or
+  return that same positive-absence outcome before any ownership, convergence,
+  install, media, or path evidence is deleted.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.
@@ -3377,7 +3484,7 @@ command. The rest are registered per command, on the verbs that reach machines.
   | `protected` | acting on state whose Environment sets `spec.safety.destroyProtection: protected`, or whose scope-filtered teardown covers a kind listed in `spec.safety.protectedKinds` (the granular gate — a protected kind absent from the scope needs no token). "Covers" follows the consequence, not the stage: a machine-layer teardown deletes a `ContainerCluster`'s and a `StorageCluster`'s machines and install state, so it trips their protection exactly as the clusters stage does | `destroy` |
   | `installed-cluster-node` | `destroy --machines` naming a node of an installed `ContainerCluster` (its install record) or of a provisioned managed `StorageCluster` (its Bootwright-owned `storage-cluster` ownership record) | `destroy` |
   | `unowned-vms` | tearing down a libvirt domain, KubeVirt VirtualMachine, or vSphere VM that matches the Bootwright `<cluster>-<machine>` naming but carries a missing or mismatched ownership marker | `destroy` |
-  | `unowned-networks` | removing the cluster's libvirt network or its KubeVirt DataVolumes when unowned — the wider blast radius, because an unowned network may still carry another context's VMs | `destroy` |
+  | `unowned-networks` | removing the cluster's libvirt network, KubeVirt DataVolumes, or their PersistentVolumeClaims when unowned — the wider blast radius, because another context may still use that network or storage | `destroy` |
   | `unowned-devices` | wiping a declared OSD device that carries data signatures or LVM/dm-crypt holders while this node holds no Bootwright OSD ownership record for it — the orphan a destroyed or foreign Ceph install leaves behind, which no `ceph orch osd rm` can reach. On `apply` the gate runs only under `--reclaim-devices`, and the token lifts the ownership objection at both levels: the node's missing OSD marker entry, and a selected cluster the controller holds no ownership record for (the state every successful destroy leaves — without the token such a reclaim acts on no device). On `destroy` it is the declared-device wipe gate. It authorizes only the *unowned* refusal: the wipe itself still needs `data-loss`, and a mounted, in-use, or unprobeable device still fails closed | `apply`, `destroy` |
   | `foreign-daemons` | removing the cephadm daemons, systemd units and `/var/lib/ceph` state of a Ceph cluster this apply does not own from a storage node it enrolls, with the fsid-scoped `cephadm rm-cluster --force --fsid <fsid>` the refusal names. `apply` only: it is consumed where an apply converges a storage cluster, and it zaps no disk, so the other cluster's OSD data survives. The gate re-probes the node after the removal and refuses again if any of its units outlive it | `apply` |
   | `unreachable-nodes` | acting on a node the run *proves* it could not contact: on `destroy` skipping it and leaving the cluster partially destroyed, on `storage-cluster replace-arbiter` retiring the replaced arbiter offline with no host-local cleanup. Absence is matched positively from the probe evidence — no route, unreachable network, host down, a connection that timed out or was refused, a probe the timeout wrapper killed. Every other refusal fails closed and prints what the probes reported: a rejected identity (an unauthorized key, an untrusted host key, a refused sudo escalation), an address that does not resolve, an empty or unreadable diagnostic. None of those prove the node is gone, and no token skips them, because skipping a node that is in fact running leaves its Ceph daemons up and its OSD devices holding cluster data while the run reports the cluster destroyed | `destroy`, `storage-cluster replace-arbiter` |
@@ -3484,10 +3591,15 @@ command. The rest are registered per command, on the verbs that reach machines.
   <StorageCluster>=<fsid>[,...]` is the narrow recovery path for a managed Ceph
   seed whose controller ownership record or
   `/etc/ceph/.bootwright-owned` marker is missing or mismatched.
-  Every named cluster must be a selected, declared, managed `StorageCluster`;
-  any existing controller owner record must agree with the declared cluster and
-  seed; and the supplied UUID must exactly equal the fsid parsed from that
-  seed's `/etc/ceph/ceph.conf`. The mapping is the operator's explicit
+  Every named cluster must be a selected, declared, managed `StorageCluster`.
+  Bootwright reads the exact canonical owner path without first filtering it by
+  context: any existing controller owner record must be readable and match the
+  ownership API, `storage-cluster` kind/name, Bootwright manager and effective
+  owner role, current context, declared cluster/host/seedHost, and either an
+  empty prerecord fsid or the supplied fsid. A reference, malformed or
+  identity-mismatched record is contradictory evidence. The supplied UUID must
+  exactly equal the fsid parsed from that seed's `/etc/ceph/ceph.conf`. The
+  mapping is the operator's explicit
   ownership attestation for that exact cluster identity. Only after the remote
   match does Bootwright reconstruct a missing controller record and re-stamp
   the host marker, then re-read both through the normal ownership decision
@@ -3513,17 +3625,25 @@ command. The rest are registered per command, on the verbs that reach machines.
   seed remains the first ownership authority whenever it is reachable. When
   that seed is one of the nodes the token proves absent, teardown may elect
   another reachable **declared mon** only before any device gate or removal and
-  only when the controller's readable owner record identifies the current
+  only when the controller's readable regular non-symlink owner record identifies the current
   context, cluster, declared seed and one fsid, while `/etc/ceph/ceph.conf` and
-  `/etc/ceph/.bootwright-owned` on every reachable declared mon are readable
+  `/etc/ceph/.bootwright-owned` regular non-symlink files on every reachable declared mon are readable
   and agree exactly on that cluster/fsid. A missing record, missing host
   evidence, unreadable JSON/file, invalid identity, or disagreement across mons
   fails closed before teardown. Peer evidence never reconstructs a controller
   record, and no token authorizes record-only removal. The skipped seed retains
-  its local state and makes the result partial. A KubeVirt host-cluster API holding a recorded guest
-  is not a skippable node: when it is unreachable Bootwright cannot prove the
-  guest VM and DataVolumes absent, so destroy fails closed and retains their
-  ownership and cluster runtime records even with the token.
+  its local state and makes the result partial. A KubeVirt host-cluster API for
+  any selected guest is not a skippable node: when it or its captured kubeconfig
+  is unavailable Bootwright cannot prove the guest VM, DataVolumes, or PVCs
+  absent, so destroy fails closed even when no controller ownership record
+  exists and retains all retry evidence even with the token.
+  More generally, authorization permits a task to record a proven unreachable
+  host but never turns skipped work into teardown completion. Any selected
+  non-storage or machine task with an unreachable member remains partial,
+  returns non-zero after independent branches drain, and retains every
+  convergence, install, ownership, captured-access and substrate-release record
+  needed by the exact retry. Only a later run that positively completes or
+  proves each target absent may clear that evidence.
 - A managed-storage destroy task succeeds only with a terminal, versioned
   attestation covering exactly every selected topology node. Each reachable
   node contributes its own whole-node Ceph LVM proof: bounded, stable final
@@ -3703,6 +3823,15 @@ command. The rest are registered per command, on the verbs that reach machines.
   self-contradictory.
   Every selected object is classified independently against the recorded last
   apply by the same classification that powers `diff --recorded`.
+  "Before any mutation" in this records-based mode contract means before the
+  run's first side effect when the complete controller preflight observes the
+  contradiction. A live provider, host, or cluster probe runs at its concrete
+  task site and refuses before the first side effect on that target or
+  consequence. Independently authorized graph branches may already have
+  completed and are not rolled back. A matching concrete-probe task skips;
+  configuration tasks without a conclusive live probe may re-run and must be
+  idempotent, so an unchanged re-apply means no unintended state change rather
+  than no task execution.
 - A structural drift whose only difference is a managed Ceph cluster's
   `spec.ceph.topology.stretch.tiebreaker.node` routes the operator to
   `bootwright storage-cluster replace-arbiter --name <cluster>`, not to
@@ -3780,9 +3909,28 @@ command. The rest are registered per command, on the verbs that reach machines.
   recorded", not "nothing exists on the substrate" (a half-provisioned VM whose
   install task failed still reports `missing`) — and a bare `apply` re-runs it,
   while an object with a prior successful record keeps classifying against that
-  record. When a completed task or convergence skip has the same current-schema
-  identity and hash input as an existing record, Bootwright retains that record
-  only if its immutable input snapshot and archived `ok` ledger still prove it;
+  record. Current-schema evidence is usable only when its canonical record path
+  is a readable regular non-symlink file, its API version, resource ID and kind,
+  task ID and kind, and owner manager and exact context are valid for the
+  selected task or storage sub-object, and its status is `created`,
+  `reconciled`, or `skipped`. Its desired hash is a
+  required lowercase SHA-256 digest; structural and tiebreaker-invariant hashes
+  are optional but must have the same syntax when present. A syntactically valid
+  desired-hash inequality is ordinary drift; structural or tiebreaker hash
+  equality is not record identity. An invalid status or hash payload is unknown
+  evidence. Only when the record's API, resource and task identities, Bootwright
+  manager, and exact context all match may an explicit same-selection
+  `--mode rebuild` replace that payload; rebuild treats it as structural drift,
+  never as missing, matched, or reconcilable. A different manager remains
+  foreign. An unreadable record or a missing or mismatched API, target identity,
+  or context has untrusted authority: no apply mode or authorization adopts or
+  overwrites it. The refusal names the exact file to restore from trusted backup
+  or remove only after independently proving it stale, followed by the exact
+  original invocation to retry after that external recovery. When a completed
+  task or convergence skip has
+  the same current-schema identity and hash input as an existing record,
+  Bootwright retains that record only if its immutable input snapshot and
+  archived `ok` ledger still prove it;
   it does not replace stronger evidence with a record bound to the current run.
   Therefore a later, unrelated task failure cannot weaken previously successful
   evidence. Changed desired input writes a fresh record and immutable snapshot
@@ -3791,11 +3939,16 @@ command. The rest are registered per command, on the verbs that reach machines.
   schema change never treats the old hash as proof that current desired state
   matches. A task that writes fresh convergence evidence also writes an
   immutable, non-secret copy of its exact hash input under that run's history.
-  Bootwright may rebaseline a record from exactly the immediately preceding
-  schema only when the record names that run, the snapshot identity and task
-  status match, the archived ledger is an `ok` run with exactly one matching
-  task, and the snapshot input equals the current input. Changed input is drift.
-  A missing, unreadable, failed-run,
+  Successful-input snapshots begin at hash schema 4. A record from an earlier
+  schema, including schema 3, cannot be rebaselined and is rebuildable unknown
+  evidence only after its authority and exact target identity pass the checks
+  above. Bootwright may rebaseline a snapshot-capable record from exactly the
+  immediately preceding schema only when its run ID is one clean non-dot path
+  segment, status and hashes are valid before any history-path access, its
+  desired hash equals the digest of the immutable snapshot input, the snapshot
+  identity and task status match, the archived ledger is an `ok` run with exactly
+  one matching task, and the snapshot input equals the current input. Changed
+  valid input is drift. A missing, unreadable, failed-run,
   mismatched, or ambiguous snapshot is unknown evidence and fails closed before
   mutation; the operator must restore the immutable run evidence or deliberately
   rebuild the same resolved selection. That refusal carries the typed
@@ -3875,9 +4028,12 @@ command. The rest are registered per command, on the verbs that reach machines.
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the
   substrate VM is undefined and its disks wiped, then rebuilt), and cleanly
-  rebuilds a managed Ceph cluster (`cephadm rm-cluster --zap-osds`), allowed only
-  when a Bootwright ownership marker proves the live cluster is the one Bootwright
-  created — a foreign or co-resident cluster fails closed. It must not bypass
+  rebuilds a managed Ceph cluster (`cephadm rm-cluster --zap-osds`), allowed
+  only when the controller owner record and host marker are readable regular
+  non-symlink files, canonical, and match every identity field and fsid of the declared live
+  cluster. Existence, a matching fsid alone, or a filtered-out foreign record
+  proves nothing; a foreign, malformed, incomplete, or co-resident cluster
+  fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
 - An interrupted first Ceph bootstrap is the markerless recovery exception, not
@@ -3952,7 +4108,9 @@ command. The rest are registered per command, on the verbs that reach machines.
   expands only to every statically declared OSD data, DB, and WAL path of the
   selected owned StorageClusters; it cannot be combined with another entry, and
   a filter-only drivegroup that declares no static path makes `all` refuse rather
-  than broadening to whatever disks happen to be visible. The converge layer
+  than broadening to whatever disks happen to be visible. `plan` accepts the
+  same flag to forecast the devices and required authorizations of that apply;
+  it contacts no hosts and wipes nothing. The converge layer
   returns typed selection evidence and no runnable text; the CLI, which owns the
   resolved invocation, renders the continuation. When every selected cluster
   uses an effectively unbounded managed data selector, it removes the

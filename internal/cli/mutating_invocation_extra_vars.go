@@ -63,6 +63,13 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		converge.MutatingInvocationExtraVar: current.String(),
 	}
 	if invocation.verb == invocationApply {
+		full, err := applyFullRecoveryInvocation(invocation)
+		if err != nil {
+			return nil, err
+		}
+		values[converge.ApplyFullInvocationExtraVar] = full.String()
+	}
+	if invocation.verb == invocationApply {
 		reconcile, err := invocation.retry(retryIntent{mode: workflow.ApplyModeReconcile})
 		if err != nil {
 			return nil, err
@@ -75,13 +82,6 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 			return nil, err
 		}
 		controllerDNS, err := controllerNameResolutionRetryInvocation(invocation)
-		if err != nil {
-			return nil, err
-		}
-		fullInvocation := invocation
-		fullInvocation.flags.selection.stage = ""
-		fullInvocation.flags.selection.through = ""
-		full, err := fullInvocation.retry(retryIntent{})
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +101,6 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		values[converge.ApplyReclaimInvocationExtraVar] = reclaim.String()
 		values[converge.ApplyReclaimDevicesExtraVar] = preservedDevices
 		values[converge.ApplyControllerDNSInvocationExtraVar] = controllerDNS.String()
-		values[converge.ApplyFullInvocationExtraVar] = full.String()
 		values[converge.ApplyThroughBaseInvocationExtraVar] = throughBase.String()
 	}
 	if invocation.verb == invocationReplaceArbiter {
@@ -126,6 +125,20 @@ func mutatingInvocationExtraVars(invocation resolvedInvocation, effectiveReclaim
 		return nil, err
 	}
 	return []string{string(data)}, nil
+}
+
+func applyFullRecoveryInvocation(invocation resolvedInvocation) (retryCommand, error) {
+	next := invocation
+	next.flags.mode = workflow.ApplyModeReconcile
+	next.flags.selection.stage = ""
+	next.flags.selection.through = ""
+	next.flags.reclaimDevices = ""
+	next.flags.recoverCephOwnership = ""
+	next.flags.purgeHistory = false
+	next.flags.clusterName = ""
+	next.flags.newArbiterMachine = ""
+	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, invocation.verb, invocationApply)
+	return next.retry(retryIntent{})
 }
 
 func controllerNameResolutionRetryInvocation(invocation resolvedInvocation) (retryCommand, error) {

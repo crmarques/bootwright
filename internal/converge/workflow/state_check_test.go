@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -13,14 +14,20 @@ func stateCheckTask(id, kind, cluster, clusterKind string) ApplyTask {
 
 func saveStateCheckRecord(t *testing.T, runsDir string, task ApplyTask, hash, owner string) {
 	t.Helper()
+	if !convergeSafetyHash.MatchString(hash) {
+		hash = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	}
 	record := ConvergeSafetyRecord{
-		APIVersion:  ConvergeSafetyAPIVersion,
-		ResourceID:  applyTaskSafetyResourceID(task),
-		DesiredHash: hash,
-		HashSchema:  ConvergeHashSchema,
-		Owner:       ConvergeSafetyOwnerIdentity{Manager: owner},
-		Status:      ConvergeSafetyStatusReconciled,
-		UpdatedAt:   time.Unix(0, 0).UTC(),
+		APIVersion:   ConvergeSafetyAPIVersion,
+		ResourceID:   applyTaskSafetyResourceID(task),
+		ResourceKind: task.Entry.Kind,
+		TaskID:       task.Entry.ID,
+		TaskKind:     task.Entry.Kind,
+		DesiredHash:  hash,
+		HashSchema:   ConvergeHashSchema,
+		Owner:        ConvergeSafetyOwnerIdentity{Manager: owner, Context: "test"},
+		Status:       ConvergeSafetyStatusReconciled,
+		UpdatedAt:    time.Unix(0, 0).UTC(),
 	}
 	if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
 		t.Fatalf("save converge safety record: %v", err)
@@ -29,14 +36,22 @@ func saveStateCheckRecord(t *testing.T, runsDir string, task ApplyTask, hash, ow
 
 func saveSubObjectRecord(t *testing.T, runsDir, resourceID, hash, owner string) {
 	t.Helper()
+	kind, name, _ := strings.Cut(resourceID, "/")
+	cluster, _, _ := strings.Cut(name, ".")
+	if !convergeSafetyHash.MatchString(hash) {
+		hash = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	}
 	record := ConvergeSafetyRecord{
-		APIVersion:  ConvergeSafetyAPIVersion,
-		ResourceID:  resourceID,
-		DesiredHash: hash,
-		HashSchema:  ConvergeHashSchema,
-		Owner:       ConvergeSafetyOwnerIdentity{Manager: owner},
-		Status:      ConvergeSafetyStatusReconciled,
-		UpdatedAt:   time.Unix(0, 0).UTC(),
+		APIVersion:   ConvergeSafetyAPIVersion,
+		ResourceID:   resourceID,
+		ResourceKind: kind,
+		TaskID:       "storage." + cluster,
+		TaskKind:     ApplyTaskKindStorageCluster,
+		DesiredHash:  hash,
+		HashSchema:   ConvergeHashSchema,
+		Owner:        ConvergeSafetyOwnerIdentity{Manager: owner, Context: "test"},
+		Status:       ConvergeSafetyStatusReconciled,
+		UpdatedAt:    time.Unix(0, 0).UTC(),
 	}
 	if err := SaveConvergeSafetyRecord(runsDir, record); err != nil {
 		t.Fatalf("save converge safety record: %v", err)
@@ -56,7 +71,7 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, match, matchHash, ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 
-	report, err := StateCheck([]ApplyTask{match, drift, absent}, ApplyTarget{}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{match, drift, absent}, ApplyTarget{}, v1alpha1.State{}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -95,7 +110,7 @@ func TestStateCheckGranularDriftMixedResources(t *testing.T) {
 	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
 	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
 
-	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, ApplyTarget{}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, ApplyTarget{}, v1alpha1.State{}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -133,7 +148,7 @@ func TestStateCheckForeignOwner(t *testing.T) {
 	}
 	saveStateCheckRecord(t, runsDir, task, hash, "someone-else")
 
-	report, err := StateCheck([]ApplyTask{task}, ApplyTarget{}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{task}, ApplyTarget{}, v1alpha1.State{}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -162,7 +177,7 @@ func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
 		saveStateCheckRecord(t, runsDir, task, hash, ConvergeSafetyOwner)
 	}
 
-	report, err := StateCheck([]ApplyTask{provider, finalize}, ApplyTarget{}, v1alpha1.State{}, runsDir)
+	report, err := StateCheck([]ApplyTask{provider, finalize}, ApplyTarget{}, v1alpha1.State{}, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -205,7 +220,7 @@ func TestStateCheckGranularStorageSubObjectDrift(t *testing.T) {
 	saveSubObjectRecord(t, runsDir, rbd.resourceID(), rbdHash, ConvergeSafetyOwner)
 	saveSubObjectRecord(t, runsDir, storageSubObject{storageSubObjectKindPool, cluster, "cephfs-data"}.resourceID(), "sha256:stale", ConvergeSafetyOwner)
 
-	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
+	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}
@@ -246,7 +261,7 @@ func TestStateCheckStorageSubObjectsCollapseWhenClusterAbsent(t *testing.T) {
 	state := storageSubObjectTestState(cluster)
 	clusterTask := stateCheckTask("storage."+cluster, "storageCluster", cluster, "storage")
 
-	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir)
+	report, err := StateCheck([]ApplyTask{clusterTask}, ApplyTarget{}, state, runsDir, "test")
 	if err != nil {
 		t.Fatalf("StateCheck: %v", err)
 	}

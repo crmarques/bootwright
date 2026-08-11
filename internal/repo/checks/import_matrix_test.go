@@ -63,7 +63,7 @@ var allowedImports = map[string][]string{
 	"internal/host/safefs":      {},
 	"internal/host/shellquote":  {},
 
-	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/infra/media", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/view", "internal/storage/topology"},
+	"internal/render":           {"api/v1alpha1", "internal/host/managedroot", "internal/host/safefs", "internal/infra/media", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/render/inventory", "internal/roles", "internal/secrets", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 	"internal/render/ceph":      {"api/v1alpha1", "internal/addons/inputs", "internal/host/shellquote", "internal/state/view", "internal/storage/topology"},
 	"internal/render/installer": {"api/v1alpha1", "internal/infra/artifacts", "internal/infra/proxy", "internal/nmstate", "internal/secrets", "internal/state/view"},
 	"internal/render/inventory": {"api/v1alpha1", "internal/addons/inputs", "internal/entitlements", "internal/host/shellquote", "internal/infra/artifacts", "internal/infra/locality", "internal/infra/media", "internal/nmstate", "internal/infra/proxy", "internal/ownership", "internal/render/ceph", "internal/render/installer", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage/cephprovider", "internal/storage/topology"},

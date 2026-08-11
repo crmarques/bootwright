@@ -287,8 +287,8 @@ bootwright apply --yes
 
 With no `--stage`, `apply` runs the full graph: infrastructure first, then
 storage and cluster install, then add-ons. Advanced build-out and recovery can
-narrow to a stage **family** or, for `apply`/`plan` only, to a single surgical
-sub-phase.
+narrow to a stage **family** or, for `apply`/`plan`/`diff` only, to a single
+surgical sub-phase.
 
 ### Stage families
 

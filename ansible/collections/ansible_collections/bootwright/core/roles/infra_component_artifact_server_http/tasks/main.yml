@@ -8,6 +8,32 @@
       - (bootwright_component.endpoints | default([])) | length > 0
     fail_msg: "artifacts_http requires component.{image,bindAddress,listeners,endpoints}"
 
+- name: Resolve desired artifact-server ownership transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired:
+      kind: artifacts
+      provider: "{{ bootwright_component.providerName }}"
+      name: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_artifacts_root }}"
+      labels:
+        bootwright.kind: artifacts
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: artifacts
+        container: "{{ bootwright_artifacts_container_name }}"
+        listenerPorts: >-
+          {{ bootwright_component.listeners
+             | map(attribute='port')
+             | map('int')
+             | unique
+             | sort
+             | map('string')
+             | map('regex_replace', '$', '/tcp')
+             | join(',') }}
+  changed_when: false
+
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
@@ -20,12 +46,22 @@
     bootwright_artifacts_https_enabled: "{{ (bootwright_component.listeners | selectattr('protocol', 'equalto', 'https') | list | length) > 0 }}"
   changed_when: false
 
+- name: Revalidate host operation before artifact package mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
+
 - name: Install boot artifact server packages
   ansible.builtin.package:
     name:
       - openssl
       - podman
     state: present
+
+- name: Revalidate host operation before artifact path and configuration mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_host_shared_service_operation.yml
 
 - name: Create boot artifact directories
   ansible.builtin.file:
@@ -149,6 +185,11 @@
       }}
   changed_when: false
 
+- name: Revalidate host operation and endpoints before artifact container mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
+
 - name: Run boot artifact server container
   containers.podman.podman_container:
     name: "{{ bootwright_artifacts_container_name }}"
@@ -165,6 +206,11 @@
       bootwright.name: "{{ bootwright_component.name }}"
       bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
     volumes: "{{ bootwright_artifacts_volumes }}"
+
+- name: Revalidate host operation and endpoints before artifact firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
 
 - name: Open boot artifact ports on host firewall
   ansible.posix.firewalld:
@@ -192,21 +238,36 @@
   loop_control:
     label: "{{ item.protocol }}:{{ item.port }}"
 
-- name: Record artifact server ownership
+- name: Close retired artifact-server ports on host firewall
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_infra_transition_retire_ports }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_firewalld_available | default(false)
+
+- name: Revalidate host operation before artifact ownership publication
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
-    tasks_from: resource.yml
+    tasks_from: require_host_shared_service_operation.yml
+
+- name: Record artifact server ownership
   vars:
     bootwright_ownership_kind: infra-component
     bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_ownership_fields:
-      provider: "{{ bootwright_component.providerName }}"
-      paths:
-        - "{{ bootwright_artifacts_root }}"
-      labels:
-        bootwright.kind: artifacts
-        bootwright.provider: "{{ bootwright_component.providerName }}"
-        bootwright.name: "{{ bootwright_component.name }}"
-      attributes:
-        componentKind: artifacts
-        container: "{{ bootwright_artifacts_container_name }}"
+      provider: "{{ bootwright_infra_transition_desired.provider }}"
+      paths: "{{ bootwright_infra_transition_desired.paths }}"
+      labels: "{{ bootwright_infra_transition_desired.labels }}"
+      attributes: "{{ bootwright_infra_transition_desired.attributes }}"
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+
+- name: Complete durable artifact-server ownership transition
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: complete_infra_component_transition.yml

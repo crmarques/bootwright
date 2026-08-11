@@ -1,0 +1,355 @@
+---
+- name: Validate infra-component apply transition inputs
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_desired_validated: >-
+      {{ bootwright_infra_transition_desired | default({})
+         | bootwright.core.bootwright_infra_component_transition_composite(
+             bootwright_managed_services_dir) }}
+    bootwright_infra_transition_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_infra_transition_host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+  changed_when: false
+
+- name: Require exact infra-component apply transition composite
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_desired_validated is mapping
+      - bootwright_infra_transition_desired_validated | length > 0
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing infra-component apply because its desired container, service,
+      paths, labels, or firewall endpoints are not one exact supported composite.
+      No role-specific state was changed. Repair the rendered input and re-run
+      `{{ bootwright_mutating_invocation | default('the same bootwright apply') }}`.
+
+- name: Resolve infra-component transition ownership identity
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: >-
+      {{ bootwright_infra_transition_desired_validated.provider }}-{{ bootwright_infra_transition_desired_validated.name }}
+    bootwright_ownership_role: owner
+    bootwright_infra_transition_claim_path: >-
+      {{ bootwright_ownership_dir ~ '/transitions/infra-component/'
+         ~ bootwright_infra_transition_desired_validated.provider ~ '-'
+         ~ bootwright_infra_transition_desired_validated.name ~ '.json' }}
+  changed_when: false
+
+- name: Read current infra-component owner before apply transition
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Classify current infra-component owner before apply transition
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_previous_record: >-
+      {{ (bootwright_ownership_validated_record
+          | bootwright.core.bootwright_infra_component_record_composite(
+              bootwright_managed_services_dir)).transition | default({})
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else {} }}
+  changed_when: false
+
+- name: Require exact current infra-component owner before apply transition
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or bootwright_infra_transition_previous_record | length > 0
+      - >-
+        bootwright_infra_transition_previous_record | length == 0
+        or (
+          bootwright_infra_transition_previous_record.kind
+          == bootwright_infra_transition_desired_validated.kind
+          and bootwright_infra_transition_previous_record.provider
+              == bootwright_infra_transition_desired_validated.provider
+          and bootwright_infra_transition_previous_record.name
+              == bootwright_infra_transition_desired_validated.name
+        )
+    fail_msg: >-
+      Refusing infra-component apply because the live owner record is incomplete,
+      future-shaped, or names a different exact component composite. No
+      role-specific state was changed. Restore trusted ownership evidence and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Inspect durable infra-component transition claim
+  ansible.builtin.stat:
+    path: "{{ bootwright_infra_transition_claim_path }}"
+    follow: false
+  register: bootwright_infra_transition_claim_stat
+  changed_when: false
+  failed_when: false
+
+- name: Read durable infra-component transition claim
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_transition_claim_path }}"
+  register: bootwright_infra_transition_claim_content
+  changed_when: false
+  failed_when: false
+  when: bootwright_infra_transition_claim_stat.stat.exists | default(false) | bool
+
+- name: Classify durable infra-component transition claim
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_existing_claim: >-
+      {{ (bootwright_infra_transition_claim_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_transition_context,
+             bootwright_infra_transition_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact durable infra-component transition claim
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_claim_stat.stat.exists is defined
+      - >-
+        not (bootwright_infra_transition_claim_stat.stat.exists | bool)
+        or (
+          bootwright_infra_transition_claim_stat.stat.isreg | default(false) | bool
+          and not (bootwright_infra_transition_claim_stat.stat.islnk | default(false) | bool)
+          and bootwright_infra_transition_claim_content.content is defined
+          and bootwright_infra_transition_existing_claim | length > 0
+          and bootwright_infra_transition_existing_claim.name
+              == bootwright_ownership_name
+        )
+    fail_msg: >-
+      Refusing infra-component apply because its durable transition claim is
+      unreadable, malformed, linked, foreign, or names a different exact
+      component. No role-specific state was changed. Restore the exact claim and
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve durable infra-component transition recovery identity
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: infra-component-transition
+  changed_when: false
+
+- name: Read durable infra-component transition recovery record
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Classify durable infra-component transition recovery record
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_existing_recovery: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_transition_record(
+             bootwright_managed_services_dir)
+         if (bootwright_ownership_validated_stat.stat.exists | bool)
+         else {} }}
+  changed_when: false
+
+- name: Require exact durable infra-component transition recovery record
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        not (bootwright_ownership_validated_stat.stat.exists | bool)
+        or (
+          bootwright_infra_transition_existing_recovery | length > 0
+          and bootwright_infra_transition_existing_recovery.name
+              == bootwright_ownership_name
+          and bootwright_infra_transition_existing_recovery.kind
+              == bootwright_infra_transition_desired_validated.kind
+          and bootwright_infra_transition_existing_recovery.claimPath
+              == bootwright_infra_transition_claim_path
+          and bootwright_infra_transition_claim_stat.stat.exists | bool
+        )
+    fail_msg: >-
+      Refusing infra-component apply because its recovery ownership record is
+      incomplete, future-shaped, contradicts the exact transition claim, or has
+      outlived that claim. No role-specific state was changed. Restore the exact
+      recovery evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve authoritative host-global infra-component apply transition
+  ansible.builtin.set_fact:
+    bootwright_ownership_kind: infra-component
+    bootwright_infra_global_claim_next: >-
+      {{ bootwright_infra_global_claim_existing
+         | bootwright.core.bootwright_infra_component_global_apply_next(
+             bootwright_infra_transition_previous_record,
+             bootwright_infra_transition_existing_claim,
+             bootwright_infra_transition_desired_validated,
+             bootwright_infra_transition_context,
+             bootwright_infra_transition_host,
+             bootwright_managed_services_dir) }}
+    bootwright_infra_transition_desired_ports: >-
+      {{ bootwright_host_infra_component_services | default([])
+         | bootwright.core.bootwright_infra_component_desired_ports }}
+    bootwright_infra_transition_recorded_ports: >-
+      {{ bootwright_ownership_records | default([])
+         | bootwright.core.bootwright_infra_component_record_ports(
+             bootwright_infra_transition_host,
+             bootwright_ownership_name,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Mirror authoritative host-global transition into local recovery evidence
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_claim:
+      apiVersion: bootwright.io/infra-component-transition/v1alpha1
+      kind: infra-component
+      name: "{{ bootwright_infra_global_claim_next.name | default('') }}"
+      owner: bootwright
+      context: "{{ bootwright_infra_transition_context }}"
+      host: "{{ bootwright_infra_transition_host }}"
+      previous: "{{ bootwright_infra_global_claim_next.previous | default([]) }}"
+      desired: "{{ bootwright_infra_global_claim_next.desired | default({}) }}"
+  changed_when: false
+
+- name: Require closed infra-component transition and survivor ledgers
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_claim | length > 0
+      - bootwright_infra_global_claim_next | length > 0
+      - bootwright_infra_global_claim_next.state | default('') == 'applying'
+      - >-
+        (bootwright_infra_transition_claim
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_transition_context,
+             bootwright_infra_transition_host,
+             bootwright_managed_services_dir)) == bootwright_infra_transition_claim
+      - bootwright_infra_transition_desired_ports.valid | default(false) | bool
+      - bootwright_infra_transition_recorded_ports.valid | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component apply because the durable transition, desired host
+      endpoints, or surviving owner endpoints could not be classified exactly.
+      No role-specific state was changed. Repair the rendered inputs and trusted
+      ownership records, then re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve exact old-only infra-component endpoints
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_retire_decision: >-
+      {{ bootwright_infra_transition_claim
+         | bootwright.core.bootwright_infra_component_transition_retire_ports(
+             bootwright_infra_transition_desired_ports,
+             bootwright_infra_transition_recorded_ports) }}
+    bootwright_infra_transition_retire_ports: >-
+      {{ (bootwright_infra_transition_claim
+          | bootwright.core.bootwright_infra_component_transition_retire_ports(
+              bootwright_infra_transition_desired_ports,
+              bootwright_infra_transition_recorded_ports)).ports | default([]) }}
+  changed_when: false
+
+- name: Require exact old-only infra-component endpoint decision
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_retire_decision.valid | default(false) | bool
+      - >-
+        bootwright_infra_transition_retire_ports | length == 0
+        or bootwright_firewalld_available | default(false) | bool
+    fail_msg: >-
+      Refusing infra-component apply because its durable transition could not
+      derive an exact survivor-safe old endpoint set or firewalld is not
+      conclusively running to retire that set. No transition or role-specific
+      state was changed. Restore trusted evidence and firewalld access, then
+      re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Probe bounded Bootwright trusted state root
+  ansible.builtin.stat:
+    path: /var/lib/bootwright
+    follow: false
+  register: bootwright_infra_trusted_root_stat
+  changed_when: false
+  failed_when: false
+
+- name: Require bounded Bootwright trusted state root
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_trusted_root_stat.stat.exists is defined
+      - bootwright_infra_trusted_root_stat.stat.exists | bool
+      - bootwright_infra_trusted_root_stat.stat.isdir | default(false) | bool
+      - not (bootwright_infra_trusted_root_stat.stat.islnk | default(false) | bool)
+      - bootwright_infra_trusted_root_stat.stat.pw_name | default('') == 'root'
+      - bootwright_infra_trusted_root_stat.stat.gr_name | default('') == 'root'
+      - bootwright_infra_trusted_root_stat.stat.mode | default('') is match('^0[0-7][0145][0145]$')
+    fail_msg: >-
+      Refusing infra-component apply because /var/lib/bootwright is not an
+      existing root-owned, non-symlink trusted directory protected from group
+      and world writes. No transition or service state was changed. Repair the
+      trusted root and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Require exclusive host operation before any transition publication
+  ansible.builtin.include_tasks: require_host_shared_service_operation.yml
+
+- name: Bind infra-component apply transition to command selection
+  ansible.builtin.include_tasks: bind_infra_component_host_operation.yml
+
+- name: Preflight every shared-service consequence before infra publication
+  ansible.builtin.include_tasks: preflight_host_shared_service_consequences.yml
+  vars:
+    bootwright_host_prepublication_candidate_family: infra-component
+    bootwright_host_prepublication_candidate: "{{ bootwright_infra_global_claim_next }}"
+
+- name: Refuse collisions with durable infra-component host consequences
+  ansible.builtin.include_tasks: require_infra_component_global_consequences.yml
+  vars:
+    bootwright_infra_operation_claim: "{{ bootwright_infra_global_claim_next }}"
+
+- name: Publish authoritative host-global transition before local recovery evidence
+  ansible.builtin.include_tasks: acquire_infra_component_global_claim.yml
+
+- name: Publish durable infra-component transition atomically before role mutation
+  bootwright.core.claim_cas:
+    path: "{{ bootwright_infra_transition_claim_path }}"
+    state: present
+    desired_content: "{{ (bootwright_infra_transition_claim | to_nice_json) ~ '\n' }}"
+    expected_contents: >-
+      {{ [bootwright_infra_transition_claim_content.content | b64decode]
+         if (bootwright_infra_transition_claim_stat.stat.exists | default(false) | bool)
+         else [] }}
+    allow_absent: >-
+      {{ not (bootwright_infra_transition_claim_stat.stat.exists | default(false) | bool) }}
+    create_parents: true
+    trusted_root: /var/lib/bootwright
+  register: bootwright_infra_transition_claim_cas
+  failed_when: false
+
+- name: Re-read durable infra-component transition winner
+  ansible.builtin.slurp:
+    src: "{{ bootwright_infra_transition_claim_path }}"
+  register: bootwright_infra_transition_claim_winner_content
+  changed_when: false
+  failed_when: false
+
+- name: Classify durable infra-component transition winner
+  ansible.builtin.set_fact:
+    bootwright_infra_transition_claim_winner: >-
+      {{ (bootwright_infra_transition_claim_winner_content.content | default('') | b64decode)
+         | bootwright.core.bootwright_infra_component_transition_claim(
+             bootwright_infra_transition_context,
+             bootwright_infra_transition_host,
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact durable infra-component transition winner
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_infra_transition_claim_cas.current_sha256 is defined
+      - bootwright_infra_transition_claim_winner_content.content is defined
+      - bootwright_infra_transition_claim_winner == bootwright_infra_transition_claim
+    fail_msg: >-
+      Refusing infra-component apply because atomic transition publication did
+      not re-read the exact desired recovery ledger. CAS detail:
+      {{ bootwright_infra_transition_claim_cas.msg | default('winner did not match') }}.
+      No service claim or role mutation followed. Inspect the competing
+      transition and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Publish infra-component transition recovery ownership record
+  ansible.builtin.include_tasks: resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component-transition
+    bootwright_ownership_name: >-
+      {{ bootwright_infra_transition_desired_validated.provider }}-{{ bootwright_infra_transition_desired_validated.name }}
+    bootwright_ownership_role: owner
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_infra_transition_desired_validated.provider }}"
+      paths:
+        - "{{ bootwright_infra_transition_claim_path }}"
+      labels: "{{ bootwright_infra_transition_desired_validated.labels }}"
+      attributes:
+        componentKind: "{{ bootwright_infra_transition_desired_validated.kind }}"
+        claimPath: "{{ bootwright_infra_transition_claim_path }}"
+
+- name: Acquire every pending endpoint after durable transition recovery publication
+  ansible.builtin.include_tasks: acquire_infra_component_endpoint_claims.yml

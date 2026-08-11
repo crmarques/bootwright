@@ -190,7 +190,7 @@ func clusterInstallRecordInputsMatch(clustersDir, runsDir string, record Cluster
 	if record.HashSchema != ConvergeHashSchema-1 || record.Status != ClusterInstallStatusInstalled || task == nil {
 		return false, false, nil
 	}
-	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, input)
+	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, record.DesiredHash, input)
 	if err != nil {
 		return false, false, &ClusterInstallStateError{
 			Cluster:   cluster,

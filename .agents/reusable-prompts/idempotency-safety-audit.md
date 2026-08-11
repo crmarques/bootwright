@@ -39,13 +39,17 @@ description. Treat "explicit" narrowly:
 - `apply` has three explicit, mutually-understood safety modes; audit the path
   under each:
   - bare `apply` is the **safe reconcile** default: it creates what is missing,
-    skips what already matches desired state (proving the match, not re-running),
-    converges drift that is reconcilable in place, and **fails closed** on
-    structural (destructive-identity) drift or foreign ownership before any
-    mutation. A previously-successful run must run end to end mutating nothing.
+    skips what already matches desired state when a concrete probe supports the
+    skip, lets other tasks re-run idempotently, converges drift that is
+    reconcilable in place, and **fails closed** on structural
+    (destructive-identity) drift or foreign ownership before changing the
+    affected target. A previously successful run must cause no unintended state
+    change; it need not execute zero tasks.
   - `apply --mode create` is the **greenfield assert**: it additionally must
-    **fail closed** (refuse, mutate nothing) if any selected object already
-    exists — recorded by Bootwright or otherwise present.
+    **fail closed** if any selected object already exists — recorded by
+    Bootwright or otherwise present. A records-preflight refusal precedes every
+    run mutation; a live refusal precedes mutation of that target, while an
+    independent authorized branch may already have completed.
   - `apply --mode rebuild` is the only **break-glass** mode: it rebuilds
     objects that have drifted and creates what is missing, but leaves objects that
     already match untouched (no gratuitous rebuild) and **never** rebuilds a
@@ -454,7 +458,12 @@ that could not run. Include focused regression tests for no-op rerun, read-only
 commands, confirmation abort, destroy protection, foreign ownership, stale
 records, scoped destroy, `--mode rebuild`/`--authorize <token>` vs. their absence,
 non-mutating desired-vs-real state checks, absent-root reporting, granular drift
-reporting, and Ansible role idempotency when relevant.
+reporting, and Ansible role idempotency when relevant. Verify the closed provider
+mutation registry names every state-capable provider/boot/media/ownership task by
+exact path, task name, action, class, safety surface, and ordered anchor; includes
+and imports remain state-capable delegated boundaries unless their targets are
+exhaustively registered. Verify every `apply`/`destroy` flag has a real safety
+matrix verdict with no exemption list.
 
 ## 9. Improvement Plan
 Group into **Now** (high-confidence safety fixes and regression tests small

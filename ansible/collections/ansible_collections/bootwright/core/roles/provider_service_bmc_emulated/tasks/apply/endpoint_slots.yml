@@ -1,0 +1,10 @@
+---
+- name: Acquire active and pending BMC endpoint slots after durable claim publication
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: acquire_host_endpoint_slots.yml
+  vars:
+    bootwright_host_endpoint_desired_claims: >-
+      {{ bootwright_bmc_endpoint_transition.retainedClaims }}
+    bootwright_host_endpoint_allowed_claim_digests: >-
+      {{ bootwright_bmc_endpoint_transition.allowedDigests }}

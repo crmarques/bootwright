@@ -1448,11 +1448,20 @@ func TestManagedControllerResolverRemovalStaysWithDNSOwner(t *testing.T) {
 	if strings.Contains(controllerPlay, "end_host") {
 		t.Fatal("controller resolver play silently skips an empty desired projection instead of failing closed before machine work")
 	}
-	destroy := readRepoFile(t, roleRoot+"tasks/destroy.yml")
-	container := strings.Index(destroy, "support_component_teardown")
-	evidence := strings.LastIndex(destroy, "support_component_teardown")
-	if container < 0 || evidence < 0 || container >= evidence {
-		t.Fatalf("DNS remote destroy must remove the service before its remote evidence: container=%d evidence=%d", container, evidence)
+	destroyPath := roleRoot + "tasks/destroy.yml"
+	destroy := readRepoFile(t, destroyPath)
+	destroyTasks := flattenAnsibleTasks(readAnsibleTasks(t, destroyPath))
+	container := findAnsibleTask(t, destroyTasks, "Remove dnsmasq container and reap orphans")
+	complete := findAnsibleTask(t, destroyTasks, "Complete dnsmasq evidence retirement after external cleanup")
+	if container >= complete {
+		t.Fatalf("DNS remote destroy must finish service cleanup before shared evidence retirement: container=%d complete=%d", container, complete)
+	}
+	completionTasks := readAnsibleTasks(t, roleRoot+"../ownership_record/tasks/complete_infra_component_destroy.yml")
+	phase := findAnsibleTask(t, completionTasks, "Persist completed infra-component external cleanup")
+	state := findAnsibleTask(t, completionTasks, "Remove final context-marked infra-component state directory")
+	evidence := findAnsibleTask(t, completionTasks, "Remove exact infra-component cleanup-phase owner last")
+	if !(phase < state && state < evidence) {
+		t.Fatalf("shared DNS completion must persist its retry boundary, remove state, then remove exact evidence: %d %d %d", phase, state, evidence)
 	}
 	if strings.Contains(destroy, "controller_destroy") {
 		t.Fatal("DNS remote destroy embeds controller cleanup instead of leaving the controller route inside the global preflight/cleanup bracket")

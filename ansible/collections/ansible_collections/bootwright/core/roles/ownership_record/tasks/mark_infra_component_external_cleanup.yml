@@ -1,0 +1,134 @@
+---
+- name: Validate infra-component cleanup phase inputs
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_kind | default('') == 'infra-component'
+      - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_expected_record is defined
+      - bootwright_ownership_expected_record is mapping
+      - bootwright_mutating_invocation | default('') | length > 0
+    fail_msg: >-
+      Refusing to publish the infra-component cleanup boundary because its exact
+      ownership identity or controller-built retry invocation is missing. The
+      live record and final context marker were retained. Repair the task inputs
+      and re-run `{{ bootwright_mutating_invocation | default('the same bootwright destroy') }}`.
+
+- name: Revalidate infra-component ownership before cleanup phase publication
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Classify infra-component transition authority for cleanup publication
+  ansible.builtin.set_fact:
+    bootwright_infra_cleanup_transition: >-
+      {{ (bootwright_infra_destroy_transition_claim | default({})
+          | bootwright.core.bootwright_infra_component_transition_claim(
+              bootwright_clusters_dir | dirname | basename,
+              bootwright_host_name | default(inventory_hostname),
+              bootwright_managed_services_dir)).desired
+         | default(
+             (bootwright_infra_global_claim_next.targets | default([]) | last),
+             true) }}
+  changed_when: false
+
+- name: Require unchanged infra-component authority before phase publication
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (
+          bootwright_ownership_validated_stat.stat.exists | bool
+          and bootwright_ownership_validated_record == bootwright_ownership_expected_record
+          and (bootwright_ownership_validated_record.attributes | default({})).destroyPhase
+              | default('') in ['', 'external-cleanup-complete']
+        )
+        or (
+          not (bootwright_ownership_validated_stat.stat.exists | bool)
+          and bootwright_ownership_expected_record | length == 0
+          and bootwright_infra_cleanup_transition | length > 0
+          and bootwright_infra_cleanup_transition.provider
+              ~ '-' ~ bootwright_infra_cleanup_transition.name
+              == bootwright_ownership_name
+        )
+    fail_msg: >-
+      Refusing to publish the infra-component cleanup boundary because the live
+      ownership record changed after teardown preflight and no exact durable
+      apply-transition proves a claim-only recovery, or the record carries an
+      unknown phase. No final context marker or ownership record was removed.
+      Inspect the current evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Publish claim-only infra-component cleanup recovery record
+  ansible.builtin.include_tasks: resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: >-
+      {{ bootwright_infra_cleanup_transition.provider }}-{{ bootwright_infra_cleanup_transition.name }}
+    bootwright_ownership_role: owner
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_infra_cleanup_transition.provider }}"
+      paths: "{{ bootwright_infra_cleanup_transition.paths }}"
+      labels: "{{ bootwright_infra_cleanup_transition.labels }}"
+      attributes: >-
+        {{ bootwright_infra_cleanup_transition.attributes
+           | combine({'destroyPhase': 'external-cleanup-complete'}) }}
+  when: not (bootwright_ownership_validated_stat.stat.exists | bool)
+
+- name: Revalidate infra-component cleanup recovery ownership
+  ansible.builtin.include_tasks: validate_resource.yml
+
+- name: Classify infra-component cleanup recovery ownership
+  ansible.builtin.set_fact:
+    bootwright_infra_cleanup_owner_composite: >-
+      {{ bootwright_ownership_validated_record
+         | bootwright.core.bootwright_infra_component_record_composite(
+             bootwright_managed_services_dir) }}
+  changed_when: false
+
+- name: Require exact infra-component cleanup recovery ownership
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bootwright_ownership_validated_stat.stat.exists | bool
+      - bootwright_infra_cleanup_owner_composite | length > 0
+      - >-
+        bootwright_infra_cleanup_transition | length == 0
+        or (
+          bootwright_infra_cleanup_owner_composite.transition.kind
+              == bootwright_infra_cleanup_transition.kind
+          and bootwright_infra_cleanup_owner_composite.transition.provider
+              == bootwright_infra_cleanup_transition.provider
+          and bootwright_infra_cleanup_owner_composite.transition.name
+              == bootwright_infra_cleanup_transition.name
+          and bootwright_infra_cleanup_owner_composite.transition.paths
+              == bootwright_infra_cleanup_transition.paths
+          and bootwright_infra_cleanup_owner_composite.transition.labels
+              == bootwright_infra_cleanup_transition.labels
+          and (
+            bootwright_infra_cleanup_owner_composite.transition.attributes
+            | dict2items
+            | rejectattr('key', 'equalto', 'destroyPhase')
+            | list
+            | items2dict
+          ) == bootwright_infra_cleanup_transition.attributes
+        )
+    fail_msg: >-
+      Refusing to publish the infra-component cleanup boundary because the live
+      owner is not the exact supported component proven before cleanup. The
+      final context marker and recovery evidence were retained. Restore trusted
+      evidence and re-run `{{ bootwright_mutating_invocation }}`.
+
+- name: Resolve phased infra-component ownership evidence
+  ansible.builtin.set_fact:
+    bootwright_infra_destroy_phase_record: >-
+      {{ bootwright_ownership_validated_record
+         | combine({'attributes':
+             (bootwright_ownership_validated_record.attributes | default({}))
+             | combine({'destroyPhase': 'external-cleanup-complete'})}) }}
+  changed_when: false
+
+- name: Publish completed infra-component external cleanup boundary
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ownership_validated_path }}"
+    content: "{{ bootwright_infra_destroy_phase_record | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0600"
