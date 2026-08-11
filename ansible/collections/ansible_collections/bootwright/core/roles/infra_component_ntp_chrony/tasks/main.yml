@@ -28,7 +28,9 @@
   ansible.builtin.set_fact:
     bootwright_chrony_existing_context: >-
       {{ bootwright_chrony_context_marker_content.content | default('') | b64decode | trim }}
+    bootwright_chrony_existing_context_content: "{{ bootwright_chrony_context_marker_content.content | default('') | b64decode | trim }}\n"
     bootwright_chrony_current_context: "{{ bootwright_clusters_dir | dirname | basename }}"
+    bootwright_chrony_current_context_content: "{{ bootwright_clusters_dir | dirname | basename }}\n"
   changed_when: false
 
 - name: Refuse unreadable NTP service claim
@@ -65,7 +67,7 @@
         or (
           bootwright_chrony_existing_context is match('^[A-Za-z0-9_.-]+$')
           and (bootwright_chrony_context_marker_content.content | b64decode)
-              == bootwright_chrony_existing_context ~ '\n'
+              == bootwright_chrony_existing_context_content
         )
     fail_msg: >-
       Refusing NTP apply because the existing service claim is not one exact
@@ -172,7 +174,7 @@
       - bootwright_chrony_context_winner.content is defined
       - >-
         (bootwright_chrony_context_winner.content | b64decode)
-        == bootwright_chrony_current_context ~ '\n'
+        == bootwright_chrony_current_context_content
     fail_msg: >-
       Refusing NTP apply because the atomic service-claim winner could not be
       re-read as this exact context before the first NTP mutation. The durable

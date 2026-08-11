@@ -440,5 +440,4 @@
     bootwright_infra_completion_boundary_path: >-
       {{ bootwright_registry_trust_refresh_marker
          if bootwright_registry_trust_transition_required | bool else '' }}
-    bootwright_infra_completion_boundary_expected_content: >-
-      {{ bootwright_registry_trust_transition_identity ~ '\n' }}
+    bootwright_infra_completion_boundary_expected_content: "{{ bootwright_registry_trust_transition_identity }}\n"

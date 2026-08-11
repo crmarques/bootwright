@@ -17,8 +17,7 @@
 
 - name: Resolve canonical host-wide shared-service operation content
   ansible.builtin.set_fact:
-    bootwright_host_operation_guard_content: >-
-      {{ (bootwright_host_operation_guard | to_nice_json) ~ '\n' }}
+    bootwright_host_operation_guard_content: "{{ bootwright_host_operation_guard | to_nice_json }}\n"
   changed_when: false
 
 - name: Require exact host-wide shared-service operation input

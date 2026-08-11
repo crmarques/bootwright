@@ -8,8 +8,7 @@
       /var/lib/bootwright/shared-services/endpoints/{{
         bootwright_host_endpoint_desired_claim.protocol }}-{{
         bootwright_host_endpoint_desired_claim.port }}.json
-    bootwright_host_endpoint_desired_content: >-
-      {{ (bootwright_host_endpoint_desired_claim | to_nice_json) ~ '\n' }}
+    bootwright_host_endpoint_desired_content: "{{ bootwright_host_endpoint_desired_claim | to_nice_json }}\n"
   changed_when: false
 
 - name: Probe current host endpoint claim

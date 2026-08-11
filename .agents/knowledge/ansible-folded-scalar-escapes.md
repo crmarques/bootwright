@@ -6,6 +6,13 @@ block re-stages, re-validates and re-installs its file with `changed_when: true`
 on **every** apply, on **every** host, though nothing changed. Nothing fails, so
 it survives review; only a `changed=` count that never drops to zero exposes it.
 
+The same mistake on JSON safety evidence fails closed instead: `jq` prints
+`Invalid numeric literal at EOF`, `sed -n l` shows `}\\n$`, and host-wide
+finalization refuses an unreadable or malformed canonical guard. Removing that
+guard does not help because the next acquisition serializes the same invalid
+suffix again. Inspect the final two bytes with `od`; `5c 6e` is a literal
+backslash-n, while valid newline-terminated JSON ends in `0a`.
+
 **Root cause:** YAML performs escape processing **only** in double-quoted
 scalars. In a folded (`>-`), literal (`|`), plain, or single-quoted scalar,
 `\n` reaches Jinja as the two characters backslash and `n`. ansible-core's Jinja
@@ -39,6 +46,10 @@ is the corrected form), and prefer not to build the comparison on the controller
 at all — compare on the node with `test "$(…)" = '…'`, where the shell owns both
 sides. Verify by asserting the built string's `| length`, never by reading the
 rendered task: both forms look identical in a diff.
+
+For JSON written through an atomic compare-and-swap boundary, use the same
+outer-double-quoted form, parse the rendered content in a runtime test, and keep
+the repository guard against `~ '\\n'` and `join('\\n')` in other scalar styles.
 
 The damage is not limited to comparisons. The RGW ingress TLS step built its
 `ssl_cert` bundle as `cert ~ "\n" ~ key ~ "\n"` in a folded `set_fact`, so every

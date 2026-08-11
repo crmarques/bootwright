@@ -171,12 +171,13 @@
       {{
         (bootwright_bmc_mount_probe.stdout_lines | default([])
          | select('match', bootwright_bmc_mount_pattern)
-         | list | join('\n'))
+         | list | join(bootwright_bmc_mount_separator))
         | bootwright.core.bootwright_mount_targets(
             [bootwright_bmc_root, bootwright_bmc_vmedia_root,
              bootwright_bmc_claim_root])
       }}
   vars:
+    bootwright_bmc_mount_separator: "\n"
     bootwright_bmc_mount_pattern: >-
       ^({{ [bootwright_bmc_root, bootwright_bmc_vmedia_root,
             bootwright_bmc_claim_root]

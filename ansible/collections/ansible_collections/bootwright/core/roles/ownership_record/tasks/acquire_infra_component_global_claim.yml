@@ -18,8 +18,7 @@
 
 - name: Resolve exact host-global infra-component transition content
   ansible.builtin.set_fact:
-    bootwright_infra_global_claim_next_content: >-
-      {{ (bootwright_infra_global_claim_next | to_nice_json) ~ '\n' }}
+    bootwright_infra_global_claim_next_content: "{{ bootwright_infra_global_claim_next | to_nice_json }}\n"
   changed_when: false
 
 - name: Publish exact host-global infra-component transition atomically

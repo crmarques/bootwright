@@ -90,10 +90,7 @@
 
 - name: Resolve remaining atomic host endpoint registry content
   ansible.builtin.set_fact:
-    bootwright_host_endpoint_registry_release_next_content: >-
-      {{ ((bootwright_host_endpoint_registry_release_next.registry | to_nice_json) ~ '\n')
-         if (bootwright_host_endpoint_registry_release_next.registry | length > 0)
-         else '' }}
+    bootwright_host_endpoint_registry_release_next_content: "{{ bootwright_host_endpoint_registry_release_next.registry | to_nice_json }}\n"
   changed_when: false
 
 - name: Atomically release full host endpoint reservation

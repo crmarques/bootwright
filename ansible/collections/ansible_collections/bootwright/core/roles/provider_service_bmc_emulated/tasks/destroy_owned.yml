@@ -209,8 +209,9 @@
           {{
             bootwright_bmc_destroy_mount_recheck.stdout_lines | default([])
             | select('match', bootwright_bmc_destroy_mount_recheck_pattern)
-            | list | join('\n')
+            | list | join(bootwright_bmc_destroy_mount_recheck_separator)
           }}
+        bootwright_bmc_destroy_mount_recheck_separator: "\n"
         bootwright_bmc_destroy_mount_recheck_pattern: >-
           ^({{ [bootwright_ownership_destroy_attrs.stateRoot,
                 bootwright_ownership_destroy_attrs.vMediaRoot,

@@ -93,8 +93,7 @@
 
 - name: Resolve next atomic host endpoint registry content
   ansible.builtin.set_fact:
-    bootwright_host_endpoint_registry_next_content: >-
-      {{ (bootwright_host_endpoint_registry_next.registry | to_nice_json) ~ '\n' }}
+    bootwright_host_endpoint_registry_next_content: "{{ bootwright_host_endpoint_registry_next.registry | to_nice_json }}\n"
   changed_when: false
 
 - name: Publish complete host endpoint reservation atomically

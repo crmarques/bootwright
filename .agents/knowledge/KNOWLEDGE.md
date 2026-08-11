@@ -289,6 +289,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 | from_json on a tolerated command's empty stdout throws (an rc!=0 task with stdout='' is DEFINED, not skipped); guard with default('{}', true) before from_json, or an eager fail_msg reference throws first. | [ansible-from-json-empty-stdout.md](ansible-from-json-empty-stdout.md) |
 | Deployed Jinja has no list/dict comprehension or multi-for grammar; build derived collections with filter chains (map/select/reject) and accumulator set_facts instead. | [ansible-jinja-no-comprehensions.md](ansible-jinja-no-comprehensions.md) |
 | YAML unescapes only in double-quoted scalars and Jinja never unescapes string literals, so in a folded (`>-`) scalar `join('\n')` joins with a literal backslash-n and every stdout comparison against it is permanently False (measured length 6 vs 5 on ansible-core 2.20.4); `replace('\r','')` is correspondingly inert when folded and strips newlines rather than CRs when double-quoted. | [ansible-folded-scalar-escapes.md](ansible-folded-scalar-escapes.md) |
+| A host-wide finalizer refuses its freshly acquired canonical guard as unreadable or malformed, `jq` reports `Invalid numeric literal at EOF`, or `sed -n l` shows JSON ending in `}\\n$`; a folded Jinja newline expression wrote literal bytes `5c 6e`, so deleting the guard only recreates the failure. | [ansible-folded-scalar-escapes.md](ansible-folded-scalar-escapes.md) |
 
 ### Workspace & context
 
