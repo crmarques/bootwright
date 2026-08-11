@@ -1,7 +1,7 @@
 # IBM Storage Ceph on libvirt — 3-node trial lab (2 full + 1 tie-breaker)
 
 A self-contained Bootwright example that provisions **three libvirt VMs on this
-machine**, installs **RHEL 9.8** on them as Bootwright-managed OS, and builds a
+machine**, installs **RHEL 9.7** on them as Bootwright-managed OS, and builds a
 **managed IBM Storage Ceph** cluster via cephadm: two full nodes
 (mon/mgr/osd/mds/rgw/ingress, 3 OSDs each) plus one **monitor-only tie-breaker**.
 All three storage types are configured — **block (RBD)**, **file (CephFS)**, and
@@ -189,9 +189,10 @@ infra/providers/libvirt.yaml                  InfraProvider: libvirt + VM profil
 infra/machines/bastion.yaml                   Machine: the libvirt host (localhost)
 infra/networkconfigs/ceph-net.yaml            NetworkConfig: 192.168.140.0/24, static IPs
 infra/components/lab-dns.yaml                 InfraComponent: dnsmasq resolver + forwarders
-infra/images/rhel-9-x86-64-dvd.yaml           MachineImage: RHEL 9.8 DVD (local-media)
+infra/images/rhel-9-x86-64-dvd.yaml           MachineImage: RHEL 9.7 DVD (local-media)
 infra/profiles/rhel-9-ceph-node.yaml          MachineInstallProfile: anaconda RHEL install
-clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: distribution ibm, release 9.9.1.0, mgmt-gateway HA dashboard
+clusters/storage/ceph-ibm/cluster.yaml        StorageCluster: IBM 9.9.0.3, package 20.1.0-221.el9cp,
+                                              image v9.0-20201, mgmt-gateway HA dashboard
 clusters/storage/ceph-ibm/nodes/ceph-{1,2,3}.yaml  Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
 clusters/storage/ceph-ibm/placement-policy.yaml  size 2 / minSize 2, failureDomain host
 clusters/storage/ceph-ibm/pools/*.yaml        StoragePools: rbd, cephfs-data/metadata, rgw

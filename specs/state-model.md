@@ -1336,8 +1336,10 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   hashing; nothing is silently rewritten to a Bootwright-preferred value. The
   same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`:
   both are read off the vendor's own release-to-build tables by the operator and
-  taken verbatim, and neither is checked against `release` or against any list of
-  builds Bootwright would have to carry.
+  taken verbatim, and neither is checked against `release` or against a static
+  build list. IBM is a runtime-artifact exception, not a catalog exception: both
+  fields are required and the installed native `cephadm` version must equal the
+  native Ceph version reported by the declared image before cluster work.
 - The only storage-node OS check is a capability statement, not a compatibility
   one: the subscription-backed provider implements RHEL-family package sources
   only, so a Ceph node's `MachineInstallProfile` must declare `family: rhel`
@@ -1348,19 +1350,27 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   Apply records whether the package predated Bootwright and which storage
   clusters require it. Destroy releases only the selected cluster's requirement
   and removes the package only when Bootwright installed it and no owner remains.
-- `spec.ceph.packageVersion` optionally pins the exact Ceph package build to
-  install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp`. It
-  names the `cephadm` build on each storage node and nothing else: the daemons
-  run from the container image, so a `packageVersion` bump reconciles the host
-  CLI in place and is **not** a cluster upgrade and **not** a rebuild. It applies
-  to `redhat` and `ibm` only; for `oss` the exact build is already named by
-  `release` as an `x.y.z` version, which selects the package repository. The
-  ownership record keys on the bare package name, so destroy still matches a
-  pinned install. Validation is syntactic — the value must not carry a package
-  name, glob, or separator — and is never checked against `release`.
-- `spec.ceph.image` optionally pins the cephadm container image, which every
-  apply asserts as the cluster's `container_image` so that cephadm deploys every
-  Ceph daemon from it, making the running cluster version reproducible. The pin
+- `spec.ceph.packageVersion` pins the exact Ceph package build to install, as an
+  RPM `[epoch:]version[-release]` such as `20.1.0-221.el9cp`. It names the
+  `cephadm` build on each storage node and nothing else: the daemons run from the
+  container image, so an equal or forward package change can reconcile the host
+  CLI in place and is **not** a cluster upgrade and **not** a rebuild. IBM
+  requires the field with the RPM release component present; Red Hat leaves it
+  optional; `oss` rejects it because an exact `x.y.z` release already selects
+  the package repository. The exact
+  versioned RPM is installed with downgrades disabled, then `rpm -q` must report
+  the declared version, version-release, epoch-version, or
+  epoch-version-release coordinate before ownership is recorded. A newer
+  installed package that DNF cannot reconcile to the declaration is refused;
+  Bootwright never performs a Ceph software downgrade. The ownership record
+  keys on the bare package name, so destroy still matches a pinned install.
+  Validation is syntactic — the value must not carry a package name, glob, or
+  separator — and is never checked against `release`.
+- `spec.ceph.image` pins the cephadm container image when a version is resolved;
+  IBM requires its `version`, while the other distributions may omit it. Every
+  apply asserts a resolved pin as the cluster's `container_image` so that
+  cephadm deploys every Ceph daemon from it, making the running cluster version
+  reproducible. The pin
   is delivered twice, and both are required: `cephadm bootstrap --image` for the
   daemons the bootstrap command itself creates, and a converged
   `ceph config set global container_image` before the first service spec is
@@ -1376,9 +1386,10 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
     asserted and the cluster keeps the image it already resolved, which for a
     vendor package is that build's own floating tag. There is
     no vendor default: `redhat` and `ibm` registry tags are build-numbered and a
-    product release such as `9.1` or `9.9.1.0` is not a tag, so the build is
-    supplied here explicitly. For `oss` an exact `x.y.z` `release` derives
-    `vX.Y.Z`; a release name leaves the daemon image unpinned.
+    product release such as `9.1` or `9.9.1.0` is not a tag. IBM requires the
+    field; Red Hat may leave it unset and accept the build's floating image. For
+    `oss` an exact `x.y.z` `release` derives `vX.Y.Z`; a release name leaves the
+    daemon image unpinned.
   - `base` is the `<registry>/<path>` the version hangs off, and defaults to the
     repository Bootwright derives from distribution, release and the entitlement
     registry — `quay.io/ceph/ceph`,
@@ -1426,12 +1437,29 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   repository, and queries every required IBM package together. Repository
   unreadability, missing package content, and a missing pinned `cephadm` build
   are distinct fail-closed states, each reported with its exact retry.
-  Neither must mix with upstream Ceph packages
-  or images. IBM license acceptance
+  `packageVersion` and `image.version` are required. Bootwright installs the
+  exact native `cephadm` RPM directly; it does not invoke `cephadm-ansible` or
+  install host `ceph-common`. After the container runtime is proven and before
+  cluster work, every IBM node must successfully report `cephadm version`, the
+  declared image must successfully report `ceph --version`, and the two native
+  versions and the epoch-free package declaration must be equal. This is an
+  artifact-parity proof, not a release/OS support claim. Neither source may mix
+  with upstream Ceph packages or images.
+  IBM license acceptance
   is passed non-interactively to `cephadm bootstrap`. Because acceptance enables
   IBM Call Home, `spec.ceph.ibm.callHome`
   is required as either `enabled` or `disabled`; apply reconciles the manager
   module to that explicit outbound-communication intent.
+- IBM's stock `cephadm-ansible` preflight remains outside Bootwright's direct
+  cephadm path. It configures a moving major-stream repository and requests
+  unversioned `cephadm`/`ceph-common`: the default package state `present`
+  retains an installed package but selects the best current candidate on an
+  absent host, while `upgrade_ceph_packages: true` requests `latest`. Exact
+  release retention on that stock path therefore requires a frozen custom
+  repository or Satellite content view exposing only the intended build and its
+  dependency closure, selected with IBM's `ceph_origin=custom` and
+  `custom_repo_url` procedure. A versioned `ceph_pkgs` override alone is not an
+  exact pin because the stock role also installs `ceph-common` unversioned.
 - `spec.ceph.osSubscriptionRef`, when set, must resolve to a `redhat-rhel`
   [`Entitlement`](#entitlement) whose `rhsm.management` is `managed`. It names
   the fleet-wide RHEL subscription every storage node registers with. Omitted,
@@ -1588,7 +1616,9 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   read `/proc/sys/crypto/fips_enabled` on every selected topology host before
   their first mutation and require `1`. This live proof includes
   `os.provided: true` hosts; Bootwright verifies their running kernel mode but
-  does not install or enable FIPS on them.
+  does not install or enable FIPS on them. For IBM, the operator must obtain the
+  FIPS-enabled product build through IBM; the kernel and package/image parity
+  gates do not prove that artifact's provenance or certification.
 - `spec.ceph.security.cephx.keyType` declares the cipher new cephx keys are
   minted with: `aes` or `aes256k`. Unset, Bootwright emits no cipher operations
   and the build's own mon-map policy stands; the block is a pointer so an absent
@@ -1978,6 +2008,11 @@ Rules:
   `StorageCluster` the `dataFoundation` arm must be empty, so there is no arm to
   derive from and `spec.type: dataFoundation` must be authored explicitly.
 - `spec.storageClusterRef` is required.
+- Export and add-on validation proves desired-state wiring only; it makes no
+  support or certification claim for a Data Foundation and external Ceph
+  release pair. IBM Storage Ceph pairings must be checked against the exact
+  consumer release in Red Hat's authenticated ODF Supportability and
+  Interoperability Checker. Public component-version parity is insufficient.
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
   `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and

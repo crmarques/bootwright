@@ -10,7 +10,11 @@ spec:
   ceph:
     distribution: ibm
 
-    release: "9.9.1.0"
+    release: "9.9.0.3"
+    packageVersion: "20.1.0-221.el9cp"
+
+    image:
+      version: "v9.0-20201"
 
     ibm:
       callHome: disabled

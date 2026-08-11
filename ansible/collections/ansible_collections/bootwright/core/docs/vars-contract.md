@@ -786,8 +786,13 @@ flow.
 record is written under, so destroy — which looks the package up by that bare
 name from a static list — still matches. `cephadmPackageSpec` is present only
 when `spec.ceph.packageVersion` pins a build, carries the composed
-`<package>-<version>`, and is consumed by exactly one task: the `dnf` install
-that pins the build. The role never composes the two itself.
+`<package>-<version>`, and is consumed verbatim by the `dnf` install and the
+post-install exact-coordinate gate. The role never composes the two itself.
+IBM desired state always renders it; Red Hat desired state may omit it. The
+IBM value includes the RPM release component so the CLI's native version can be
+matched to it. The install permits an upgrade but never enables DNF downgrade
+behavior, and a build that still differs after DNF runs fails closed before
+cluster convergence.
 
 The provider also carries the `runtimeOS` family and, for IBM,
 `ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
@@ -797,6 +802,12 @@ with an explicit daemon image base under the same registry namespace by
 desired-state validation. The rendered `image` and `imageBase` are already
 composed by the renderer from `spec.ceph.image.base` (or the derived vendor
 repository) and `spec.ceph.image.version`; the role consumes them verbatim.
+For IBM, desired-state validation requires both the full package and image
+pins. The container-runtime phase reads `cephadm version` from the installed
+vendor RPM, runs `ceph --version` in that exact image, and requires both
+reported builds to match the epoch-free package declaration before bootstrap
+or service convergence. This proof also runs on the split seed pass where
+package prerequisites are skipped.
 
 `ceph.sidecarImagePins` carries the cluster's `config[mgr]`
 `mgr/cephadm/container_image_*` entries, excluding `container_image_base`. The

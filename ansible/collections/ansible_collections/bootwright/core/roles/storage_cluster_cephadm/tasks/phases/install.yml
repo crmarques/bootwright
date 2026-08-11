@@ -27,8 +27,40 @@
   ansible.builtin.dnf:
     name: "{{ bootwright_ceph_provider.cephadmPackageSpec }}"
     state: present
-    allow_downgrade: true
+    allow_downgrade: false
   register: bootwright_cephadm_pinned_install
+  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+
+- name: Read installed cephadm package coordinates after pinning
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - --qf
+      - "%{VERSION}\n%{VERSION}-%{RELEASE}\n%{EPOCHNUM}:%{VERSION}\n%{EPOCHNUM}:%{VERSION}-%{RELEASE}\n"
+      - "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
+  register: bootwright_cephadm_installed_coordinates
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
+
+- name: Require the installed cephadm package to equal the declared build
+  ansible.builtin.assert:
+    that:
+      - bootwright_cephadm_installed_coordinates.rc | default(1) | int == 0
+      - >-
+        bootwright_ceph_provider.cephadmPackageSpec
+        | regex_replace('^' ~ (bootwright_ceph_provider.cephadmPackage | default('cephadm') | regex_escape) ~ '-', '')
+        in (bootwright_cephadm_installed_coordinates.stdout_lines | default([]))
+    fail_msg: >-
+      Storage node {{ bootwright_current_storage_host.hostname }} does not run the
+      cephadm build declared by spec.ceph.packageVersion. The declaration resolves to
+      {{ bootwright_ceph_provider.cephadmPackageSpec }}, while rpm reports
+      {{ bootwright_cephadm_installed_coordinates.stdout_lines | default([]) | join(', ') }}.
+      Bootwright refuses to downgrade Ceph software because the vendor supports upgrades,
+      not in-place downgrades. Use this release only on a new cluster, or declare the
+      installed/newer supported release and follow the vendor's upgrade procedure.
+    quiet: true
   when: bootwright_ceph_provider.cephadmPackageSpec | default('') | length > 0
 
 - name: Create cephadm package ownership directory

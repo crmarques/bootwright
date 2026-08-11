@@ -96,6 +96,39 @@ func TestValidateStorageCephPackageVersionRejectedForOSS(t *testing.T) {
 	}
 }
 
+func TestValidateStorageCephIBMRequiresArtifactPins(t *testing.T) {
+	cases := []struct {
+		name           string
+		distribution   string
+		packageVersion string
+		imageVersion   string
+		want           []string
+	}{
+		{name: "both missing", distribution: v1alpha1.StorageCephDistributionIBM, want: []string{"packageVersion is required", "image.version is required"}},
+		{name: "package missing", distribution: v1alpha1.StorageCephDistributionIBM, imageVersion: "v9.0-20201", want: []string{"packageVersion is required"}},
+		{name: "image missing", distribution: v1alpha1.StorageCephDistributionIBM, packageVersion: "20.1.0-221.el9cp", want: []string{"image.version is required"}},
+		{name: "package release missing", distribution: v1alpha1.StorageCephDistributionIBM, packageVersion: "20.1.0", imageVersion: "v9.0-20201", want: []string{"must include the RPM release component"}},
+		{name: "both declared", distribution: v1alpha1.StorageCephDistributionIBM, packageVersion: "20.1.0-221.el9cp", imageVersion: "v9.0-20201"},
+		{name: "epoch declared", distribution: v1alpha1.StorageCephDistributionIBM, packageVersion: "2:20.1.0-221.el9cp", imageVersion: "v9.0-20201"},
+		{name: "redhat remains optional", distribution: v1alpha1.StorageCephDistributionRedHat},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := versionPinCluster(tc.distribution, "9.9.0.3", tc.packageVersion, "", tc.imageVersion)
+			errs := validateStorageCephIBMArtifactPins("spec.ceph", cluster)
+			got := strings.Join(errs, "; ")
+			if len(tc.want) != len(errs) {
+				t.Fatalf("errors = %v, want %v", errs, tc.want)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("errors = %v, want substring %q", errs, want)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateStorageCephImageVersionDoesNotSatisfyARegistryOverride(t *testing.T) {
 	state := v1alpha1.State{Entitlements: []v1alpha1.Entitlement{{
 		Metadata: v1alpha1.Metadata{Name: "rhcs"},

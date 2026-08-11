@@ -60,7 +60,9 @@ judges the release you declare, nor the RHEL version you run it on. A release
 published today installs today. Neither the vendor image build tag nor the Ceph
 package build is derivable from a product release, so name them yourself with
 `spec.ceph.image.version` and `spec.ceph.packageVersion` to lock the exact build
-on both axes. To mirror upstream packages for a
+on both axes. Both pins are required for IBM; Bootwright proves their native
+Ceph versions equal before cluster work, without maintaining a release catalog.
+To mirror upstream packages for a
 disconnected `oss` install, set an HTTPS `spec.ceph.community.mirror`.
 Check what a release supports against the vendor's own sources — the upstream
 [Ceph releases](https://docs.ceph.com/en/latest/releases/) page, the
@@ -84,24 +86,34 @@ The `ceph-distribution-oss`, `ceph-distribution-redhat`, and
 `ceph-distribution-ibm` [reference examples](examples.md) show each source end
 to end, including the entitlement and license-acceptance workflow.
 
-!!! note "Pin the build on `redhat`/`ibm`"
-    Set `spec.ceph.image.version` for production — a vendor build tag, or a
-    `sha256:` digest for a fully immutable pin. Left unset, the install uses the
-    distribution-packaged `cephadm`'s default image tag, which floats, so the
-    running Ceph version is not reproducible across re-installs. You normally
-    only write the version: `spec.ceph.image.base` defaults to the vendor
-    repository Bootwright derives from the distribution, release and entitlement
-    registry, so the namespace and stream cannot drift from the release. Author
-    `base` only to mirror the image or to name a build base Bootwright has not
-    recorded.
+!!! note "Pin the native build"
+    IBM requires `spec.ceph.packageVersion` and `spec.ceph.image.version` from
+    one row of its release table. `packageVersion` is the **IBM Storage Package
+    Version**, including its RPM release component, not the separate Cephadm
+    Ansible Package Version. Bootwright installs that exact native `cephadm`
+    RPM, verifies its installed coordinate, runs `ceph --version` inside the
+    exact declared image, and refuses unless both native versions match the
+    package declaration. Red Hat keeps both fields optional; omit the image pin
+    only if accepting its floating vendor default is intentional.
 
-    Pin `spec.ceph.packageVersion` alongside it to fix the `cephadm` RPM on the
-    hosts. It is the one version field that is *not* install-time-only: it names
-    the host CLI, not the daemons, so changing it reconciles in place instead of
-    proposing a rebuild.
+    The package pin names the host CLI, not the daemons. An equal or forward
+    package transaction may reconcile in place, but Bootwright never downgrades
+    a newer installed Ceph package. Image or release changes on a live cluster
+    remain vendor upgrade operations performed out of band.
+
+!!! note "IBM stock preflight is a separate path"
+    Bootwright invokes native `cephadm` directly and does not run
+    `cephadm-ansible`. IBM's stock preflight uses a moving major-stream
+    repository and unversioned package names. Its default `present` state keeps
+    an installed package, but a clean host resolves the newest available build;
+    `upgrade_ceph_packages: true` selects `latest`. To retain one exact build on
+    that stock path, publish only its complete package closure through a frozen
+    custom repository or Satellite content view and follow IBM's
+    [disconnected preflight procedure](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook-disconnected)
+    with `ceph_origin=custom` and `custom_repo_url`.
 
 !!! warning "IBM Call Home is an explicit choice"
-    IBM Storage Ceph 9.9.1.0 enables Call Home when the license is accepted.
+    IBM Storage Ceph enables Call Home when the license is accepted.
     Author `spec.ceph.ibm.callHome: enabled` to retain it or `disabled` to turn
     it off after bootstrap. Validation rejects an IBM cluster that leaves the
     outbound-communication choice implicit.
@@ -338,6 +350,13 @@ preflight, storage-node access apply, and Ceph apply read
 value `1`. That proves the running kernel mode on the third-site arbiter just as
 it does on managed data nodes. It does not prove the provenance of the vendor's
 FIPS build or turn FIPS on after installation.
+
+For IBM Storage Ceph, the
+[compatibility matrix](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=compatibility-matrix)
+directs customers to obtain the FIPS-enabled build through their IBM
+representative. The Bootwright kernel gate and package/image parity check cannot
+substitute for that IBM-supplied artifact or establish its certification
+provenance.
 
 FIPS is an install-time customization, so changing it on an installed machine is
 a reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-owned-ceph-rebuild).
@@ -659,6 +678,13 @@ cluster. The `baremetal-redfish-imported-ceph-odf` and
 `baremetal-redfish-multidc-virtualized-odf-ceph` [reference examples](examples.md)
 wire export-to-ODF for imported and managed Ceph respectively. The export object
 model is in the [storage reference](../concepts/storage.md#storageexport).
+
+That wiring is not a support certification. Verify the exact Data Foundation
+and external Ceph releases in Red Hat's authenticated
+[ODF Supportability and Interoperability Checker](https://access.redhat.com/labs/odfsi/)
+before deployment. A public advisory that names a matching Red Hat Ceph basis
+does not by itself certify an IBM Storage Ceph external-cluster pairing; for a
+FIPS deployment, also confirm access to the IBM FIPS-enabled build.
 
 `spec.dataFoundation.objectGatewayRef` names the `StorageObjectGateway` ODF's
 object storage should use; set it and the exporter step passes that gateway's

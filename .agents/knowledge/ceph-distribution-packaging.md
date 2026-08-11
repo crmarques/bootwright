@@ -26,7 +26,10 @@ prevent. Two earlier attempts got this wrong: first a closed release catalog tha
 hard-failed unknown releases, then an advisory catalog that warned on them. The
 same rule governs `spec.ceph.packageVersion` and `spec.ceph.image.version`: both
 are coordinates the operator reads off the vendor's own release-to-build table,
-validated syntactically and never cross-checked against `release` or each other.
+validated syntactically and never cross-checked against `release` or a static
+catalog. IBM adds a live artifact proof without adding a catalog: both pins are
+required and the installed native `cephadm` version must equal the native Ceph
+version reported by the exact declared image before cluster work.
 
 **Constraint:** `spec.ceph.image` is a `{base, version}` block, not a reference
 string. `version` is the build (tag or `sha256:` digest) and `base` defaults to
@@ -35,24 +38,30 @@ them in `cephprovider.resolvedImage`, with `@` for a digest and `:` for a tag.
 Because the derived base is the same value `validateStorageCephImageBase`
 compares against, an unauthored base satisfies the vendor-prefix guard by
 construction and the guard is deliberately not re-run on it — a property test in
-`cephprovider` welds the two. `version` has NO vendor default: `redhat` and `ibm`
-image tags are build-numbered and a product release such as `9.1` or `9.9.1.0` is
-not a tag, so defaulting it to the release would compose a reference that fails
-the pull. Only `oss` derives one, `v<x.y.z>`, and only from an exact version.
+`cephprovider` welds the two. Vendor image tags are build-numbered and a product
+release such as `9.1` or `9.9.1.0` is not a tag, so defaulting `version` to the
+release would compose a reference that fails the pull. IBM therefore requires
+the authored pin; Red Hat may leave it unset and accept the floating image. Only
+`oss` derives one, `v<x.y.z>`, and only from an exact version.
 
 **Constraint:** `spec.ceph.packageVersion` renders as `CephadmPackageSpec`
-(`cephadm-<nvr>`) and reaches exactly one task — the `dnf` install of the pinned
-build. `CephadmPackage` stays the bare name because it is the ownership-record
+(`cephadm-<nvr>`) and feeds the `dnf` install plus its exact installed-coordinate
+assertion. `CephadmPackage` stays the bare name because it is the ownership-record
 key, and the destroy list (`vars/os/RedHat.yml` `bootwright_ceph_managed_packages`)
 is static and bare: keying the record on the versioned string orphans the package
-forever. The pinned install uses `ansible.builtin.dnf` with `allow_downgrade`
-(`ansible.builtin.package` cannot downgrade, so a pin below the installed build
-would fail on re-apply) and fails closed, unlike the unpinned fallback. It also
-gathers `package_facts` first: `package_records_write.yml` computes `preexisting`
-by membership in `ansible_facts.packages`, and the pinned path is the first one
-that can touch an already-installed cephadm — without the gather, `preexisting`
-reads false and destroy removes the operator's own package. The pin is
-reconcilable drift, not structural: it is nulled from both
+forever. The pinned install uses `ansible.builtin.dnf` with downgrades disabled,
+then `rpm -q` emits version, version-release, epoch-version, and
+epoch-version-release forms; one must equal the declaration before ownership is
+recorded. This closes DNF's possible no-op against a newer installed package and
+fails closed instead of silently accepting it. IBM supports upgrades, not
+in-place software downgrades, so a lower declaration is refused and must be
+handled as a new cluster or through the vendor's supported release procedure. It
+also gathers `package_facts` first: `package_records_write.yml` computes
+`preexisting` by membership in `ansible_facts.packages`, and the pinned path is
+the first one that can touch an already-installed cephadm — without the gather,
+`preexisting` reads false and destroy removes the operator's own package. The pin
+is reconcilable drift only when the exact package can be reached without a
+downgrade; it is not structural and is nulled from both
 `storageClusterStructuralHashVars` and `managedMachineOSStructuralHashVars`, the
 latter because that task kind is not reconfigure-only and would propose a machine
 reinstall.
@@ -95,7 +104,13 @@ standalone storage preflight, storage-node access apply, and cephadm apply read
 first mutation. The kernel flag must be exactly `1`, including on an
 `os.provided: true` arbiter. That proves current kernel mode only: it neither
 enables FIPS nor proves that an externally installed host or vendor image has a
-particular certification provenance.
+particular certification provenance. IBM's compatibility matrix directs
+customers to their IBM representative for access to FIPS-enabled builds; no
+Bootwright gate proves that the pulled image is that entitled artifact. Likewise,
+Bootwright's Data Foundation export wiring is not a support certification: the
+exact consumer/external-Ceph combination must be checked in Red Hat's
+authenticated ODF Supportability and Interoperability Checker, and public
+component-version parity is insufficient.
 
 **Symptom:** On an IBM Storage Ceph cluster, `ceph orch upgrade ls` and the
 dashboard "Upgrade" page fail with 401 against `registry.redhat.io`.
@@ -285,7 +300,9 @@ set_fact fails with `ansible_distribution_major_version is undefined`.
 
 **Constraint:** Bootstrap, live health, and destroy use `cephadm shell` for all
 Ceph client commands. The host-level package gate covers `cephadm`; no phase
-assumes a host-installed `ceph` or `radosgw-admin` binary.
+assumes a host-installed `ceph` or `radosgw-admin` binary. This is also the IBM
+native-tool boundary: Bootwright installs `cephadm` directly and never invokes
+`cephadm-ansible` or installs the latter's host `ceph-common` client set.
 
 **Constraint:** IBM's release table has two similarly named package columns.
 `StorageCluster.spec.ceph.packageVersion` takes the **IBM Storage Package
@@ -296,7 +313,56 @@ whereas `5.0.x` versions belong to the separate `cephadm-ansible` package that
 Bootwright does not use. For IBM Storage Ceph 9.9.0.3, the July 2026 CVE row
 therefore maps to `packageVersion: 20.1.0-221.el9cp` and image tag
 `v9.0-20201`; `5.0.2-1` would make Bootwright ask DNF for a nonexistent
-`cephadm-5.0.2-1` build.
+`cephadm-5.0.2-1` build. IBM repository primary metadata recorded SHA-256
+`af0e7053c765de766abb3c81991cfa31af425c1cfca31985320b4623afe75a45`
+for `cephadm-20.1.0-221.el9cp.noarch.rpm` and
+`40541d9e3e10b8df3a0fa7e4be27f6a872f3a369dbbac1b794b7fee6c39876f8`
+for the stock preflight's matching
+`ceph-common-20.1.0-221.el9cp.x86_64.rpm` when inspected.
+
+**Constraint:** IBM requires `packageVersion`, including the RPM release
+component, and `image.version` together. On each storage node, after the
+runtime is proven and before cluster work,
+`container_runtime.yml` runs installed `cephadm version` and `ceph --version`
+inside `bootwright_ceph_bootstrap_image`. Both probes must succeed and their
+native version tokens must equal the epoch-free package declaration and each
+other. This catches a host/image mismatch from coordinates selected from
+different IBM release-table rows, while deliberately
+proving nothing about the authored `release`, RHEL compatibility, or vendor
+certification.
+
+**Constraint:** IBM's stock `cephadm-ansible` preflight has different package
+semantics from Bootwright's direct path. The inspected
+`cephadm-ansible-5.0.2-1.el9cp.noarch.rpm` from IBM's public Ceph 9 RHEL 9
+repository has SHA-256
+`e3174a043c3273177d73ee73881870ad1ae3a37347d844ef083d28a3dc0bd6be`;
+that checksum matched the repository's primary metadata. The RPM reports epoch
+`1`, source RPM `cephadm-ansible-5.0.2-1.el9cp.src.rpm`, and a Red Hat signature
+under key ID `1e1850467eaa5b6e`; the inspection did not import that key and
+therefore did not establish trust. In
+`roles/ceph_defaults/defaults/main.yml:12-24` it selects the moving IBM stream,
+defaults `upgrade_ceph_packages: false`, and names unversioned `cephadm` and
+`ceph-common`; `roles/ceph_defaults/tasks/main.yml:57-70` maps the legacy
+variables into those defaults. In the extracted `cephadm-preflight.yml:193-214`,
+package state is `latest` only when that upgrade switch is true and otherwise
+`present`; the earlier `ceph-common` install is also unversioned.
+Consequently `present` retains an already-installed package but, on an absent
+host, DNF resolves the best candidate visible in IBM's moving major-stream
+repository. The current stream can contain later Ceph and cephadm-ansible builds
+than the release being retained.
+
+The supported stock path for exact retention is frozen content: expose only the
+intended package/dependency closure in a custom repository or Satellite content
+view, then run IBM's disconnected preflight with
+`ansible-playbook -i INVENTORY_FILE cephadm-preflight.yml --extra-vars
+"ceph_origin=custom" -e "custom_repo_url=CUSTOM_REPO_URL"`. Supplying full
+versioned names through the role's legacy `ceph_pkgs` override is not a complete
+pin: an earlier task installs `ceph-common` unversioned, and the documented
+connected setup also installs `cephadm-ansible` unversioned. The inspected role
+also accepts `custom_repo_gpgkey`, `custom_repo_state`, `custom_repo_enabled`, or
+the multi-repository `ceph_custom_repositories` form; IBM's documented command
+uses only `ceph_origin` and `custom_repo_url`. Bootwright needs neither workaround
+because its desired state selects and verifies the native `cephadm` RPM itself.
 
 ## Vendor references
 
@@ -304,6 +370,14 @@ therefore maps to `packageVersion: 20.1.0-221.el9cp` and image tag
 - Red Hat Ceph Storage 9 compatibility guide: <https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf>
 - IBM Storage Ceph release/package mapping: <https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions>
 - IBM Storage Ceph 9 public RPM repository: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/>
+- Inspected IBM-hosted cephadm 20.1.0-221 RPM: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.1.0-221.el9cp.noarch.rpm>
+- Inspected IBM-hosted ceph-common 20.1.0-221 RPM: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/ceph-common-20.1.0-221.el9cp.x86_64.rpm>
+- Inspected IBM-hosted cephadm-ansible 5.0.2 RPM: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-ansible-5.0.2-1.el9cp.noarch.rpm>
+- IBM 9.9.0 compatibility matrix and FIPS-build access note: <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=compatibility-matrix>
+- IBM connected preflight procedure: <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook>
+- IBM disconnected/custom-repository preflight procedure: <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook-disconnected>
+- IBM upgrade FAQ (software downgrades unsupported): <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=faqs-upgrade-questions>
+- Red Hat ODF Supportability and Interoperability Checker (authentication required): <https://access.redhat.com/labs/odfsi/>
 - IBM Storage Ceph 9.9.1.0 versioning scheme: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=whats-new-in-storage-ceph-991>
 - IBM Storage Ceph 9.9.1.0 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
 - IBM 9.9.1.0 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>

@@ -1156,7 +1156,7 @@ func seedProtectedMixedLayerDrift(t *testing.T, ctx workspace.Context) {
 	t.Helper()
 	seedSuccessfulApply(t, ctx)
 	path := safetyObjectInputPath(t, ctx, v1alpha1.KindStorageCluster, safetyBareMetalManagedOSCluster)
-	rewriteSafetyInput(t, path, [][2]string{{"release: \"9.9.1.0\"", "release: \"9.9.1.1\""}})
+	rewriteSafetyInput(t, path, [][2]string{{"release: \"9.9.0.3\"", "release: \"9.9.0.4\""}})
 	seedRunnableSafetyMutation(t, ctx)
 }
 

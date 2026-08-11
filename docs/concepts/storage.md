@@ -116,8 +116,8 @@ spec:
 | --- | --- | --- | --- |
 | `ceph.distribution` | No | `oss` | One of `oss`, `redhat`, or `ibm`. |
 | `ceph.release` | No | `20.2.2` (`oss`); `9.1` (`redhat`); `9.9.1.0` (`ibm`) | Ceph release for the chosen distribution. `oss` takes an upstream release name (`tentacle`) or an exact `x.y.z` version; an exact version pins the package repository and derives `quay.io/ceph/ceph:vX.Y.Z`. `redhat` and `ibm` take a dot-separated numeric product version of any length (`9.1`, `9.9.1.0`), whose leading component is the product stream. The value is used verbatim; see [Version compatibility is yours, not Bootwright's](#version-compatibility-is-yours-not-bootwrights). |
-| `ceph.packageVersion` | No | — | Pins the exact Ceph package build to install, as an RPM `[epoch:]version[-release]` such as `19.2.1-245.el9cp` — the build your vendor's release-to-package-version table names. It governs the `cephadm` RPM on each storage node and nothing else: the daemons run from the container image, so bumping it reconciles the host CLI in place rather than upgrading or rebuilding the cluster. `redhat` and `ibm` only; for `oss` the build is already named by `ceph.release`. |
-| `ceph.image.version` | No | `vX.Y.Z` from an exact `x.y.z` `oss` `ceph.release`; otherwise none | The daemon image build, as a tag or a `sha256:` digest. Every apply pins it as the cluster's `container_image`, so cephadm deploys every daemon — mon, mgr, osd, mds, rgw, nfs — from it; daemons already running move only on an out-of-band upgrade. A mutable `latest` is not a pin. There is no `redhat`/`ibm` default because vendor tags are build-numbered and a product release such as `9.9.1.0` is not a tag; left unset, the cluster keeps whatever image it already resolved, which for a vendor build is that build's own floating tag. |
+| `ceph.packageVersion` | No | — | Pins the exact Ceph package build to install, as an RPM `[epoch:]version[-release]` such as `20.1.0-221.el9cp` — the **IBM Storage Package Version**, not the separate Cephadm Ansible Package Version. It governs the `cephadm` RPM on each storage node and nothing else. Bootwright installs that exact coordinate, verifies the installed RPM, and refuses rather than downgrades a newer package. `redhat` and `ibm` only; for `oss` the build is already named by `ceph.release`. |
+| `ceph.image.version` | No | `vX.Y.Z` from an exact `x.y.z` `oss` `ceph.release`; otherwise none | The daemon image build, as a tag or a `sha256:` digest. Every apply pins it as the cluster's `container_image`, so cephadm deploys every daemon — mon, mgr, osd, mds, rgw, nfs — from it; daemons already running move only on an out-of-band upgrade. A mutable `latest` is not a pin. IBM requires this field and proves that the image's native Ceph version equals the installed `cephadm` version before cluster work. Red Hat may leave it unset and accept that vendor build's floating image. |
 | `ceph.image.base` | No | The repository derived from `ceph.distribution`, `ceph.release` and the entitlement registry | The `<registry>/<path>` the version hangs off — `quay.io/ceph/ceph`, `registry.redhat.io/rhceph/rhceph-<stream>-rhel9`, or `cp.icr.io/cp/ibm-ceph/ceph-<stream>-rhel9`. Leave it unset in the normal case: the derived value keeps the vendor namespace and stream welded to the release. Author it to mirror the image or to name a vendor build base Bootwright has not recorded. Must carry no tag, digest, or scheme. |
 | `ceph.community.mirror` | No | `https://download.ceph.com` | HTTPS upstream package base URL for mirrored or disconnected environments. `oss` only. |
 | `ceph.community.checksum` | No | — | Optional `sha256:<hex>` pin on the `cephadm` bootstrap binary fetched from `community.mirror` and executed as root; it adds a content check on top of the HTTPS-only mirror. It does not pin the Ceph packages. `oss` only. |
@@ -139,7 +139,7 @@ apply may install it, while destroy keeps a copy that predated Bootwright or is
 still required by another storage cluster.
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
-| `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that every Bootwright-installed Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. Preflight and apply also verify `/proc/sys/crypto/fips_enabled` on every running Ceph node, including provided-OS nodes, before storage mutation. |
+| `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that every Bootwright-installed Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. Preflight and apply also verify `/proc/sys/crypto/fips_enabled` on every running Ceph node, including provided-OS nodes, before storage mutation. For IBM, obtain the FIPS-enabled product build through IBM; the live kernel check does not prove image/build provenance. |
 | `ceph.security.cephx.keyType` | No | — | Cipher new cephx keys are minted with: `aes` (AES-128) or `aes256k` (AES-256). Unset leaves the build's own mon-map policy untouched — declare it only to override a vendor default a client cannot read. `aes` **weakens cephx for every client of this cluster**; see [cephx key types](../advanced/ceph-topologies.md#cephx-key-types). |
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. Keys another field owns are rejected here: `public_network`/`cluster_network` belong to `ceph.networks`, and `container_image` belongs to `ceph.image` — these operations run after the first services are deployed, so a pin declared here would arrive too late for them. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
@@ -147,6 +147,12 @@ still required by another storage cluster.
 | `ceph.mgmtGateway` | No | — | Native cephadm management gateway (`mgmt-gateway`) fronting the Ceph dashboard behind a highly-available VIP; the block's presence enables it, and `mgmtGateway.ingress` is then required. See [Management gateway](#management-gateway). |
 | `ceph.services[]` | No | — | Raw cephadm service-spec passthrough for unmodeled service types; see [Passthrough services](#passthrough-services). |
 | `ceph.topology` | Yes | — | Nodes, roles, OSD devices, sites, and stretch mode; see [Topology](#topology). |
+
+`ceph.packageVersion` and `ceph.image.version` are conditionally required when
+`ceph.distribution` is `ibm`; both may be omitted for `redhat`. The IBM package
+coordinate must include the RPM release component from the vendor table, not
+only its version. Before cluster work, the declaration, installed CLI, and
+image-reported native Ceph versions must agree.
 
 !!! warning "Release/image fields are install-time intent, not a day-2 upgrade"
     `ceph.release` and `ceph.image` select what cephadm bootstraps. Changing them
@@ -165,8 +171,9 @@ still required by another storage cluster.
     field is still drift.
 
     `ceph.packageVersion` is the exception: it pins the host `cephadm` RPM, not
-    the daemons, so a change to it is reconciled in place on the next apply and
-    never proposes a rebuild.
+    the daemons, so an equal or forward package change can reconcile in place
+    and never proposes a rebuild. A declaration below the installed build is
+    refused: Bootwright does not perform a Ceph software downgrade.
 
 !!! note "Cross-field rules"
     - `ceph.config` **rejects** `public_network` and `cluster_network` keys in
@@ -196,7 +203,7 @@ Distribution requirements:
 | --- | --- |
 | `oss` | Community package and image sources; `entitlementRef` must be empty; `community.mirror` may override `download.ceph.com`. |
 | `redhat` | `entitlementRef` resolves to `redhat-ceph`. |
-| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. `ibm.callHome` is required. |
+| `ibm` | `entitlementRef` resolves to `ibm-storage-ceph` with accepted license terms; the RHEL subscription is named by the nodes' `MachineInstallProfile.spec.subscription` or the cluster `osSubscriptionRef`. `packageVersion`, `image.version`, and `ibm.callHome` are required. |
 
 ### Version compatibility is yours, not Bootwright's
 
@@ -214,21 +221,33 @@ each node's own RHEL major filling the repo templates at run time. Declare
 `release: "9.9.2.0"` the day IBM ships it and it installs, with no Bootwright
 update and no warning.
 
-The two build pins work the same way: `ceph.packageVersion` and
-`ceph.image.version` are the coordinates from your vendor's release-to-build
-table, checked neither against `ceph.release` nor against each other. Pin them
-together to make an install reproducible on both axes — the `cephadm` RPM on the
-hosts and the container image the daemons run from:
+The two build pins are coordinates from your vendor's release-to-build table.
+Bootwright carries no static table and does not infer either coordinate from
+`ceph.release`. IBM requires both fields and, before cluster work, compares the
+native version reported by the installed `cephadm` with `ceph --version` inside
+the exact declared image. That proves host/image parity without claiming that
+either build is certified for the authored product release or node OS:
 
 ```yaml
 spec:
   ceph:
     distribution: ibm
-    release: "9.9.1.0"
-    packageVersion: "19.2.1-245.el9cp"
+    release: "9.9.0.3"
+    packageVersion: "20.1.0-221.el9cp"
     image:
-      version: "9.9.1.0-123"
+      version: "v9.0-20201"
 ```
+
+Bootwright's IBM path installs the versioned native `cephadm` RPM directly; it
+does not invoke the `cephadm-ansible` preflight collection or install host
+`ceph-common`. IBM's stock preflight instead points at a moving major-stream
+repository and requests unversioned packages: its default `state: present`
+retains an already-installed package but resolves the newest available candidate
+on a clean host, while `upgrade_ceph_packages: true` requests `latest`. To retain
+an exact stock-preflight build, expose only that build and its dependency closure
+through a frozen custom repository or Satellite content view and use IBM's
+[disconnected preflight procedure](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook-disconnected)
+with `ceph_origin=custom` / `custom_repo_url`.
 
 Two things are still checked, and neither is a version claim. A Ceph node's
 `MachineInstallProfile` must declare `family: rhel`, because the subscription-backed
@@ -1038,6 +1057,14 @@ spec:
 ```
 
 ### Data Foundation
+
+!!! warning "Compatibility is a vendor decision"
+    Bootwright validates and applies the external-mode wiring; it does not
+    certify a Data Foundation and Ceph release pairing. Check the exact consumer
+    and external Ceph versions in Red Hat's authenticated
+    [ODF Supportability and Interoperability Checker](https://access.redhat.com/labs/odfsi/).
+    A public advisory that happens to share a Ceph base version is not evidence
+    that the external pairing is supported.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |

@@ -97,10 +97,10 @@ my-ceph-lab/
     networkconfigs/ceph-net.yaml                     NetworkConfig: 192.168.140.0/24, static IPs
     components/lab-dns.yaml                           InfraComponent: dnsmasq resolver + forwarders
     entitlements/{rhel,ibm-storage-ceph}.yaml         Entitlements: RHEL subscription + IBM Storage Ceph
-    images/rhel-9-x86-64-dvd.yaml                    MachineImage: RHEL 9.8 DVD (local-media)
+    images/rhel-9-x86-64-dvd.yaml                    MachineImage: RHEL 9.7 DVD (local-media)
     profiles/rhel-9-ceph-node.yaml                   MachineInstallProfile: Anaconda RHEL install
   clusters/storage/ceph-ibm/
-    cluster.yaml                                     StorageCluster: distribution ibm, release 9.9.1.0
+    cluster.yaml                                     StorageCluster: IBM 9.9.0.3, exact package and image builds
     nodes/{ceph-1,ceph-2,ceph-3}.yaml                Machines: ceph-1, ceph-2 (full), ceph-3 (mon)
     placement-policy.yaml                            StoragePlacementPolicy: size 2 / minSize 2
     pools/{rbd,cephfs-data,cephfs-metadata,rgw}.yaml StoragePools
@@ -197,13 +197,13 @@ These drive the managed RHEL install — the part that distinguishes this lab fr
 the agent-installed OpenShift SNO lab.
 
 - `MachineImage` `rhel-9-x86-64-dvd`: a full DVD whose
-  `bootMedia: local-media:rhel-9.8-x86_64-dvd.iso` resolves to the managed media
+  `bootMedia: local-media:rhel-9.7-x86_64-dvd.iso` resolves to the managed media
   store (you stage the ISO with `bootwright media add` below). The install
   profile omits `installer.anaconda.packageSource`, so Anaconda installs from
   the DVD via `cdrom`.
 - `MachineInstallProfile` `rhel-9-ceph-node`: the Anaconda install
   (`installer.anaconda.imageRef: rhel-9-x86-64-dvd`) for
-  `os.family: rhel`, `version: "9.8"`. Its `customizations` disable SSH password
+  `os.family: rhel`, `version: "9.7"`. Its `customizations` disable SSH password
   authentication (`ssh.passwordAuthentication: false`) — the install itself
   creates the `bootwright` account and authorizes
   `Environment.spec.machineAccess.keyRef` for it — wipe and lay down the root
@@ -231,8 +231,9 @@ resolvers. It also publishes the RGW S3 endpoint
 
 The Ceph install intent. `StorageCluster` `ceph-ibm` is `type: ceph`,
 `management: managed` (bootwright installs and owns it via cephadm). Its `spec.ceph`
-block sets `distribution: ibm`, `release: "9.9.1.0"`, `ibm.callHome: disabled`,
-`entitlementRef: ibm-storage-ceph`,
+block sets `distribution: ibm`, `release: "9.9.0.3"`,
+`packageVersion: "20.1.0-221.el9cp"`, `image.version: "v9.0-20201"`,
+`ibm.callHome: disabled`, `entitlementRef: ibm-storage-ceph`,
 FIPS (`security.fips.enabled: true`), the cephadm SSH address and bootstrap node
 (`node-01`), the public/cluster networks, the HA dashboard
 (`mgmtGateway` → mgmt-gateway with a `keepalive_only` ingress VIP on `.81`), and
@@ -265,8 +266,10 @@ environment differs.
 | `infra/networkconfigs/ceph-net.yaml` | `spec.machineNetwork[].cidr` | The machine network CIDR (default `192.168.140.0/24`). |
 | `clusters/storage/ceph-ibm/nodes/*.yaml` | each `Machine` `spec.addresses` (`ssh`) | The node IPs (defaults `.21`, `.22`, `.23`). |
 | `infra/images/rhel-9-x86-64-dvd.yaml` | `spec.bootMedia` | The staged RHEL DVD (`local-media:<your-iso-name>`). |
-| `infra/profiles/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.8`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
-| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.1.0`). Any product version installs; its leading component selects the stream. |
+| `infra/profiles/rhel-9-ceph-node.yaml` | `spec.os.version` | The RHEL release on the DVD (default `9.7`). Bootwright does not check it against the Ceph release; consult the vendor compatibility guide. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.release` | The IBM Storage Ceph VRMF product version (`9.9.0.3`). Its leading component selects the stream. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.packageVersion` | The full IBM Storage Package Version from the same [release-table](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions) row (`20.1.0-221.el9cp`), including the RPM release component and not the Cephadm Ansible Package Version. Required for IBM. |
+| `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.image.version` | The IBM daemon image tag from that row (`v9.0-20201`). Required for IBM. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.ibm.callHome` | `disabled` keeps outbound Call Home off; choose `enabled` only when intended. |
 | `clusters/storage/ceph-ibm/cluster.yaml` | `spec.ceph.networks` and `mgmtGateway.ingress.address` | The dashboard VIP and the public/cluster CIDRs, if you changed the network. |
 | `clusters/storage/ceph-ibm/object-gateways/rgw.yaml` | `spec.public.dnsLabel` and `spec.ceph.ingresses[].address` | The RGW endpoint label and ingress VIP, if you changed the network. |
@@ -280,7 +283,24 @@ If you change the `192.168.140.*` network, update every place it appears:
     Two blocks request FIPS: `spec.ceph.security.fips.enabled` in
     `cluster.yaml` and `customizations.security.fips.enabled` in
     `infra/profiles/rhel-9-ceph-node.yaml`. Remove both to build the cluster without
-    FIPS — bootwright requires every Ceph node's install profile to agree.
+    FIPS — bootwright requires every Ceph node's install profile to agree. For
+    an IBM FIPS deployment, obtain the FIPS-enabled product build through IBM;
+    Bootwright's kernel check does not establish build provenance.
+
+!!! note "Bootwright uses native cephadm"
+    Bootwright installs the exact declared `cephadm` RPM directly, verifies its
+    installed coordinate, and checks that its native Ceph version equals the
+    version reported inside the declared image before bootstrap. It refuses a
+    package downgrade.
+
+    IBM's stock `cephadm-ansible` preflight is a different installation path.
+    Its moving major-stream repository plus unversioned `state: present`
+    resolves the newest available build on a clean host (and retains an existing
+    package); `upgrade_ceph_packages: true` requests `latest`. Use a frozen
+    custom repository or Satellite content view containing the exact package
+    closure with IBM's `ceph_origin=custom` / `custom_repo_url` procedure when a
+    stock-preflight install must retain this build; follow IBM's
+    [disconnected preflight procedure](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-running-preflight-playbook-disconnected).
 
 ## Prerequisites Unique To This Lab
 
@@ -293,12 +313,12 @@ below.
 
 ### Stage the RHEL DVD ISO
 
-Download `rhel-9.8-x86_64-dvd.iso` from Red Hat, then stage it into the managed
+Download `rhel-9.7-x86_64-dvd.iso` from Red Hat, then stage it into the managed
 media store. The `MachineImage` references it as
-`local-media:rhel-9.8-x86_64-dvd.iso`, so the media name must match:
+`local-media:rhel-9.7-x86_64-dvd.iso`, so the media name must match:
 
 ```bash
-bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
+bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
 bootwright media list
 ```
 
@@ -385,7 +405,7 @@ bootwright status --watch
 
 `apply` runs in two stages. **infra** defines the NAT'd libvirt network, brings
 up the dnsmasq resolver, creates the three VMs with emulated Redfish BMCs,
-installs RHEL 9.8 on each via the Anaconda kickstart, and — once the OS is in
+installs RHEL 9.7 on each via the Anaconda kickstart, and — once the OS is in
 place — registers every node with RHSM (the `registration.ceph-ibm` machines
 task). **clusters** then, on every node, enables the RHEL and IBM Storage Ceph
 repos, accepts the IBM license, logs in to `cp.icr.io`, installs cephadm,

@@ -336,7 +336,9 @@ func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
 				}}
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionIBM
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
-				state.StorageClusters[0].Spec.Ceph.Release = "9.9.1.0"
+				state.StorageClusters[0].Spec.Ceph.Release = "9.9.0.3"
+				state.StorageClusters[0].Spec.Ceph.PackageVersion = "20.1.0-221.el9cp"
+				state.StorageClusters[0].Spec.Ceph.Image = &v1alpha1.StorageCephImageSpec{Version: "v9.0-20201"}
 				state.StorageClusters[0].Spec.Ceph.IBM = &v1alpha1.StorageCephIBMSpec{CallHome: v1alpha1.StorageCephIBMCallHomeDisabled}
 			},
 		},

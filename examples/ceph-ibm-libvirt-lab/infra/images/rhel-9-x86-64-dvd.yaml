@@ -3,4 +3,4 @@ kind: MachineImage
 metadata:
   name: rhel-9-x86-64-dvd
 spec:
-  bootMedia: local-media:rhel-9.8-x86_64-dvd.iso
+  bootMedia: local-media:rhel-9.7-x86_64-dvd.iso

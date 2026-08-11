@@ -165,8 +165,31 @@ func validateStorageCephDistributionFamily(prefix string, cluster v1alpha1.Stora
 	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), cluster.Spec.Ceph.Release)...)
 	errs = append(errs, validateStorageCephPackageVersion(prefix, cluster)...)
 	errs = append(errs, validateStorageCephImage(prefix+".image", cluster, state)...)
+	errs = append(errs, validateStorageCephIBMArtifactPins(prefix, cluster)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephIBM(prefix+".ibm", cluster, state)...)
+	return errs
+}
+
+func validateStorageCephIBMArtifactPins(prefix string, cluster v1alpha1.StorageCluster) []string {
+	if storageCephDistribution(cluster) != v1alpha1.StorageCephDistributionIBM {
+		return nil
+	}
+	var errs []string
+	if cluster.Spec.Ceph.PackageVersion == "" {
+		errs = append(errs, prefix+".packageVersion is required when distribution=ibm; IBM's product-stream repository carries several releases, so an unversioned cephadm install can resolve independently of .release")
+	} else {
+		version := cluster.Spec.Ceph.PackageVersion
+		if index := strings.IndexByte(version, ':'); index >= 0 {
+			version = version[index+1:]
+		}
+		if !strings.Contains(version, "-") {
+			errs = append(errs, prefix+".packageVersion must include the RPM release component when distribution=ibm, such as 20.1.0-221.el9cp; the full IBM Storage Package Version is required to prove the installed native build")
+		}
+	}
+	if v1alpha1.StorageCephImageVersion(cluster.Spec.Ceph) == "" {
+		errs = append(errs, prefix+".image.version is required when distribution=ibm; the IBM daemon build is an independent coordinate in the vendor release table and a floating image does not select .release")
+	}
 	return errs
 }
 

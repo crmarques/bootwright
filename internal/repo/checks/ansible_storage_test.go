@@ -1709,6 +1709,41 @@ func TestStorageCephContainerRuntimeIsProvenBeforeAnyClusterWork(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(assertion), "bootwright_ceph_runtime_ready") {
 		t.Fatalf("the gate must assert on the runtime as this apply leaves the node, not on a probe taken before it changed the cgroup manager selection: accepting the earlier probe passes a node whose remediation this same task removed moments later. Got %v", assertion)
 	}
+	cephadmVersionIdx := findAnsibleTask(t, tasks, "Read the installed IBM cephadm version for package and image parity")
+	imageVersionIdx := findAnsibleTask(t, tasks, "Read the Ceph version from the declared IBM daemon image")
+	resolveVersionsIdx := findAnsibleTask(t, tasks, "Resolve IBM cephadm and daemon image versions")
+	matchVersionsIdx := findAnsibleTask(t, tasks, "Require matching IBM cephadm and daemon image versions")
+	if !(assertIdx < cephadmVersionIdx && cephadmVersionIdx < imageVersionIdx && imageVersionIdx < resolveVersionsIdx && resolveVersionsIdx < matchVersionsIdx) {
+		t.Fatalf("IBM package/image parity must be checked after the runtime is proven and before cluster work (runtime=%d cephadm=%d image=%d resolve=%d match=%d)", assertIdx, cephadmVersionIdx, imageVersionIdx, resolveVersionsIdx, matchVersionsIdx)
+	}
+	if got := fmt.Sprint(tasks[cephadmVersionIdx]); !strings.Contains(got, "cephadm") || !strings.Contains(got, "version") {
+		t.Fatalf("the IBM host-tool probe must read the installed native cephadm version, got %v", tasks[cephadmVersionIdx])
+	}
+	if got := fmt.Sprint(tasks[imageVersionIdx]); !strings.Contains(got, "--entrypoint ceph") || !strings.Contains(got, "--version") || !strings.Contains(got, "bootwright_ceph_bootstrap_image") {
+		t.Fatalf("the IBM image version probe must execute ceph --version inside the exact declared image, got %v", tasks[imageVersionIdx])
+	}
+	matchVersions, ok := tasks[matchVersionsIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("the IBM parity gate must be an assertion, got %v", tasks[matchVersionsIdx])
+	}
+	comparisons := fmt.Sprint(matchVersions["that"])
+	for _, want := range []string{
+		"bootwright_ceph_ibm_cephadm_version_value == bootwright_ceph_ibm_declared_version_value",
+		"bootwright_ceph_ibm_image_version_value == bootwright_ceph_ibm_declared_version_value",
+		"bootwright_ceph_ibm_cephadm_version_value == bootwright_ceph_ibm_image_version_value",
+	} {
+		if !strings.Contains(comparisons, want) {
+			t.Fatalf("the IBM parity gate must compare the exact declared package, native cephadm, and image versions (missing %q), got %v", want, tasks[matchVersionsIdx])
+		}
+	}
+	for _, idx := range []int{cephadmVersionIdx, imageVersionIdx, resolveVersionsIdx, matchVersionsIdx} {
+		if got := fmt.Sprint(tasks[idx]["when"]); !strings.Contains(got, "bootwright_ceph_provider_name == 'ibm'") {
+			t.Fatalf("the IBM-specific version proof must not affect other distributions, got when=%v", tasks[idx]["when"])
+		}
+	}
+	if got := fmt.Sprint(tasks[cephadmVersionIdx]["when"]); strings.Contains(got, "bootwright_task_storage_skip_prereqs") {
+		t.Fatalf("the IBM host-tool probe must run on the split seed pass after package prerequisites were skipped, got when=%v", tasks[cephadmVersionIdx]["when"])
+	}
 }
 
 func TestStorageCephMonReadinessNamesAContainerRuntimeFault(t *testing.T) {
@@ -3828,16 +3863,28 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	pinnedInstall := installTasks[pinnedInstallIdx]
 	pinnedBody, ok := pinnedInstall["ansible.builtin.dnf"].(map[string]any)
 	if !ok {
-		t.Fatalf("the pinned cephadm install must use ansible.builtin.dnf; ansible.builtin.package cannot downgrade, so a pin below the installed build would fail on re-apply, got %v", pinnedInstall)
+		t.Fatalf("the pinned cephadm install must use ansible.builtin.dnf so the rendered RPM version-release is passed verbatim, got %v", pinnedInstall)
 	}
-	if pinnedBody["allow_downgrade"] != true {
-		t.Fatalf("the pinned cephadm install must set allow_downgrade so a pin below the installed build converges, got %v", pinnedBody)
+	if pinnedBody["allow_downgrade"] != false {
+		t.Fatalf("the pinned cephadm install must explicitly refuse software downgrades; IBM supports upgrades but not in-place downgrades, got %v", pinnedBody)
 	}
 	if _, ok := pinnedInstall["failed_when"]; ok {
 		t.Fatalf("the pinned cephadm install must fail closed; an unavailable pinned build is an error, not a silent float back to whatever the repository ships, got %v", pinnedInstall)
 	}
 	if got := fmt.Sprint(pinnedBody["name"]); !strings.Contains(got, "cephadmPackageSpec") || strings.Contains(got, "~") || strings.Contains(got, "join") {
 		t.Fatalf("the pinned install name must be the rendered cephadmPackageSpec verbatim, with no Jinja string composition, got %v", got)
+	}
+	readCoordinatesIdx := findAnsibleTask(t, installTasks, "Read installed cephadm package coordinates after pinning")
+	requireCoordinatesIdx := findAnsibleTask(t, installTasks, "Require the installed cephadm package to equal the declared build")
+	if !(pinnedInstallIdx < readCoordinatesIdx && readCoordinatesIdx < requireCoordinatesIdx && requireCoordinatesIdx < recordCephadmIdx) {
+		t.Fatalf("the exact installed package must be verified before ownership is recorded (install=%d read=%d require=%d record=%d)", pinnedInstallIdx, readCoordinatesIdx, requireCoordinatesIdx, recordCephadmIdx)
+	}
+	if got := fmt.Sprint(installTasks[readCoordinatesIdx]["ansible.builtin.command"]); !strings.Contains(got, "EPOCHNUM") || !strings.Contains(got, "VERSION") || !strings.Contains(got, "RELEASE") {
+		t.Fatalf("the installed-coordinate probe must accept the RPM forms dnf accepts, got %v", installTasks[readCoordinatesIdx])
+	}
+	requireCoordinates, ok := installTasks[requireCoordinatesIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(requireCoordinates["that"]), "cephadmPackageSpec") || !strings.Contains(fmt.Sprint(requireCoordinates["fail_msg"]), "refuses to downgrade") {
+		t.Fatalf("the installed-coordinate gate must fail closed on a mismatch and explain the no-downgrade boundary, got %v", installTasks[requireCoordinatesIdx])
 	}
 	recordName := fmt.Sprint(installTasks[recordCephadmIdx]["vars"])
 	if !strings.Contains(recordName, "cephadmPackage") || strings.Contains(recordName, "cephadmPackageSpec") {
