@@ -68,7 +68,13 @@ func AllReferencingClustersInstalled(clustersDir string, clusters []string) (boo
 		if err != nil {
 			return false, err
 		}
-		if !found || record.Status != workflow.ClusterInstallStatusInstalled {
+		if !found {
+			return false, nil
+		}
+		if err := workflow.ValidateClusterInstallRecord(clustersDir, cluster, record); err != nil {
+			return false, err
+		}
+		if record.Status != workflow.ClusterInstallStatusInstalled {
 			return false, nil
 		}
 	}

@@ -133,14 +133,14 @@ func clusterInstallHashParts(contextName string, state v1alpha1.State, clusterNa
 	return inputs, secretInputs, nil
 }
 
-func installInputsMatch(record ClusterInstallRecord, desiredHash, structuralHash string) bool {
+func installInputsMatch(record ClusterInstallRecord, _ string, structuralHash string) bool {
 	if record.HashSchema != ConvergeHashSchema {
 		return false
 	}
-	if record.StructuralHash != "" && structuralHash != "" {
-		return record.StructuralHash == structuralHash
+	if record.StructuralHash == "" || structuralHash == "" {
+		return false
 	}
-	return record.DesiredHash == desiredHash
+	return record.StructuralHash == structuralHash
 }
 
 func clusterInstallHashes(contextName string, state v1alpha1.State, clusterName, secretsDir string) (hash, structuralHash string, err error) {
@@ -180,11 +180,14 @@ func installWaitTask(tasks []ApplyTask, cluster string) *ApplyTask {
 	return nil
 }
 
-func clusterInstallRecordInputsMatch(runsDir string, record ClusterInstallRecord, cluster string, task *ApplyTask, desiredHash, structuralHash string, input []byte) (bool, bool, error) {
+func clusterInstallRecordInputsMatch(clustersDir, runsDir string, record ClusterInstallRecord, cluster string, task *ApplyTask, desiredHash, structuralHash string, input []byte) (bool, bool, error) {
+	if err := validateClusterInstallRecordState(clustersDir, cluster, record); err != nil {
+		return false, false, err
+	}
 	if record.HashSchema == ConvergeHashSchema {
 		return installInputsMatch(record, desiredHash, structuralHash), false, nil
 	}
-	if record.HashSchema != ConvergeHashSchema-1 || record.Status != ClusterInstallStatusInstalled || task == nil || record.Cluster != cluster {
+	if record.HashSchema != ConvergeHashSchema-1 || record.Status != ClusterInstallStatusInstalled || task == nil {
 		return false, false, nil
 	}
 	matched, err := successfulInputSnapshotMatches(runsDir, record.RunID, clusterInstallSnapshotResourceID(cluster), task.Entry.ID, task.Entry.Kind, TaskStatusOK, record.HashSchema, input)

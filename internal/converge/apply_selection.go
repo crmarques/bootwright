@@ -192,6 +192,9 @@ func kubeVirtParentReady(state v1alpha1.State, clustersDir string, parent string
 	if !found || record.Status != workflow.ClusterInstallStatusInstalled || record.Phase != workflow.ClusterInstallPhaseComplete {
 		return false, nil
 	}
+	if err := workflow.ValidateClusterInstallRecord(clustersDir, parent, record); err != nil {
+		return false, err
+	}
 	kubeconfigPath := filepath.Join(clustersDir, parent, "secrets", "kubeconfig")
 	info, err := os.Stat(kubeconfigPath)
 	if err != nil || info.IsDir() {

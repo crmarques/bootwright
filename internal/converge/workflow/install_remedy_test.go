@@ -91,21 +91,38 @@ func TestInstallWorkflowSourceNeverEmbedsStateChangeArgv(t *testing.T) {
 
 func TestUnreadableLegacyInstallEvidenceCarriesTypedRebuild(t *testing.T) {
 	const cluster = "ocp"
+	now := time.Now().UTC()
 	record := ClusterInstallRecord{
-		Cluster:    cluster,
-		HashSchema: ConvergeHashSchema - 1,
-		Status:     ClusterInstallStatusInstalled,
-		Phase:      ClusterInstallPhaseComplete,
-		RunID:      "missing-run",
+		Cluster:        cluster,
+		DesiredHash:    "sha256:" + strings.Repeat("a", 64),
+		StructuralHash: "sha256:" + strings.Repeat("b", 64),
+		HashSchema:     ConvergeHashSchema - 1,
+		Status:         ClusterInstallStatusInstalled,
+		Phase:          ClusterInstallPhaseComplete,
+		RunID:          "missing-run",
+		StartedAt:      now,
+		UpdatedAt:      now,
+		InstalledAt:    &now,
 	}
 	task := &ApplyTask{Entry: TaskLedgerEntry{ID: "wait.ocp", Kind: ApplyTaskKindInstallWait, Cluster: cluster}}
-	_, _, err := clusterInstallRecordInputsMatch(t.TempDir(), record, cluster, task, "desired", "structural", []byte("input"))
+	_, _, err := clusterInstallRecordInputsMatch(t.TempDir(), t.TempDir(), record, cluster, task, "desired", "structural", []byte("input"))
 	assertClusterInstallRemedy(t, err, remedy.ActionRebuildCluster, cluster)
 	var stateErr *ClusterInstallStateError
 	if !errors.As(err, &stateErr) || stateErr.Condition != ClusterInstallConditionLegacyInstallEvidenceUnreadable || !errors.Is(err, stateErr.Cause) {
 		t.Fatalf("legacy evidence error lost typed condition or cause: %#v", stateErr)
 	}
 	assertInstallErrorHasNoArgv(t, err)
+}
+
+func TestCurrentInstallMatcherRejectsUnboundRecord(t *testing.T) {
+	const cluster = "ocp"
+	record := syntheticClusterInstallRecord("other", ClusterInstallStatusInstalled, ClusterInstallPhaseComplete, time.Now().UTC())
+	_, _, err := clusterInstallRecordInputsMatch(t.TempDir(), t.TempDir(), record, cluster, nil, record.DesiredHash, record.StructuralHash, nil)
+	var stateErr *ClusterInstallStateError
+	if !errors.As(err, &stateErr) || stateErr.Condition != ClusterInstallConditionInvalidRecordEvidence || !strings.Contains(err.Error(), `record cluster is "other", want "ocp"`) {
+		t.Fatalf("current matcher accepted unbound record: %#v", err)
+	}
+	assertClusterInstallRemedy(t, err, remedy.ActionRebuildCluster, cluster)
 }
 
 func TestMissingPostSuccessInstallRecordCarriesTypedRebuild(t *testing.T) {

@@ -91,17 +91,27 @@ same boot-proven set, unioned with released-substrate clusters (a destroyed
 cluster's rebuild legitimately faces its own old OS), feeds
 `bootwright_ocp_reinstall_clusters`, the occupancy-guard opt-out list.
 
-**Constraint (status and phase are one lifecycle state):** JSON decoding proves
-only that an install record is syntactically readable. Before install planning,
-`validateClusterInstallRecordState` requires `installing` or `failed` with an
-empty or named nonterminal phase, or `installed` or `destroyed` with `complete`.
-An unknown value or contradictory pair cannot select a resume boundary and
-returns typed `rebuild-cluster` remedy data before desired-hash work, an
-availability probe, or task-plan mutation. The explicit rebuild preview treats
-that invalid record as a node-disk-wiping reinstall candidate; only its resulting
-acknowledgement lets scheduler preparation retain the full install plan. This
-keeps the exact remedy executable without letting ordinary reconcile silently
-fall through the status switch and reinstall a cluster.
+**Constraint (an install record is bound writer evidence):** JSON decoding proves
+only that an install record is syntactically readable. Before install planning or
+any artifact-server, KubeVirt-readiness, boot-proof, or installed-skip consumer,
+`ValidateClusterInstallRecord` binds the record's `cluster` to the cluster named
+by its path. `installing` or `failed` requires an empty or named nonterminal
+phase and the current hash schema; `installed` requires `complete` and the
+current or immediately preceding schema; `destroyed`/`complete` is an
+identity-only released sentinel. Every non-released record requires canonical
+desired and structural SHA-256 values, a non-empty run ID, start and update
+times, state-consistent `InstalledAt`, and ordered terminal times. Immediately
+preceding installed evidence still has to pass the immutable successful-run
+snapshot rebaseline gate. Missing ISO publish time and missing post-boot start
+time are deferred to their narrower recovery gates. An unknown lifecycle value,
+contradictory pair, cross-cluster copy, unsupported schema, malformed hash, or
+missing or contradictory writer field returns typed `rebuild-cluster` remedy
+data before desired-hash work, an availability probe, or task-plan mutation. The
+explicit rebuild preview treats that invalid record as a node-disk-wiping
+reinstall candidate; only its resulting acknowledgement lets scheduler
+preparation retain the full install plan. This keeps the exact remedy executable
+without letting ordinary reconcile silently fall through the status switch or a
+future consumer trust a current-schema record merely because it decoded.
 
 **Constraint (bounded resume and installer-version evidence):** ISO creation
 records the exact installer version and clears stale version evidence before a
@@ -112,7 +122,7 @@ embedded bootstrap certificates are fresh, so scheduler preparation returns a
 typed cluster-scoped ISO-regeneration refusal before it writes a run ledger or
 creates a runner. The bootstrap wait records both its running and completed
 phase. Post-boot retries use the original `StartedAt` and may start only inside
-the three-hour ceiling; a missing time or an expired ceiling is a pre-mutation
+the three-hour ceiling; a missing, future, or expired time is a pre-mutation
 refusal with typed, scoped destroy-and-reapply remedy data. A missing or
 mismatched installer version before boot requires ISO regeneration. Once nodes
 may have booted, Ansible warns and completes the in-flight install; the successful

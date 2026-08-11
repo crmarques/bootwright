@@ -281,6 +281,7 @@ func TestRunApplyTaskGraphRefusesStaleAgentISOBeforeRunnerOrLedger(t *testing.T)
 	record.Status = ClusterInstallStatusInstalling
 	record.Phase = ClusterInstallPhaseISOCreated
 	record.UpdatedAt = now.Add(-publishedAgentISOFreshWindow - time.Minute)
+	record.StartedAt = record.UpdatedAt.Add(-time.Minute)
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}

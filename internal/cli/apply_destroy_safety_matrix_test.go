@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -1917,6 +1918,31 @@ func safetyStartingStateCases() []safetyCase {
 			reexecuteHermeticRemedy(t, output, "unsupported install record lifecycle state", false)
 		},
 	}, {
+		name: "apply/install record copied from another cluster cannot authorize a skip",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalled, workflow.ClusterInstallPhaseComplete, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
+			record, found, err := workflow.LoadClusterInstallRecord(ctx.ClustersDir, safetyAdvancedContainerOCP)
+			if err != nil || !found {
+				t.Fatalf("load install record: found=%v err=%v", found, err)
+			}
+			record.Cluster = "copied-source"
+			data, err := json.MarshalIndent(record, "", "  ")
+			if err != nil {
+				t.Fatalf("marshal copied install record: %v", err)
+			}
+			if err := os.WriteFile(workflow.ClusterInstallRecordPath(ctx.ClustersDir, safetyAdvancedContainerOCP), append(data, '\n'), 0o600); err != nil {
+				t.Fatalf("write copied install record: %v", err)
+			}
+		},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRebuildCluster,
+		want:        []string{"invalid install record identity or writer evidence", `record cluster is "copied-source", want "` + safetyAdvancedContainerOCP + `"`, "refuses before any mutation", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			reexecuteHermeticRemedy(t, output, "invalid install record identity or writer evidence", false)
+		},
+	}, {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")
@@ -2641,11 +2667,14 @@ func seedInstalledCluster(t *testing.T, ctx workspace.Context, cluster string) {
 	now := time.Now().UTC()
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
 		Cluster:          cluster,
-		DesiredHash:      "sha256:seeded",
+		DesiredHash:      "sha256:" + strings.Repeat("a", 64),
+		StructuralHash:   "sha256:" + strings.Repeat("b", 64),
 		HashSchema:       workflow.ConvergeHashSchema,
 		Status:           workflow.ClusterInstallStatusInstalled,
 		Phase:            workflow.ClusterInstallPhaseComplete,
+		RunID:            "seeded-run",
 		InstallerVersion: safetyDeclaredInstallerVersion(t, ctx, cluster),
+		StartedAt:        now,
 		UpdatedAt:        now,
 		InstalledAt:      &now,
 	}); err != nil {
@@ -2672,7 +2701,9 @@ func seedMatchingInstalledCluster(t *testing.T, ctx workspace.Context, cluster s
 		HashSchema:       workflow.ConvergeHashSchema,
 		Status:           workflow.ClusterInstallStatusInstalled,
 		Phase:            workflow.ClusterInstallPhaseComplete,
+		RunID:            "seeded-run",
 		InstallerVersion: safetyDeclaredInstallerVersion(t, ctx, cluster),
+		StartedAt:        now,
 		UpdatedAt:        now,
 		InstalledAt:      &now,
 	}); err != nil {
@@ -2699,6 +2730,7 @@ func seedClusterInstallLifecycle(t *testing.T, ctx workspace.Context, cluster st
 		HashSchema:       workflow.ConvergeHashSchema,
 		Status:           status,
 		Phase:            phase,
+		RunID:            "seeded-run",
 		InstallerVersion: installerVersion,
 		StartedAt:        startedAt.UTC(),
 		UpdatedAt:        now,

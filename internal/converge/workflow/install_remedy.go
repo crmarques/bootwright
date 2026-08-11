@@ -26,6 +26,7 @@ const (
 	ClusterInstallConditionUncertainBoot                   ClusterInstallCondition = "uncertain-boot"
 	ClusterInstallConditionUnrecognizedPhase               ClusterInstallCondition = "unrecognized-phase"
 	ClusterInstallConditionInvalidRecordState              ClusterInstallCondition = "invalid-record-state"
+	ClusterInstallConditionInvalidRecordEvidence           ClusterInstallCondition = "invalid-record-evidence"
 	ClusterInstallConditionMissingPostSuccessRecord        ClusterInstallCondition = "missing-post-success-record"
 )
 
@@ -58,15 +59,19 @@ func (e *ClusterInstallStateError) Remedy() remedy.Request {
 }
 
 type ClusterInstallResumeExpiredError struct {
-	Cluster   string
-	Phase     ClusterInstallPhase
-	StartedAt time.Time
-	Deadline  time.Time
+	Cluster    string
+	Phase      ClusterInstallPhase
+	StartedAt  time.Time
+	ObservedAt time.Time
+	Deadline   time.Time
 }
 
 func (e *ClusterInstallResumeExpiredError) Error() string {
 	if e.StartedAt.IsZero() {
 		return fmt.Sprintf("ContainerCluster/%s has incomplete post-boot install state at phase %q with no recorded start time; bootwright cannot prove that another automatic wait is still inside the %s resume ceiling and refuses before any mutation", e.Cluster, e.Phase, ClusterInstallResumeCeiling)
+	}
+	if !e.ObservedAt.IsZero() && e.StartedAt.After(e.ObservedAt) {
+		return fmt.Sprintf("ContainerCluster/%s has incomplete post-boot install state at phase %q with start time %s after the current observation time %s; bootwright cannot prove that another automatic wait is inside the %s resume ceiling and refuses before any mutation", e.Cluster, e.Phase, e.StartedAt.UTC().Format(time.RFC3339), e.ObservedAt.UTC().Format(time.RFC3339), ClusterInstallResumeCeiling)
 	}
 	return fmt.Sprintf("ContainerCluster/%s has incomplete post-boot install state at phase %q from %s; its automatic resume ceiling ended at %s after %s, so bootwright refuses another wait before any mutation", e.Cluster, e.Phase, e.StartedAt.UTC().Format(time.RFC3339), e.Deadline.UTC().Format(time.RFC3339), ClusterInstallResumeCeiling)
 }

@@ -16,14 +16,6 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 	tasks := mustPlanApplyTasks(applyContainerClusterTarget(), state)
 	now := time.Now()
 
-	matchingHash := func(t *testing.T, secretsDir string) string {
-		t.Helper()
-		hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
-		if err != nil {
-			t.Fatalf("clusterInstallDesiredHash: %v", err)
-		}
-		return hash
-	}
 	writeKubeconfig := func(t *testing.T, clustersDir string) {
 		t.Helper()
 		writeEncryptedClusterKubeconfig(t, clustersDir, cluster)
@@ -37,11 +29,12 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 		{
 			name: "installed record not available",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
-				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
-					Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-					InstallerVersion: clusterInstallDeclaredVersion(state, cluster), UpdatedAt: now.UTC(),
-				}); err != nil {
+				record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+				record.Status = ClusterInstallStatusInstalled
+				record.Phase = ClusterInstallPhaseComplete
+				installedAt := now.UTC()
+				record.InstalledAt = &installedAt
+				if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 					t.Fatalf("SaveClusterInstallRecord: %v", err)
 				}
 				writeKubeconfig(t, clustersDir)
@@ -58,11 +51,10 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 		{
 			name: "booting phase is uncertain",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
-				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
-					Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseBooting,
-					UpdatedAt: now.UTC(),
-				}); err != nil {
+				record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+				record.Status = ClusterInstallStatusInstalling
+				record.Phase = ClusterInstallPhaseBooting
+				if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 					t.Fatalf("SaveClusterInstallRecord: %v", err)
 				}
 			},
@@ -71,11 +63,10 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 		{
 			name: "unrecognized phase",
 			seed: func(t *testing.T, clustersDir, secretsDir string) {
-				if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-					Cluster: cluster, DesiredHash: matchingHash(t, secretsDir), HashSchema: ConvergeHashSchema,
-					Status: ClusterInstallStatusInstalling, Phase: "bogus-phase",
-					UpdatedAt: now.UTC(),
-				}); err != nil {
+				record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+				record.Status = ClusterInstallStatusInstalling
+				record.Phase = "bogus-phase"
+				if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 					t.Fatalf("SaveClusterInstallRecord: %v", err)
 				}
 			},

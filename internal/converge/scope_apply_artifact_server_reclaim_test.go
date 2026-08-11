@@ -1,7 +1,10 @@
 package converge
 
 import (
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -65,7 +68,23 @@ func TestSelectArtifactServerReclaims(t *testing.T) {
 
 func saveInstallRecordForTest(t *testing.T, clustersDir, cluster string, status workflow.ClusterInstallStatus) {
 	t.Helper()
-	if err := workflow.SaveClusterInstallRecord(clustersDir, workflow.ClusterInstallRecord{Cluster: cluster, Status: status}); err != nil {
+	now := time.Now().UTC()
+	record := workflow.ClusterInstallRecord{
+		Cluster:        cluster,
+		DesiredHash:    "sha256:" + strings.Repeat("a", 64),
+		StructuralHash: "sha256:" + strings.Repeat("b", 64),
+		HashSchema:     workflow.ConvergeHashSchema,
+		Status:         status,
+		Phase:          workflow.ClusterInstallPhaseCreatingISO,
+		RunID:          "seeded-run",
+		StartedAt:      now,
+		UpdatedAt:      now,
+	}
+	if status == workflow.ClusterInstallStatusInstalled {
+		record.Phase = workflow.ClusterInstallPhaseComplete
+		record.InstalledAt = &now
+	}
+	if err := workflow.SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -86,5 +105,31 @@ func TestAllReferencingClustersInstalled(t *testing.T) {
 	saveInstallRecordForTest(t, dir, "b", workflow.ClusterInstallStatusInstalled)
 	if ok, err := AllReferencingClustersInstalled(dir, []string{"a", "b"}); err != nil || !ok {
 		t.Fatalf("all installed: ok=%v err=%v; want true,nil", ok, err)
+	}
+}
+
+func TestAllReferencingClustersInstalledRejectsUnboundRecord(t *testing.T) {
+	dir := t.TempDir()
+	saveInstallRecordForTest(t, dir, "expected", workflow.ClusterInstallStatusInstalled)
+	record, found, err := workflow.LoadClusterInstallRecord(dir, "expected")
+	if err != nil || !found {
+		t.Fatalf("LoadClusterInstallRecord: found=%v err=%v", found, err)
+	}
+	record.Cluster = "other"
+	dataDir := t.TempDir()
+	if err := workflow.SaveClusterInstallRecord(dataDir, record); err != nil {
+		t.Fatal(err)
+	}
+	source := workflow.ClusterInstallRecordPath(dataDir, "other")
+	destination := workflow.ClusterInstallRecordPath(dir, "expected")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := AllReferencingClustersInstalled(dir, []string{"expected"}); err == nil || ok || !strings.Contains(err.Error(), `record cluster is "other", want "expected"`) {
+		t.Fatalf("unbound record authorized installed state: ok=%v err=%v", ok, err)
 	}
 }

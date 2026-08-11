@@ -47,18 +47,16 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		dir := t.TempDir()
 		clustersDir := filepath.Join(dir, "clusters")
 		secretsDir := writeWorkflowInstallerSecrets(t, dir)
-		if hash == "" {
-			var err error
-			if hash, err = clusterInstallDesiredHashForContext("test", state, cluster, secretsDir); err != nil {
-				t.Fatalf("clusterInstallDesiredHash: %v", err)
-			}
+		record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+		if hash != "" {
+			record.DesiredHash = hash
+			record.StructuralHash = hash
 		}
-		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
-			UpdatedAt:        now.UTC(),
-		}); err != nil {
+		record.Status = ClusterInstallStatusInstalled
+		record.Phase = ClusterInstallPhaseComplete
+		installedAt := now.UTC()
+		record.InstalledAt = &installedAt
+		if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)
@@ -90,7 +88,7 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		}
 	})
 	t.Run("acked drift is rebuilt", func(t *testing.T) {
-		skipped, total := installSkipped(reconcile(t, "sha256:stale", true, []string{cluster}))
+		skipped, total := installSkipped(reconcile(t, "sha256:"+strings.Repeat("0", 64), true, []string{cluster}))
 		if total == 0 || skipped != 0 {
 			t.Fatalf("override over a drifted cluster must rebuild (skip 0 of %d install tasks), skipped %d", total, skipped)
 		}
@@ -105,12 +103,14 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		dir := t.TempDir()
 		clustersDir := filepath.Join(dir, "clusters")
 		secretsDir := writeWorkflowInstallerSecrets(t, dir)
-		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-			Cluster: cluster, DesiredHash: "sha256:stale", HashSchema: ConvergeHashSchema,
-			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
-			UpdatedAt:        now.UTC(),
-		}); err != nil {
+		record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+		record.DesiredHash = "sha256:" + strings.Repeat("0", 64)
+		record.StructuralHash = "sha256:" + strings.Repeat("0", 64)
+		record.Status = ClusterInstallStatusInstalled
+		record.Phase = ClusterInstallPhaseComplete
+		installedAt := now.UTC()
+		record.InstalledAt = &installedAt
+		if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)
@@ -124,20 +124,16 @@ func TestReconcileApplyClusterInstallStateOverride(t *testing.T) {
 		dir := t.TempDir()
 		clustersDir := filepath.Join(dir, "clusters")
 		secretsDir := writeWorkflowInstallerSecrets(t, dir)
-		hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
-		if err != nil {
-			t.Fatalf("clusterInstallDesiredHash: %v", err)
-		}
-		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
-			UpdatedAt:        now.UTC(),
-		}); err != nil {
+		record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+		record.Status = ClusterInstallStatusInstalled
+		record.Phase = ClusterInstallPhaseComplete
+		installedAt := now.UTC()
+		record.InstalledAt = &installedAt
+		if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)
-		_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeRebuild, nil, &fakeClusterAvailabilityChecker{available: false}, now)
+		_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeRebuild, nil, &fakeClusterAvailabilityChecker{available: false}, now)
 		if err == nil || !strings.Contains(err.Error(), "requires the destructive decision to be confirmed again") {
 			t.Fatalf("unacked unavailable reinstall must fail closed, got: %v", err)
 		}
@@ -188,11 +184,12 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 	})
 	t.Run("incomplete booted record is destructive", func(t *testing.T) {
 		clustersDir, secretsDir := seed(t)
-		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-			Cluster: cluster, DesiredHash: "sha256:stale", HashSchema: ConvergeHashSchema,
-			Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseNodesBooted,
-			UpdatedAt: now.UTC(),
-		}); err != nil {
+		record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+		record.DesiredHash = "sha256:" + strings.Repeat("0", 64)
+		record.StructuralHash = "sha256:" + strings.Repeat("0", 64)
+		record.Status = ClusterInstallStatusInstalling
+		record.Phase = ClusterInstallPhaseNodesBooted
+		if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		got, err := OverrideRebuildInstalledClusters(context.Background(), clustersDir, "", "test", secretsDir, state, tasks, &fakeClusterAvailabilityChecker{available: true})
@@ -200,16 +197,12 @@ func TestOverrideRebuildInstalledClustersDescriptors(t *testing.T) {
 	})
 	t.Run("probe error fails closed instead of authorizing a rebuild", func(t *testing.T) {
 		clustersDir, secretsDir := seed(t)
-		hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
-		if err != nil {
-			t.Fatalf("clusterInstallDesiredHash: %v", err)
-		}
-		if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-			Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-			Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-			InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
-			UpdatedAt:        now.UTC(),
-		}); err != nil {
+		record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+		record.Status = ClusterInstallStatusInstalled
+		record.Phase = ClusterInstallPhaseComplete
+		installedAt := now.UTC()
+		record.InstalledAt = &installedAt
+		if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 			t.Fatalf("SaveClusterInstallRecord: %v", err)
 		}
 		writeKubeconfig(t, clustersDir)

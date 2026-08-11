@@ -49,6 +49,16 @@ func TestClusterInstallResumeCeilingBoundsRepeatedWaits(t *testing.T) {
 	assertLifecycleTaskStatus(t, planned, ApplyTaskKindClusterISO, TaskStatusSkipped)
 	assertLifecycleTaskStatus(t, planned, ApplyTaskKindNodeBoot, TaskStatusSkipped)
 	assertLifecycleTaskStatus(t, planned, ApplyTaskKindBootstrapWait, TaskStatusPending)
+
+	record.StartedAt = now.Add(time.Minute)
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+		t.Fatalf("SaveClusterInstallRecord future start: %v", err)
+	}
+	_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, filepath.Join(dir, "runs"), "test", secretsDir, "next", state, mustPlanApplyTasks(applyContainerClusterTarget(), state), ApplyModeReconcile, nil, &fakeClusterAvailabilityChecker{}, now)
+	if !errors.As(err, &expired) || expired.StartedAt != record.StartedAt || expired.ObservedAt != now {
+		t.Fatalf("ReconcileApplyClusterInstallState future start error = %#v, want observation-bound resume refusal", err)
+	}
+	assertClusterInstallRemedy(t, expired, remedy.ActionDestroyAndReapplyCluster, cluster)
 }
 
 func TestClusterInstallResumeWithoutStartTimeFailsClosed(t *testing.T) {
@@ -96,6 +106,9 @@ func TestPublishedAgentISOResumeRequiresProvableFreshness(t *testing.T) {
 			record.Status = ClusterInstallStatusInstalling
 			record.Phase = ClusterInstallPhaseISOCreated
 			record.UpdatedAt = tc.publishedAt(now)
+			if !record.UpdatedAt.IsZero() {
+				record.StartedAt = record.UpdatedAt.Add(-time.Minute)
+			}
 			if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 				t.Fatalf("SaveClusterInstallRecord: %v", err)
 			}
@@ -275,6 +288,7 @@ func matchingLifecycleRecord(t *testing.T, state v1alpha1.State, secretsDir, clu
 		DesiredHash:      hash,
 		StructuralHash:   structuralHash,
 		HashSchema:       ConvergeHashSchema,
+		RunID:            "seeded-run",
 		InstallerVersion: clusterInstallDeclaredVersion(state, cluster),
 		StartedAt:        now.UTC(),
 		UpdatedAt:        now.UTC(),

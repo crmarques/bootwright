@@ -27,18 +27,18 @@ func TestReconcileApplyClusterInstallStateExpectNewRefusesExistingRecord(t *test
 			dir := t.TempDir()
 			clustersDir := filepath.Join(dir, "clusters")
 			secretsDir := writeWorkflowInstallerSecrets(t, dir)
-			hash, err := clusterInstallDesiredHashForContext("", state, cluster, secretsDir)
-			if err != nil {
-				t.Fatalf("hash: %v", err)
+			record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+			record.Status = tc.status
+			record.Phase = tc.phase
+			if tc.status == ClusterInstallStatusInstalled {
+				installedAt := now.UTC()
+				record.InstalledAt = &installedAt
 			}
-			if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-				Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-				Status: tc.status, Phase: tc.phase, UpdatedAt: now.UTC(),
-			}); err != nil {
+			if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 				t.Fatalf("SaveClusterInstallRecord: %v", err)
 			}
 			checker := &fakeClusterAvailabilityChecker{available: true}
-			_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeCreate, nil, checker, now)
+			_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeCreate, nil, checker, now)
 			if err == nil || !strings.Contains(err.Error(), "requires a greenfield environment") {
 				t.Fatalf("expect-new against an existing install record must fail closed, got %v", err)
 			}
@@ -58,10 +58,14 @@ func TestOverrideReinstallInputDriftedClusters(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: "stale-hash", HashSchema: ConvergeHashSchema,
-		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete, UpdatedAt: now.UTC(),
-	}); err != nil {
+	record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+	record.DesiredHash = "sha256:" + strings.Repeat("0", 64)
+	record.StructuralHash = "sha256:" + strings.Repeat("0", 64)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	installedAt := now.UTC()
+	record.InstalledAt = &installedAt
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	drifted := OverrideReinstallInputDriftedClusters(clustersDir, "", "", secretsDir, state, tasks)
@@ -69,15 +73,11 @@ func TestOverrideReinstallInputDriftedClusters(t *testing.T) {
 		t.Fatalf("stale install inputs must flag the cluster for reinstall, got %v", drifted)
 	}
 
-	hash, err := clusterInstallDesiredHashForContext("", state, cluster, secretsDir)
-	if err != nil {
-		t.Fatalf("hash: %v", err)
-	}
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-		InstallerVersion: clusterInstallDeclaredVersion(state, cluster), UpdatedAt: now.UTC(),
-	}); err != nil {
+	record = matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	record.InstalledAt = &installedAt
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	if got := OverrideReinstallInputDriftedClusters(clustersDir, "", "", secretsDir, state, tasks); len(got) != 0 {

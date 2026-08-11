@@ -13,15 +13,12 @@ func TestInstallInputsMatch(t *testing.T) {
 	}
 
 	structuralLess := ClusterInstallRecord{DesiredHash: "full-A", HashSchema: ConvergeHashSchema}
-	if !installInputsMatch(structuralLess, "full-A", "struct-X") {
-		t.Fatal("a structural-less record must match on the full desired hash")
-	}
-	if installInputsMatch(structuralLess, "full-B", "struct-X") {
-		t.Fatal("a structural-less record must differ on a changed full desired hash")
+	if installInputsMatch(structuralLess, "full-A", "struct-X") {
+		t.Fatal("a current-schema record without structural evidence must not match")
 	}
 
-	if !installInputsMatch(rec, "full-A", "") {
-		t.Fatal("an empty computed structural hash must fall back to the full desired hash")
+	if installInputsMatch(rec, "full-A", "") {
+		t.Fatal("an empty computed structural hash must not match")
 	}
 
 	preSchema := ClusterInstallRecord{DesiredHash: "old-full", StructuralHash: "old-struct"}

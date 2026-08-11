@@ -55,15 +55,12 @@ func TestReconcileOverrideProbeErrorRebuilds(t *testing.T) {
 	dir := t.TempDir()
 	clustersDir := filepath.Join(dir, "clusters")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
-	hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
-	if err != nil {
-		t.Fatalf("clusterInstallDesiredHash: %v", err)
-	}
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-		InstallerVersion: clusterInstallDeclaredVersion(state, cluster), UpdatedAt: now.UTC(),
-	}); err != nil {
+	record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	installedAt := now.UTC()
+	record.InstalledAt = &installedAt
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	writeAuditKubeconfig(t, clustersDir, cluster)
@@ -90,20 +87,17 @@ func TestReconcileContinueProbeErrorNamesRemedy(t *testing.T) {
 	dir := t.TempDir()
 	clustersDir := filepath.Join(dir, "clusters")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
-	hash, err := clusterInstallDesiredHashForContext("test", state, cluster, secretsDir)
-	if err != nil {
-		t.Fatalf("clusterInstallDesiredHash: %v", err)
-	}
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster: cluster, DesiredHash: hash, HashSchema: ConvergeHashSchema,
-		Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete,
-		UpdatedAt: now.UTC(),
-	}); err != nil {
+	record := matchingLifecycleRecord(t, state, secretsDir, cluster, now)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	installedAt := now.UTC()
+	record.InstalledAt = &installedAt
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	writeAuditKubeconfig(t, clustersDir, cluster)
 	checker := &fakeClusterAvailabilityChecker{err: errors.New("connection refused")}
-	_, _, err = ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeReconcile, nil, checker, now)
+	_, _, err := ReconcileApplyClusterInstallState(context.Background(), clustersDir, "", "", secretsDir, "run", state, tasks, ApplyModeReconcile, nil, checker, now)
 	if err == nil {
 		t.Fatal("continue mode must refuse an unverifiable probe")
 	}

@@ -1187,7 +1187,7 @@ there.
 | `runs/last-destroy-input/` | The forensic snapshot of the input a `destroy` loaded. |
 | `runs/safety/` | Convergence-safety records (the non-secret desired hash plus Bootwright owner identity) that `diff` classifies against. |
 | `ownership/` | Root-managed non-secret JSON ownership records used to scope destroy, gate host package removal, and report orphans. |
-| `clusters/<cluster>/runtime/install-record.json` | Per-cluster install record with the non-secret desired-input fingerprint, exact installer version, original start time, and ISO/boot/bootstrap/install phase that bounded resume reads. |
+| `clusters/<cluster>/runtime/install-record.json` | Cluster-bound install record with the non-secret desired and structural fingerprints, hash schema, writer run, exact installer version, lifecycle times, and ISO/boot/bootstrap/install phase used by fail-closed skip and resume gates. |
 
 A real apply or destroy records its exact resolved invocation argv as immutable
 audit evidence and separately stores a typed, ordered recovery plan. The plan is

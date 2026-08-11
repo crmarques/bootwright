@@ -642,23 +642,12 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
 	managedServicesDir := filepath.Join(dir, "managed-services")
-	hash, err := clusterInstallDesiredHashForContext("test", state, "sno-libvirt", secretsDir)
-	if err != nil {
-		t.Fatalf("clusterInstallDesiredHash: %v", err)
-	}
 	now := time.Now()
-	record := ClusterInstallRecord{
-		Cluster:          "sno-libvirt",
-		DesiredHash:      hash,
-		HashSchema:       ConvergeHashSchema,
-		Status:           ClusterInstallStatusInstalled,
-		Phase:            ClusterInstallPhaseComplete,
-		RunID:            "previous-run",
-		StartedAt:        now.UTC(),
-		UpdatedAt:        now.UTC(),
-		InstalledAt:      &now,
-		InstallerVersion: clusterInstallDeclaredVersion(state, "sno-libvirt"),
-	}
+	record := matchingLifecycleRecord(t, state, secretsDir, "sno-libvirt", now)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	installedAt := now.UTC()
+	record.InstalledAt = &installedAt
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
@@ -710,14 +699,14 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
 	managedServicesDir := filepath.Join(dir, "managed-services")
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster:     "sno-libvirt",
-		DesiredHash: "sha256:old",
-		HashSchema:  ConvergeHashSchema,
-		Status:      ClusterInstallStatusInstalled,
-		Phase:       ClusterInstallPhaseComplete,
-		UpdatedAt:   time.Now().UTC(),
-	}); err != nil {
+	now := time.Now().UTC()
+	record := matchingLifecycleRecord(t, state, secretsDir, "sno-libvirt", now)
+	record.DesiredHash = "sha256:" + strings.Repeat("0", 64)
+	record.StructuralHash = "sha256:" + strings.Repeat("0", 64)
+	record.Status = ClusterInstallStatusInstalled
+	record.Phase = ClusterInstallPhaseComplete
+	record.InstalledAt = &now
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	calls := 0
@@ -742,7 +731,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	}
 }
 
-func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
+func TestRunApplyTaskGraphBlocksMalformedInstallEvidenceAfterNodeBoot(t *testing.T) {
 	cases := []struct {
 		name   string
 		status ClusterInstallStatus
@@ -790,8 +779,9 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 				calls++
 				return &fakeRunner{}
 			})
-			if err == nil || !strings.Contains(err.Error(), "missing or different install inputs") {
-				t.Fatalf("RunApplyTaskGraph error = %v, want missing or different install inputs", err)
+			var stateErr *ClusterInstallStateError
+			if !errors.As(err, &stateErr) || stateErr.Condition != ClusterInstallConditionInvalidRecordEvidence || !strings.Contains(err.Error(), "desiredHash is not sha256") {
+				t.Fatalf("RunApplyTaskGraph error = %v, want invalid install evidence", err)
 			}
 			if calls != 0 {
 				t.Fatalf("runner factory calls = %d, want 0", calls)
@@ -808,21 +798,12 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
 	managedServicesDir := filepath.Join(dir, "managed-services")
-	hash, err := clusterInstallDesiredHashForContext("test", state, "sno-libvirt", secretsDir)
-	if err != nil {
-		t.Fatalf("clusterInstallDesiredHash: %v", err)
-	}
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
-		Cluster:          "sno-libvirt",
-		DesiredHash:      hash,
-		HashSchema:       ConvergeHashSchema,
-		Status:           ClusterInstallStatusInstalling,
-		Phase:            ClusterInstallPhaseNodesBooted,
-		RunID:            "previous-run",
-		InstallerVersion: clusterInstallDeclaredVersion(state, "sno-libvirt"),
-		StartedAt:        time.Now().Add(-time.Hour).UTC(),
-		UpdatedAt:        time.Now().UTC(),
-	}); err != nil {
+	now := time.Now().UTC()
+	record := matchingLifecycleRecord(t, state, secretsDir, "sno-libvirt", now)
+	record.Status = ClusterInstallStatusInstalling
+	record.Phase = ClusterInstallPhaseNodesBooted
+	record.StartedAt = now.Add(-time.Hour)
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
 	runner := &fakeRunner{}

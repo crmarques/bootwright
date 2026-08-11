@@ -290,7 +290,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 		hashMatches := !found
 		rebaseline := false
 		if found {
-			hashMatches, rebaseline, err = clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+			hashMatches, rebaseline, err = clusterInstallRecordInputsMatch(clustersDir, runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
 			if err != nil {
 				return out, installedMatching, err
 			}
@@ -448,44 +448,6 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, runsDir
 	return out, installedMatching, nil
 }
 
-func validateClusterInstallRecordState(clustersDir, cluster string, record ClusterInstallRecord) error {
-	knownPhase := false
-	switch record.Phase {
-	case "", ClusterInstallPhaseCreatingISO, ClusterInstallPhaseISOCreated, ClusterInstallPhaseBooting, ClusterInstallPhaseNodesBooted, ClusterInstallPhaseWaitingBootstrap, ClusterInstallPhaseBootstrapComplete, ClusterInstallPhaseWaiting, ClusterInstallPhaseComplete:
-		knownPhase = true
-	}
-	if !knownPhase {
-		return &ClusterInstallStateError{
-			Cluster:    cluster,
-			Condition:  ClusterInstallConditionUnrecognizedPhase,
-			Status:     record.Status,
-			Phase:      record.Phase,
-			RecordPath: ClusterInstallRecordPath(clustersDir, cluster),
-			Message:    fmt.Sprintf("ContainerCluster/%s has unrecognized install phase %q in its install record at %s; bootwright cannot prove which install steps already changed the cluster and refuses before any mutation", cluster, record.Phase, ClusterInstallRecordPath(clustersDir, cluster)),
-			Request:    clusterInstallRemedy(remedy.ActionRebuildCluster, cluster),
-		}
-	}
-	valid := false
-	switch record.Status {
-	case ClusterInstallStatusInstalling, ClusterInstallStatusFailed:
-		valid = record.Phase != ClusterInstallPhaseComplete
-	case ClusterInstallStatusInstalled, ClusterInstallStatusDestroyed:
-		valid = record.Phase == ClusterInstallPhaseComplete
-	}
-	if valid {
-		return nil
-	}
-	return &ClusterInstallStateError{
-		Cluster:    cluster,
-		Condition:  ClusterInstallConditionInvalidRecordState,
-		Status:     record.Status,
-		Phase:      record.Phase,
-		RecordPath: ClusterInstallRecordPath(clustersDir, cluster),
-		Message:    fmt.Sprintf("ContainerCluster/%s has unsupported install record lifecycle state status %q and phase %q at %s; bootwright cannot prove which install steps already changed the cluster and refuses before any mutation", cluster, record.Status, record.Phase, ClusterInstallRecordPath(clustersDir, cluster)),
-		Request:    clusterInstallRemedy(remedy.ActionRebuildCluster, cluster),
-	}
-}
-
 func stampInstalledClusterConvergeRecords(runsDir, contextName, runID string, tasks []ApplyTask, clusters []string, now time.Time) error {
 	if len(clusters) == 0 || strings.TrimSpace(runsDir) == "" {
 		return nil
@@ -570,8 +532,13 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, runsDir,
 			}
 			continue
 		}
-		if validateClusterInstallRecordState(clustersDir, name, record) != nil {
-			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (install record has unsupported lifecycle state status %q and phase %q — bootwright cannot prove which install steps ran; --mode rebuild reinstalls it and wipes its node disks)", name, record.Status, record.Phase)})
+		if stateErr := validateClusterInstallRecordState(clustersDir, name, record); stateErr != nil {
+			description := fmt.Sprintf("install record has unsupported lifecycle state status %q and phase %q — bootwright cannot prove which install steps ran", record.Status, record.Phase)
+			var typed *ClusterInstallStateError
+			if errors.As(stateErr, &typed) && typed.Condition == ClusterInstallConditionInvalidRecordEvidence {
+				description = "install record identity or writer evidence is invalid: " + strings.Join(typed.Details, "; ")
+			}
+			out = append(out, ClusterReinstall{Name: name, Descriptor: fmt.Sprintf("reinstall ContainerCluster/%s (%s; --mode rebuild reinstalls it and wipes its node disks)", name, description)})
 			continue
 		}
 		hash, structuralHash, input, err := clusterInstallHashesAndInput(contextName, state, name, secretsDir)
@@ -584,7 +551,7 @@ func OverrideRebuildInstalledClusters(ctx context.Context, clustersDir, runsDir,
 			}
 			continue
 		}
-		matches, _, err := clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+		matches, _, err := clusterInstallRecordInputsMatch(clustersDir, runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
 		if err != nil {
 			return nil, err
 		}
@@ -640,7 +607,7 @@ func OverrideReinstallInputDriftedClusters(clustersDir, runsDir, contextName, se
 		if err != nil || !found || record.Status != ClusterInstallStatusInstalled {
 			continue
 		}
-		matches, _, matchErr := clusterInstallRecordInputsMatch(runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
+		matches, _, matchErr := clusterInstallRecordInputsMatch(clustersDir, runsDir, record, name, installWaitTask(tasks, name), hash, structuralHash, input)
 		if matchErr != nil || !matches || clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(state, name), true) != nil {
 			out = append(out, name)
 		}
@@ -655,7 +622,7 @@ func InstalledRecordedClusters(clustersDir string, tasks []ApplyTask) []string {
 		if err != nil || !found {
 			continue
 		}
-		if record.Status == ClusterInstallStatusInstalled {
+		if record.Status == ClusterInstallStatusInstalled && validateClusterInstallRecordState(clustersDir, name, record) == nil {
 			out = append(out, name)
 		}
 	}
@@ -789,15 +756,24 @@ func guardClusterInstallResumeCeiling(record ClusterInstallRecord, name string, 
 	if record.StartedAt.IsZero() {
 		return &ClusterInstallResumeExpiredError{Cluster: name, Phase: record.Phase}
 	}
+	if record.StartedAt.UTC().After(now.UTC()) {
+		return &ClusterInstallResumeExpiredError{
+			Cluster:    name,
+			Phase:      record.Phase,
+			StartedAt:  record.StartedAt.UTC(),
+			ObservedAt: now.UTC(),
+		}
+	}
 	deadline := record.StartedAt.UTC().Add(ClusterInstallResumeCeiling)
 	if now.UTC().Before(deadline) {
 		return nil
 	}
 	return &ClusterInstallResumeExpiredError{
-		Cluster:   name,
-		Phase:     record.Phase,
-		StartedAt: record.StartedAt.UTC(),
-		Deadline:  deadline,
+		Cluster:    name,
+		Phase:      record.Phase,
+		StartedAt:  record.StartedAt.UTC(),
+		ObservedAt: now.UTC(),
+		Deadline:   deadline,
 	}
 }
 

@@ -1651,11 +1651,16 @@ func TestApplyKubeVirtChildOnlySelectionAcceptsReadyParent(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
-		Cluster:     "dc1-metal-ocp",
-		Status:      workflow.ClusterInstallStatusInstalled,
-		Phase:       workflow.ClusterInstallPhaseComplete,
-		UpdatedAt:   now,
-		InstalledAt: &now,
+		Cluster:        "dc1-metal-ocp",
+		DesiredHash:    "sha256:" + strings.Repeat("a", 64),
+		StructuralHash: "sha256:" + strings.Repeat("b", 64),
+		HashSchema:     workflow.ConvergeHashSchema,
+		Status:         workflow.ClusterInstallStatusInstalled,
+		Phase:          workflow.ClusterInstallPhaseComplete,
+		RunID:          "seeded-run",
+		StartedAt:      now,
+		UpdatedAt:      now,
+		InstalledAt:    &now,
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
@@ -4531,13 +4536,17 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	clusterName := "3-nodes-ocp-baremetal"
+	now := time.Now().UTC()
 	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
-		Cluster:     clusterName,
-		DesiredHash: "sha256:old",
-		HashSchema:  workflow.ConvergeHashSchema,
-		Status:      workflow.ClusterInstallStatusInstalling,
-		Phase:       workflow.ClusterInstallPhaseNodesBooted,
-		UpdatedAt:   time.Now().UTC(),
+		Cluster:        clusterName,
+		DesiredHash:    "sha256:" + strings.Repeat("0", 64),
+		StructuralHash: "sha256:" + strings.Repeat("0", 64),
+		HashSchema:     workflow.ConvergeHashSchema,
+		Status:         workflow.ClusterInstallStatusInstalling,
+		Phase:          workflow.ClusterInstallPhaseNodesBooted,
+		RunID:          "seeded-run",
+		StartedAt:      now.Add(-time.Hour),
+		UpdatedAt:      now,
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}

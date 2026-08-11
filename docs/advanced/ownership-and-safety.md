@@ -40,7 +40,7 @@ mutates a host it writes durable **ownership evidence** so later runs — and
 | --- | --- | --- |
 | Per-host ownership records | The exact resources and packages Bootwright created or configured on a host | Destroy scoping, package-removal gating, orphan reporting, `diff` |
 | Convergence-safety records | A non-secret desired hash plus a Bootwright owner identity for a mutated resource | Drift and foreign-ownership classification |
-| Per-cluster install records | A non-secret fingerprint of the install inputs and the phase reached | Skipping completed installs and resuming only from known-safe phases |
+| Per-cluster install records | A cluster-bound, schema-versioned non-secret fingerprint plus writer run and lifecycle times | Skipping completed installs and resuming only from known-safe phases |
 | Provider VM markers | That a substrate VM is one Bootwright created | Bounded teardown — never touching co-resident VMs |
 
 These live under the protected context state directory
@@ -105,7 +105,9 @@ the destructive kinds cross the destroy-protection boundary (below).
     records, add-on records, managed-OS markers, provider metadata, and storage
     comparisons — decide skip-vs-fail against live state.
     Cluster install reconcile reads the per-cluster install record, probes live
-    cluster availability, skips completed installs, resumes only from known-safe
+    cluster availability, and first requires the record identity to match its
+    cluster path and its schema, hashes, writer run, and lifecycle times to form
+    complete evidence. It skips completed installs, resumes only from known-safe
     phases for at most three hours from the original start, and refuses to
     proceed when install state exists for different inputs after node boot —
     unless you pass `--mode rebuild`. ISO creation records the installer version:

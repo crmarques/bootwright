@@ -145,6 +145,9 @@ func ClusterInstallPostSuccessError(clustersDir string, task ApplyTask) error {
 			Request:    clusterInstallRemedy(remedy.ActionRebuildCluster, task.Entry.Cluster),
 		}
 	}
+	if err := validateClusterInstallRecordState(clustersDir, task.Entry.Cluster, record); err != nil {
+		return err
+	}
 	return clusterInstallVersionMismatch(record, clusterInstallDeclaredVersion(task.State, task.Entry.Cluster), true)
 }
 

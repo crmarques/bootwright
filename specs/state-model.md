@@ -3721,15 +3721,25 @@ command. The rest are registered per command, on the verbs that reach machines.
   cluster-or-machine selection, context, identity, effects, and authorizations.
   A preview classification error is a reported refusal, never omitted.
   Rebaseline writes the current schema only after all of those proofs succeed.
-- Every existing container install record is validated as a status/phase pair
-  before install planning. `installing` and `failed` accept only the empty or
-  named nonterminal phases; `installed` and `destroyed` require `complete`.
-  An unknown status, unknown phase, or terminal/nonterminal mismatch is unknown
-  lifecycle evidence and fails closed before task planning with an exact
-  cluster-scoped `--mode rebuild --authorize data-loss` remedy. That rebuild
-  treats the invalid record as a disk-wiping reinstall candidate and may consume
-  it only after the candidate was included in the destructive preview and
-  explicitly authorized.
+- Every existing container install record is validated before install planning
+  and every other skip or readiness decision that consumes it. The record's
+  `cluster` must equal the cluster named by its path. `installing` and `failed`
+  accept only the empty or named nonterminal phases and the current hash schema;
+  `installed` requires `complete` and accepts the current schema or exactly the
+  immediately preceding schema through the immutable-success-evidence
+  rebaseline rule; `destroyed`/`complete` is an identity-bound released-state
+  sentinel and authorizes no skip or resume. Every non-released record requires
+  canonical desired and structural SHA-256 values, a non-empty run ID, and
+  writer-consistent lifecycle times: start and update times, an install time
+  only for `installed`, and ordered terminal times. The phase-specific missing
+  or unprovable ISO publish time and post-boot start time keep their narrower
+  remedies below. An unknown status or phase, terminal/nonterminal mismatch,
+  cross-cluster record, unsupported schema, malformed hash, or missing or
+  contradictory writer evidence fails closed before desired-hash work, probing,
+  or task-plan mutation with an exact cluster-scoped `--mode rebuild
+  --authorize data-loss` remedy. That rebuild treats the invalid record as a
+  disk-wiping reinstall candidate and may consume it only after the candidate
+  was included in the destructive preview and explicitly authorized.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
   `iso-created` skips the ISO and resumes from node boot only when its recorded
@@ -3749,10 +3759,11 @@ command. The rest are registered per command, on the verbs that reach machines.
   cluster-scoped remedy because Bootwright cannot prove which install steps ran.
 - Automatic post-boot resume is bounded by the original install record's
   `StartedAt`, not by an attempt counter. A wait may be replanned only before the
-  three-hour resume ceiling; exactly at or after the deadline, or when the start
-  time is absent, apply refuses before any mutation and names the deliberately
-  scoped destroy-and-reapply sequence. A wait invocation already in progress may
-  finish; the ceiling prevents starting an unbounded new one on every apply.
+  three-hour resume ceiling; exactly at or after the deadline, when the start
+  time is absent, or when it is after the current observation time, apply refuses
+  before any mutation and names the deliberately scoped destroy-and-reapply
+  sequence. A wait invocation already in progress may finish; the ceiling
+  prevents starting an unbounded new one on every apply.
 - ISO creation records the exact `openshift-install` version beside the install
   state. Before node boot, a missing or desired-version-mismatched value refuses
   before mutation and requires deliberate ISO regeneration. After nodes may have

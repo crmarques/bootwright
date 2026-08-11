@@ -3,20 +3,22 @@ package workflow
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestBootProvenContainerClusters(t *testing.T) {
 	clustersDir := t.TempDir()
+	now := time.Now().UTC()
 	records := []ClusterInstallRecord{
-		{Cluster: "creating", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseCreatingISO},
-		{Cluster: "iso-only", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseISOCreated},
-		{Cluster: "booting", Status: ClusterInstallStatusFailed, Phase: ClusterInstallPhaseBooting},
-		{Cluster: "booted", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseNodesBooted},
-		{Cluster: "waiting", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseWaiting},
-		{Cluster: "invalid-complete", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseComplete},
-		{Cluster: "installed", Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete},
+		syntheticClusterInstallRecord("creating", ClusterInstallStatusInstalling, ClusterInstallPhaseCreatingISO, now),
+		syntheticClusterInstallRecord("iso-only", ClusterInstallStatusInstalling, ClusterInstallPhaseISOCreated, now),
+		syntheticClusterInstallRecord("booting", ClusterInstallStatusFailed, ClusterInstallPhaseBooting, now),
+		syntheticClusterInstallRecord("booted", ClusterInstallStatusInstalling, ClusterInstallPhaseNodesBooted, now),
+		syntheticClusterInstallRecord("waiting", ClusterInstallStatusInstalling, ClusterInstallPhaseWaiting, now),
+		syntheticClusterInstallRecord("invalid-complete", ClusterInstallStatusInstalling, ClusterInstallPhaseComplete, now),
+		syntheticClusterInstallRecord("installed", ClusterInstallStatusInstalled, ClusterInstallPhaseComplete, now),
 		{Cluster: "destroyed", Status: ClusterInstallStatusDestroyed, Phase: ClusterInstallPhaseComplete},
 	}
 	names := []string{"no-record"}
@@ -40,7 +42,7 @@ func TestBootProvenContainerClusters(t *testing.T) {
 
 func TestBareMetalFirstInstallClustersWarnsISOCreatedResume(t *testing.T) {
 	clustersDir := t.TempDir()
-	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{Cluster: "resume-bm", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseISOCreated}); err != nil {
+	if err := SaveClusterInstallRecord(clustersDir, syntheticClusterInstallRecord("resume-bm", ClusterInstallStatusInstalling, ClusterInstallPhaseISOCreated, time.Now().UTC())); err != nil {
 		t.Fatalf("save record: %v", err)
 	}
 	tasks := []ApplyTask{
