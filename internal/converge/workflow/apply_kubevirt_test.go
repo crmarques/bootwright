@@ -36,6 +36,12 @@ func TestMultiDCExampleOrdersChildVMsAfterStorageAndNetworkAddons(t *testing.T) 
 		"addon.dc2-metal-ocp.openshift-data-foundation",
 		"addon.dc2-metal-ocp.child-network-dc2",
 	)
+	assertTaskHasDeps(t, tasks, "addon.dc1-metal-ocp.child-network-dc1",
+		"addon.dc1-metal-ocp.nmstate",
+	)
+	assertTaskHasDeps(t, tasks, "addon.dc2-metal-ocp.child-network-dc2",
+		"addon.dc2-metal-ocp.nmstate",
+	)
 	assertNoTaskPath(t, tasks, "addon.dc1-metal-ocp.child-network-dc1", "addon.dc1-metal-ocp.openshift-data-foundation")
 	assertNoTaskPath(t, tasks, "addon.dc1-metal-ocp.openshift-data-foundation", "addon.dc1-metal-ocp.child-network-dc1")
 	assertNoTaskPath(t, tasks, "iso.dc1-child-ocp", "wait.dc1-metal-ocp")
@@ -81,6 +87,7 @@ func kubeVirtChildResourceRefPlanningState() v1alpha1.State {
 		},
 	}}
 	state.InfraProviders = []v1alpha1.InfraProvider{provider}
+	state.Machines[0].Spec.Network.Config.AttachmentRef = v1alpha1.LocalObjectReference{Name: "child-net"}
 	state.ClusterAddons = append(state.ClusterAddons,
 		v1alpha1.ClusterAddon{
 			Metadata: v1alpha1.Metadata{Name: "openshift-data-foundation"},
@@ -127,6 +134,50 @@ func TestKubeVirtChildInfraWaitsForReferencedStorageAndNetworkAddons(t *testing.
 	assertTaskDependsTransitively(t, tasks, "infra.child-ocp.localhost", "addon.metal-ocp.child-network")
 	assertTaskDeps(t, tasks, "addon.metal-ocp.openshift-data-foundation", "wait.metal-ocp")
 	assertTaskDeps(t, tasks, "addon.metal-ocp.child-network", "wait.metal-ocp")
+}
+
+func TestKubeVirtChildInfraWaitsForEveryPerInterfaceNetworkAddon(t *testing.T) {
+	state := kubeVirtChildResourceRefPlanningState()
+	state.InfraProviders[0].Spec.NetworkAttachments = append(state.InfraProviders[0].Spec.NetworkAttachments,
+		v1alpha1.NetworkAttachmentCapability{
+			Name: "ceph-public",
+			KubeVirt: &v1alpha1.NetworkAttachmentKubeVirt{NetworkRef: v1alpha1.KubeVirtNetworkRef{
+				APIGroup: v1alpha1.KubeVirtNetworkGroupOVN,
+				Kind:     v1alpha1.KubeVirtNetworkKindCUDN,
+				Name:     "ceph-public",
+			}},
+		})
+	state.Machines[0].Spec.Network.Config.AttachmentRef = v1alpha1.LocalObjectReference{}
+	state.Machines[0].Spec.Network.Config.InterfaceAttachments = []v1alpha1.MachineInterfaceAttachment{
+		{Interface: "primary", AttachmentRef: v1alpha1.LocalObjectReference{Name: "child-net"}},
+		{Interface: "ceph-public", AttachmentRef: v1alpha1.LocalObjectReference{Name: "ceph-public"}},
+	}
+	state.ClusterAddons = append(state.ClusterAddons, v1alpha1.ClusterAddon{
+		Metadata: v1alpha1.Metadata{Name: "ceph-public-network"},
+		Spec: v1alpha1.ClusterAddonSpec{
+			Type: v1alpha1.ClusterAddonTypeManifestSet,
+			Readiness: v1alpha1.ClusterAddonReadiness{
+				Checks: []v1alpha1.ClusterAddonReadinessCheck{{
+					ResourceExists: &v1alpha1.ClusterAddonResourceExistsReadiness{
+						APIVersion: v1alpha1.KubeVirtNetworkGroupOVN + "/v1",
+						Kind:       v1alpha1.KubeVirtNetworkKindCUDN,
+						Name:       "ceph-public",
+					},
+				}},
+			},
+		},
+	})
+	state.ClusterAddonBindings[0].Spec.AddonRefs = append(state.ClusterAddonBindings[0].Spec.AddonRefs,
+		v1alpha1.LocalObjectReference{Name: "ceph-public-network"})
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskHasDeps(t, tasks, "infra.child-ocp.localhost",
+		"addon.metal-ocp.child-network",
+		"addon.metal-ocp.ceph-public-network",
+	)
 }
 
 func TestKubeVirtChildInfraIgnoresUnrelatedAddons(t *testing.T) {

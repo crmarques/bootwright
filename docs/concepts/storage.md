@@ -139,7 +139,7 @@ apply may install it, while destroy keeps a copy that predated Bootwright or is
 still required by another storage cluster.
 | `ceph.networks.publicCIDRs[]` | No | — | Public-network CIDRs (renders `public_network`). |
 | `ceph.networks.clusterCIDRs[]` | No | — | Cluster-network CIDRs for replication and recovery traffic (renders `cluster_network`). |
-| `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that **every** Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. |
+| `ceph.security.fips.enabled` | No | `false` | `true` requires a `redhat` or `ibm` distribution and that every Bootwright-installed Ceph node's `MachineInstallProfile` sets `customizations.security.fips.enabled: true`. Ceph runs FIPS by running on FIPS-installed RHEL nodes — there is no cephadm FIPS flag. Preflight and apply also verify `/proc/sys/crypto/fips_enabled` on every running Ceph node, including provided-OS nodes, before storage mutation. |
 | `ceph.security.cephx.keyType` | No | — | Cipher new cephx keys are minted with: `aes` (AES-128) or `aes256k` (AES-256). Unset leaves the build's own mon-map policy untouched — declare it only to override a vendor default a client cannot read. `aes` **weakens cephx for every client of this cluster**; see [cephx key types](../advanced/ceph-topologies.md#cephx-key-types). |
 | `ceph.config` | No | — | Ceph config database options as `section -> key -> value`, rendered as idempotent `ceph config set` after bootstrap. Keys another field owns are rejected here: `public_network`/`cluster_network` belong to `ceph.networks`, and `container_image` belongs to `ceph.image` — these operations run after the first services are deployed, so a pin declared here would arrive too late for them. |
 | `ceph.mgrModules[]` | No | — | mgr modules to enable (`ceph mgr module enable`). |
@@ -184,8 +184,11 @@ still required by another storage cluster.
     - `ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
       (the community `oss` images are not FIPS-validated) and that every Ceph
       node Bootwright installs uses a `MachineInstallProfile` with
-      `customizations.security.fips.enabled: true`. Provided-OS nodes (no
-      install profile) are not checked and must be FIPS-installed out of band.
+      `customizations.security.fips.enabled: true`. A provided-OS node has no
+      install profile, so its FIPS installation remains external, but
+      standalone preflight and both apply mutation boundaries read
+      `/proc/sys/crypto/fips_enabled` on every selected node and refuse unless
+      it reports `1`.
 
 Distribution requirements:
 

@@ -325,15 +325,19 @@ gate**: it asserts that the storage cluster runs in FIPS mode. The **node
 profile** is set on each storage node's `MachineInstallProfile` for machines
 whose OS Bootwright installs, so the RHEL install comes up in FIPS mode.
 
-The gate is a **one-way desired-state check**, run at validate time (before
-apply), not a runtime probe of the hosts: when the cluster gate is on, every
-managed-OS storage node's install profile must also enable FIPS, or validation
-fails closed. It does not check the reverse direction — FIPS-enabled node
-profiles under a non-FIPS cluster gate pass — and nodes whose OS Bootwright does
-not install (`os.provided: true`) carry no install profile and are out of scope
-for the check. There is no `fips-mode-setup` verification in the Ansible roles;
-correctness of the running mode is the operator's responsibility on
-provided-OS hosts.
+The desired-state gate checks every managed-OS storage node's install profile:
+the profile must also enable FIPS, or validation fails closed. It does not check
+the reverse direction — FIPS-enabled node profiles under a non-FIPS cluster
+gate pass. A provided-OS node (`os.provided: true`) carries no install profile,
+so Bootwright cannot enable FIPS there; that installation remains the
+operator's responsibility.
+
+The live gate closes the provided-OS gap before mutation. Standalone storage
+preflight, storage-node access apply, and Ceph apply read
+`/proc/sys/crypto/fips_enabled` on every selected topology host and require the
+value `1`. That proves the running kernel mode on the third-site arbiter just as
+it does on managed data nodes. It does not prove the provenance of the vendor's
+FIPS build or turn FIPS on after installation.
 
 FIPS is an install-time customization, so changing it on an installed machine is
 a reinstall; see [managed-OS reinstall](operations.md#managed-os-reinstall-and-owned-ceph-rebuild).

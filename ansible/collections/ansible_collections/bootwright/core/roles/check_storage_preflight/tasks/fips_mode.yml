@@ -1,0 +1,28 @@
+---
+- name: Read the storage node kernel FIPS mode
+  ansible.builtin.command:
+    argv:
+      - cat
+      - /proc/sys/crypto/fips_enabled
+  register: bootwright_storage_fips_mode_probe
+  changed_when: false
+  failed_when: false
+  when: bootwright_storage_fips_required | default(false) | bool
+
+- name: Refuse a storage node that is not running in FIPS mode
+  ansible.builtin.assert:
+    that:
+      - bootwright_storage_fips_mode_probe.rc | default(1) == 0
+      - bootwright_storage_fips_mode_probe.stdout | default('') | trim == '1'
+    fail_msg: >-
+      Storage node {{ bootwright_host_name | default(inventory_hostname) }} belongs to
+      FIPS-enabled StorageCluster/{{ bootwright_task_storage_cluster_name
+      | default(bootwright_storage_cluster_name | default('<unknown>')) }}, but
+      /proc/sys/crypto/fips_enabled did not report 1
+      (rc={{ bootwright_storage_fips_mode_probe.rc | default('missing') }},
+      value={{ bootwright_storage_fips_mode_probe.stdout | default('missing') | trim }}).
+      Refusing before any storage mutation. Reinstall or externally provision this
+      host in FIPS mode, verify it reports 1, then re-run
+      {{ bootwright_mutating_invocation | default('the same preflight or apply invocation') }}.
+    quiet: true
+  when: bootwright_storage_fips_required | default(false) | bool

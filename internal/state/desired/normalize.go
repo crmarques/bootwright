@@ -196,7 +196,7 @@ func normalizeMachine(m *v1alpha1.Machine) {
 		normalizeBMC(&m.Spec.Hardware.Management.BMC)
 	}
 	config := &m.Spec.Network.Config
-	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
+	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" && len(config.InterfaceAttachments) == 0 {
 		config.AttachmentRef.Name = config.NetworkConfigRef.Name
 		m.DefaultedRefs.AttachmentRef = true
 	}

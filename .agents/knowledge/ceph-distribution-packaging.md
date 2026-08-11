@@ -87,6 +87,16 @@ statement — the subscription provider implements RHEL-family package sources o
 — not a vendor compatibility claim. No OS *version* is examined anywhere, in Go or
 in Ansible. The rendered `runtimeOS` var carries `family` and nothing else.
 
+**Constraint:** A FIPS-enabled storage cluster has both an install-time and a
+live-host gate. Validation requires FIPS in every managed node install profile;
+the rendered cluster `fips` and per-host `fipsRequired` facts additionally make
+standalone storage preflight, storage-node access apply, and cephadm apply read
+`/proc/sys/crypto/fips_enabled` on every selected topology host before their
+first mutation. The kernel flag must be exactly `1`, including on an
+`os.provided: true` arbiter. That proves current kernel mode only: it neither
+enables FIPS nor proves that an externally installed host or vendor image has a
+particular certification provenance.
+
 **Symptom:** On an IBM Storage Ceph cluster, `ceph orch upgrade ls` and the
 dashboard "Upgrade" page fail with 401 against `registry.redhat.io`.
 
@@ -259,11 +269,23 @@ set_fact fails with `ansible_distribution_major_version is undefined`.
 Ceph client commands. The host-level package gate covers `cephadm`; no phase
 assumes a host-installed `ceph` or `radosgw-admin` binary.
 
+**Constraint:** IBM's release table has two similarly named package columns.
+`StorageCluster.spec.ceph.packageVersion` takes the **IBM Storage Package
+Version**, not the **Cephadm Ansible Package Version**. The field pins the
+`cephadm` RPM that Bootwright installs on every node. IBM's public Ceph 9 RPM
+metadata confirms that `cephadm` shares the Ceph build NVR (with epoch `2`),
+whereas `5.0.x` versions belong to the separate `cephadm-ansible` package that
+Bootwright does not use. For IBM Storage Ceph 9.9.0.3, the July 2026 CVE row
+therefore maps to `packageVersion: 20.1.0-221.el9cp` and image tag
+`v9.0-20201`; `5.0.2-1` would make Bootwright ask DNF for a nonexistent
+`cephadm-5.0.2-1` build.
+
 ## Vendor references
 
 - Upstream release lifecycle: <https://docs.ceph.com/en/latest/releases/>
 - Red Hat Ceph Storage 9 compatibility guide: <https://docs.redhat.com/en/documentation/red_hat_ceph_storage/9/pdf/compatibility_guide/Red_Hat_Ceph_Storage-9-Compatibility_Guide-en-US.pdf>
 - IBM Storage Ceph release/package mapping: <https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions>
+- IBM Storage Ceph 9 public RPM repository: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/>
 - IBM Storage Ceph 9.9.1.0 versioning scheme: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=whats-new-in-storage-ceph-991>
 - IBM Storage Ceph 9.9.1.0 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
 - IBM 9.9.1.0 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>

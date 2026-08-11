@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func kubeVirtHostClusterApplyCapabilities(state v1alpha1.State) (map[string][]CapabilityRef, error) {
@@ -47,7 +48,7 @@ func kubeVirtHostClusterApplyCapabilities(state v1alpha1.State) (map[string][]Ca
 			for _, cap := range caps {
 				out[cluster.Metadata.Name] = appendUniqueCapability(out[cluster.Metadata.Name], cap)
 			}
-			for _, addon := range kubeVirtProviderAddonDependencies(provider, resources[parent], storageProviders[parent]) {
+			for _, addon := range kubeVirtMachineAddonDependencies(provider, machine.Spec.Network.Config, resources[parent], storageProviders[parent]) {
 				out[cluster.Metadata.Name] = appendUniqueCapability(out[cluster.Metadata.Name], addonAppliedCapability(parent, addon))
 			}
 		}
@@ -93,7 +94,7 @@ func kubeVirtHostClusterApplyCapabilitiesForMachines(state v1alpha1.State, machi
 		for _, cap := range caps {
 			out = appendUniqueCapability(out, cap)
 		}
-		for _, addon := range kubeVirtProviderAddonDependencies(provider, resources[parent], storageProviders[parent]) {
+		for _, addon := range kubeVirtMachineAddonDependencies(provider, machine.Spec.Network.Config, resources[parent], storageProviders[parent]) {
 			out = appendUniqueCapability(out, addonAppliedCapability(parent, addon))
 		}
 	}
@@ -190,14 +191,27 @@ func addonResourceField(in map[string]any, key string) string {
 	return value
 }
 
-func kubeVirtProviderAddonDependencies(provider v1alpha1.InfraProvider, owners []addonResourceOwner, storageProviders []string) []string {
+func kubeVirtMachineAddonDependencies(provider v1alpha1.InfraProvider, network v1alpha1.MachineNetworkConfig, owners []addonResourceOwner, storageProviders []string) []string {
 	var out []string
 	if profile := provider.Spec.KubeVirt; profile != nil && profile.StorageClassRef != nil && profile.StorageClassRef.Name != "" {
 		for _, addon := range addonsProvidingStorageClass(owners, storageProviders, profile.StorageClassRef.Name) {
 			out = appendUniqueString(out, addon)
 		}
 	}
-	for _, attachment := range provider.Spec.NetworkAttachments {
+	attachmentNames := []string{}
+	if network.AttachmentRef.Name != "" {
+		attachmentNames = appendUniqueString(attachmentNames, network.AttachmentRef.Name)
+	}
+	for _, binding := range network.InterfaceAttachments {
+		if binding.AttachmentRef.Name != "" {
+			attachmentNames = appendUniqueString(attachmentNames, binding.AttachmentRef.Name)
+		}
+	}
+	for _, name := range attachmentNames {
+		attachment, ok := stateview.NetworkAttachment(provider, name)
+		if !ok {
+			continue
+		}
 		if attachment.KubeVirt == nil || attachment.KubeVirt.NetworkRef.Name == "" {
 			continue
 		}

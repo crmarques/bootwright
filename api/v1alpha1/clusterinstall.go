@@ -19,10 +19,11 @@ func (r ArtifactServerEndpointRef) IsZero() bool {
 }
 
 type MachineNetworkBinding struct {
-	MachineName      string               `yaml:"-" json:"-"`
-	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef" json:"networkConfigRef"`
-	ProviderRef      LocalObjectReference `yaml:"providerRef" json:"providerRef"`
-	AttachmentRef    LocalObjectReference `yaml:"attachmentRef" json:"attachmentRef"`
+	MachineName          string                       `yaml:"-" json:"-"`
+	NetworkConfigRef     LocalObjectReference         `yaml:"networkConfigRef" json:"networkConfigRef"`
+	ProviderRef          LocalObjectReference         `yaml:"providerRef" json:"providerRef"`
+	AttachmentRef        LocalObjectReference         `yaml:"attachmentRef" json:"attachmentRef"`
+	InterfaceAttachments []MachineInterfaceAttachment `yaml:"interfaceAttachments,omitempty" json:"interfaceAttachments,omitempty"`
 }
 
 type InstallPlatform struct {

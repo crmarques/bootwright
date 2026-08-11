@@ -16,11 +16,25 @@ spec:
   network:
     config:
       networkConfigRef: dc2-child-net
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: dc2-child-net
+        - interface: ceph-public
+          attachmentRef: dc2-ceph-public
       interfaceAddresses:
         - interface: primary
           addressRef: ip
           prefixLength: 24
+      overrides:
+        interfaces:
+          - name: ceph-public
+            ipv4:
+              address:
+                - ip: 192.168.172.72
+                  prefix-length: 24
 
   addresses:
     - name: ip
       address: 192.168.152.42
+    - name: ceph-public
+      address: 192.168.172.72

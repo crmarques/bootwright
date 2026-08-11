@@ -17,6 +17,9 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"devices":       cephrender.OSDGateDevicePaths(cluster, node),
 			"rootFSGiB":     topology.NodeRootFilesystemGiB(cluster, node),
 		}
+		if cluster.Spec.Ceph.Security.FIPS.Enabled {
+			host["fipsRequired"] = true
+		}
 		if node.Site != "" {
 			host["site"] = node.Site
 		}

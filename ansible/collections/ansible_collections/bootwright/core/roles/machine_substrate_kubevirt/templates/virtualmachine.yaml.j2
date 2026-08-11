@@ -57,7 +57,7 @@ spec:
 {% for iface in bootwright_component.interfaces | default([]) %}
         - name: {{ iface.name }}
           multus:
-            networkName: {{ bootwright_kubevirt_nad }}
+            networkName: {{ iface.networkAttachment.kubevirt.nad }}
 {% endfor %}
       volumes:
         - name: agent-iso

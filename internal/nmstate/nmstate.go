@@ -59,6 +59,60 @@ func SetInterfaceAddress(config map[string]any, address InterfaceAddress) {
 	familyConfig["address"] = []any{map[string]any{"ip": address.IP, "prefix-length": address.PrefixLength}}
 }
 
+func PhysicalInterfaceNames(config map[string]any) []string {
+	raw, ok := config["interfaces"].([]any)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := entry["name"].(string)
+		interfaceType, _ := entry["type"].(string)
+		if name != "" && !virtualInterfaceType(interfaceType) {
+			seen[name] = true
+		}
+		aggregation, _ := entry["link-aggregation"].(map[string]any)
+		for _, port := range stringSequence(aggregation["port"]) {
+			seen[port] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func virtualInterfaceType(interfaceType string) bool {
+	switch interfaceType {
+	case "bond", "vlan", "vxlan", "bridge", "linux-bridge", "ovs-bridge",
+		"ovs-interface", "team", "vrf", "dummy", "macvlan", "macvtap", "ipvlan":
+		return true
+	default:
+		return false
+	}
+}
+
+func stringSequence(raw any) []string {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		name, _ := item.(string)
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func Merge(base, patch map[string]any) error {
 	for key, patchValue := range patch {
 		baseMap, baseIsMap := base[key].(map[string]any)

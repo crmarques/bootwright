@@ -21,10 +21,11 @@ own the kinds and their field tables; this page owns assembly.
 
 Substrate network surfaces live on `InfraProvider.spec.networkAttachments[]`.
 `Machine.spec.network.config.attachmentRef` maps a logical `NetworkConfig` to
-the selected provider attachment. When a provider-backed machine omits
-`attachmentRef`, it defaults to the `networkConfigRef` name; the default is
-accepted only while the provider declares a single attachment — with several,
-validation requires an authored `attachmentRef` naming the one to bind.
+one selected provider attachment for all physical NICs. A KubeVirt machine can
+instead map each NIC through `interfaceAttachments[]`. When a provider-backed
+machine omits both, `attachmentRef` defaults to the `networkConfigRef` name; the
+default is accepted only while the provider declares a single attachment — with
+several, validation requires an explicit whole-machine or per-interface choice.
 
 ## Network template
 
@@ -165,21 +166,24 @@ spec:
 Bind that attachment from each installing machine via
 `spec.network.config.attachmentRef`, as shown in the machine above. The full
 attachment model, including KubeVirt secondary networks
-(`networkAttachments[].kubevirt.networkRef`), is in
+(`networkAttachments[].kubevirt.networkRef`) and per-interface binding, is in
 [Infrastructure](../concepts/infrastructure.md#network-attachments).
 
 ### KubeVirt child networks
 
-A KubeVirt child cluster's machines attach to a `ClusterUserDefinedNetwork`
-(usually `topology: Localnet`, bridged to a physical VLAN by an
-`NodeNetworkConfigurationPolicy`) on the parent cluster. Bootwright **references**
-those objects and never renders them: author the (C)UDN and the NNCP out of band,
-typically as a `manifestSet` add-on bound to the parent, and name the (C)UDN from
+A KubeVirt child cluster's machines attach to one or more
+`ClusterUserDefinedNetwork` objects, usually `topology: Localnet` networks
+bridged to physical VLANs by a `NodeNetworkConfigurationPolicy` on the parent.
+Bootwright **references** those objects and never renders them: deliver the
+CUDNs and NNCP as a `manifestSet` add-on on the parent, then name each CUDN from
 `networkAttachments[].kubevirt.networkRef`.
 
-The `NetworkConfig` a child machine references therefore describes the network
-*inside* the guest, where the single virtio NIC is named `primary` — that is the
-name `interfaceAddresses[].interface` binds to:
+One attachment can still serve every VM NIC. When guest NICs must land on
+different networks, use `Machine.spec.network.config.interfaceAttachments[]`.
+The list maps each physical interface in the effective `NetworkConfig` to its
+own provider attachment; it is not a VLAN-trunk shortcut. The following child
+network keeps the OpenShift machine network on a 1500-byte primary NIC and adds
+a 9000-byte routed client network for external Ceph:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -195,6 +199,16 @@ spec:
         - name: primary
           type: ethernet
           state: up
+          mtu: 1500
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: ceph-public
+          type: ethernet
+          state: up
+          mtu: 9000
           ipv4:
             enabled: true
             dhcp: false
@@ -206,10 +220,54 @@ spec:
             next-hop-address: 192.168.151.1
             next-hop-interface: primary
             table-id: 254
+          - destination: 192.168.141.0/24
+            next-hop-address: 192.168.171.1
+            next-hop-interface: ceph-public
+            table-id: 254
 ```
 
-A localnet CUDN carries no IPAM, so each child machine must pin its own static
-address through `interfaceAddresses[]`, exactly as a bare-metal node does. See
+Each machine binds both NICs, authors only the primary install IP through
+`interfaceAddresses[]`, and adds its secondary client address through the
+per-machine NMState override:
+
+```yaml
+spec:
+  network:
+    config:
+      networkConfigRef: dc1-child-net
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: dc1-child-net
+        - interface: ceph-public
+          attachmentRef: dc1-ceph-public
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+      overrides:
+        interfaces:
+          - name: ceph-public
+            ipv4:
+              address:
+                - ip: 192.168.171.60
+                  prefix-length: 24
+  addresses:
+    - name: ip
+      address: 192.168.151.30
+    - name: ceph-public
+      address: 192.168.171.60
+```
+
+The primary `192.168.151.0/24` CIDR remains the child `ContainerCluster`'s only
+machine network. `192.168.171.0/24` is a routed node/client subnet, not a Ceph
+daemon bind network, so it does **not** belong in
+`StorageCluster.spec.ceph.networks.publicCIDRs`; that list contains the networks
+where Ceph hosts actually stand. Data Foundation external-mode CSI uses node
+networking to reach Ceph monitor endpoints, so every schedulable child node
+needs the secondary route. The fabric must route both directions between the
+node/client subnet and every Ceph public CIDR, permit the required Ceph ports,
+and carry MTU 9000 end to end. A localnet CUDN with disabled IPAM leaves both
+addresses under Bootwright desired state. See
 [KubeVirt nested clusters](kubevirt.md) for the provider and parent-ordering
 model.
 

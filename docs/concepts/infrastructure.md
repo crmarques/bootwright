@@ -569,11 +569,14 @@ machineProfiles:
   and rebuilt gets a **new** TPM and cannot unseal the old volume. That is
   harmless under Bootwright, whose `destroy` + `apply` reinstalls the OS anyway.
   `tpm.persistent` is rejected here: libvirt has no ephemeral mode to opt out of.
-- **kubevirt** sets `devices.tpm.persistent: true`, which needs the
-  `VMPersistentState` feature gate and a `vmStateStorageClass` on the host
-  cluster; without them the VM will not start. `persistent: false` drops the
-  state with the `virt-launcher` pod, so anything sealed to that vTPM is lost on
-  the first restart — set it only for a machine that is reinstalled each boot.
+- **kubevirt** sets `devices.tpm.persistent: true`, which stores vTPM state on a
+  PVC. OpenShift Virtualization 4.21 uses its virtualization-default
+  StorageClass, then the cluster default, when
+  `HyperConverged.spec.vmStateStorageClass` is unset; set that field explicitly
+  when deterministic placement matters. Older host releases can require the
+  `VMPersistentState` feature gate. `persistent: false` drops the state with the
+  `virt-launcher` pod, so anything sealed to that vTPM is lost on the first
+  restart — set it only for a machine that is reinstalled each boot.
 - **vsphere** rejects `tpm`. A vTPM there needs a vCenter key provider, EFI
   firmware and a powered-off snapshot-free VM, none of which Bootwright
   configures. Encrypt those nodes out of band, or run them on hardware.
@@ -583,11 +586,12 @@ machineProfiles:
 ### Network Attachments
 
 `networkAttachments[]` declares the named substrate networks a machine's
-`NetworkConfig` binds to (a `Machine` selects one with
-`network.config.attachmentRef`). It is a presence union over the provider arms:
-each attachment has a `name` (unique within the provider) and exactly one arm,
-which must match the provider's `spec.type` — the parent type already fixes the
-kind, so there is no separate discriminator.
+`NetworkConfig` binds to. A `Machine` selects one for all NICs with
+`network.config.attachmentRef`; a KubeVirt machine can instead select one per
+NIC with `network.config.interfaceAttachments[]`. It is a presence union over
+the provider arms: each attachment has a `name` (unique within the provider)
+and exactly one arm, which must match the provider's `spec.type` — the parent
+type already fixes the kind, so there is no separate discriminator.
 
 | Arm | Field | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -611,6 +615,16 @@ kind, so there is no separate discriminator.
     `network.config.attachmentRef` selects one attachment, and it applies to every
     NIC of that machine. `failureDomains[].topology.networks[]` is not this
     binding — it is install-config data for OpenShift node addressing.
+
+!!! note "KubeVirt can bind each VM NIC separately"
+    Use `Machine.spec.network.config.interfaceAttachments[]` when the effective
+    `NetworkConfig` declares multiple physical interfaces that must land on
+    different CUDNs, UDNs, or NADs. Every physical interface must appear exactly
+    once, each `attachmentRef` must resolve on the selected KubeVirt provider,
+    and the list cannot be combined with the machine-wide `attachmentRef`.
+    Bootwright renders each KubeVirt `VirtualMachine.spec.networks[]` entry from
+    that interface's resolved attachment; it does not assume an unverified VLAN
+    trunk behind one NAD.
 
 KubeVirt `networkRef` is the API's sole object-form reference because the network
 object lives on the host cluster, outside the loaded desired state. It is
@@ -856,6 +870,13 @@ the kickstart `network` directive — see
 | `dns-resolver.config.server` | `spec.nameResolutionRefs[]` | restructured | cross-document reference into the `Environment` name-resolution catalog |
 | per-host nmstate additions | `Machine` `spec.network.config.overrides` (deep-merged over the selected template) | mirror | — |
 | per-host static addresses | `Machine` `spec.network.config.interfaceAddresses[]` referencing `spec.addresses[]` | restructured | the IP is authored once and shared with SSH and endpoint resolution |
+
+### Native mapping — KubeVirt `VirtualMachine`
+
+| Native key | Bootwright path | Class | What the divergence buys |
+| --- | --- | --- | --- |
+| `VirtualMachine` `template.spec.domain.devices.interfaces[].name` + `template.spec.networks[].name` | effective `NetworkConfig` physical interface names | derived | one guest interface identity drives agent NMState, deterministic MAC generation, and VM networking |
+| `VirtualMachine` `template.spec.networks[].multus.networkName` | `Machine.spec.network.config.attachmentRef` or `interfaceAttachments[].attachmentRef` → `InfraProvider.spec.networkAttachments[].kubevirt.networkRef` | restructured | cross-document reference to a host-cluster network object, with a per-NIC form for distinct networks |
 
 ### Native mapping — `install-config.yaml` (vSphere platform)
 

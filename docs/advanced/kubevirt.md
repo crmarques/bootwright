@@ -40,6 +40,13 @@ spec:
           kind: ClusterUserDefinedNetwork
           name: dc1-child-net
           namespace: bootwright-dc1-child-ocp
+    - name: dc1-ceph-public
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: dc1-ceph-public
+          namespace: bootwright-dc1-child-ocp
   kubevirt:
     namespace: bootwright-dc1-child-ocp
     storageClassRef: ocs-external-storagecluster-ceph-rbd
@@ -110,14 +117,14 @@ accepted. Bootwright **references** the object; it does not render or own it —
 author the (C)UDN/NAD and any OVS bridge-mapping `NodeNetworkConfigurationPolicy`
 out of band, for example as a `manifestSet` add-on on the parent. See
 [Networking → KubeVirt child networks](networking.md#kubevirt-child-networks) for
-the localnet topology, the `dc1-child-net` `NetworkConfig` these machines
-reference, and the static-IP rule.
+the two-localnet topology, the `dc1-child-net` `NetworkConfig` these machines
+reference, the routed external-Ceph client path, and the static-IP rule.
 
 ## The child machines
 
 Each child machine is `os.provided: false`, selects the KubeVirt provider and one
-of its profiles, and binds the KubeVirt network attachment by its
-`networkConfigRef`:
+of its profiles, and binds the primary and external-Ceph client NICs to distinct
+provider attachments:
 
 ```yaml
 spec:
@@ -131,14 +138,33 @@ spec:
   network:
     config:
       networkConfigRef: dc1-child-net
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: dc1-child-net
+        - interface: ceph-public
+          attachmentRef: dc1-ceph-public
       interfaceAddresses:
         - interface: primary
           addressRef: ip
           prefixLength: 24
+      overrides:
+        interfaces:
+          - name: ceph-public
+            ipv4:
+              address:
+                - ip: 192.168.171.60
+                  prefix-length: 24
   addresses:
     - name: ip
       address: 192.168.151.30
+    - name: ceph-public
+      address: 192.168.171.60
 ```
+
+`interfaceAttachments[]` must cover every physical interface in the effective
+`NetworkConfig` exactly once. Bootwright gives each VM NIC the NAD selected for
+that interface; a machine-wide `attachmentRef` remains the concise form when all
+NICs use one network.
 
 The child `ContainerCluster` itself is ordinary OpenShift install intent — its
 nodes reference these machines, and its endpoints use `external` or

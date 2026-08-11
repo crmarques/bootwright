@@ -40,7 +40,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		out["primaryIPAddress"] = ip
 	}
 	if interfaces := installer.MachineInterfaces(state, m, clusterName); len(interfaces) > 0 {
-		out["interfaces"] = machineInterfaceVars(interfaces)
+		out["interfaces"] = clusterMachineInterfaceVars(state, ci, m, interfaces)
 	}
 	if machineRef := machineHostRef(state, m); machineRef != "" {
 		out["machineRef"] = machineRef

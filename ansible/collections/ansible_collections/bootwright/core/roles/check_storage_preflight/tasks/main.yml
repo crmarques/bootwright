@@ -34,6 +34,20 @@
     fail_msg: "Storage node {{ bootwright_host_name }} must already run RHEL or a Red Hat family OS before managed Ceph apply."
   when: bootwright_host_storage_nodes | length > 0
 
+- name: Resolve whether this host belongs to a FIPS-enabled storage cluster
+  ansible.builtin.set_fact:
+    bootwright_storage_fips_required: >-
+      {{ bootwright_host_storage_nodes
+         | selectattr('fipsRequired', 'defined')
+         | selectattr('fipsRequired', 'equalto', true)
+         | list | length > 0 }}
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Verify storage node FIPS mode
+  ansible.builtin.include_tasks: fips_mode.yml
+  when: bootwright_host_storage_nodes | length > 0
+
 - name: Check for package-mode Ceph daemon residue
   ansible.builtin.include_tasks: package_mode_daemons.yml
   when: bootwright_host_storage_nodes | length > 0

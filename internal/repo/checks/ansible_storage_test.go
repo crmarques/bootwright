@@ -716,6 +716,74 @@ func TestStoragePackageModeDaemonGatePrecedesMutationOnEverySelectedHost(t *test
 	}
 }
 
+func TestStorageFIPSModeGatePrecedesMutationOnEverySelectedHost(t *testing.T) {
+	fipsPath := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/fips_mode.yml"
+	fipsTasks := readAnsibleTasks(t, fipsPath)
+	probe := fipsTasks[findAnsibleTask(t, fipsTasks, "Read the storage node kernel FIPS mode")]
+	command, ok := probe["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("the FIPS mode proof must use a command probe, got %v", probe)
+	}
+	if got := fmt.Sprint(command["argv"]); !strings.Contains(got, "cat") || !strings.Contains(got, "/proc/sys/crypto/fips_enabled") {
+		t.Fatalf("the FIPS mode proof must read the kernel flag, got argv=%v", command["argv"])
+	}
+	if probe["changed_when"] != false || probe["failed_when"] != false {
+		t.Fatalf("the FIPS probe must be read-only and defer classification to the refusal, got changed_when=%v failed_when=%v", probe["changed_when"], probe["failed_when"])
+	}
+	refuse := fipsTasks[findAnsibleTask(t, fipsTasks, "Refuse a storage node that is not running in FIPS mode")]
+	assert, ok := refuse["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("a non-FIPS storage node must trip an assertion, got %v", refuse)
+	}
+	that := fmt.Sprint(assert["that"])
+	for _, want := range []string{"bootwright_storage_fips_mode_probe.rc", "== 0", "bootwright_storage_fips_mode_probe.stdout", "== '1'"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("the FIPS refusal is missing %q, got that=%v", want, assert["that"])
+		}
+	}
+	message := fmt.Sprint(assert["fail_msg"])
+	for _, want := range []string{"/proc/sys/crypto/fips_enabled", "before any storage mutation", "bootwright_mutating_invocation"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("the FIPS refusal is missing %q, got %s", want, message)
+		}
+	}
+
+	preflightPath := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml"
+	preflightTasks := readAnsibleTasks(t, preflightPath)
+	resolveIdx := findAnsibleTask(t, preflightTasks, "Resolve whether this host belongs to a FIPS-enabled storage cluster")
+	preflightGateIdx := findAnsibleTask(t, preflightTasks, "Verify storage node FIPS mode")
+	packageIdx := findAnsibleTask(t, preflightTasks, "Check for package-mode Ceph daemon residue")
+	if !(resolveIdx < preflightGateIdx && preflightGateIdx < packageIdx) {
+		t.Fatalf("standalone preflight must resolve and verify FIPS before later storage checks (resolve=%d gate=%d package=%d)", resolveIdx, preflightGateIdx, packageIdx)
+	}
+	assertIncludeTasksFile(t, preflightTasks[preflightGateIdx], "fips_mode.yml")
+
+	rolePath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml"
+	roleTasks := readAnsibleTasks(t, rolePath)
+	applyGateIdx := findAnsibleTask(t, roleTasks, "Verify storage node FIPS mode before storage mutation")
+	nodeIdentityIdx := findAnsibleTask(t, roleTasks, "Resolve and gate Ceph storage node identity")
+	if applyGateIdx >= nodeIdentityIdx {
+		t.Fatalf("the FIPS mode gate must precede the hostname mutation (gate=%d identity=%d)", applyGateIdx, nodeIdentityIdx)
+	}
+	include, ok := roleTasks[applyGateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || include["name"] != "bootwright.core.check_storage_preflight" || include["tasks_from"] != "fips_mode.yml" {
+		t.Fatalf("storage apply must reuse the exact FIPS gate, got %v", roleTasks[applyGateIdx])
+	}
+
+	nodeAccessPath := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_node_access_apply.yml"
+	nodeAccessPlays := readAnsiblePlays(t, nodeAccessPath)
+	nodeAccessTasks := nestedAnsibleTasks(t, nodeAccessPlays[0], "tasks")
+	nodeAccessGateIdx := findAnsibleTask(t, nodeAccessTasks, "Verify storage node FIPS mode before node access mutation")
+	nodeAccessApplyIdx := findAnsibleTask(t, nodeAccessTasks, "Apply Ceph storage node access")
+	if nodeAccessGateIdx >= nodeAccessApplyIdx {
+		t.Fatalf("the FIPS mode gate must precede orchestration-account mutation (gate=%d apply=%d)", nodeAccessGateIdx, nodeAccessApplyIdx)
+	}
+	nodeAccessInclude, ok := nodeAccessTasks[nodeAccessGateIdx]["ansible.builtin.include_role"].(map[string]any)
+	if !ok || nodeAccessInclude["name"] != "bootwright.core.check_storage_preflight" || nodeAccessInclude["tasks_from"] != "fips_mode.yml" {
+		t.Fatalf("node-access apply must reuse the exact FIPS gate, got %v", nodeAccessTasks[nodeAccessGateIdx])
+	}
+}
+
 func TestStorageOSDReadinessRequiresInOSDPerDynamicHost(t *testing.T) {
 	path := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/osd_readiness.yml"
 	tasks := readAnsibleTasks(t, path)

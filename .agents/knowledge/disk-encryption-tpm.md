@@ -156,6 +156,25 @@ which come from `tpm2-tss` — and `tpm2-tss` is only a **Recommends** of
 a `minimal` environment, so it does not have them, and enrollment fails *after*
 the OSD has already been created. Validation now refuses that combination.
 
+### IBM 9.9 exposes the mechanism but does not document it as supported
+
+[Upstream Ceph Tentacle](https://docs.ceph.com/en/tentacle/cephadm/services/osd/#additional-options)
+and the 20.1.0 source implement `encrypted: true` plus `tpm2: true` as LUKS2
+enrollment through `systemd-cryptenroll`; the TPM path does not escrow a
+persistent `dmcrypt_key` in the monitors. IBM Storage Ceph 9.9.0.3 is built
+from that line, so Bootwright can render the field and the binary contains the
+mechanism.
+
+That is not the same as an IBM support statement. IBM's
+[9.9 encryption-at-rest documentation](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=management-encryption-rest)
+describes LUKS1, `encrypted: true`, and monitor-escrowed keys; it does not
+document the `tpm2` OSD-spec field or the LUKS2 TPM path. Treat an IBM 9.9
+`osd.tpm2` declaration as support-unverified until IBM confirms it for the exact
+image/build and the target RHEL, TPM, SELinux, and FIPS combination. Do not
+infer vendor support from upstream source presence, and do not replace the
+requested declaration with ordinary dm-crypt: that changes the key-custody
+requirement.
+
 ## Emulated TPMs: state loss, not PCR drift, is what bricks VMs
 
 There is no incompatibility between clevis and swtpm. The failure mode is
@@ -166,10 +185,15 @@ lifecycle:
   added `--keep-tpm`). A redefined domain gets a freshly manufactured TPM with a
   new SRK and cannot unseal the old volume. Harmless under Bootwright, whose
   destroy+apply reinstalls the OS anyway.
-- **KubeVirt** needs `tpm: {persistent: true}` plus the `VMPersistentState`
-  feature gate and a `vmStateStorageClass`; without persistence the vTPM dies
-  with the `virt-launcher` pod on any stop/start, restart, eviction or
-  migration. Live migration additionally wants RWX+Filesystem backing storage.
+- **KubeVirt** needs `tpm: {persistent: true}`; without persistence the vTPM
+  dies with the `virt-launcher` pod on any stop/start, restart, eviction or
+  migration. Persistent state uses a PVC. OpenShift Virtualization 4.21 chooses
+  the virtualization-default StorageClass, then the cluster default, when
+  `HyperConverged.spec.vmStateStorageClass` is unset; setting it explicitly is
+  recommended for deterministic placement. Older host releases can still
+  require the `VMPersistentState` feature gate, so host-version support remains
+  an external prerequisite rather than something a KubeVirt VM manifest can
+  enable.
 - **vSphere** requires a vCenter key provider, EFI firmware, hardware version 14+
   and a powered-off snapshot-free VM; cloning with **Replace** mints a blank
   vTPM. `community.vmware.vmware_guest_tpm` exists but `vmware_guest` has no

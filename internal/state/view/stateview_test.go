@@ -70,6 +70,37 @@ func TestClusterInstallRelationships(t *testing.T) {
 	}
 }
 
+func TestClusterInstallProjectsPerInterfaceNetworkAttachments(t *testing.T) {
+	cluster := v1alpha1.ContainerCluster{
+		Metadata: v1alpha1.Metadata{Name: "child"},
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+			Name: "master-0", MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
+		}}},
+	}
+	attachments := []v1alpha1.MachineInterfaceAttachment{
+		{Interface: "primary", AttachmentRef: v1alpha1.LocalObjectReference{Name: "machine"}},
+		{Interface: "ceph-public", AttachmentRef: v1alpha1.LocalObjectReference{Name: "ceph-public"}},
+	}
+	state := v1alpha1.State{Machines: []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: "master-0"},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{ProviderRef: v1alpha1.LocalObjectReference{Name: "kubevirt"}},
+			Network: v1alpha1.MachineNetwork{Config: v1alpha1.MachineNetworkConfig{
+				NetworkConfigRef:     v1alpha1.LocalObjectReference{Name: "child-net"},
+				InterfaceAttachments: attachments,
+			}},
+		},
+	}}}
+	install, ok := ClusterInstallForContainerCluster(state, cluster)
+	if !ok || len(install.NetworkBindings) != 1 {
+		t.Fatalf("ClusterInstallForContainerCluster = %+v, %v", install, ok)
+	}
+	binding := install.NetworkBindings[0]
+	if len(binding.InterfaceAttachments) != 2 || binding.InterfaceAttachments[1].AttachmentRef.Name != "ceph-public" {
+		t.Fatalf("projected interface attachments = %+v, want both bindings", binding.InterfaceAttachments)
+	}
+}
+
 func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 	infra := v1alpha1.ClusterInstall{
 		Endpoints: map[string]v1alpha1.Endpoint{

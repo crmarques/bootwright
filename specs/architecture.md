@@ -59,10 +59,12 @@ Imported storage clusters skip this storage task.
 For KubeVirt children that reference a Bootwright-managed virtualization
 cluster, the full graph and explicit parent+child `--clusters` selections add
 graph edges from the child work to both the parent install wait and the parent
-add-on wait task that provides `kubevirt`. Scoped child applies do not expand
-the scope to install the parent; they fail before mutation unless the parent is
-selected too or local runtime records prove the parent install and KubeVirt
-add-on are ready.
+add-on wait task that provides `kubevirt`. VM infrastructure also waits for the
+parent add-ons that declare its selected storage class and every network object
+referenced by the machine-wide or per-interface KubeVirt attachments. Scoped
+child applies do not expand the scope to install the parent; they fail before
+mutation unless the parent is selected too or local runtime records prove the
+parent install and KubeVirt add-on are ready.
 
 Bootwright is the cross-cluster DAG orchestrator. The executor split is:
 host and bastion mutations execute in Ansible; installed-cluster API
@@ -147,8 +149,10 @@ boundaries drive rendering:
   referenced `Machine` objects, `NetworkConfig` templates, and provider or
   generated substrate MAC inventory.
 - Machine and endpoint provider variables resolve substrate network
-  attachments from `Machine.spec.network.config.attachmentRef` to
-  `InfraProvider.spec.networkAttachments[]`.
+  attachments from `Machine.spec.network.config.attachmentRef`, or KubeVirt
+  per-NIC `interfaceAttachments[]`, to
+  `InfraProvider.spec.networkAttachments[]`; KubeVirt VM inventory carries the
+  resolved attachment on each rendered interface.
 - Global boot-artifact and time-source fields are rendered from disconnected
   install mode, `ContainerCluster.spec.install.agent.bootArtifacts`, and
   resolved environment NTP source entries.

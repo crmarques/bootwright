@@ -1153,6 +1153,25 @@ func TestKubeVirtApplyPreservesRuntimeState(t *testing.T) {
 	}
 }
 
+func TestKubeVirtVirtualMachineUsesPerInterfaceNetworkAttachments(t *testing.T) {
+	template := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/virtualmachine.yaml.j2")
+	if !strings.Contains(template, "networkName: {{ iface.networkAttachment.kubevirt.nad }}") {
+		t.Fatal("KubeVirt VM networks must resolve the NAD projected onto each rendered interface")
+	}
+	if strings.Contains(template, "bootwright_kubevirt_nad") {
+		t.Fatal("KubeVirt VM template must not collapse all interfaces onto one NAD")
+	}
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml")
+	validateIdx := findAnsibleTask(t, tasks, "Validate KubeVirt substrate inputs")
+	assertion := fmt.Sprint(tasks[validateIdx]["ansible.builtin.assert"])
+	if !strings.Contains(assertion, "networkAttachment.kubevirt.nad") || !strings.Contains(assertion, "per-interface NAD") {
+		t.Fatalf("KubeVirt input gate must require a NAD on every rendered interface, got %v", tasks[validateIdx])
+	}
+	if !strings.Contains(assertion, "map(attribute='networkAttachment.kubevirt.nad', default='')") || strings.Contains(assertion, "selectattr('networkAttachment.kubevirt.nad'") {
+		t.Fatalf("KubeVirt input gate must safely default a missing nested NAD before filtering it, got %v", tasks[validateIdx])
+	}
+}
+
 func TestKubeVirtApplyGatesLiveResourcesBeforeMutation(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/main.yml")
 	vmProbeIdx := findAnsibleTask(t, tasks, "Read existing KubeVirt VirtualMachine identity")

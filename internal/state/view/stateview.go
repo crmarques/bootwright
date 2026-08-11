@@ -123,12 +123,13 @@ func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.Co
 		}
 		nodes = append(nodes, clusterNodeFromMachine(machine))
 		network := machine.Spec.Network.Config
-		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
+		if network.NetworkConfigRef.Name != "" && (network.AttachmentRef.Name != "" || len(network.InterfaceAttachments) > 0) && machine.Spec.Substrate.ProviderRef.Name != "" {
 			networkBindings = append(networkBindings, v1alpha1.MachineNetworkBinding{
-				MachineName:      machine.Metadata.Name,
-				NetworkConfigRef: network.NetworkConfigRef,
-				ProviderRef:      machine.Spec.Substrate.ProviderRef,
-				AttachmentRef:    network.AttachmentRef,
+				MachineName:          machine.Metadata.Name,
+				NetworkConfigRef:     network.NetworkConfigRef,
+				ProviderRef:          machine.Spec.Substrate.ProviderRef,
+				AttachmentRef:        network.AttachmentRef,
+				InterfaceAttachments: append([]v1alpha1.MachineInterfaceAttachment(nil), network.InterfaceAttachments...),
 			})
 		}
 	}

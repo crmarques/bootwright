@@ -12,6 +12,16 @@ spec:
         - name: primary
           type: ethernet
           state: up
+          mtu: 1500
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: ceph-public
+          type: ethernet
+          state: up
+          mtu: 9000
           ipv4:
             enabled: true
             dhcp: false
@@ -26,4 +36,16 @@ spec:
           - destination: 0.0.0.0/0
             next-hop-address: 192.168.151.1
             next-hop-interface: primary
+            table-id: 254
+          - destination: 192.168.141.0/24
+            next-hop-address: 192.168.171.1
+            next-hop-interface: ceph-public
+            table-id: 254
+          - destination: 192.168.142.0/24
+            next-hop-address: 192.168.171.1
+            next-hop-interface: ceph-public
+            table-id: 254
+          - destination: 192.168.143.0/24
+            next-hop-address: 192.168.171.1
+            next-hop-interface: ceph-public
             table-id: 254

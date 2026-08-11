@@ -157,24 +157,6 @@ learned; this file records what it still owes.
   this entry.
 - Related: ADR 0022, [cluster-install-record-gates.md](cluster-install-record-gates.md)
 
-## B-043 — Seven `Machine.spec.capabilities[]` values have no enforcement site
-- Status: open
-- Area: api / validation
-- Origin: definitions review 2026-07-28
-- Severity: low
-- Problem: of the eleven accepted values, only `openshift-node`, `ceph-node`,
-  `libvirt` and `container-runtime` are read anywhere —
-  `internal/state/desired/validate_machine.go` cross-checks the first three
-  against an existing reference and `internal/roles/registry.go` asserts the last
-  two as host properties. `ceph-admin`, `artifact-server`, `load-balancer`,
-  `proxy`, `name-resolution`, `ntp` and `registry` appear only in the accept-list
-  at `validate_machine.go:13-24`; they render into inventory
-  (`internal/render/inventory/vars.go`) but no playbook consumes them, so
-  authoring or omitting them changes nothing.
-- Exit: give each remaining value an enforcement site, or retire it — removal
-  from `v1alpha1` is an API break and needs its own ADR.
-- Related: [api-normalize-bookkeeping.md](api-normalize-bookkeeping.md)
-
 ## B-045 — `access.rootLogin: revoke` is Ceph-only because no other executor exists
 - Status: open
 - Area: machines / node-access

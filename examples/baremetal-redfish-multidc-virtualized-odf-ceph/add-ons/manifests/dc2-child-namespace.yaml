@@ -4,3 +4,4 @@ metadata:
   name: bootwright-dc2-child-ocp
   labels:
     bootwright.io/cudn: dc2-child-net
+    bootwright.io/ceph-public-cudn: dc2-ceph-public

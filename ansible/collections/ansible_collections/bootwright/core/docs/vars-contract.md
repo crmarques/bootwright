@@ -118,7 +118,20 @@ bootwright_clusters:
         cleanupMediaRole: bootwright.core.container_cluster_boot_redfish
         machineSetupRoles:
           - bootwright.core.provider_host_libvirt
+        interfaces:
+          - name: primary
+            macAddress: 52:54:00:12:34:56
+            networkAttachment:
+              kind: kubevirt
+              kubevirt: { nad: bootwright-child/child-machine-net }
+          - name: ceph-public
+            macAddress: 52:54:00:65:43:21
+            networkAttachment:
+              kind: kubevirt
+              kubevirt: { nad: bootwright-child/ceph-public }
         networkAttachment:
+          # Present for the machine-wide attachmentRef form. KubeVirt
+          # interfaceAttachments[] instead resolve under each interfaces[] item.
           kind: libvirt | vsphere | kubevirt | baremetal
           libvirt: { bridge }
           vsphere: { portgroup }
@@ -589,6 +602,7 @@ bootwright_storage_clusters:
   - name: ceph-stretch
     seedHost: storage__ceph-stretch__ceph-dc1-0
     storageGroup: bootwright_storage_hosts_ceph_stretch
+    fips: true
     provider:
       name: redhat
       distribution: redhat
@@ -624,11 +638,13 @@ bootwright_storage_clusters:
       - hostname: ceph-dc1-0
         inventoryHost: storage__ceph-stretch__ceph-dc1-0
         address: 192.168.133.30
+        fipsRequired: true
         devices:
           - /dev/sdb
       - hostname: ceph-dc1-1
         inventoryHost: storage__ceph-stretch__ceph-dc1-1
         address: 192.168.133.31
+        fipsRequired: true
         devices: []
         osdDeviceFilters:
           - role: data
@@ -677,6 +693,14 @@ half of the `cephadm.clusterSSH.keyRef` pair that is the only key authorized for
 that account. The Machine key stays offered alongside it. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
+
+`fips: true` is present on a cluster entry only when
+`StorageCluster.spec.ceph.security.fips.enabled` is true, and every host in that
+cluster then carries `fipsRequired: true`. Standalone preflight resolves the
+host fact; storage-node access and storage-cluster apply use the selected
+cluster fact. All three paths read `/proc/sys/crypto/fips_enabled` and require
+`1` before their first mutation, including for an `os.provided: true` host whose
+FIPS installation remains external.
 
 The three host-level OSD gate facts have distinct authority:
 

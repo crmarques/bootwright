@@ -1,8 +1,6 @@
 package installer
 
 import (
-	"sort"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/nmstate"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -34,38 +32,5 @@ func machineInterfaceAddresses(machine v1alpha1.InstallMachine) []nmstate.Interf
 }
 
 func networkConfigInterfaceNames(config map[string]any) []string {
-	raw, ok := config["interfaces"].([]any)
-	if !ok {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, item := range raw {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := entry["name"].(string)
-		if name == "" || seen[name] {
-			continue
-		}
-		ifType, _ := entry["type"].(string)
-		if isVirtualInterfaceType(ifType) {
-			continue
-		}
-		seen[name] = true
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func isVirtualInterfaceType(ifType string) bool {
-	switch ifType {
-	case "bond", "vlan", "vxlan", "bridge", "linux-bridge", "ovs-bridge",
-		"ovs-interface", "team", "vrf", "dummy", "macvlan", "macvtap", "ipvlan":
-		return true
-	default:
-		return false
-	}
+	return nmstate.PhysicalInterfaceNames(config)
 }

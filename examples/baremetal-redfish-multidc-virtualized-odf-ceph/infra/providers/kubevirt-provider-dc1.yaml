@@ -15,6 +15,14 @@ spec:
         name: dc1-child-net
         namespace: bootwright-dc1-child-ocp
 
+  - name: dc1-ceph-public
+    kubevirt:
+      networkRef:
+        apiGroup: k8s.ovn.org
+        kind: ClusterUserDefinedNetwork
+        name: dc1-ceph-public
+        namespace: bootwright-dc1-child-ocp
+
   kubevirt:
     namespace: bootwright-dc1-child-ocp
     storageClassRef: ocs-external-storagecluster-ceph-rbd

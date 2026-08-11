@@ -383,6 +383,8 @@ Rules:
   `spec`.
 - `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
+  It applies that attachment to every physical NIC rendered for the machine and
+  is mutually exclusive with `interfaceAttachments[]`.
   When omitted on a provider-backed machine that sets `networkConfigRef`,
   `attachmentRef` defaults to the `networkConfigRef`; `render
   effective` materializes the default and validation resolves it against the
@@ -391,6 +393,14 @@ Rules:
   attachment of its kind; with several, validation rejects the defaulted
   reference and lists the candidate names, so renaming a `NetworkConfig` can
   never silently re-bind a machine to a different attachment.
+- `spec.network.config.interfaceAttachments[]` is the KubeVirt alternative when
+  different VM NICs use different host-cluster networks. Each entry maps one
+  physical interface name from the effective `NetworkConfig` to an
+  `InfraProvider.spec.networkAttachments[]` entry through `attachmentRef`.
+  Interface names are unique, every rendered physical NIC is covered exactly
+  once, and every reference resolves to a KubeVirt attachment on the selected
+  KubeVirt provider. The field is rejected on other provider types and is
+  mutually exclusive with the machine-wide `attachmentRef`.
 - `spec.network.config.interfaceAddresses[]` is the single owner of a node's
   static install IP. Each entry binds an NMState `interface` to a named
   `spec.addresses[]` entry through `addressRef` and sets `prefixLength` (and
@@ -889,7 +899,8 @@ Rules:
   `{datastore, folder}`. Absent fields default to the machine's
   failure-domain `topology.datastore` and the stock vmedia folder.
 - `networkAttachments[]` names provider-specific attachment targets. Machines
-  bind to them through `spec.network.config.attachmentRef`. Each entry sets a
+  bind to them through `spec.network.config.attachmentRef`, or on KubeVirt
+  through `spec.network.config.interfaceAttachments[]`. Each entry sets a
   `name` and exactly one arm matching the provider `type`: `libvirt.bridge`,
   `vsphere.portgroup`, `baremetal.vlan` (`0`–`4094`), or `kubevirt.networkRef`. A
   KubeVirt `networkRef` requires `name` and `namespace` (a DNS label); `kind`
@@ -901,8 +912,8 @@ Rules:
   because portgroup resolution is not datacenter-scoped. It is required whenever
   the provider declares more than one `vsphere.failureDomains[]` entry, where a
   bare portgroup name is no longer uniquely resolvable, and in practice whenever
-  the name is not unique across the vCenter. The attachment a machine selects
-  applies to every NIC of that machine.
+  the name is not unique across the vCenter. The attachment a vSphere machine
+  selects applies to every NIC of that machine.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.
   `hostClusterRef` references a Bootwright `ContainerCluster`; `kubeconfigRef`
   references a secret containing an external virtualization kubeconfig. They also
@@ -1572,7 +1583,12 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
 - `spec.ceph.security.fips.enabled: true` requires distribution `redhat` or `ibm`
   (rejected for `oss`) and gates the cluster on FIPS-mode Ceph hosts: every host
   that installs a managed OS must reference a `MachineInstallProfile` whose
-  `customizations.security.fips.enabled` is also `true`.
+  `customizations.security.fips.enabled` is also `true`. Standalone storage
+  preflight, storage-node access apply, and storage-cluster apply additionally
+  read `/proc/sys/crypto/fips_enabled` on every selected topology host before
+  their first mutation and require `1`. This live proof includes
+  `os.provided: true` hosts; Bootwright verifies their running kernel mode but
+  does not install or enable FIPS on them.
 - `spec.ceph.security.cephx.keyType` declares the cipher new cephx keys are
   minted with: `aes` or `aes256k`. Unset, Bootwright emits no cipher operations
   and the build's own mon-map policy stands; the block is a pointer so an absent
@@ -2481,7 +2497,8 @@ section above.
   exception because `ContainerCluster.spec.install.nodeSSH` owns the installed
   RHCOS identity.
 - Provider network attachment refs must exist and match the provider arm used
-  by the machine.
+  by the machine. KubeVirt `interfaceAttachments[]` must map every effective
+  physical interface exactly once and cannot be combined with `attachmentRef`.
 - A `Machine` is node-bound by at most one cluster across `ContainerCluster`
   `spec.nodes[].machineRef` and `StorageCluster`
   `spec.ceph.topology.nodes[].machineRef`, and by at most one host entry

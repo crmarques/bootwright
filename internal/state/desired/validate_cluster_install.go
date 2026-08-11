@@ -394,16 +394,36 @@ func validateMachineNetworkBindings(ci v1alpha1.ClusterInstall, providers map[st
 		} else if !ok {
 			errs = append(errs, fmt.Sprintf("%s spec.substrate.providerRef %q does not match any InfraProvider", mp, binding.ProviderRef.Name))
 		}
-		if binding.AttachmentRef.Name == "" {
-			errs = append(errs, mp+" spec.network.config.attachmentRef is required")
-		} else if ok {
-			if attachment, found := lookupNetworkAttachment(provider, binding.AttachmentRef.Name); !found {
-				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef %q does not match any networkAttachments[] on InfraProvider/%s", mp, binding.AttachmentRef.Name, provider.Metadata.Name))
-			} else if kind := v1alpha1.NetworkAttachmentKind(attachment); kind != "" && kind != provider.Spec.Type {
-				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef %q binds to InfraProvider/%s networkAttachment of kind %q, but provider type is %q",
-					mp, binding.AttachmentRef.Name, provider.Metadata.Name, kind, provider.Spec.Type))
+		if binding.AttachmentRef.Name != "" && len(binding.InterfaceAttachments) > 0 {
+			errs = append(errs, mp+" spec.network.config must set only one of attachmentRef or interfaceAttachments")
+		}
+		if binding.AttachmentRef.Name == "" && len(binding.InterfaceAttachments) == 0 {
+			errs = append(errs, mp+" spec.network.config must set attachmentRef or interfaceAttachments")
+		}
+		if binding.AttachmentRef.Name != "" && ok {
+			errs = append(errs, validateMachineNetworkBindingAttachment(mp+" spec.network.config.attachmentRef", binding.AttachmentRef, provider)...)
+		}
+		if ok {
+			for i, interfaceAttachment := range binding.InterfaceAttachments {
+				owner := fmt.Sprintf("%s spec.network.config.interfaceAttachments[%d].attachmentRef", mp, i)
+				errs = append(errs, validateMachineNetworkBindingAttachment(owner, interfaceAttachment.AttachmentRef, provider)...)
 			}
 		}
 	}
 	return errs
+}
+
+func validateMachineNetworkBindingAttachment(owner string, ref v1alpha1.LocalObjectReference, provider v1alpha1.InfraProvider) []string {
+	if ref.Name == "" {
+		return []string{owner + " is required"}
+	}
+	attachment, found := lookupNetworkAttachment(provider, ref.Name)
+	if !found {
+		return []string{fmt.Sprintf("%s %q does not match any networkAttachments[] on InfraProvider/%s", owner, ref.Name, provider.Metadata.Name)}
+	}
+	if kind := v1alpha1.NetworkAttachmentKind(attachment); kind != "" && kind != provider.Spec.Type {
+		return []string{fmt.Sprintf("%s %q binds to InfraProvider/%s networkAttachment of kind %q, but provider type is %q",
+			owner, ref.Name, provider.Metadata.Name, kind, provider.Spec.Type)}
+	}
+	return nil
 }

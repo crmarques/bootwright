@@ -1,0 +1,47 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: nmstate
+spec:
+  type: olm
+
+  provides:
+    - nmstate
+
+  olm:
+    namespace:
+      name: openshift-nmstate
+      create: true
+    operatorGroup:
+      name: openshift-nmstate
+      targetNamespaces:
+        - openshift-nmstate
+    subscription:
+      name: kubernetes-nmstate-operator
+      package: kubernetes-nmstate-operator
+      channel: stable
+      source: redhat-operators
+    customResources:
+      - apiVersion: nmstate.io/v1
+        kind: NMState
+        metadata:
+          name: nmstate
+
+  readiness:
+    timeout: 30m
+    checks:
+      - csvSucceeded:
+          namespace: openshift-nmstate
+          subscription: kubernetes-nmstate-operator
+      - resourceExists:
+          apiVersion: nmstate.io/v1
+          kind: NMState
+          name: nmstate
+      - condition:
+          apiVersion: apps/v1
+          kind: Deployment
+          namespace: openshift-nmstate
+          name: nmstate-webhook
+          condition:
+            type: Available
+            status: "True"

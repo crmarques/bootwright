@@ -22,6 +22,13 @@
     name: bootwright.core.check_storage_preflight
     tasks_from: package_mode_daemons.yml
 
+- name: Verify storage node FIPS mode before storage mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.check_storage_preflight
+    tasks_from: fips_mode.yml
+  vars:
+    bootwright_storage_fips_required: "{{ bootwright_selected_storage_cluster.fips | default(false) | bool }}"
+
 - name: Resolve and gate Ceph storage node identity
   ansible.builtin.include_tasks: phases/node_identity.yml
 

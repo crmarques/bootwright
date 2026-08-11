@@ -11,6 +11,7 @@ func TestMachineNetworkConfigIsZero(t *testing.T) {
 		{"empty", MachineNetworkConfig{}, true},
 		{"networkConfigRef", MachineNetworkConfig{NetworkConfigRef: LocalObjectReference{Name: "n"}}, false},
 		{"attachmentRef", MachineNetworkConfig{AttachmentRef: LocalObjectReference{Name: "a"}}, false},
+		{"interfaceAttachments", MachineNetworkConfig{InterfaceAttachments: []MachineInterfaceAttachment{{Interface: "eth0"}}}, false},
 		{"overrides", MachineNetworkConfig{Overrides: map[string]any{"k": "v"}}, false},
 		{"spec", MachineNetworkConfig{Spec: &NetworkConfigSpec{}}, false},
 		{"interfaceAddresses", MachineNetworkConfig{InterfaceAddresses: []MachineInterfaceAddress{{Interface: "eth0"}}}, false},

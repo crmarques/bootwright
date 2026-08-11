@@ -46,8 +46,9 @@ The tables below describe only `spec`.
 !!! note "Reusable network templates live on the Infrastructure page"
     A `Machine` references a `NetworkConfig` by name through
     `spec.network.config.networkConfigRef`, and a provider attachment through
-    `attachmentRef`. The `NetworkConfig`, `InfraProvider`, and `InfraComponent`
-    kinds are documented on [Infrastructure](infrastructure.md).
+    `attachmentRef` or KubeVirt per-NIC `interfaceAttachments[]`. The
+    `NetworkConfig`, `InfraProvider`, and `InfraComponent` kinds are documented
+    on [Infrastructure](infrastructure.md).
 
 ## Machine
 
@@ -79,13 +80,14 @@ The tables below describe only `spec`.
 ### Capabilities
 
 `spec.capabilities[]` tags the roles a machine fulfills. Each entry must come
-from the canonical set of four; an unknown, empty, or duplicate capability
+from the canonical set of five; an unknown, empty, or duplicate capability
 fails validation. Every one of them gates something:
 
 | Capability | Required by |
 | --- | --- |
 | `openshift-node` | Every `ContainerCluster` `nodes[].machineRef`. |
 | `ceph-node` | Every `StorageCluster` `spec.ceph.topology.nodes[].machineRef`. |
+| `ceph-arbiter` | A machine eligible to become a stretched Ceph cluster's monitor-only tiebreaker; requires a declared site in a stretched estate. |
 | `libvirt` | An `InfraProvider` libvirt host, and the host of an emulated BMC service. |
 | `container-runtime` | The host of **every** `InfraComponent` that runs a container: `loadBalancer`/`haproxy`, `artifactServer`/`http`, `proxy`/`squid`, `nameResolution`/`dnsmasq`, and `registry`/`mirror-registry`. `ntp`/`chrony` needs no capability. |
 
@@ -195,7 +197,9 @@ with `spec`; the two are mutually exclusive. `overrides` and
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `network.config.networkConfigRef` | No | — | Names a reusable `NetworkConfig`. Mutually exclusive with `network.config.spec`. |
-| `network.config.attachmentRef` | No | The `networkConfigRef` name, only when the provider declares exactly one attachment | Names an `InfraProvider.spec.networkAttachments[]` entry. Required with `networkConfigRef` on a provider-backed machine. |
+| `network.config.attachmentRef` | No | The `networkConfigRef` name, only when the provider declares exactly one attachment | Names one `InfraProvider.spec.networkAttachments[]` entry for every physical NIC. Required with `networkConfigRef` on a provider-backed machine unless KubeVirt `interfaceAttachments[]` is set; mutually exclusive with that list. |
+| `network.config.interfaceAttachments[].interface` | Yes (per entry) | — | KubeVirt only. Physical interface name from the effective `NetworkConfig`; every rendered VM NIC must appear exactly once. |
+| `network.config.interfaceAttachments[].attachmentRef` | Yes (per entry) | — | KubeVirt `InfraProvider.spec.networkAttachments[]` entry for this interface. |
 | `network.config.interfaceAddresses[].interface` | Yes (per entry) | — | NMState interface receiving the static address. |
 | `network.config.interfaceAddresses[].addressRef` | Yes (per entry) | — | Name from `spec.addresses[]`. |
 | `network.config.interfaceAddresses[].prefixLength` | Yes (per entry) | — | Prefix length; must be 1-128, or 1-32 when the family is IPv4. |
@@ -211,6 +215,14 @@ with `spec`; the two are mutually exclusive. `overrides` and
     `overrides` — validation rejects a static address in `overrides` for an
     interface that `interfaceAddresses[]` already owns. `interfaceAddresses[]`
     itself is only valid alongside `networkConfigRef` or `spec`.
+
+!!! note "One attachment for all NICs, or one per KubeVirt NIC"
+    Use `attachmentRef` when every NIC belongs to the same substrate network.
+    A KubeVirt machine that needs distinct host-cluster networks uses
+    `interfaceAttachments[]` instead. The list must cover the physical
+    interfaces of the effective `NetworkConfig` exactly; bonds map their member
+    NICs, while VLANs and bridges remain guest-side constructs and are not
+    attachment targets.
 
 ### Access
 

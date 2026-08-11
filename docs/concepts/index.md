@@ -110,6 +110,9 @@ Machine.spec.network.config.networkConfigRef
 Machine.spec.network.config.attachmentRef
   -> InfraProvider.spec.networkAttachments[].name
 
+Machine.spec.network.config.interfaceAttachments[].attachmentRef
+  -> InfraProvider.spec.networkAttachments[].name
+
 Environment.spec.infraComponents.*[].componentRef
   -> InfraComponent
   -> Machine through InfraComponent service placement

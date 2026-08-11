@@ -133,11 +133,17 @@ type MachineNetwork struct {
 }
 
 type MachineNetworkConfig struct {
-	NetworkConfigRef   LocalObjectReference      `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
-	AttachmentRef      LocalObjectReference      `yaml:"attachmentRef,omitempty" json:"attachmentRef,omitempty"`
-	InterfaceAddresses []MachineInterfaceAddress `yaml:"interfaceAddresses,omitempty" json:"interfaceAddresses,omitempty"`
-	Overrides          map[string]any            `yaml:"overrides,omitempty" json:"overrides,omitempty"`
-	Spec               *NetworkConfigSpec        `yaml:"spec,omitempty" json:"spec,omitempty"`
+	NetworkConfigRef     LocalObjectReference         `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
+	AttachmentRef        LocalObjectReference         `yaml:"attachmentRef,omitempty" json:"attachmentRef,omitempty"`
+	InterfaceAttachments []MachineInterfaceAttachment `yaml:"interfaceAttachments,omitempty" json:"interfaceAttachments,omitempty"`
+	InterfaceAddresses   []MachineInterfaceAddress    `yaml:"interfaceAddresses,omitempty" json:"interfaceAddresses,omitempty"`
+	Overrides            map[string]any               `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+	Spec                 *NetworkConfigSpec           `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+type MachineInterfaceAttachment struct {
+	Interface     string               `yaml:"interface" json:"interface"`
+	AttachmentRef LocalObjectReference `yaml:"attachmentRef" json:"attachmentRef"`
 }
 
 type MachineInterfaceAddress struct {
@@ -365,6 +371,7 @@ func MachineProfileRef(machine Machine) LocalObjectReference {
 func (n MachineNetworkConfig) IsZero() bool {
 	return n.NetworkConfigRef.Name == "" &&
 		n.AttachmentRef.Name == "" &&
+		len(n.InterfaceAttachments) == 0 &&
 		len(n.InterfaceAddresses) == 0 &&
 		len(n.Overrides) == 0 &&
 		n.Spec == nil

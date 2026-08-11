@@ -138,6 +138,7 @@ func TestLoadUsesMarkedContextSnapshotOutsideEnvironmentResources(t *testing.T) 
     - clusters
     - add-ons/child-network-dc1.yaml
     - add-ons/child-network-dc2.yaml
+    - add-ons/nmstate.yaml
     - add-ons/openshift-virtualization.yaml
 `
 	environment = []byte(strings.Replace(string(environment), "spec:\n", resources, 1))

@@ -6,6 +6,7 @@ spec:
   clusterRef: dc2-metal-ocp
 
   addonRefs:
+    - nmstate
     - openshift-virtualization
     - openshift-data-foundation
     - child-network-dc2

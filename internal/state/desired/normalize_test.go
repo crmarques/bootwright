@@ -366,6 +366,23 @@ func TestNormalizeDefaultsMachineAttachmentRef(t *testing.T) {
 					},
 				},
 			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "per-interface"},
+				Spec: v1alpha1.MachineSpec{
+					Substrate: v1alpha1.MachineSubstrate{
+						ProviderRef: v1alpha1.LocalObjectReference{Name: "rack"},
+					},
+					Network: v1alpha1.MachineNetwork{
+						Config: v1alpha1.MachineNetworkConfig{
+							NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "cluster-net"},
+							InterfaceAttachments: []v1alpha1.MachineInterfaceAttachment{{
+								Interface:     "primary",
+								AttachmentRef: v1alpha1.LocalObjectReference{Name: "primary-net"},
+							}},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -388,6 +405,12 @@ func TestNormalizeDefaultsMachineAttachmentRef(t *testing.T) {
 	}
 	if state.Machines[2].DefaultedRefs.AttachmentRef {
 		t.Fatalf("DefaultedRefs = %+v, want provider-less machine left unmarked", state.Machines[2].DefaultedRefs)
+	}
+	if got := state.Machines[3].Spec.Network.Config.AttachmentRef.Name; got != "" {
+		t.Fatalf("per-interface machine attachmentRef = %q, want empty", got)
+	}
+	if state.Machines[3].DefaultedRefs.AttachmentRef {
+		t.Fatalf("DefaultedRefs = %+v, want per-interface bindings left unmarked", state.Machines[3].DefaultedRefs)
 	}
 }
 

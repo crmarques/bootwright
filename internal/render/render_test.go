@@ -2,6 +2,7 @@ package render_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -171,6 +172,9 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 		t.Fatalf("KubeVirt machine component needs a primary IP for the readiness gate, got %v", got)
 	}
 	interfaces := machine["interfaces"].([]any)
+	if len(interfaces) != 2 {
+		t.Fatalf("KubeVirt machine interfaces = %v, want primary and ceph-public", interfaces)
+	}
 	iface := interfaces[0].(map[string]any)
 	mac, _ := iface["macAddress"].(string)
 	if !strings.HasPrefix(mac, "52:54:00:") {
@@ -184,12 +188,40 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if got := agentIface["macAddress"]; got != mac {
 		t.Fatalf("agent-config MAC = %v, want vars MAC %s", got, mac)
 	}
-	attachment := machine["networkAttachment"].(map[string]any)
-	if got := attachment["kind"]; got != v1alpha1.ProvisionerKubeVirt {
-		t.Fatalf("network attachment kind = %v, want kubevirt", got)
+	agentNetwork := agent["hosts"].([]any)[0].(map[string]any)["networkConfig"].(map[string]any)
+	var cephPublic map[string]any
+	for _, raw := range agentNetwork["interfaces"].([]any) {
+		entry := raw.(map[string]any)
+		if entry["name"] == "ceph-public" {
+			cephPublic = entry
+		}
 	}
-	if got := attachment["kubevirt"].(map[string]any)["nad"]; got != "bootwright-dc1-child-ocp/dc1-child-net" {
-		t.Fatalf("network NAD = %v, want bootwright-dc1-child-ocp/dc1-child-net", got)
+	if cephPublic == nil || fmt.Sprint(cephPublic["mtu"]) != "9000" {
+		t.Fatalf("ceph-public agent interface = %v, want MTU 9000", cephPublic)
+	}
+	cephAddresses := cephPublic["ipv4"].(map[string]any)["address"].([]any)
+	if got := cephAddresses[0].(map[string]any)["ip"]; got != "192.168.171.60" {
+		t.Fatalf("ceph-public agent IP = %v, want 192.168.171.60", got)
+	}
+	if _, found := machine["networkAttachment"]; found {
+		t.Fatalf("per-interface KubeVirt machine collapsed onto a component networkAttachment: %v", machine["networkAttachment"])
+	}
+	interfacesByName := map[string]map[string]any{}
+	for _, raw := range interfaces {
+		entry := raw.(map[string]any)
+		interfacesByName[entry["name"].(string)] = entry
+	}
+	for name, want := range map[string]string{
+		"primary":     "bootwright-dc1-child-ocp/dc1-child-net",
+		"ceph-public": "bootwright-dc1-child-ocp/dc1-ceph-public",
+	} {
+		attachment := interfacesByName[name]["networkAttachment"].(map[string]any)
+		if got := attachment["kind"]; got != v1alpha1.ProvisionerKubeVirt {
+			t.Fatalf("%s network attachment kind = %v, want kubevirt", name, got)
+		}
+		if got := attachment["kubevirt"].(map[string]any)["nad"]; got != want {
+			t.Fatalf("%s NAD = %v, want %s", name, got, want)
+		}
 	}
 
 	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)

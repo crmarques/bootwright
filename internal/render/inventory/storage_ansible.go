@@ -222,6 +222,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"osdReadiness": storageOSDReadinessVars(cluster),
 			"monReadiness": storageMonReadinessVars(cluster),
 		}
+		if ceph.Security.FIPS.Enabled {
+			entry["fips"] = true
+		}
 		if !topology.MonitoringEnabled(cluster) {
 			entry["skipMonitoringStack"] = true
 		}

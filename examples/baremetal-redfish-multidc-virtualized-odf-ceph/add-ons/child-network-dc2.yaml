@@ -5,15 +5,26 @@ metadata:
 spec:
   type: manifestSet
 
+  requires:
+    - nmstate
+
   manifestSet:
     manifests:
       - path: manifests/dc2-child-namespace.yaml
       - path: manifests/dc2-child-nncp.yaml
       - path: manifests/dc2-child-cudn.yaml
+      - path: manifests/dc2-ceph-public-cudn.yaml
 
   readiness:
     timeout: 5m
     checks:
+      - condition:
+          apiVersion: nmstate.io/v1
+          kind: NodeNetworkConfigurationPolicy
+          name: dc2-child-localnet
+          condition:
+            type: Available
+            status: "True"
       - resourceExists:
           apiVersion: k8s.ovn.org/v1
           kind: ClusterUserDefinedNetwork
@@ -22,4 +33,13 @@ spec:
           apiVersion: k8s.cni.cncf.io/v1
           kind: NetworkAttachmentDefinition
           name: dc2-child-net
+          namespace: bootwright-dc2-child-ocp
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: dc2-ceph-public
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: dc2-ceph-public
           namespace: bootwright-dc2-child-ocp

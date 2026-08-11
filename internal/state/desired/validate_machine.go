@@ -407,8 +407,11 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	if len(config.Overrides) > 0 && config.NetworkConfigRef.Name == "" {
 		errs = append(errs, prefix+".config.overrides is only valid with "+prefix+".config.networkConfigRef")
 	}
-	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
-		errs = append(errs, prefix+".config.attachmentRef is required when networkConfigRef is set on a provider-backed Machine")
+	if config.AttachmentRef.Name != "" && len(config.InterfaceAttachments) > 0 {
+		errs = append(errs, prefix+".config must set only one of attachmentRef or interfaceAttachments")
+	}
+	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" && len(config.InterfaceAttachments) == 0 {
+		errs = append(errs, prefix+".config must set attachmentRef or interfaceAttachments when networkConfigRef is set on a provider-backed Machine")
 	}
 	if machine.DefaultedRefs.AttachmentRef {
 		if candidates := providerNetworkAttachmentNames(provider); len(candidates) > 1 {
@@ -433,10 +436,76 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 		errs = append(errs, validateNetworkConfigSpec(prefix+".config.spec", *config.Spec, map[string]bool{})...)
 		effective = nmstate.EffectiveConfig(config.Spec.Template.NetworkConfig, nil, injects)
 	}
-	errs = append(errs, validateMachineInterfaceBindings(prefix+".interfaceBinding", machine, networkInterfaceNames(effective), provider)...)
+	errs = append(errs, validateMachineInterfaceAttachments(prefix+".config.interfaceAttachments", config, provider, effective)...)
+	errs = append(errs, validateMachineInterfaceBindings(prefix+".interfaceBinding", machine, nmstate.PhysicalInterfaceNames(effective), provider)...)
 	if effective != nil {
 		errs = append(errs, validateMachineNetworkStaticAddresses(prefix+".config", machine, effective)...)
 		errs = append(errs, validateMachineInstallNetwork(prefix+".config", machine, effective)...)
+	}
+	return errs
+}
+
+func validateMachineInterfaceAttachments(prefix string, config v1alpha1.MachineNetworkConfig, provider v1alpha1.InfraProvider, effective map[string]any) []string {
+	if len(config.InterfaceAttachments) == 0 {
+		return nil
+	}
+	var errs []string
+	if config.NetworkConfigRef.Name == "" && config.Spec == nil {
+		errs = append(errs, prefix+" is only valid with config.networkConfigRef or config.spec")
+	}
+	if provider.Metadata.Name != "" && provider.Spec.Type != v1alpha1.ProvisionerKubeVirt {
+		errs = append(errs, fmt.Sprintf("%s is only supported on a kubevirt InfraProvider; InfraProvider/%s has type %q", prefix, provider.Metadata.Name, provider.Spec.Type))
+	}
+
+	want := map[string]bool{}
+	if effective != nil && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
+		names := nmstate.PhysicalInterfaceNames(effective)
+		if len(names) == 0 {
+			names = []string{"primary"}
+		}
+		for _, name := range names {
+			want[name] = true
+		}
+	}
+
+	seen := map[string]bool{}
+	for i, binding := range config.InterfaceAttachments {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if binding.Interface == "" {
+			errs = append(errs, owner+".interface is required")
+		} else if seen[binding.Interface] {
+			errs = append(errs, fmt.Sprintf("%s.interface %q is duplicated", owner, binding.Interface))
+		} else {
+			seen[binding.Interface] = true
+			if len(want) > 0 && !want[binding.Interface] {
+				errs = append(errs, fmt.Sprintf("%s.interface %q does not match any physical interface in the effective NetworkConfig", owner, binding.Interface))
+			}
+		}
+		if binding.AttachmentRef.Name == "" {
+			errs = append(errs, owner+".attachmentRef is required")
+			continue
+		}
+		if provider.Metadata.Name == "" {
+			continue
+		}
+		attachment, ok := lookupNetworkAttachment(provider, binding.AttachmentRef.Name)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.attachmentRef %q does not match any networkAttachments[] on InfraProvider/%s", owner, binding.AttachmentRef.Name, provider.Metadata.Name))
+		} else if attachment.KubeVirt == nil {
+			errs = append(errs, fmt.Sprintf("%s.attachmentRef %q binds to InfraProvider/%s networkAttachment of kind %q; interfaceAttachments require kubevirt attachments", owner, binding.AttachmentRef.Name, provider.Metadata.Name, v1alpha1.NetworkAttachmentKind(attachment)))
+		}
+	}
+	if len(want) > 0 {
+		names := make([]string, 0, len(want))
+		for name := range want {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if !seen[name] {
+				errs = append(errs, fmt.Sprintf("%s must bind physical interface %q to an InfraProvider network attachment", prefix, name))
+			}
+		}
 	}
 	return errs
 }

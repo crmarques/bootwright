@@ -48,18 +48,24 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 	}
 }
 
-func TestNetworkConfigInterfaceNamesSkipsVirtualInterfaces(t *testing.T) {
+func TestNetworkConfigInterfaceNamesReturnsPhysicalInterfaces(t *testing.T) {
 	config := map[string]any{
 		"interfaces": []any{
 			map[string]any{"name": "eno1", "type": "ethernet"},
 			map[string]any{"name": "eno2", "type": "ethernet"},
-			map[string]any{"name": "bond0", "type": "bond"},
+			map[string]any{
+				"name": "bond0",
+				"type": "bond",
+				"link-aggregation": map[string]any{
+					"port": []any{"eno3", "eno4"},
+				},
+			},
 			map[string]any{"name": "bond0.151", "type": "vlan"},
 			map[string]any{"name": "untyped"},
 		},
 	}
 	got := networkConfigInterfaceNames(config)
-	want := []string{"eno1", "eno2", "untyped"}
+	want := []string{"eno1", "eno2", "eno3", "eno4", "untyped"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("networkConfigInterfaceNames = %#v, want %#v", got, want)
 	}

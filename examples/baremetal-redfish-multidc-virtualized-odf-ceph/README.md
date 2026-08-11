@@ -7,11 +7,38 @@ This reference example shows the full canonical layout with:
 - one managed stretched Ceph cluster spanning two data sites plus a tiebreaker;
 - OpenShift Data Foundation bound to all four container clusters for block and file storage (object storage via the native Ceph RGW endpoint);
 - OpenShift Virtualization bound only to the two parent clusters;
-- child cluster namespace, a `ClusterUserDefinedNetwork` (localnet), and the
+- child cluster namespace, two `ClusterUserDefinedNetwork` localnets, and the
   matching `NodeNetworkConfigurationPolicy` delivered as a cluster add-on; the
-  KubeVirt provider references the CUDN by `networkRef`.
+  primary OpenShift NIC uses MTU 1500 and a separate routed Ceph client NIC uses
+  MTU 9000, with each KubeVirt VM NIC bound to its own CUDN-derived NAD. The
+  network add-on requires the `nmstate` capability advertised by the dedicated
+  Kubernetes NMState Operator add-on, then waits for the NNCP to report
+  `Available=True` and for both derived NADs to exist before its ready record
+  can unblock child VM creation.
 
-Like the smaller examples, the YAML is lean and relies on documented defaults; references such as `attachmentRef` are authored only where validation requires an explicit choice (the bare-metal provider declares one attachment per data center).
+Like the smaller examples, the YAML is lean and relies on documented defaults.
+The bare-metal machines use a machine-wide attachment; child VMs use
+`interfaceAttachments[]` because their two NICs consume distinct CUDNs.
+
+The network fabric must provide VLANs 171 and 172 with gateways
+`192.168.171.1` and `192.168.172.1`, route both subnets bidirectionally to the
+Ceph daemon public networks `192.168.141.0/24`, `192.168.142.0/24`, and
+`192.168.143.0/24`, and carry MTU 9000 across the complete secondary path. The
+child NetworkConfigs make the forward monitor routes explicit, and the parent
+NetworkConfigs direct the return path for both child subnets to their site
+gateway. The gateways still own forwarding in both directions, including the
+route from the OS-provided tiebreaker network. The routed child subnets are Data
+Foundation node/client networks, not Ceph daemon bind networks, so they are
+deliberately absent from
+`StorageCluster.spec.ceph.networks.publicCIDRs`.
+
+The shipped NNCPs peel the primary and Ceph VLANs off the parent node's
+`primary` uplink into separate OVS bridges; the child VMs do not consume a
+trunk. Each bridge permits the extra patch ports that OVN creates for its
+localnet mapping. Preserve that topology or adapt the base interface, VLAN IDs,
+and bridge mappings together for the target fabric. The parent uplink and
+complete Ceph path must support MTU 9000 before the NNCP readiness gate can be
+treated as proof of usable end-to-end jumbo frames.
 
 > **This tree is also a shared test fixture.** Beyond the
 > every-example-validates guard, it carries content-level assertions across six

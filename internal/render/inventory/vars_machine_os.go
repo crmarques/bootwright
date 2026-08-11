@@ -86,12 +86,13 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		seen[node.MachineRef.Name] = true
 		machines = append(machines, stateview.InstallMachineFromMachine(machine))
 		network := machine.Spec.Network.Config
-		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
+		if network.NetworkConfigRef.Name != "" && (network.AttachmentRef.Name != "" || len(network.InterfaceAttachments) > 0) && machine.Spec.Substrate.ProviderRef.Name != "" {
 			bindings = append(bindings, v1alpha1.MachineNetworkBinding{
-				MachineName:      machine.Metadata.Name,
-				NetworkConfigRef: network.NetworkConfigRef,
-				ProviderRef:      machine.Spec.Substrate.ProviderRef,
-				AttachmentRef:    network.AttachmentRef,
+				MachineName:          machine.Metadata.Name,
+				NetworkConfigRef:     network.NetworkConfigRef,
+				ProviderRef:          machine.Spec.Substrate.ProviderRef,
+				AttachmentRef:        network.AttachmentRef,
+				InterfaceAttachments: append([]v1alpha1.MachineInterfaceAttachment(nil), network.InterfaceAttachments...),
 			})
 		}
 	}

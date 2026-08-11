@@ -17,12 +17,33 @@ spec:
         type: ovs-bridge
         state: up
         bridge:
+          allow-extra-patch-ports: true
           options:
             stp: false
           port:
             - name: primary.152
+      - name: primary.172
+        type: vlan
+        state: up
+        mtu: 9000
+        vlan:
+          base-iface: primary
+          id: 172
+      - name: br-dc2-ceph-public
+        type: ovs-bridge
+        state: up
+        mtu: 9000
+        bridge:
+          allow-extra-patch-ports: true
+          options:
+            stp: false
+          port:
+            - name: primary.172
     ovn:
       bridge-mappings:
         - localnet: dc2-child
           bridge: br-dc2-child
+          state: present
+        - localnet: dc2-ceph-public
+          bridge: br-dc2-ceph-public
           state: present

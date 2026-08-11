@@ -21,6 +21,35 @@ func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.Clust
 	return networkAttachmentVars(attachment)
 }
 
+func clusterMachineInterfaceVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, interfaces []v1alpha1.MachineNIC) []any {
+	out := machineInterfaceVars(interfaces)
+	attachments := map[string]map[string]any{}
+	if len(m.Network.InterfaceAttachments) > 0 {
+		provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
+		if ok {
+			for _, binding := range m.Network.InterfaceAttachments {
+				attachment, found := stateview.NetworkAttachment(provider, binding.AttachmentRef.Name)
+				if found {
+					attachments[binding.Interface] = networkAttachmentVars(attachment)
+				}
+			}
+		}
+	} else if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
+		if attachment["kind"] == v1alpha1.ProvisionerKubeVirt {
+			for _, iface := range interfaces {
+				attachments[iface.Name] = attachment
+			}
+		}
+	}
+	for _, raw := range out {
+		entry := raw.(map[string]any)
+		if attachment := attachments[entry["name"].(string)]; attachment != nil {
+			entry["networkAttachment"] = attachment
+		}
+	}
+	return out
+}
+
 func clusterNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, networkName string) map[string]any {
 	var first map[string]any
 	for _, binding := range ci.NetworkBindings {
