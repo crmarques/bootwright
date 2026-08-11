@@ -23,7 +23,7 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	if err != nil {
 		return err
 	}
-	if !found || record.Status == ClusterInstallStatusInstalled {
+	if !found || record.Status == ClusterInstallStatusInstalled || record.Status == ClusterInstallStatusDestroyed || validateClusterInstallRecordState(clustersDir, task.Entry.Cluster, record) != nil {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
 	record.DesiredHash = hash

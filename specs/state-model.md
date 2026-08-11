@@ -3704,6 +3704,15 @@ command. The rest are registered per command, on the verbs that reach machines.
   cluster-or-machine selection, context, identity, effects, and authorizations.
   A preview classification error is a reported refusal, never omitted.
   Rebaseline writes the current schema only after all of those proofs succeed.
+- Every existing container install record is validated as a status/phase pair
+  before install planning. `installing` and `failed` accept only the empty or
+  named nonterminal phases; `installed` and `destroyed` require `complete`.
+  An unknown status, unknown phase, or terminal/nonterminal mismatch is unknown
+  lifecycle evidence and fails closed before task planning with an exact
+  cluster-scoped `--mode rebuild --authorize data-loss` remedy. That rebuild
+  treats the invalid record as a disk-wiping reinstall candidate and may consume
+  it only after the candidate was included in the destructive preview and
+  explicitly authorized.
 - A bare `apply` resumes a partially-completed container install from its
   recorded phase: `creating-iso` (or no phase) restarts from the agent ISO;
   `iso-created` skips the ISO and resumes from node boot only when its recorded
@@ -3713,8 +3722,10 @@ command. The rest are registered per command, on the verbs that reach machines.
   embedded bootstrap certificates are no longer provably fresh; `nodes-booted` and
   `waiting-bootstrap` skip the ISO and boot and resume bootstrap wait;
   `bootstrap-complete` and `waiting` additionally skip bootstrap wait and resume
-  install-complete wait; `complete` is a no-op. The bootstrap wait stamps both
-  its start and success phases. The `booting` phase fails closed — node-boot
+  install-complete wait. An `installed`/`complete` record is a no-op; a
+  `destroyed`/`complete` record is released state and a new apply starts from
+  the agent ISO. The bootstrap wait stamps both its start and success phases.
+  The `booting` phase fails closed — node-boot
   completion is uncertain, so Bootwright names an exact cluster-scoped
   `--mode rebuild --authorize data-loss` invocation that recreates the agent ISO
   and reboots the nodes. An unrecognized phase receives the same typed,

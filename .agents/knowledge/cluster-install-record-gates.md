@@ -91,6 +91,18 @@ same boot-proven set, unioned with released-substrate clusters (a destroyed
 cluster's rebuild legitimately faces its own old OS), feeds
 `bootwright_ocp_reinstall_clusters`, the occupancy-guard opt-out list.
 
+**Constraint (status and phase are one lifecycle state):** JSON decoding proves
+only that an install record is syntactically readable. Before install planning,
+`validateClusterInstallRecordState` requires `installing` or `failed` with an
+empty or named nonterminal phase, or `installed` or `destroyed` with `complete`.
+An unknown value or contradictory pair cannot select a resume boundary and
+returns typed `rebuild-cluster` remedy data before desired-hash work, an
+availability probe, or task-plan mutation. The explicit rebuild preview treats
+that invalid record as a node-disk-wiping reinstall candidate; only its resulting
+acknowledgement lets scheduler preparation retain the full install plan. This
+keeps the exact remedy executable without letting ordinary reconcile silently
+fall through the status switch and reinstall a cluster.
+
 **Constraint (bounded resume and installer-version evidence):** ISO creation
 records the exact installer version and clears stale version evidence before a
 new create attempt. An `iso-created` record reaches node boot only when

@@ -15,7 +15,7 @@ func TestBootProvenContainerClusters(t *testing.T) {
 		{Cluster: "booting", Status: ClusterInstallStatusFailed, Phase: ClusterInstallPhaseBooting},
 		{Cluster: "booted", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseNodesBooted},
 		{Cluster: "waiting", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseWaiting},
-		{Cluster: "complete", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseComplete},
+		{Cluster: "invalid-complete", Status: ClusterInstallStatusInstalling, Phase: ClusterInstallPhaseComplete},
 		{Cluster: "installed", Status: ClusterInstallStatusInstalled, Phase: ClusterInstallPhaseComplete},
 		{Cluster: "destroyed", Status: ClusterInstallStatusDestroyed, Phase: ClusterInstallPhaseComplete},
 	}
@@ -32,7 +32,7 @@ func TestBootProvenContainerClusters(t *testing.T) {
 	}
 
 	got := BootProvenContainerClusters(clustersDir, tasks)
-	want := []string{"booted", "booting", "complete", "installed", "waiting"}
+	want := []string{"booted", "booting", "installed", "waiting"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("BootProvenContainerClusters = %v, want %v", got, want)
 	}

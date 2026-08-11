@@ -1904,6 +1904,19 @@ func safetyStartingStateCases() []safetyCase {
 		verdict: verdictRefusal,
 		want:    []string{"unrecognized install phase", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
+		name: "apply/unsupported install status names an executable scoped rebuild",
+		seed: func(t *testing.T, ctx workspace.Context) {
+			seedRunnableSafetyMutation(t, ctx)
+			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatus("future-status"), workflow.ClusterInstallPhaseWaiting, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
+		},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRebuildCluster,
+		want:        []string{"unsupported install record lifecycle state", `status "future-status"`, `phase "waiting"`, "refuses before any mutation", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			reexecuteHermeticRemedy(t, output, "unsupported install record lifecycle state", false)
+		},
+	}, {
 		name: "apply/cluster-wide substrate release authorizes and discloses the rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedKubeVirtReadyHost(t, ctx, "dc1-metal-ocp")

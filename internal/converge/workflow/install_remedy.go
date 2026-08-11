@@ -25,6 +25,7 @@ const (
 	ClusterInstallConditionNoInstallRecord                 ClusterInstallCondition = "no-install-record"
 	ClusterInstallConditionUncertainBoot                   ClusterInstallCondition = "uncertain-boot"
 	ClusterInstallConditionUnrecognizedPhase               ClusterInstallCondition = "unrecognized-phase"
+	ClusterInstallConditionInvalidRecordState              ClusterInstallCondition = "invalid-record-state"
 	ClusterInstallConditionMissingPostSuccessRecord        ClusterInstallCondition = "missing-post-success-record"
 )
 
