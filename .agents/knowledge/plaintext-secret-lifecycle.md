@@ -1,14 +1,16 @@
 # Plaintext secret staging: modes, cleanup, and the SIGKILL sweep
 
 **Stale runtime-secrets sweep:** a run materializes plaintext BMC/SSH/pull
-secrets under per-run/task runtime secrets dirs — two nesting shapes exist,
-`tasks/<id>/runtime/secrets` and `tasks/<id>/artifacts/runtime/secrets` — and
-only DEFERS their removal, so a SIGKILL'd run would leave plaintext behind
-forever with nothing else cleaning it. `sweepStaleRuntimeSecrets`
+secrets under runtime secret dirs. Per-task runs use
+`tasks/<id>/runtime/secrets` or `tasks/<id>/artifacts/runtime/secrets`; a
+destroy graph's shared immutable inputs use `history/<run>/runtime/secrets`.
+Normal cleanup is deferred, so a SIGKILL'd run would leave plaintext behind
+without a later owner. `sweepStaleRuntimeSecrets`
 (`internal/converge/workflow/run.go`) runs right after lease acquisition:
 the lease is the single point of mutual exclusion, so once `liveRunID` holds
 it, every other history entry belongs to a finished or killed run whose
 plaintext is safe to reclaim; the live run's own dirs are never touched.
+The sweep removes both the graph runtime root and the task nesting shapes.
 Known limitation: the unsupported cross-host shared-runsDir case, where a
 remote holder's lease can go stale while its run is still live, is a
 pre-existing split-brain concern this sweep does not solve.
@@ -43,6 +45,16 @@ back to plaintext, and neither helper migrates durable material.
 `workflow.Run` nests these callbacks for the managed `hostClusterRef`
 kubeconfigs selected by the current KubeVirt-capable playbook or task, keeping
 them available for one bounded Ansible invocation.
+
+A destroy graph has two deliberately different lifetimes. Referenced context
+secrets are selected from its initial immutable full render, materialized once
+under the graph runtime root, and shared read-only by task overlays. The graph
+owner removes that root on every normal return and reports a cleanup failure.
+Managed KubeVirt host kubeconfigs are still single-material callback staging:
+each machine-infra task materializes only its dependency closure beneath its
+own task runtime parent and removes those copies after that invocation. Do not
+move kubeconfigs into the graph-wide set; doing so restores the broad plaintext
+exposure the task-scoped resolver prevents.
 
 Callback cleanup is not crash recovery: an abrupt process termination cannot
 run deferred removals. Task runtime secret directories are reclaimed by the

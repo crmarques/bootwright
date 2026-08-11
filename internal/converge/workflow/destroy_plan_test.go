@@ -360,7 +360,7 @@ func TestPlanDestroyTasksAllChain(t *testing.T) {
 		t.Fatalf("apply makes every machines-phase task depend on the fabric services, so the inverse tears the fabric down after the machines it serves: %v", wantIDs)
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.container-clusters").Entry.Dependencies; !reflect.DeepEqual(got, []string{"destroy.machine-infra"}) {
-		t.Fatalf("the records half must require successful machine teardown: kubeVirtHostClustersForRun materialises every KubeVirt host kubeconfig for each machine-infra task, so deleting one while any machine teardown is still runnable strands the guests; got %v", got)
+		t.Fatalf("the records half must require successful machine teardown: each machine task receives only its KubeVirt host dependency, so deleting the controller records while any machine teardown is still runnable strands that task's guest access; got %v", got)
 	}
 	if got := destroyTaskByID(t, tasks, "destroy.machine-registration").Entry.OrderingDependencies; slices.Contains(got, "destroy.infra-components") {
 		t.Fatalf("RHSM deregistration runs through bootwright_proxy_env, so the proxy InfraComponent must still exist: %v", got)

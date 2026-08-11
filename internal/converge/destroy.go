@@ -223,6 +223,8 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 	runOpts.SelectedMachines = plan.SelectedMachines
 	runOpts.RunLease = runLease
 	runOpts.InvocationArgs = append([]string(nil), invocationArgs...)
+	runOpts.PreparedRunRender = renderResult
+	runOpts.CacheDestroyRunInputs = true
 	prepared, err := workflow.PrepareDestroyTaskGraph(ctx.RunsDir, runOpts, tasks, workflow.ConcurrencyLimits{})
 	if err != nil {
 		return render.Result{}, workflow.RunLedger{}, "", err

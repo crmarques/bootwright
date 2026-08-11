@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -65,7 +66,20 @@ func RunPreparedApplyTaskGraph(ctx context.Context, streamOut io.Writer, streamE
 	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneApplyTask)
 }
 
-func RunPreparedDestroyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+func RunPreparedDestroyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (ledger RunLedger, runErr error) {
+	if !opts.CacheDestroyRunInputs {
+		return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneDestroyTask)
+	}
+	inputs, err := newDestroyRunInputs(runsDir, prepared.RunID, opts)
+	if err != nil {
+		return RunLedger{}, err
+	}
+	opts.destroyRunInputs = inputs
+	defer func() {
+		if err := inputs.close(); err != nil {
+			runErr = errors.Join(runErr, err)
+		}
+	}()
 	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneDestroyTask)
 }
 

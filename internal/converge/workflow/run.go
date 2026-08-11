@@ -52,6 +52,9 @@ type RunOptions struct {
 	OwnershipDir                string
 	OwnershipRecordsSnapshot    []ownership.ResourceRecord
 	UseOwnershipRecordsSnapshot bool
+	PreparedRunRender           render.Result
+	CacheDestroyRunInputs       bool
+	DestroyRunInputCounters     *DestroyRunInputCounters
 	Executable                  string
 	BundleDir                   string
 	Playbook                    string
@@ -78,6 +81,8 @@ type RunOptions struct {
 	ApplyMode                   ApplyMode
 	OverrideAckedReinstalls     []string
 	SelectedMachines            []string
+	KubeVirtHostClusters        []string
+	UseKubeVirtHostClusterScope bool
 	InvocationArgs              []string
 	InterruptionRecovery        RunRecoveryPlan
 	ResolveRecovery             RunRecoveryResolver
@@ -88,6 +93,7 @@ type RunOptions struct {
 	PostRunFinalizer            func(RunResult) error
 	HostMutationLeaseFinalizer  bool
 	addonStepResources          *addonStepResourcePool
+	destroyRunInputs            *destroyRunInputs
 }
 
 type RunResult struct {
@@ -165,6 +171,12 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	var ownershipRecords []ownership.ResourceRecord
 	if opts.UseOwnershipRecordsSnapshot {
 		ownershipRecords = append([]ownership.ResourceRecord(nil), opts.OwnershipRecordsSnapshot...)
+	} else if opts.destroyRunInputs != nil {
+		var err error
+		ownershipRecords, err = opts.destroyRunInputs.ownershipSnapshot()
+		if err != nil {
+			return RunResult{}, err
+		}
 	} else {
 		var err error
 		ownershipRecords, err = loadOwnershipRecordsForRun(opts.Playbook, ownershipDir, opts.ContextName)
@@ -190,12 +202,18 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if opts.DryRun {
 		return runWithRuntimeSecrets(ctx, opts, renderDir, contextName, opts.SecretsDir, ownershipDir, ownershipRecords, nil, runner, reporter)
 	}
+	if opts.destroyRunInputs != nil || opts.DestroyRunInputCounters != nil {
+		runner = destroyRunInputRunner{runner: runner, inputs: opts.destroyRunInputs, counters: opts.DestroyRunInputCounters}
+	}
 	runtimeBaseDir := runtimeSecretBaseDir(renderDir, opts.ArtifactsRoot)
 	runSecretsDir := filepath.Join(runtimeBaseDir, runtimeSecretsDirName)
 	defer os.RemoveAll(runSecretsDir)
 	hostClusters := kubeVirtHostClustersForRun(opts)
 	if len(hostClusters) == 0 {
 		return runWithRuntimeSecrets(ctx, opts, renderDir, contextName, runSecretsDir, ownershipDir, ownershipRecords, map[string]string{}, runner, reporter)
+	}
+	if opts.DestroyRunInputCounters != nil {
+		opts.DestroyRunInputCounters.kubeconfigScopes.Add(int64(len(hostClusters)))
 	}
 	hostKubeconfigDir := filepath.Join(runtimeBaseDir, runtimeHostKubeconfigDirName)
 	if err := ensureRuntimeSecretDir(hostKubeconfigDir); err != nil {
@@ -232,7 +250,12 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 	perTask := strings.TrimSpace(opts.RenderDir) != ""
 	var result render.Result
 	var err error
-	if perTask {
+	prepared := opts.destroyRunInputs != nil && !opts.DryRun
+	runSpecRenderedDir := renderDir
+	if prepared {
+		result, runSecretsDir, err = opts.destroyRunInputs.prepare(opts, ownershipRecords, kubeVirtHostKubeconfigPaths)
+		runSpecRenderedDir = opts.RenderedDir
+	} else if perTask {
 		result, err = render.RunInputs(renderDir, paths, opts.State, ownershipRecords)
 	} else {
 		result, err = render.AllWithOwnershipRecordsAndPathOptions(renderDir, opts.ClustersDir, paths, opts.State, ownershipRecords)
@@ -245,7 +268,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 			return RunResult{Render: result}, err
 		}
 	}
-	if !opts.DryRun {
+	if !opts.DryRun && !prepared {
 		if err := materializeRunSecrets(contextName, opts.SecretsDir, runSecretsDir, perTask, result); err != nil {
 			return RunResult{Render: result}, err
 		}
@@ -279,7 +302,7 @@ func runWithRuntimeSecrets(ctx context.Context, opts RunOptions, renderDir, cont
 	spec, err := runconfig.NewRunSpec(runconfig.RunSpecConfig{
 		Executable:          opts.Executable,
 		BundleDir:           opts.BundleDir,
-		RenderedDir:         renderDir,
+		RenderedDir:         runSpecRenderedDir,
 		ClustersDir:         opts.ClustersDir,
 		RunsDir:             opts.RunsDir,
 		SecretsDir:          runSecretsDir,
@@ -516,6 +539,7 @@ func sweepStaleRuntimeSecrets(runsDir, liveRunID string) {
 }
 
 func removeRuntimeSecretDirs(runRoot string) {
+	_ = os.RemoveAll(filepath.Join(runRoot, "runtime"))
 	taskEntries, err := os.ReadDir(filepath.Join(runRoot, runTaskDirName))
 	if err != nil {
 		return

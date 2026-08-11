@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
+	"time"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
@@ -128,5 +131,99 @@ func TestRunInputsWritesOnlyAnsibleInputsAndStorageAssets(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunInputsWithAssetRootReusesStorageAssets(t *testing.T) {
+	state := v1alpha1.State{
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph:       &v1alpha1.StorageClusterCephSpec{},
+			},
+		}},
+	}
+	paths := render.PathOptions{SecretsDir: t.TempDir()}
+	assetRoot := filepath.Join(t.TempDir(), "rendered")
+	seeded, err := render.RunInputs(assetRoot, paths, state, nil)
+	if err != nil {
+		t.Fatalf("render.RunInputs: %v", err)
+	}
+	if len(seeded.StorageAssets) != 1 {
+		t.Fatalf("storage assets got %d, want 1", len(seeded.StorageAssets))
+	}
+
+	storageRoot := filepath.Join(assetRoot, "storage")
+	storageFiles := relativeFilePaths(t, storageRoot)
+	if len(storageFiles) == 0 {
+		t.Fatal("render.RunInputs wrote no storage assets")
+	}
+	frozenTime := time.Unix(123456789, 0)
+	wantContent := make(map[string][]byte, len(storageFiles))
+	for _, rel := range storageFiles {
+		path := filepath.Join(storageRoot, rel)
+		content := []byte("immutable storage asset: " + rel + "\n")
+		if err := os.WriteFile(path, content, 0o600); err != nil {
+			t.Fatalf("write sentinel %s: %v", path, err)
+		}
+		if err := os.Chtimes(path, frozenTime, frozenTime); err != nil {
+			t.Fatalf("freeze timestamp %s: %v", path, err)
+		}
+		wantContent[rel] = content
+	}
+
+	taskRoot := filepath.Join(t.TempDir(), "destroy-task")
+	got, err := render.RunInputsWithAssetRoot(taskRoot, assetRoot, paths, state, nil)
+	if err != nil {
+		t.Fatalf("render.RunInputsWithAssetRoot: %v", err)
+	}
+	if got.InventoryPath != filepath.Join(taskRoot, "ansible", "inventory.yaml") {
+		t.Fatalf("inventory path = %q, want task-local path", got.InventoryPath)
+	}
+	if got.VarsPath != filepath.Join(taskRoot, "ansible", "vars.yaml") {
+		t.Fatalf("vars path = %q, want task-local path", got.VarsPath)
+	}
+	for _, path := range []string{got.InventoryPath, got.VarsPath} {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read task input %s: %v", path, readErr)
+		}
+		if len(content) == 0 {
+			t.Fatalf("task input %s is empty", path)
+		}
+	}
+	if !reflect.DeepEqual(got.StorageAssets, seeded.StorageAssets) {
+		t.Fatalf("storage assets = %#v, want shared assets %#v", got.StorageAssets, seeded.StorageAssets)
+	}
+	if files := relativeFilePaths(t, taskRoot); !reflect.DeepEqual(files, []string{
+		filepath.Join("ansible", "inventory.yaml"),
+		filepath.Join("ansible", "vars.yaml"),
+	}) {
+		t.Fatalf("task render wrote unexpected files: %v", files)
+	}
+	if _, statErr := os.Stat(filepath.Join(taskRoot, "storage")); !os.IsNotExist(statErr) {
+		t.Fatalf("task render copied storage assets (stat err=%v)", statErr)
+	}
+	if files := relativeFilePaths(t, storageRoot); !reflect.DeepEqual(files, storageFiles) {
+		t.Fatalf("shared storage file set changed: got %v, want %v", files, storageFiles)
+	}
+	for _, rel := range storageFiles {
+		path := filepath.Join(storageRoot, rel)
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read shared storage asset %s: %v", path, readErr)
+		}
+		if !bytes.Equal(content, wantContent[rel]) {
+			t.Fatalf("shared storage asset %s was rewritten", path)
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			t.Fatalf("stat shared storage asset %s: %v", path, statErr)
+		}
+		if !info.ModTime().Equal(frozenTime) {
+			t.Fatalf("shared storage asset %s timestamp changed to %s", path, info.ModTime())
+		}
 	}
 }

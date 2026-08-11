@@ -2891,7 +2891,7 @@ func TestStorageCephadmDestroyDefersControllerOwnershipReleaseUntilValidatedAtte
 	}
 	runner := readRepoFile(t, "internal/converge/workflow/destroy_runner.go")
 	validatePos := strings.Index(runner, "ValidateStorageDestroyResults")
-	stagePos := strings.Index(runner, "PrepareStorageDestroyOwnershipRelease")
+	stagePos := strings.Index(runner, "prepareStorageDestroyOwnershipRelease(taskOpts")
 	releasePos := -1
 	workerSuccessPos := -1
 	if stagePos >= 0 {
@@ -2901,7 +2901,7 @@ func TestStorageCephadmDestroyDefersControllerOwnershipReleaseUntilValidatedAtte
 	if validatePos < 0 || stagePos < validatePos || releasePos < 0 || workerSuccessPos < 0 || releasePos > workerSuccessPos {
 		t.Fatalf("a storage worker must validate its terminal report, durably stage it, finish the release-only phase, then report task success (validate=%d stage=%d release=%d success=%d)", validatePos, stagePos, releasePos, workerSuccessPos)
 	}
-	for _, want := range []string{"StorageDestroyReleaseValidationFileName", "ResetStorageDestroyOwnershipProof", "MarkStorageDestroyOwnershipReleased"} {
+	for _, want := range []string{"StorageDestroyReleaseValidationFileName", "resetStorageDestroyOwnershipProof", "markStorageDestroyOwnershipReleased", "withDestroyOwnershipMutation", "invalidateOwnership"} {
 		if !strings.Contains(runner, want) {
 			t.Errorf("the release worker must retain %q so validation failure retries destructive proof while a completed evidence phase becomes replayable, got:\n%s", want, runner)
 		}

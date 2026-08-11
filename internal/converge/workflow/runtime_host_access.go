@@ -13,6 +13,9 @@ import (
 )
 
 func kubeVirtHostClustersForRun(opts RunOptions) []string {
+	if opts.UseKubeVirtHostClusterScope {
+		return sortedUniqueStrings(opts.KubeVirtHostClusters)
+	}
 	if opts.Playbook == applyHostVirtctlPlaybook {
 		if host := extraVarValue(opts.ExtraVarPairs, "bootwright_task_host_cluster_name"); host != "" {
 			return []string{host}
@@ -61,6 +64,76 @@ func kubeVirtHostClustersForRun(opts RunOptions) []string {
 	}
 	sort.Strings(clusters)
 	return clusters
+}
+
+func destroyTaskKubeVirtHostClusters(task ApplyTask) []string {
+	if task.Playbook != roles.PlaybookTaskMachineInfraDestroy {
+		return nil
+	}
+	if extraVarValue(task.ExtraVarPairs, MachineInfraRecordsOnlyExtraVar) == "true" {
+		return nil
+	}
+	machines := map[string]bool{}
+	for _, name := range DestroyTaskMachineKeys(task.Entry) {
+		machines[name] = true
+	}
+	for _, cluster := range DestroyTaskClusterKeys(task.Entry) {
+		for _, name := range ClusterSubstrateMachineNames(task.State, cluster) {
+			machines[name] = true
+		}
+	}
+	for _, name := range strings.Split(extraVarValue(task.ExtraVarPairs, DestroyMachineScopeExtraVar), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			machines[name] = true
+		}
+	}
+	if len(machines) == 0 {
+		fallback := RunOptions{State: task.State, Playbook: task.Playbook}
+		return kubeVirtHostClustersForRun(fallback)
+	}
+	providerNames := map[string]bool{}
+	matchedMachine := false
+	for _, machine := range task.State.Machines {
+		if machines[machine.Metadata.Name] {
+			matchedMachine = true
+			providerNames[machine.Spec.Substrate.ProviderRef.Name] = true
+		}
+	}
+	if !matchedMachine {
+		fallback := RunOptions{State: task.State, Playbook: task.Playbook}
+		return kubeVirtHostClustersForRun(fallback)
+	}
+	seen := map[string]bool{}
+	var clusters []string
+	for _, provider := range task.State.InfraProviders {
+		kubeVirt := provider.Spec.KubeVirt
+		if !providerNames[provider.Metadata.Name] || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || kubeVirt == nil || kubeVirt.HostClusterRef == nil {
+			continue
+		}
+		name := strings.TrimSpace(kubeVirt.HostClusterRef.Name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		clusters = append(clusters, name)
+	}
+	sort.Strings(clusters)
+	return clusters
+}
+
+func sortedUniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func playbookToleratesMissingKubeVirtHostKubeconfig(playbook string) bool {

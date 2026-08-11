@@ -39,7 +39,15 @@ func RunInputs(renderDir string, paths PathOptions, state v1alpha1.State, record
 	return runInputsOn(defaultFS, renderDir, paths, state, records)
 }
 
+func RunInputsWithAssetRoot(renderDir, assetRoot string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	return runInputsWithAssetRootOn(defaultFS, renderDir, assetRoot, paths, state, records)
+}
+
 func runInputsOn(fs FileSystem, baseDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	return runInputsWithAssetRootOn(fs, baseDir, baseDir, paths, state, records)
+}
+
+func runInputsWithAssetRootOn(fs FileSystem, baseDir, assetRoot string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
 	if err := checkResolvedNames(state); err != nil {
 		return Result{}, err
 	}
@@ -47,11 +55,13 @@ func runInputsOn(fs FileSystem, baseDir string, paths PathOptions, state v1alpha
 		InventoryPath: filepath.Join(baseDir, "ansible", "inventory.yaml"),
 		VarsPath:      filepath.Join(baseDir, "ansible", "vars.yaml"),
 		ArtifactsDir:  filepath.Join(baseDir, "ansible", "artifacts"),
-		StorageAssets: ceph.StorageAssets(baseDir, state),
+		StorageAssets: ceph.StorageAssets(assetRoot, state),
 	}
 	dirs := []string{baseDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
-	for _, asset := range result.StorageAssets {
-		dirs = append(dirs, asset.Directories()...)
+	if filepath.Clean(baseDir) == filepath.Clean(assetRoot) {
+		for _, asset := range result.StorageAssets {
+			dirs = append(dirs, asset.Directories()...)
+		}
 	}
 	for _, dir := range dirs {
 		if err := ensureLocalDir(fs, dir); err != nil {
@@ -64,8 +74,10 @@ func runInputsOn(fs FileSystem, baseDir string, paths PathOptions, state v1alpha
 	if err := writeYAML(fs, result.VarsPath, inventory.VarsWithPathOptionsAndOwnership(state, paths, records)); err != nil {
 		return result, err
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
-		return result, err
+	if filepath.Clean(baseDir) == filepath.Clean(assetRoot) {
+		if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }

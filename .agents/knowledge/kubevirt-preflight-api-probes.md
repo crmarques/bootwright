@@ -42,6 +42,14 @@ explicit file source in source mode remains the operator-owned source path.
 Dry-run keeps the logical managed-host path and creates no plaintext runtime
 material.
 
+For a destroy graph, machine-infra tasks derive that set from their exact
+machine keys, cluster substrate closure, and explicit destroy machine scope.
+Records-only and unrelated tasks resolve an explicit empty set. The resulting
+runtime path map is part of the task-overlay cache key, so an overlay rendered
+for one host-cluster scope cannot be reused for another. Context secrets may be
+shared once across the destroy graph, but captured host kubeconfigs retain this
+per-task callback lifetime.
+
 KubeVirt host readiness, missing captured kubeconfig, and runtime host-access
 failures carry the same typed host-`ContainerCluster` reconcile action. The
 backend message names only the child, host, durable path, and observed failure;

@@ -301,8 +301,9 @@ func TestSweepStaleRuntimeSecretsMatchesTheLiveTaskLayoutAndSkipsSweptRuns(t *te
 	stepConnection := filepath.Join(taskRoot, taskStepsDirName, "install", stepConnectionSecretsDirName)
 	stepOutputs := filepath.Join(taskRoot, taskStepsDirName, "install", stepOutputsDirName)
 	stepManifests := filepath.Join(taskRoot, taskStepsDirName, "install", stepManifestsDirName)
+	graphSecrets := filepath.Join(opts.RunsDir, "history", "run-1", "runtime", runtimeSecretsDirName)
 	keep := filepath.Join(taskRoot, taskRenderedDirName)
-	for _, dir := range []string{stepSecrets, stepConnection, stepOutputs, stepManifests, keep} {
+	for _, dir := range []string{stepSecrets, stepConnection, stepOutputs, stepManifests, graphSecrets, keep} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("mkdir %s: %v", dir, err)
 		}
@@ -313,7 +314,7 @@ func TestSweepStaleRuntimeSecretsMatchesTheLiveTaskLayoutAndSkipsSweptRuns(t *te
 
 	sweepStaleRuntimeSecrets(opts.RunsDir, "run-live")
 
-	for _, gone := range []string{liveSecretsDir, stepSecrets, stepConnection, stepOutputs, stepManifests} {
+	for _, gone := range []string{liveSecretsDir, stepSecrets, stepConnection, stepOutputs, stepManifests, graphSecrets} {
 		if _, err := os.Stat(gone); !os.IsNotExist(err) {
 			t.Fatalf("sweep left plaintext at %s (err=%v): a step's captured outputs and rendered manifests carry the same credential material its secrets dir does — the external-ceph attach writes every shared cephx key into both — so a crashed run leaves them readable until the next destroy", gone, err)
 		}

@@ -33,6 +33,11 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	taskOpts.AcquireRunLease = false
 	taskOpts.SkipNoHostsBeforeRender = true
 	taskOpts.ClassifyUnreachable = task.Entry.Kind != DestroyTaskKindStorageCluster
+	taskOpts.KubeVirtHostClusters = destroyTaskKubeVirtHostClusters(task)
+	taskOpts.UseKubeVirtHostClusterScope = true
+	if err := refreshDestroyTaskOwnershipSnapshot(&taskOpts); err != nil {
+		return failedDestroyTaskResult(taskOpts, task, false, err)
+	}
 	if runnerFactory == nil {
 		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 			return ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
@@ -56,6 +61,19 @@ func runOneDestroyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		return failedDestroyTaskResult(taskOpts, task, result.Skipped, err)
 	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped}
+}
+
+func refreshDestroyTaskOwnershipSnapshot(opts *RunOptions) error {
+	if opts == nil || opts.destroyRunInputs == nil {
+		return nil
+	}
+	records, err := opts.destroyRunInputs.ownershipSnapshot()
+	if err != nil {
+		return err
+	}
+	opts.OwnershipRecordsSnapshot = records
+	opts.UseOwnershipRecordsSnapshot = true
+	return nil
 }
 
 type PartialDestroyOutcomeError struct {
@@ -123,9 +141,13 @@ func expectedNonStorageDestroyHosts(opts RunOptions, task ApplyTask) ([]string, 
 	if task.Entry.Kind == DestroyTaskKindStorageCluster {
 		return nil, nil
 	}
-	records, err := loadOwnershipRecordsForRun(task.Playbook, opts.OwnershipDir, opts.ContextName)
-	if err != nil {
-		return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: err}
+	records := opts.OwnershipRecordsSnapshot
+	if !opts.UseOwnershipRecordsSnapshot {
+		var err error
+		records, err = loadOwnershipRecordsForRun(task.Playbook, opts.OwnershipDir, opts.ContextName)
+		if err != nil {
+			return nil, &PartialDestroyOutcomeError{TaskID: task.Entry.ID, Cause: err}
+		}
 	}
 	members := render.HostGroupMembersWithOwnershipRecords(task.State, records)
 	hostSet := map[string]bool{}
@@ -227,7 +249,7 @@ func runOneStorageDestroyTask(ctx context.Context, stdout io.Writer, stderr io.W
 	if err := writeStorageDestroyResult(resultPath, validated); err != nil {
 		return failedDestroyTaskResult(taskOpts, task, skipped, err)
 	}
-	manifest, err := PrepareStorageDestroyOwnershipRelease(taskOpts.OwnershipDir, taskOpts.ContextName, validated, expectedSeedHosts)
+	manifest, err := prepareStorageDestroyOwnershipRelease(taskOpts, validated, expectedSeedHosts)
 	if err != nil {
 		return failedDestroyTaskResult(taskOpts, task, skipped, err)
 	}
@@ -288,24 +310,56 @@ func finalizeStorageDestroyTask(ctx context.Context, stdout io.Writer, stderr io
 	validationPath := filepath.Join(releaseOpts.ArtifactsRoot, StorageDestroyReleaseValidationFileName)
 	releaseOpts.ExtraVarPairs = replaceDestroyExtraVar(releaseOpts.ExtraVarPairs, StorageDestroyReleaseValidationExtraVar, validationPath)
 	releaseOpts.SkipNoHostsBeforeRender = false
+	if err := refreshDestroyTaskOwnershipSnapshot(&releaseOpts); err != nil {
+		return err
+	}
 	releaseResult, err := Run(ctx, releaseOpts, runnerFactory(stdout, stderr), nil)
 	if err != nil {
 		if _, validationErr := os.Stat(validationPath); errors.Is(validationErr, os.ErrNotExist) {
-			return errors.Join(err, ResetStorageDestroyOwnershipProof(taskOpts.OwnershipDir, taskOpts.ContextName, results, expectedSeedHosts, manifest))
+			return errors.Join(err, resetStorageDestroyOwnershipProof(taskOpts, results, expectedSeedHosts, manifest))
 		}
 		return err
 	}
 	if releaseResult.Skipped {
 		return errors.Join(
 			errors.New("validated storage ownership release matched no hosts"),
-			ResetStorageDestroyOwnershipProof(taskOpts.OwnershipDir, taskOpts.ContextName, results, expectedSeedHosts, manifest),
+			resetStorageDestroyOwnershipProof(taskOpts, results, expectedSeedHosts, manifest),
 		)
 	}
 	if info, err := os.Stat(validationPath); err != nil || !info.Mode().IsRegular() {
-		resetErr := ResetStorageDestroyOwnershipProof(taskOpts.OwnershipDir, taskOpts.ContextName, results, expectedSeedHosts, manifest)
+		resetErr := resetStorageDestroyOwnershipProof(taskOpts, results, expectedSeedHosts, manifest)
 		return errors.Join(fmt.Errorf("storage ownership release produced no validation boundary at %s", validationPath), resetErr)
 	}
-	return MarkStorageDestroyOwnershipReleased(taskOpts.OwnershipDir, taskOpts.ContextName, results, expectedSeedHosts, manifest)
+	return markStorageDestroyOwnershipReleased(taskOpts, results, expectedSeedHosts, manifest)
+}
+
+func withDestroyOwnershipMutation(inputs *destroyRunInputs, mutation func() error) error {
+	if inputs != nil {
+		inputs.invalidateOwnership()
+		defer inputs.invalidateOwnership()
+	}
+	return mutation()
+}
+
+func prepareStorageDestroyOwnershipRelease(opts RunOptions, results map[string]StorageDestroyClusterResult, expectedSeedHosts map[string]string) (manifest StorageDestroyReleaseManifest, err error) {
+	err = withDestroyOwnershipMutation(opts.destroyRunInputs, func() error {
+		var mutationErr error
+		manifest, mutationErr = PrepareStorageDestroyOwnershipRelease(opts.OwnershipDir, opts.ContextName, results, expectedSeedHosts)
+		return mutationErr
+	})
+	return manifest, err
+}
+
+func resetStorageDestroyOwnershipProof(opts RunOptions, results map[string]StorageDestroyClusterResult, expectedSeedHosts map[string]string, manifest StorageDestroyReleaseManifest) error {
+	return withDestroyOwnershipMutation(opts.destroyRunInputs, func() error {
+		return ResetStorageDestroyOwnershipProof(opts.OwnershipDir, opts.ContextName, results, expectedSeedHosts, manifest)
+	})
+}
+
+func markStorageDestroyOwnershipReleased(opts RunOptions, results map[string]StorageDestroyClusterResult, expectedSeedHosts map[string]string, manifest StorageDestroyReleaseManifest) error {
+	return withDestroyOwnershipMutation(opts.destroyRunInputs, func() error {
+		return MarkStorageDestroyOwnershipReleased(opts.OwnershipDir, opts.ContextName, results, expectedSeedHosts, manifest)
+	})
 }
 
 func failedDestroyTaskResult(opts RunOptions, task ApplyTask, skipped bool, err error) applyTaskResult {
