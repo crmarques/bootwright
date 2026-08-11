@@ -75,12 +75,12 @@
     owner: root
     group: root
     mode: "0644"
+  register: bootwright_haproxy_config
 
 - name: Revalidate host operation and endpoints before HAProxy container mutation
   ansible.builtin.include_role:
     name: bootwright.core.ownership_record
     tasks_from: require_infra_component_endpoint_claims.yml
-  register: bootwright_haproxy_config
 
 - name: Run HAProxy container
   containers.podman.podman_container:
@@ -97,17 +97,17 @@
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
       bootwright.context: "{{ bootwright_clusters_dir | dirname | basename }}"
-
-- name: Revalidate host operation and endpoints before HAProxy firewall mutation
-  ansible.builtin.include_role:
-    name: bootwright.core.ownership_record
-    tasks_from: require_infra_component_endpoint_claims.yml
     volumes:
       - "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z"
     command:
       - haproxy
       - -f
       - /usr/local/etc/haproxy/haproxy.cfg
+
+- name: Revalidate host operation and endpoints before HAProxy firewall mutation
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: require_infra_component_endpoint_claims.yml
 
 - name: Open HAProxy frontend ports on host firewall
   ansible.posix.firewalld:
