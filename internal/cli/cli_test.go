@@ -2773,6 +2773,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"secret", "delete"}, want: false},
 		{args: []string{"media"}, want: false},
 		{args: []string{"media", "list"}, want: true},
+		{args: []string{"media", "list", "--checksums"}, want: true},
 		{args: []string{"media", "add", "--name", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: true},
 		{args: []string{"media", "add", "rhel.iso", "--from-file", "/home/user/rhel.iso"}, want: false},
 		{args: []string{"media", "add"}, want: false},

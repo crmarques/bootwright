@@ -102,17 +102,19 @@ func mediaEntryExists(key string) (bool, error) {
 
 func newMediaListCmd(stdout io.Writer) *cobra.Command {
 	var outputFormat string
+	var checksums bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List managed ISO media",
 		Args:  cobra.NoArgs,
 	}
 	addOutputFlag(cmd, &outputFormat)
+	cmd.Flags().BoolVar(&checksums, "checksums", false, "calculate and include each ISO's SHA-256 checksum; reads every ISO in full")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
 			return failErr(2, err)
 		}
-		entries, err := media.List()
+		entries, err := media.List(checksums)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -127,11 +129,15 @@ func newMediaListCmd(stdout io.Writer) *cobra.Command {
 		}
 		checks := make([]output.Check, 0, len(entries))
 		for _, entry := range entries {
+			evidence := fmt.Sprintf("%s %d bytes", entry.Reference, entry.Size)
+			if checksums {
+				evidence += " sha256:" + entry.SHA256
+			}
 			checks = append(checks, output.Check{
 				Group:    "Managed ISO media",
 				Name:     entry.Name,
 				Status:   output.StatusOK,
-				Evidence: fmt.Sprintf("%s %d bytes sha256:%s", entry.Reference, entry.Size, entry.SHA256),
+				Evidence: evidence,
 			})
 		}
 		p.Checks(checks)

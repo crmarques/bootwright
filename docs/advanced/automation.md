@@ -46,6 +46,10 @@ request never takes a lease or begins Git work.
 | `plan` | always a preview | The planned task graph. |
 | `apply`, `destroy`, `storage-cluster replace-arbiter` | **yes** | The plan, plus `requiredAuthorizations` — a real mutating run has no JSON mode. |
 
+`media list` reports metadata without opening the ISO payloads, and its default
+JSON omits `sha256`. Add `--checksums` to calculate that field; the command then
+reads every listed ISO in full.
+
 Every `preflight` target reports results in that one shape. Only the targets
 that run an Ansible preflight accept `--dry-run` to describe the plan instead;
 `preflight add-ons` has no `--dry-run`, and `preflight bastion` accepts neither

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -25,9 +27,20 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 		t.Fatalf("media add output = %q", stdout)
 	}
 
+	stdout, stderr, code = runCLI(t, "media", "list")
+	if code != 0 {
+		t.Fatalf("media list exited %d, stderr=%q", code, stderr)
+	}
+	if strings.Contains(stdout, "sha256:") {
+		t.Fatalf("default media list calculated a checksum: %q", stdout)
+	}
+
 	stdout, stderr, code = runCLI(t, "media", "list", "--output", "json")
 	if code != 0 {
 		t.Fatalf("media list exited %d, stderr=%q", code, stderr)
+	}
+	if strings.Contains(stdout, `"sha256"`) {
+		t.Fatalf("default media list JSON included a checksum: %q", stdout)
 	}
 	var report mediaListReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -37,12 +50,45 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 
+	wantSum := sha256.Sum256([]byte("iso bytes"))
+	wantSHA256 := hex.EncodeToString(wantSum[:])
+	stdout, stderr, code = runCLI(t, "media", "list", "--checksums")
+	if code != 0 {
+		t.Fatalf("media list --checksums exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "sha256:"+wantSHA256) {
+		t.Fatalf("media list --checksums omitted the checksum: %q", stdout)
+	}
+
+	stdout, stderr, code = runCLI(t, "media", "list", "--checksums", "--output", "json")
+	if code != 0 {
+		t.Fatalf("media list --checksums --output json exited %d, stderr=%q", code, stderr)
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode checked media list: %v\n%s", err, stdout)
+	}
+	if len(report.Media) != 1 || report.Media[0].SHA256 != wantSHA256 {
+		t.Fatalf("checked report = %#v", report)
+	}
+
 	stdout, stderr, code = runCLI(t, "media", "delete", "--name", "rhel.iso", "--yes")
 	if code != 0 {
 		t.Fatalf("media delete exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	if _, err := os.Stat(filepath.Join(media.StoreDir(), "rhel.iso")); !os.IsNotExist(err) {
 		t.Fatalf("stored ISO still exists or stat failed: %v", err)
+	}
+}
+
+func TestMediaListChecksumsHelpNamesFullRead(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "media", "list", "--help")
+	if code != 0 {
+		t.Fatalf("media list --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"--checksums", "reads every ISO in full"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("media list --help missing %q:\n%s", want, stdout)
+		}
 	}
 }
 

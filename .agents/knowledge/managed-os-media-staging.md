@@ -36,6 +36,14 @@ in managed-os-install-media-missing.md. Replacing an existing media entry is
 authorized by a single `--yes` (or an interactive y), matching `secret set` —
 `media add` carries no second overwrite flag of its own.
 
+**Media-store inventory cost:** media entries retain no expected checksum
+baseline. The default `bootwright media list` therefore stats each regular ISO
+without opening its payload and omits SHA-256 from text and JSON. The former
+shared entry helper hashed every ISO during that default inventory, making the
+command serially proportional to the total bytes in the store. `--checksums`
+opts into those full reads and reports the current digests; it computes values
+for comparison elsewhere rather than verifying them against stored evidence.
+
 **Hosted install tree identity and atomicity:** the tree
 (`packageSource.hostedTree`) is extracted once per (cluster, image) with
 run_once. Identity is the DVD `size:mtime` (mirroring the boot-source identity

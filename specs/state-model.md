@@ -3078,11 +3078,16 @@ command. The rest are registered per command, on the verbs that reach machines.
   that `MachineImage` `local-media:` keys resolve against (see
   [MachineImage](#machineimage)); ADR 0010 decides their flag conventions —
   root escalation, `--name` targeting, and the one `--yes` gate on replace and
-  delete. `media delete` checks only the store: it does not cross-check loaded
-  `MachineImage` objects, so a key a declared image still names is caught
-  later, by the installer-media preflight check, which fails naming the missing
-  source and the `media add --name <filename.iso>` remediation — the same
-  check that catches a `MachineImage` naming a key never added.
+  delete. `media list` reads directory and regular-file metadata only by
+  default; its text output omits a digest and its JSON entries omit `sha256`.
+  `media list --checksums` reads every ISO in full and includes its current
+  SHA-256 in both formats. This calculates digests; it does not verify them
+  against an add-time baseline, because the store persists no expected digest.
+  `media delete` checks only the store: it does not cross-check loaded
+  `MachineImage` objects, so a key a declared image still names is caught later,
+  by the installer-media preflight check, which fails naming the missing source
+  and the `media add --name <filename.iso>` remediation — the same check that
+  catches a `MachineImage` naming a key never added.
 - `secret encryption init|status` complete the `migrate`/`rotate` pair whose
   semantics `security.md` (Secret Lifecycle) owns: `init` initializes the
   current context's encrypted secret store, `status` reports the store's

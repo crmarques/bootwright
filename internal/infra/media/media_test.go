@@ -36,7 +36,7 @@ func TestAddListRemoveFile(t *testing.T) {
 		t.Fatalf("stored bytes = %q", data)
 	}
 
-	entries, err := List()
+	entries, err := List(false)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -51,12 +51,65 @@ func TestAddListRemoveFile(t *testing.T) {
 	if deleted.Name != "rhel.iso" {
 		t.Fatalf("deleted = %#v", deleted)
 	}
-	entries, err = List()
+	entries, err = List(false)
 	if err != nil {
 		t.Fatalf("List after delete: %v", err)
 	}
 	if len(entries) != 0 {
 		t.Fatalf("entries after delete = %#v", entries)
+	}
+}
+
+func TestListChecksumsAreOptIn(t *testing.T) {
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	source := filepath.Join(t.TempDir(), "rhel.iso")
+	if err := os.WriteFile(source, []byte("iso bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddFile("rhel.iso", source, "", false); err != nil {
+		t.Fatalf("AddFile: %v", err)
+	}
+
+	entries, err := List(false)
+	if err != nil {
+		t.Fatalf("List without checksums: %v", err)
+	}
+	if len(entries) != 1 || entries[0].SHA256 != "" {
+		t.Fatalf("entries without checksums = %#v", entries)
+	}
+
+	entries, err = List(true)
+	if err != nil {
+		t.Fatalf("List with checksums: %v", err)
+	}
+	if len(entries) != 1 || entries[0].SHA256 != sha256Hex([]byte("iso bytes")) {
+		t.Fatalf("entries with checksums = %#v", entries)
+	}
+}
+
+func TestListWithoutChecksumsDoesNotReadMedia(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("unreadable media check requires non-root test process")
+	}
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	dir, err := EnsureStoreDir()
+	if err != nil {
+		t.Fatalf("EnsureStoreDir: %v", err)
+	}
+	path := filepath.Join(dir, "rhel.iso")
+	if err := os.WriteFile(path, []byte("iso bytes"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := List(false)
+	if err != nil {
+		t.Fatalf("List without checksums: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name != "rhel.iso" {
+		t.Fatalf("entries without checksums = %#v", entries)
+	}
+	if _, err := List(true); err == nil || !strings.Contains(err.Error(), "open media") {
+		t.Fatalf("List with checksums err = %v", err)
 	}
 }
 

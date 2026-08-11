@@ -44,7 +44,7 @@ type Entry struct {
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
 	Size      int64     `json:"size"`
-	SHA256    string    `json:"sha256"`
+	SHA256    string    `json:"sha256,omitempty"`
 	Modified  time.Time `json:"modified"`
 	Reference string    `json:"reference"`
 }
@@ -223,7 +223,12 @@ func add(opts AddOptions) (Entry, error) {
 	if err := os.Rename(tmpPath, target); err != nil {
 		return Entry{}, fmt.Errorf("install media file %s: %w", target, err)
 	}
-	return entryForPath(opts.Key, target, actualSHA)
+	entry, err := entryForPath(opts.Key, target)
+	if err != nil {
+		return Entry{}, err
+	}
+	entry.SHA256 = actualSHA
+	return entry, nil
 }
 
 func ensureWritableTarget(target string, force bool) error {
@@ -303,7 +308,7 @@ func copyURL(w io.Writer, sourceURL string) error {
 	return nil
 }
 
-func List() ([]Entry, error) {
+func List(checksums bool) ([]Entry, error) {
 	dir := StoreDir()
 	items, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -322,9 +327,15 @@ func List() ([]Entry, error) {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		entry, err := entryForPath(name, path, "")
+		entry, err := entryForPath(name, path)
 		if err != nil {
 			return nil, err
+		}
+		if checksums {
+			entry.SHA256, err = sha256ForPath(path)
+			if err != nil {
+				return nil, err
+			}
 		}
 		out = append(out, entry)
 	}
@@ -337,7 +348,7 @@ func Delete(key string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	entry, err := entryForPath(key, path, "")
+	entry, err := entryForPath(key, path)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -347,7 +358,7 @@ func Delete(key string) (Entry, error) {
 	return entry, nil
 }
 
-func entryForPath(key, path, knownSHA string) (Entry, error) {
+func entryForPath(key, path string) (Entry, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Entry{}, fmt.Errorf("stat media %s: %w", path, err)
@@ -355,30 +366,29 @@ func entryForPath(key, path, knownSHA string) (Entry, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return Entry{}, fmt.Errorf("media %s must be a regular file", path)
 	}
-	sum := knownSHA
-	if sum == "" {
-		f, err := os.Open(path)
-		if err != nil {
-			return Entry{}, fmt.Errorf("open media %s: %w", path, err)
-		}
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			_ = f.Close()
-			return Entry{}, fmt.Errorf("hash media %s: %w", path, err)
-		}
-		if err := f.Close(); err != nil {
-			return Entry{}, fmt.Errorf("close media %s: %w", path, err)
-		}
-		sum = hex.EncodeToString(h.Sum(nil))
-	}
 	return Entry{
 		Name:      key,
 		Path:      path,
 		Size:      info.Size(),
-		SHA256:    sum,
 		Modified:  info.ModTime().UTC(),
 		Reference: Reference(key),
 	}, nil
+}
+
+func sha256ForPath(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open media %s: %w", path, err)
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("hash media %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("close media %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func NormalizeSHA256(value string) (string, error) {
