@@ -70,9 +70,11 @@ deletion.
 network remover, emulated-BMC runtime and vmedia-pool teardown, and vSphere
 datastore-media remover all fail before deleting local state or ownership. Their
 rescues name the failed external operation and the controller-rendered exact
-mutating invocation. Only firewall-port closure remains best effort: with the
-listener already removed, a stale allow rule exposes no process and does not
-authorize deleting a live provider resource.
+mutating invocation. Firewall-port closure may be skipped only when firewalld
+is conclusively absent or stopped: with the listener already removed, a stale
+allow rule exposes no process and does not authorize deleting a live provider
+resource. A cleanup attempted against running firewalld is a hard operation;
+failure retains the teardown evidence for retry.
 
 **A controller name locates; live identity authorizes:** provider objects can be
 removed and recreated under the same global name between runs. Apply, declared
@@ -145,8 +147,20 @@ foreign-squatter probe is disarmed. Container names must live in role DEFAULTS,
 not a tasks set_fact — the gate runs before the role's set_fact block. A
 missing podman binary or no matching container reads as "does not exist".
 
-**Conventions:** destroy paths tolerate firewalld errors when closing ports (a
-best-effort close never aborts a teardown). `support_ssh_readiness` is the
-shared post-boot SSH probe and is contractually read-only (`changed_when:
-false` everywhere; `bootwright_ssh_ready_address: ''` skips all probes,
+**Conclusive firewalld absence is not a teardown blocker:** shared
+infra-component destroy accepts an absent `/usr/bin/firewall-cmd`, a running
+daemon (`rc=0`, `running`), or firewalld's conclusive not-running result
+(`rc=252`). Only the running case attempts firewall cleanup. A non-regular,
+linked, or non-executable binary, an incomplete command result, or any other
+return code remains unknown and fails before service mutation. A gate must not
+also require `bootwright_firewalld_available` merely because its authoritative
+port ledger is non-empty: that fact is intentionally false for both conclusive
+unavailable states, and the extra condition strands every such teardown.
+Skipping the close in those states is safe because removing the listener leaves
+a stale allow rule with no process to expose. A cleanup attempted against a
+running daemon remains hard and retains evidence on failure.
+
+**Conventions:** `support_ssh_readiness` is the shared post-boot SSH probe and
+is contractually read-only (`changed_when: false` everywhere;
+`bootwright_ssh_ready_address: ''` skips all probes,
 `bootwright_ssh_ready_key_path: ''` skips auth verification).

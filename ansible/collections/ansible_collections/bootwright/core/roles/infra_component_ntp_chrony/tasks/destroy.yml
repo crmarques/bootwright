@@ -145,7 +145,13 @@
             or bootwright_firewalld_state.rc | int == 252
           )
         )
-      - bootwright_firewalld_available | bool
+      - >-
+        bootwright_firewalld_available | bool
+        == (
+          bootwright_firewalld_probe.stat.exists | bool
+          and bootwright_firewalld_state.rc | default(252) | int == 0
+          and bootwright_firewalld_state.stdout | default('') | trim == 'running'
+        )
     fail_msg: >-
       Cannot conclusively use firewalld before NTP teardown on
       {{ inventory_hostname }}. No NTP service, UDP endpoint, or ownership

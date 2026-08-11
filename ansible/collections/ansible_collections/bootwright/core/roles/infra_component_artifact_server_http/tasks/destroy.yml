@@ -166,9 +166,6 @@
       - bootwright_firewalld_probe.stat.exists is defined
       - bootwright_firewalld_available is defined
       - >-
-        bootwright_artifacts_selected_listener_ports | length == 0
-        or bootwright_firewalld_available | bool
-      - >-
         not (bootwright_firewalld_probe.stat.exists | bool)
         or (
           bootwright_firewalld_probe.stat.isreg | default(false) | bool

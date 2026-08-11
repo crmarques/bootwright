@@ -47,6 +47,14 @@ func TestInfraComponentTeardownFailsClosedBeforeEvidenceRemoval(t *testing.T) {
 					t.Errorf("%s firewalld gate does not prove %q: %v", path, want, assertion["that"])
 				}
 			}
+			for _, condition := range assertion["that"].([]any) {
+				expression := fmt.Sprint(condition)
+				if strings.Contains(expression, "bootwright_firewalld_available") &&
+					!strings.Contains(expression, "is defined") &&
+					!strings.Contains(expression, "bootwright_firewalld_available | bool ==") {
+					t.Errorf("%s firewalld gate rejects a conclusively absent or stopped daemon: %v", path, condition)
+				}
+			}
 			if failure := fmt.Sprint(assertion["fail_msg"]); !strings.Contains(failure, "bootwright_mutating_invocation") || !strings.Contains(failure, "No ") {
 				t.Errorf("%s firewalld refusal must retain state and name the exact retry: %v", path, assertion["fail_msg"])
 			}
@@ -76,6 +84,9 @@ func TestInfraComponentTeardownFailsClosedBeforeEvidenceRemoval(t *testing.T) {
 				when := fmt.Sprint(task["when"])
 				if !strings.Contains(when, "bootwright_infra_destroy_state_stat.stat.exists") {
 					t.Errorf("%s task %q can remove a same-port foreign firewall rule without the exact current-context live marker: when=%v", path, task["name"], task["when"])
+				}
+				if !strings.Contains(when, "bootwright_firewalld_available") {
+					t.Errorf("%s task %q can attempt firewall cleanup when firewalld is conclusively unavailable: when=%v", path, task["name"], task["when"])
 				}
 			}
 
