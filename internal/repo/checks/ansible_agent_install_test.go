@@ -481,33 +481,40 @@ func TestInstallAgentRequiresInstallStateForWaitAction(t *testing.T) {
 	}
 }
 
-func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/inputs.yml")
-	stat := tasks[findAnsibleTask(t, tasks, "Check local installer extra manifests")]
-	remove := tasks[findAnsibleTask(t, tasks, "Remove stale remote installer extra manifests")]
-	stage := tasks[findAnsibleTask(t, tasks, "Stage installer extra manifests on controller")]
-
-	if got := fmt.Sprint(stat["delegate_to"]); got != "localhost" {
-		t.Fatalf("extra manifest stat delegate_to = %v", got)
-	}
-	copyTask, ok := stage["ansible.builtin.copy"].(map[string]any)
+func TestInstallAgentUsesMaterializedInstallerInputsInPlace(t *testing.T) {
+	const roleRoot = "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/"
+	tasks := readAnsibleTasks(t, roleRoot+"tasks/stage/inputs.yml")
+	secure := tasks[findAnsibleTask(t, tasks, "Secure installer work directory")]
+	fileTask, ok := secure["ansible.builtin.file"].(map[string]any)
 	if !ok {
-		t.Fatalf("stage extra manifests has no copy body: %v", stage)
+		t.Fatalf("secure installer work directory has no file body: %v", secure)
 	}
-	if got := copyTask["src"]; got != "{{ bootwright_install_local_work_dir }}/openshift/" {
-		t.Fatalf("extra manifest copy src = %v", got)
+	if got := fileTask["path"]; got != "{{ bootwright_install_work_dir }}" {
+		t.Fatalf("installer work directory path = %v", got)
 	}
-	if got := copyTask["dest"]; got != "{{ bootwright_install_work_dir }}/openshift/" {
-		t.Fatalf("extra manifest copy dest = %v", got)
+	if got := fileTask["state"]; got != "directory" {
+		t.Fatalf("installer work directory state = %v", got)
 	}
-	if got := copyTask["directory_mode"]; got != "0700" {
-		t.Fatalf("extra manifest directory_mode = %v", got)
+	if got := fileTask["mode"]; got != "0700" {
+		t.Fatalf("installer work directory mode = %v", got)
 	}
-	if got := fmt.Sprint(remove["when"]); !strings.Contains(got, "run") || !strings.Contains(got, "create_iso") {
-		t.Fatalf("remove stale manifests when = %v", remove["when"])
+
+	var defaults map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, roleRoot+"defaults/main.yml")), &defaults); err != nil {
+		t.Fatalf("decode install_agent defaults: %v", err)
 	}
-	if !stringListContains(stage["when"], "bootwright_install_extra_manifests_stat.stat.isdir | default(false)") {
-		t.Fatalf("extra manifest stage when = %v", stage["when"])
+	if got, want := defaults["bootwright_install_local_work_dir"], defaults["bootwright_install_work_dir"]; got != want {
+		t.Fatalf("controller-local installer input dir = %v, work dir = %v", got, want)
+	}
+
+	for _, task := range tasks {
+		if _, ok := task["ansible.builtin.copy"]; ok {
+			t.Fatalf("controller-local installer inputs must not be copied onto themselves: %v", task["name"])
+		}
+		body, ok := task["ansible.builtin.file"].(map[string]any)
+		if ok && body["path"] == "{{ bootwright_install_work_dir }}/openshift" && body["state"] == "absent" {
+			t.Fatalf("controller-local installer inputs must not remove materialized extra manifests: %v", task["name"])
+		}
 	}
 }
 

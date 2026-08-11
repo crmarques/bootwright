@@ -35,6 +35,7 @@ Decisions with durable rationale live in [`specs/adr/`](../../specs/adr/README.m
 | OpenShift / OKD clusters | Mirror push x509 SAN mismatch after self-signed cert spec change | [self-signed-cert-drift.md](self-signed-cert-drift.md) |
 | OpenShift / OKD clusters | Agent ISO cache stale; `cannot generate ISO image due to configuration errors` | [openshift-agent-iso-cache.md](openshift-agent-iso-cache.md) |
 | OpenShift / OKD clusters | `Missing install-config.yaml`; `Fail when install-config is missing`; boot task after successful ISO generation | [openshift-install-config-consumed.md](openshift-install-config-consumed.md) |
+| OpenShift / OKD clusters | `Stage installer extra manifests on controller`; `Could not find or access .../runtime/installer/openshift/` | [container-cluster-ansible-flow.md](container-cluster-ansible-flow.md) |
 | OpenShift / OKD clusters | `SQUASHFS error: Unable to read page`; `Unable to read fragment cache entry`; agent API never initializes after virtual media eject | [openshift-agent-iso-squashfs-detach.md](openshift-agent-iso-squashfs-detach.md) |
 | OpenShift / OKD clusters | `v2GetClusterNotFound`; `Writing image to disk: 100%`; node boots agent ISO again | [openshift-agent-iso-reboot-loop.md](openshift-agent-iso-reboot-loop.md) |
 | OpenShift / OKD clusters | `Only platform none and external supports 1 ControlPlane and 0 Compute nodes`; SNO renders `platform.baremetal` | [openshift-sno-platform-none.md](openshift-sno-platform-none.md) |

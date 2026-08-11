@@ -47,6 +47,19 @@ selects the binary per cluster:
 `openshift-install`. The `controller_openshift_tools` role installs both
 binaries whenever any cluster enables FIPS.
 
+**Constraint (effective installer inputs stay in place on the controller):**
+Before Ansible runs, Go replaces and writes `install-config.yaml`,
+`agent-config.yaml`, and the optional `openshift/` extra-manifest tree directly
+under the cluster's controller-local `runtime/installer` directory. Go owns
+stale-manifest removal; an empty rendered set deliberately leaves no
+`openshift/` directory. The agent-install play runs on localhost and its local
+and work directory defaults name that same path, so Ansible must consume these
+files in place and must neither remove nor copy them as a staging step. The
+retired bastion flow used distinct filesystems; retaining its remove-then-copy
+sequence after moving installation to localhost deletes the copy source and
+fails at `Stage installer extra manifests on controller` with `Could not find
+or access .../runtime/installer/openshift/`.
+
 **Constraint (no `end_play` in multi-host diagnostics):**
 `diagnostic_cluster_endpoint_dns` runs when a cluster's endpoints use
 `source.type: external` (the operator owns the LB and DNS records) and reports
