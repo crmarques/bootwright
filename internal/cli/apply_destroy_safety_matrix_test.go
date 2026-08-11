@@ -2701,6 +2701,9 @@ func seedRunnableSafetyMutation(t *testing.T, ctx workspace.Context) {
 	}
 	previous := preflight.DefaultDeps
 	deps := previous
+	deps.LookPath = func(name string, _ []string) (string, error) {
+		return "/test/bin/" + name, nil
+	}
 	deps.CommandOutputLocalRoot = func(_ string, args ...string) ([]byte, error) {
 		return []byte(`{"gitVersion":"v1","request":"` + strings.Join(args, " ") + `"}`), nil
 	}

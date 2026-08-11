@@ -101,6 +101,15 @@ existing `SetWorkflowBundlePreparerForTest` seam (the safety matrix wraps it in
 passes after `sync-bundle` locally but fails the clean-checkout gate with
 `missing ansible_bundle.zip`, masking the behavior it meant to exercise.
 
+**Hermetic safety-matrix tools:** A matrix fixture that deliberately advances
+through controller preflight must resolve its prerequisite binaries through the
+test dependency seam. `--stage clusters` includes add-ons, so a runnable fixture
+that leaves `preflight.DefaultDeps.LookPath` live can pass on a workstation with
+`oc` and fail in CI with `Installer tools: oc: not found` before reaching the
+intended install-record refusal. Keep optional operator tools out of the workflow
+image; make the fixture hermetic while leaving real runtime execution on the
+package-level command stubs.
+
 **CI gates:**
 
 - `checks.yml` runs the full suite on `v*` release tags (not just PRs/main
