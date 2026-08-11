@@ -358,39 +358,6 @@
     - bootwright_ceph_op_idempotency_kind == 'stretch-mode'
     - ((bootwright_ceph_mon_dump.stdout | default('') | trim | default('{}', true)) | from_json).stretch_mode | default(false) | bool
 
-- name: Check enabled mgr modules
-  ansible.builtin.command:
-    argv:
-      - timeout
-      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
-      - "{{ bootwright_ceph_probe_timeout_seconds }}"
-      - cephadm
-      - shell
-      - --
-      - ceph
-      - mgr
-      - module
-      - ls
-      - --format
-      - json
-  register: bootwright_ceph_mgr_modules
-  changed_when: false
-  failed_when: bootwright_ceph_mgr_modules.rc | default(0) | int in [124, 137]
-  when: bootwright_ceph_op_idempotency_kind == 'mgr-module'
-
-- name: Skip enabled mgr module operation
-  ansible.builtin.set_fact:
-    bootwright_ceph_op_skip: true
-  vars:
-    bootwright_ceph_mgr_module_doc: "{{ (bootwright_ceph_mgr_modules.stdout | default('') | trim | default('{}', true)) | from_json }}"
-  when:
-    - bootwright_ceph_op_idempotency_kind == 'mgr-module'
-    - >-
-      bootwright_ceph_op_idempotency_name in (
-        (bootwright_ceph_mgr_module_doc.enabled_modules | default([]))
-        + (bootwright_ceph_mgr_module_doc.always_on_modules | default([]))
-      )
-
 - name: Check existing RGW realm
   ansible.builtin.command:
     argv:

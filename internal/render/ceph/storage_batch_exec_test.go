@@ -81,7 +81,6 @@ if [[ -n "${BW_STUB_FAIL:-}" && "$*" == *"${BW_STUB_FAIL}"* ]]; then
 fi
 case "$*" in
   "osd pool ls --format json") echo '["existing"]' ;;
-  "mgr module ls --format json") echo '{"enabled_modules": [], "always_on_modules": ["rbd_support"]}' ;;
   "mon dump --format json") echo '{"stretch_mode": false}' ;;
   "osd crush rule dump --format json") echo '[]' ;;
   "osd erasure-code-profile ls --format json") echo '[]' ;;
@@ -148,8 +147,11 @@ func TestCephBatchScriptGuardsSkipLiveResourcesAndRunMissingOnes(t *testing.T) {
 	if !strings.Contains(log, "osd pool create missing") {
 		t.Fatalf("a pool the live cluster lacks must be created by the batch:\n%s", log)
 	}
-	if strings.Contains(log, "mgr module enable rbd_support") {
-		t.Fatalf("an always-on mgr module must be skipped by the batch guard:\n%s", log)
+	if !strings.Contains(log, "mgr module enable rbd_support") {
+		t.Fatalf("mgr modules must converge through Ceph's native idempotent enable command:\n%s", log)
+	}
+	if strings.Contains(log, "mgr module ls") {
+		t.Fatalf("mgr module convergence must not run the detailed module-list probe:\n%s", log)
 	}
 }
 

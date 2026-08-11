@@ -199,27 +199,45 @@ or denies it to turn the module off.
 
 **Symptom:** `ceph orch deny call-home-enabled` prints `Call home agent module
 disabled and health warning for call home enablement cleared`, but the client
-does not exit; the 300-second wrapper terminates it with rc 124.
+does not exit; the 300-second wrapper terminates it with rc 124. A separate
+read-only form occurs at `Inspect IBM Call Home manager module state`: `ceph mgr
+module ls --format json` emits a complete JSON document with
+`call_home_agent` in `enabled_modules`, but still reaches the 120-second bound
+and exits rc 124.
 
 **Root cause:** IBM's `deny_call_home()` removes the
 `CALL_HOME_ENABLED_AUTOMATICALLY` warning, sends a nested `mgr module disable`
 monitor command for `call_home_agent`, clears
 `mgr/cephadm/call_home_needs_acceptance`, and then returns that exact text. The
-Ceph CLI prints its command response before shutting down its cluster handle,
-so the success-looking line and a later client timeout can coexist. The precise
-transport hang is not vendor-confirmed; unloading the module inside the active
-manager-targeted request is the inferred trigger. The timeout remains an unknown
-outcome under Bootwright's fail-closed command contract and stdout must never
-override rc 124 or 137.
+Ceph CLI prints and flushes its command response before shutting down its
+cluster handle, so a complete response and a later client timeout can coexist.
+The module-list JSON includes the full option metadata for every disabled
+module even though this reconcile needs one enabled-module bit; the observed
+process remained live after all 34,039 response bytes arrived. Source ordering
+makes post-response CLI/RADOS or cephadm cleanup the leading inference, but the
+precise stage and trigger are not vendor-confirmed and may affect any CLI
+command. The denial's nested module unload is an additional risky path that the
+direct-disable ordering avoids, not a proven common cause. Both timeouts remain
+unknown outcomes under Bootwright's fail-closed command contract and stdout
+must never override rc 124 or 137. This symptom is not evidence of an HTTP(S)
+proxy failure: the Ceph messenger monitor request is not HTTP, and the complete
+monitor response proves the request itself succeeded.
 
-**Fix:** Inspect the module for both explicit intents. For disabled intent,
-first run the bounded, monitor-targeted `ceph mgr module disable
-call_home_agent` when it is active, then run the bounded `ceph orch deny
-call-home-enabled` so IBM still clears the warning and persists the denial. The
-nested disable is then idempotent instead of unloading a module inside that
-orchestrator request. The generated native apply script must keep the same
+**Fix:** Do not pre-read the module state. Run the bounded, monitor-targeted
+`ceph mgr module enable call_home_agent` or `ceph mgr module disable
+call_home_agent` directly for the explicit intent; Ceph returns rc 0 and an
+`already enabled` or `already disabled` response when the state is already
+converged. For disabled intent, run that direct disable before the bounded
+`ceph orch deny call-home-enabled` so IBM still clears the warning and persists
+the denial without unloading a module inside the orchestrator request. Declared
+`mgrModules[]` use the same native idempotency instead of repeating the detailed
+module-list probe later in the operation plan. Read-only discovery retains its
+direct-host module catalog because diff needs both explicitly enabled and
+always-on modules; the failing reconcile used the separate `cephadm shell`
+path. The generated native apply script keeps the same direct operations and
 order. Live diagnosis requires all three conditions: `call_home_agent` absent
-from `ceph mgr module ls`, `mgr/cephadm/call_home_needs_acceptance` false, and
+from the MgrMap,
+`mgr/cephadm/call_home_needs_acceptance` false, and
 `CALL_HOME_ENABLED_AUTOMATICALLY` absent from `ceph health detail`; none is a
 reason to reinterpret a timed-out run as successful.
 

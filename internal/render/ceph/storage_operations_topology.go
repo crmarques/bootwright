@@ -91,7 +91,7 @@ func cephCrushHostLocationOperations(cluster v1alpha1.StorageCluster, stretch *v
 func cephMgrAndLoggingOperations(cluster v1alpha1.StorageCluster) []map[string]any {
 	var ops []map[string]any
 	for _, module := range cluster.Spec.Ceph.MgrModules {
-		ops = append(ops, operationWithIdempotency("topology", "enable-mgr-module-"+module, "mgr-module", module, "ceph", "mgr", "module", "enable", module))
+		ops = append(ops, operationInPhase("topology", "enable-mgr-module-"+module, "ceph", "mgr", "module", "enable", module))
 	}
 	return ops
 }

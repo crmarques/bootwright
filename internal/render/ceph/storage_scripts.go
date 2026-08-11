@@ -183,18 +183,12 @@ func writeIBMCallHomeStage(b *strings.Builder, intent string) {
 		return
 	}
 	b.WriteString("\necho \"== stage 05: IBM Call Home ==\"\n")
-	b.WriteString("ibm_call_home_modules=\"$(_bw_exec ceph mgr module ls --format json)\"\n")
-	b.WriteString("ibm_call_home_enabled=\"$(jq -r '(.enabled_modules // []) | index(\"call_home_agent\") != null' <<<\"$ibm_call_home_modules\")\"\n")
 	switch intent {
 	case v1alpha1.StorageCephIBMCallHomeEnabled:
-		b.WriteString("if [[ \"$ibm_call_home_enabled\" != \"true\" ]]; then\n")
-		b.WriteString("  bw_run ceph mgr module enable call_home_agent\n")
-		b.WriteString("fi\n")
+		b.WriteString("bw_run ceph mgr module enable call_home_agent\n")
 		b.WriteString("bw_run ceph orch accept call-home-enabled\n")
 	case v1alpha1.StorageCephIBMCallHomeDisabled:
-		b.WriteString("if [[ \"$ibm_call_home_enabled\" == \"true\" ]]; then\n")
-		b.WriteString("  bw_run ceph mgr module disable call_home_agent\n")
-		b.WriteString("fi\n")
+		b.WriteString("bw_run ceph mgr module disable call_home_agent\n")
 		b.WriteString("bw_run ceph orch deny call-home-enabled\n")
 	}
 }

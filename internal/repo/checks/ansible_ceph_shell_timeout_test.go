@@ -14,7 +14,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const cephShellCommandFloor = 125
+const cephShellCommandFloor = 124
 
 type cephShellTimeoutClass struct {
 	name       string

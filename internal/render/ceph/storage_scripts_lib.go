@@ -147,9 +147,6 @@ _bw_exists() {
     cephfs-subvolumegroup)
       local fs="${name%%/*}" grp="${name##*/}"
       _bw_has_attr "$(_bw_exec ceph fs subvolumegroup ls "$fs" --format json)" name "$grp" ;;
-    mgr-module)
-      jq -e --arg n "$name" '((.enabled_modules // []) + (.always_on_modules // [])) | any(. == $n)' \
-        >/dev/null 2>&1 <<<"$(_bw_exec ceph mgr module ls --format json)" ;;
     stretch-mode)
       jq -e '.stretch_mode == true' >/dev/null 2>&1 <<<"$(_bw_exec ceph mon dump --format json)" ;;
     rgw-realm)

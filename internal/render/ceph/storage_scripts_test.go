@@ -106,6 +106,9 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 			t.Errorf("apply.sh missing %q", want)
 		}
 	}
+	if strings.Contains(lib, "mgr module ls --format json") {
+		t.Fatalf("native mgr module convergence must use Ceph's idempotent direct enable without the detailed module-list probe")
+	}
 
 	for _, want := range []string{
 		"command -v jq",
@@ -169,12 +172,10 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 				"bw_run ceph config set mgr mgr/cephadm/container_image_prometheus cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
 			},
 			wantCallHome: []string{
-				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
-				`ibm_call_home_enabled="$(jq -r '(.enabled_modules // []) | index("call_home_agent") != null' <<<"$ibm_call_home_modules")"`,
-				`if [[ "$ibm_call_home_enabled" == "true" ]]; then`,
 				`bw_run ceph mgr module disable call_home_agent`,
 				`bw_run ceph orch deny call-home-enabled`,
 			},
+			reject: []string{`ibm_call_home_modules=`, `ibm_call_home_status=`},
 		},
 		{
 			name:         "ibm enabled reconciles call home",
@@ -186,11 +187,10 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
 			wantLicense:  true,
 			wantCallHome: []string{
-				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
 				`bw_run ceph mgr module enable call_home_agent`,
 				`bw_run ceph orch accept call-home-enabled`,
 			},
-			reject: []string{`bw_run ceph orch deny call-home-enabled`},
+			reject: []string{`ibm_call_home_modules=`, `ibm_call_home_status=`, `bw_run ceph orch deny call-home-enabled`},
 		},
 		{
 			name:         "ibm disabled reconciles call home",
@@ -202,13 +202,12 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
 			wantLicense:  true,
 			wantCallHome: []string{
-				`ibm_call_home_modules="$(_bw_exec ceph mgr module ls --format json)"`,
-				`ibm_call_home_enabled="$(jq -r '(.enabled_modules // []) | index("call_home_agent") != null' <<<"$ibm_call_home_modules")"`,
-				`if [[ "$ibm_call_home_enabled" == "true" ]]; then`,
 				`bw_run ceph mgr module disable call_home_agent`,
 				`bw_run ceph orch deny call-home-enabled`,
 			},
 			reject: []string{
+				`ibm_call_home_modules=`,
+				`ibm_call_home_status=`,
 				`bw_run ceph mgr module enable call_home_agent`,
 				`bw_run ceph orch accept call-home-enabled`,
 			},

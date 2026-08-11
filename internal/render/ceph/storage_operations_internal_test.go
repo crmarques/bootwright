@@ -1365,6 +1365,9 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	var modules [][]string
 	for _, op := range ops {
 		if name, _ := op["name"].(string); strings.HasPrefix(name, "enable-mgr-module-") {
+			if _, guarded := op["idempotency"]; guarded {
+				t.Fatalf("mgr module enable is a native-idempotent in-place reconcile and must not carry a catalog probe: %v", op)
+			}
 			modules = append(modules, op["command"].([]string))
 		}
 	}
@@ -1374,6 +1377,18 @@ func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
 	}
 	if !reflect.DeepEqual(modules, want) {
 		t.Fatalf("mgr module ops = %v, want %v", modules, want)
+	}
+	script := mustApplyScript(t, state, cluster, CephScriptOptions{LibFile: "lib.sh", LateServicesSpecFile: "late.yaml"})
+	for _, want := range []string{
+		"bw_run ceph mgr module enable balancer",
+		"bw_run ceph mgr module enable telemetry",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("native mgr module convergence must run the idempotent enable directly, missing %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "bw_guarded mgr-module") || strings.Contains(script, "mgr module ls --format json") {
+		t.Fatalf("native mgr module convergence must not route through a module-list guard:\n%s", script)
 	}
 }
 

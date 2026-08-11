@@ -33,7 +33,6 @@ func cephBatchGuards() map[string]cephBatchGuard {
 		"ec-profile":   {mode: "string-list", probe: []string{"ceph", "osd", "erasure-code-profile", "ls", "--format", "json"}},
 		"cephfs":       {mode: "attr-list", key: "name", probe: []string{"ceph", "fs", "ls", "--format", "json"}},
 		"crush-rule":   {mode: "attr-list", key: "rule_name", probe: []string{"ceph", "osd", "crush", "rule", "dump", "--format", "json"}},
-		"mgr-module":   {mode: "mgr-module", probe: []string{"ceph", "mgr", "module", "ls", "--format", "json"}},
 		"stretch-mode": {mode: "flag-true", key: "stretch_mode", probe: []string{"ceph", "mon", "dump", "--format", "json"}},
 		"rgw-realm":    {mode: "key-list", key: "realms", probe: []string{"radosgw-admin", "realm", "list", "--format", "json"}},
 		"rgw-zonegroup": {
@@ -228,10 +227,6 @@ elif mode == "attr-list":
 elif mode == "key-list":
     if isinstance(doc, dict):
         found = name in strings(doc.get(key))
-elif mode == "mgr-module":
-    if isinstance(doc, dict):
-        modules = strings(doc.get("enabled_modules")) + strings(doc.get("always_on_modules"))
-        found = name in modules
 elif mode == "flag-true":
     found = isinstance(doc, dict) and truthy(doc.get(key))
 else:

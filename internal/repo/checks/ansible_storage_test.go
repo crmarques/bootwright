@@ -1023,9 +1023,11 @@ func TestStorageMonReadinessGatesEveryDeclaredMonBeforeTopologyOperations(t *tes
 }
 
 func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
+	idempotencyPath := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml"
+	idempotencyTasks := readAnsibleTasks(t, idempotencyPath)
 	body := strings.Join([]string{
 		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/classify.yml"),
-		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml"),
+		readRepoFile(t, idempotencyPath),
 	}, "\n")
 	for _, want := range []string{
 		"bootwright_ceph_op_idempotency_kind",
@@ -1045,6 +1047,11 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("storage operation runner must not infer idempotency from %q", forbidden)
+		}
+	}
+	for _, task := range idempotencyTasks {
+		if strings.Contains(fmt.Sprint(task), "mgr module ls") {
+			t.Fatalf("mgr module convergence must not issue the detailed module-list probe: %v", task)
 		}
 	}
 }
@@ -3905,42 +3912,49 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("licensed bootstrap must non-interactively accept the declared license, got %v", resolveBootstrap)
 	}
 	callHomeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml")
-	inspectCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Inspect IBM Call Home manager module state")
-	resolveCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Resolve IBM Call Home manager module state")
+	enableCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Enable IBM Call Home manager module")
+	acceptCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Accept enabled IBM Call Home state")
 	disableCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Disable IBM Call Home manager module")
 	denyCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Deny IBM Call Home enablement")
-	if !(inspectCallHomeIdx < resolveCallHomeIdx && resolveCallHomeIdx < disableCallHomeIdx && disableCallHomeIdx < denyCallHomeIdx) {
-		t.Fatalf("Call Home opt-out must inspect module state, disable the module directly, then deny the enabled state (inspect=%d resolve=%d disable=%d deny=%d)", inspectCallHomeIdx, resolveCallHomeIdx, disableCallHomeIdx, denyCallHomeIdx)
+	if !(enableCallHomeIdx < acceptCallHomeIdx && disableCallHomeIdx < denyCallHomeIdx) {
+		t.Fatalf("Call Home must apply the direct module transition before persisting its matching consent (enable=%d accept=%d disable=%d deny=%d)", enableCallHomeIdx, acceptCallHomeIdx, disableCallHomeIdx, denyCallHomeIdx)
 	}
-	inspectCallHome := callHomeTasks[inspectCallHomeIdx]
-	if got := fmt.Sprint(inspectCallHome["when"]); !strings.Contains(got, "ibm") || !strings.Contains(got, "enabled") || !strings.Contains(got, "disabled") {
-		t.Fatalf("Call Home inspection must be IBM-only and require explicit intent, got when=%v", inspectCallHome["when"])
+	for _, task := range callHomeTasks {
+		got := fmt.Sprint(task)
+		if strings.Contains(got, "mgr module ls") || strings.Contains(got, "enabled_modules") {
+			t.Fatalf("Call Home must use Ceph's idempotent direct module operations without the module catalog probe that can time out after returning complete JSON: %v", task)
+		}
 	}
-	resolveCallHome := callHomeTasks[resolveCallHomeIdx]
-	if got := fmt.Sprint(resolveCallHome["when"]); !strings.Contains(got, "enabled") || !strings.Contains(got, "disabled") {
-		t.Fatalf("Call Home module-state resolution must serve both explicit intents, got when=%v", resolveCallHome["when"])
-	}
-	enableCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Enable IBM Call Home manager module")]
+	enableCallHome := callHomeTasks[enableCallHomeIdx]
 	if got := fmt.Sprint(enableCallHome); !strings.Contains(got, "call_home_agent") || !strings.Contains(got, "enabled") {
 		t.Fatalf("Call Home enable path must enable call_home_agent for enabled intent, got %v", enableCallHome)
 	}
-	acceptCallHome := callHomeTasks[findAnsibleTask(t, callHomeTasks, "Accept enabled IBM Call Home state")]
+	if enableCallHome["register"] != "bootwright_ceph_ibm_call_home_enable" || !strings.Contains(fmt.Sprint(enableCallHome["changed_when"]), "already enabled") {
+		t.Fatalf("Call Home enable must preserve honest change reporting from Ceph's idempotent response, got %v", enableCallHome)
+	}
+	acceptCallHome := callHomeTasks[acceptCallHomeIdx]
 	if got := fmt.Sprint(acceptCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "accept") {
 		t.Fatalf("Call Home enable path must acknowledge the enabled state, got %v", acceptCallHome)
+	}
+	if acceptCallHome["changed_when"] != true {
+		t.Fatalf("Call Home acceptance has independent consent state and must conservatively report its unprobed mutation, got changed_when=%v", acceptCallHome["changed_when"])
 	}
 	disableCallHome := callHomeTasks[disableCallHomeIdx]
 	if got := fmt.Sprint(disableCallHome["ansible.builtin.command"]); !strings.Contains(got, "mgr module disable call_home_agent") || strings.Contains(got, "orch deny") {
 		t.Fatalf("Call Home opt-out must disable call_home_agent through the monitor command before the manager-targeted denial, got %v", disableCallHome)
 	}
-	if got := fmt.Sprint(disableCallHome["when"]); !strings.Contains(got, "disabled") || !strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
-		t.Fatalf("Call Home direct disable must run only for disabled intent when the module is active, got when=%v", disableCallHome["when"])
+	if got := fmt.Sprint(disableCallHome["when"]); !strings.Contains(got, "disabled") || strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
+		t.Fatalf("Call Home direct disable must run for disabled intent without a pre-read, got when=%v", disableCallHome["when"])
+	}
+	if disableCallHome["register"] != "bootwright_ceph_ibm_call_home_disable" || !strings.Contains(fmt.Sprint(disableCallHome["changed_when"]), "already disabled") {
+		t.Fatalf("Call Home disable must preserve honest change reporting from Ceph's idempotent response, got %v", disableCallHome)
 	}
 	denyCallHome := callHomeTasks[denyCallHomeIdx]
 	if got := fmt.Sprint(denyCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "deny") || !strings.Contains(got, "disabled") {
 		t.Fatalf("Call Home opt-out must still deny the enabled state after the direct disable, got %v", denyCallHome)
 	}
-	if got := fmt.Sprint(denyCallHome["when"]); strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
-		t.Fatalf("Call Home opt-out must deny consent even when the module is already disabled, got when=%v", denyCallHome["when"])
+	if denyCallHome["changed_when"] != true {
+		t.Fatalf("Call Home denial has independent consent state and must conservatively report its unprobed mutation, got changed_when=%v", denyCallHome["changed_when"])
 	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph OSD service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations one container per operation")
