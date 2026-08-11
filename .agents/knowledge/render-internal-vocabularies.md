@@ -17,6 +17,16 @@ per-cluster machines service and the provider BMC service). They are not
 authored `InfraComponent` slots; do not look for them in the component slot
 vocabulary.
 
+**Infra-component desired-service kinds versus durable evidence kinds:**
+`bootwright_infra_component_services` keeps the API slot spellings
+`artifactServer` and `loadBalancer`. The corresponding role-owned records,
+labels, claims, and transitions deliberately use the physical implementation
+spellings `artifacts` and `load-balancer`. A filter or selector reading rendered
+desired services must use the former pair; a durable-evidence parser must use
+the latter pair. Mixing the boundaries makes every artifact-server apply fail
+at `bootwright_infra_transition_desired_ports.valid`, and makes an
+artifact-server-only destroy silently select no desired service.
+
 **`DefaultArtifactsHTTPPort = 8443`:** the default port of the artifact
 server's HTTPS listener (8443 is the HTTPS convention). The "HTTP" in the
 constant name — like the `artifactServer.http` key in the

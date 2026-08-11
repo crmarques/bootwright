@@ -616,6 +616,78 @@ class DeclaredManagedOSPaths(unittest.TestCase):
                 )
 
 
+class InfraComponentDesiredPorts(unittest.TestCase):
+    def test_accepts_all_rendered_service_kinds(self):
+        cases = {
+            "artifactServer": (
+                {
+                    "kind": "artifactServer",
+                    "listeners": [{"port": 8443}, {"port": 8080}],
+                },
+                ["8080/tcp", "8443/tcp"],
+            ),
+            "loadBalancer": (
+                {
+                    "kind": "loadBalancer",
+                    "frontends": [
+                        {
+                            "ports": [
+                                {"listenPort": 6443},
+                                {"listenPort": 443},
+                                {"listenPort": 80},
+                            ]
+                        }
+                    ],
+                },
+                ["443/tcp", "6443/tcp", "80/tcp"],
+            ),
+            "nameResolution": (
+                {"kind": "nameResolution"},
+                ["53/tcp", "53/udp"],
+            ),
+            "ntp": ({"kind": "ntp", "port": 123}, ["123/udp"]),
+            "proxy": ({"kind": "proxy", "port": 3128}, ["3128/tcp"]),
+            "registry": ({"kind": "registry", "port": 5000}, ["5000/tcp"]),
+        }
+        for kind, (service, ports) in cases.items():
+            with self.subTest(kind=kind):
+                self.assertEqual(
+                    _module.bootwright_infra_component_desired_ports([service]),
+                    {"valid": True, "ports": ports},
+                )
+
+    def test_rejects_record_kinds_and_malformed_endpoint_shapes(self):
+        cases = [
+            {"kind": "artifacts", "listeners": [{"port": 8443}]},
+            {
+                "kind": "load-balancer",
+                "frontends": [{"ports": [{"listenPort": 6443}]}],
+            },
+            {"kind": "artifactServer", "listeners": []},
+            {"kind": "artifactServer", "listeners": [{"port": "8443"}]},
+            {
+                "kind": "artifactServer",
+                "listeners": [{"port": 8443}, None],
+            },
+            {"kind": "loadBalancer", "frontends": [{"ports": [None]}]},
+            {
+                "kind": "loadBalancer",
+                "frontends": [
+                    {"ports": [{"listenPort": 6443}, None]},
+                ],
+            },
+            {"kind": "proxy", "port": True},
+            {"kind": "registry", "port": 65536},
+            {"kind": "unknown", "port": 1234},
+        ]
+        for service in cases:
+            with self.subTest(service=service):
+                self.assertEqual(
+                    _module.bootwright_infra_component_desired_ports([service]),
+                    {},
+                )
+
+
 class InfraComponentRecordComposite(unittest.TestCase):
     managed = "/srv/bootwright/services"
 

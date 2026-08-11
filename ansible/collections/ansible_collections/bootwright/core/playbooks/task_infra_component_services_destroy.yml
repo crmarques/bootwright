@@ -20,7 +20,7 @@
     bootwright_host_infra_component_services: >-
       {{
         (bootwright_host_infra_component_services_all
-          | selectattr('kind', 'equalto', 'artifacts')
+          | selectattr('kind', 'equalto', 'artifactServer')
           | selectattr('realisation', 'equalto', 'http')
           | list)
         if bootwright_infra_component_service_destroy_scope == 'artifact-server'

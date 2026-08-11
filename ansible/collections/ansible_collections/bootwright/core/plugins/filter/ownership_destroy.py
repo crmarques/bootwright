@@ -2592,13 +2592,15 @@ def bootwright_infra_component_desired_ports(services):
             if not isinstance(service, dict):
                 return {}
             kind = service.get("kind")
-            if kind == "artifacts":
+            if kind == "artifactServer":
                 listeners = service.get("listeners")
                 if not isinstance(listeners, list) or not listeners:
                     return {}
-                values = [item.get("port") for item in listeners if isinstance(item, dict)]
+                if any(not isinstance(item, dict) for item in listeners):
+                    return {}
+                values = [item.get("port") for item in listeners]
                 protocol = "tcp"
-            elif kind == "load-balancer":
+            elif kind == "loadBalancer":
                 frontends = service.get("frontends")
                 if not isinstance(frontends, list):
                     return {}
@@ -2607,7 +2609,9 @@ def bootwright_infra_component_desired_ports(services):
                     if not isinstance(frontend, dict) or not isinstance(frontend.get("ports"), list):
                         return {}
                     entries.extend(frontend["ports"])
-                values = [item.get("listenPort") for item in entries if isinstance(item, dict)]
+                if any(not isinstance(item, dict) for item in entries):
+                    return {}
+                values = [item.get("listenPort") for item in entries]
                 protocol = "tcp"
             elif kind == "nameResolution":
                 ports.extend(["53/tcp", "53/udp"])

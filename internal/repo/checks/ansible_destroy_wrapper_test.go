@@ -109,3 +109,25 @@ func TestControllerNameResolutionDestroyBracketsInfraMutations(t *testing.T) {
 		t.Fatal("artifact-server-only destroy must not preflight or remove controller name-resolution state")
 	}
 }
+
+func TestArtifactServerDestroyScopeSelectsTheRenderedServiceKind(t *testing.T) {
+	const path = "ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml"
+	var plays []map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, path)), &plays); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+	if len(plays) != 1 {
+		t.Fatalf("%s play count = %d, want 1", path, len(plays))
+	}
+	vars, ok := plays[0]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s vars are not a mapping", path)
+	}
+	selection, ok := vars["bootwright_host_infra_component_services"].(string)
+	if !ok {
+		t.Fatalf("%s host infra-component selection is not a scalar", path)
+	}
+	if !strings.Contains(selection, "'artifactServer'") || strings.Contains(selection, "'artifacts'") {
+		t.Fatalf("artifact-server-only destroy must select the rendered artifactServer kind, not the durable ownership artifacts kind; got %s", selection)
+	}
+}
