@@ -1,0 +1,65 @@
+---
+- name: Inspect native cephadm bootstrap capabilities
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - bootstrap
+      - --help
+  environment:
+    LC_ALL: C
+    COLUMNS: "4096"
+  register: bootwright_cephadm_bootstrap_help
+  changed_when: false
+  failed_when: >-
+    bootwright_cephadm_bootstrap_help.rc | default(0) | int in [124, 137]
+  when:
+    - >-
+      not (bootwright_ceph_override_conf_stat.stat.exists | default(true) | bool)
+      or (bootwright_ceph_rebuild_cleanup_required | default(false) | bool)
+    - bootwright_ceph_provider.requiresLicense | default(false) | bool
+    - bootwright_ceph_provider.license.accepted | default(false) | bool
+    - bootwright_ceph_provider.nativeCapabilityCandidates.cephadmBootstrapLicenseOption | default('') | length > 0
+
+- name: Require native cephadm bootstrap capability discovery
+  ansible.builtin.assert:
+    that:
+      - bootwright_cephadm_bootstrap_help.rc | default(1) | int == 0
+      - >-
+        (
+          ((bootwright_cephadm_bootstrap_help.stdout | default('')) ~ ' ' ~
+           (bootwright_cephadm_bootstrap_help.stderr | default('')))
+          | regex_search('(^|[^A-Za-z0-9_-])--mon-ip([^A-Za-z0-9_-]|$)')
+        ) is not none
+    fail_msg: >-
+      Could not inspect the installed cephadm bootstrap capabilities on
+      {{ inventory_hostname }} (rc={{ bootwright_cephadm_bootstrap_help.rc | default('unknown') }}).
+      stderr: {{ bootwright_cephadm_bootstrap_help.stderr | default('') }}
+      Refusing to guess whether the declared license can be accepted non-interactively
+      from failed or unrecognizable help output; no existing cluster was removed and no
+      ownership evidence or bootstrap state was written. Repair cephadm and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: not (bootwright_cephadm_bootstrap_help.skipped | default(true) | bool)
+
+- name: Resolve native cephadm bootstrap license arguments
+  ansible.builtin.set_fact:
+    bootwright_ceph_bootstrap_license_argv: >-
+      {{
+        [bootwright_ceph_provider.nativeCapabilityCandidates.cephadmBootstrapLicenseOption]
+        if (
+          not (bootwright_cephadm_bootstrap_help.skipped | default(true) | bool)
+          and (
+            ((bootwright_cephadm_bootstrap_help.stdout | default('')) ~ ' ' ~
+             (bootwright_cephadm_bootstrap_help.stderr | default('')))
+            | regex_search(
+                '(^|[^A-Za-z0-9_-])'
+                ~ (bootwright_ceph_provider.nativeCapabilityCandidates.cephadmBootstrapLicenseOption | regex_escape)
+                ~ '([^A-Za-z0-9_-]|$)'
+              )
+          ) is not none
+        )
+        else []
+      }}
+  changed_when: false

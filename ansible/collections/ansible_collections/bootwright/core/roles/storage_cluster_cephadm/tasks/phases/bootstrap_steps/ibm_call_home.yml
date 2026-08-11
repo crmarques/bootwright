@@ -1,4 +1,66 @@
 ---
+- name: Inspect native Ceph orchestrator capabilities for IBM Call Home
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "--kill-after={{ bootwright_ceph_timeout_kill_after_seconds }}"
+      - "{{ bootwright_ceph_probe_timeout_seconds }}"
+      - cephadm
+      - shell
+      - --
+      - ceph
+      - orch
+      - --help
+  environment:
+    LC_ALL: C
+    COLUMNS: "4096"
+  register: bootwright_ceph_ibm_call_home_help
+  changed_when: false
+  failed_when: >-
+    bootwright_ceph_ibm_call_home_help.rc | default(0) | int in [124, 137]
+  when:
+    - (bootwright_ceph_provider.ibm.callHome | default('')) in ['enabled', 'disabled']
+    - bootwright_ceph_provider.nativeCapabilityCandidates.cephOrchCallHomeConsentToken | default('') | length > 0
+
+- name: Require native Ceph orchestrator capability discovery for IBM Call Home
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_ibm_call_home_help.rc | default(1) | int == 0
+      - >-
+        (
+          ((bootwright_ceph_ibm_call_home_help.stdout | default('')) ~ ' ' ~
+           (bootwright_ceph_ibm_call_home_help.stderr | default('')))
+          | regex_search('(^|[^A-Za-z0-9_-])orch\s+status([^A-Za-z0-9_-]|$)')
+        ) is not none
+    fail_msg: >-
+      Could not inspect the Ceph orchestrator capabilities for IBM Call Home on
+      {{ inventory_hostname }} (rc={{ bootwright_ceph_ibm_call_home_help.rc | default('unknown') }}).
+      stderr: {{ bootwright_ceph_ibm_call_home_help.stderr | default('') }}
+      No Call Home state was changed because the command failed or its help output
+      was unrecognizable; repair cluster CLI access and re-run
+      `{{ bootwright_mutating_invocation }}`.
+  when: not (bootwright_ceph_ibm_call_home_help.skipped | default(true) | bool)
+
+- name: Resolve native Ceph orchestrator capabilities for IBM Call Home
+  ansible.builtin.set_fact:
+    bootwright_ceph_ibm_call_home_consent_supported: >-
+      {{
+        not (bootwright_ceph_ibm_call_home_help.skipped | default(true) | bool)
+        and (
+          ((bootwright_ceph_ibm_call_home_help.stdout | default('')) ~ ' ' ~
+           (bootwright_ceph_ibm_call_home_help.stderr | default('')))
+          | regex_search(
+              '(^|[^A-Za-z0-9_-])'
+              ~ 'orch\s+'
+              ~ ('accept' if bootwright_ceph_provider.ibm.callHome == 'enabled' else 'deny')
+              ~ '\s+'
+              ~ (bootwright_ceph_provider.nativeCapabilityCandidates.cephOrchCallHomeConsentToken | regex_escape)
+              ~ '([^A-Za-z0-9_-]|$)'
+            )
+        ) is not none
+      }}
+  changed_when: false
+
 - name: Enable IBM Call Home manager module
   ansible.builtin.command:
     argv:
@@ -32,9 +94,11 @@
       - ceph
       - orch
       - accept
-      - call-home-enabled
+      - "{{ bootwright_ceph_provider.nativeCapabilityCandidates.cephOrchCallHomeConsentToken }}"
   changed_when: true
-  when: bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+  when:
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'enabled'
+    - bootwright_ceph_ibm_call_home_consent_supported | default(false) | bool
 
 - name: Disable IBM Call Home manager module
   ansible.builtin.command:
@@ -69,6 +133,8 @@
       - ceph
       - orch
       - deny
-      - call-home-enabled
+      - "{{ bootwright_ceph_provider.nativeCapabilityCandidates.cephOrchCallHomeConsentToken }}"
   changed_when: true
-  when: bootwright_ceph_provider.ibm.callHome | default('') == 'disabled'
+  when:
+    - bootwright_ceph_provider.ibm.callHome | default('') == 'disabled'
+    - bootwright_ceph_ibm_call_home_consent_supported | default(false) | bool

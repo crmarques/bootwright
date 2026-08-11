@@ -3,6 +3,10 @@
   ansible.builtin.include_tasks: bootstrap_steps/apply_mode.yml
   when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
 
+- name: Discover native cephadm bootstrap capabilities on the seed host
+  ansible.builtin.include_tasks: bootstrap_steps/bootstrap_capabilities.yml
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
 - name: Gather storage node OS facts for authorized rebuild
   ansible.builtin.setup:
     gather_subset:

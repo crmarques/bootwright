@@ -10,15 +10,17 @@ import (
 )
 
 type CephScriptOptions struct {
-	LibFile              string
-	BootstrapConfFile    string
-	BootstrapSpecFile    string
-	CoreServicesSpecFile string
-	LateServicesSpecFile string
-	BootstrapImage       string
-	ImageBase            string
-	AcceptLicense        bool
-	IBMCallHome          string
+	LibFile                       string
+	BootstrapConfFile             string
+	BootstrapSpecFile             string
+	CoreServicesSpecFile          string
+	LateServicesSpecFile          string
+	BootstrapImage                string
+	ImageBase                     string
+	LicenseAccepted               bool
+	CephadmBootstrapLicenseOption string
+	CephOrchCallHomeConsentToken  string
+	IBMCallHome                   string
 }
 
 func CephApplyScript(state v1alpha1.State, cluster v1alpha1.StorageCluster, opts CephScriptOptions) (string, error) {
@@ -109,9 +111,6 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	if ceph.Cephadm.Bootstrap.SingleHostDefaults {
 		args = append(args, "--single-host-defaults")
 	}
-	if opts.AcceptLicense {
-		args = append(args, "--automatically-accept-license")
-	}
 	if cidrs := ceph.Networks.ClusterCIDRs; len(cidrs) > 0 {
 		args = append(args, "--cluster-network", strings.Join(cidrs, ","))
 	}
@@ -123,11 +122,21 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	b.WriteString("if [[ -f /etc/ceph/ceph.conf ]]; then\n")
 	b.WriteString("  echo \"  [skip] cephadm bootstrap: /etc/ceph/ceph.conf present\"\n")
 	b.WriteString("else\n")
+	if opts.LicenseAccepted && opts.CephadmBootstrapLicenseOption != "" {
+		b.WriteString("  bw_cephadm_bootstrap_help=\"$(bw_native_help 'cephadm bootstrap' --mon-ip cephadm bootstrap)\"\n")
+		b.WriteString("  bw_cephadm_bootstrap_license_option=false\n")
+		fmt.Fprintf(b, "  if bw_text_has_token \"$bw_cephadm_bootstrap_help\" %s; then\n", shellquote.QuoteWord(opts.CephadmBootstrapLicenseOption))
+		b.WriteString("    bw_cephadm_bootstrap_license_option=true\n")
+		b.WriteString("  fi\n")
+	}
 	fmt.Fprintf(b, "  bootstrap=(%s", shellquote.Quote(args))
 	if opts.BootstrapConfFile != "" {
 		fmt.Fprintf(b, " --config \"$HERE/%s\"", opts.BootstrapConfFile)
 	}
 	b.WriteString(")\n")
+	if opts.LicenseAccepted && opts.CephadmBootstrapLicenseOption != "" {
+		fmt.Fprintf(b, "  [[ \"$bw_cephadm_bootstrap_license_option\" == true ]] && bootstrap+=(%s)\n", shellquote.QuoteWord(opts.CephadmBootstrapLicenseOption))
+	}
 	b.WriteString("  # Extra bootstrap-subcommand flags from the environment, e.g.\n")
 	b.WriteString("  # --registry-json <file> for authenticated Red Hat / IBM registries.\n")
 	b.WriteString("  # shellcheck disable=SC2206\n")
@@ -135,7 +144,7 @@ func writeBootstrapStage(b *strings.Builder, state v1alpha1.State, cluster v1alp
 	b.WriteString("  bw_run \"${bootstrap[@]}\"\n")
 	b.WriteString("  echo \"  [note] the image pins in stage 06 are applied either way.\"\n")
 	b.WriteString("fi\n")
-	writeIBMCallHomeStage(b, opts.IBMCallHome)
+	writeIBMCallHomeStage(b, opts)
 }
 
 type cephImagePin struct {
@@ -178,19 +187,42 @@ func writeContainerImageStage(b *strings.Builder, cluster v1alpha1.StorageCluste
 	}
 }
 
-func writeIBMCallHomeStage(b *strings.Builder, intent string) {
+func writeIBMCallHomeStage(b *strings.Builder, opts CephScriptOptions) {
+	intent := opts.IBMCallHome
 	if intent == "" {
 		return
 	}
 	b.WriteString("\necho \"== stage 05: IBM Call Home ==\"\n")
+	if opts.CephOrchCallHomeConsentToken != "" {
+		b.WriteString("bw_ceph_orch_help=\"$(bw_ceph_native_help 'Ceph orchestrator' status ceph orch)\"\n")
+		b.WriteString("bw_ceph_orch_call_home_consent=false\n")
+		fmt.Fprintf(b, "if bw_text_has_triplet \"$bw_ceph_orch_help\" orch %s %s; then\n", shellquote.QuoteWord(callHomeConsentVerb(intent)), shellquote.QuoteWord(opts.CephOrchCallHomeConsentToken))
+		b.WriteString("  bw_ceph_orch_call_home_consent=true\n")
+		b.WriteString("fi\n")
+	}
 	switch intent {
 	case v1alpha1.StorageCephIBMCallHomeEnabled:
 		b.WriteString("bw_run ceph mgr module enable call_home_agent\n")
-		b.WriteString("bw_run ceph orch accept call-home-enabled\n")
+		if opts.CephOrchCallHomeConsentToken != "" {
+			b.WriteString("if [[ \"$bw_ceph_orch_call_home_consent\" == true ]]; then\n")
+			fmt.Fprintf(b, "  bw_run ceph orch accept %s\n", shellquote.QuoteWord(opts.CephOrchCallHomeConsentToken))
+			b.WriteString("fi\n")
+		}
 	case v1alpha1.StorageCephIBMCallHomeDisabled:
 		b.WriteString("bw_run ceph mgr module disable call_home_agent\n")
-		b.WriteString("bw_run ceph orch deny call-home-enabled\n")
+		if opts.CephOrchCallHomeConsentToken != "" {
+			b.WriteString("if [[ \"$bw_ceph_orch_call_home_consent\" == true ]]; then\n")
+			fmt.Fprintf(b, "  bw_run ceph orch deny %s\n", shellquote.QuoteWord(opts.CephOrchCallHomeConsentToken))
+			b.WriteString("fi\n")
+		}
 	}
+}
+
+func callHomeConsentVerb(intent string) string {
+	if intent == v1alpha1.StorageCephIBMCallHomeEnabled {
+		return "accept"
+	}
+	return "deny"
 }
 
 func writeOperation(b *strings.Builder, op map[string]any) error {

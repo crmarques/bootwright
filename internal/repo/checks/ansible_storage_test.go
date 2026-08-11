@@ -4158,9 +4158,20 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	confFSIDRefuseIdx := findAnsibleTask(t, block, "Refuse existing Ceph configuration without an exact fsid")
 	confPresentIdx := findAnsibleTask(t, block, "Resolve whether a proven Ceph configuration already exists")
 	preRecordIdx := findAnsibleTask(t, block, "Pre-record storage cluster ownership before bootstrap")
+	bootstrapCapabilityProbeIdx := findAnsibleTask(t, block, "Inspect native cephadm bootstrap capabilities")
+	bootstrapCapabilityGateIdx := findAnsibleTask(t, block, "Require native cephadm bootstrap capability discovery")
+	bootstrapLicenseArgsIdx := findAnsibleTask(t, block, "Resolve native cephadm bootstrap license arguments")
+	removeClusterIdx := findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild on every topology host")
+	resolveBootstrapIdx := findAnsibleTask(t, block, "Resolve cephadm bootstrap command")
 	bootstrapIdx := findAnsibleTask(t, block, "Bootstrap Ceph cluster when absent")
-	if !(confStatIdx < confReadIdx && confReadIdx < confProbeRefuseIdx && confProbeRefuseIdx < confFSIDIdx && confFSIDIdx < confFSIDRefuseIdx && confFSIDRefuseIdx < confPresentIdx && confPresentIdx < preRecordIdx && preRecordIdx < bootstrapIdx) {
-		t.Fatalf("a fresh exact configuration proof must precede the ownership pre-record and bootstrap (stat=%d read=%d probe=%d fsid=%d fsidGate=%d present=%d record=%d bootstrap=%d)", confStatIdx, confReadIdx, confProbeRefuseIdx, confFSIDIdx, confFSIDRefuseIdx, confPresentIdx, preRecordIdx, bootstrapIdx)
+	if !(bootstrapCapabilityProbeIdx < bootstrapCapabilityGateIdx && bootstrapCapabilityGateIdx < bootstrapLicenseArgsIdx && bootstrapLicenseArgsIdx < removeClusterIdx && removeClusterIdx < confStatIdx && confStatIdx < confReadIdx && confReadIdx < confProbeRefuseIdx && confProbeRefuseIdx < confFSIDIdx && confFSIDIdx < confFSIDRefuseIdx && confFSIDRefuseIdx < confPresentIdx && confPresentIdx < preRecordIdx && preRecordIdx < resolveBootstrapIdx && resolveBootstrapIdx < bootstrapIdx) {
+		t.Fatalf("native bootstrap capability discovery must precede rebuild mutation, then a fresh exact configuration proof and ownership pre-record must precede bootstrap (capabilityProbe=%d capabilityGate=%d licenseArgs=%d removeCluster=%d stat=%d read=%d probe=%d fsid=%d fsidGate=%d present=%d record=%d argv=%d bootstrap=%d)", bootstrapCapabilityProbeIdx, bootstrapCapabilityGateIdx, bootstrapLicenseArgsIdx, removeClusterIdx, confStatIdx, confReadIdx, confProbeRefuseIdx, confFSIDIdx, confFSIDRefuseIdx, confPresentIdx, preRecordIdx, resolveBootstrapIdx, bootstrapIdx)
+	}
+	rebuildTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml")
+	capabilityIncludeIdx := findAnsibleTask(t, rebuildTasks, "Discover native cephadm bootstrap capabilities on the seed host")
+	rebuildRemoveIdx := findAnsibleTask(t, rebuildTasks, "Remove existing cephadm cluster for override rebuild on every topology host")
+	if capabilityIncludeIdx >= rebuildRemoveIdx || rebuildTasks[capabilityIncludeIdx]["ansible.builtin.include_tasks"] != "bootstrap_steps/bootstrap_capabilities.yml" {
+		t.Fatalf("rebuild must discover native bootstrap capabilities before removing the existing cluster, got include=%d remove=%d task=%v", capabilityIncludeIdx, rebuildRemoveIdx, rebuildTasks[capabilityIncludeIdx])
 	}
 	for idx, wants := range map[int][]string{
 		confProbeRefuseIdx: {"stat.exists is defined", "stat.isreg", "stat.islnk", "prerecord_conf.content is defined", "bootwright_mutating_invocation", "No apply mode or authorization"},
@@ -4173,7 +4184,28 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 			}
 		}
 	}
-	resolveBootstrap := block[findAnsibleTask(t, block, "Resolve cephadm bootstrap command")]
+	bootstrapCapabilityProbe := block[bootstrapCapabilityProbeIdx]
+	if got := fmt.Sprint(bootstrapCapabilityProbe["ansible.builtin.command"]); !strings.Contains(got, "timeout") || !strings.Contains(got, "bootwright_ceph_timeout_kill_after_seconds") || !strings.Contains(got, "bootwright_ceph_probe_timeout_seconds") || !strings.Contains(got, "cephadm bootstrap --help") {
+		t.Fatalf("cephadm bootstrap capability discovery must be a bounded native help probe, got %v", bootstrapCapabilityProbe)
+	}
+	if bootstrapCapabilityProbe["changed_when"] != false || !strings.Contains(fmt.Sprint(bootstrapCapabilityProbe["failed_when"]), "124") || !strings.Contains(fmt.Sprint(bootstrapCapabilityProbe["failed_when"]), "137") {
+		t.Fatalf("cephadm bootstrap capability discovery must be read-only and preserve safety timeouts, got %v", bootstrapCapabilityProbe)
+	}
+	if got := fmt.Sprint(bootstrapCapabilityProbe["environment"]); !strings.Contains(got, "LC_ALL:C") || !strings.Contains(got, "COLUMNS:4096") {
+		t.Fatalf("cephadm bootstrap help must be stable and unwrapped, got environment=%v", bootstrapCapabilityProbe["environment"])
+	}
+	if got := fmt.Sprint(bootstrapCapabilityProbe["when"]); !strings.Contains(got, "bootwright_ceph_override_conf_stat.stat.exists") || !strings.Contains(got, "bootwright_ceph_rebuild_cleanup_required") || !strings.Contains(got, "requiresLicense") || !strings.Contains(got, "license.accepted") || !strings.Contains(got, "nativeCapabilityCandidates.cephadmBootstrapLicenseOption") || strings.Contains(got, "release") || strings.Contains(got, "packageVersion") {
+		t.Fatalf("cephadm bootstrap capability discovery must use fresh-or-rebuild license intent and a provider candidate, never a version branch, got when=%v", bootstrapCapabilityProbe["when"])
+	}
+	bootstrapCapabilityGate := block[bootstrapCapabilityGateIdx]
+	if got := fmt.Sprint(bootstrapCapabilityGate["ansible.builtin.assert"]); !strings.Contains(got, ".rc") || !strings.Contains(got, "--mon-ip") || !strings.Contains(got, "regex_search") {
+		t.Fatalf("cephadm bootstrap capability discovery must fail closed on command errors and unrecognizable help, got %v", bootstrapCapabilityGate)
+	}
+	bootstrapLicenseArgs := block[bootstrapLicenseArgsIdx]
+	if got := fmt.Sprint(bootstrapLicenseArgs["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_bootstrap_license_argv") || !strings.Contains(got, "nativeCapabilityCandidates.cephadmBootstrapLicenseOption") || !strings.Contains(got, "regex_escape") || !strings.Contains(got, "stdout") || !strings.Contains(got, "stderr") || strings.Contains(got, "packageVersion") || strings.Contains(got, "release") {
+		t.Fatalf("bootstrap license arguments must resolve from the exact live option rather than a version matrix, got %v", bootstrapLicenseArgs)
+	}
+	resolveBootstrap := block[resolveBootstrapIdx]
 	bootstrapArgv := fmt.Sprint(resolveBootstrap["ansible.builtin.set_fact"])
 	if !strings.Contains(bootstrapArgv, "--registry-json") || strings.Contains(bootstrapArgv, "--registry-password") || strings.Contains(bootstrapArgv, "--registry-username") {
 		t.Fatalf("bootstrap argv must use registry JSON without username/password arguments, got %v", resolveBootstrap)
@@ -4193,22 +4225,43 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !strings.Contains(bootstrapArgv, "--single-host-defaults") || !strings.Contains(bootstrapArgv, "singleHostDefaults") {
 		t.Fatalf("bootstrap argv must conditionally pass --single-host-defaults, got %v", resolveBootstrap)
 	}
-	if !strings.Contains(bootstrapArgv, "--automatically-accept-license") || !strings.Contains(bootstrapArgv, "requiresLicense") || !strings.Contains(bootstrapArgv, "license.accepted") {
-		t.Fatalf("licensed bootstrap must non-interactively accept the declared license, got %v", resolveBootstrap)
+	if !strings.Contains(bootstrapArgv, "bootwright_ceph_bootstrap_license_argv") || strings.Contains(bootstrapArgv, "--automatically-accept-license") || strings.Contains(bootstrapArgv, "requiresLicense") || strings.Contains(bootstrapArgv, "license.accepted") {
+		t.Fatalf("bootstrap must consume only the already discovered license arguments, got %v", resolveBootstrap)
 	}
 	callHomeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/ibm_call_home.yml")
+	callHomeProbeIdx := findAnsibleTask(t, callHomeTasks, "Inspect native Ceph orchestrator capabilities for IBM Call Home")
+	callHomeGateIdx := findAnsibleTask(t, callHomeTasks, "Require native Ceph orchestrator capability discovery for IBM Call Home")
+	callHomeCapabilityIdx := findAnsibleTask(t, callHomeTasks, "Resolve native Ceph orchestrator capabilities for IBM Call Home")
 	enableCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Enable IBM Call Home manager module")
 	acceptCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Accept enabled IBM Call Home state")
 	disableCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Disable IBM Call Home manager module")
 	denyCallHomeIdx := findAnsibleTask(t, callHomeTasks, "Deny IBM Call Home enablement")
-	if !(enableCallHomeIdx < acceptCallHomeIdx && disableCallHomeIdx < denyCallHomeIdx) {
-		t.Fatalf("Call Home must apply the direct module transition before persisting its matching consent (enable=%d accept=%d disable=%d deny=%d)", enableCallHomeIdx, acceptCallHomeIdx, disableCallHomeIdx, denyCallHomeIdx)
+	if !(callHomeProbeIdx < callHomeGateIdx && callHomeGateIdx < callHomeCapabilityIdx && callHomeCapabilityIdx < enableCallHomeIdx && enableCallHomeIdx < acceptCallHomeIdx && callHomeCapabilityIdx < disableCallHomeIdx && disableCallHomeIdx < denyCallHomeIdx) {
+		t.Fatalf("Call Home must discover native consent support before applying the direct module transition and optional matching consent (probe=%d gate=%d capability=%d enable=%d accept=%d disable=%d deny=%d)", callHomeProbeIdx, callHomeGateIdx, callHomeCapabilityIdx, enableCallHomeIdx, acceptCallHomeIdx, disableCallHomeIdx, denyCallHomeIdx)
 	}
 	for _, task := range callHomeTasks {
 		got := fmt.Sprint(task)
 		if strings.Contains(got, "mgr module ls") || strings.Contains(got, "enabled_modules") {
 			t.Fatalf("Call Home must use Ceph's idempotent direct module operations without the module catalog probe that can time out after returning complete JSON: %v", task)
 		}
+	}
+	callHomeProbe := callHomeTasks[callHomeProbeIdx]
+	if got := fmt.Sprint(callHomeProbe["ansible.builtin.command"]); !strings.Contains(got, "timeout") || !strings.Contains(got, "bootwright_ceph_timeout_kill_after_seconds") || !strings.Contains(got, "bootwright_ceph_probe_timeout_seconds") || !strings.Contains(got, "cephadm shell -- ceph orch --help") {
+		t.Fatalf("Call Home capability discovery must be a bounded live Ceph help probe, got %v", callHomeProbe)
+	}
+	if callHomeProbe["changed_when"] != false || !strings.Contains(fmt.Sprint(callHomeProbe["failed_when"]), "124") || !strings.Contains(fmt.Sprint(callHomeProbe["failed_when"]), "137") {
+		t.Fatalf("Call Home capability discovery must be read-only and preserve safety timeouts, got %v", callHomeProbe)
+	}
+	if got := fmt.Sprint(callHomeProbe["environment"]); !strings.Contains(got, "LC_ALL:C") || !strings.Contains(got, "COLUMNS:4096") {
+		t.Fatalf("Ceph orchestrator help must be stable and unwrapped, got environment=%v", callHomeProbe["environment"])
+	}
+	callHomeGate := callHomeTasks[callHomeGateIdx]
+	if got := fmt.Sprint(callHomeGate["ansible.builtin.assert"]); !strings.Contains(got, ".rc") || !strings.Contains(got, "orch") || !strings.Contains(got, "status") || !strings.Contains(got, "regex_search") {
+		t.Fatalf("Call Home capability discovery must fail closed on command errors and unrecognizable help, got %v", callHomeGate)
+	}
+	callHomeCapability := callHomeTasks[callHomeCapabilityIdx]
+	if got := fmt.Sprint(callHomeCapability["ansible.builtin.set_fact"]); !strings.Contains(got, "bootwright_ceph_ibm_call_home_consent_supported") || !strings.Contains(got, "accept") || !strings.Contains(got, "deny") || !strings.Contains(got, "nativeCapabilityCandidates.cephOrchCallHomeConsentToken") || !strings.Contains(got, "regex_escape") || strings.Contains(got, "packageVersion") || strings.Contains(got, "release") {
+		t.Fatalf("Call Home consent support must resolve from the exact live signature rather than a version matrix, got %v", callHomeCapability)
 	}
 	enableCallHome := callHomeTasks[enableCallHomeIdx]
 	if got := fmt.Sprint(enableCallHome); !strings.Contains(got, "call_home_agent") || !strings.Contains(got, "enabled") {
@@ -4217,8 +4270,11 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if enableCallHome["register"] != "bootwright_ceph_ibm_call_home_enable" || !strings.Contains(fmt.Sprint(enableCallHome["changed_when"]), "already enabled") {
 		t.Fatalf("Call Home enable must preserve honest change reporting from Ceph's idempotent response, got %v", enableCallHome)
 	}
+	if got := fmt.Sprint(enableCallHome["when"]); strings.Contains(got, "consent_supported") {
+		t.Fatalf("Call Home direct enable must not depend on the newer consent surface, got when=%v", enableCallHome["when"])
+	}
 	acceptCallHome := callHomeTasks[acceptCallHomeIdx]
-	if got := fmt.Sprint(acceptCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "accept") {
+	if got := fmt.Sprint(acceptCallHome); !strings.Contains(got, "nativeCapabilityCandidates.cephOrchCallHomeConsentToken") || !strings.Contains(got, "accept") || !strings.Contains(got, "bootwright_ceph_ibm_call_home_consent_supported") {
 		t.Fatalf("Call Home enable path must acknowledge the enabled state, got %v", acceptCallHome)
 	}
 	if acceptCallHome["changed_when"] != true {
@@ -4228,14 +4284,14 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if got := fmt.Sprint(disableCallHome["ansible.builtin.command"]); !strings.Contains(got, "mgr module disable call_home_agent") || strings.Contains(got, "orch deny") {
 		t.Fatalf("Call Home opt-out must disable call_home_agent through the monitor command before the manager-targeted denial, got %v", disableCallHome)
 	}
-	if got := fmt.Sprint(disableCallHome["when"]); !strings.Contains(got, "disabled") || strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") {
+	if got := fmt.Sprint(disableCallHome["when"]); !strings.Contains(got, "disabled") || strings.Contains(got, "bootwright_ceph_ibm_call_home_enabled") || strings.Contains(got, "consent_supported") {
 		t.Fatalf("Call Home direct disable must run for disabled intent without a pre-read, got when=%v", disableCallHome["when"])
 	}
 	if disableCallHome["register"] != "bootwright_ceph_ibm_call_home_disable" || !strings.Contains(fmt.Sprint(disableCallHome["changed_when"]), "already disabled") {
 		t.Fatalf("Call Home disable must preserve honest change reporting from Ceph's idempotent response, got %v", disableCallHome)
 	}
 	denyCallHome := callHomeTasks[denyCallHomeIdx]
-	if got := fmt.Sprint(denyCallHome); !strings.Contains(got, "call-home-enabled") || !strings.Contains(got, "deny") || !strings.Contains(got, "disabled") {
+	if got := fmt.Sprint(denyCallHome); !strings.Contains(got, "nativeCapabilityCandidates.cephOrchCallHomeConsentToken") || !strings.Contains(got, "deny") || !strings.Contains(got, "disabled") || !strings.Contains(got, "bootwright_ceph_ibm_call_home_consent_supported") {
 		t.Fatalf("Call Home opt-out must still deny the enabled state after the direct disable, got %v", denyCallHome)
 	}
 	if denyCallHome["changed_when"] != true {
@@ -4319,6 +4375,7 @@ func storageCephBootstrapTasks(t *testing.T) []map[string]any {
 	destroyBase := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
 	return readAnsibleTasksFromFiles(t,
 		base+"apply_mode.yml",
+		base+"bootstrap_capabilities.yml",
 		destroyBase+"context.yml",
 		destroyBase+"device_gates.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/rebuild.yml",

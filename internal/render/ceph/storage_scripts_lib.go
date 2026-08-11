@@ -24,12 +24,56 @@ if ! command -v jq >/dev/null 2>&1; then
   echo "bootwright: 'jq' is required by the idempotency guards but is not on PATH" >&2
   exit 1
 fi
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "bootwright: 'timeout' is required by the native capability probes but is not on PATH" >&2
+  exit 1
+fi
 
 # shellcheck disable=SC2206
 _bw_prefix=(${BW_CEPH_PREFIX:-})
 
 # _bw_exec <argv...>: run a native command through the optional exec prefix.
 _bw_exec() { "${_bw_prefix[@]}" "$@"; }
+
+bw_text_has_token() {
+  local text="$1" token="$2"
+  if [[ ! "$token" =~ ^[-_[:alnum:]]+$ ]]; then
+    echo "bootwright: invalid native capability token '${token}'" >&2
+    return 2
+  fi
+  [[ "$text" =~ (^|[^[:alnum:]_-])${token}([^[:alnum:]_-]|$) ]]
+}
+
+bw_text_has_triplet() {
+  local text="$1" first="$2" second="$3" third="$4"
+  if [[ ! "$first" =~ ^[-_[:alnum:]]+$ || ! "$second" =~ ^[-_[:alnum:]]+$ || ! "$third" =~ ^[-_[:alnum:]]+$ ]]; then
+    echo "bootwright: invalid native capability signature '${first} ${second} ${third}'" >&2
+    return 2
+  fi
+  [[ "$text" =~ (^|[^[:alnum:]_-])${first}[[:space:]]+${second}[[:space:]]+${third}([^[:alnum:]_-]|$) ]]
+}
+
+bw_native_help() {
+  local label="$1" baseline="$2"; shift 2
+  local help rc
+  if help="$(LC_ALL=C COLUMNS=4096 timeout --kill-after=15 120 "$@" --help 2>&1)"; then
+    :
+  else
+    rc=$?
+    echo "bootwright: failed to inspect ${label} capabilities (rc=${rc})" >&2
+    return "$rc"
+  fi
+  if ! bw_text_has_token "$help" "$baseline"; then
+    echo "bootwright: ${label} returned unrecognizable help without '${baseline}'" >&2
+    return 1
+  fi
+  printf '%s\n' "$help"
+}
+
+bw_ceph_native_help() {
+  local label="$1" baseline="$2"; shift 2
+  bw_native_help "$label" "$baseline" "${_bw_prefix[@]}" "$@"
+}
 
 # bw_run <argv...>: run an in-place reconcile (idempotent) command.
 bw_run() {

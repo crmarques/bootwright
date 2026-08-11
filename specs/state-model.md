@@ -1462,11 +1462,18 @@ The kind has three top-level fields: `spec.type`, `spec.management`, and
   versions and the epoch-free package declaration must be equal. This is an
   artifact-parity proof, not a release/OS support claim. Neither source may mix
   with upstream Ceph packages or images.
-  IBM license acceptance
-  is passed non-interactively to `cephadm bootstrap`. Because acceptance enables
-  IBM Call Home, `spec.ceph.ibm.callHome`
-  is required as either `enabled` or `disabled`; apply reconciles the manager
-  module to that explicit outbound-communication intent.
+  The package license marker is written before package installation. On a fresh
+  cluster, the non-interactive bootstrap license option is added only when a
+  bounded, recognizable `cephadm bootstrap --help` response advertises the
+  provider's exact candidate option; recognizable absence omits it, while a
+  failed or unrecognizable probe refuses before bootstrap. No product release,
+  package version, or image tag selects the argument. Because IBM builds differ
+  in their Call Home default and acknowledgement surface,
+  `spec.ceph.ibm.callHome` is required as either `enabled` or `disabled` for
+  every IBM cluster. Apply always reconciles the manager module to that explicit
+  outbound-communication intent and runs a matching orchestrator
+  acknowledgement only when recognizable live help advertises its exact
+  command signature.
 - A provider-selected `cephadm-ansible-local` preparation flow runs on each
   storage node during the all-node infrastructure task. Bootwright first
   converges the declared repository source and preinstalls its rendered package

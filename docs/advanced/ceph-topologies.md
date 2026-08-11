@@ -120,10 +120,12 @@ to end, including the entitlement and license-acceptance workflow.
     from the currently declared repository content.
 
 !!! warning "IBM Call Home is an explicit choice"
-    IBM Storage Ceph enables Call Home when the license is accepted.
-    Author `spec.ceph.ibm.callHome: enabled` to retain it or `disabled` to turn
-    it off after bootstrap. Validation rejects an IBM cluster that leaves the
-    outbound-communication choice implicit.
+    IBM Storage Ceph builds differ in whether license acceptance enables Call
+    Home and whether they expose a separate acknowledgement command. Author
+    `spec.ceph.ibm.callHome: enabled` or `disabled`; Bootwright always
+    reconciles the manager module and uses the acknowledgement only when the
+    live Ceph help surface advertises it. Validation rejects an IBM cluster that
+    leaves the outbound-communication choice implicit.
 
 ## The bootstrap seed host
 

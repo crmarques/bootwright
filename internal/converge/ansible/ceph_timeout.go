@@ -305,7 +305,7 @@ func cephShellCommandReadOnly(command []string) bool {
 	}
 	if hasCommandExact(args, "health") || hasCommandExact(args, "health", "--format", "json") ||
 		hasCommandExact(args, "fsid") || hasCommandExact(args, "status") ||
-		hasCommandExact(args, "versions", "--format", "json") {
+		hasCommandExact(args, "versions", "--format", "json") || hasCommandExact(args, "orch", "--help") {
 		return true
 	}
 	for _, prefix := range [][]string{

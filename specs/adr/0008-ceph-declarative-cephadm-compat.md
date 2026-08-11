@@ -43,6 +43,16 @@ concepts rather than inventing its own vocabulary:
   Ceph runtime pin, cephadm-ansible pin, full RPM release, image base, and image
   pin are optional, required, or forbidden and selects optional native
   preparation and parity adapters.
+- A native command difference that the installed tool can advertise is
+  discovered from that live command surface, never selected from a release or
+  package version. Provider data may name an exact candidate option or command
+  token; a bounded help probe must return recognizable baseline output before
+  exact candidate presence enables it, recognizable absence omits it, and a
+  failed or unrecognizable probe refuses before the related mutation.
+  Undiscoverable supplier defects remain isolated behind the existing closed,
+  explicitly authored workaround tokens. Observed release/build discrepancies
+  belong in the indexed knowledge ledger as diagnostic evidence and must not
+  become executable policy.
 - Release and subscription image-base coordinates are authored desired state;
   Bootwright carries no compiled current release or RHEL image suffix. The
   current IBM policy requires exact Ceph runtime, cephadm-ansible, and image

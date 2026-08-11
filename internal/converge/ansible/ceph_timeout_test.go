@@ -194,3 +194,10 @@ func TestCephMutationLookalikesAreNotClassifiedReadOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestCephOrchestratorHelpIsClassifiedReadOnly(t *testing.T) {
+	command := []string{"timeout", "120", "cephadm", "shell", "--", "ceph", "orch", "--help"}
+	if CephShellCommandStateChanging(command) {
+		t.Fatalf("Ceph argv %v only inspects the native command surface", command)
+	}
+}

@@ -38,15 +38,17 @@ func scriptOptionsFor(asset StorageAsset, state v1alpha1.State, cluster v1alpha1
 		return path
 	}
 	return ceph.CephScriptOptions{
-		LibFile:              rel(asset.ApplyLibPath),
-		BootstrapConfFile:    rel(asset.BootstrapConfPath),
-		BootstrapSpecFile:    rel(asset.BootstrapSpecPath),
-		CoreServicesSpecFile: rel(asset.CoreServicesSpecPath),
-		LateServicesSpecFile: rel(asset.LateServicesSpecPath),
-		BootstrapImage:       provider.Image,
-		ImageBase:            provider.ImageBase,
-		AcceptLicense:        provider.RequiresLicense && provider.Entitlement.License.Accepted,
-		IBMCallHome:          provider.IBMCallHome,
+		LibFile:                       rel(asset.ApplyLibPath),
+		BootstrapConfFile:             rel(asset.BootstrapConfPath),
+		BootstrapSpecFile:             rel(asset.BootstrapSpecPath),
+		CoreServicesSpecFile:          rel(asset.CoreServicesSpecPath),
+		LateServicesSpecFile:          rel(asset.LateServicesSpecPath),
+		BootstrapImage:                provider.Image,
+		ImageBase:                     provider.ImageBase,
+		LicenseAccepted:               provider.RequiresLicense && provider.Entitlement.License.Accepted,
+		CephadmBootstrapLicenseOption: provider.NativeCapabilityCandidates.CephadmBootstrapLicenseOption,
+		CephOrchCallHomeConsentToken:  provider.NativeCapabilityCandidates.CephOrchCallHomeConsentToken,
+		IBMCallHome:                   provider.IBMCallHome,
 	}
 }
 

@@ -132,9 +132,12 @@ Every secret moves through the same stages, and each stage has one owner:
 Bootwright must not leave vendor outbound telemetry enabled through an implicit
 default; the choice is authored.
 
-IBM Storage Ceph license acceptance enables Call Home by default. An IBM
+IBM Storage Ceph builds differ in whether license acceptance enables Call Home
+by default and whether they expose a separate orchestrator acknowledgement. An IBM
 `StorageCluster` must therefore declare `spec.ceph.ibm.callHome` as `enabled`
-or `disabled`; apply reconciles that choice after bootstrap.
+or `disabled` regardless of release. Apply reconciles the manager module to that
+choice after bootstrap and issues a matching acknowledgement only when the live
+native help surface advertises it.
 
 ## Node Login Identity and Privilege
 

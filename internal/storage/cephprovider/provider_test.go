@@ -83,6 +83,9 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	if provider.RequiresRHSM || provider.RequiresRegistry || provider.RequiresLicense {
 		t.Fatalf("OSS provider requires vendor material: %#v", provider)
 	}
+	if provider.NativeCapabilityCandidates != (NativeCapabilityCandidates{}) {
+		t.Fatalf("OSS provider carries vendor native capability candidates: %#v", provider.NativeCapabilityCandidates)
+	}
 	if provider.Community.Version != release {
 		t.Fatalf("community version = %q, want authored %q", provider.Community.Version, release)
 	}
@@ -98,6 +101,22 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	}
 	if _, hasMirror := community["mirror"]; hasMirror {
 		t.Fatalf("community vars must omit mirror when unset: %#v", community)
+	}
+}
+
+func TestIBMNativeCapabilityCandidatesAreReleaseAgnostic(t *testing.T) {
+	want := NativeCapabilityCandidates{
+		CephadmBootstrapLicenseOption: ibmCephadmBootstrapLicenseOption,
+		CephOrchCallHomeConsentToken:  ibmCephOrchCallHomeConsentToken,
+	}
+	for _, release := range []string{"9.9.0.3", "9.9.1.0", "42.7.3.1"} {
+		cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionIBM,
+			Release:      release,
+		}}}
+		if got := Select(cluster, nil, secret.Index{}, "/context/secrets").NativeCapabilityCandidates; got != want {
+			t.Fatalf("IBM release %s native capability candidates = %#v, want %#v", release, got, want)
+		}
 	}
 }
 
@@ -675,6 +694,10 @@ func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
 	if license["accepted"] != true {
 		t.Fatalf("license vars = %#v", license)
 	}
+	candidates, ok := vars["nativeCapabilityCandidates"].(map[string]any)
+	if !ok || candidates["cephadmBootstrapLicenseOption"] != ibmCephadmBootstrapLicenseOption || candidates["cephOrchCallHomeConsentToken"] != ibmCephOrchCallHomeConsentToken {
+		t.Fatalf("IBM native capability candidates = %#v", vars["nativeCapabilityCandidates"])
+	}
 }
 
 func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
@@ -792,6 +815,9 @@ func TestSelectDerivesPackageSourcesForAReleaseNewerThanBootwright(t *testing.T)
 	}
 	if provider.CephadmPackageSpec != "cephadm-31.7.3-456.el14" || provider.CephadmAnsiblePackageSpec != "cephadm-ansible-17.3.2-9.el14" {
 		t.Fatalf("future IBM native package coordinates were rewritten: cephadm=%q cephadm-ansible=%q", provider.CephadmPackageSpec, provider.CephadmAnsiblePackageSpec)
+	}
+	if provider.NativeCapabilityCandidates.CephadmBootstrapLicenseOption != ibmCephadmBootstrapLicenseOption || provider.NativeCapabilityCandidates.CephOrchCallHomeConsentToken != ibmCephOrchCallHomeConsentToken {
+		t.Fatalf("future IBM release lost live native capability candidates: %#v", provider.NativeCapabilityCandidates)
 	}
 	policy := Vars(provider)["artifactPolicy"].(map[string]any)
 	if policy["packagePin"] != string(ArtifactPinRequired) || policy["cephadmAnsiblePackagePin"] != string(ArtifactPinRequired) || policy["nativeParityMode"] != NativeParityCephVersion {

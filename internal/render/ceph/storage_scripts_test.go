@@ -112,9 +112,11 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 
 	for _, want := range []string{
 		"command -v jq",
+		"command -v timeout",
 		"_bw_exists()",
 		"ceph-pool)",
 		"BW_CEPH_PREFIX",
+		"timeout --kill-after=15 120",
 		"bw_stretch_crush_rule()",
 	} {
 		if !strings.Contains(lib, want) {
@@ -131,18 +133,18 @@ func TestCephApplyScriptGuardingAndRedaction(t *testing.T) {
 
 func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 	tests := []struct {
-		name         string
-		distribution string
-		release      string
-		imageBase    string
-		imageVersion string
-		callHome     string
-		config       map[string]map[string]string
-		want         string
-		wantLicense  bool
-		wantCallHome []string
-		wantPins     []string
-		reject       []string
+		name             string
+		distribution     string
+		release          string
+		imageBase        string
+		imageVersion     string
+		callHome         string
+		config           map[string]map[string]string
+		want             string
+		wantLicenseProbe bool
+		wantCallHome     []string
+		wantPins         []string
+		reject           []string
 	}{
 		{
 			name:         "oss version derives image",
@@ -155,19 +157,19 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			},
 		},
 		{
-			name:         "ibm hoists sidecar pins ahead of the first orch apply",
+			name:         "ibm 9.9.0 discovers native capabilities and hoists sidecar pins",
 			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1.0",
+			release:      "9.9.0.3",
 			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
-			imageVersion: "v9.9.1-17759",
+			imageVersion: "v9.0-20201",
 			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
 			config: map[string]map[string]string{"mgr": {
 				"mgr/cephadm/container_image_prometheus": "cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
 			}},
-			want:        "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
-			wantLicense: true,
+			want:             "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.0-20201 bootstrap --mon-ip 192.0.2.10",
+			wantLicenseProbe: true,
 			wantPins: []string{
-				"bw_run ceph config set global container_image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759",
+				"bw_run ceph config set global container_image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.0-20201",
 				"bw_run ceph config set mgr mgr/cephadm/container_image_base cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
 				"bw_run ceph config set mgr mgr/cephadm/container_image_prometheus cp.icr.io/cp/ibm-ceph/prometheus:v4.10",
 			},
@@ -178,14 +180,14 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			reject: []string{`ibm_call_home_modules=`, `ibm_call_home_status=`},
 		},
 		{
-			name:         "ibm enabled reconciles call home",
-			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1.0",
-			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
-			imageVersion: "v9.9.1-17759",
-			callHome:     v1alpha1.StorageCephIBMCallHomeEnabled,
-			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
-			wantLicense:  true,
+			name:             "ibm enabled reconciles call home",
+			distribution:     v1alpha1.StorageCephDistributionIBM,
+			release:          "9.9.1.0",
+			imageBase:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			imageVersion:     "v9.9.1-17759",
+			callHome:         v1alpha1.StorageCephIBMCallHomeEnabled,
+			want:             "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
+			wantLicenseProbe: true,
 			wantCallHome: []string{
 				`bw_run ceph mgr module enable call_home_agent`,
 				`bw_run ceph orch accept call-home-enabled`,
@@ -193,14 +195,14 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			reject: []string{`ibm_call_home_modules=`, `ibm_call_home_status=`, `bw_run ceph orch deny call-home-enabled`},
 		},
 		{
-			name:         "ibm disabled reconciles call home",
-			distribution: v1alpha1.StorageCephDistributionIBM,
-			release:      "9.9.1.0",
-			imageBase:    "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
-			imageVersion: "v9.9.1-17759",
-			callHome:     v1alpha1.StorageCephIBMCallHomeDisabled,
-			want:         "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
-			wantLicense:  true,
+			name:             "ibm disabled reconciles call home",
+			distribution:     v1alpha1.StorageCephDistributionIBM,
+			release:          "9.9.1.0",
+			imageBase:        "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+			imageVersion:     "v9.9.1-17759",
+			callHome:         v1alpha1.StorageCephIBMCallHomeDisabled,
+			want:             "bootstrap=(cephadm --image cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-17759 bootstrap --mon-ip 192.0.2.10",
+			wantLicenseProbe: true,
 			wantCallHome: []string{
 				`bw_run ceph mgr module disable call_home_agent`,
 				`bw_run ceph orch deny call-home-enabled`,
@@ -274,8 +276,14 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 			if !strings.Contains(script, tc.want) {
 				t.Fatalf("apply.sh bootstrap command missing provider image before subcommand:\n%s", script)
 			}
-			if got := strings.Contains(script, "--automatically-accept-license"); got != tc.wantLicense {
-				t.Fatalf("apply.sh license flag presence = %t, want %t:\n%s", got, tc.wantLicense, script)
+			for _, want := range []string{
+				"bw_native_help 'cephadm bootstrap' --mon-ip cephadm bootstrap",
+				"if bw_text_has_token \"$bw_cephadm_bootstrap_help\" --automatically-accept-license; then",
+				"bootstrap+=(--automatically-accept-license)",
+			} {
+				if got := strings.Contains(script, want); got != tc.wantLicenseProbe {
+					t.Fatalf("apply.sh native license capability probe %q presence = %t, want %t:\n%s", want, got, tc.wantLicenseProbe, script)
+				}
 			}
 			if !strings.Contains(script, `bootstrap+=(${BW_CEPHADM_BOOTSTRAP_EXTRA})`) {
 				t.Fatalf("apply.sh lost bootstrap-subcommand extras:\n%s", script)
@@ -317,10 +325,89 @@ func TestCephApplyScriptBootstrapImageParity(t *testing.T) {
 				}
 				return
 			}
-			bootstrapEnd := strings.Index(script, "\nfi\n")
+			if !strings.Contains(script, "bw_ceph_native_help 'Ceph orchestrator' status ceph orch") {
+				t.Errorf("IBM apply.sh must discover Call Home acknowledgement support from the live Ceph CLI:\n%s", script)
+			}
+			consentVerb := "deny"
+			if tc.callHome == v1alpha1.StorageCephIBMCallHomeEnabled {
+				consentVerb = "accept"
+			}
+			if !strings.Contains(script, `if bw_text_has_triplet "$bw_ceph_orch_help" orch `+consentVerb+` call-home-enabled; then`) {
+				t.Errorf("IBM apply.sh must discover the exact Call Home acknowledgement signature:\n%s", script)
+			}
+			bootstrapRun := strings.Index(script, `bw_run "${bootstrap[@]}"`)
 			callHomeStage := strings.Index(script, "== stage 05: IBM Call Home ==")
-			if bootstrapEnd < 0 || callHomeStage < bootstrapEnd {
+			if bootstrapRun < 0 || callHomeStage < bootstrapRun {
 				t.Errorf("IBM Call Home reconcile must run after bootstrap guard so skipped bootstrap still reconciles:\n%s", script)
+			}
+		})
+	}
+}
+
+func TestCephApplyLibDiscoversNativeCapabilitiesFailClosed(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	dir := t.TempDir()
+	libPath := filepath.Join(dir, "lib.sh")
+	if err := os.WriteFile(libPath, []byte(ceph.CephApplyLib()), 0o755); err != nil {
+		t.Fatalf("write lib.sh: %v", err)
+	}
+	for name, body := range map[string]string{
+		"jq": "#!/bin/sh\nexit 0\n",
+		"timeout": `#!/bin/sh
+if [ "${BW_HELP_MODE:-}" = timeout ]; then exit 124; fi
+if [ "${BW_HELP_MODE:-}" = killed ]; then exit 137; fi
+shift 2
+exec "$@"
+`,
+		"native": `#!/bin/sh
+case "${BW_HELP_MODE:-}" in
+  present) printf '%s\n' 'baseline --wanted' 'orch accept call-home-enabled' ;;
+  absent) printf '%s\n' 'baseline --wanted-extra' 'orch unacceptable call-home-enabled' ;;
+  no-baseline) printf '%s\n' '--wanted' 'orch accept call-home-enabled' ;;
+  failure) exit 23 ;;
+esac
+`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	probe := `source "$1"
+help="$(bw_native_help test-surface baseline native probe)"
+if bw_text_has_token "$help" --wanted; then candidate=supported; else candidate=unsupported; fi
+if bw_text_has_triplet "$help" orch accept call-home-enabled; then consent=supported; else consent=unsupported; fi
+printf '%s %s\n' "$candidate" "$consent"`
+	tests := []struct {
+		mode       string
+		wantRC     int
+		wantOutput string
+	}{
+		{mode: "present", wantOutput: "supported supported"},
+		{mode: "absent", wantOutput: "unsupported unsupported"},
+		{mode: "failure", wantRC: 23, wantOutput: "failed to inspect test-surface capabilities (rc=23)"},
+		{mode: "timeout", wantRC: 124, wantOutput: "failed to inspect test-surface capabilities (rc=124)"},
+		{mode: "killed", wantRC: 137, wantOutput: "failed to inspect test-surface capabilities (rc=137)"},
+		{mode: "no-baseline", wantRC: 1, wantOutput: "unrecognizable help without 'baseline'"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.mode, func(t *testing.T) {
+			cmd := exec.Command(bash, "-c", probe, "bash", libPath)
+			cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"), "BW_HELP_MODE="+tc.mode)
+			out, err := cmd.CombinedOutput()
+			gotRC := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					gotRC = exitErr.ExitCode()
+				} else {
+					t.Fatalf("run probe: %v", err)
+				}
+			}
+			if gotRC != tc.wantRC || !strings.Contains(string(out), tc.wantOutput) {
+				t.Fatalf("probe result rc=%d output=%q, want rc=%d containing %q", gotRC, out, tc.wantRC, tc.wantOutput)
 			}
 		})
 	}

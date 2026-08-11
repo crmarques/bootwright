@@ -837,9 +837,23 @@ work directory. The generic exact-artifact loop re-proves all authored EVRs
 afterward.
 
 The provider also carries the `runtimeOS` family and, for IBM,
-`ibm.callHome`. IBM bootstrap adds `--automatically-accept-license`; the
-bootstrap phase then enables and acknowledges Call Home or denies it according
-to the required authored value. A custom entitlement `registry.url` is paired
+`ibm.callHome` plus candidate native tokens:
+
+```yaml
+nativeCapabilityCandidates:
+  cephadmBootstrapLicenseOption: --automatically-accept-license
+  cephOrchCallHomeConsentToken: call-home-enabled
+```
+
+These values name features to inspect; they do not assert that a release
+supports them. A fresh licensed bootstrap uses a bounded
+`cephadm bootstrap --help` probe and appends the exact option only when
+recognizable help advertises it. The Call Home phase independently inspects
+`ceph orch --help`, always reconciles the manager module to `ibm.callHome`, and
+acknowledges or denies the automatic state only when the matching signature is
+advertised. Probe failure or unrecognizable help refuses before the related
+mutation, and no release/package-version branch selects either path. A custom
+entitlement `registry.url` is paired
 with an explicit daemon image base under the same registry namespace by
 desired-state validation. The rendered `image` and `imageBase` are composed
 from authored `spec.ceph.image.base` and `spec.ceph.image.version`; only the

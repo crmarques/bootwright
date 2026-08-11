@@ -68,6 +68,18 @@ subcommand token (`cephadm --image <ref> bootstrap …`); appended after
 `bootstrap` list, while every `--mon-ip`/`--config`/`--registry-json`/etc. flag
 is a genuine bootstrap subcommand option that follows it.
 
+**Constraint:** A licensed provider's non-interactive acceptance option is a
+native capability candidate, not a product-release rule. Only for a fresh
+cluster with an accepted license, the role runs bounded
+`cephadm bootstrap --help` under a stable locale and wide columns. The response
+must exit zero and contain the stable `--mon-ip` baseline. Exact presence of the
+provider's candidate adds that one option; recognizable absence omits it. A
+failed, timed-out, or unrecognizable probe refuses before bootstrap. The
+generated native apply bundle follows the same three-state rule. See
+[ceph-native-capability-discrepancies.md](ceph-native-capability-discrepancies.md)
+for the observations that require this seam; that ledger is never runtime
+policy.
+
 **Constraint:** `cephadm bootstrap` is a one-time, non-idempotent operation
 that refuses to run when `/etc/ceph/ceph.conf` already exists. The role gates
 purely on that file — the same marker cephadm itself checks. An

@@ -19,6 +19,9 @@ const (
 
 	ibmImagePathTemplate    = "ibm-ceph/ceph-%s-rhel%s"
 	rhcephImagePathTemplate = "rhceph/rhceph-%s-rhel%s"
+
+	ibmCephadmBootstrapLicenseOption = "--automatically-accept-license"
+	ibmCephOrchCallHomeConsentToken  = "call-home-enabled"
 )
 
 const (
@@ -31,6 +34,7 @@ type distributionDef struct {
 	requiresRHSM                     bool
 	requiresRegistry                 bool
 	requiresLicense                  bool
+	nativeCapabilityCandidates       NativeCapabilityCandidates
 	registryURL                      string
 	baseRepos                        []string
 	usesRHCephToolsRepo              bool
@@ -67,9 +71,13 @@ var distributions = map[string]distributionDef{
 		},
 	},
 	v1alpha1.StorageCephDistributionIBM: {
-		requiresRHSM:                     true,
-		requiresRegistry:                 true,
-		requiresLicense:                  true,
+		requiresRHSM:     true,
+		requiresRegistry: true,
+		requiresLicense:  true,
+		nativeCapabilityCandidates: NativeCapabilityCandidates{
+			CephadmBootstrapLicenseOption: ibmCephadmBootstrapLicenseOption,
+			CephOrchCallHomeConsentToken:  ibmCephOrchCallHomeConsentToken,
+		},
 		registryURL:                      IBMRegistryURL,
 		baseRepos:                        []string{rhelBaseOSRepo, rhelAppStreamRepo},
 		ibmRepoTemplate:                  ibmStorageCephRepoTemplate,
@@ -111,6 +119,11 @@ type ArtifactPolicy struct {
 	NativePreparationMode            string
 }
 
+type NativeCapabilityCandidates struct {
+	CephadmBootstrapLicenseOption string
+	CephOrchCallHomeConsentToken  string
+}
+
 func ArtifactPolicyFor(distribution string) (ArtifactPolicy, bool) {
 	def, ok := distributions[distribution]
 	if !ok {
@@ -120,26 +133,27 @@ func ArtifactPolicyFor(distribution string) (ArtifactPolicy, bool) {
 }
 
 type Provider struct {
-	Distribution              string
-	Entitlement               entitlements.Resolved
-	OSRegistration            entitlements.Resolved
-	RequiresRHSM              bool
-	RequiresRegistry          bool
-	RequiresLicense           bool
-	PrerequisitePackages      []string
-	CephadmPackage            string
-	CephadmPackageSpec        string
-	CephadmAnsiblePackage     string
-	CephadmAnsiblePackageSpec string
-	Image                     string
-	ImageBase                 string
-	Community                 Community
-	Repository                Repository
-	RuntimeOS                 RuntimeOS
-	ArtifactPolicy            ArtifactPolicy
-	NativePreparation         NativePreparation
-	PackageArtifacts          []PackageArtifact
-	IBMCallHome               string
+	Distribution               string
+	Entitlement                entitlements.Resolved
+	OSRegistration             entitlements.Resolved
+	RequiresRHSM               bool
+	RequiresRegistry           bool
+	RequiresLicense            bool
+	PrerequisitePackages       []string
+	CephadmPackage             string
+	CephadmPackageSpec         string
+	CephadmAnsiblePackage      string
+	CephadmAnsiblePackageSpec  string
+	Image                      string
+	ImageBase                  string
+	Community                  Community
+	Repository                 Repository
+	RuntimeOS                  RuntimeOS
+	ArtifactPolicy             ArtifactPolicy
+	NativeCapabilityCandidates NativeCapabilityCandidates
+	NativePreparation          NativePreparation
+	PackageArtifacts           []PackageArtifact
+	IBMCallHome                string
 }
 
 type NativePreparation struct {
@@ -263,15 +277,16 @@ func Select(cluster v1alpha1.StorageCluster, ents []v1alpha1.Entitlement, idx se
 	def := distributions[distribution]
 	stream := subscriptionStream(cluster)
 	provider := Provider{
-		Distribution:          distribution,
-		PrerequisitePackages:  []string{"firewalld", "lvm2", "podman", "chrony", "sos"},
-		CephadmPackage:        "cephadm",
-		CephadmAnsiblePackage: "cephadm-ansible",
-		RequiresRHSM:          def.requiresRHSM,
-		RequiresRegistry:      def.requiresRegistry,
-		RequiresLicense:       def.requiresLicense,
-		RuntimeOS:             RuntimeOS{Family: "rhel"},
-		ArtifactPolicy:        def.artifactPolicy,
+		Distribution:               distribution,
+		PrerequisitePackages:       []string{"firewalld", "lvm2", "podman", "chrony", "sos"},
+		CephadmPackage:             "cephadm",
+		CephadmAnsiblePackage:      "cephadm-ansible",
+		RequiresRHSM:               def.requiresRHSM,
+		RequiresRegistry:           def.requiresRegistry,
+		RequiresLicense:            def.requiresLicense,
+		RuntimeOS:                  RuntimeOS{Family: "rhel"},
+		ArtifactPolicy:             def.artifactPolicy,
+		NativeCapabilityCandidates: def.nativeCapabilityCandidates,
 		NativePreparation: NativePreparation{
 			RuntimePackages: append([]string(nil), def.nativePreparationRuntimePackages...),
 		},
@@ -336,6 +351,12 @@ func Vars(provider Provider) map[string]any {
 			"nativeParityMode":                 provider.ArtifactPolicy.NativeParityMode,
 			"nativePreparationMode":            provider.ArtifactPolicy.NativePreparationMode,
 		},
+	}
+	if provider.NativeCapabilityCandidates.CephadmBootstrapLicenseOption != "" || provider.NativeCapabilityCandidates.CephOrchCallHomeConsentToken != "" {
+		out["nativeCapabilityCandidates"] = map[string]any{
+			"cephadmBootstrapLicenseOption": provider.NativeCapabilityCandidates.CephadmBootstrapLicenseOption,
+			"cephOrchCallHomeConsentToken":  provider.NativeCapabilityCandidates.CephOrchCallHomeConsentToken,
+		}
 	}
 	if provider.ArtifactPolicy.NativePreparationMode != "" {
 		out["nativePreparation"] = map[string]any{

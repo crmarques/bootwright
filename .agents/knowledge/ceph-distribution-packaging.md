@@ -211,9 +211,18 @@ daemon tooling from the vendor sources
 (`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-<N>-rhel-9.repo`).
 IBM Storage Ceph 9.9.1.0 also pauses `cephadm bootstrap` for interactive license
 acceptance unless `--automatically-accept-license` is present. That acceptance
-enables the `call_home_agent` mgr module by default, so the StorageCluster must
-declare `ibm.callHome: enabled|disabled`; apply acknowledges the enabled state
-or denies it to turn the module off.
+enables the `call_home_agent` mgr module by default. The observed 9.9.0.3 build
+does not expose that bootstrap option, and the 9.9.0 documentation does not
+define the automatic Call Home acknowledgement surface. The IBM provider
+therefore supplies candidate tokens,
+while bounded recognizable help from the installed `cephadm` and live Ceph CLI
+decides whether each native argument exists. The StorageCluster always declares
+`ibm.callHome: enabled|disabled`, and apply always reconciles the manager module
+to that explicit intent. It acknowledges or denies the automatic state only
+when the matching live command signature is advertised. Exact observations are
+kept in
+[ceph-native-capability-discrepancies.md](ceph-native-capability-discrepancies.md),
+never in a runtime release table.
 
 **Symptom:** `ceph orch deny call-home-enabled` prints `Call home agent module
 disabled and health warning for call home enablement cleared`, but the client
@@ -245,15 +254,19 @@ monitor response proves the request itself succeeded.
 `ceph mgr module enable call_home_agent` or `ceph mgr module disable
 call_home_agent` directly for the explicit intent; Ceph returns rc 0 and an
 `already enabled` or `already disabled` response when the state is already
-converged. For disabled intent, run that direct disable before the bounded
-`ceph orch deny call-home-enabled` so IBM still clears the warning and persists
-the denial without unloading a module inside the orchestrator request. Declared
-`mgrModules[]` use the same native idempotency instead of repeating the detailed
-module-list probe later in the operation plan. Read-only discovery retains its
-direct-host module catalog because diff needs both explicitly enabled and
-always-on modules; the failing reconcile used the separate `cephadm shell`
-path. The generated native apply script keeps the same direct operations and
-order. Live diagnosis requires all three conditions: `call_home_agent` absent
+converged. For disabled intent, run that direct disable before a bounded
+`ceph orch deny call-home-enabled` only when recognizable live orchestrator help
+advertises the exact denial signature. Builds without that automatic-consent
+surface stop after the direct module transition. This ordering clears the
+warning and persists the denial where supported without unloading a module
+inside the orchestrator request. Declared `mgrModules[]` use the same native
+idempotency instead of repeating the detailed module-list probe later in the
+operation plan. Read-only discovery retains its direct-host module catalog
+because diff needs both explicitly enabled and always-on modules; the failing
+reconcile used the separate `cephadm shell` path. The generated native apply
+script keeps the same capability gate, direct operations, and order. Live
+diagnosis on a build carrying the acknowledgement surface requires all three
+conditions: `call_home_agent` absent
 from the MgrMap,
 `mgr/cephadm/call_home_needs_acceptance` false, and
 `CALL_HOME_ENABLED_AUTOMATICALLY` absent from `ceph health detail`; none is a
@@ -412,6 +425,8 @@ that an incompatible artifact consumed the safety controls.
 - Red Hat ODF Supportability and Interoperability Checker (authentication required): <https://access.redhat.com/labs/odfsi/>
 - IBM Storage Ceph 9.9.1.0 versioning scheme: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=whats-new-in-storage-ceph-991>
 - IBM Storage Ceph 9.9.1.0 node prerequisites: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-registering-storage-ceph-nodes>
+- IBM 9.9.0 bootstrap procedure: <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=installation-bootstrapping-new-storage-cluster>
+- IBM 9.9.0 Call Home enablement: <https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=interface-enabling-call-home>
 - IBM 9.9.1.0 bootstrap license and Call Home behavior: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=installation-bootstrapping-new-storage-cluster>
 - IBM 9.9.1.0 Call Home disable procedure: <https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=interface-disabling-call-home>
 - IBM Storage Ceph 9 source RPM: <https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/source/ceph-20.2.1-324.el9cp.src.rpm>

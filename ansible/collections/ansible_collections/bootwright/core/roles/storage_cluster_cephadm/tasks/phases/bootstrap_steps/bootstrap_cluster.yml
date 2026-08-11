@@ -21,14 +21,7 @@
           if bootwright_selected_storage_cluster.bootstrap.singleHostDefaults | default(false) | bool
           else []
         )
-        + (
-          ['--automatically-accept-license']
-          if (
-            bootwright_ceph_provider.requiresLicense | default(false) | bool
-            and bootwright_ceph_provider.license.accepted | default(false) | bool
-          )
-          else []
-        )
+        + (bootwright_ceph_bootstrap_license_argv | default([]))
         + (
           ['--cluster-network', (bootwright_selected_storage_cluster.clusterNetworkCIDRs | join(','))]
           if (bootwright_selected_storage_cluster.clusterNetworkCIDRs | default([]) | length) > 0

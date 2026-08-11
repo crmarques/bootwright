@@ -578,8 +578,12 @@ func cephShellStaticClass(child []string) string {
 	}
 	if hasArgvExact(args, "health") || hasArgvExact(args, "health", "--format", "json") ||
 		hasArgvExact(args, "fsid") || hasArgvExact(args, "status") ||
-		hasArgvExact(args, "versions", "--format", "json") {
+		hasArgvExact(args, "versions", "--format", "json") || hasArgvExact(args, "orch", "--help") {
 		return "probe"
+	}
+	callHomeConsentCandidate := "{{ bootwright_ceph_provider.nativeCapabilityCandidates.cephOrchCallHomeConsentToken }}"
+	if hasArgvExact(args, "orch", "accept", callHomeConsentCandidate) || hasArgvExact(args, "orch", "deny", callHomeConsentCandidate) {
+		return "configuration"
 	}
 	for _, prefix := range [][]string{
 		{"osd", "stat"}, {"osd", "tree"}, {"osd", "metadata"}, {"osd", "getcrushmap"},
