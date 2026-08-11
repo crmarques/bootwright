@@ -634,6 +634,128 @@ func TestStorageDestroyCompletionReceiptIsSupersededByANewOwnerLifecycle(t *test
 	}
 }
 
+func TestPrepareStorageDestroyReleaseBindsCleanRetryToExactOwner(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	seeds := map[string]string{"ceph-a": seed}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+	result.FSID = ""
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), StorageDestroyResultFileName)
+	if err := writeStorageDestroyResult(path, results); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err != nil {
+		t.Fatalf("prepare clean retry: %v", err)
+	}
+	if err := writeStorageDestroyResult(path, results); err != nil {
+		t.Fatalf("rewrite clean retry result: %v", err)
+	}
+	if results["ceph-a"].FSID != storageDestroyTestFSIDA || manifest.Clusters["ceph-a"].FSID != storageDestroyTestFSIDA {
+		t.Fatalf("bound results=%+v manifest=%+v", results, manifest)
+	}
+	records, err := ownership.LoadContext(dir, "")
+	if err != nil || len(records) != 1 || records[0].Attributes[storageDestroyStatusAttr] != storageDestroyStatusProofValidated {
+		t.Fatalf("bound proof owner records=%v err=%v", records, err)
+	}
+	if _, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a"); err != nil || found {
+		t.Fatalf("owner-bound proof wrote ownerless receipt found=%t err=%v", found, err)
+	}
+	report, found, err := ReadStorageDestroyResult(path)
+	if err != nil || !found || report.Clusters[0].FSID != storageDestroyTestFSIDA {
+		t.Fatalf("bound final artifact=%+v found=%t err=%v", report, found, err)
+	}
+	if err := MarkStorageDestroyOwnershipReleased(dir, "", results, seeds, manifest); err != nil {
+		t.Fatalf("mark bound evidence released: %v", err)
+	}
+	if err := ReconcileStorageDestroyOwnership(dir, "", results, seeds); err != nil {
+		t.Fatalf("reconcile bound clean retry: %v", err)
+	}
+	if records, err := ownership.LoadContext(dir, ""); err != nil || len(records) != 0 {
+		t.Fatalf("bound clean retry owner records=%v err=%v", records, err)
+	}
+	receipt, found, err := readStorageDestroyCompletionReceipt(dir, "ceph-a")
+	if err != nil || !found || receipt.State != storageDestroyCompletionStateCompleted || receipt.Result.FSID != storageDestroyTestFSIDA {
+		t.Fatalf("bound completion receipt=%+v found=%t err=%v", receipt, found, err)
+	}
+}
+
+func TestPrepareStorageDestroyReleaseDoesNotBindPartialProof(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ownership")
+	seed := "storage__ceph-a__a1"
+	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+		Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := storageDestroyResult("ceph-a", []string{"a1"}, []string{"a2"}).Clusters[0]
+	result.FSID = ""
+	results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+	manifest, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, map[string]string{"ceph-a": seed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results["ceph-a"].FSID != "" || len(manifest.Clusters) != 0 {
+		t.Fatalf("partial proof was bound or released results=%+v manifest=%+v", results, manifest)
+	}
+	records, err := ownership.LoadContext(dir, "")
+	if err != nil || len(records) != 1 || records[0].Attributes[storageDestroyStatusAttr] != storageDestroyStatusPartial {
+		t.Fatalf("partial owner records=%v err=%v", records, err)
+	}
+}
+
+func TestPrepareStorageDestroyReleaseRefusesCleanBindingOverActiveReceipt(t *testing.T) {
+	for _, state := range []string{
+		storageDestroyCompletionStateReleasePending,
+		storageDestroyCompletionStateResetPending,
+		storageDestroyCompletionStateCompleted,
+	} {
+		t.Run(state, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "ownership")
+			seed := "storage__ceph-a__a1"
+			oldResult := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+			oldResult.FSID = storageDestroyTestFSIDB
+			if err := writeStorageDestroyCompletionReceipt(dir, StorageDestroyCompletionReceipt{
+				APIVersion: storageDestroyCompletionAPIVersion,
+				State:      state,
+				Cluster:    "ceph-a",
+				SeedHost:   seed,
+				Result:     oldResult,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := ownership.SaveResource(dir, ownership.ResourceRecord{
+				Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Host: seed,
+				Attributes: map[string]string{"seedHost": seed, "fsid": storageDestroyTestFSIDA},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
+			result.FSID = ""
+			results := map[string]StorageDestroyClusterResult{"ceph-a": result}
+			_, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, map[string]string{"ceph-a": seed})
+			if err == nil || !strings.Contains(err.Error(), "cannot be superseded") {
+				t.Fatalf("active receipt binding error=%v", err)
+			}
+			if results["ceph-a"].FSID != "" {
+				t.Fatalf("active receipt bound proof=%+v", results["ceph-a"])
+			}
+			records, loadErr := ownership.LoadContext(dir, "")
+			if loadErr != nil || len(records) != 1 || records[0].Attributes[storageDestroyStatusAttr] != "" {
+				t.Fatalf("active receipt mutated owner records=%v err=%v", records, loadErr)
+			}
+		})
+	}
+}
+
 func TestPrepareStorageDestroyReleaseDistinguishesNoOpOwnerAndReceipt(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ownership")
 	seed := "storage__ceph-a__a1"
@@ -697,8 +819,9 @@ func TestPrepareStorageDestroyReleaseDistinguishesNoOpOwnerAndReceipt(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds); err == nil || !strings.Contains(err.Error(), "clean no-op") {
-		t.Fatalf("clean proof with owner error = %v", err)
+	_, err = PrepareStorageDestroyOwnershipRelease(dir, "", results, seeds)
+	if err == nil || !strings.Contains(err.Error(), "cannot be superseded") {
+		t.Fatalf("completed no-op receipt with new owner error=%v", err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)

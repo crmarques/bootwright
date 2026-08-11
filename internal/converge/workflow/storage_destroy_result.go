@@ -494,6 +494,22 @@ func PrepareStorageDestroyOwnershipRelease(ownershipDir, contextName string, res
 			}
 			continue
 		}
+		if result.FSID == "" && found {
+			receipt, receiptFound, err := readStorageDestroyCompletionReceipt(ownershipDir, name)
+			if err != nil {
+				return manifest, err
+			}
+			if receiptFound {
+				if _, err := validateStorageDestroyCompletionReceiptIntrinsic(receipt, contextName, name); err != nil {
+					return manifest, err
+				}
+				if receipt.State != storageDestroyCompletionStateApplyStarted {
+					return manifest, fmt.Errorf("storage destroy completion receipt for %s is %s and cannot be superseded by a clean proof bound only to the exact controller owner", name, receipt.State)
+				}
+			}
+			result.FSID = record.Attributes["fsid"]
+			results[name] = result
+		}
 		if result.FSID != "" {
 			if !found {
 				receipt, receiptFound, err := matchingStorageDestroyCompletionReceipt(ownershipDir, contextName, name, expectedSeedHosts[name], result)
@@ -512,9 +528,6 @@ func PrepareStorageDestroyOwnershipRelease(ownershipDir, contextName string, res
 				return manifest, fmt.Errorf("storage destroy proof for %s names fsid %s, controller owner names %s", name, result.FSID, record.Attributes["fsid"])
 			}
 		} else {
-			if found {
-				return manifest, fmt.Errorf("storage destroy proof for %s claims a clean no-op while an exact controller owner still exists", name)
-			}
 			receipt, receiptFound, err := readStorageDestroyCompletionReceipt(ownershipDir, name)
 			if err != nil {
 				return manifest, err

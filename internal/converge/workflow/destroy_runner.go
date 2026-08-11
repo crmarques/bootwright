@@ -90,6 +90,9 @@ func runOneStorageDestroyTask(ctx context.Context, stdout io.Writer, stderr io.W
 	if err != nil {
 		return failedDestroyTaskResult(taskOpts, task, skipped, err)
 	}
+	if err := writeStorageDestroyResult(resultPath, validated); err != nil {
+		return failedDestroyTaskResult(taskOpts, task, skipped, err)
+	}
 	if partial := partialStorageDestroyNames(validated); len(partial) > 0 {
 		return failedDestroyTaskResult(taskOpts, task, false, fmt.Errorf(
 			"storage teardown remains partial for %s; retaining ownership, access, and substrate for an exact retry",

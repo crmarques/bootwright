@@ -81,6 +81,13 @@ worktree; CI and ordinary repositories must retain their normal environment,
 and Bootwright release metadata remains supplied by the Makefile's explicit
 linker flags.
 
+**Staticcheck cache in a read-only home:** Staticcheck writes analysis facts
+under the XDG cache independently of `GOCACHE`. In a restricted environment it
+can therefore fail with `failed caching data: open .../.cache/staticcheck/...:
+read-only file system` even when Go compilation succeeds. Point
+`XDG_CACHE_HOME` at a direct writable per-run directory alongside the existing
+`GOTMPDIR` and `GOCACHE` paths. Do not replace `HOME` to work around the cache.
+
 **Clean-checkout bundle exclusion:** `go-test-clean-checkout` deliberately
 omits the gitignored `internal/converge/bundle/ansible_bundle.zip`; its purpose
 is to prove the authored checkout, not a developer's generated artifact. A CLI

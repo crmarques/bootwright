@@ -223,6 +223,18 @@ completion; it survives a crash or desired-topology change and forces fresh
 destructive proof. A new normal exact owner supersedes the older result, and
 successful release replaces it with a `completed` receipt.
 
+A retry can attest that every node is clean while carrying no fsid because the
+earlier destructive pass already removed all remote identity. When an exact,
+validated controller owner remains, this is not an ownerless no-op: the
+controller binds the complete no-skip proof to that owner's fsid only at the
+evidence-release boundary, stages it as `proof-validated`, and rewrites the
+terminal artifact before starting the release-only pass. The owner fsid never
+authorizes the destructive phase. Partial or skipped proofs stay unbound, and a
+conflicting `release-pending`, `reset-pending`, or `completed` receipt blocks the
+binding; only `apply-started` represents a legitimately superseded lifecycle.
+The release-only pass still performs fresh marker/config, target-fsid, daemon,
+and whole-node LVM checks before removing evidence.
+
 **`--authorize unreachable-nodes` release authorization follows the attestation,
 not flag presence:** a successful managed-storage teardown always writes
 `storage-destroy-result.json`, with one terminal object for every selected
