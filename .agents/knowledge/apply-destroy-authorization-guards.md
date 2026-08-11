@@ -486,14 +486,20 @@ re-execution close the behavior over new actions and flags.
 
 **A sanctioned cross-verb alternative changes only the typed consequence.** A
 protected apply rebuild returns one registered action plus a non-empty unique
-set of `machine-layer`/`cluster-layer` roles. The CLI alone maps those roles to
-fixed destroy stages, retains the resolved original `--machines` or `--clusters`
-and all applicable global flags, projects prior authorizations across the verb
-boundary, drops apply-only effects, unions `protected` and cluster-teardown
-`data-loss`, and renders the unchanged-selection rebuild resume. Backend
-evidence names are never operands. Unknown, duplicate or empty
-role shapes emit no command. The action formatter, exact parse/re-execution
-tests and machine/cluster/mixed matrix rows close that alternative over future
+set of `machine-layer`/`cluster-layer` roles plus the typed, validated selected
+desired-state cluster roots for those roles. The CLI alone maps the roles to
+fixed destroy stages. An explicit `--machines` or `--clusters` selection is
+retained unchanged. An implicit whole-context selection becomes an explicit
+`--clusters` selection of only the typed roots classified for each affected
+layer; backend names, drift labels, and other display evidence are never
+operands. The CLI retains all applicable global flags, projects prior
+authorizations across the verb boundary, drops apply-only effects, unions
+`protected` and cluster-teardown `data-loss`, and renders the original selection
+as a rebuild resume. Direct unscoped destroy semantics remain
+whole-context. Unknown,
+duplicate, empty, or layer/root-inconsistent target shapes emit no command. The
+action formatter, exact parse/re-execution tests and
+implicit/machine/cluster/mixed matrix rows close that alternative over future
 flags without creating a grandfather allowlist. The destructive apply-kind
 registry assigns every live destructive task to exactly one layer; its guard
 rejects a new unclassified kind and any retired registry member.

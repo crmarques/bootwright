@@ -209,9 +209,10 @@ func TestEveryDestructiveApplyTaskKindMapsToExactlyOneProtectedLayer(t *testing.
 	for _, kind := range ApplyTaskKinds() {
 		live[kind] = true
 		drifted := ObjectClassification{
-			Kind:   kind,
-			Label:  kind + "/demo",
-			counts: map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1},
+			Kind:    kind,
+			Label:   kind + "/demo",
+			Cluster: "root",
+			counts:  map[ConvergeSafetyClassification]int{ConvergeSafetyDrift: 1},
 		}
 		if !isOverrideDestructive(drifted) {
 			if _, registered := overrideDestructiveLayerRole(kind); registered {
@@ -227,10 +228,14 @@ func TestEveryDestructiveApplyTaskKindMapsToExactlyOneProtectedLayer(t *testing.
 		if role != remedy.TargetRoleMachineLayer && role != remedy.TargetRoleClusterLayer {
 			t.Errorf("destructive apply task kind %q has unsupported protected-layer role %q", kind, role)
 		}
-		machines, _ := OverrideDestructiveMachineSubstrate([]ObjectClassification{drifted})
+		machines, machineRoots := OverrideDestructiveMachineSubstrate([]ObjectClassification{drifted})
 		clusters := OverrideDestructiveClusterScope([]ObjectClassification{drifted})
-		if (len(machines) > 0) == (len(clusters) > 0) {
-			t.Errorf("destructive apply task kind %q maps to machine=%v cluster=%v; protected rebuild remedies require exactly one fixed destroy layer", kind, machines, clusters)
+		clusterRoots := OverrideDestructiveClusterRoots([]ObjectClassification{drifted})
+		if (len(machines) > 0) == (len(clusters) > 0) || (len(machineRoots) > 0) == (len(clusterRoots) > 0) {
+			t.Errorf("destructive apply task kind %q maps to machine=%v roots=%v cluster=%v roots=%v; protected rebuild remedies require exactly one fixed destroy layer with a typed root", kind, machines, machineRoots, clusters, clusterRoots)
+		}
+		if len(machineRoots)+len(clusterRoots) != 1 || append(machineRoots, clusterRoots...)[0] != "root" {
+			t.Errorf("destructive apply task kind %q lost its typed desired-state root: machine=%v cluster=%v", kind, machineRoots, clusterRoots)
 		}
 	}
 	for kind := range overrideDestructiveLayerRoles {

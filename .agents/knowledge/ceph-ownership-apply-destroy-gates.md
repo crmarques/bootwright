@@ -126,6 +126,16 @@ ceph-prd-01 2026-08-04: a repeat destroy refused on seed srv4203 for
 `6a1388fa-9021-11f1-bf15-303ea72d7724` with no way to tell from the run which
 evidence had gone missing.
 
+Controller-side destroy recovery follows the same diagnostic rule. If the
+selected `StorageCluster` owner disagrees with the manager (`owner`), API,
+context, cluster name, rendered seed host, `attributes.seedHost`, or canonical
+fsid contract, the refusal prints the canonical record path and every
+mismatched field while retaining the record. Invalid roles are rejected while
+loading and reference records do not enter this owner-contract check. The
+operator restores trusted context evidence or independently verifies the live
+identity before repair; an opaque `contradicts the controller owner contract`
+summary is not actionable enough.
+
 **Semantics:** `cephadm rm-cluster` is host-local: run on the seed it stops and
 removes only the SEED's daemons/state. Non-seed hosts keep their
 mon/mgr/mds/osd systemd units and podman containers running, so wiping their

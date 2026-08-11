@@ -846,7 +846,7 @@ func reconcileStorageDestroyOwnership(ownershipDir, contextName string, results 
 }
 
 func storageDestroyOwnerRecords(ownershipDir, contextName string, targets map[string]bool, expectedSeedHosts map[string]string) (map[string]ownership.ResourceRecord, error) {
-	records, err := ownership.LoadContext(ownershipDir, contextName)
+	records, err := ownership.LoadResources(ownershipDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ownership records for storage destroy completion: %w", err)
 	}
@@ -859,8 +859,12 @@ func storageDestroyOwnerRecords(ownershipDir, contextName string, targets map[st
 			continue
 		}
 		expectedSeedHost := expectedSeedHosts[record.Name]
-		if record.Owner != ownership.Owner || record.EffectiveRole() != ownership.RoleOwner || record.APIVersion != "bootwright.io/ownership/v1alpha1" || record.Context != contextName || record.Cluster != record.Name || expectedSeedHost == "" || record.Host != expectedSeedHost || record.Attributes["seedHost"] != expectedSeedHost || !storageDestroyFSIDPattern.MatchString(record.Attributes["fsid"]) {
-			return nil, fmt.Errorf("storage cluster ownership record %s contradicts the controller owner contract", record.Name)
+		if problems := storageDestroyOwnerContractProblems(record, contextName, expectedSeedHost); len(problems) > 0 {
+			path, pathErr := ownership.ResourcePath(ownershipDir, record)
+			if pathErr != nil {
+				path = "<unresolved ownership path: " + pathErr.Error() + ">"
+			}
+			return nil, fmt.Errorf("storage cluster ownership record %s at %s contradicts the controller owner contract: %s; the record was retained — restore it from trusted context evidence or independently verify the live cluster identity before repairing it", record.Name, path, strings.Join(problems, "; "))
 		}
 		switch status := record.Attributes[storageDestroyStatusAttr]; status {
 		case "", storageDestroyStatusPartial, storageDestroyStatusProofValidated, storageDestroyStatusEvidenceReleased:

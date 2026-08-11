@@ -134,7 +134,11 @@ func resolveApplyRunRecovery(request remedy.Request, invocation resolvedInvocati
 		if err != nil {
 			return workflow.RunRecoveryPlan{}, fmt.Errorf("cannot construct the exact reapply command after the cluster destroy: %v", err)
 		}
-		commands = append(commands, destroy, reapply)
+		resume, err := invocation.retry(retryIntent{})
+		if err != nil {
+			return workflow.RunRecoveryPlan{}, fmt.Errorf("cannot construct the exact original-selection resume command after the cluster reinstall: %v", err)
+		}
+		commands = append(commands, destroy, reapply, resume)
 	case remedy.ActionRebuildCluster:
 		cluster, err := singleContainerClusterRemedyTarget(request)
 		if err != nil {
@@ -146,19 +150,19 @@ func resolveApplyRunRecovery(request remedy.Request, invocation resolvedInvocati
 		}
 		commands = append(commands, command)
 	case remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:
-		machineLayer, clusterLayer, err := protectedLayerRemedyTargets(request)
+		targets, err := protectedLayerRemedyTargets(request)
 		if err != nil {
 			return workflow.RunRecoveryPlan{}, fmt.Errorf("cannot construct the exact protected-layer teardown and rebuild sequence: %v", err)
 		}
-		if clusterLayer {
-			command, commandErr := invocation.destroySelectedClusterLayerRetry()
+		if targets.clusterLayer {
+			command, commandErr := invocation.destroyClusterLayerRetryForRoots(targets.clusterRoots)
 			if commandErr != nil {
 				return workflow.RunRecoveryPlan{}, fmt.Errorf("cannot construct the exact protected cluster-layer destroy command: %v", commandErr)
 			}
 			commands = append(commands, command)
 		}
-		if machineLayer {
-			command, commandErr := invocation.destroySelectedMachineLayerRetry()
+		if targets.machineLayer {
+			command, commandErr := invocation.destroyMachineLayerRetryForRoots(targets.machineRoots)
 			if commandErr != nil {
 				return workflow.RunRecoveryPlan{}, fmt.Errorf("cannot construct the exact protected machine-layer destroy command: %v", commandErr)
 			}

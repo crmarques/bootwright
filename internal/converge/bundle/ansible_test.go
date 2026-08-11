@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,6 +26,7 @@ func TestExtractAnsibleBundleEitherSucceedsOrReportsEmpty(t *testing.T) {
 		filepath.Join(collectionRoot, "galaxy.yml"),
 		filepath.Join(collectionRoot, "playbooks", "check_become.yml"),
 		filepath.Join(collectionRoot, "playbooks", "check_preflight.yml"),
+		filepath.Join(collectionRoot, "playbooks", "task_host_shared_service_operation_finalize.yml"),
 		filepath.Join(collectionRoot, "playbooks", "workflow_all_apply.yml"),
 		filepath.Join(collectionRoot, "playbooks", "workflow_infra_apply.yml"),
 		filepath.Join(collectionRoot, "playbooks", "workflow_infra_destroy_artifact_server.yml"),
@@ -43,6 +45,35 @@ func TestExtractAnsibleBundleEitherSucceedsOrReportsEmpty(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(dest, "PLACEHOLDER")); statErr == nil {
 		t.Fatalf("PLACEHOLDER must not appear in extracted bundle")
+	}
+}
+
+func TestEnsureAnsibleBundleReextractsWhenFinalizerIsMissing(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "bundle")
+	marker := "version=test\ngitCommit=abc123"
+	first, err := EnsureAnsibleBundle(dest, marker)
+	if err != nil {
+		if !strings.Contains(err.Error(), "embedded ansible bundle is empty") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if first.Reused {
+		t.Fatal("first ensure unexpectedly reused an empty destination")
+	}
+	finalizer := filepath.Join(dest, filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "task_host_shared_service_operation_finalize.yml")))
+	if err := os.Remove(finalizer); err != nil {
+		t.Fatal(err)
+	}
+	second, err := EnsureAnsibleBundle(dest, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Reused {
+		t.Fatal("bundle missing the host operation finalizer should be re-extracted")
+	}
+	if _, err := os.Stat(finalizer); err != nil {
+		t.Fatalf("re-extraction did not restore the host operation finalizer: %v", err)
 	}
 }
 

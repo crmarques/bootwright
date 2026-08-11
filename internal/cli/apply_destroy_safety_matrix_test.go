@@ -1644,6 +1644,20 @@ func safetyStorageDataLossCases() []safetyCase {
 		verdict: verdictNoChange,
 		deny:    []string{"not a safe in-place reconcile", "would reinstall the cluster"},
 	}, {
+		name:        "apply/protected unscoped rebuild narrows destroy to typed affected roots",
+		seed:        seedProtectedClusterLayerDrift,
+		args:        []string{"apply", "--stage", "clusters", "--mode", "rebuild", "--authorize", authorizeAll, "--yes", "--ask-become-pass=false", "--trust-on-first-use=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		want:        []string{"protected resource", "bootwright destroy", "--stage clusters", "--clusters ceph-storage,dc1-child-ocp,dc1-metal-ocp,dc2-child-ocp,dc2-metal-ocp", "resume exactly the original selected work", "bootwright apply --mode rebuild", "--context matrix"},
+		deny:        []string{"--stage infra", "--machines"},
+		checkRemedy: func(t *testing.T, _ workspace.Context, output string) {
+			commands := backtickedBootwrightCommands(output)
+			if len(commands) != 2 || !commandHasFlagValue(commands[0], "--clusters", "ceph-storage,dc1-child-ocp,dc1-metal-ocp,dc2-child-ocp,dc2-metal-ocp") || strings.Contains(commands[1], "--clusters") {
+				t.Fatalf("implicit protected recovery did not narrow only its destroy step: %v", commands)
+			}
+		},
+	}, {
 		name:        "apply/protected machine rebuild retains the exact machine selection in destroy and resume",
 		baseline:    safetyBaselineBareMetalManagedOS,
 		seed:        seedProtectedMachineLayerDrift,
@@ -1986,23 +2000,27 @@ func safetyStartingStateCases() []safetyCase {
 		typedRemedy: convergeremedy.ActionRebuildCluster,
 		want:        []string{"deliberately rebuild only ContainerCluster/" + safetyAdvancedContainerOCP, "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
-		name: "apply/uncertain node boot phase names an exact scoped rebuild",
+		name: "apply/uncertain node boot phase names a scoped reset and exact resume",
 		seed: func(t *testing.T, ctx workspace.Context) {
+			seedProtectedEnvironment(t, ctx)
 			seedRunnableSafetyMutation(t, ctx)
 			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhaseBooting, safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"node boot completion is uncertain", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionDestroyAndReapplyCluster,
+		want:        []string{"node boot completion is uncertain", "deliberately reset only this cluster's incomplete install", "bootwright destroy --authorize protected,data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "resume exactly the original selected work", "bootwright apply --mode reconcile --authorize data-loss", "--context matrix"},
+		deny:        []string{"ansible-playbook is stubbed in the cli test package", "bootwright apply --mode rebuild"},
 	}, {
 		name: "apply/unrecognized install phase names an exact scoped rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {
 			seedRunnableSafetyMutation(t, ctx)
 			seedClusterInstallLifecycle(t, ctx, safetyAdvancedContainerOCP, workflow.ClusterInstallStatusInstalling, workflow.ClusterInstallPhase("future-phase"), safetyDeclaredInstallerVersion(t, ctx, safetyAdvancedContainerOCP), time.Now().Add(-time.Hour))
 		},
-		args:    []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
-		verdict: verdictRefusal,
-		want:    []string{"unrecognized install phase", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
+		args:        []string{"apply", "--stage", "clusters", "--clusters", safetyAdvancedContainerOCP, "--yes", "--ask-become-pass=false"},
+		verdict:     verdictRefusal,
+		typedRemedy: convergeremedy.ActionRebuildCluster,
+		want:        []string{"unrecognized install phase", "bootwright apply --mode rebuild --authorize data-loss", "--stage clusters", "--clusters " + safetyAdvancedContainerOCP, "--context matrix"},
 	}, {
 		name: "apply/unsupported install status names an executable scoped rebuild",
 		seed: func(t *testing.T, ctx workspace.Context) {

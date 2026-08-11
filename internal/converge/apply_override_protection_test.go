@@ -25,12 +25,24 @@ func assertProtectedLayerRemedy(t *testing.T, err error, roles ...remedy.TargetR
 	if request.Action != remedy.ActionDestroyProtectedLayersThenRebuildSameSelection {
 		t.Fatalf("action = %q, want protected-layer teardown and same-selection rebuild", request.Action)
 	}
-	if len(request.Targets) != len(roles) {
-		t.Fatalf("targets = %#v, want roles %v", request.Targets, roles)
+	var layerRoles []remedy.TargetRole
+	rootCount := map[remedy.TargetRole]int{}
+	for _, target := range request.Targets {
+		switch target.Role {
+		case remedy.TargetRoleMachineLayer, remedy.TargetRoleClusterLayer:
+			layerRoles = append(layerRoles, target.Role)
+		case remedy.TargetRoleMachineLayerRoot:
+			rootCount[remedy.TargetRoleMachineLayer]++
+		case remedy.TargetRoleClusterLayerRoot:
+			rootCount[remedy.TargetRoleClusterLayer]++
+		}
+	}
+	if len(layerRoles) != len(roles) {
+		t.Fatalf("targets = %#v, want layer roles %v", request.Targets, roles)
 	}
 	for i, role := range roles {
-		if request.Targets[i].Role != role {
-			t.Fatalf("target %d role = %q, want %q", i, request.Targets[i].Role, role)
+		if layerRoles[i] != role || rootCount[role] == 0 {
+			t.Fatalf("targets = %#v, want layer role %q with a typed root", request.Targets, role)
 		}
 	}
 	for _, forbidden := range []string{"bootwright apply", "bootwright destroy"} {
@@ -76,16 +88,16 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	destructive := driftedObjects(t, workflow.ApplyTaskKindStorageCluster, "storage.ceph", "ceph")
 	reconfigure := driftedObjects(t, workflow.ApplyTaskKindInfraComponentServices, "infra-component.bastion", "")
 
-	if err := CheckApplyOverrideDestroyProtection(v1alpha1.State{}, destructive, nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(v1alpha1.State{}, destructive, nil, nil); err != nil {
 		t.Fatalf("unprotected env must not block: %v", err)
 	}
-	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, nil, nil); err != nil {
 		t.Fatalf("protected env with nothing destructive must proceed: %v", err)
 	}
-	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), reconfigure, nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protectedEnvState(), reconfigure, nil, nil); err != nil {
 		t.Fatalf("protected env with only reconfigure-only drift must proceed: %v", err)
 	}
-	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), destructive, nil)
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), destructive, nil, nil)
 	if err == nil {
 		t.Fatal("protected env with destructive drift must fail closed")
 	}
@@ -98,6 +110,9 @@ func TestCheckApplyOverrideDestroyProtectionScopeAware(t *testing.T) {
 	if len(typed.ClusterLayer) != 1 || typed.ClusterLayer[0] != "ceph" {
 		t.Fatalf("cluster-layer evidence = %v, want ceph", typed.ClusterLayer)
 	}
+	if len(typed.ClusterRoots) != 1 || typed.ClusterRoots[0] != "ceph" {
+		t.Fatalf("cluster-layer roots = %v, want ceph", typed.ClusterRoots)
+	}
 }
 
 func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
@@ -109,7 +124,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 		}}}
 	}
 
-	err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), storage, nil)
+	err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), storage, nil, nil)
 	if err == nil {
 		t.Fatal("protected StorageCluster kind must fail closed even on an allow-default env")
 	}
@@ -119,7 +134,7 @@ func TestCheckApplyOverrideDestroyProtectionGranularKinds(t *testing.T) {
 			t.Fatalf("granular gate error must contain %q: %v", want, err)
 		}
 	}
-	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), storage, nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), storage, nil, nil); err != nil {
 		t.Fatalf("a StorageCluster rebuild must proceed when only ContainerCluster is protected: %v", err)
 	}
 }
@@ -133,7 +148,7 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 		}}}
 	}
 
-	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, reinstalls)
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), nil, reinstalls, []string{"dc1-ocp"})
 	if err == nil {
 		t.Fatal("protected env with a cluster reinstall and no drift must fail closed")
 	}
@@ -143,7 +158,7 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 			t.Fatalf("protected-env reinstall refusal must contain %q: %v", want, err)
 		}
 	}
-	err = CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), nil, reinstalls)
+	err = CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindContainerCluster), nil, reinstalls, []string{"dc1-ocp"})
 	if err == nil {
 		t.Fatal("protected ContainerCluster kind must fail closed on a reinstall")
 	}
@@ -153,7 +168,7 @@ func TestCheckApplyOverrideDestroyProtectionReinstalls(t *testing.T) {
 			t.Fatalf("protectedKinds reinstall refusal must contain %q: %v", want, err)
 		}
 	}
-	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), nil, reinstalls); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(protect(v1alpha1.KindStorageCluster), nil, reinstalls, []string{"dc1-ocp"}); err != nil {
 		t.Fatalf("a ContainerCluster reinstall must proceed when only StorageCluster is protected: %v", err)
 	}
 }
@@ -183,7 +198,7 @@ func managedRHSMStorageState(clusterName string) v1alpha1.State {
 func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t *testing.T) {
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph", "ceph")
 
-	err := CheckApplyOverrideDestroyProtection(managedRHSMStorageState("ceph"), machine, nil)
+	err := CheckApplyOverrideDestroyProtection(managedRHSMStorageState("ceph"), machine, nil, nil)
 	if err == nil {
 		t.Fatal("in-place reimage of a managed-RHSM storage node must be routed to destroy, not reimaged in place")
 	}
@@ -196,6 +211,9 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t 
 	if len(typed.ManagedRHSMClusters) != 1 || typed.ManagedRHSMClusters[0] != "ceph" {
 		t.Fatalf("managed-RHSM evidence = %v, want ceph", typed.ManagedRHSMClusters)
 	}
+	if len(typed.MachineRoots) != 1 || typed.MachineRoots[0] != "ceph" {
+		t.Fatalf("machine-layer roots = %v, want ceph", typed.MachineRoots)
+	}
 
 	ossState := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{{
 		Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -203,8 +221,33 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMReimageRoutesToDestroy(t 
 			Distribution: v1alpha1.StorageCephDistributionOSS,
 		}},
 	}}}
-	if err := CheckApplyOverrideDestroyProtection(ossState, machine, nil); err != nil {
+	if err := CheckApplyOverrideDestroyProtection(ossState, machine, nil, nil); err != nil {
 		t.Fatalf("OSS (non-managed-RHSM) storage node keeps in-place reimage: %v", err)
+	}
+}
+
+func TestCheckApplyOverrideDestroyProtectionManagedRHSMRootsExcludeOrdinaryMachineDrift(t *testing.T) {
+	state := managedRHSMStorageState("rhsm")
+	state.StorageClusters = append(state.StorageClusters, v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "oss"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionOSS,
+		}},
+	})
+	rhsm := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.rhsm", "rhsm")
+	oss := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.oss", "oss")
+	err := CheckApplyOverrideDestroyProtection(state, append(rhsm, oss...), nil, nil)
+	if err == nil {
+		t.Fatal("managed-RHSM machine drift must cross destroy even beside ordinary OSS drift")
+	}
+	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer)
+	if len(typed.MachineRoots) != 1 || typed.MachineRoots[0] != "rhsm" {
+		t.Fatalf("machine-layer roots = %v, want only the managed-RHSM cluster", typed.MachineRoots)
+	}
+	for _, target := range typed.Remedy().Targets {
+		if target.Name == "oss" {
+			t.Fatalf("ordinary OSS drift became executable destroy scope: %#v", typed.Remedy())
+		}
 	}
 }
 
@@ -219,13 +262,16 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMMixedWithProtectedCluster
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph", "ceph")
 	storage := driftedObjects(t, workflow.ApplyTaskKindStorageCluster, "storage.ceph", "ceph")
 
-	err := CheckApplyOverrideDestroyProtection(state, append(machine, storage...), nil)
+	err := CheckApplyOverrideDestroyProtection(state, append(machine, storage...), nil, nil)
 	if err == nil {
 		t.Fatal("managed-RHSM machine work mixed with a protected cluster rebuild must fail closed on both layers")
 	}
 	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer, remedy.TargetRoleClusterLayer)
 	if len(typed.ClusterLayer) != 1 || typed.ClusterLayer[0] != "ceph" {
 		t.Fatalf("cluster-layer evidence = %v, want ceph", typed.ClusterLayer)
+	}
+	if len(typed.MachineRoots) != 1 || typed.MachineRoots[0] != "ceph" || len(typed.ClusterRoots) != 1 || typed.ClusterRoots[0] != "ceph" {
+		t.Fatalf("typed protected roots = machine %v cluster %v, want ceph for both", typed.MachineRoots, typed.ClusterRoots)
 	}
 	for _, want := range []string{"managed-RHSM", "protected cluster-layer work ceph", "explicit destroy boundary"} {
 		if !strings.Contains(err.Error(), want) {
@@ -237,13 +283,16 @@ func TestCheckApplyOverrideDestroyProtectionManagedRHSMMixedWithProtectedCluster
 func TestCheckApplyOverrideDestroyProtectionMachineSubstrateRemedy(t *testing.T) {
 	machine := driftedObjects(t, workflow.ApplyTaskKindManagedMachineOS, "osinstall.ceph-nprd", "ceph-nprd")
 
-	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), machine, nil)
+	err := CheckApplyOverrideDestroyProtection(protectedEnvState(), machine, nil, nil)
 	if err == nil {
 		t.Fatal("protected env with a drifted managed-OS machine must fail closed")
 	}
 	typed := assertProtectedLayerRemedy(t, err, remedy.TargetRoleMachineLayer)
 	if len(typed.MachineLayer) != 1 || typed.MachineLayer[0] != "osinstall.ceph-nprd" {
 		t.Fatalf("machine-layer evidence = %v, want selected managed-OS object", typed.MachineLayer)
+	}
+	if len(typed.MachineRoots) != 1 || typed.MachineRoots[0] != "ceph-nprd" {
+		t.Fatalf("machine-layer roots = %v, want ceph-nprd", typed.MachineRoots)
 	}
 }
 

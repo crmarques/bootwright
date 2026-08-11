@@ -2,6 +2,7 @@ package converge
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/remedy"
@@ -22,6 +23,8 @@ type ApplyOverrideDestroyProtectionError struct {
 	ManagedRHSMClusters   []string
 	MachineLayer          []string
 	ClusterLayer          []string
+	MachineRoots          []string
+	ClusterRoots          []string
 }
 
 func (e *ApplyOverrideDestroyProtectionError) Error() string {
@@ -43,9 +46,30 @@ func (e *ApplyOverrideDestroyProtectionError) Remedy() remedy.Request {
 	var targets []remedy.Target
 	if len(e.MachineLayer) > 0 {
 		targets = append(targets, remedy.Target{Role: remedy.TargetRoleMachineLayer})
+		for _, root := range sortedUniqueNonempty(e.MachineRoots) {
+			targets = append(targets, remedy.Target{Role: remedy.TargetRoleMachineLayerRoot, Name: root})
+		}
 	}
 	if len(e.ClusterLayer) > 0 {
 		targets = append(targets, remedy.Target{Role: remedy.TargetRoleClusterLayer})
+		for _, root := range sortedUniqueNonempty(e.ClusterRoots) {
+			targets = append(targets, remedy.Target{Role: remedy.TargetRoleClusterLayerRoot, Name: root})
+		}
 	}
 	return remedy.Request{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: targets}
+}
+
+func sortedUniqueNonempty(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }

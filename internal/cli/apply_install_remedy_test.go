@@ -57,11 +57,6 @@ func TestClusterLifecycleRetryCommandsKeepIdentityAndReplaceUnsafeEffects(t *tes
 			deny: []string{"--mode", "--trust-on-first-use"},
 		},
 		{
-			name: "reapply destroyed install",
-			make: func() (retryCommand, error) { return invocation.reapplyDestroyedClusterRetry("ocp") },
-			want: []string{"bootwright apply", "--mode reconcile", "--authorize foreign-daemons,unowned-devices,data-loss", "--stage clusters", "--clusters ocp"},
-		},
-		{
 			name: "rebuild installed cluster",
 			make: func() (retryCommand, error) { return invocation.rebuildInstalledClusterRetry("ocp") },
 			want: []string{"bootwright apply", "--mode rebuild", "--authorize foreign-daemons,unowned-devices,data-loss", "--stage clusters", "--clusters ocp"},
@@ -159,8 +154,8 @@ func TestApplyInstallRemedialErrorsNameCompleteExactSequences(t *testing.T) {
 			err: &workflow.ClusterInstallResumeExpiredError{
 				Cluster: "ocp", Phase: workflow.ClusterInstallPhaseNodesBooted, StartedAt: now.Add(-4 * time.Hour), Deadline: now.Add(-time.Hour),
 			},
-			commandCount:  2,
-			wantFragments: []string{"bootwright destroy", "--authorize protected,data-loss", "bootwright apply", "--mode reconcile", "--authorize foreign-daemons,data-loss", "--stage clusters", "--clusters ocp"},
+			commandCount:  3,
+			wantFragments: []string{"bootwright destroy", "--authorize protected,data-loss", "bootwright apply", "--mode reconcile", "--authorize foreign-daemons,data-loss", "--stage clusters", "--clusters ocp", "resume exactly the original selected work", "--machines worker-0"},
 		},
 		{
 			name: "completed skew rebuilds",
@@ -174,10 +169,10 @@ func TestApplyInstallRemedialErrorsNameCompleteExactSequences(t *testing.T) {
 			name: "uncertain boot rebuilds",
 			err: &workflow.ClusterInstallStateError{
 				Message: "node boot completion is uncertain",
-				Request: clusterInstallRemedyRequest(remedy.ActionRebuildCluster, "ocp"),
+				Request: clusterInstallRemedyRequest(remedy.ActionDestroyAndReapplyCluster, "ocp"),
 			},
-			commandCount:  1,
-			wantFragments: []string{"--mode rebuild", "--authorize foreign-daemons,data-loss", "--stage clusters", "--clusters ocp"},
+			commandCount:  3,
+			wantFragments: []string{"deliberately reset only this cluster's incomplete install", "bootwright destroy", "--authorize protected,data-loss", "--stage clusters", "--clusters ocp", "resume exactly the original selected work", "bootwright apply --mode reconcile", "--machines worker-0"},
 		},
 	}
 	for _, tc := range tests {
@@ -334,11 +329,13 @@ func TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly(t *t
 		selection    runSelection
 		machineLayer []string
 		clusterLayer []string
+		machineRoots []string
+		clusterRoots []string
 		wantStages   []string
 	}{
-		{name: "machine selection", selection: runSelection{stage: "deps", through: "base", machines: "worker-0"}, machineLayer: []string{"managedMachineOS/worker-0"}, wantStages: []string{"infra"}},
-		{name: "cluster selection", selection: runSelection{stage: "clusters", clusters: "ceph"}, clusterLayer: []string{"StorageCluster/ceph"}, wantStages: []string{"clusters"}},
-		{name: "mixed selection", selection: runSelection{through: "base", clusters: "ceph"}, machineLayer: []string{"managedMachineOS/ceph-0"}, clusterLayer: []string{"StorageCluster/ceph"}, wantStages: []string{"clusters", "infra"}},
+		{name: "machine selection", selection: runSelection{stage: "deps", through: "base", machines: "worker-0"}, machineLayer: []string{"managedMachineOS/worker-0"}, machineRoots: []string{"ceph"}, wantStages: []string{"infra"}},
+		{name: "cluster selection", selection: runSelection{stage: "clusters", clusters: "ceph"}, clusterLayer: []string{"StorageCluster/ceph"}, clusterRoots: []string{"ceph"}, wantStages: []string{"clusters"}},
+		{name: "mixed selection", selection: runSelection{through: "base", clusters: "ceph"}, machineLayer: []string{"managedMachineOS/ceph-0"}, clusterLayer: []string{"StorageCluster/ceph"}, machineRoots: []string{"ceph"}, clusterRoots: []string{"ceph"}, wantStages: []string{"clusters", "infra"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -367,6 +364,8 @@ func TestProtectedLayerRemedyFormatsMachineClusterAndMixedSelectionsExactly(t *t
 				Destructive:  []string{"typed object"},
 				MachineLayer: tc.machineLayer,
 				ClusterLayer: tc.clusterLayer,
+				MachineRoots: tc.machineRoots,
+				ClusterRoots: tc.clusterRoots,
 			}
 			formatted := applyInstallRemedialError(typed, invocation)
 			commands := backtickedBootwrightCommands(formatted.Error())
@@ -426,10 +425,12 @@ func TestProtectedLayerRemedyCommandsReexecuteHermetically(t *testing.T) {
 		selection    runSelection
 		machineLayer []string
 		clusterLayer []string
+		machineRoots []string
+		clusterRoots []string
 	}{
-		{name: "machine", selection: runSelection{machines: "master-0"}, machineLayer: []string{"managedMachineOS/master-0"}},
-		{name: "cluster", selection: runSelection{clusters: "sno-libvirt"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}},
-		{name: "mixed", selection: runSelection{clusters: "sno-libvirt"}, machineLayer: []string{"managedMachineOS/master-0"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}},
+		{name: "machine", selection: runSelection{machines: "master-0"}, machineLayer: []string{"managedMachineOS/master-0"}, machineRoots: []string{"sno-libvirt"}},
+		{name: "cluster", selection: runSelection{clusters: "sno-libvirt"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}, clusterRoots: []string{"sno-libvirt"}},
+		{name: "mixed", selection: runSelection{clusters: "sno-libvirt"}, machineLayer: []string{"managedMachineOS/master-0"}, clusterLayer: []string{"ContainerCluster/sno-libvirt"}, machineRoots: []string{"sno-libvirt"}, clusterRoots: []string{"sno-libvirt"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -449,6 +450,8 @@ func TestProtectedLayerRemedyCommandsReexecuteHermetically(t *testing.T) {
 				Destructive:  []string{"typed object"},
 				MachineLayer: tc.machineLayer,
 				ClusterLayer: tc.clusterLayer,
+				MachineRoots: tc.machineRoots,
+				ClusterRoots: tc.clusterRoots,
 			}, invocation)
 			commands := backtickedBootwrightCommands(formatted.Error())
 			if len(commands) == 0 {
@@ -478,8 +481,10 @@ func TestProtectedLayerTargetNamesNeverBecomeSelection(t *testing.T) {
 		Request: remedy.Request{
 			Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
 			Targets: []remedy.Target{
-				{Role: remedy.TargetRoleMachineLayer, Name: "backend-machine-cluster"},
-				{Role: remedy.TargetRoleClusterLayer, Name: "backend-cluster"},
+				{Role: remedy.TargetRoleMachineLayer},
+				{Role: remedy.TargetRoleMachineLayerRoot, Name: "typed-machine-root"},
+				{Role: remedy.TargetRoleClusterLayer},
+				{Role: remedy.TargetRoleClusterLayerRoot, Name: "typed-cluster-root"},
 			},
 		},
 	}
@@ -492,11 +497,42 @@ func TestProtectedLayerTargetNamesNeverBecomeSelection(t *testing.T) {
 		if !commandHasFlagValue(command, "--clusters", "selected-cluster") {
 			t.Fatalf("command lost resolved selection: %s", command)
 		}
-		for _, forbidden := range []string{"backend-machine-cluster", "backend-cluster"} {
+		for _, forbidden := range []string{"typed-machine-root", "typed-cluster-root"} {
 			if strings.Contains(command, forbidden) {
 				t.Fatalf("backend evidence became executable selection argv %q: %s", forbidden, command)
 			}
 		}
+	}
+}
+
+func TestProtectedLayerRecoveryNarrowsImplicitSelectionToTypedRoots(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode: workflow.ApplyModeRebuild,
+		},
+	}
+	typed := &workflow.ClusterInstallStateError{
+		Message: "typed protection refusal",
+		Request: remedy.Request{
+			Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+			Targets: []remedy.Target{
+				{Role: remedy.TargetRoleClusterLayer},
+				{Role: remedy.TargetRoleClusterLayerRoot, Name: "intended-cluster"},
+			},
+		},
+	}
+	formatted := applyInstallRemedialError(typed, invocation)
+	commands := backtickedBootwrightCommands(formatted.Error())
+	if len(commands) != 2 {
+		t.Fatalf("implicit protected recovery commands = %v, want scoped destroy and original resume: %v", commands, formatted)
+	}
+	if !commandHasFlagValue(commands[0], "--clusters", "intended-cluster") || !commandHasFlagValue(commands[0], "--stage", "clusters") {
+		t.Fatalf("destroy did not narrow to the typed cluster root: %s", commands[0])
+	}
+	if strings.Contains(commands[1], "--clusters") || !commandHasFlagValue(commands[1], "--mode", "rebuild") {
+		t.Fatalf("resume did not retain the original implicit selection: %s", commands[1])
 	}
 }
 
@@ -595,7 +631,7 @@ func TestEveryRegisteredRemedyActionHasAnExactCLIFormatter(t *testing.T) {
 				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}}
 			}
 			if action == remedy.ActionDestroyProtectedLayersThenRebuildSameSelection {
-				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}}}
+				request = remedy.Request{Action: action, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleMachineLayerRoot, Name: "ocp"}}}
 			}
 			typed := &workflow.ClusterInstallStateError{
 				Message: "typed refusal",

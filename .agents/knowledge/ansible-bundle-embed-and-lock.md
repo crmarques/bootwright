@@ -39,3 +39,13 @@ normalized to 0644/0755 so bundle-equality tests and rebuilds are stable.
 inside the downloaded collections tree are skipped WITHOUT following their
 targets so no out-of-tree file can leak into the bundle. Both behaviors are
 pinned by `scripts/test_sync_ansible_bundle.py`.
+
+**Early refusal finalization:** apply resolves the bundle path lazily, but it
+must finalize a host-wide shared-service operation only after task-graph
+execution has started. A scheduler refusal has acquired no remote guard; running
+the finalizer from the unresolved cache path both obscures the primary refusal
+and can report `task_host_shared_service_operation_finalize could not be found`.
+The non-empty run ID is the execution-start boundary. Once execution starts, the
+bundle has been prepared and the finalizer remains mandatory on success,
+failure, or cancellation. The fast cache probe also requires the finalizer
+playbook so a marker-valid partial cache is re-extracted before use.

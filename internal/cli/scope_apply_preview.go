@@ -102,7 +102,7 @@ func applyGateForecastRefusals(fullState, planState v1alpha1.State, tasks []work
 	}
 	rebuiltHosts := forecastRebuiltHosts(objects, tasks, runsDir, mode, reinstallDrift)
 	if mode == workflow.ApplyModeRebuild {
-		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, forecastReinstallDescriptors(reinstallDrift)); err != nil {
+		if err := converge.CheckApplyOverrideDestroyProtection(planState, objects, forecastReinstallDescriptors(reinstallDrift), reinstallDrift); err != nil {
 			refusals = append(refusals, err)
 		}
 	}

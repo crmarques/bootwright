@@ -294,6 +294,7 @@ func bundleProbeRelPaths() []string {
 		AnsibleCfgRelPath,
 		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "galaxy.yml")),
 		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "check_preflight.yml")),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "task_host_shared_service_operation_finalize.yml")),
 		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "workflow_infra_apply.yml")),
 	}
 }

@@ -150,22 +150,25 @@ whether the context is protected:
 
 - **Protected context** — rebuild crosses the destroy boundary. Which `destroy`
   depends on what the rebuild would touch, because machine substrate is torn
-  down by the infra stage and never by the clusters stage. Run the destroy the
-  refusal names, then re-apply:
+  down by the infra stage and never by the clusters stage. An explicit
+  `--clusters` or `--machines` selection is preserved. For a whole-context
+  rebuild, Bootwright instead narrows each destroy to the affected cluster roots
+  from validated desired state; backend and display labels are never selectors.
+  Run the destroy the refusal names, then re-apply:
 
   ```text
   # A cluster rebuild
-  bootwright destroy --clusters ocp-3node --authorize protected
+  bootwright destroy --stage clusters --clusters ocp-3node --authorize protected,data-loss
 
   # A machine or managed-OS rebuild
   bootwright destroy --stage infra --clusters ocp-3node --authorize protected
 
-  # A scope covering both: the infra destroy first, then the clusters destroy
+  # A scope covering both: the clusters destroy first, then the infra destroy
+  bootwright destroy --stage clusters --clusters ocp-3node --authorize protected,data-loss
   bootwright destroy --stage infra --clusters ocp-3node --authorize protected
-  bootwright destroy --clusters ocp-3node --authorize protected
 
-  # Then re-apply
-  bootwright apply --clusters ocp-3node --yes
+  # Then resume the original rebuild
+  bootwright apply --clusters ocp-3node --mode rebuild --authorize data-loss --yes
   ```
 
   A rebuild routed to the wrong stage loops: a `--stage clusters` destroy never
@@ -370,8 +373,8 @@ full-lifecycle teardown is covered first, as are `--stage infra` and
 `--stage clusters`:
 
 ```text
-bootwright destroy --authorize protected
-bootwright destroy --stage clusters --authorize protected
+bootwright destroy --authorize protected,data-loss
+bootwright destroy --stage clusters --authorize protected,data-loss
 ```
 
 This is the **destroy authorization boundary**: destruction of protected state
@@ -398,17 +401,25 @@ A listed kind crosses the same destroy authorization boundary as
 `destroyProtection` is `allow`, a `destroy` whose scope tears down a protected
 kind requires `--authorize protected`, and an `apply --mode rebuild` that would
 destructively rebuild one fails closed and prints the exact least-privilege
-sequence for the selection you gave. A machine-layer rebuild uses `destroy
---stage infra`; a cluster-layer rebuild uses `destroy --stage clusters`; mixed
-work prints both, followed by the original selection under `apply --mode
-rebuild`. Every command retains your `--machines` or `--clusters`, context, SSH
-identity, dry-run/output and confirmation flags, so a selected machine is never
-expanded to its cluster and a selected cluster is never expanded to the whole
-context. Cluster teardown includes both `--authorize protected` and
-`--authorize data-loss`. Reconfigure-only drift — an in-place service re-apply that touches
-no data, OS, or VM — does not trip it; only destructive rebuilds of the protected
-kind do. `destroyProtection` and `protectedKinds` combine: a resource is
-protected if either covers it.
+sequence for the selected state. A machine-layer rebuild uses `destroy --stage
+infra`; a cluster-layer rebuild uses `destroy --stage clusters`; mixed work
+prints both, followed by the original selection under `apply --mode rebuild`.
+An explicit `--machines` or `--clusters` selection is retained. An implicit
+whole-context rebuild produces explicit `--clusters` selectors containing only
+the typed cluster roots classified for each destructive layer. Every command
+retains context, SSH identity, dry-run/output and confirmation flags, so a
+selected machine is never expanded to its cluster and a selected cluster is
+never expanded to the whole context. Cluster teardown includes both
+`--authorize protected` and `--authorize data-loss`. Reconfigure-only drift —
+an in-place service re-apply that touches no data, OS, or VM — does not trip it;
+only destructive rebuilds of the protected kind do. `destroyProtection` and
+`protectedKinds` combine: a resource is protected if either covers it.
+
+An unscoped protected rebuild is still refused, but its alternatives are scoped:
+validated desired-state classification supplies the exact cluster roots for
+each affected destructive layer. Backend names and display labels remain
+evidence only. This does not change direct destroy behavior — a `destroy`
+without `--clusters` or `--machines` still means the whole context.
 
 !!! warning "`--yes` authorizes no token"
     `--yes` answers only the confirmation prompt; it never implies any
@@ -1205,13 +1216,20 @@ recovery, so partial `create`, prerequisite repair, stale, and cancelled cases d
 not blindly replay a command that cannot progress. Status validates and quotes
 only those recorded recovery steps; it never reconstructs a command, widens the
 selection, or invents `--yes`. An older or malformed ledger without a valid plan
-yields command-free guidance. The short-lived lease marks the updating process; cluster install
-tasks additionally record per-cluster install state. The lease is per context
-and spans input read, safety gates, remote work,
-and final evidence cleanup. Input-mutating `context update`, `diff --adopt`, and
-arbiter replacement share it, so they cannot race an apply or destroy that
-already classified the previous input. The forensic YAML input snapshots
-capture what was loaded and are not
+yields command-free guidance.
+
+An install record left at `booting` cannot prove whether node boot completed.
+Its recovery plan first destroys only that cluster at `--stage clusters` with
+`protected,data-loss`, then reinstalls only that cluster under reconcile with
+`data-loss`, and finally runs the exact original invocation unchanged. The first
+two prerequisites add no authorization to the final command.
+
+The short-lived lease marks the updating process; cluster install tasks
+additionally record per-cluster install state. The lease is per context and
+spans input read, safety gates, remote work, and final evidence cleanup.
+Input-mutating `context update`, `diff --adopt`, and arbiter replacement share
+it, so they cannot race an apply or destroy that already classified the previous
+input. The forensic YAML input snapshots capture what was loaded and are not
 classification input. The separate successful-input snapshots are machine-read
 only for fail-closed hash-schema rebaseline proof. `plan` / `--dry-run` write
 neither kind.

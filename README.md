@@ -65,9 +65,11 @@ each unknown host's fingerprint on first use.)
 Use `--clusters <name>[,<name>...]` to converge or recover isolated
 `ContainerCluster` and `StorageCluster` components without applying the whole
 platform. `destroy` uses the same `--stage infra|clusters` and `--clusters`
-selector shape; omitting `--stage` tears down the whole context (clusters first,
-then the infra they ran on). Unscoped `destroy --stage infra` performs
-current-context VM cleanup.
+selector shape; omitting `--stage` tears down the full lifecycle of the selected
+work set (clusters first, then the infra they ran on), and omitting both a stage
+and a selector means the whole context. `--yes` skips confirmation but does not
+narrow that scope. Unscoped `destroy --stage infra` performs current-context VM
+cleanup.
 
 <p align="center">
   <img src="docs/assets/images/high-level-overview.png" alt="Bootwright overview" width="800">

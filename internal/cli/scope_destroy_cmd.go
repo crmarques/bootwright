@@ -78,6 +78,9 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		printMutatingRunPreamble(stdout, flags.output, runCommandLabel)
+		if flags.output != outputJSON {
+			printUnscopedFullDestroyDisclosure(stdout, fullDestroy, selection, yes)
+		}
 		if !dryRun {
 			if err := checkCurrentApplyBeforeMutation(ctx.RunsDir); err != nil {
 				return failErr(1, mutatingRunLeaseRefusal(err, invocation))

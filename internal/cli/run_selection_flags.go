@@ -24,6 +24,10 @@ func (s runSelection) narrowFlag() string {
 	return "--clusters"
 }
 
+func (s runSelection) hasExplicitTargets() bool {
+	return strings.TrimSpace(s.clusters) != "" || strings.TrimSpace(s.machines) != ""
+}
+
 type invocationVerb string
 
 const (
@@ -238,31 +242,6 @@ func (i resolvedInvocation) reapplyDestroyedClusterRetry(cluster string) (retryC
 
 func (i resolvedInvocation) rebuildInstalledClusterRetry(cluster string) (retryCommand, error) {
 	return i.clusterLifecycleRetry(invocationApply, cluster, converge.ClustersScope.Name, workflow.ApplyModeRebuild, authorizeDataLoss)
-}
-
-func (i resolvedInvocation) destroySelectedMachineLayerRetry() (retryCommand, error) {
-	return i.destroySelectedLayerRetry(converge.InfraScope.Name, authorizeProtected)
-}
-
-func (i resolvedInvocation) destroySelectedClusterLayerRetry() (retryCommand, error) {
-	return i.destroySelectedLayerRetry(converge.ClustersScope.Name, authorizeProtected, authorizeDataLoss)
-}
-
-func (i resolvedInvocation) destroySelectedLayerRetry(stage string, requiredAuthorizations ...string) (retryCommand, error) {
-	next := i
-	next.verb = invocationDestroy
-	next.flags.mode = ""
-	next.flags.selection.stage = stage
-	next.flags.selection.through = ""
-	next.flags.reclaimDevices = ""
-	next.flags.clusterInstallParallelism = 0
-	next.flags.recoverCephOwnership = ""
-	next.flags.purgeHistory = false
-	next.flags.trustOnFirstUse = false
-	next.flags.clusterName = ""
-	next.flags.newArbiterMachine = ""
-	next.flags.authorizations = authorizationsAcceptedByVerb(next.flags.authorizations, i.verb, invocationDestroy)
-	return next.retry(retryIntent{requiredAuthorizations: requiredAuthorizations})
 }
 
 func (i resolvedInvocation) clusterLifecycleRetry(verb invocationVerb, cluster, stage string, mode workflow.ApplyMode, requiredAuthorizations ...string) (retryCommand, error) {

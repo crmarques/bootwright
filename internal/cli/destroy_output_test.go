@@ -87,6 +87,31 @@ func TestDestroyOrphanHintScopedToSweepCoverage(t *testing.T) {
 	}
 }
 
+func TestUnscopedFullDestroyYesDisclosureIsExact(t *testing.T) {
+	var buf bytes.Buffer
+	printUnscopedFullDestroyDisclosure(&buf, true, runSelection{}, true)
+	for _, want := range []string{"destroy scope", "whole context", "full lifecycle", "confirmation skipped by --yes"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("scope disclosure missing %q:\n%s", want, buf.String())
+		}
+	}
+	for _, tc := range []struct {
+		full      bool
+		selection runSelection
+		yes       bool
+	}{
+		{full: false, yes: true},
+		{full: true, selection: runSelection{clusters: "ocp"}, yes: true},
+		{full: true, yes: false},
+	} {
+		buf.Reset()
+		printUnscopedFullDestroyDisclosure(&buf, tc.full, tc.selection, tc.yes)
+		if buf.Len() != 0 {
+			t.Fatalf("nonmatching scope printed disclosure: %q", buf.String())
+		}
+	}
+}
+
 func TestDestroyOutputNamesCoveredClusters(t *testing.T) {
 	now := time.Now()
 	ledger := workflow.NewRunLedger("destroy-test", "clusters destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{

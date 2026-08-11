@@ -23,6 +23,8 @@ const (
 	TargetRoleClusterRoot      TargetRole = "cluster-root"
 	TargetRoleMachineLayer     TargetRole = "machine-layer"
 	TargetRoleClusterLayer     TargetRole = "cluster-layer"
+	TargetRoleMachineLayerRoot TargetRole = "machine-layer-cluster-root"
+	TargetRoleClusterLayerRoot TargetRole = "cluster-layer-cluster-root"
 )
 
 type Target struct {

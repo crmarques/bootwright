@@ -15,20 +15,23 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification, reinstallDescriptors []string) error {
+func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflow.ObjectClassification, reinstallDescriptors, reinstallClusters []string) error {
 	destructive := append(workflow.OverrideDestructiveDriftedObjects(objects), reinstallDescriptors...)
 	if len(destructive) == 0 {
 		return nil
 	}
 	if protected := workflow.ProtectedEnvironments(state); len(protected) > 0 {
-		machineLabels, _ := workflow.OverrideDestructiveMachineSubstrate(objects)
+		machineLabels, machineRoots := workflow.OverrideDestructiveMachineSubstrate(objects)
 		clusterLayer := append(workflow.OverrideDestructiveClusterScope(objects), reinstallDescriptors...)
+		clusterRoots := workflow.UnionClusterNames(workflow.OverrideDestructiveClusterRoots(objects), reinstallClusters)
 		return &ApplyOverrideDestroyProtectionError{
 			Reason:                ApplyOverrideProtectionEnvironment,
 			Destructive:           append([]string(nil), destructive...),
 			ProtectedEnvironments: append([]string(nil), protected...),
 			MachineLayer:          append([]string(nil), machineLabels...),
 			ClusterLayer:          clusterLayer,
+			MachineRoots:          append([]string(nil), machineRoots...),
+			ClusterRoots:          clusterRoots,
 		}
 	}
 	protectedKinds := workflow.ProtectedKindSet(state)
@@ -37,30 +40,42 @@ func CheckApplyOverrideDestroyProtection(state v1alpha1.State, objects []workflo
 		blocked = append(blocked, reinstallDescriptors...)
 	}
 	clusterLayer := workflow.OverrideDestructiveProtectedClusterScope(objects, protectedKinds)
+	clusterRoots := workflow.OverrideDestructiveProtectedClusterRoots(objects, protectedKinds)
 	if protectedKinds[v1alpha1.KindContainerCluster] {
 		clusterLayer = append(clusterLayer, reinstallDescriptors...)
+		clusterRoots = workflow.UnionClusterNames(clusterRoots, reinstallClusters)
 	}
 	machineLabels, machineClusters := workflow.OverrideDestructiveMachineSubstrate(objects)
 	if rhsmClusters := managedRegistrationClustersInScope(state, machineClusters); len(rhsmClusters) > 0 {
+		machineRoots := rhsmClusters
+		if protectedKinds[v1alpha1.KindMachine] {
+			machineRoots = workflow.UnionClusterNames(machineRoots, machineClusters)
+		}
 		return &ApplyOverrideDestroyProtectionError{
 			Reason:              ApplyOverrideProtectionManagedRHSM,
 			ManagedRHSMClusters: append([]string(nil), rhsmClusters...),
 			MachineLayer:        append([]string(nil), machineLabels...),
 			ClusterLayer:        append([]string(nil), clusterLayer...),
+			MachineRoots:        append([]string(nil), machineRoots...),
+			ClusterRoots:        append([]string(nil), clusterRoots...),
 		}
 	}
 	if len(blocked) == 0 {
 		return nil
 	}
 	var machineLayer []string
+	var machineRoots []string
 	if protectedKinds[v1alpha1.KindMachine] {
 		machineLayer = append(machineLayer, machineLabels...)
+		machineRoots = append(machineRoots, machineClusters...)
 	}
 	return &ApplyOverrideDestroyProtectionError{
 		Reason:       ApplyOverrideProtectionKinds,
 		Destructive:  append([]string(nil), blocked...),
 		MachineLayer: machineLayer,
 		ClusterLayer: clusterLayer,
+		MachineRoots: machineRoots,
+		ClusterRoots: clusterRoots,
 	}
 }
 

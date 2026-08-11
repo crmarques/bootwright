@@ -85,7 +85,10 @@ func TestReconcileApplyClusterInstallStateFailsClosed(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("expected fail-closed error containing %q, got %v", tc.wantErr, err)
 			}
-			if tc.name == "booting phase is uncertain" || tc.name == "unrecognized phase" {
+			if tc.name == "booting phase is uncertain" {
+				assertClusterInstallRemedy(t, err, remedy.ActionDestroyAndReapplyCluster, cluster)
+			}
+			if tc.name == "unrecognized phase" {
 				assertClusterInstallRemedy(t, err, remedy.ActionRebuildCluster, cluster)
 			}
 		})

@@ -217,7 +217,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				if ocpReinstallDescriptors, ocpReinstallAcked, rerr = overrideReinstallPlan(runContext, clustersDir, ctx.RunsDir, ctx.Name, ctx.SecretsDir, plan.State, tasks, applyClusterAvailabilityChecker); rerr != nil {
 					return failErr(1, applyInstallRemedialError(rerr, invocation))
 				}
-				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors); err != nil {
+				if err := converge.CheckApplyOverrideDestroyProtection(plan.State, objects, ocpReinstallDescriptors, ocpReinstallAcked); err != nil {
 					return failErr(1, applyInstallRemedialError(err, invocation))
 				}
 				_, substrateResetClusters = workflow.OverrideDestructiveMachineSubstrate(objects)
@@ -342,7 +342,8 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		if err := requireSharedServiceMutationLease(sharedServiceLease, "before apply execution"); err != nil {
 			return failErr(1, err)
 		}
-		if len(sharedMutation.manifest) > 0 {
+		renderResult, bundleResult, ledger, err := converge.ExecuteApply(runContext, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
+		if len(sharedMutation.manifest) > 0 && ledger.RunID != "" {
 			defer func() {
 				returnErr = finishHostSharedServiceOperations(returnErr, func() error {
 					if err := requireSharedServiceMutationLease(sharedServiceLease, "before host-wide operation finalization"); err != nil {
@@ -355,7 +356,6 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				})
 			}()
 		}
-		renderResult, bundleResult, ledger, err := converge.ExecuteApply(runContext, stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, buildClusterDisplays(state), false))
 		if err != nil {
 			if hasApplyInstallRemedy(err) {
 				return failErr(1, applyInstallRemedialError(err, invocation))

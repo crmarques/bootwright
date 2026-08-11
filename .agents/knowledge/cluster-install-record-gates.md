@@ -129,3 +129,12 @@ may have booted, Ansible warns and completes the in-flight install; the successf
 record remains durable, but the Go runner returns a typed nonzero future-rebuild
 error afterward so skew can never be stamped as healthy. An image-only release
 declaration has no comparable version and is deliberately exempt.
+
+The `booting` phase is a separate uncertainty boundary: the node-boot command
+may have completed even though its terminal record did not. A plain apply
+therefore emits a target-only `destroy --stage clusters` with `protected` and
+`data-loss`, a target-only reconcile reinstall with `data-loss`, and then the
+exact original invocation unchanged. The prerequisite steps add no authority
+to that final invocation. This avoids a target rebuild that immediately
+collides with destroy protection while still completing wider work the
+operator originally selected.

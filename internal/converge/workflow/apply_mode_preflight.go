@@ -344,6 +344,10 @@ func OverrideDestructiveClusterScope(objects []ObjectClassification) []string {
 	return clusters
 }
 
+func OverrideDestructiveClusterRoots(objects []ObjectClassification) []string {
+	return overrideDestructiveClusterRoots(objects, nil)
+}
+
 func OverrideDestructiveProtectedClusterScope(objects []ObjectClassification, protected map[string]bool) []string {
 	seen := map[string]bool{}
 	var clusters []string
@@ -365,6 +369,32 @@ func OverrideDestructiveProtectedClusterScope(objects []ObjectClassification, pr
 	}
 	sort.Strings(clusters)
 	return clusters
+}
+
+func OverrideDestructiveProtectedClusterRoots(objects []ObjectClassification, protected map[string]bool) []string {
+	return overrideDestructiveClusterRoots(objects, protected)
+}
+
+func overrideDestructiveClusterRoots(objects []ObjectClassification, protected map[string]bool) []string {
+	seen := map[string]bool{}
+	var roots []string
+	for _, o := range objects {
+		if !isOverrideDestructive(o) || !isClusterLayerKind(o.Kind) || strings.TrimSpace(o.Cluster) == "" {
+			continue
+		}
+		if protected != nil {
+			if kind := objectProtectedKind(o); kind == "" || !protected[kind] {
+				continue
+			}
+		}
+		root := strings.TrimSpace(o.Cluster)
+		if !seen[root] {
+			seen[root] = true
+			roots = append(roots, root)
+		}
+	}
+	sort.Strings(roots)
+	return roots
 }
 
 func OverrideDestructiveMachineSubstrate(objects []ObjectClassification) (labels, clusters []string) {

@@ -2834,8 +2834,10 @@ new executable command from a resolved invocation. Every registered action must
 have a CLI formatter and a safety-matrix scenario, so a new backend refusal
 cannot assemble a partial command or silently drop a future selection,
 identity, effect, or authorization flag. An action whose alternatives depend
-on target roles accepts only its published non-empty, unique role set; an
-empty, duplicate, or unknown role fails closed without rendering a command.
+on target roles accepts only its published shape: unique consequence roles and,
+where required, non-empty unique named roots matching those roles. An empty,
+duplicate, unknown, or layer/root-inconsistent target fails closed without
+rendering a command.
 Every destructive apply task kind is explicitly registered as machine-layer or
 cluster-layer; a new task kind has no default role and cannot pass the
 authorization guard until that choice is made.
@@ -3996,16 +3998,23 @@ command. The rest are registered per command, on the verbs that reach machines.
   `destroyed`/`complete` record is released state and a new apply starts from
   the agent ISO. The bootstrap wait stamps both its start and success phases.
   The `booting` phase fails closed — node-boot
-  completion is uncertain, so Bootwright names an exact cluster-scoped
-  `--mode rebuild --authorize data-loss` invocation that recreates the agent ISO
-  and reboots the nodes. An unrecognized phase receives the same typed,
-  cluster-scoped remedy because Bootwright cannot prove which install steps ran.
+  completion is uncertain, so Bootwright names an exact target-only cluster-stage
+  destroy (`destroy --stage clusters`) that adds `protected` and `data-loss`, an
+  exact target-only `--mode reconcile --authorize data-loss` reinstall, and then
+  the exact original invocation unchanged. The final step gains no authority
+  from either prerequisite. This crosses protection without asking the operator
+  to improvise a broader rebuild, recreates the agent ISO only after the
+  incomplete install state is explicitly released, and completes any wider
+  work the operator originally selected. An unrecognized phase keeps
+  the exact cluster-scoped `--mode rebuild --authorize data-loss` remedy because
+  Bootwright cannot prove which install steps ran.
 - Automatic post-boot resume is bounded by the original install record's
   `StartedAt`, not by an attempt counter. A wait may be replanned only before the
   three-hour resume ceiling; exactly at or after the deadline, when the start
   time is absent, or when it is after the current observation time, apply refuses
-  before any mutation and names the deliberately scoped destroy-and-reapply
-  sequence. A wait invocation already in progress may finish; the ceiling
+  before any mutation and names the same target-only destroy, target-only
+  reconcile reinstall, and unchanged-original-invocation sequence. A wait
+  invocation already in progress may finish; the ceiling
   prevents starting an unbounded new one on every apply.
 - ISO creation records the exact `openshift-install` version beside the install
   state. Before node boot, a missing or desired-version-mismatched value refuses
@@ -4080,11 +4089,18 @@ command. The rest are registered per command, on the verbs that reach machines.
   authorization boundary. The refusal identifies whether the selected rebuild
   reaches the machine layer, cluster layer, or both, without carrying command
   fragments. The CLI derives least-privilege alternatives from the original
-  resolved selection: machine-layer work becomes `destroy --stage infra` with
-  the exact original `--machines` or `--clusters`; cluster-layer work becomes
-  `destroy --stage clusters` with that same selection; a mixed rebuild names
-  both commands; and all cases end with the exact original selection under
-  `apply --mode rebuild`. Destroy alternatives retain context, SSH identity,
+  resolved selection and typed classification roots derived from validated
+  selected desired state.
+  For an explicit selection, machine-layer work becomes `destroy --stage infra`
+  with the exact original `--machines` or `--clusters`; cluster-layer work
+  becomes `destroy --stage clusters` with that same selection. For an implicit
+  whole-context selection, each affected layer instead receives an explicit
+  `--clusters` selector containing only its classified cluster roots. Backend
+  names, drift labels, and other display evidence never become selectors. A
+  mixed rebuild names both commands, and all cases end with the exact original
+  selection under `apply --mode rebuild`. This recovery narrowing does not
+  change direct destroy semantics: `destroy` without a selection remains a
+  whole-context teardown. Destroy alternatives retain context, SSH identity,
   dry-run/output, `--yes`, verbosity and applicable granted authorizations,
   discard apply-only effects, add `protected`, and add `data-loss` to the cluster
   teardown. Neither a machine selection may widen to its cluster nor a selected

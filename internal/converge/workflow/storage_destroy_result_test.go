@@ -1005,19 +1005,77 @@ func TestReconcileStorageDestroyOwnershipTargetsOnlyTheExactOwner(t *testing.T) 
 	}
 }
 
+func TestStorageDestroyOwnerContractProblemsNameEveryMismatch(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*ownership.ResourceRecord)
+		want   string
+	}{
+		{name: "manager", mutate: func(record *ownership.ResourceRecord) { record.Owner = "foreign" }, want: `owner is "foreign", want "bootwright"`},
+		{name: "api version", mutate: func(record *ownership.ResourceRecord) { record.APIVersion = "other/v1" }, want: `apiVersion is "other/v1"`},
+		{name: "context", mutate: func(record *ownership.ResourceRecord) { record.Context = "other" }, want: `context is "other", want "ctx"`},
+		{name: "cluster", mutate: func(record *ownership.ResourceRecord) { record.Cluster = "ceph-b" }, want: `cluster is "ceph-b", want record name "ceph-a"`},
+		{name: "host", mutate: func(record *ownership.ResourceRecord) { record.Host = "storage__ceph-a__other" }, want: `host is "storage__ceph-a__other", want selected seed "storage__ceph-a__a1"`},
+		{name: "seed host", mutate: func(record *ownership.ResourceRecord) { record.Attributes["seedHost"] = "storage__ceph-a__other" }, want: `attributes.seedHost is "storage__ceph-a__other", want selected seed "storage__ceph-a__a1"`},
+		{name: "fsid", mutate: func(record *ownership.ResourceRecord) { record.Attributes["fsid"] = "not-a-uuid" }, want: `attributes.fsid "not-a-uuid" is not a canonical UUID`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			record := ownership.ResourceRecord{
+				APIVersion: "bootwright.io/ownership/v1alpha1",
+				Kind:       string(ownership.KindStorageCluster),
+				Name:       "ceph-a",
+				Owner:      ownership.Owner,
+				Role:       ownership.RoleOwner,
+				Context:    "ctx",
+				Cluster:    "ceph-a",
+				Host:       "storage__ceph-a__a1",
+				Attributes: map[string]string{"seedHost": "storage__ceph-a__a1", "fsid": storageDestroyTestFSIDA},
+			}
+			test.mutate(&record)
+			problems := storageDestroyOwnerContractProblems(record, "ctx", "storage__ceph-a__a1")
+			if len(problems) != 1 || !strings.Contains(problems[0], test.want) {
+				t.Fatalf("problems = %v, want only %q", problems, test.want)
+			}
+		})
+	}
+}
+
 func TestReconcileStorageDestroyOwnershipRefusesAContradictoryOwner(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ownership")
 	if err := ownership.SaveResource(dir, ownership.ResourceRecord{
-		Kind: string(ownership.KindStorageCluster), Name: "ceph-a", Cluster: "ceph-a", Context: "ctx", Owner: "foreign",
+		APIVersion: "other/v1",
+		Kind:       string(ownership.KindStorageCluster),
+		Name:       "ceph-a",
+		Owner:      "foreign",
+		Role:       ownership.RoleOwner,
+		Context:    "other",
+		Cluster:    "ceph-b",
+		Host:       "storage__ceph-a__other",
+		Attributes: map[string]string{"seedHost": "storage__ceph-a__other", "fsid": "not-a-uuid"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
 	err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": "storage__ceph-a__a1"})
-	if err == nil || !strings.Contains(err.Error(), "contradicts") {
-		t.Fatalf("error = %v", err)
+	expectedPath := filepath.Join(dir, ownership.ResourceDirName, string(ownership.KindStorageCluster), "ceph-a.json")
+	for _, want := range []string{
+		"contradicts",
+		expectedPath,
+		`owner is "foreign", want "bootwright"`,
+		`apiVersion is "other/v1"`,
+		`context is "other", want "ctx"`,
+		`cluster is "ceph-b", want record name "ceph-a"`,
+		`host is "storage__ceph-a__other", want selected seed "storage__ceph-a__a1"`,
+		`attributes.seedHost is "storage__ceph-a__other", want selected seed "storage__ceph-a__a1"`,
+		`attributes.fsid "not-a-uuid" is not a canonical UUID`,
+		"the record was retained",
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
 	}
-	if records, loadErr := ownership.LoadContext(dir, "ctx"); loadErr != nil || len(records) != 1 {
+	records, loadErr := ownership.LoadResources(dir)
+	if loadErr != nil || len(records) != 1 || records[0].Context != "other" {
 		t.Fatalf("contradictory owner must be retained, records=%v err=%v", records, loadErr)
 	}
 }
@@ -1044,7 +1102,7 @@ func TestReconcileStorageDestroyOwnershipRequiresTheSelectedSeed(t *testing.T) {
 			}
 			result := storageDestroyResult("ceph-a", []string{"a1"}, nil).Clusters[0]
 			err := ReconcileStorageDestroyOwnership(dir, "ctx", map[string]StorageDestroyClusterResult{"ceph-a": result}, map[string]string{"ceph-a": test.expected})
-			if err == nil || !strings.Contains(err.Error(), "contradicts") {
+			if err == nil || !strings.Contains(err.Error(), "contradicts") || !strings.Contains(err.Error(), "selected seed") {
 				t.Fatalf("error = %v", err)
 			}
 			if records, loadErr := ownership.LoadContext(dir, "ctx"); loadErr != nil || len(records) != 1 {

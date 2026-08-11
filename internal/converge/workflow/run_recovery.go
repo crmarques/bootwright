@@ -3,6 +3,7 @@ package workflow
 import (
 	"errors"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/remedy"
@@ -93,9 +94,17 @@ func (p RunRecoveryPlan) Valid() bool {
 	case remedy.ActionReconcileSharedServiceThenRetrySameSelection, remedy.ActionReconcileContainerClusterThenRetrySameSelection, remedy.ActionRegenerateClusterISO:
 		verbs = []string{"apply", "apply"}
 	case remedy.ActionDestroyAndReapplyCluster:
-		verbs = []string{"destroy", "apply"}
+		verbs = []string{"destroy", "apply", "apply"}
 	case remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:
-		verbs = make([]string, len(p.Request.Targets)+1)
+		machineRoots, clusterRoots, _ := protectedLayerRecoveryTargetRoots(p.Remedy().Targets)
+		layerCount := 0
+		if len(clusterRoots) > 0 {
+			layerCount++
+		}
+		if len(machineRoots) > 0 {
+			layerCount++
+		}
+		verbs = make([]string, layerCount+1)
 		for i := range verbs[:len(verbs)-1] {
 			verbs[i] = "destroy"
 		}
@@ -195,17 +204,45 @@ func validNamedRecoveryTargets(targets []remedy.Target, role remedy.TargetRole, 
 }
 
 func validProtectedLayerRecoveryTargets(targets []remedy.Target) bool {
-	if len(targets) == 0 || len(targets) > 2 {
-		return false
+	_, _, valid := protectedLayerRecoveryTargetRoots(targets)
+	return valid
+}
+
+func protectedLayerRecoveryTargetRoots(targets []remedy.Target) ([]string, []string, bool) {
+	seenLayers := map[remedy.TargetRole]bool{}
+	seenRoots := map[remedy.TargetRole]map[string]bool{
+		remedy.TargetRoleMachineLayerRoot: {},
+		remedy.TargetRoleClusterLayerRoot: {},
 	}
-	seen := map[remedy.TargetRole]bool{}
+	var machineRoots, clusterRoots []string
 	for _, target := range targets {
-		if target.Role != remedy.TargetRoleMachineLayer && target.Role != remedy.TargetRoleClusterLayer || seen[target.Role] {
-			return false
+		name := strings.TrimSpace(target.Name)
+		switch target.Role {
+		case remedy.TargetRoleMachineLayer, remedy.TargetRoleClusterLayer:
+			if name != "" || seenLayers[target.Role] {
+				return nil, nil, false
+			}
+			seenLayers[target.Role] = true
+		case remedy.TargetRoleMachineLayerRoot, remedy.TargetRoleClusterLayerRoot:
+			if name == "" || seenRoots[target.Role][name] {
+				return nil, nil, false
+			}
+			seenRoots[target.Role][name] = true
+			if target.Role == remedy.TargetRoleMachineLayerRoot {
+				machineRoots = append(machineRoots, name)
+			} else {
+				clusterRoots = append(clusterRoots, name)
+			}
+		default:
+			return nil, nil, false
 		}
-		seen[target.Role] = true
 	}
-	return true
+	if len(machineRoots) == 0 != !seenLayers[remedy.TargetRoleMachineLayer] || len(clusterRoots) == 0 != !seenLayers[remedy.TargetRoleClusterLayer] || len(machineRoots)+len(clusterRoots) == 0 {
+		return nil, nil, false
+	}
+	sort.Strings(machineRoots)
+	sort.Strings(clusterRoots)
+	return machineRoots, clusterRoots, true
 }
 
 func validRecoveryStep(step RunRecoveryStep, verbs ...string) bool {

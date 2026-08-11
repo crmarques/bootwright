@@ -88,7 +88,8 @@ func (p RunRecoveryPlan) ValidFor(originalArgs []string) bool {
 		return slices.Equal(p.Steps[1].Args, originalArgs) && validClusterLifecycleRecovery(original, steps[0], "apply", request.Targets[0].Name, ApplyPhaseDeps, ApplyModeRebuild, nil)
 	case remedy.ActionDestroyAndReapplyCluster:
 		return validClusterLifecycleRecovery(original, steps[0], "destroy", request.Targets[0].Name, "clusters", "", []string{"protected", "data-loss"}) &&
-			validClusterLifecycleRecovery(original, steps[1], "apply", request.Targets[0].Name, "clusters", ApplyModeReconcile, []string{"data-loss"})
+			validClusterLifecycleRecovery(original, steps[1], "apply", request.Targets[0].Name, "clusters", ApplyModeReconcile, []string{"data-loss"}) &&
+			slices.Equal(p.Steps[2].Args, originalArgs)
 	case remedy.ActionRebuildCluster:
 		return validClusterLifecycleRecovery(original, steps[0], "apply", request.Targets[0].Name, "clusters", ApplyModeRebuild, []string{"data-loss"})
 	case remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:
@@ -221,30 +222,42 @@ func validProtectedLayerRecovery(original recoveryInvocation, steps []recoveryIn
 	if original.verb != "apply" {
 		return false
 	}
-	var stages []string
-	for _, target := range targets {
-		if target.Role == remedy.TargetRoleClusterLayer {
-			stages = append(stages, "clusters")
-		}
+	machineRoots, clusterRoots, valid := protectedLayerRecoveryTargetRoots(targets)
+	if !valid {
+		return false
 	}
-	for _, target := range targets {
-		if target.Role == remedy.TargetRoleMachineLayer {
-			stages = append(stages, "infra")
-		}
+	type layerRecovery struct {
+		stage string
+		roots []string
 	}
-	for i, stage := range stages {
+	var layers []layerRecovery
+	if len(clusterRoots) > 0 {
+		layers = append(layers, layerRecovery{stage: "clusters", roots: clusterRoots})
+	}
+	if len(machineRoots) > 0 {
+		layers = append(layers, layerRecovery{stage: "infra", roots: machineRoots})
+	}
+	implicitSelection := original.flags["--clusters"] == "" && original.flags["--machines"] == ""
+	for i, layer := range layers {
 		changed := map[string]bool{
 			"--mode": true, "--authorize": true, "--stage": true, "--through": true,
 			"--reclaim-devices": true, "--recover-ceph-ownership": true, "--purge-history": true, "--trust-on-first-use": true,
 		}
+		if implicitSelection {
+			changed["--clusters"] = true
+			changed["--machines"] = true
+		}
 		step := steps[i]
 		required := []string{"protected"}
-		if stage == "clusters" {
+		if layer.stage == "clusters" {
 			required = append(required, "data-loss")
 		}
-		if !validRecoveryCrossVerbExcept(original, step, "destroy", changed) || step.flags["--stage"] != stage || step.flags["--through"] != "" ||
+		if !validRecoveryCrossVerbExcept(original, step, "destroy", changed) || step.flags["--stage"] != layer.stage || step.flags["--through"] != "" ||
 			step.flags["--mode"] != "" || step.flags["--reclaim-devices"] != "" || step.flags["--recover-ceph-ownership"] != "" ||
 			step.flags["--purge-history"] != "" || step.flags["--trust-on-first-use"] != "" || !validRecoveryAuthorizations(original, step, required) {
+			return false
+		}
+		if implicitSelection && (step.flags["--clusters"] != strings.Join(layer.roots, ",") || step.flags["--machines"] != "") {
 			return false
 		}
 	}

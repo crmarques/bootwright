@@ -285,6 +285,24 @@ func TestProtectedLayerDestroyRetriesRetainExactSelectionAndClearApplyEffects(t 
 	}
 }
 
+func TestProtectedLayerDestroyRetriesRejectImplicitWholeContext(t *testing.T) {
+	invocation := resolvedInvocation{
+		verb:        invocationApply,
+		contextName: "prod",
+		flags: invocationFlags{
+			mode: workflow.ApplyModeRebuild,
+		},
+	}
+	for _, build := range []func() (retryCommand, error){
+		invocation.destroySelectedMachineLayerRetry,
+		invocation.destroySelectedClusterLayerRetry,
+	} {
+		if command, err := build(); err == nil || len(command.Args()) != 0 {
+			t.Fatalf("implicit whole-context protected destroy = %#v, err=%v", command.Args(), err)
+		}
+	}
+}
+
 func TestDestroyRetryPreservesClusterScopeRecoveryPurgeAndAuthorizations(t *testing.T) {
 	invocation := resolvedInvocation{
 		verb:        invocationDestroy,

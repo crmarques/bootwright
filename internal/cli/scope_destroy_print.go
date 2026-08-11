@@ -48,6 +48,13 @@ func destroyConfirmPrompt(dataLossUnauthorized bool) string {
 	return "Continue with destroy? [y/N] (default: no): "
 }
 
+func printUnscopedFullDestroyDisclosure(w io.Writer, fullLifecycle bool, selection runSelection, yes bool) {
+	if !fullLifecycle || selection.hasExplicitTargets() || !yes {
+		return
+	}
+	output.NewContinuation(w).Warning("destroy scope", "whole context; full lifecycle; confirmation skipped by --yes")
+}
+
 func destroyDataLossYesGuard(dataLoss workflow.DestroyDataLoss, yes, allowDestroy bool, invocation resolvedInvocation) error {
 	if allowDestroy || !yes || !dataLoss.Planned() {
 		return nil

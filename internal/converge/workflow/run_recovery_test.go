@@ -18,6 +18,12 @@ func TestRunRecoveryPlanValidationCoversEveryRegisteredAction(t *testing.T) {
 	destroy := []string{"bootwright", "destroy", "--context", "matrix"}
 	container := []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}
 	root := []remedy.Target{{Role: remedy.TargetRoleClusterRoot, Name: "ocp"}}
+	protected := []remedy.Target{
+		{Role: remedy.TargetRoleMachineLayer},
+		{Role: remedy.TargetRoleMachineLayerRoot, Name: "ceph"},
+		{Role: remedy.TargetRoleClusterLayer},
+		{Role: remedy.TargetRoleClusterLayerRoot, Name: "ceph"},
+	}
 	plans := map[remedy.Action]RunRecoveryPlan{
 		remedy.ActionRetrySameInvocation:                             NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRetrySameInvocation}, apply),
 		remedy.ActionApplyAllConsumers:                               NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionApplyAllConsumers, Targets: root}, apply),
@@ -27,9 +33,9 @@ func TestRunRecoveryPlanValidationCoversEveryRegisteredAction(t *testing.T) {
 		remedy.ActionReconcileContainerClusterThenRetrySameSelection: NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionReconcileContainerClusterThenRetrySameSelection, Targets: container}, apply, apply),
 		remedy.ActionRebuildSameSelection:                            NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRebuildSameSelection}, apply),
 		remedy.ActionRegenerateClusterISO:                            NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRegenerateClusterISO, Targets: container}, apply, apply),
-		remedy.ActionDestroyAndReapplyCluster:                        NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyAndReapplyCluster, Targets: container}, destroy, apply),
+		remedy.ActionDestroyAndReapplyCluster:                        NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyAndReapplyCluster, Targets: container}, destroy, apply, apply),
 		remedy.ActionRebuildCluster:                                  NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRebuildCluster, Targets: container}, apply),
-		remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:  NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleClusterLayer}}}, destroy, destroy, apply),
+		remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:  NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: protected}, destroy, destroy, apply),
 	}
 	registered := remedy.RegisteredActions()
 	for _, action := range registered {
@@ -56,7 +62,7 @@ func TestRunRecoveryPlanRejectsTruncatedAndWrongVerbSequences(t *testing.T) {
 		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionReconcileSharedServiceThenRetrySameSelection, Targets: root}, apply),
 		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionReconcileSameSelection}, destroy),
 		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyAndReapplyCluster, Targets: container}, apply, apply),
-		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}}}, destroy),
+		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleMachineLayerRoot, Name: "ocp"}}}, destroy),
 		NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRetrySameInvocation}, []string{}),
 	}
 	for i, plan := range tests {
@@ -99,6 +105,38 @@ func TestRunRecoveryPlanValidForRejectsWidenedOrMalformedArgv(t *testing.T) {
 	retry := NewRunRecoveryPlan(remedy.Request{Action: remedy.ActionRetrySameInvocation}, reconcile)
 	if retry.ValidFor(original) {
 		t.Fatal("retry-same-invocation accepted argv that was not byte-identical to the audit invocation")
+	}
+}
+
+func TestProtectedLayerRecoveryPlanNarrowsImplicitSelectionToTypedRoots(t *testing.T) {
+	original := []string{"bootwright", "apply", "--mode", "rebuild", "--context", "matrix"}
+	destroy := []string{"bootwright", "destroy", "--authorize", "protected,data-loss", "--stage", "clusters", "--clusters", "ocp-a,ocp-b", "--context", "matrix"}
+	resume := []string{"bootwright", "apply", "--mode", "rebuild", "--authorize", "data-loss", "--context", "matrix"}
+	plan := NewRunRecoveryPlan(remedy.Request{
+		Action:  remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		Targets: []remedy.Target{{Role: remedy.TargetRoleClusterLayer}, {Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp-b"}, {Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp-a"}},
+	}, destroy, resume)
+	if !plan.ValidFor(original) {
+		t.Fatalf("typed-root protected recovery was rejected: %#v", plan)
+	}
+	plan.Steps[0].Args[7] = "ocp-a,ocp-b,other"
+	if plan.ValidFor(original) {
+		t.Fatalf("widened typed-root protected recovery was accepted: %#v", plan)
+	}
+}
+
+func TestDestroyAndReapplyPlanConfinesPrerequisitesBeforeExactResume(t *testing.T) {
+	original := []string{"bootwright", "apply", "--mode", "create", "--stage", "base", "--machines", "worker-0", "--yes", "--ask-become-pass=false", "--trust-on-first-use=false", "--context", "matrix"}
+	destroy := []string{"bootwright", "destroy", "--authorize", "protected,data-loss", "--yes", "--stage", "clusters", "--clusters", "ocp", "--ask-become-pass=false", "--context", "matrix"}
+	reapply := []string{"bootwright", "apply", "--mode", "reconcile", "--authorize", "data-loss", "--yes", "--stage", "clusters", "--clusters", "ocp", "--ask-become-pass=false", "--trust-on-first-use=false", "--context", "matrix"}
+	request := remedy.Request{Action: remedy.ActionDestroyAndReapplyCluster, Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}}
+	plan := NewRunRecoveryPlan(request, destroy, reapply, original)
+	if !plan.ValidFor(original) {
+		t.Fatalf("target-only prerequisites plus exact resume were rejected: %#v", plan)
+	}
+	plan.Steps[2].Args = append(plan.Steps[2].Args, "--authorize", "data-loss")
+	if plan.ValidFor(original) {
+		t.Fatalf("resume carrying prerequisite authority was accepted: %#v", plan)
 	}
 }
 

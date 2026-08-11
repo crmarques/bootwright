@@ -333,3 +333,23 @@ learned; this file records what it still owes.
   change.
 - Related: [ansible-core-eager-setfact.md](ansible-core-eager-setfact.md),
   [ceph-distribution-packaging.md](ceph-distribution-packaging.md)
+
+## B-088 — Install-state reconciliation reports only the first blocked cluster
+
+- Status: open
+- Area: container-clusters / install recovery
+- Origin: multi-cluster booting-state recovery review 2026-08-11
+- Severity: low
+- Problem: `ReconcileApplyClusterInstallState` sorts selected clusters and
+  returns the first install-state error. An unscoped apply with two clusters at
+  the same fail-closed `booting` boundary therefore names only the first; the
+  second appears after the operator completes or retries the first remedy. This
+  is safe but encourages repeated recovery improvisation. The registered
+  rebuild/reset actions and their persisted-plan validators are deliberately
+  single-target, so concatenating names into the current target would weaken
+  their exact-scope contract.
+- Exit: pre-scan install records without mutation, aggregate blockers that share
+  one action into a typed multi-target recovery, and extend immediate and
+  persisted recovery validation plus the safety matrix to prove every destroy
+  and reinstall remains target-exact.
+- Related: [cluster-install-record-gates.md](cluster-install-record-gates.md)

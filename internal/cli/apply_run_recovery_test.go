@@ -67,7 +67,10 @@ func TestResolveApplyRunRecoveryCoversEveryRegisteredAction(t *testing.T) {
 		remedy.ActionRegenerateClusterISO:                            {Action: remedy.ActionRegenerateClusterISO, Targets: container},
 		remedy.ActionDestroyAndReapplyCluster:                        {Action: remedy.ActionDestroyAndReapplyCluster, Targets: container},
 		remedy.ActionRebuildCluster:                                  {Action: remedy.ActionRebuildCluster, Targets: container},
-		remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:  {Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleClusterLayer}}},
+		remedy.ActionDestroyProtectedLayersThenRebuildSameSelection: {Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection, Targets: []remedy.Target{
+			{Role: remedy.TargetRoleMachineLayer}, {Role: remedy.TargetRoleMachineLayerRoot, Name: "ocp"},
+			{Role: remedy.TargetRoleClusterLayer}, {Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp"},
+		}},
 	}
 	registered := remedy.RegisteredActions()
 	for _, action := range registered {
@@ -139,7 +142,9 @@ func TestProtectedLayerRecoveryProjectsAuthorizeAllAcrossVerbs(t *testing.T) {
 		Action: remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
 		Targets: []remedy.Target{
 			{Role: remedy.TargetRoleMachineLayer},
+			{Role: remedy.TargetRoleMachineLayerRoot, Name: "ocp"},
 			{Role: remedy.TargetRoleClusterLayer},
+			{Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp"},
 		},
 	}
 	plan, err := resolveApplyRunRecovery(request, invocation)
@@ -162,6 +167,45 @@ func TestProtectedLayerRecoveryProjectsAuthorizeAllAcrossVerbs(t *testing.T) {
 		if got := shellParseWords(t, commands[i]); !slices.Equal(got, plan.Steps[i].Args) {
 			t.Fatalf("authorize-all step %d drifted: immediate=%#v persisted=%#v", i, got, plan.Steps[i].Args)
 		}
+	}
+}
+
+func TestProtectedLayerRecoveryPersistsTypedRootsForImplicitSelection(t *testing.T) {
+	invocation := recoveryTestInvocation(workflow.ApplyModeRebuild)
+	invocation.flags.selection = runSelection{}
+	request := remedy.Request{
+		Action:  remedy.ActionDestroyProtectedLayersThenRebuildSameSelection,
+		Targets: []remedy.Target{{Role: remedy.TargetRoleClusterLayer}, {Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp-b"}, {Role: remedy.TargetRoleClusterLayerRoot, Name: "ocp-a"}},
+	}
+	plan, err := resolveApplyRunRecovery(request, invocation)
+	if err != nil || !plan.ValidFor(invocation.args()) || len(plan.Steps) != 2 {
+		t.Fatalf("implicit typed-root protected recovery = %#v, err=%v", plan, err)
+	}
+	assertRecoveryFlagValue(t, plan.Steps[0].Args, "--clusters", "ocp-a,ocp-b")
+	if slices.Contains(plan.Steps[1].Args, "--clusters") {
+		t.Fatalf("original-selection resume was unexpectedly narrowed: %#v", plan.Steps[1].Args)
+	}
+}
+
+func TestDestroyAndReapplyRecoveryConfinesAuthorityBeforeExactOriginalResume(t *testing.T) {
+	invocation := recoveryTestInvocation(workflow.ApplyModeCreate)
+	invocation.flags.selection = runSelection{stage: "base", machines: "worker-0"}
+	request := remedy.Request{Action: remedy.ActionDestroyAndReapplyCluster, Targets: []remedy.Target{{Role: remedy.TargetRoleContainerCluster, Name: "ocp"}}}
+	plan, err := resolveApplyRunRecovery(request, invocation)
+	if err != nil || !plan.ValidFor(invocation.args()) || len(plan.Steps) != 3 {
+		t.Fatalf("destroy-and-reapply recovery = %#v, err=%v", plan, err)
+	}
+	for _, step := range plan.Steps[:2] {
+		assertRecoveryFlagValue(t, step.Args, "--clusters", "ocp")
+	}
+	assertRecoveryFlagValue(t, plan.Steps[0].Args, "--authorize", "protected,data-loss")
+	assertRecoveryFlagValue(t, plan.Steps[1].Args, "--authorize", "foreign-daemons,data-loss")
+	if !slices.Equal(plan.Steps[2].Args, invocation.args()) {
+		t.Fatalf("resume = %#v, want exact original %#v", plan.Steps[2].Args, invocation.args())
+	}
+	plan.Steps[2].Args = append(plan.Steps[2].Args, "--authorize", authorizeDataLoss)
+	if plan.ValidFor(invocation.args()) {
+		t.Fatalf("tampered original-selection resume was accepted: %#v", plan)
 	}
 }
 

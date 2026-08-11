@@ -812,7 +812,7 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 			Status:    record.Status,
 			Phase:     record.Phase,
 			Message:   fmt.Sprintf("ContainerCluster/%s has prior install state at phase %s; node boot completion is uncertain, so bootwright refuses to reboot before any mutation", name, record.Phase),
-			Request:   clusterInstallRemedy(remedy.ActionRebuildCluster, name),
+			Request:   clusterInstallRemedy(remedy.ActionDestroyAndReapplyCluster, name),
 		}
 	default:
 		return tasks, &ClusterInstallStateError{

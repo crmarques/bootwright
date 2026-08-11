@@ -111,7 +111,11 @@ func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation
 		if commandErr != nil {
 			return "", fmt.Errorf("cannot construct the exact reapply command after the cluster destroy: %v", commandErr)
 		}
-		return fmt.Sprintf("deliberately reset only this cluster's incomplete install with `%s`, then reinstall it with `%s`", destroy.String(), reapply.String()), nil
+		resume, commandErr := invocation.retry(retryIntent{})
+		if commandErr != nil {
+			return "", fmt.Errorf("cannot construct the exact original-selection resume command after the cluster reinstall: %v", commandErr)
+		}
+		return fmt.Sprintf("deliberately reset only this cluster's incomplete install with `%s`, reinstall only that cluster with `%s`, then resume exactly the original selected work with `%s`", destroy.String(), reapply.String(), resume.String()), nil
 	case remedy.ActionRebuildCluster:
 		cluster, targetErr := singleContainerClusterRemedyTarget(request)
 		if targetErr != nil {
@@ -123,20 +127,20 @@ func applyRemedialGuidance(request remedy.Request, invocation resolvedInvocation
 		}
 		return fmt.Sprintf("deliberately rebuild only ContainerCluster/%s with `%s`", cluster, command.String()), nil
 	case remedy.ActionDestroyProtectedLayersThenRebuildSameSelection:
-		machineLayer, clusterLayer, targetErr := protectedLayerRemedyTargets(request)
+		targets, targetErr := protectedLayerRemedyTargets(request)
 		if targetErr != nil {
 			return "", fmt.Errorf("cannot construct the exact protected-layer teardown and rebuild sequence: %v", targetErr)
 		}
 		var teardown []string
-		if clusterLayer {
-			command, commandErr := invocation.destroySelectedClusterLayerRetry()
+		if targets.clusterLayer {
+			command, commandErr := invocation.destroyClusterLayerRetryForRoots(targets.clusterRoots)
 			if commandErr != nil {
 				return "", fmt.Errorf("cannot construct the exact protected cluster-layer destroy command: %v", commandErr)
 			}
 			teardown = append(teardown, "destroy the protected cluster layer with `"+command.String()+"`")
 		}
-		if machineLayer {
-			command, commandErr := invocation.destroySelectedMachineLayerRetry()
+		if targets.machineLayer {
+			command, commandErr := invocation.destroyMachineLayerRetryForRoots(targets.machineRoots)
 			if commandErr != nil {
 				return "", fmt.Errorf("cannot construct the exact protected machine-layer destroy command: %v", commandErr)
 			}
@@ -207,29 +211,55 @@ func containerClusterReconcileCommand(request remedy.Request, invocation resolve
 	return cluster, command, nil
 }
 
-func protectedLayerRemedyTargets(request remedy.Request) (bool, bool, error) {
+type protectedLayerTargets struct {
+	machineLayer bool
+	clusterLayer bool
+	machineRoots []string
+	clusterRoots []string
+}
+
+func protectedLayerRemedyTargets(request remedy.Request) (protectedLayerTargets, error) {
+	var out protectedLayerTargets
 	if len(request.Targets) == 0 {
-		return false, false, fmt.Errorf("action %q requires at least one protected layer", request.Action)
+		return out, fmt.Errorf("action %q requires at least one protected layer", request.Action)
 	}
-	machineLayer := false
-	clusterLayer := false
+	seenMachineRoots := map[string]bool{}
+	seenClusterRoots := map[string]bool{}
 	for _, target := range request.Targets {
+		name := strings.TrimSpace(target.Name)
 		switch target.Role {
 		case remedy.TargetRoleMachineLayer:
-			if machineLayer {
-				return false, false, fmt.Errorf("action %q repeats protected layer role %q", request.Action, target.Role)
+			if name != "" || out.machineLayer {
+				return out, fmt.Errorf("action %q repeats or names protected layer role %q", request.Action, target.Role)
 			}
-			machineLayer = true
+			out.machineLayer = true
 		case remedy.TargetRoleClusterLayer:
-			if clusterLayer {
-				return false, false, fmt.Errorf("action %q repeats protected layer role %q", request.Action, target.Role)
+			if name != "" || out.clusterLayer {
+				return out, fmt.Errorf("action %q repeats or names protected layer role %q", request.Action, target.Role)
 			}
-			clusterLayer = true
+			out.clusterLayer = true
+		case remedy.TargetRoleMachineLayerRoot:
+			if name == "" || seenMachineRoots[name] {
+				return out, fmt.Errorf("action %q has a blank or repeated machine-layer cluster root", request.Action)
+			}
+			seenMachineRoots[name] = true
+			out.machineRoots = append(out.machineRoots, name)
+		case remedy.TargetRoleClusterLayerRoot:
+			if name == "" || seenClusterRoots[name] {
+				return out, fmt.Errorf("action %q has a blank or repeated cluster-layer cluster root", request.Action)
+			}
+			seenClusterRoots[name] = true
+			out.clusterRoots = append(out.clusterRoots, name)
 		default:
-			return false, false, fmt.Errorf("action %q does not accept target role %q", request.Action, target.Role)
+			return out, fmt.Errorf("action %q does not accept target role %q", request.Action, target.Role)
 		}
 	}
-	return machineLayer, clusterLayer, nil
+	if out.machineLayer != (len(out.machineRoots) > 0) || out.clusterLayer != (len(out.clusterRoots) > 0) || !out.machineLayer && !out.clusterLayer {
+		return out, fmt.Errorf("action %q requires typed desired-state roots for every protected layer", request.Action)
+	}
+	out.machineRoots = workflow.UnionClusterNames(out.machineRoots)
+	out.clusterRoots = workflow.UnionClusterNames(out.clusterRoots)
+	return out, nil
 }
 
 func hasApplyInstallRemedy(err error) bool {
