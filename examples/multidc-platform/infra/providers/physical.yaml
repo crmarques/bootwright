@@ -1,0 +1,25 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: bare-metal
+spec:
+  type: baremetal
+
+  baremetal:
+    boot:
+      method: external
+    defaults:
+      bmc:
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+
+  networkAttachments:
+    - name: ocp-bare-metal-network
+      baremetal:
+        vlan: 100
+    - name: ceph-network
+      baremetal:
+        vlan: 200

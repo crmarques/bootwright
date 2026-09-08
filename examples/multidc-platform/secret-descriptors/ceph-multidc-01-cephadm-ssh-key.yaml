@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-multidc-01-cephadm-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-ceph-multidc-01-cephadm

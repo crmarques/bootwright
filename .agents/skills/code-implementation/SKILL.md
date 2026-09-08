@@ -1,0 +1,112 @@
+---
+name: code-implementation
+description: Implement and deliver any authorized Bootwright tracked change, including specs, skills, guidance, code, and tests, using temporary branches, dependency-aware parallel work, verification, commits, and linear integration.
+---
+
+# Code Implementation
+
+This is the shared delivery workflow for all tracked changes. Unless the user
+requests an uncommitted result or integration is unsafe, finish with one
+verified final commit per coherent change on the current destination branch
+(normally main), then remove task-created branches and worktrees. This does
+not authorize a push or release.
+
+## Prepare and divide work
+
+1. Identify the authorized outcome using the owning [specs](../../../specs/index.md),
+   [milestone](../../../specs/milestones.md), and relevant
+   [knowledge](../../knowledge/index.md). A spec or backlog entry is not
+   implementation authorization. Record unrelated discoveries in the earliest
+   fitting future milestone.
+2. Inspect status, destination history, publication/share evidence, and
+   relevant branches and worktrees. Preserve unrelated changes; never stash,
+   reset, rewrite, or remove them to make integration convenient.
+3. For a new or changed dependency, follow the
+   [dependency selection rule](../../../specs/architecture.md#dependency-selection-and-reuse).
+4. Load applicable [domain skills](../index.md). For authoritative spec or
+   guidance edits, include architecture-best-practices. Use
+   [source formatting](references/formatting.md) for Go, YAML, Ansible, front
+   matter, and corresponding inline examples; [Go](references/go.md) for Go
+   code/modules; [Ansible](references/ansible.md) for Ansible content. Load both
+   language references for a Go/Ansible port or shared contract change.
+5. Identify useful tasks, their dependencies, ownership, and checks before
+   editing. Run independent ready tasks concurrently whenever this reduces
+   total execution time; start newly unblocked tasks as soon as their
+   prerequisites are integrated. Account for coordination and integration cost.
+   Assign one owner to overlapping files, interfaces, and mutable test resources;
+   revise ownership or sequence work when overlap prevents safe parallelism.
+   Record why work must remain sequential when dependencies, shared resources,
+   or coordination cost prevent a time saving.
+
+Always use a task-created temporary branch and worktree for tracked edits,
+including small documentation, specification, and skill changes. Never implement
+directly on the destination branch. Create the initial integration branch/worktree
+from the inspected destination. For parallel writing, give each worker a unique
+temporary branch/worktree from the coordinator's current integration tip so
+dependent tasks include their integrated prerequisites. Read-only reviews may
+share a checkout.
+
+Record task-created paths and bases using non-sensitive identifiers. Worker
+briefs name scope, ownership, contracts, base, and checks; workers commit only
+their own changes and return SHAs, checks, and concerns. The coordinator alone
+integrates and advances the destination. Agent parallelism does not authorize
+concurrent Bootwright lifecycle execution.
+
+## Implement and verify
+
+- Apply the [repository layout contract](../../../specs/architecture.md#repository-layout)
+  when adding or changing code and scripts; review names and placement before
+  delivery.
+- Keep implementation, specs, examples, and tests for one observable change
+  together. Add meaningful automated coverage for changed behavior and
+  affected safety invariants; include a regression for a defect when practical.
+  Test public contracts and effect boundaries, not incidental implementation.
+- Cover relevant failures, limits, determinism, cancellation, replay, and
+  partial progress. Close coverage gaps in behavior the change relies on;
+  do not expand into unauthorized features to obtain evidence.
+- For definition-only changes, check links, consistency, examples, and skill
+  metadata. Record future executable evidence in the owning milestone gate;
+  do not build deferred behavior or wording-matching tests for a document edit.
+- Run focused checks during work and the affected repository/language gates
+  before delivery. After rebase or conflict resolution, rerun affected checks;
+  run full relevant gates on the final integrated tree. Record exact commands
+  and results. Failed, skipped, flaky, unavailable, and unrun gates are not passes.
+- Before staging and committing, review the complete prospective diff, tree,
+  status, and message for unrelated or sensitive content. Inspect the staged
+  result and run `git diff --cached --check` before creating the commit.
+
+## Commit and integrate
+
+Before creating final or follow-up history, inspect the destination tip and
+relevant range. Record the amend-versus-new decision in the task plan or a
+progress update, including same-change, rewrite authorization,
+publication/share, and intervening-commit evidence. A handoff, task boundary,
+user turn, or prior fast-forward alone does not make related work a new change.
+
+Amend the latest related commit only when all hold: the work is the same
+coherent change; the agent created that commit for this work or the user
+authorized rewriting it; it has not been pushed or shared as a dependency; and
+no unrelated commit follows it. Otherwise make a new coherent fix commit.
+Never rewrite other history without authorization.
+
+Accept ready tasks serially through the coordinator. Rebase each onto the current
+integration tip, verify its affected checks, and review the incoming range and
+messages before acceptance. Consolidate temporary history into one non-merge
+commit per coherent change. Check the explicit incoming range with
+`git diff --check` and inspect its log: fast-forward alone does not prove that
+the range has no merge, WIP, or fixup commits.
+
+If the destination moved, rebase onto its current tip and rerun relevant gates.
+Advance it by fast-forward, or amend under the rule above. If it has unrelated
+uncommitted changes or cannot be updated safely, preserve tested task branches
+and report the blocker; never overwrite work or bypass the check with a merge.
+
+Once the final commit is on the destination and checks pass there, remove each
+clean task-created worktree, then its branch. Verify its content is represented
+by the final commit before deletion; force-delete a task branch only when
+consolidation changed ancestry and ordinary deletion refuses for that reason.
+Leave unrelated Git state untouched.
+
+Report the outcome, final SHA, checks and limitations, cleanup status, and the
+amend-versus-new decision with its evidence. Explain dependency choices and
+parallel-work considerations when they materially affect review.

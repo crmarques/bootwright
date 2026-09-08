@@ -1,0 +1,61 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: multidc
+spec:
+  domains:
+    base: example.com
+    clusters: clusters.example.com
+
+  sites:
+    - name: site-a
+    - name: site-b
+    - name: site-c
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  infraComponents:
+    proxies:
+      - name: default
+        management: external
+        connection:
+          httpProxy: http://proxy.example.com:8080
+          httpsProxy: http://proxy.example.com:8080
+          noProxy:
+            - .example.com
+            - 192.0.2.0/24
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+          trustBundleRef: custom-ca-bundle
+
+    nameResolution:
+      - name: default-01
+        management: external
+        address: 192.0.2.53
+      - name: default-02
+        management: external
+        address: 198.51.100.53
+      - name: default-03
+        management: external
+        address: 203.0.113.53
+
+    artifactServers:
+      - name: default
+        management: managed
+        componentRef: artifact-server
+
+    ntp:
+      - name: default-01
+        management: external
+        address: time1.example.com
+      - name: default-02
+        management: external
+        address: time2.example.com
+      - name: default-03
+        management: external
+        address: time3.example.com
+
+  trustedCAs:
+    caBundleRefs:
+      - custom-ca-bundle

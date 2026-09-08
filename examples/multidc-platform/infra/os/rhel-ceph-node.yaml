@@ -1,0 +1,70 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-ceph-node
+spec:
+  os:
+    family: rhel
+    version: "9.99"
+    architecture: x86_64
+
+  installer:
+    anaconda:
+      imageRef: rhel-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.99-x86_64-dvd.iso
+          artifactServerEndpoint:
+            endpointRef: ip-http
+
+  subscription:
+    entitlementRef: rhel-satellite
+
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        source: machineRootDeviceHints
+    packages:
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      install:
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
+    repositories:
+      subscription:
+        enable:
+          - "example-ceph-9-for-rhel-9-x86_64-rpms"
+          - "rhel-9-for-x86_64-appstream-rpms"
+          - "rhel-9-for-x86_64-baseos-rpms"
+    services:
+      enabled:
+        - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - cockpit.socket
+        - kdump
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true
+      fips:
+        enabled: true
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: rhel-luks-recovery

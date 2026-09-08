@@ -1,0 +1,172 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-multidc-01
+spec:
+  type: ceph
+
+  management: managed
+
+  ceph:
+    distribution: ibm
+    release: "9.0.0.0"
+    packageVersion: "20.1.0-1.el9cp"
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    ibm:
+      callHome: disabled
+      packages:
+        source: subscription
+        subscriptionRepos:
+          - "example-ceph-9-for-rhel-9-x86_64-rpms"
+    entitlementRef: ceph-entitlement
+    cephadm:
+      ansible:
+        packageVersion: "5.0.0-1.el9cp"
+      workarounds:
+        - mgmt-gateway-spec-dependency-recording
+      addressRef: ssh
+      clusterSSH:
+        user: cephadm
+        keyRef: ceph-multidc-01-cephadm-ssh-key
+      bootstrap:
+        node: node-01
+    networks:
+      publicCIDRs:
+        - "198.51.100.0/25"
+        - "198.51.100.128/25"
+      clusterCIDRs:
+        - "203.0.113.0/24"
+    security:
+      fips:
+        enabled: true
+      cephx:
+        keyType: aes
+    monitoring:
+      prometheus:
+        retentionTime: 14d
+        retentionSize: 5GB
+      grafana:
+        initialAdminPasswordRef: ceph-multidc-01-grafana-admin
+    mgmtGateway:
+      dnsLabel: mgr
+      port: 10443
+      exposure: http
+      ingress:
+        name: mgmt
+        address: 198.51.100.58
+        prefixLength: 25
+        virtualInterfaceNetworks:
+          - "198.51.100.0/25"
+        firstVirtualRouterID: 42
+    config:
+      global:
+        mon_osd_down_out_subtree_limit: "host"
+        osd_pool_default_pg_autoscale_mode: "on"
+      mgr:
+        mgr/balancer/mode: "upmap"
+    mgrModules:
+      - balancer
+      - pg_autoscaler
+      - devicehealth
+    topology:
+      stretch:
+        failureDomain: datacenter
+        tiebreaker:
+          node: node-07
+      nodes:
+        - name: node-01
+          machineRef: storage-a-01
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-02
+          machineRef: storage-a-02
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-03
+          machineRef: storage-a-03
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+        - name: node-04
+          machineRef: storage-b-01
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-05
+          machineRef: storage-b-02
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-06
+          machineRef: storage-b-03
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+        - name: node-07
+          machineRef: storage-witness-01
+          roles:
+            - mon
+      osdDrivegroups:
+        - serviceID: data
+          placement:
+            hosts:
+              - node-01
+              - node-02
+              - node-03
+              - node-04
+              - node-05
+              - node-06
+          osd:
+            dataDevices:
+              paths:
+                - /dev/disk/by-id/nvme-example-data-01
+                - /dev/disk/by-id/nvme-example-data-02
+                - /dev/disk/by-id/nvme-example-data-03
+                - /dev/disk/by-id/nvme-example-data-04
+                - /dev/disk/by-id/nvme-example-data-05
+            encrypted: true
+            tpm2: true

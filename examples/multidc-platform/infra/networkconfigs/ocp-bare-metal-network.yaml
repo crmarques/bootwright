@@ -1,0 +1,112 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ocp-bare-metal-network
+spec:
+  machineNetwork:
+    - cidr: 192.0.2.0/24
+
+  nameResolutionRefs:
+    - default-01
+    - default-02
+    - default-03
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: eth0
+          profile-name: bond0-eth0
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: eth2
+          profile-name: bond0-eth2
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0
+          type: bond
+          state: up
+          mtu: 1500
+          link-aggregation:
+            mode: 802.3ad
+            options:
+              lacp_rate: "fast"
+              miimon: "100"
+            port:
+              - eth0
+              - eth2
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0.100
+          profile-name: vlan100
+          type: vlan
+          state: up
+          mtu: 1500
+          vlan:
+            base-iface: bond0
+            id: 100
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: bond0.200
+          profile-name: vlan200-ceph-public
+          type: vlan
+          state: up
+          mtu: 1500
+          vlan:
+            base-iface: bond0
+            id: 200
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: br-ceph-public
+          type: ovs-bridge
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+          bridge:
+            allow-extra-patch-ports: true
+            options:
+              stp: false
+            port:
+              - name: bond0.200
+              - name: ceph-public
+        - name: ceph-public
+          type: ovs-interface
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          search:
+            - example.com
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.0.2.252
+            next-hop-interface: bond0.100
+            table-id: 254
+            metric: 100

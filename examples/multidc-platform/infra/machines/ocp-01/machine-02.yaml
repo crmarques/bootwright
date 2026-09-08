@@ -1,0 +1,63 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-a-02
+  labels:
+    datacenter: site-a
+spec:
+  capabilities:
+    - openshift-node
+
+  placement:
+    site: site-a
+
+  substrate:
+    providerRef: bare-metal
+
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+
+  addresses:
+    - name: fqdn
+      address: edge-a-02.example.com
+    - name: ip
+      address: 192.0.2.4
+    - name: ceph-public
+      address: 198.51.100.22
+
+  network:
+    config:
+      networkConfigRef: ocp-bare-metal-network
+      attachmentRef: ocp-bare-metal-network
+      interfaceAddresses:
+        - interface: bond0.100
+          addressRef: ip
+          prefixLength: 24
+      overrides:
+        interfaces:
+          - name: ceph-public
+            ipv4:
+              address:
+                - ip: 198.51.100.22
+                  prefix-length: 25
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:1a
+      - name: eth2
+        macAddress: 02:00:00:00:00:1b
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
+        credentialsRef: ocp-bmc-credentials

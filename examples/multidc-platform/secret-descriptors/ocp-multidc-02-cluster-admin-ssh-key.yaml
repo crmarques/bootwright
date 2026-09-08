@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ocp-multidc-02-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-ocp-multidc-02-cluster-admin

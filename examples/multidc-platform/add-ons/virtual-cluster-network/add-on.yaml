@@ -1,0 +1,45 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: virtual-cluster-network
+spec:
+  type: manifestSet
+
+  requires:
+    - nmstate
+
+  manifestSet:
+    manifests:
+      - path: manifests/virtual-cluster-network-namespace.yaml
+      - path: manifests/virtual-cluster-network-nncp.yaml
+      - path: manifests/virtual-cluster-machine-cudn.yaml
+      - path: manifests/virtual-cluster-ceph-public-cudn.yaml
+
+  readiness:
+    timeout: 5m
+    checks:
+      - condition:
+          apiVersion: nmstate.io/v1
+          kind: NodeNetworkConfigurationPolicy
+          name: multidc-virtual-cluster-localnet
+          condition:
+            type: Available
+            status: "True"
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-machine
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: multidc-virtual-cluster-machine
+          namespace: bootwright-multidc-virtual-clusters
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-ceph-public
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: multidc-virtual-cluster-ceph-public
+          namespace: bootwright-multidc-virtual-clusters

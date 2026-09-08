@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: stretch-datacenter
+spec:
+  storageClusterRef: ceph-multidc-01
+
+  ceph:
+    failureDomain: datacenter
+    ruleName: stretch-rule
+    replicated:
+      size: 4
+      minSize: 2

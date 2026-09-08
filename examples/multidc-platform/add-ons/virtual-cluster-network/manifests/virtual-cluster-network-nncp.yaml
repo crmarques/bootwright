@@ -1,0 +1,17 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: multidc-virtual-cluster-localnet
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+
+  desiredState:
+    ovn:
+      bridge-mappings:
+        - localnet: multidc-vm-machine
+          bridge: br-ex
+          state: present
+        - localnet: multidc-vm-ceph-public
+          bridge: br-ceph-public
+          state: present

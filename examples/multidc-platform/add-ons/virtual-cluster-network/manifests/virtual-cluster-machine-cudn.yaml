@@ -1,0 +1,17 @@
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: multidc-virtual-cluster-machine
+spec:
+  namespaceSelector:
+    matchLabels:
+      bootwright.io/virtual-clusters: multidc
+
+  network:
+    topology: Localnet
+    localnet:
+      role: Secondary
+      ipam:
+        mode: Disabled
+      physicalNetworkName: multidc-vm-machine
+      mtu: 1500

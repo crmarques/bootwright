@@ -1,0 +1,68 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: hub-multidc-01
+spec:
+  distribution:
+    release:
+      version: 4.99.0
+
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+
+  install:
+    endpoints:
+      api:
+        address: 192.0.2.11
+        source:
+          type: external
+      api-int:
+        address: 192.0.2.11
+        source:
+          type: external
+      ingress:
+        address: 192.0.2.12
+        source:
+          type: external
+    nodeSSH:
+      keyPairRef: hub-multidc-01-cluster-admin-ssh-key
+
+  networking:
+    clusterNetwork:
+      - cidr: 10.132.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 10.97.0.0/16
+
+  nodes:
+    - name: master-01
+      role: master
+      machineRef: hub-multidc-01-master-01
+    - name: master-02
+      role: master
+      machineRef: hub-multidc-01-master-02
+    - name: master-03
+      role: master
+      machineRef: hub-multidc-01-master-03
+    - name: worker-01
+      role: worker
+      machineRef: hub-multidc-01-worker-01
+    - name: worker-02
+      role: worker
+      machineRef: hub-multidc-01-worker-02
+    - name: worker-03
+      role: worker
+      machineRef: hub-multidc-01-worker-03
+    - name: infra-01
+      role: infra
+      machineRef: hub-multidc-01-infra-01
+    - name: infra-02
+      role: infra
+      machineRef: hub-multidc-01-infra-02
+    - name: infra-03
+      role: infra
+      machineRef: hub-multidc-01-infra-03

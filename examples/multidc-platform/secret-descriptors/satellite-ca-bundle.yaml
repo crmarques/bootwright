@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-ca-bundle
+spec:
+  type: caBundle
+  source:
+    file:
+      path: ../secrets/sources/satellite-ca-bundle.pem

@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-org
+spec:
+  type: opaque
+  source:
+    file:
+      path: ../secrets/sources/satellite-org.bin

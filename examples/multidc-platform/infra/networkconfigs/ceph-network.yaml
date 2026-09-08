@@ -1,0 +1,106 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph-network
+spec:
+  machineNetwork:
+    - cidr: "198.51.100.0/25"
+    - cidr: "203.0.113.0/24"
+
+  nameResolutionRefs:
+    - default-01
+    - default-02
+    - default-03
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: eth0
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: eth1
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: eth2
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: eth3
+          type: ethernet
+          controller: bond0
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0
+          type: bond
+          state: up
+          mtu: 1500
+          link-aggregation:
+            mode: active-backup
+            options:
+              miimon: "100"
+            port:
+              - eth0
+              - eth1
+              - eth2
+              - eth3
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0.200
+          profile-name: vlan200-public
+          type: vlan
+          state: up
+          mtu: 1500
+          vlan:
+            base-iface: bond0
+            id: 200
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: bond0.300
+          profile-name: vlan300-cluster
+          type: vlan
+          state: up
+          mtu: 1500
+          vlan:
+            base-iface: bond0
+            id: 300
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          search:
+            - example.com
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 198.51.100.124
+            next-hop-interface: bond0.200
+            table-id: 254

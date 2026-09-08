@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: ceph-multidc-01-odf-ocp-multidc-01
+spec:
+  storageClusterRef: ceph-multidc-01
+
+  dataFoundation:
+    rbdPoolRef: odf-ocp-multidc-01-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all

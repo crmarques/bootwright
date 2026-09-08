@@ -1,0 +1,69 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-a-03
+spec:
+  capabilities:
+    - ceph-node
+
+  placement:
+    site: site-a
+
+  substrate:
+    providerRef: bare-metal
+
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+
+  addresses:
+    - name: fqdn
+      address: storage-a-03.example.com
+    - name: ssh
+      address: 198.51.100.3
+    - name: cluster
+      address: 203.0.113.3
+
+  network:
+    config:
+      networkConfigRef: ceph-network
+      attachmentRef: ceph-network
+      interfaceAddresses:
+        - interface: bond0.200
+          addressRef: ssh
+          prefixLength: 25
+        - interface: bond0.300
+          addressRef: cluster
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:08
+      - name: eth1
+        macAddress: 02:00:00:00:00:09
+      - name: eth2
+        macAddress: 02:00:00:00:00:0a
+      - name: eth3
+        macAddress: 02:00:00:00:00:0b
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
+        credentialsRef: ceph-bmc-credentials
+        virtualMedia:
+          tls:
+            trust: established

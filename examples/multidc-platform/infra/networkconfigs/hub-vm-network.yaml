@@ -1,0 +1,45 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: hub-vm-network
+spec:
+  machineNetwork:
+    - cidr: 192.0.2.0/24
+
+  nameResolutionRefs:
+    - default-01
+    - default-02
+    - default-03
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+        - name: ceph-public
+          type: ethernet
+          state: up
+          mtu: 1500
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          search:
+            - example.com
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.0.2.252
+            next-hop-interface: primary
+            table-id: 254
+            metric: 100

@@ -1,0 +1,293 @@
+# Command and Flag Catalog
+
+Read with [CLI behavior](../cli.md) and [output contracts](output.md).
+The tables define the complete public command tree, operands, flags and defaults.
+
+## Global flags
+
+Every command accepts and parses these inherited long flags so the same flag
+spellings and resolved values can be reused across workflow commands. A command
+resolves a global value only when its use case consumes it. An unused value
+grants no authority, performs no discovery or prompt, and changes no result;
+its syntax and context-independent safety checks still apply.
+
+| Flag | Type and default | Contract |
+| --- | --- | --- |
+| `--context <name>` | context name; current context | Select the named context for a context-backed command. A non-empty value conflicts with context-free `render --input-dir`. |
+| `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
+| `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. It does not alter desired state or the managed identity Bootwright installs. |
+| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution. |
+| `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. |
+
+Every command also accepts `-h` and `--help`. Help performs no desired-state
+discovery, state lookup, secret access, privilege escalation, process launch,
+network access, or write after the command path and flag syntax are resolved.
+After surrounding whitespace is trimmed, an SSH user matches
+`^[a-z_][a-z0-9_-]{0,31}$` exactly.
+
+Context-independent validation of inherited flags always checks an explicitly
+non-empty `--context` against the context-name DNS-label grammar, an explicit
+`--ssh-user` against the trimmed grammar above,
+`--ssh-user-for-provisioned=true` for its required non-empty `--ssh-user`, and
+`--ssh-ask-sudo-password=true` for its conflict with JSON output. TTY detection,
+prompting, path inspection, tilde expansion, and operating-system account lookup
+are deferred until an available use case needs them. An unavailable invocation
+performs none of those operations.
+
+## Command and flag catalog
+
+The tables list local flags; inherited global flags and `-h`/`--help` are not
+repeated. “Local” means the command may create or update Bootwright-owned local
+state but contacts no managed target. “Observe” permits bounded read-only
+process or network access. “Mutate” permits only the named, planned effects.
+
+### Setup commands
+
+| Invocation | Local flags and defaults | Successful result | Effects |
+| --- | --- | --- | --- |
+| `bootwright context init` | required `--name <name>` and exactly one `-f, --file <dir>`; `--yes` false | selected context and copied input summary | local context creation; safe recreation only with `--yes` |
+| `bootwright context update` | required `--name <name>` and exactly one `-f, --file <dir>`; `--yes` false | replaced input summary | local atomic input replacement; never lifecycle reconciliation |
+| `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
+| `bootwright context list` | none | contexts in canonical name order | read local state |
+| `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
+| `bootwright context delete` | required `--name <name>` and `--purge`; `--yes` false; `--abandon-resources` false | final deletion or recovery-only archival summary | local cleanup under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
+| `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
+| `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
+| `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
+| `bootwright secret set` | required `--name <name>` and one source mode: `--pull-secret <file>`, paired `--tls-cert <file> --tls-key <file>`, `--raw-file <file>`, `--from-file <file>`, `--password-stdin`, or `--generate`; optional `--username <name>` and `--yes` false | stored secret identity and parts, never values | local confidential store write |
+| `bootwright secret generate` | `--renew` false | generated/missing/unchanged counts | local confidential generation and writes |
+| `bootwright secret check` | `--output text\|json` default `text` | availability and type checks for declared secrets | read declarations and confidential metadata; no values emitted |
+| `bootwright secret list` | `--output text\|json` default `text` | context secret identities, types, parts, and availability | read confidential-store metadata |
+| `bootwright secret show` | required `--name <name>`; `--part primary\|private\|public\|tls-key` default `primary` | the selected part through the explicit sensitive-output boundary | read and reveal one secret part |
+| `bootwright secret delete` | required `--name <name>`; `--yes` false | deleted secret identity | local confidential deletion when not required by immutable continuation |
+| `bootwright secret encryption init` | none | active encryption-key identity and state | idempotent local keyring creation |
+| `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
+| `bootwright secret encryption rotate` | `--yes` false | new active key identity and re-encryption summary | atomic local key rotation and re-encryption |
+| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download and atomic publication |
+| `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, and optional computed digests | read local media; `--checksums` reads each image in full |
+| `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
+
+### Inspect and lifecycle commands
+
+| Invocation | Local flags and defaults | Successful result | Effects |
+| --- | --- | --- | --- |
+| `bootwright validate` | repeatable `-f, --file <file-or-dir>` default selected context input; `--output text\|json` default `text` | decoded object counts, exclusions, advisories, and diagnostics | none |
+| `bootwright preflight bastion` | none | local controller dependency readiness | local observation only |
+| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight container-cluster` | same flags as `preflight infra`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
+| `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
+| `bootwright plan` | none | next legal full-context plan or exact continuation point | none |
+| `bootwright status` | `--output text\|json` default `text`; `--watch` false; `--watch-interval <duration>` default `5s` | context readiness, lifecycle state, and next safe commands | read local state; watch repeats reads |
+| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
+| `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
+| `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false; `--output text\|json` default `text` | installer artifact manifest | local placeholder files and optional sensitive files |
+| `bootwright render storage` | `--clusters <list>` default all StorageClusters; `--output text\|json` default `text` | storage artifact manifest | local native files or scripts only; never execution |
+| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full apply or exact continued state | complete planned mutation |
+| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full destroy or exact continued state | complete planned removal |
+
+### Resource, access, and general commands
+
+| Invocation | Local flags and defaults | Successful result | Effects |
+| --- | --- | --- | --- |
+| `bootwright machine list` | `--clusters <list>` default all; `--silent` false; `--output text\|json` default `text` | Machines and ownership-backed state, or sorted names with `--silent` | read local state |
+| `bootwright machine rsh` | required `--name <machine>` | bounded handoff for an interactive SSH session to the exact Machine | read target and access metadata only |
+| `bootwright machine exec` | required `--name <machine>` and `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
+| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan and result | bounded SSH identity observation; local trust-store write unless dry-run |
+| `bootwright bastion setup` | `--dry-run` false; `--yes` false | controller prerequisite plan or completed setup | local prerequisite installation/publication only |
+| `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
+| `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |
+| `bootwright cluster exec` | required `--name <cluster>`; `--node <node>` default first node in canonical name order; required `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
+| `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
+| `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
+| `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
+| `bootwright version` | none | version, commit, Go runtime and target, and embedded dependency-bundle identity | none |
+| `bootwright help [command ...]` | no local flags | human help for the exact resolved command | none |
+| `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
+| `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |
+| `bootwright completion fish` | `--no-descriptions` false | Fish completion script | none |
+| `bootwright completion powershell` | `--no-descriptions` false | PowerShell completion script | none |
+
+### Cluster command applicability
+
+`--name` selects from the shared ContainerCluster/StorageCluster name namespace
+in the selected context. The following table owns applicability; access evidence
+and resolution follow [resource inspection and explicit access](../cli.md#resource-inspection-and-explicit-access).
+
+| Command | Applicable targets |
+| --- | --- |
+| `cluster list`, `cluster info` | All selected ContainerClusters and StorageClusters, including external storage clusters. |
+| `cluster rsh`, `cluster exec` | OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters have no declared node roster and are inapplicable. |
+| `cluster oc`, `cluster kubectl`, `cluster kubeconfig` | OpenShift/OKD ContainerClusters only. |
+
+Applicability does not establish implementation availability, access readiness,
+identity, or ownership. Missing access material on an applicable target is an
+access failure, not a change in applicability.
+
+### Access help
+
+The short description and detailed help for `machine rsh`, `machine exec`,
+`cluster rsh`, `cluster exec`, `cluster oc`, and `cluster kubectl` state that
+success prints an access descriptor for independent operator execution and does
+not launch a client or connect. Cluster command help includes its applicable
+target kinds and variants from the table above. `cluster kubeconfig` help states
+that success exports raw sensitive bytes to standard output.
+
+Help and completion use the static catalog; they never load a selected cluster
+to hide or enable commands. Target-aware discovery belongs to `cluster info`.
+
+### Version output
+
+`version` writes exactly these five lines in this order to standard output and
+writes nothing to standard error:
+
+```text
+version: <version>
+commit: <commit>
+go: <go-runtime>
+target: <goos>/<goarch>
+dependency bundle: <dependency-bundle>
+```
+
+Each line ends in LF and the fifth line supplies the final LF. The composition
+root supplies every value: it obtains the Go runtime, GOOS, and GOARCH from the
+linked Go runtime and combines them with link-supplied version, commit, and
+dependency-bundle values before constructing the CLI. Surrounding whitespace is
+removed from composition-root values, and every displayed value follows the
+[safe display escaping](output.md#json-output). An empty version renders as `devel`. A
+non-empty commit is valid only when it contains 7 through 64 hexadecimal digits;
+it renders in lowercase, and an empty or invalid commit renders as `unknown`.
+An empty Go runtime, GOOS, or GOARCH also renders as `unknown`, including in its
+corresponding target component. An absent dependency bundle renders as `none`.
+A present dependency bundle is its canonical content identity, exactly
+`sha256:` followed by 64 lowercase hexadecimal digits; a value that is empty or
+does not have that form renders as `none`. The command performs no environment
+lookup, filesystem access, process launch, network access, state or secret
+lookup, random generation, or other effect.
+
+### Completion
+
+Completion generation and the private completion protocol derive solely from
+the closed declarative command catalog and the bounded argument prefix. They
+perform no standard-input, environment, filesystem, context, state, secret,
+process, network, random, prompt, privilege, or remote access, and the
+completion path starts no concurrent work. A generated shell integration may
+invoke only the Bootwright executable's private completion protocol; it
+performs no filesystem fallback or other subprocess. Completion
+offers exactly the applicable public command paths, public flags and shorthands,
+and closed enum values defined by this contract. It does not offer filenames or
+inspect the filesystem for path-valued flags, and offers no dynamic candidate
+for context, object, catalog, target, or other name or free-form value. The
+private protocol entries remain hidden and are never themselves candidates. A
+generated integration presents descriptions only when the shell provides a
+distinct description channel that leaves the inserted candidate bytes unchanged;
+otherwise it safely omits their presentation. `--no-descriptions` suppresses
+description retrieval and presentation but never changes candidate membership
+or order.
+
+## Flag relationships and safeguards
+
+`--output` is command-local and accepts exactly `text` or `json`. There is no
+YAML output mode, global output flag, or `--format` alias. `apply`, `destroy`,
+`plan`, setup mutations, access-handoff commands, credential-export commands,
+`version`, help, and completion are text or raw only.
+
+`--yes` suppresses only the named command's ordinary confirmation after target
+selection and every independent safeguard and authorization succeeds. It may
+confirm a safe command-owned overwrite, recreation, or replacement, but it
+does not itself select a target or authorize data loss, recovery-only archival,
+a changed or unknown identity, a failed probe, or another named risk. If a
+prompt remains necessary, the command fails instead when standard input is
+non-interactive, JSON output is selected, or a safe answer cannot be read.
+
+`context delete` requires `--purge` to resolve to `true`; omission or
+`--purge=false` fails without changing state. The flag acknowledges deletion of
+proven-disposable local context data, while `--yes` independently controls its
+ordinary confirmation and `--abandon-resources` selects recovery-only archival
+when final deletion is unsafe.
+
+`--authorize` accepts only `data-loss`, and only on `apply` and `destroy`.
+Unknown, empty, duplicate, or inapplicable tokens are usage errors; `all` is not
+accepted. Whitespace around comma-separated tokens is ignored. The token
+acknowledges an already-planned irreversible consequence and grants none of
+selection, confirmation, identity, ownership, power, probe, or digest
+authority. The complete authorization boundary is defined by
+[state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
+
+`--verbose` adds safe structured progress and troubleshooting detail. It never
+reveals secret values or digests, disables redaction or `no_log`, forwards raw
+adapter output, changes a decision, or weakens a log bound. Lifecycle verbose
+detail remains in the private attempt log; preflight verbose detail may be
+presented only after structural redaction.
+
+`--trust-on-first-use=true` permits bounded retrieval and presentation of an
+unknown SSH host key from the exact authorized endpoint. It never accepts,
+persists, or uses the key. The preflight fails `trust.identity` and names the
+exact `machine trust` request needed for explicit enrollment. A changed key
+always fails. `machine trust --replace` is the only interface for a deliberately
+changed key, and every replacement name must also be in that command's selected
+Machine set.
+
+`--sensitive` authorizes materialization, not disclosure in normal output. It
+applies only to the render rows that list it. Sensitive installer artifacts use
+the exact verified destination boundary, mode `0600` beneath `0700`
+directories, atomic publication, and bounded cleanup in [security](../security.md).
+It never permits a secret in an effective-state artifact, manifest, diagnostic,
+log, command argument, or path. `render --input-dir` always uses placeholders
+and requires `--output-dir`. A non-empty `--context` or
+`--sensitive=true` conflicts with `--input-dir`.
+
+`machine list --silent=true` emits only sorted names as text and conflicts
+with a resolved `--output json`. The conflict is `cli.usage` with exit `2`
+and the normal JSON failure envelope; `--silent=false` permits JSON output.
+This relationship uses final scalar values and follows explicit-help precedence.
+
+`status --watch` is text-only and conflicts with JSON. A valid
+`--watch-interval` without `--watch` is accepted but has no effect; with watch,
+a zero or negative duration resolves to the `5s` default. A
+`machine trust --output json` invocation with pending trust-store writes
+requires `--yes`; without it the invocation must use `--dry-run` or fails
+without writing.
+
+`media add --from-url` requires `--sha256`; the digest is optional verification
+for `--from-file`. URL userinfo and an unverifiable digest are rejected.
+Redirects are disabled unless the media-import port explicitly permits them;
+every permitted hop is revalidated under [security](../security.md).
+
+`<filename.iso>` is one portable ASCII basename of 5 through 255 bytes with an
+exact lowercase `.iso` suffix. Its stem begins and ends with an ASCII
+alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
+`_`, or `-`. A case-insensitive stem equal to `CON`, `PRN`, `AUX`, `NUL`,
+`COM1` through `COM9`, or `LPT1` through `LPT9` is invalid.
+
+`--watch-interval` uses Go `time.ParseDuration` syntax. A non-empty
+`--sha256` is 64 case-insensitive hexadecimal digits, optionally prefixed by
+exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
+
+`add-ons add --name <name>:<version>` conflicts with a non-empty `--version`.
+An explicitly empty `--version=` is absence. Omission of both version forms
+selects the catalog's declared default. Add-on registration uses only an
+embedded, content-identified catalog release; these flags do not accept a path,
+URL, or arbitrary package.
+
+`cluster info --secrets=true` requires an explicitly supplied, non-empty
+`--name`; the default-all selection applies only when sensitive values are not
+requested.
+
+`secret set` source modes are mutually exclusive, except that `--tls-cert` and
+`--tls-key` form one inseparable mode. `--password-stdin` requires
+`--username`; `--generate` defaults the username to `admin` when that secret
+type needs one. Empty material fails. Generation uses an operating-system
+cryptographic random source with no fallback. `secret generate --renew`
+regenerates only declarations whose API-owned source is `generated`; it never
+overwrites operator-supplied material. Key rotation preserves a recoverable old
+key until every owned item is durably re-encrypted.
+
+Secret, media, and add-on mutation obeys the immutable binding and external-
+content rules in state reconciliation. A set, renewal, replacement, or
+deletion refuses while an incomplete operation or completed-apply snapshot
+needs the existing version, unless that exact version remains durably
+available for continuation and destroy.

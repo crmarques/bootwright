@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: hub-multidc-02-addons
+spec:
+  clusterRef: hub-multidc-02
+
+  profileRefs:
+    - hub-cluster-addons
+
+  addonConfigs:
+    - addonRef: fusion-data-foundation
+      inputs:
+        - name: external-storage
+          value: ceph-multidc-01-odf-hub-multidc-02
+        - name: ibm-entitlement
+          value: ibm-entitlement-key

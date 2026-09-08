@@ -1,0 +1,496 @@
+# Machines and infrastructure
+
+This page defines `InfraProvider`, `Machine`, `MachineImage`,
+`MachineInstallProfile`, `NetworkConfig` and `InfraComponent`.
+[The compiler boundary](../api.md#compiler-boundary) and
+[native-field rules](../api.md#native-and-implementation-shaped-fields) apply.
+
+Unless a field below declares a narrower namespace, a scalar `*Ref` is a plain
+`metadata.name` reference in the global namespace of its target kind. Local
+references are deliberately scalar too: `profileRef` resolves inside one
+provider, NIC and address refs inside one machine, listener and endpoint refs
+inside one component, and attachment refs inside one provider. Loading order
+never chooses among duplicates.
+
+## InfraProvider
+
+`InfraProvider` declares substrate intent, not an adapter selection. Its
+`type` selects exactly the matching arm alongside optional `networkAttachments`.
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `spec.type` | string | yes | `baremetal`, `libvirt`, `vsphere`, or `kubevirt`. |
+| `spec.baremetal` | object | when `type: baremetal` | The bare-metal arm below. |
+| `spec.libvirt` | object | when `type: libvirt` | The libvirt arm below. |
+| `spec.vsphere` | object | when `type: vsphere` | The vSphere arm below. |
+| `spec.kubevirt` | object | when `type: kubevirt` | The KubeVirt arm below. |
+| `spec.networkAttachments` | array | no | Set keyed by `name`; each entry has exactly the arm matching `spec.type`. |
+
+### Bare-metal arm
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `spec.baremetal.boot.method` | string | no | — | Non-empty provider boot-method name when present. |
+| `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | `usernamePassword` `Secret` reference. This field is part of the authored provider contract but is not inherited into a machine credential reference. |
+| `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Valid only with `disable-verification`. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `import-certificate`. |
+
+Normalization inherits an explicitly authored provider `tls.verify` only when
+the machine omits that value. It copies the complete provider `virtualMedia`
+block only when the machine omits that block. It never inherits
+`credentialsRef`, and a machine-local value always wins.
+
+### Libvirt arm
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the machine has capability `libvirt`. |
+| `spec.libvirt.uri` | string | yes | — | Non-empty libvirt connection URI. |
+| `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
+| `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
+| `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
+| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | no | `0.0.0.0` | Listener address. |
+| `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`. |
+| `spec.libvirt.bmcEmulationDefaults.vMediaPort` | integer | no | `port + 1` | `1..65535` and different from `port`. |
+| `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
+| `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
+| `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
+
+`bmcEmulationDefaults` is required and its defaults materialize. Across
+providers on the same host, effective BMC and virtual-media ports do not
+collide; declarations identifying a shared provider service use the same URI,
+bind address, ports and credential reference.
+
+### vSphere arm
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `spec.vsphere.vcenters` | array | yes | Non-empty set with unique `server`. |
+| `spec.vsphere.vcenters[].server` | string | yes | vCenter server name or address. |
+| `spec.vsphere.vcenters[].port` | integer | no | `0..65535`; zero/absence leaves the native default. |
+| `spec.vsphere.vcenters[].datacenters` | array of strings | yes | Non-empty datacenter inventory names. |
+| `spec.vsphere.vcenters[].credentialsRef` | string | yes | `usernamePassword` `Secret`. |
+| `spec.vsphere.vcenters[].disableCertificateVerification` | boolean | no | Defaults `false`. |
+| `spec.vsphere.failureDomains` | array | yes | Non-empty set keyed by `name`. |
+| `spec.vsphere.failureDomains[].name` | string | yes | Provider-local failure-domain name. |
+| `spec.vsphere.failureDomains[].region` | string | yes | Non-empty region tag. |
+| `spec.vsphere.failureDomains[].zone` | string | yes | Non-empty zone tag. |
+| `spec.vsphere.failureDomains[].server` | string | yes | Resolves to `vcenters[].server`. |
+| `spec.vsphere.failureDomains[].topology` | object | yes | Required `datacenter`, `computeCluster`, `datastore`, and non-empty `networks`; optional `folder` and `resourcePool`. |
+| `spec.vsphere.nodeNetworking.external.networkSubnetCidr` | array of strings | no | Valid external network CIDRs; effective state masks host bits. The final YAML word is exactly `Cidr`. |
+| `spec.vsphere.nodeNetworking.internal.networkSubnetCidr` | array of strings | no | Valid internal network CIDRs; effective state masks host bits. |
+| `spec.vsphere.isoStaging.datastore` | string | conditional | Defaults to the selected failure domain's `topology.datastore`; at least one of `datastore` or `folder` is present when `isoStaging` is set. |
+| `spec.vsphere.isoStaging.folder` | string | conditional | Defaults to `bootwright-vmedia`; same presence rule for an authored `isoStaging` block. |
+| `spec.vsphere.machineProfiles` | array | no | Provider-local set keyed by `name`; common profile shape below. |
+
+A failure domain with more than one topology network requires
+`nodeNetworking`. A machine profile must set `failureDomainRef` when more than
+one failure domain exists; with one domain the reference is implicit.
+
+### KubeVirt arm
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `spec.kubevirt.hostClusterRef` | string | union | — | Global `ContainerCluster` reference. |
+| `spec.kubevirt.kubeconfigRef` | string | union | — | Kubeconfig-bearing `Secret` reference. |
+| `spec.kubevirt.namespace` | string | yes | — | Kubernetes DNS label. |
+| `spec.kubevirt.storageClassRef` | string | no | — | External Kubernetes storage-class name. |
+| `spec.kubevirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`. |
+
+Exactly one of `hostClusterRef` and `kubeconfigRef` is present. The former
+selects a managed cluster and the latter an external host-cluster credential;
+they are never combined.
+
+### Machine profiles and network attachments
+
+Every libvirt, vSphere, and KubeVirt `machineProfiles[]` entry has this exact
+shape:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `name` | string | yes | — | Unique in the provider. |
+| `cpu` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
+| `memoryMiB` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
+| `diskGiB` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
+| `template` | string | vSphere clone profiles | — | vSphere-only template inventory reference; required when a consuming install profile uses `templateClone`. |
+| `failureDomainRef` | string | conditional | sole vSphere domain | Provider-local `failureDomains[].name`; vSphere-only. |
+| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by required `name`, with positive `sizeGiB`. |
+| `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
+| `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
+
+`networkAttachments[]` names are unique. Each entry has required `name` and
+exactly one arm matching the provider type:
+
+| Arm | Exact fields | Rule |
+| --- | --- | --- |
+| `baremetal` | optional integer `vlan` | `0..4094`; zero means no VLAN selection. |
+| `libvirt` | required string `bridge` | Names the libvirt bridge. |
+| `vsphere` | required string `portgroup`; optional string `distributedSwitch` | `distributedSwitch` is required when the provider spans multiple failure domains. |
+| `kubevirt` | required object `networkRef` | `networkRef.name` and DNS-label `networkRef.namespace` are required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork` and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. |
+
+External KubeVirt `networkRef` has exactly `apiGroup`, `kind`, `name` and
+`namespace`.
+
+## Machine
+
+`Machine` is the single object for physical machines, provider-created virtual
+machines, OS-ready hosts, Bootwright-installed hosts, and hosts whose OS a
+downstream installer supplies.
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `spec.capabilities` | array of strings | no | `[]` | Unique values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`. |
+| `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
+| `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
+| `spec.substrate.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required for a virtual install machine and forbidden for bare metal. |
+| `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
+| `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name. |
+| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC. |
+| `spec.hardware.boot.nicRef` | string | conditional | — | Machine-local `nics[].name`; required for bare-metal install. |
+| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; exact shape below. |
+| `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
+| `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
+| `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
+| `spec.network.config` | object | conditional | — | Reusable or inline `NetworkConfig` selection and composition below. |
+| `spec.network.interfaceBinding` | array | conditional | `[]` | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. |
+| `spec.addresses` | array | no | `[]` | Set keyed by `name`; every entry has required `name` and `address`. |
+| `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
+
+### OS lifecycle and substrate invariants
+
+The required `os.provided` value and optional `installProfileRef` select exactly
+one lifecycle:
+
+- `provided: true` is OS-ready. `installProfileRef`, `os.install`, and
+  `network.config` are absent. Access is operator-authored or defaults to SSH
+  operator identity.
+- `provided: false` with `installProfileRef` is Bootwright-installed. The
+  machine references a `MachineInstallProfile`, must not author `access`, and
+  effective access is derived.
+- `provided: false` without `installProfileRef` is installer-provisioned. The
+  substrate is prepared, but a downstream installer supplies the OS. Access
+  may remain absent.
+
+Every non-provided machine has `substrate.providerRef`. Bare metal forbids
+`profileRef`. Libvirt, vSphere, and KubeVirt require a profile when the OS is
+not provided. A selected profile resolves only in its provider.
+
+A bare-metal non-provided machine has at least one NIC; every NIC has a MAC;
+`boot.nicRef` resolves locally; BMC address and credentials are present; the
+address selects one exact `/redfish/v1/Systems/<id>` ComputerSystem; and root
+device hints contain `deviceName` or `wwn`. These declarations identify an
+install target but do not authorize a destructive operation.
+
+NIC names and canonical MACs are unique in a machine, and authored MACs are
+unique across the complete graph. Effective normalization writes MACs as
+lowercase colon-separated EUI-48 values. A vSphere-authored MAC is in the
+manual assignment range `00:50:56:00:00:00` through
+`00:50:56:3f:ff:ff`.
+
+### BMC and root-device shape
+
+`hardware.management.bmc` contains only:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `address` | string | with the BMC block | — | Redfish endpoint; a bare-metal install address selects one exact ComputerSystem. |
+| `protocol` | string | no | `redfish` | `redfish`. |
+| `credentialsRef` | string | with the BMC block | — | `usernamePassword` `Secret`. |
+| `tls.verify` | boolean | no | `true` | Controls the controller-to-BMC TLS leg. |
+| `virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`; controls the BMC-to-artifact-server leg. |
+| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`. |
+| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`. |
+
+If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
+legs stay independent; no BMC verification opt-out changes artifact-server
+trust.
+
+`os.install.rootDeviceHints` admits only `deviceName`, `hctl`, `model`,
+`vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and boolean `rotational`.
+`minSizeGigabytes` is non-negative. For a bare-metal install,
+`deviceName` or `wwn` is mandatory; predicate-only hints are not an adequate
+destructive target selector.
+
+### Network configuration
+
+`network.config` contains:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `networkConfigRef` | string | union | — | Global `NetworkConfig`. |
+| `spec` | `NetworkConfig.spec` object | union | — | Inline one-off alternative. |
+| `overrides` | arbitrary map | no | `{}` | Valid only with `networkConfigRef`; merged into the selected NMState template. |
+| `attachmentRef` | string | conditional | `networkConfigRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. |
+| `interfaceAttachments` | array | conditional | `[]` | KubeVirt-only set of `{interface, attachmentRef}`; mutually exclusive with `attachmentRef`. |
+| `interfaceAddresses` | array | no | `[]` | Set of `{interface, addressRef, prefixLength, family?}`; requires a selected reusable or inline config. |
+
+Exactly one of `networkConfigRef` and inline `spec` is present when machine
+network config is authored. An inline `spec` has precisely the
+`NetworkConfig.spec` shape. `overrides` is forbidden with inline `spec`.
+
+On a provider-backed machine with `networkConfigRef`, absent attachment
+selection defaults `attachmentRef` to the `networkConfigRef` name and effective
+state materializes it. An authored attachment always wins. A defaulted value is
+accepted only when the provider exposes a single attachment; multiple
+candidates require an explicit selection. `interfaceAttachments` is the
+KubeVirt alternative for per-interface networks: interface names are unique,
+every effective physical interface is covered exactly once, and every
+`attachmentRef` resolves to a KubeVirt arm in the selected provider.
+
+Every `interfaceAddresses[]` entry has required `interface`, `addressRef`, and
+`prefixLength`; `family` is `ipv4` by default or `ipv6`. The interface resolves
+to a physical interface in the effective NMState map, `addressRef` resolves to
+this machine's `addresses[].name`, prefixes are `1..32` for IPv4 and `1..128`
+for IPv6, and the literal matches its family and one selected
+`machineNetwork[].cidr`. One entry per interface and family is allowed. The
+same install IP cannot be selected by another machine.
+
+Static install addresses have one owner: `interfaceAddresses`. They are not
+duplicated in `overrides`; after base/override composition and address
+injection, every static IP in effective NMState equals one declared
+`addresses[].address`.
+
+`network.interfaceBinding[]` entries have exactly `nicRef` and
+`interfaceName`. Both sides resolve locally, and neither a NIC nor an effective
+physical interface is bound more than once. A bare-metal non-provided machine
+binds every effective physical interface so the hardware MAC can be injected.
+
+The effective reusable-template merge is deterministic:
+
+- maps deep-merge and the override wins on scalar or type conflict;
+- lists whose entries all have a non-empty `name` merge by name, updating base
+  entries and appending new override entries;
+- all-map lists that are not all named merge positionally by index; and
+- scalar lists, mixed map/scalar lists, or mixed named/unnamed map lists are
+  rejected instead of silently replaced.
+
+Interface-address injection occurs after this merge. For a Bootwright-installed
+Anaconda machine, the effective install network is DHCP or static IPv4;
+IPv6-only install access is rejected. Its primary static interface is
+`ethernet`, `vlan`, or `bond`; if more than one interface is addressed, the SSH
+address is carried by the default-route interface or the first primary
+interface.
+
+### Addresses and access
+
+Address names are unique within a Machine. Normalization appends an absent
+`fqdn` entry using [Environment domains](environment.md#domains). An authored
+`fqdn` is preserved verbatim, is a DNS subdomain and is unique across Machines.
+
+`access.local` is boolean `true`, not an object. It is mutually exclusive with
+`access.ssh` and valid only for an OS-ready machine. On an OS-ready machine,
+omitting all access fields defaults to `ssh.auth.operatorIdentity: {}`. On an
+installer-provisioned machine, omission means no Bootwright login.
+
+`access.ssh` contains:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `addressRef` | string | normalized | `ssh`, else `fqdn` | Machine-local `addresses[].name`; no arbitrary only-address fallback. |
+| `port` | integer | no | `22` | `1..65535` effective. |
+| `user` | string | no | operator user for operator identity, otherwise `root` | POSIX user name; required explicitly with password auth. |
+| `auth.operatorIdentity` | empty object | union | — | Use the invoking operator's existing SSH identity. |
+| `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. |
+| `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. |
+| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret` for escalation. |
+| `knownHostsRef` | string | no | context-managed trust | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. |
+
+Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
+or `revoke`. `revoke` requires authored SSH access and a non-root replacement
+identity supplied by the managed storage-cluster relationship; it is invalid
+on a Bootwright-installed machine or a machine without that successor login.
+
+The `knownHostsRef` Secret's resolved material is UTF-8 text containing exactly
+one data line and one host key. Its host token is the effective SSH address for
+port `22`, or `[<address>]:<port>` otherwise. Markers, patterns, hashed hosts,
+comma-separated hosts, and blank or additional lines are invalid. The key is
+boundedly decoded, its type matches the algorithm token, and the consumer
+accepts only its qualified algorithm allow-list; one declared target, port,
+and key is therefore bound before observation.
+
+A Bootwright-installed machine authors no `access` or `rootLogin`.
+Normalization derives SSH user `bootwright`, the fleet
+`Environment.spec.remoteMachinesAccessKey.keyRef`, the normal address default,
+and `rootLogin: keep`.
+
+## MachineImage
+
+`MachineImage` has the exact two-field spec:
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `spec.bootMedia` | string | yes | `local-media:<filename.iso>`, an absolute `file://` URI, or an `http://`/`https://` URL. |
+| `spec.checksum` | string | no | SHA-256 content pin: 64 hexadecimal digits with an optional `sha256:` prefix. Surrounding whitespace and hex case are accepted; checksum consumers canonicalize the digest to lowercase. |
+
+The local-media key is a basename ending in `.iso` with no path traversal.
+Remote lifecycle media requires a checksum; local and file media is pinned by
+the immutable-operation workflow. Authenticated downloads and private-CA
+download fields are not part of this contract. Validation is lexical only.
+
+## MachineInstallProfile
+
+`MachineInstallProfile` declares an OS and exactly one installer arm.
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `spec.os.family` | string | yes | `rhel`, accepted case-insensitively and normalized to lowercase `rhel` in effective state. |
+| `spec.os.version` | string | yes | Non-empty; when it has a numeric major, the major is at least `9`. |
+| `spec.os.architecture` | string | yes | Non-empty architecture name. |
+| `spec.installer.anaconda` | object | union | Anaconda arm below. |
+| `spec.installer.templateClone` | object | union | Template-clone arm below. |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`. |
+| `spec.customizations` | object | no | Closed customization groups below. |
+
+### Installer arms
+
+The `anaconda` arm contains:
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `imageRef` | string | yes | Global `MachineImage`. |
+| `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | no | `Environment.spec.infraComponents.artifactServers[].name`; omission selects the default or sole catalog entry. |
+| `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed artifact-server `InfraComponent`. |
+| `packageSource` | object | no | Exactly one of `mirror`, `fromSubscription`, or `hostedTree`. |
+
+`redfishVirtualMedia` is optional in the standalone install-profile shape. If
+its endpoint block is present, `endpointRef` is required; graph validation
+requires that complete endpoint when a consuming managed-OS install uses bare
+metal.
+
+The optional package-source arms are exact:
+
+- `mirror` has required HTTP(S) `baseURL` and optional `repositories[]`, each
+  with required `id` and HTTP(S) `baseURL`.
+- `fromSubscription` has required `entitlementRef` to a `redhat-rhel`
+  `Entitlement`. It cannot be combined with top-level `subscription` because it
+  already registers during installation.
+- `hostedTree` has required `fromMedia` using local `local-media:` or `file://`
+  DVD media, distinct from the boot image's `bootMedia`, plus required
+  `artifactServerEndpoint` with the same `{serverRef?, endpointRef}` shape.
+  Its selected managed endpoint supports HTTP package content.
+
+The `templateClone` arm has required `seed`, and `seed` has exactly one arm:
+`cloudInit`. `cloudInit.growRootFilesystem` is optional and defaults `true`.
+Template clone consumes no `MachineImage` or Anaconda package source. A
+consuming machine uses a vSphere provider profile whose `template` is present.
+
+### Customizations
+
+`customizations` contains only these fields and defaults:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `hostname.source` | string | no | — | `machineName`; permitted only when the machine is not cluster-bound. |
+| `localization.language` | string | no | `en_US.UTF-8` | No whitespace. |
+| `localization.formats` | string | no | effective language | No whitespace. |
+| `localization.keyboard` | string | no | `us` | No whitespace. |
+| `localization.timezone` | string | no | `UTC` | No whitespace. |
+| `localization.additionalLocales` | array of strings | no | `[]` | Unique, non-empty, no whitespace. |
+| `ssh.passwordAuthentication` | boolean | no | `false` | Enables SSH password authentication. |
+| `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. |
+| `storage.rootDevice.source` | string | no | — | `machineRootDeviceHints`. |
+| `packages.environment` | string | no | — | `minimal` when set. |
+| `packages.install` | array of strings | no | `[]` | Unique non-empty package names without whitespace. |
+| `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
+| `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
+| `repositories.configure` | array | no | `[]` | Set keyed by `id`; exact entry shape below. |
+| `repositories.subscription.enable` | array of strings | no | `[]` | Unique repository IDs; `*` is not accepted. |
+| `repositories.subscription.disable` | array of strings | no | `[]` | Unique repository IDs, disjoint from `enable`; `*` is also accepted and, with a non-empty `enable`, requests purge-before-enable semantics. |
+| `services.enabled` | array of strings | no | `[]` | Unique non-empty service names. |
+| `services.disabled` | array of strings | no | `[]` | Unique and disjoint from `enabled`. |
+| `security.selinux.mode` | string | no | OS default | `enforcing`, `permissive`, or `disabled`. |
+| `security.firewall.enabled` | boolean | no | OS default | `true` requires `firewalld` in packages and enabled services. |
+| `security.fips.enabled` | boolean | no | `false` | RHEL-only. |
+| `security.diskEncryption` | object | no | — | TPM2 unlock plus recovery passphrase below. |
+
+Each `repositories.configure[]` entry has required `id` and HTTP(S) `baseURL`,
+optional `displayName` defaulting to `id`, `enabled` defaulting `true`,
+`gpgCheck` defaulting `true`, and optional `gpgKeyURL`. IDs are unique and
+contain no whitespace, quotes, or slash. `gpgKeyURL` accepts HTTP(S) or
+`file:///`; it is required while GPG checking is enabled. A subscription
+repository block sets at least one of `enable` and `disable` and requires a
+registration entitlement from either top-level `subscription` or Anaconda
+`fromSubscription`.
+
+`security.diskEncryption` requires exactly `unlock.tpm2` and required
+`recoveryPassphraseRef` to a secret containing the recovery passphrase.
+`tpm2.pcrIds` is a unique integer list in `0..23`; optional `pcrBank` is one of
+`sha1`, `sha256`, `sha384`, or `sha512`, defaults to `sha256` when PCRs are
+selected, and is invalid without `pcrIds`. A consuming virtual profile supplies
+TPM support.
+
+Template clone permits hostname, SSH password-authentication policy,
+repositories, services, and subscription intent. It rejects the Anaconda-only
+localization, initial-password, storage, package, SELinux, firewall, FIPS, and
+disk-encryption customizations. Any referenced install profile enables `sshd`;
+cross-field service and firewall requirements are checked before effective
+rendering.
+
+## InfraComponent
+
+`InfraComponent.spec.type` is required and exactly one byte-identical arm is
+present: `artifactServer`, `loadBalancer`, `proxy`, `nameResolution`, `ntp`, or
+`registry`.
+
+| Type | Required implementation | Exact arm fields |
+| --- | --- | --- |
+| `artifactServer` | no implementation field | `machineRef`, `bindAddress?`, `retention?`, `tls?`, `listeners[]?`, `endpoints[]?` |
+| `loadBalancer` | `haproxy` | `implementation`, `machineRef`, `bindAddresses[]` |
+| `proxy` | `squid` | `implementation`, `machineRef`, `bindAddress?`, `port?`, `endpoints[]?` |
+| `nameResolution` | `dnsmasq` | Proxy/common service fields plus `additionalIngressHosts[]?`, `forwarders[]?` |
+| `ntp` | `chrony` | Common service fields plus `upstreamSources[]?` |
+| `registry` | `mirror-registry` | Common service fields |
+
+Every `machineRef` is a global `Machine`. Artifact server, load balancer,
+proxy, name resolution, and registry placement requires that machine's
+`container-runtime` capability; NTP does not.
+
+Proxy, name resolution, NTP, and registry share optional `bindAddress`, which
+defaults `0.0.0.0`, and optional `port`, which respectively defaults to `3128`,
+`53`, `123`, and `5000`. Effective ports are `1..65535`; name resolution
+accepts only `53`. Their `endpoints[]` are sets keyed by required `name`, with
+required `addressRef` resolving to the placement machine's
+`addresses[].name`. `forwarders[]` are IP resolver addresses and
+`upstreamSources[]` are IP or DNS NTP sources.
+
+A load balancer has a non-empty `bindAddresses[]`. Each entry has required IP
+`address`; `name` is required when more than one entry exists and, when set, is
+unique. A cluster endpoint selects one with `source.bindAddressRef`; omission is
+valid only for a single bind address.
+
+The artifact-server arm has these additional rules:
+
+- `bindAddress` defaults to `0.0.0.0`;
+- `retention` is `persistent` by default or `install-only`;
+- omitted `listeners` defaults to
+  `[{name: https, protocol: https, port: 8443}]`;
+- listener names and ports are unique, protocol is `http` or `https`, and port
+  is `1..65535`;
+- each endpoint has required unique `name`, `listenerRef` resolving locally,
+  and `addressRef` resolving to the placement machine;
+- `tls` is required when any effective listener uses HTTPS and forbidden when
+  every listener uses HTTP; it contains `certificateRef` then `minVersion`;
+- `tls.certificateRef` is a required `tlsCertificate` `Secret` reference;
+- `tls.minVersion` is `TLSv1.2` by default or `TLSv1.3`.
+
+## NetworkConfig
+
+`NetworkConfig` owns reusable machine CIDRs, name-resolution catalog refs, and
+an NMState template:
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `spec.machineNetwork` | array | yes | Non-empty set of `{cidr}` with valid, unique CIDRs; effective state masks host bits. |
+| `spec.nameResolutionRefs` | array of strings | no | Unique `Environment.spec.infraComponents.nameResolution[].name` references. |
+| `spec.template.networkConfig` | arbitrary map | yes | NMState desired-state template. |
+
+`template.networkConfig` must not contain a Bootwright
+`nameResolutionRefs` key. The selected template is composed with machine
+overrides using the deterministic merge and address injection defined under
+[Machine network configuration](#network-configuration).
+
+Name-resolution references select managed components or external entries under
+[the Environment catalog rules](environment.md#name-resolution-catalog),
+including its limit of at most one consumed managed component.

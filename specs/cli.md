@@ -1,0 +1,411 @@
+# Command-line Interface
+
+`bootwright` exposes the [desired-state API](api.md) to operators and automation.
+Equivalent logical input produces the same ordered output regardless of TTY,
+locale, map iteration or discovery order. Prompts, explicit sensitive exports
+and watch displays are the named exceptions.
+
+Read this page with the [command and flag catalog](cli/commands.md) and
+[output contract](cli/output.md). Together they define the CLI. Unlisted
+commands, aliases, flags, shorthands, modes and operands are usage errors.
+A declared command does not claim an available implementation.
+
+Choose CLI dependencies under the
+[dependency selection rule](architecture.md#dependency-selection-and-reuse).
+Use the framework for parsing, command resolution, help, and completion where
+supported. Add a completion dependency only if needed. Configure defaults to
+the closed catalog and reject unowned hidden handlers after resolution and
+before output or ambient access.
+
+## Command tree
+
+The [catalog](cli/commands.md#command-and-flag-catalog) is the sole list of
+command paths. With no arguments, the root prints root help and succeeds.
+Bare `help` prints root help; bare `completion` prints completion help. Both
+succeed. `render` is the only domain parent that also executes; every other
+incomplete domain parent prints help and fails with a usage error.
+
+The former root groups `example` and `container-cluster` are absent, with no
+aliases or hidden compatibility handlers. Their paths, including explicit help
+requests, fail command resolution with `cli.usage` and exit `2`. Repository
+examples remain desired-state inputs; the CLI does not generate them.
+
+Private completion entries are fixed by the implementation and generated
+scripts. They are absent from public help and candidates and are outside the
+public closed-tree compatibility promise.
+
+## Recognized but unavailable commands
+
+Every invocation follows this precedence:
+
+1. enforce the raw-argument bounds below;
+2. resolve exact command and flag tokens and their syntactic values;
+3. honor an explicit help request;
+4. validate semantic operands, presence, cardinality, enums, formats, defaults,
+   and flag relationships, including context-independent inherited flags;
+5. apply the bare-`render` help special case; and
+6. decide whether the resolved use case is available.
+
+Explicit help therefore outranks required-value, enum, cardinality, and
+relationship validation only after the raw bounds and command/flag syntax are
+valid. It continues to follow the no-effect contract under
+[Global flags](cli/commands.md#global-flags). Root help, explicit help requests, bare
+`render`, bare `completion`, completion scripts, and the private completion
+protocol retain their defined behavior; malformed or incomplete usage remains
+`cli.usage` with exit status `2`.
+
+A syntactically complete application invocation whose use case is unavailable:
+
+- makes no application call and performs no input discovery, context or
+  state-root resolution, standard-input read, prompt, privilege escalation,
+  secret access, random generation, ambient-configuration read, filesystem
+  stat, open, read, or write, process launch, network access, or remote effect;
+- in human mode, writes no standard output, emits one LF-terminated
+  `[FAIL] cli.not-implemented: bootwright <command> is not implemented`
+  diagnostic on standard error, and exits `1`; and
+- when the command supports and selects JSON output, emits the normal single
+  JSON envelope on standard output with `ok: false`, `exitCode: 1`,
+  `result: null`, one `cli.not-implemented` diagnostic, and empty `logs`, emits
+  nothing on standard error, and exits `1`.
+
+`<command>` is the resolved canonical command path without arguments. Human
+wording may evolve under the [compatibility rule](cli/output.md#compatibility),
+but the code, command identity, streams, result absence, exit meaning, and
+no-effect boundary are stable. An unavailable `plan`, `apply`, or `destroy`
+emits no lifecycle receipt because no trustworthy lifecycle result exists.
+
+## Parsing and input conventions
+
+Before command resolution or flag parsing, Bootwright enforces these inclusive
+bounds on the raw argument vector, excluding the executable name:
+
+| Resource | Maximum |
+| --- | --- |
+| Argument count | 1,024 |
+| Bytes in one argument | 16,384 |
+| Bytes across all arguments | 1,048,576 |
+
+The byte measures are the lengths of the raw argument strings and do not count
+the executable name or any conceptual separators. Bootwright checks argument
+count first. When it is within bounds, it scans arguments from left to right,
+checks each argument's byte length before adding it to the aggregate, and then
+checks the new aggregate. A value equal to a maximum is valid; the next unit is
+not.
+
+A raw-bound violation always emits one source-free `cli.usage` diagnostic plus
+concise root help on standard error, emits nothing on standard output, and exits
+`2`. It never establishes JSON mode, and neither `--help` nor argument order can
+bypass it. The diagnostic does not echo an argument or its contents. Rejection
+invokes no command or unavailable handler and performs no standard-input,
+ambient-configuration, filesystem, state, secret, random, prompt, privilege,
+process, network, or remote I/O.
+
+Command and flag names are case-sensitive and may not be abbreviated. A long
+value flag accepts `--flag <value>` or `--flag=<value>`; `-f` additionally
+accepts `-f<value>`. A Boolean flag accepts its bare form as `true` or an
+attached value such as `--watch=false` or `-v=false`; a separated token is a
+positional operand, not its value. Boolean values use Go's case-sensitive
+`strconv.ParseBool` spellings: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`,
+`F`, `FALSE`, `false`, and `False`. The only shorthands are `-h`, `-f`, and
+`-v`.
+
+A command-local flag is recognized only after its complete owning command path
+has been resolved and is not inherited by descendants. Before the complete
+path is resolved, only inherited global flags and `-h`/`--help` are recognized.
+
+Scalar flags follow command-line order and the last occurrence wins, including
+the scalar comma-list flags `--clusters`, `--machines`, and `--replace`.
+Collection flags aggregate in command-line order only where this contract says
+they are repeatable. `validate -f` is repeatable. `--authorize` is repeatable
+and each occurrence may also contain commas. Supplying an empty required value
+is a usage error.
+
+An explicitly supplied empty scalar value is also a usage error unless this
+contract names one of these exceptions: `--context=` is omission and selects
+the current context; `add-ons add --version=` is absence and selects the catalog
+version under the [catalog rules](cli/commands.md#flag-relationships-and-safeguards);
+an optional `--sha256=` is absence; and comma-list
+flags use their command-specific empty-list rules below.
+
+Empty-value rejection is occurrence-local: a later scalar occurrence does not
+erase an earlier explicitly empty occurrence. The named empty exceptions remain
+valid occurrences; enum and format validation otherwise applies to the final
+resolved scalar value under the last-occurrence-wins rule.
+
+`--clusters`, `--machines`, and `--replace` are comma-separated name lists.
+Whitespace around a member is ignored, empty members are ignored, and duplicate
+members collapse to their first occurrence. Omission selects all eligible
+objects only where the command row says “default all.” Empty resolved lists
+preserve these command-specific compatibility rules:
+
+- cluster-backed preflight and render treat an empty or whitespace-only value
+  as omission, but reject a nonblank comma-only value;
+- `machine list --clusters` treats an empty or whitespace-only value as
+  omission and a comma-only value as an empty result; and
+- `machine trust --machines` treats an empty or comma-only value as omission,
+  while an empty or comma-only `--replace` selects no replacement.
+
+A selector is applied only after the complete Environment-selected graph has
+been loaded, normalized, and validated. It filters presentation, checks,
+artifacts, trust-store maintenance, or explicit access; it never changes
+effective state, dependency closure, ownership, lifecycle scope, the frozen
+plan, or continuation.
+
+`validate -f/--file` accepts a YAML file or directory and may be repeated. The
+set is compiled as one ordered desired-state input universe under [the API
+contract](api.md); supplying `-f` makes validation context-free, while omission
+uses the selected context input. `context init` and `context update` use the
+same spelling but require exactly one source directory and copy its accepted
+contents into the context.
+
+This document owns public input acquisition and flag cardinality. Each `-f`
+occurrence is one path; commas are filename characters. Cleaned path strings
+are deduplicated and discovered files are globally sorted by cleaned path. The
+combined universe undergoes one Environment selection; its selected documents
+are decoded and validated as one graph without staging, copying, override, or
+flag-order precedence. An `Environment.spec.resources` path resolves only from
+the directory containing that Environment's actual source file. Discovery,
+Environment selection, duplicate-object rules, and source provenance remain
+API-owned.
+
+Commands accept no positional operands except those shown in the catalog.
+`machine exec` and `cluster exec` accept a non-empty command argument vector;
+`--` is optional, but is required to preserve a flag-shaped first argument or
+prevent a recognized Bootwright flag from being consumed. The
+`cluster oc` and `cluster kubectl` commands accept global
+and local flags until the first positional payload token. Parsing then stops
+and every remaining token is payload. A flag-shaped first payload token
+therefore requires `--`; for example, `--name c -- --help` treats `--help` as
+payload, while `--name c --help` requests Bootwright help. The `--` separator
+is syntax only for these four payload-bearing commands and is a usage error on
+every other command.
+
+Standard input is read only for an ordinary confirmation, an explicitly
+requested sudo-password prompt, or `secret set --password-stdin`. No command
+reads an ambient configuration file.
+
+State-root selection and its sole environment input are defined by
+[state reconciliation](state-reconciliation.md#durable-identities-and-private-paths).
+
+Raw arguments are classified before privilege escalation. Help, completion,
+context-free read-only work, and malformed invocations never trigger a
+privilege prompt. Only a fully resolved command that needs root-owned state may
+re-execute through the qualified privilege boundary.
+
+For a usage failure, JSON mode is established only after an exact
+JSON-capable command is resolved and its final scalar `--output` occurrence
+validly selects `json`. Once established, a later usage failure emits the normal
+JSON envelope on standard output with `ok: false`, `exitCode: 2`, `result: null`,
+one source-free `cli.usage` diagnostic, and empty `logs`; it emits nothing on
+standard error. The position of the valid final `--output json` occurrence does
+not change this result. An error before that mode selection remains a human
+usage failure. Explicit help remains human under the precedence above.
+
+## Context and setup behavior
+
+A context is a user-facing name for one self-contained lifecycle unit and its
+workspace-owned durable identity. Context names are lowercase DNS labels.
+`context init` validates its source before exclusive, owner-only publication,
+then makes the new context current. Reinitialization with `--yes` is allowed
+only when no running, failed, unknown, applied, owned, or recovery-relevant
+state would be discarded.
+
+`context update` validates a complete replacement before atomically publishing
+it. It preserves secret material, generated artifacts, ownership, operation
+history, and other context-owned state, but it refuses while an apply or destroy
+is running, failed, or unknown and whenever the replacement would turn exact
+continuation into reconciliation.
+
+Normal `context delete --purge` requires positive proof that no live resource
+or incomplete lifecycle depends on the context and that every required archive
+and ownership release is durable. When live, owned, failed, or unknown state
+exists, `--abandon-resources` requests recovery-only archival instead of final
+deletion. It never releases ownership or deletes material needed for status,
+exact continuation, or full destroy. The same context name remains selectable
+for those actions; update, fresh apply, access, adoption, and reuse remain
+forbidden. It refuses while a live mutator holds the context, and final purge
+still requires positive absence and durable ownership release.
+
+Media, secret, add-on, and context writes use verified roots, safe
+single path segments, exclusive creation, restrictive permissions, bounded
+input, and atomic publication. A confirmation cannot authorize overwriting an
+unrelated path. Network media import follows the endpoint and supply-chain
+rules in [security](security.md).
+
+## Validation, preflight, and rendering
+
+`validate` performs discovery, strict decoding, normalization, complete graph
+validation, and deterministic diagnostics. It opens no declared payload,
+secret material, process, or network endpoint. A context-free invocation opens
+no context store; a context-backed invocation reads only the selected immutable
+input view and performs no write. Warnings and advisories do not change a
+successful exit; an invalid input set exits `1`. After the CLI has resolved the
+input universe, discovery and Environment selection are defined by
+[the API contract](api.md).
+
+Preflight reports current readiness but grants no mutation authority and never
+replaces a fresh lifecycle operation's effect-boundary probes. `--dry-run`
+limits the result to deterministic local validation, renderability, dependency
+selection, and the checks that can be answered without process or network
+access. A live preflight may perform bounded read-only observation through
+qualified adapters but allocates no lifecycle identity or log. Failed,
+unavailable, forbidden, malformed, or contradictory observation is an explicit
+failed or unknown check, never success or absence.
+
+Any otherwise syntactically and semantically valid `render` invocation prints
+human render help and succeeds when neither `--input-dir` nor `--output-dir` is
+supplied. This includes an invocation with `--output json` or other valid render
+flags: it emits no JSON envelope and performs no command work. Context-free
+render requires both path flags and writes placeholder-bearing portable
+artifacts after loading and validating the desired-state file or directory
+named by `--input-dir`. Context-backed whole render requires `--output-dir` and
+`--sensitive`. `render installer` and `render storage` write to their
+context-owned artifact roots.
+`render effective` is the read-only exception: text mode emits canonical
+effective YAML and JSON mode places the complete canonical effective-state
+object in its result; neither mode writes an artifact. Rendering contacts no
+host, management controller, cluster, or provider, launches no managed
+operation, and creates no ownership evidence. Generated native scripts are
+artifacts only and are never executed by render.
+
+## Lifecycle behavior
+
+`plan`, `apply`, and `destroy` act on the complete selected lifecycle unit.
+They accept no positional operand, partial selector, stage, range, mode,
+reconciliation, adoption, reclaim, force, or resource-specific subcommand.
+
+### Staged apply without destroy
+
+When `apply` is operational under the staged-availability exception in
+[state reconciliation](state-reconciliation.md#lifecycle-unit) while
+`destroy` is unavailable, it emits exactly one
+`lifecycle.destroy-unavailable` warning on standard error after presenting the
+plan and before confirmation. With or without `--yes`, this pre-phase warning
+precedes fresh operation registration and any continuation attempt,
+unknown-outcome resolution observation, or effect. `--yes` suppresses only
+confirmation.
+
+Every trustworthy post-registration `apply` result in `running`, `failed`,
+`unknown`, or `done` emits the warning once again on standard error after the
+primary result. The warning states that this executable cannot invoke destroy,
+that update, another apply, and final purge remain locked, and that the safe
+next action is exact apply continuation when incomplete or installation of a
+compatible destroy-capable executable when done. It never changes or enters
+the standard-output lifecycle receipt. Human wording may evolve, but its code,
+two phases, stream, lock meaning, and safe-next-action content are stable. The
+public `destroy` invocation itself retains the `cli.not-implemented` behavior.
+
+`plan` is a pure text preview of the next legal full operation or frozen
+continuation point. `apply` and `destroy` follow the state owner's
+[transitions](state-reconciliation.md#state-machine),
+[execution rules](state-reconciliation.md#plan-and-execution) and
+[authorization gates](state-reconciliation.md#confirmation-and-authorization).
+The CLI presents the frozen plan and required authorizations, then obtains
+ordinary confirmation unless `--yes` was supplied. A flag bypasses no state
+or safety gate.
+
+Every resolved `plan`, `apply`, or `destroy` invocation ends its text result
+with this stable machine-readable receipt unless no trustworthy lifecycle
+result exists:
+
+```text
+operation: <operation-id|none>
+verb: <plan|apply|destroy>
+state: <preview|refused|running|failed|unknown|done>
+next: <apply|continue-apply|destroy|continue-destroy|resolve|none>
+```
+
+The labels, order, enum values, escaping, and final LF are stable. `preview`
+is a CLI-only marker for a pure plan with no operation; `refused` is a CLI-only
+marker for a resolved request rejected before operation registration. Neither
+is persisted as an operation state. When `operation` is not `none`, `state` is
+exactly the durable `running`, `failed`, `unknown`, or `done` value owned by
+state reconciliation. The receipt and `status --output json` derive from the
+same trustworthy state.
+
+## Resource inspection and explicit access
+
+List and info commands derive their result from validated desired state,
+context-owned artifacts, and durable ownership evidence. A name can locate an
+entry but never proves identity or ownership. `cluster info` omits secret values
+by default and presents the exact `secret show` or
+`cluster kubeconfig` command needed to retrieve them. `cluster list` identifies
+each cluster's API kind. `cluster info` presents each cluster's kind and the
+applicability and availability of its access commands under the
+[discovery output contract](cli/output.md#cluster-discovery).
+
+For an available cluster access or credential-export use case, load and validate
+the complete selected graph, resolve `--name` to one selected cluster, then check the
+[applicability table](cli/commands.md#cluster-command-applicability). An unknown
+or excluded name fails `access.target`; it never selects another cluster or
+searches outside the selected graph. An inapplicable command fails
+`cluster.not-applicable` with exit `1`, empty standard output, and one diagnostic
+on standard error naming the canonical command, selected cluster name and kind,
+applicable targets, and `bootwright cluster info --context <context> --name
+<cluster>` as the next discovery action. It reads no credential material,
+produces no descriptor or sensitive output, and performs no write, process,
+network, or remote access. This target check follows, and never bypasses, the
+[unavailable-command gate](#recognized-but-unavailable-commands).
+
+On an applicable target, resolve the exact node when required, then establish
+access readiness from local context-owned metadata and evidence. Missing access
+metadata or a required credential artifact fails `access.unavailable` with exit
+`1`, empty standard output, and a diagnostic identifying the missing prerequisite
+and its safe next action. Missing target or ownership evidence remains
+`access.target`; SSH identity and trust failures retain `trust.identity`, and
+unsafe descriptor encoding remains `access.handoff`.
+An access prerequisite failure never produces a partial descriptor or sensitive
+result and never falls back to ambient configuration. Applicability and
+prerequisite checks precede any permitted credential read.
+
+`secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
+They require an exact context and object, perform no implicit fallback, emit
+only the requested material, and add no status prefix or suffix. A
+`cluster info --secrets` result is instead structured and explicitly sensitive
+over its exact resolved selection; in JSON, values occur only in fields whose
+names end in `Value`. Neither form copies a sensitive value to a diagnostic,
+log, history, cache, terminal title, or second stream. Callers are responsible
+for a restrictive destination if they redirect an explicit reveal. Help and
+completion never reveal.
+
+`machine rsh`, `machine exec`, `cluster rsh`, `cluster exec`,
+`cluster oc`, and `cluster kubectl` are explicit access
+handoffs, not desired-state automation or lifecycle blocks. Bootwright resolves
+one exact target and emits a bounded, deterministically escaped descriptor for
+independent operator execution. It does not launch a client, connect to the
+target, open an interactive stream, or treat later execution as operation
+evidence. The descriptor names the pinned client identity, exact target,
+minimal non-sensitive configuration, and requested argument vector as data,
+never shell text; sensitive argument values have no supported transport.
+
+`machine exec` and `cluster exec` preserve the command values as an argument
+vector, never shell text. `rsh` accepts no command tail. `oc` and `kubectl`
+preserve the payload argument vector but never inherit ambient kubeconfig,
+plugins, credentials, proxy settings, cache, or executable lookup.
+
+### Cluster node selection
+
+`cluster rsh` and `cluster exec` resolve `--node` only within the selected
+cluster's declared roster: `ContainerCluster.spec.nodes` or managed
+`StorageCluster.spec.ceph.topology.nodes`. Canonical node order is ascending
+bytewise order of node `name`, independent of declaration or map order.
+Omission selects the first node in that order. An explicitly empty value is a
+usage error under the scalar input rules.
+
+For a supplied value, use the first matching tier:
+
+1. exact declared node `name`;
+2. exact effective node FQDN, including an authored override; then
+3. `<role>-<ordinal>`, where the role is declared by the owning cluster schema
+   and the ordinal is a zero-based decimal integer spelled `0` or `[1-9][0-9]*`.
+   Filter nodes by that role, sort them in canonical node order, and select the
+   indexed node. Container nodes use their authored role, including `infra`;
+   a storage node participates once in each role listed in its `roles` set.
+
+A literal node name wins even if it looks like a role selector. Multiple
+matches in a tier, an unknown name or role, an absent role, an out-of-range
+ordinal, or a malformed selector fails `access.target` with exit `1`; resolution
+never falls through from an ambiguous tier or silently selects the default.
+The diagnostic names the requested selector and gives the safe next action of
+choosing one declared node name. Node selection changes no desired state,
+canonical serialization, or lifecycle scope.

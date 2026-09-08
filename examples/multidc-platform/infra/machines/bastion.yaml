@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: bastion
+spec:
+  capabilities:
+    - container-runtime
+
+  os:
+    provided: true
+
+  addresses:
+    - name: fqdn
+      address: utility-01.example.com
+    - name: dns-alias
+      address: utility-01.example.com
+    - name: ip
+      address: 192.0.2.127
+
+  access:
+    local: true
