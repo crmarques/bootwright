@@ -1,8 +1,9 @@
 # Milestones
 
-**Current milestone: M1a — not started.** The repository contains specifications
-and examples; there is no executable, Go module, build tooling or test suite.
-No implementation exit evidence has been established.
+**Current milestone: M1a — completed.** The Cobra CLI implements the complete
+catalog, help, version, and completion. All 49 application commands call typed,
+injected stubs and report `cli.not-implemented` without effects. M1b remains
+unstarted; this completion does not authorize its implementation.
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. Keep detailed implementation plans
@@ -28,8 +29,9 @@ close to the task that will execute them, rather than pre-designing later work.
   to the exit gate; candidates do not until promoted. A blocked milestone
   remains current and records its resumption condition.
 - Deferred commands retain the [unavailable result](cli.md#recognized-but-unavailable-commands)
-  introduced by M1a. Add no successful placeholders, speculative domain packages
-  or adjacent effects. Cross-cutting safety constraints apply from the start.
+  introduced by M1a. Their explicitly scoped application stubs add no successful
+  placeholders or adjacent effects. Cross-cutting safety constraints apply
+  from the start.
 
 ## M1a — complete CLI skeleton
 
@@ -37,12 +39,12 @@ close to the task that will execute them, rather than pre-designing later work.
 **Requires:** specification foundation. **Definition:** Specified.
 
 Implement `version` plus the complete [command catalog](cli/commands.md), help
-and shell completion. All unavailable application commands return
-`cli.not-implemented` without application calls or other effects.
+and shell completion. All unavailable application commands call their typed,
+injected stub and return `cli.not-implemented` without I/O or other effects.
 
 Implementation order:
 
-1. Research and choose a CLI framework under the
+1. Qualify the requested Cobra CLI framework under the
    [dependency selection rule](architecture.md#dependency-selection-and-reuse),
    using its completion support or a suitable dependency when needed.
 2. Add the Go module, reproducible locks and pinned development/check toolchain.
@@ -50,8 +52,8 @@ Implementation order:
    [package contract](architecture.md#go-package-structure).
 3. Define the command/flag/default/relationship catalog once; configure the
    framework and any completion dependency from it. Keep parsing and
-   presentation in the CLI adapter. The unavailable handler has no application
-   port or service.
+   presentation in the CLI adapter. Define the consuming CLI interfaces and
+   context-owned request types and stubs; wire every command at composition.
 4. Implement help, version, output and usage contracts; test the composed
    command and the provider boundaries before exposing any domain capability.
 
@@ -70,13 +72,36 @@ Exit evidence:
   `machine list --silent=true --output json` produces the JSON usage envelope;
   cover reversed flag order, repeated scalar flags, `--silent=false`, and help
   precedence. Cluster commands remain unavailable without resolving targets.
-- Effect sentinels prove these paths perform only authorized output: no
-  application call, discovery, stdin or filesystem access, context lookup,
+- Effect sentinels prove help, completion, version, and invalid requests call no
+  application service, while valid application requests call only their injected
+  stub. All skeleton paths perform only authorized output: no
+  discovery, stdin or filesystem access, context lookup,
   secret access, randomness, prompt, privilege, process, network or remote work.
-- No speculative domain, persistence or remote adapters are introduced.
+- Only the command-consumed interfaces, requests, and stubs are introduced;
+  no domain policy, persistence or remote adapters are implemented.
 - On the integrated commit: `gofmt`, `go mod verify`, `go test ./...`,
   `go vet ./...`, the pinned vulnerability check, and
   `git diff --check` pass; full diff review is complete.
+
+Delivered evidence:
+
+- `make check` covers formatting, both module locks, package tests, vet,
+  generated shell integrations, the pinned vulnerability scan, and diff
+  whitespace. `make build` produces `bin/bootwright`.
+- The independent catalog fixture checks every public command, local flag,
+  shorthand, and output enum. All 49 composed application routes and all stub
+  cancellation/deadline paths are covered, alongside parsing, normalization,
+  help precedence, output failure, and payload preservation regressions.
+- First-party import checks forbid ambient effect capabilities in the skeleton;
+  injected call sentinels and completion environment/file sentinels verify the
+  no-effect boundary. `go test -race ./...` passes, and a 10-second
+  `FuzzInvocation` run completed more than 87,000 executions without failure.
+- Both module graphs pass `go mod tidy -diff`. The pinned `govulncheck` reports
+  no known reachable vulnerabilities. Full source, dependency, prospective
+  tree, and Git-diff reviews are complete.
+- Bash, Zsh, Fish, and PowerShell runtime tests pass with and without
+  descriptions; see [development](../docs/development.md) for the exact tested
+  versions and the required PowerShell preview release.
 
 ## M1b — durable contexts and desired-state admission
 

@@ -54,9 +54,12 @@ valid. It continues to follow the no-effect contract under
 protocol retain their defined behavior; malformed or incomplete usage remains
 `cli.usage` with exit status `2`.
 
-A syntactically complete application invocation whose use case is unavailable:
+A syntactically complete application invocation whose use case is unavailable
+calls its injected, typed application stub. The stub accepts the validated
+request and returns the shared unavailable error without performing work. The
+CLI owns its temporary message and exit status. Such an invocation:
 
-- makes no application call and performs no input discovery, context or
+- performs no input discovery, context or
   state-root resolution, standard-input read, prompt, privilege escalation,
   secret access, random generation, ambient-configuration read, filesystem
   stat, open, read, or write, process launch, network access, or remote effect;
@@ -112,6 +115,10 @@ positional operand, not its value. Boolean values use Go's case-sensitive
 A command-local flag is recognized only after its complete owning command path
 has been resolved and is not inherited by descendants. Before the complete
 path is resolved, only inherited global flags and `-h`/`--help` are recognized.
+At runnable `render`, a non-flag token that is not a declared subcommand starts
+the operand list; later tokens do not extend the command path. These unexpected
+operands fail semantic validation after explicit-help precedence, as on other
+runnable commands. An explicit `help` path still requires exact subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
 the scalar comma-list flags `--clusters`, `--machines`, and `--replace`.

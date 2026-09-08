@@ -44,6 +44,7 @@ merge contexts or create an abstraction before its first consumer.
 | Desired state | Document discovery and provenance, strict decoding, API-to-domain translation, normalized catalog assembly, deterministic diagnostics, and canonical effective-state encoding. | Domain invariants belonging to the referenced platform contexts or any platform effect. |
 | Environment | Environment selection, shared defaults, complete graph closure, and cross-context reference semantics. | Policy internal to a selected machine, provider, cluster, storage service, or add-on. |
 | Workspace | Explicit local contexts, Bootwright-owned paths, and persistence boundaries for local runtime data. | Lifecycle policy, secret meaning, or arbitrary user filesystem content. |
+| Controller | Local controller prerequisite inspection and setup. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
 | Secrets | Secret custody and materialization, immutable secret binding, and disclosure classification. | A consuming context's authorization or business decision. Entitlement semantics remain with the product context that consumes them. |
 | Trust | SSH host identity, TLS trust, trust decisions, and durable trust evidence. | Secret custody, endpoint business policy, or ambient trust configuration. |
 | Substrate | Provider capabilities, provider identity, network attachments, machine infrastructure realization, and normalized power and identity operations. | Machine OS policy, cluster installation, or lifecycle ordering. |
@@ -150,6 +151,39 @@ owned behavior or asset is added.
 Versioned content, examples, fixtures, Git metadata, and documentation contain
 no private environment, identity, topology, credential, or secret material.
 
+## Self-explanatory code and retained knowledge
+
+Make code explain its behavior through precise domain names, explicit types,
+small cohesive functions, straightforward control flow, and meaningful test
+names. Apply this to production code, tests, scripts, configuration, and code
+examples. When code needs an explanation, first improve its names or structure;
+do not compensate for unclear code with prose or introduce unnecessary
+abstractions solely to eliminate a comment.
+
+Minimize comments. Omit narration of what code does, redundant declaration or
+package summaries, section labels, commented-out code, and change diaries.
+An exported Go name alone is not a reason to add a comment. Retain only comments
+required by language, tooling, a maintained documentation contract, or legal
+obligations, such as build/embed directives, shebangs, generator markers, and
+license notices. Keep those comments minimal and correctly attached; preserve
+comments that are intentional fixture data. Change generated or vendored
+content through its owning source or dependency workflow.
+
+Preserve a finding only when it can change a future implementation, review, or
+diagnosis. Record observed constraints, non-obvious implementation rationale,
+and dependency workarounds in the searchable
+[knowledge catalog](../.agents/knowledge/index.md), with links to the affected
+code and verification evidence. Required behavior and its rationale remain in
+the owning spec; deferred work remains in [milestones](milestones.md). Knowledge
+links to those owners instead of duplicating their contracts. Do not move
+obvious code narration into knowledge merely to save every removed comment.
+
+During review, examine existing comments in the affected scope. Remove
+redundancy, improve unclear code without changing its behavior, and preserve
+useful findings in the catalog before removing their explanation from source.
+Keep the catalog's paths, symbols, evidence, and applicability current when
+changing the associated implementation.
+
 ## Go package structure
 
 `api/v1alpha1` owns public wire types and vocabulary. It is I/O-free and does
@@ -183,6 +217,15 @@ presentation-independent results. Domain decisions are pure. Filesystem,
 process, persistence, network, clock, randomness, and remote access occur only
 in injected adapters. Package-global mutable flags, streams, registries,
 clocks, configuration, and service instances are forbidden.
+
+The M1a skeleton provides consumer-owned CLI interfaces and typed requests for
+every application command. Context-owned stub methods return the shared
+`internal/availability.ErrNotImplemented` sentinel, or the caller's context
+cancellation error, without I/O. They expose no successful result schema until
+the owning use case is implemented. `cmd/bootwright` injects these stubs; the CLI
+alone renders their temporary unavailable message. Cross-context cluster
+inspection and access selection are coordinated by Environment, while the
+container-cluster and storage contexts retain their platform-specific policy.
 
 Repository-fitness packages may inspect source and assets but contain no
 production behavior. They enforce dependency direction and mapping rules

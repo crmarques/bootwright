@@ -188,6 +188,14 @@ otherwise it safely omits their presentation. `--no-descriptions` suppresses
 description retrieval and presentation but never changes candidate membership
 or order.
 
+The PowerShell integration requires version `7.7.0-preview.2` or later and
+refuses an older runtime before registering its completer. This is the first
+qualified release with the
+[upstream empty-result fix](https://github.com/PowerShell/PowerShell/pull/27398)
+needed to suppress filesystem fallback without throwing an exception or
+inserting a false candidate. Stable PowerShell `7.6` is not supported by this
+integration.
+
 ## Flag relationships and safeguards
 
 `--output` is command-local and accepts exactly `text` or `json`. There is no

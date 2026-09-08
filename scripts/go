@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export GOTOOLCHAIN=go1.26.7
+exec go "$@"
