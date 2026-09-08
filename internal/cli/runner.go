@@ -6,15 +6,22 @@ import (
 	"io"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/spf13/cobra"
 )
 
 type Config struct {
-	Out       io.Writer
-	ErrOut    io.Writer
-	BuildInfo BuildInfo
-	Services  Services
+	Out                 io.Writer
+	ErrOut              io.Writer
+	BuildInfo           BuildInfo
+	Services            Services
+	EncodeEffectiveYAML func(context.Context, api.Catalog) ([]byte, error)
+	EncodeEffectiveJSON func(context.Context, api.Catalog) ([]byte, error)
+	// BeginOperation derives an invocation context and returns a cleanup that
+	// releases and joins its cancellation resources before Run returns.
+	BeginOperation func(context.Context) (context.Context, func())
 }
 
 type Runner struct{ config Config }
@@ -166,7 +173,23 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		}
 		return 0
 	}
-	err = r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
+	if r.config.BeginOperation != nil && implementedOperation(path) && ctx.Err() == nil {
+		operationContext, finish := r.config.BeginOperation(ctx)
+		if finish != nil {
+			defer finish()
+		}
+		if operationContext == nil || finish == nil {
+			return r.failure(command, path, "runtime.internal", "operation cancellation is not configured", 1, selectedJSON(command))
+		}
+		ctx = operationContext
+	}
+	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
+	if canceled := ctx.Err(); canceled != nil {
+		err = canceled
+	}
+	if errors.Is(context.Cause(ctx), ErrInterrupted) {
+		return r.failure(command, path, "runtime.interrupted", "operation interrupted", 130, selectedJSON(command))
+	}
 	if errors.Is(err, availability.ErrNotImplemented) {
 		return r.failure(command, path, "cli.not-implemented", "bootwright "+path+" is not implemented", 1, selectedJSON(command))
 	}
@@ -175,6 +198,25 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return r.failure(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command))
+	}
+	if diagnostics := desiredstate.DiagnosticsOf(err); len(diagnostics) != 0 {
+		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command)); err != nil {
+			return 1
+		}
+		return 1
+	}
+	if err == nil {
+		handled, presentErr := r.writeResult(ctx, command, path, result)
+		var failure *resultFailure
+		if errors.As(presentErr, &failure) {
+			return r.failure(command, path, failure.code, failure.message, failure.exitCode, selectedJSON(command))
+		}
+		if presentErr != nil {
+			return 1
+		}
+		if handled {
+			return 0
+		}
 	}
 	return r.failure(command, path, "runtime.internal", "application service returned an unsupported result", 1, selectedJSON(command))
 }

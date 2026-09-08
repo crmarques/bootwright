@@ -1,6 +1,7 @@
 .PHONY: build test vet fmt-check modules-check completion-test vulncheck check
 
 GO := ./scripts/go
+VULNDB ?= https://vuln.go.dev
 
 build:
 	$(GO) build -trimpath -buildvcs=false -o bin/bootwright ./cmd/bootwright
@@ -26,7 +27,7 @@ completion-test:
 	$(GO) test -count=1 -tags=completion ./test/completion
 
 vulncheck:
-	./scripts/govulncheck ./...
+	./scripts/govulncheck -db "$(VULNDB)" ./...
 
 check: fmt-check modules-check test vet completion-test vulncheck
 	git diff --check

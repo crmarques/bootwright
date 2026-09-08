@@ -90,10 +90,12 @@ rules. An adapter never calls another adapter to bypass that service.
 Each consuming package owns the smallest useful interface. In Go this is a
 typed interface located with its consumer, not in a provider or generic
 `ports` package. Its immutable request and result use domain terms rather than
-vendor, transport, inventory, or persistence shapes. The contract defines all
-applicable success, typed failure, cancellation, replay or idempotence,
-ownership, and completion-evidence semantics. Reuse a port only when every
-implementation preserves those semantics; otherwise split the capability.
+vendor, transport, inventory, or persistence shapes. Copy mutable collections
+at boundaries and propagate `context.Context` through cancellable Go calls.
+The contract defines applicable success, typed failure, cancellation, replay
+or idempotence, ownership, and completion-evidence semantics. Reuse a port only
+when every implementation preserves those semantics; otherwise split the
+capability.
 
 Languages without Go-style interfaces use an equivalent explicit contract.
 For Ansible, that contract is the allowlisted playbook entrypoint plus its
@@ -192,25 +194,47 @@ Internal contexts translate boundary values when their invariants require a
 domain model; they do not mechanically duplicate the API or pass API objects
 around as shared mutable state.
 
-`cmd/bootwright` is the only composition root. It wires process context,
-arguments, standard streams, build information, application services, ports,
-and concrete adapters. It makes no domain or presentation decision.
+Use domain-first capability packages:
+
+| Package | Owns |
+| --- | --- |
+| `internal/<context>` | Pure domain values, invariants, and published value contracts. |
+| `internal/<context>/<capability>` | Application services, command requests, and interfaces consumed by the capability. |
+| Named implementation packages such as `localstore`, `inputfs`, and `ansible` | Effects and translation behind the consuming capability's interface. |
+
+Each application capability exposes a concrete `Service`. Dependencies are
+private fields; add constructors when there are actual dependencies to inject.
+Keep requests with their capability and shared domain values at the context
+root, including `machine.SSHOptions` and `secrets.Source`. Add domain files and
+implementation packages with their first authorized behavior. Do not create
+empty packages or repeat generic `domain`, `application`, `ports`, and
+`adapters` layers inside every context.
+
+`cmd/bootwright` is the only composition root:
+
+| File | Responsibility |
+| --- | --- |
+| `main.go` | Process entrypoint and exit; linker-injected `version`, `commit`, and `dependencyBundle` variables. |
+| `run.go` | Assemble the process context, arguments, streams, and build information into the CLI invocation. |
+| `wiring.go` | Construct concrete services and return the statically typed `cli.Services` bundle from `wireServices()`. |
+
+Wiring constructs adapters and injects them into their consumers as capabilities
+are implemented. It performs no context discovery, application work, domain
+decision, or presentation. Domain-specific implementation selection belongs
+to the owning application policy.
 
 `internal/cli` is the driving adapter backed by the selected framework. It owns
 the public command catalog, framework configuration, contract-specific
 validation, help content and templates, prompts, presentation, diagnostics,
 output-mode selection, and exit-code mapping. It owns the consumer interface
-through which a command invokes an application use case. It never constructs a
-driven adapter or sequences a cross-domain workflow.
-
-Policy-bearing packages live under their context, for example
-`internal/<context>`, `internal/<context>/<use-case>`, and
-`internal/<context>/<technology>`. Go does not require every context to repeat
-folders named `domain`, `application`, `ports`, or `adapters`: use the smallest
-package set whose names identify the owned domain behavior. Renderers live
-with their semantic owner—effective-state rendering with desired state,
-installer projection with container clusters, and Ceph projection with
-storage—not in a global rendering component.
+through which a command invokes an application use case. Each
+`commands_<context>.go` keeps its command declarations, consumer interfaces,
+and request translation together. `catalog.go` assembles those fragments into
+the public tree and order, including shared groups such as `cluster`,
+`preflight`, and `render`; every command has one declaration. `services.go`
+holds the typed dependency bundle. Parsing, help, completion, output, and static
+dispatch remain shared. CLI code never constructs a driven adapter or
+sequences a cross-domain workflow.
 
 Application services receive complete validated immutable requests and return
 presentation-independent results. Domain decisions are pure. Filesystem,
@@ -218,18 +242,144 @@ process, persistence, network, clock, randomness, and remote access occur only
 in injected adapters. Package-global mutable flags, streams, registries,
 clocks, configuration, and service instances are forbidden.
 
-The M1a skeleton provides consumer-owned CLI interfaces and typed requests for
-every application command. Context-owned stub methods return the shared
-`internal/availability.ErrNotImplemented` sentinel, or the caller's context
-cancellation error, without I/O. They expose no successful result schema until
-the owning use case is implemented. `cmd/bootwright` injects these stubs; the CLI
-alone renders their temporary unavailable message. Cross-context cluster
-inspection and access selection are coordinated by Environment, while the
-container-cluster and storage contexts retain their platform-specific policy.
+The CLI has consumer-owned interfaces and typed requests for all 49
+application commands. M1b's explicit-input validation service returns a typed
+report or admission failure. Its composition binds the safe input reader,
+YAML parser and pure component-owned rules. Other capability-owned stub
+methods return `internal/availability.ErrNotImplemented`, or the caller's
+context cancellation error, without I/O. They expose no successful result
+schema until the owning use case is implemented. The CLI alone renders
+results and unavailable messages; package structure does not advance
+[delivery scope](milestones.md).
 
 Repository-fitness packages may inspect source and assets but contain no
 production behavior. They enforce dependency direction and mapping rules
 rather than becoming a runtime dependency.
+
+### Application service ownership
+
+Every package below is under `internal/` and exposes `Service`. The table
+assigns application ownership; implementations remain limited to the skeleton
+until their [milestone](milestones.md) is authorized. Detailed domain behavior
+remains with the owning specifications.
+
+| Capability package | `cli.Services` field | Responsibility |
+| --- | --- | --- |
+| `workspace/contexts` | `Contexts` | Context initialization, update, selection, inspection, deletion, identity, and admitted-input publication. |
+| `desiredstate/compilation` | `DesiredState` | Coordinate validation and effective-state rendering around deterministic compilation. |
+| `environment/preflight` | `EnvironmentPreflight` | Infrastructure, selected-cluster, and whole-environment prerequisite checks. |
+| `environment/inspection` | `EnvironmentInspection` | Cluster listing and information across platform contexts. |
+| `environment/access` | `EnvironmentAccess` | Cluster/node selection for shell and command access. |
+| `controller/prerequisites` | `Controller` | Controller prerequisite inspection and setup. |
+| `secrets/custody` | `Secrets` | Secret management, immutable bindings, materialization, and disclosure. |
+| `secrets/encryption` | `Encryption` | Encryption initialization, status, and rotation. |
+| `trust/enrollment` | `MachineTrust` | Machine identity trust enrollment and its evidence. |
+| `machine/inventory` | `MachineInventory` | Machine inventory presentation data. |
+| `machine/access` | `MachineAccess` | Explicit machine access descriptors. |
+| `managedos/media` | `Media` | Installer media management. |
+| `containercluster/preflight` | `ContainerPreflight` | Container-cluster prerequisites. |
+| `containercluster/installation` | `Installer` | Installer intent and native projection. |
+| `containercluster/access` | `ClusterAccess` | `oc`, `kubectl`, and kubeconfig access. |
+| `storage/preflight` | `StoragePreflight` | Storage prerequisites. |
+| `storage/rendering` | `StorageArtifacts` | Ceph-native projection. |
+| `addons/catalog` | `AddOnCatalog` | Add-on catalog registrations. |
+| `addons/preflight` | `AddOnPreflight` | Add-on prerequisites. |
+| `nativeartifacts/rendering` | `Artifacts` | Whole-render coordination and safe publication. |
+| `reconciliation/lifecycle` | `Lifecycle` | Plans, transitions, scheduling, authorization, continuation, and complete-environment readiness. |
+
+Environment's three preflight methods belong to `preflight`, its two inspection
+methods to `inspection`, and its two access methods to `access`. Platform rules
+remain with their owning contexts. Substrate realization and normalized
+identity/power operations, managed-OS installation, and infrastructure-service
+provisioning and readiness gain separate capabilities when implemented.
+
+### Service interactions
+
+M1b implements `compilation.Compiler`, immutable values and reports,
+`contexts.Inputs`, the Workspace repository and the local Reconciliation
+mutation guard. Lifecycle execution and native artifact publication retain
+their later milestone scope. Durable context publication follows
+[the context contract](contexts.md).
+
+#### Context admission and compilation
+
+Separate context management, immutable input reading, and compilation of an
+explicit input universe:
+
+```text
+context init/update -> contexts.Service -> compilation.Compiler
+                                       -> Workspace repository
+
+validate/render effective -> compilation.Service -> contexts.Inputs
+                                                 -> compilation.Compiler
+contexts.Inputs -> Workspace repository (read only)
+```
+
+`contexts.Service` owns context publication and consumes its own `Compiler`
+interface and `Repository` interface. `compilation.Service` consumes a narrow
+`ContextInputs` interface for existing named/current context input.
+`contexts.Inputs` implements that reading capability through a narrow
+repository interface of its own. Input values are immutable views, separate
+from writable context records.
+
+`compilation.Compiler` accepts explicit input independently of context
+selection; it never calls context management. Input lookup never calls the
+compiler. This separates context admission's compilation dependency from
+command-facing compilation's input lookup without a package or service cycle.
+Compilation translates decoded values into Environment-owned inputs for pure
+selection and graph closure. Environment's domain rules never import the
+desired-state aggregate. Platform-owned invariants remain with Machine,
+Container cluster, Storage, and the other referenced domains; compilation phase
+and diagnostic semantics remain in [the API contract](api.md).
+
+#### Environment inspection and access
+
+Environment preflight consumes domain-owned prerequisite capabilities.
+Inspection combines validated input and permitted local evidence. Environment
+access selects the declared cluster and node before delegating platform access
+decisions. Machine owns SSH descriptor construction; Container cluster owns
+`oc`, `kubectl`, and kubeconfig behavior. These calls preserve the descriptor
+and export boundaries defined by
+[the access contract](cli.md#resource-inspection-and-explicit-access).
+
+#### Lifecycle and state ownership
+
+`lifecycle.Service` consumes narrow interfaces for Workspace context identity
+and immutable input, Desired state compilation, Secrets bindings and controlled
+materialization, domain-owned platform capabilities, and Reconciliation-owned
+operation persistence and leases. Reconciliation owns cross-domain ordering;
+a cluster service cannot schedule storage or OS installation independently.
+
+Platform services own the meaning of completion evidence and return it through
+typed results. Adapters return bounded results to their application service.
+Reconciliation owns operation transitions and their durable records under
+[the lifecycle contract](state-reconciliation.md).
+
+Context update and deletion consume a separate Reconciliation-owned
+`ContextMutationGuard` capability through an interface owned by the consuming
+Workspace package. The guard participates in the mutation and locking
+boundary; a stale Boolean check cannot authorize a later mutation. Lifecycle
+reads Workspace inputs through the independent input capability, avoiding a
+dependency cycle with context management. The owning lifecycle and context
+contracts determine which mutations are permitted.
+
+#### Native projection and publication
+
+```text
+whole-render service -> platform-owned projections
+                     -> immutable artifact manifests
+                     -> publication capability -> filesystem adapter
+```
+
+Container cluster and Storage own their native formats and projections.
+The `nativeartifacts` root owns shared artifact-manifest values; a separate
+publication capability owns destination and publication behavior. Platform
+render commands may consume publication directly without calling the
+whole-render coordinator. Artifact generation creates no lifecycle operation.
+
+Define successful result schemas and concrete effect interfaces with the first
+implemented use case, following the
+[communication contract](#dependency-direction-and-communication).
 
 ## Go and Ansible responsibility boundary
 

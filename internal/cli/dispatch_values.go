@@ -20,6 +20,13 @@ func invokeRequest[T any](ctx context.Context, values *requestValues, request T,
 	return invoke(ctx, request)
 }
 
+func invokeResult[T, R any](ctx context.Context, values *requestValues, request T, invoke func(context.Context, T) (*R, error)) (*R, error) {
+	if values.err != nil {
+		return nil, fmt.Errorf("invalid application request wiring: %w", values.err)
+	}
+	return invoke(ctx, request)
+}
+
 type requestValues struct {
 	flags *pflag.FlagSet
 	err   error

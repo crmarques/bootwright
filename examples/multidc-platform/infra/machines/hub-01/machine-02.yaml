@@ -2,6 +2,7 @@ apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
   name: hub-multidc-01-infra-02
+
 spec:
   capabilities:
     - openshift-node
@@ -11,33 +12,33 @@ spec:
 
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: hub-multidc-01-infra
+    profileRef: large
 
   os:
     provided: false
 
-  addresses:
-    - name: ip
-      address: 192.0.2.20
-    - name: ceph-public
-      address: 198.51.100.38
-
   network:
-    config:
-      networkConfigRef: hub-vm-network
-      interfaceAttachments:
-        - interface: primary
-          attachmentRef: hub-vm-machine
-        - interface: ceph-public
-          attachmentRef: hub-vm-ceph-public
-      interfaceAddresses:
-        - interface: primary
-          addressRef: ip
-          prefixLength: 24
-      overrides:
-        interfaces:
-          - name: ceph-public
-            ipv4:
-              address:
-                - ip: 198.51.100.38
-                  prefix-length: 25
+    configRef: hub-vm-network
+
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-infra-02.example.com
+
+      - name: ip
+        address: 192.0.2.20/24
+        interface: primary
+
+      - name: ceph-public
+        address: 198.51.100.38/25
+        interface: ceph-public
+
+    overrides: {}

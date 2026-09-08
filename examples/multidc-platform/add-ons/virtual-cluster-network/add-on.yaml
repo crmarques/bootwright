@@ -2,11 +2,14 @@ apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
   name: virtual-cluster-network
+
 spec:
-  type: manifestSet
+  provides: []
 
   requires:
     - nmstate
+
+  inputs: []
 
   manifestSet:
     manifests:
@@ -43,3 +46,5 @@ spec:
           kind: NetworkAttachmentDefinition
           name: multidc-virtual-cluster-ceph-public
           namespace: bootwright-multidc-virtual-clusters
+
+  steps: []

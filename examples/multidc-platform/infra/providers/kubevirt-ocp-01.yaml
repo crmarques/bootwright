@@ -2,30 +2,26 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: kubevirt-ocp-multidc-01
-spec:
-  type: kubevirt
 
+spec:
   kubevirt:
     hostClusterRef: ocp-multidc-01
     namespace: bootwright-multidc-virtual-clusters
     storageClassRef: ocs-external-storagecluster-ceph-rbd
-
     machineProfiles:
-      - name: hub-multidc-01-master
+      - name: general
         cpu: 4
         memoryMiB: 16384
         diskGiB: 100
-        tpm: {}
-      - name: hub-multidc-01-worker
-        cpu: 4
-        memoryMiB: 16384
-        diskGiB: 100
-        tpm: {}
-      - name: hub-multidc-01-infra
+        tpm:
+          persistent: true
+
+      - name: large
         cpu: 8
         memoryMiB: 32768
         diskGiB: 160
-        tpm: {}
+        tpm:
+          persistent: true
 
   networkAttachments:
     - name: hub-vm-machine
@@ -34,11 +30,10 @@ spec:
           apiGroup: k8s.ovn.org
           kind: ClusterUserDefinedNetwork
           name: multidc-virtual-cluster-machine
-          namespace: bootwright-multidc-virtual-clusters
+
     - name: hub-vm-ceph-public
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org
           kind: ClusterUserDefinedNetwork
           name: multidc-virtual-cluster-ceph-public
-          namespace: bootwright-multidc-virtual-clusters

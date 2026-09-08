@@ -2,10 +2,14 @@ apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
 metadata:
   name: ocp-multidc-02
+
 spec:
   distribution:
+    type: openshift
+
     release:
       version: 4.99.0
+      channel: stable-4.99
 
   security:
     fips:
@@ -13,31 +17,47 @@ spec:
     diskEncryption:
       unlock:
         tpm2: {}
+      roles:
+        - master
 
   install:
+    method: agent
+    mode: connected
+
     platform:
       type: baremetal
       baremetal:
         provisioningNetwork: disabled
+
     endpoints:
       api:
         address: 192.0.2.131
         source:
           type: external
+        interfaceNetworks: []
       api-int:
         address: 192.0.2.131
         source:
           type: external
+        interfaceNetworks: []
       ingress:
         address: 192.0.2.132
         source:
           type: external
+        interfaceNetworks: []
+
     agent:
       redfishVirtualMedia:
         artifactServerEndpoint:
           endpointRef: ip-https
+          serverRef: default
+
+    pullSecretRef: openshift-pull-secret
+
     nodeSSH:
       keyPairRef: ocp-multidc-02-cluster-admin-ssh-key
+
+    additionalTrustBundleRefs: []
 
   networking:
     clusterNetwork:
@@ -50,9 +70,14 @@ spec:
     - name: master-01
       role: master
       machineRef: edge-b-01
+      fqdn: master-01.ocp-multidc-02.clusters.example.com
+
     - name: master-02
       role: master
       machineRef: edge-b-02
+      fqdn: master-02.ocp-multidc-02.clusters.example.com
+
     - name: master-03
       role: master
       machineRef: edge-b-03
+      fqdn: master-03.ocp-multidc-02.clusters.example.com

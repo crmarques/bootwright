@@ -1,0 +1,445 @@
+package contextfs
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
+)
+
+type reservation struct {
+	Version              int    `json:"version"`
+	ID                   string `json:"id"`
+	EnvironmentDirectory string `json:"environmentDirectory"`
+}
+
+type manifest struct {
+	Version              int          `json:"version"`
+	ID                   string       `json:"id"`
+	Revision             string       `json:"revision"`
+	InputDirectory       string       `json:"inputDirectory"`
+	EnvironmentDirectory string       `json:"environmentDirectory"`
+	Files                []frozenFile `json:"files"`
+}
+
+type frozenFile struct {
+	Path     string `json:"path"`
+	Category string `json:"category"`
+	Size     int    `json:"size"`
+	SHA256   string `json:"sha256"`
+}
+
+type archive struct {
+	Version  int             `json:"version"`
+	Outcome  string          `json:"outcome"`
+	Record   contexts.Record `json:"record"`
+	Mutation json.RawMessage `json:"mutation"`
+}
+
+// Comparing the canonical encoding rejects duplicate keys, alternate casing,
+// omitted fields, null collections, trailing data and noncanonical spellings.
+func decodeRecord(data []byte, maximum int, target any) error {
+	if len(data) > maximum || !utf8.Valid(data) {
+		return state("persisted record exceeds its bounds or encoding")
+	}
+	items := maxIdentities
+	if _, ok := target.(*manifest); ok {
+		items = desiredstate.MaxFiles + desiredstate.MaxMarkers
+	}
+	if err := boundedJSON(data, items); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return state("persisted record is malformed or unsupported")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return state("persisted record contains trailing data")
+	}
+	canonical, err := encodeRecord(target, maximum)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(canonical, data) {
+		return state("persisted record is not canonical")
+	}
+	return nil
+}
+
+// Bound representation before encoding/json allocates typed collections. The
+// decoder below remains the sole JSON grammar implementation.
+func boundedJSON(data []byte, maxItems int) error {
+	type frame struct {
+		kind   byte
+		commas int
+	}
+	stack := make([]frame, 0, 8)
+	quoted, escaped, start := false, false, 0
+	for index, c := range data {
+		if quoted {
+			if index-start > 6*maxPath {
+				return state("persisted string exceeds its limit")
+			}
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				quoted = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			quoted, start = true, index
+		case '{', '[':
+			if len(stack) >= 8 {
+				return state("persisted record exceeds its nesting limit")
+			}
+			stack = append(stack, frame{kind: c})
+		case '}', ']':
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		case ',':
+			if len(stack) > 0 {
+				top := &stack[len(stack)-1]
+				top.commas++
+				if top.kind == '[' && top.commas >= maxItems || top.kind == '{' && top.commas >= 16 {
+					return state("persisted collection exceeds its limit")
+				}
+			}
+		case 'n':
+			if bytes.HasPrefix(data[index:], []byte("null")) {
+				return state("persisted null values are forbidden")
+			}
+		}
+	}
+	return nil
+}
+
+func encodeRecord(value any, maximum int) ([]byte, error) {
+	if maximum < 1 || !fitsJSON(reflect.ValueOf(value), maximum-1) {
+		return nil, state("persisted record exceeds its encoding limit")
+	}
+	data, err := json.Marshal(value)
+	if err != nil || len(data) >= maximum {
+		return nil, state("persisted record exceeds its encoding limit")
+	}
+	return append(data, '\n'), nil
+}
+
+// All record types are closed structs of strings, integers, slices and raw
+// mutation JSON. Count their exact encoding before allocating the output.
+func fitsJSON(value reflect.Value, limit int) bool {
+	count := 0
+	add := func(n int) bool {
+		if n < 0 || n > limit-count {
+			return false
+		}
+		count += n
+		return true
+	}
+	stringSize := func(value string) int {
+		size := 2
+		for len(value) > 0 {
+			r, n := utf8.DecodeRuneInString(value)
+			value = value[n:]
+			switch {
+			case r == '"' || r == '\\' || r == '\b' || r == '\f' || r == '\n' || r == '\r' || r == '\t':
+				size += 2
+			case r < 0x20 || r == '<' || r == '>' || r == '&' || r == 0x2028 || r == 0x2029 || r == utf8.RuneError && n == 1:
+				size += 6
+			default:
+				size += n
+			}
+			if size > limit-count {
+				return size
+			}
+		}
+		return size
+	}
+	var visit func(reflect.Value, int) bool
+	visit = func(v reflect.Value, depth int) bool {
+		if depth > 8 || !v.IsValid() {
+			return false
+		}
+		if v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+			if v.IsNil() {
+				return add(4)
+			}
+			return visit(v.Elem(), depth+1)
+		}
+		if v.Type() == reflect.TypeFor[json.RawMessage]() {
+			raw := v.Bytes()
+			if len(raw) > maxRecord || !json.Valid(raw) {
+				return false
+			}
+			quoted, escaped := false, false
+			for i := 0; i < len(raw); {
+				c := raw[i]
+				if !quoted && (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+					i++
+					continue
+				}
+				if quoted && !escaped && (c == '<' || c == '>' || c == '&') {
+					if !add(6) {
+						return false
+					}
+					i++
+					continue
+				}
+				if quoted && !escaped && c >= utf8.RuneSelf {
+					r, n := utf8.DecodeRune(raw[i:])
+					size := n
+					if r == 0x2028 || r == 0x2029 {
+						size = 6
+					}
+					if !add(size) {
+						return false
+					}
+					i += n
+					continue
+				}
+				if !add(1) {
+					return false
+				}
+				i++
+				if escaped {
+					escaped = false
+					continue
+				}
+				if quoted && c == '\\' {
+					escaped = true
+				} else if c == '"' {
+					quoted = !quoted
+				}
+			}
+			return true
+		}
+		switch v.Kind() {
+		case reflect.String:
+			if v.Len() > limit-count {
+				return false
+			}
+			return add(stringSize(v.String()))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n := v.Int()
+			digits := 1
+			u := uint64(n)
+			if n < 0 {
+				digits++
+				u = uint64(-(n + 1)) + 1
+			}
+			for u >= 10 {
+				digits++
+				u /= 10
+			}
+			return add(digits)
+		case reflect.Bool:
+			if v.Bool() {
+				return add(4)
+			}
+			return add(5)
+		case reflect.Slice:
+			if v.IsNil() {
+				return add(4)
+			}
+			if !add(2) {
+				return false
+			}
+			for i := 0; i < v.Len(); i++ {
+				if i > 0 && !add(1) {
+					return false
+				}
+				if !visit(v.Index(i), depth+1) {
+					return false
+				}
+			}
+			return true
+		case reflect.Struct:
+			if !add(2) {
+				return false
+			}
+			fields := 0
+			for i := 0; i < v.NumField(); i++ {
+				field := v.Type().Field(i)
+				if !field.IsExported() {
+					continue
+				}
+				name := field.Tag.Get("json")
+				if name == "-" {
+					continue
+				}
+				if name == "" {
+					name = field.Name
+				}
+				if strings.Contains(name, ",") {
+					return false
+				}
+				if fields > 0 && !add(1) {
+					return false
+				}
+				fields++
+				if !add(stringSize(name)+1) || !visit(v.Field(i), depth+1) {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	}
+	return visit(value, 0)
+}
+
+func canonicalPath(path string) bool {
+	return len(path) > 0 && len(path) <= maxPath && utf8.ValidString(path) && !strings.ContainsRune(path, 0) && filepath.IsAbs(path) && filepath.Clean(path) == path
+}
+
+func beneath(parent, child string) bool {
+	relative, err := filepath.Rel(parent, child)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
+}
+
+func identifier(value, prefix string) bool {
+	if len(value) != len(prefix)+32 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for _, c := range value[len(prefix):] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func contextName(name string) bool {
+	if len(name) == 0 || len(name) > 63 || name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validateRegistry(r contexts.Registry) error {
+	if r.Version != 1 || r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
+		return state("context registry has unsupported version or bounds")
+	}
+	identities := make(map[string]string, len(r.Identities))
+	paths := make(map[string]string, len(r.Identities))
+	previous := ""
+	for _, identity := range r.Identities {
+		if !canonicalPath(identity.EnvironmentDirectory) || !identifier(identity.ID, "ctx-") || identity.EnvironmentDirectory <= previous {
+			return state("context identity mapping is invalid or unordered")
+		}
+		if _, found := identities[identity.ID]; found {
+			return state("context identity mapping is contradictory")
+		}
+		identities[identity.ID], paths[identity.EnvironmentDirectory] = identity.EnvironmentDirectory, identity.ID
+		previous = identity.EnvironmentDirectory
+	}
+	activeIDs := make(map[string]bool, len(r.Contexts))
+	currentExists := r.Current == ""
+	previous = ""
+	for _, record := range r.Contexts {
+		if !contextName(record.Name) || record.Name <= previous || identities[record.ID] != record.EnvironmentDirectory || paths[record.EnvironmentDirectory] != record.ID || activeIDs[record.ID] || !identifier(record.Revision, "rev-") || record.Mode != contexts.Active && record.Mode != contexts.RecoveryOnly {
+			return state("active context mapping is invalid or contradictory")
+		}
+		previous, activeIDs[record.ID] = record.Name, true
+		if record.Name == r.Current {
+			currentExists = true
+		}
+	}
+	if !currentExists {
+		return state("current context is missing from the registry")
+	}
+	return nil
+}
+
+func validateReservation(r reservation, id, environment string) error {
+	if r.Version != 1 || r.ID != id || !identifier(r.ID, "ctx-") || !canonicalPath(r.EnvironmentDirectory) || environment != "" && r.EnvironmentDirectory != environment {
+		return state("context reservation contradicts its identity")
+	}
+	return nil
+}
+
+func validFrozenPath(path, category string) bool {
+	if path == "" || len(path) > maxPath || !utf8.ValidString(path) || strings.ContainsRune(path, 0) || filepath.IsAbs(path) || filepath.Clean(path) != path || path == "." || path == ".." || strings.HasPrefix(path, "../") {
+		return false
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) > desiredstate.MaxPathDepth {
+		return false
+	}
+	for _, part := range parts[:len(parts)-1] {
+		if strings.HasPrefix(part, ".") || slices.Contains([]string{"vendor", "node_modules", "playbooks", "roles", "collections", "manifests", "secrets"}, part) {
+			return false
+		}
+	}
+	if category == "yaml" {
+		return strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")
+	}
+	return category == "marker" && parts[len(parts)-1] == ".bootwright-addon"
+}
+
+func validateManifest(m manifest, id, revision, environment string) error {
+	if m.Version != 1 || m.ID != id || m.Revision != revision || !identifier(id, "ctx-") || !identifier(revision, "rev-") || !canonicalPath(m.InputDirectory) || !canonicalPath(m.EnvironmentDirectory) || !beneath(m.InputDirectory, m.EnvironmentDirectory) || m.EnvironmentDirectory != environment || m.Files == nil {
+		return state("input manifest identity is invalid")
+	}
+	if len(m.Files) > desiredstate.MaxFiles+desiredstate.MaxMarkers {
+		return state("input manifest has too many files")
+	}
+	yamlCount, markerCount, yamlBytes, markerBytes := 0, 0, 0, 0
+	previous := ""
+	for _, file := range m.Files {
+		if !validFrozenPath(file.Path, file.Category) || len(filepath.Join(m.InputDirectory, file.Path)) > maxPath || file.Path <= previous || file.Size < 0 || len(file.SHA256) != 64 {
+			return state("input manifest file is invalid or duplicated")
+		}
+		if file.Category == "marker" {
+			parts := strings.Split(filepath.Join(m.InputDirectory, file.Path), "/")
+			if len(parts) < 4 || parts[len(parts)-4] != "add-ons" || parts[len(parts)-3] != "_store" {
+				return state("input manifest marker is outside its permitted position")
+			}
+		}
+		digest, err := hex.DecodeString(file.SHA256)
+		if err != nil || hex.EncodeToString(digest) != file.SHA256 {
+			return state("input manifest digest is invalid")
+		}
+		previous = file.Path
+		if file.Category == "yaml" {
+			yamlCount++
+			yamlBytes += file.Size
+			if file.Size > desiredstate.MaxFileBytes {
+				return state("frozen YAML exceeds its byte limit")
+			}
+		} else {
+			markerCount++
+			markerBytes += file.Size
+			if file.Size > desiredstate.MaxMarkerBytes {
+				return state("frozen marker exceeds its byte limit")
+			}
+		}
+		if yamlCount > desiredstate.MaxFiles || markerCount > desiredstate.MaxMarkers || yamlBytes > desiredstate.MaxAllFileBytes || markerBytes > desiredstate.MaxAllMarkerBytes {
+			return state("frozen input exceeds its acquisition limits")
+		}
+	}
+	return nil
+}
+
+func digest(data []byte) string { value := sha256.Sum256(data); return hex.EncodeToString(value[:]) }

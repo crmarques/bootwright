@@ -4,19 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
 
-type diagnostic struct {
-	Severity string `json:"severity"`
-	Code     string `json:"code"`
-	Message  string `json:"message"`
-}
+type diagnostic = desiredstate.Diagnostic
 
-type failureEnvelope struct {
+type commandEnvelope struct {
 	SchemaVersion string       `json:"schemaVersion"`
 	Command       string       `json:"command"`
 	OK            bool         `json:"ok"`
@@ -27,19 +27,120 @@ type failureEnvelope struct {
 }
 
 func writeFailure(out, errOut io.Writer, command, code, message string, exitCode int, jsonMode bool) error {
+	return writeDiagnostics(out, errOut, command, []diagnostic{{Severity: "error", Code: code, Message: message}}, exitCode, jsonMode)
+}
+
+func writeDiagnostics(out, errOut io.Writer, command string, diagnostics []diagnostic, exitCode int, jsonMode bool) error {
+	diagnostics = displayDiagnostics(diagnostics)
 	if jsonMode {
 		encoder := json.NewEncoder(out)
 		encoder.SetEscapeHTML(false)
-		return encoder.Encode(failureEnvelope{
+		return encoder.Encode(commandEnvelope{
 			SchemaVersion: "v1alpha1",
 			Command:       escapeDisplayLine(command),
 			ExitCode:      exitCode,
-			Diagnostics:   []diagnostic{{Severity: "error", Code: code, Message: escapeDisplayLine(message)}},
+			Diagnostics:   diagnostics,
 			Logs:          []string{},
 		})
 	}
-	_, err := fmt.Fprintf(errOut, "[FAIL] %s: %s\n", code, escapeDisplayLine(message))
+	return writeHumanDiagnostics(errOut, diagnostics)
+}
+
+func writeValidation(out, errOut io.Writer, command string, report *compilation.Report, jsonMode bool) error {
+	diagnostics := displayDiagnostics(report.Diagnostics)
+	advisories := []diagnostic{}
+	for _, d := range diagnostics {
+		if d.Code == "api.deferred" && d.Severity == "warning" {
+			advisories = append(advisories, d)
+		}
+	}
+	result := compilation.Report{
+		Counts:                    report.Counts,
+		ExcludedContainerClusters: displayNames(report.ExcludedContainerClusters),
+		ExcludedStorageClusters:   displayNames(report.ExcludedStorageClusters),
+		ExcludedResourceFiles:     displayNames(report.ExcludedResourceFiles),
+		Advisories:                advisories,
+	}
+	if jsonMode {
+		encoder := json.NewEncoder(out)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: result, Diagnostics: diagnostics, Logs: []string{}})
+	}
+	if err := writeHumanDiagnostics(errOut, diagnostics); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(out, "[OK] Desired state is valid (files seen: %d, objects decoded: %d)\n", report.Counts.FilesSeen, report.Counts.ObjectsDecoded)
 	return err
+}
+
+func displayNames(values []string) []string {
+	values = append([]string{}, values...)
+	slices.Sort(values)
+	values = slices.Compact(values)
+	for i := range values {
+		values[i] = escapeDisplayLine(values[i])
+	}
+	return values
+}
+
+func displayDiagnostics(values []diagnostic) []diagnostic {
+	values = append([]diagnostic{}, values...)
+	desiredstate.SortDiagnostics(values)
+	for i, d := range values {
+		d.Severity = escapeDisplayLine(d.Severity)
+		d.Code = escapeDisplayLine(d.Code)
+		d.Message = escapeDisplayLine(d.Message)
+		d.Field = escapeDisplayLine(d.Field)
+		d.Remediation = escapeDisplayLine(d.Remediation)
+		if d.Source != nil {
+			source := *d.Source
+			source.Path = escapeDisplayLine(source.Path)
+			d.Source = &source
+		}
+		if d.Object != nil {
+			object := *d.Object
+			object.APIVersion = escapeDisplayLine(object.APIVersion)
+			object.Kind = escapeDisplayLine(object.Kind)
+			object.Name = escapeDisplayLine(object.Name)
+			d.Object = &object
+		}
+		values[i] = d
+	}
+	return values
+}
+
+// Values reaching this function have already crossed the display boundary.
+func writeHumanDiagnostics(out io.Writer, diagnostics []diagnostic) error {
+	for _, d := range diagnostics {
+		status := "FAIL"
+		if d.Severity == "warning" {
+			status = "WARN"
+		}
+		location := ""
+		if d.Source != nil && d.Source.Path != "" {
+			location = " " + d.Source.Path
+			if d.Source.Line > 0 {
+				location += fmt.Sprintf(":%d", d.Source.Line)
+				if d.Source.Column > 0 {
+					location += fmt.Sprintf(":%d", d.Source.Column)
+				}
+			}
+		}
+		message := d.Message
+		if d.Object != nil {
+			message += " [" + d.Object.Kind + "/" + d.Object.Name + "]"
+		}
+		if d.Field != "" {
+			message += " (" + d.Field + ")"
+		}
+		if d.Remediation != "" {
+			message += "; " + d.Remediation
+		}
+		if _, err := fmt.Fprintf(out, "[%s] %s%s: %s\n", status, d.Code, location, message); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func escapeDisplayLine(value string) string {

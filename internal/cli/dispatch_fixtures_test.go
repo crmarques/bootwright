@@ -3,291 +3,307 @@ package cli
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/addons"
-	"github.com/crmarques/bootwright/internal/containercluster"
-	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/environment"
-	"github.com/crmarques/bootwright/internal/machine"
-	"github.com/crmarques/bootwright/internal/managedos"
-	"github.com/crmarques/bootwright/internal/nativeartifacts"
-	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
-	"github.com/crmarques/bootwright/internal/trust"
-	"github.com/crmarques/bootwright/internal/workspace"
+	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
+	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
+	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
+	"github.com/crmarques/bootwright/internal/containercluster/installation"
+	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	"github.com/crmarques/bootwright/internal/environment/inspection"
+	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine/inventory"
+	"github.com/crmarques/bootwright/internal/managedos/media"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/encryption"
+	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
+	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
 )
 
 type dispatchRecord struct {
-	calls   int
-	path    string
-	ctx     context.Context
-	request any
-	err     error
+	report    *compilation.Report
+	result    commandResult
+	calls     int
+	path      string
+	ctx       context.Context
+	request   any
+	err       error
+	afterCall func()
 }
 
 func (r *dispatchRecord) called(ctx context.Context, path string, request any) error {
 	r.calls++
 	r.ctx, r.path, r.request = ctx, path, request
+	if r.afterCall != nil {
+		r.afterCall()
+	}
 	return r.err
 }
 
 type contextsSpy struct{ record *dispatchRecord }
 
-func (s contextsSpy) Init(ctx context.Context, request workspace.InitRequest) error {
-	return s.record.called(ctx, "context init", request)
+func (s contextsSpy) Init(ctx context.Context, request contexts.InitRequest) (*contexts.AdmissionResult, error) {
+	return s.record.result.admission, s.record.called(ctx, "context init", request)
 }
 
-func (s contextsSpy) Update(ctx context.Context, request workspace.UpdateRequest) error {
-	return s.record.called(ctx, "context update", request)
+func (s contextsSpy) Update(ctx context.Context, request contexts.UpdateRequest) (*contexts.AdmissionResult, error) {
+	return s.record.result.admission, s.record.called(ctx, "context update", request)
 }
 
-func (s contextsSpy) Use(ctx context.Context, request workspace.UseRequest) error {
-	return s.record.called(ctx, "context use", request)
+func (s contextsSpy) Use(ctx context.Context, request contexts.UseRequest) (*contexts.UseResult, error) {
+	return s.record.result.use, s.record.called(ctx, "context use", request)
 }
 
-func (s contextsSpy) List(ctx context.Context, request workspace.ListRequest) error {
-	return s.record.called(ctx, "context list", request)
+func (s contextsSpy) List(ctx context.Context, request contexts.ListRequest) (*contexts.ListResult, error) {
+	return s.record.result.list, s.record.called(ctx, "context list", request)
 }
 
-func (s contextsSpy) Current(ctx context.Context, request workspace.CurrentRequest) error {
-	return s.record.called(ctx, "context current", request)
+func (s contextsSpy) Current(ctx context.Context, request contexts.CurrentRequest) (*contexts.CurrentResult, error) {
+	return s.record.result.current, s.record.called(ctx, "context current", request)
 }
 
-func (s contextsSpy) Delete(ctx context.Context, request workspace.DeleteRequest) error {
-	return s.record.called(ctx, "context delete", request)
+func (s contextsSpy) Delete(ctx context.Context, request contexts.DeleteRequest) (*contexts.DeleteResult, error) {
+	return s.record.result.deletion, s.record.called(ctx, "context delete", request)
 }
 
 type addOnCatalogSpy struct{ record *dispatchRecord }
 
-func (s addOnCatalogSpy) List(ctx context.Context, request addons.ListRequest) error {
+func (s addOnCatalogSpy) List(ctx context.Context, request addoncatalog.ListRequest) error {
 	return s.record.called(ctx, "add-ons list", request)
 }
 
-func (s addOnCatalogSpy) Add(ctx context.Context, request addons.AddRequest) error {
+func (s addOnCatalogSpy) Add(ctx context.Context, request addoncatalog.AddRequest) error {
 	return s.record.called(ctx, "add-ons add", request)
 }
 
-func (s addOnCatalogSpy) Delete(ctx context.Context, request addons.DeleteRequest) error {
+func (s addOnCatalogSpy) Delete(ctx context.Context, request addoncatalog.DeleteRequest) error {
 	return s.record.called(ctx, "add-ons delete", request)
 }
 
 type secretsSpy struct{ record *dispatchRecord }
 
-func (s secretsSpy) Set(ctx context.Context, request secrets.SetRequest) error {
+func (s secretsSpy) Set(ctx context.Context, request custody.SetRequest) error {
 	return s.record.called(ctx, "secret set", request)
 }
 
-func (s secretsSpy) Generate(ctx context.Context, request secrets.GenerateRequest) error {
+func (s secretsSpy) Generate(ctx context.Context, request custody.GenerateRequest) error {
 	return s.record.called(ctx, "secret generate", request)
 }
 
-func (s secretsSpy) Check(ctx context.Context, request secrets.CheckRequest) error {
+func (s secretsSpy) Check(ctx context.Context, request custody.CheckRequest) error {
 	return s.record.called(ctx, "secret check", request)
 }
 
-func (s secretsSpy) List(ctx context.Context, request secrets.ListRequest) error {
+func (s secretsSpy) List(ctx context.Context, request custody.ListRequest) error {
 	return s.record.called(ctx, "secret list", request)
 }
 
-func (s secretsSpy) Show(ctx context.Context, request secrets.ShowRequest) error {
+func (s secretsSpy) Show(ctx context.Context, request custody.ShowRequest) error {
 	return s.record.called(ctx, "secret show", request)
 }
 
-func (s secretsSpy) Delete(ctx context.Context, request secrets.DeleteRequest) error {
+func (s secretsSpy) Delete(ctx context.Context, request custody.DeleteRequest) error {
 	return s.record.called(ctx, "secret delete", request)
 }
 
 type encryptionSpy struct{ record *dispatchRecord }
 
-func (s encryptionSpy) Init(ctx context.Context, request secrets.EncryptionInitRequest) error {
+func (s encryptionSpy) Init(ctx context.Context, request encryption.EncryptionInitRequest) error {
 	return s.record.called(ctx, "secret encryption init", request)
 }
 
-func (s encryptionSpy) Status(ctx context.Context, request secrets.EncryptionStatusRequest) error {
+func (s encryptionSpy) Status(ctx context.Context, request encryption.EncryptionStatusRequest) error {
 	return s.record.called(ctx, "secret encryption status", request)
 }
 
-func (s encryptionSpy) Rotate(ctx context.Context, request secrets.EncryptionRotateRequest) error {
+func (s encryptionSpy) Rotate(ctx context.Context, request encryption.EncryptionRotateRequest) error {
 	return s.record.called(ctx, "secret encryption rotate", request)
 }
 
 type mediaSpy struct{ record *dispatchRecord }
 
-func (s mediaSpy) Add(ctx context.Context, request managedos.AddMediaRequest) error {
+func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) error {
 	return s.record.called(ctx, "media add", request)
 }
 
-func (s mediaSpy) List(ctx context.Context, request managedos.ListMediaRequest) error {
+func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) error {
 	return s.record.called(ctx, "media list", request)
 }
 
-func (s mediaSpy) Delete(ctx context.Context, request managedos.DeleteMediaRequest) error {
+func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) error {
 	return s.record.called(ctx, "media delete", request)
 }
 
 type desiredStateSpy struct{ record *dispatchRecord }
 
-func (s desiredStateSpy) Validate(ctx context.Context, request desiredstate.ValidateRequest) error {
-	return s.record.called(ctx, "validate", request)
+func (s desiredStateSpy) Validate(ctx context.Context, request compilation.ValidateRequest) (*compilation.Report, error) {
+	return s.record.report, s.record.called(ctx, "validate", request)
 }
 
-func (s desiredStateSpy) RenderEffective(ctx context.Context, request desiredstate.EffectiveRequest) error {
-	return s.record.called(ctx, "render effective", request)
+func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+	return s.record.result.effective, s.record.called(ctx, "render effective", request)
 }
 
 type controllerSpy struct{ record *dispatchRecord }
 
-func (s controllerSpy) Check(ctx context.Context, request controller.CheckRequest) error {
+func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) error {
 	return s.record.called(ctx, "preflight bastion", request)
 }
 
-func (s controllerSpy) Setup(ctx context.Context, request controller.SetupRequest) error {
+func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) error {
 	return s.record.called(ctx, "bastion setup", request)
 }
 
 type environmentSpy struct{ record *dispatchRecord }
 
-func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environment.InfrastructurePreflightRequest) error {
+func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environmentpreflight.InfrastructurePreflightRequest) error {
 	return s.record.called(ctx, "preflight infra", request)
 }
 
-func (s environmentSpy) PreflightClusters(ctx context.Context, request environment.ClustersPreflightRequest) error {
+func (s environmentSpy) PreflightClusters(ctx context.Context, request environmentpreflight.ClustersPreflightRequest) error {
 	return s.record.called(ctx, "preflight clusters", request)
 }
 
-func (s environmentSpy) PreflightAll(ctx context.Context, request environment.AllPreflightRequest) error {
+func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpreflight.AllPreflightRequest) error {
 	return s.record.called(ctx, "preflight all", request)
 }
 
-func (s environmentSpy) ListClusters(ctx context.Context, request environment.ListClustersRequest) error {
+func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) error {
 	return s.record.called(ctx, "cluster list", request)
 }
 
-func (s environmentSpy) ClusterInfo(ctx context.Context, request environment.ClusterInfoRequest) error {
+func (s environmentSpy) ClusterInfo(ctx context.Context, request inspection.ClusterInfoRequest) error {
 	return s.record.called(ctx, "cluster info", request)
 }
 
-func (s environmentSpy) ClusterRsh(ctx context.Context, request environment.ClusterRshRequest) error {
+func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentaccess.ClusterRshRequest) error {
 	return s.record.called(ctx, "cluster rsh", request)
 }
 
-func (s environmentSpy) ClusterExec(ctx context.Context, request environment.ClusterExecRequest) error {
+func (s environmentSpy) ClusterExec(ctx context.Context, request environmentaccess.ClusterExecRequest) error {
 	return s.record.called(ctx, "cluster exec", request)
 }
 
 type containerPreflightSpy struct{ record *dispatchRecord }
 
-func (s containerPreflightSpy) Check(ctx context.Context, request containercluster.PreflightRequest) error {
+func (s containerPreflightSpy) Check(ctx context.Context, request containerpreflight.PreflightRequest) error {
 	return s.record.called(ctx, "preflight container-cluster", request)
 }
 
 type storagePreflightSpy struct{ record *dispatchRecord }
 
-func (s storagePreflightSpy) Check(ctx context.Context, request storage.PreflightRequest) error {
+func (s storagePreflightSpy) Check(ctx context.Context, request storagepreflight.PreflightRequest) error {
 	return s.record.called(ctx, "preflight storage-cluster", request)
 }
 
 type addOnPreflightSpy struct{ record *dispatchRecord }
 
-func (s addOnPreflightSpy) Check(ctx context.Context, request addons.PreflightRequest) error {
+func (s addOnPreflightSpy) Check(ctx context.Context, request addonpreflight.PreflightRequest) error {
 	return s.record.called(ctx, "preflight add-ons", request)
 }
 
 type lifecycleSpy struct{ record *dispatchRecord }
 
-func (s lifecycleSpy) Plan(ctx context.Context, request reconciliation.PlanRequest) error {
+func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) error {
 	return s.record.called(ctx, "plan", request)
 }
 
-func (s lifecycleSpy) Status(ctx context.Context, request reconciliation.StatusRequest) error {
+func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) error {
 	return s.record.called(ctx, "status", request)
 }
 
-func (s lifecycleSpy) Apply(ctx context.Context, request reconciliation.ApplyRequest) error {
+func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) error {
 	return s.record.called(ctx, "apply", request)
 }
 
-func (s lifecycleSpy) Destroy(ctx context.Context, request reconciliation.DestroyRequest) error {
+func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequest) error {
 	return s.record.called(ctx, "destroy", request)
 }
 
 type artifactsSpy struct{ record *dispatchRecord }
 
-func (s artifactsSpy) Render(ctx context.Context, request nativeartifacts.RenderRequest) error {
+func (s artifactsSpy) Render(ctx context.Context, request artifactrendering.RenderRequest) error {
 	return s.record.called(ctx, "render", request)
 }
 
 type installerSpy struct{ record *dispatchRecord }
 
-func (s installerSpy) Render(ctx context.Context, request containercluster.RenderInstallerRequest) error {
+func (s installerSpy) Render(ctx context.Context, request installation.RenderInstallerRequest) error {
 	return s.record.called(ctx, "render installer", request)
 }
 
 type storageArtifactsSpy struct{ record *dispatchRecord }
 
-func (s storageArtifactsSpy) Render(ctx context.Context, request storage.RenderArtifactsRequest) error {
+func (s storageArtifactsSpy) Render(ctx context.Context, request storagerendering.RenderArtifactsRequest) error {
 	return s.record.called(ctx, "render storage", request)
 }
 
 type machineInventorySpy struct{ record *dispatchRecord }
 
-func (s machineInventorySpy) List(ctx context.Context, request machine.ListRequest) error {
+func (s machineInventorySpy) List(ctx context.Context, request inventory.ListRequest) error {
 	return s.record.called(ctx, "machine list", request)
 }
 
 type machineAccessSpy struct{ record *dispatchRecord }
 
-func (s machineAccessSpy) Rsh(ctx context.Context, request machine.RshRequest) error {
+func (s machineAccessSpy) Rsh(ctx context.Context, request machineaccess.RshRequest) error {
 	return s.record.called(ctx, "machine rsh", request)
 }
 
-func (s machineAccessSpy) Exec(ctx context.Context, request machine.ExecRequest) error {
+func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRequest) error {
 	return s.record.called(ctx, "machine exec", request)
 }
 
 type machineTrustSpy struct{ record *dispatchRecord }
 
-func (s machineTrustSpy) Enroll(ctx context.Context, request trust.EnrollRequest) error {
+func (s machineTrustSpy) Enroll(ctx context.Context, request enrollment.EnrollRequest) error {
 	return s.record.called(ctx, "machine trust", request)
 }
 
 type clusterAccessSpy struct{ record *dispatchRecord }
 
-func (s clusterAccessSpy) OC(ctx context.Context, request containercluster.OCRequest) error {
+func (s clusterAccessSpy) OC(ctx context.Context, request containeraccess.OCRequest) error {
 	return s.record.called(ctx, "cluster oc", request)
 }
 
-func (s clusterAccessSpy) Kubectl(ctx context.Context, request containercluster.KubectlRequest) error {
+func (s clusterAccessSpy) Kubectl(ctx context.Context, request containeraccess.KubectlRequest) error {
 	return s.record.called(ctx, "cluster kubectl", request)
 }
 
-func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containercluster.KubeconfigRequest) error {
+func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containeraccess.KubeconfigRequest) error {
 	return s.record.called(ctx, "cluster kubeconfig", request)
 }
 
 func dispatchSpies(record *dispatchRecord) Services {
 	return Services{
-		Contexts:           contextsSpy{record},
-		AddOnCatalog:       addOnCatalogSpy{record},
-		Secrets:            secretsSpy{record},
-		Encryption:         encryptionSpy{record},
-		Media:              mediaSpy{record},
-		DesiredState:       desiredStateSpy{record},
-		Controller:         controllerSpy{record},
-		Environment:        environmentSpy{record},
-		ContainerPreflight: containerPreflightSpy{record},
-		StoragePreflight:   storagePreflightSpy{record},
-		AddOnPreflight:     addOnPreflightSpy{record},
-		Lifecycle:          lifecycleSpy{record},
-		Artifacts:          artifactsSpy{record},
-		Installer:          installerSpy{record},
-		StorageArtifacts:   storageArtifactsSpy{record},
-		MachineInventory:   machineInventorySpy{record},
-		MachineAccess:      machineAccessSpy{record},
-		MachineTrust:       machineTrustSpy{record},
-		ClusterAccess:      clusterAccessSpy{record},
+		Contexts:              contextsSpy{record},
+		AddOnCatalog:          addOnCatalogSpy{record},
+		Secrets:               secretsSpy{record},
+		Encryption:            encryptionSpy{record},
+		Media:                 mediaSpy{record},
+		DesiredState:          desiredStateSpy{record},
+		Controller:            controllerSpy{record},
+		EnvironmentPreflight:  environmentSpy{record},
+		EnvironmentInspection: environmentSpy{record},
+		EnvironmentAccess:     environmentSpy{record},
+		ContainerPreflight:    containerPreflightSpy{record},
+		StoragePreflight:      storagePreflightSpy{record},
+		AddOnPreflight:        addOnPreflightSpy{record},
+		Lifecycle:             lifecycleSpy{record},
+		Artifacts:             artifactsSpy{record},
+		Installer:             installerSpy{record},
+		StorageArtifacts:      storageArtifactsSpy{record},
+		MachineInventory:      machineInventorySpy{record},
+		MachineAccess:         machineAccessSpy{record},
+		MachineTrust:          machineTrustSpy{record},
+		ClusterAccess:         clusterAccessSpy{record},
 	}
 }
 

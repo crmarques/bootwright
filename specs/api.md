@@ -70,9 +70,11 @@ universe reaches graph validation and fails because it has no `Environment`.
 Discovery establishes the input universe. The selecting `Environment` then
 sets the complete desired-state scope:
 
-1. Scan discovered YAML streams for exactly one valid `Environment`; always
-   select its declaring file.
-2. Apply its `resources` list, or select all discovered files when omitted.
+1. Scan discovered YAML streams for exactly one structurally decoded
+   `Environment`; always select its declaring file. Validate its authored kind
+   defaults and apply `defaults.Environment` once before checking its required
+   spec fields and selections. Envelope identity fields cannot be defaulted.
+2. Apply its resulting `resources` list, or select all discovered files when omitted.
    Every resource must be covered by an acquired file/directory source or
    selected context input; authored YAML never widens filesystem authority.
    [Environment selection](api/environment.md#resource-and-cluster-selection)
@@ -134,24 +136,63 @@ candidates lexically; check per-marker bytes before grammar and aggregate bytes,
 in table order. Read at most the remaining applicable budget plus one byte;
 never allocate from an untrusted declared size.
 
-Count every stream document, including empty ones. Its document node has depth
-zero; every child edge adds one. Count document, mapping, sequence, scalar and
-alias nodes once on encounter, even if grammar later rejects them. Traverse
-mapping keys and values; key use, tags and anchors add no count. Never traverse
-or expand alias targets. Per-file/document counters reset only at their named
-boundary; aggregate counters never reset. Scanning and decoding share counts.
+Count every composed stream document, including empty ones, before schema
+decoding. Its document node has depth zero; every child edge adds one. Count
+document, mapping, sequence, scalar and alias nodes once during a bounded
+traversal, even if grammar later rejects them. Traverse mapping keys and
+values; key use, tags and anchors add no count. Never traverse or expand alias
+targets. Per-file/document counters reset only at their named boundary;
+aggregate counters never reset. Scanning and decoding share counts and reuse
+the admitted representation instead of parsing it again.
 
-Crossing a filesystem, byte, document, depth or node ceiling immediately stops
-the current read and all further admission, including other streams. Return no
-state and one `input.limit` error naming the resource and ceiling; prior
-diagnostics may remain. No normalization, publication or effects follow. The
-first failure in processing order wins; simultaneous checks use table order.
+Crossing a filesystem or byte ceiling immediately stops the current read and
+all further admission. A document, depth or node violation is detected at the
+per-document boundary below and stops further admission, including other
+streams. Return no state and one `input.limit` error naming the resource and
+ceiling; prior diagnostics may remain. No schema decoding of the rejected
+document, normalization, publication or effects follow. The first failure in
+processing order wins; simultaneous checks use table order.
 
 Deduplicate diagnostics before counting. Retain at most the first 999 distinct
 ordinary diagnostics in processing order. At the 1,000th, stop validation and
 fill the reserved slot with one source-free `input.limit`, then sort all 1,000
 by CLI diagnostic order. Every limit failure makes the command-specific result
 `null`; partial file/object counts are not completion evidence.
+
+### Parser boundary
+
+Read and verify the source bytes within the per-file and aggregate byte
+ceilings before passing them to the parser. The selected stable YAML v3
+decoder composes one complete document at a time. Check the returned document
+count, depth and node counts before envelope or schema decoding, Environment
+selection, normalization or expansion. Structural ceilings bound the admitted
+representation, not allocations performed inside that one parser call.
+
+At a document-count ceiling, one additional document may be composed to
+distinguish end-of-stream from an over-limit stream. Discard that document
+without schema decoding and return `input.limit`; do not add it to the
+retained trees. A parser syntax failure before it returns a document
+takes precedence over structural limits that could only be checked on the
+unavailable representation. Prior verified byte-limit failures always precede
+parsing. The parser adapter is unmodified; it has no pre-composition node,
+depth or document hook. It accepts a `%YAML 1.1` directive and rejects a
+`%YAML 1.2` directive. Bootwright applies the strict scalar rules below in both
+directive-free and accepted-directive streams.
+
+Syntax failure metadata is bounded to one record per acquired file. Apply the
+returned-diagnostic ceiling after resource selection; syntax errors from
+excluded files do not consume that allowance. Structural limits remain global.
+For open native maps, diagnostics name the containing typed field and retain
+source coordinates without repeating arbitrary native keys as field paths.
+
+Parse each source stream once. Retain only admitted trees within the aggregate
+node ceiling and reuse them for Environment scanning and selected decoding.
+Cancellation is cooperative: check the supplied context around each decode,
+in the context-aware reader, during node traversal and between later phases.
+A decoder already processing buffered bytes is not forcibly interrupted.
+Do not abandon parser goroutines or claim an in-process hard time or memory
+limit. The isolated resource-qualification gate belongs to the
+[M1b delivery evidence](milestones.md#first-delivery-context-free-desired-state-admission).
 
 ## YAML streams and decoding
 
@@ -174,12 +215,12 @@ prefixes or separators. Their lexical value is parsed without a machine-word
 size limit before the owning field applies its range. Quoted booleans and
 integers are strings and therefore type errors.
 
-YAML numeric scalars are otherwise rejected except at these finite-number
-fields:
+Outside explicitly open native fields, YAML numeric scalars other than
+schema-declared integers are rejected except at these finite-number fields:
 
 - an OSD declaration's `dataAllocateFraction`;
-- `StoragePool.spec.ceph.autoscale.targetSizeRatio`; and
-- `StoragePool.spec.ceph.compression.requiredRatio`.
+- `StoragePool.spec.autoscale.targetSizeRatio`; and
+- `StoragePool.spec.compression.requiredRatio`.
 
 Those fields accept a base-10 integer, fractional, or exponent spelling without
 a base prefix or digit separator and decode with IEEE-754 binary64 semantics.
@@ -187,14 +228,17 @@ Infinity, NaN, and finite spellings that overflow to a non-finite value are
 invalid; underflow may produce zero. Canonical output uses the shortest base-10
 spelling, including exponent form when needed, that round-trips to the same
 binary64 value. The owning storage rules define zero-as-omission and the
-non-zero ranges.
+non-zero ranges. Open-field numeric values follow the
+[native scalar rules](#native-and-implementation-shaped-fields).
 
 An explicit `null` document or mapping key is a `yaml.shape` error. An explicit
 `null` used for any schema field or collection element is an `api.type` error,
 including when the field is required. A document with such an error does not
 count as decoded. A missing `apiVersion` receives `api.version`, a missing
-`kind` receives `api.kind`, and every other absent required field reaches
-required-value validation and receives `api.required`.
+`kind` receives `api.kind`, and an absent required envelope field receives
+`api.required`. Missing required spec fields are checked after Environment kind
+defaults and owning-schema normalization; a field still missing then receives
+`api.required`.
 
 The registered schema fixes scalar and collection types, and strict decoding
 rejects unknown fields at every typed level. Explicitly documented open native
@@ -213,11 +257,14 @@ validation fails. A scan-only excluded document does not count as decoded.
 
 Processing is deterministic:
 
-1. discover paths and scan for the selecting Environment;
+1. discover paths, scan for the selecting Environment, validate its partial
+   kind-default entries, and apply its self-default entry once;
 2. resolve resource selection and parse every selected stream;
 3. strictly decode the envelope and registered kind;
 4. validate authored-only grammar that normalization would otherwise erase;
-5. normalize reference-independent defaults and values;
+5. apply Environment kind defaults once to each other selected object; recheck
+   authored-intent and forbidden-input constraints on inherited values before
+   normalizing remaining reference-independent defaults and values;
 6. build provisional indexes, apply the Environment cluster-selection closure,
    and resolve references within the retained selected state;
 7. normalize reference-derived defaults and composed values; and
@@ -259,32 +306,35 @@ The deliberate exceptions are:
   selection lists, not references;
 - `CustomPlaybook.spec.target.{clusters,machines,hostGroups}` and the matching
   cluster-add-on step target lists are inventory selections;
-- `Environment.spec.proxyFor.*` names a proxy catalog entry or the literal
-  `none`; and
+- `StorageFilesystem.spec.dataPoolRefs` accepts either scalar names or the
+  owning schema's `{name, default}` records;
 - `InfraProvider` KubeVirt `networkRef` is the sole object-form external
-  reference and carries its Kubernetes group, kind, name, and namespace.
+  reference and carries its Kubernetes group, kind, name, and a namespace only
+  for namespaced resource kinds.
 
-The object form `{name: ...}` is rejected for ordinary Bootwright references.
+The object form `{name: ...}` is rejected for ordinary Bootwright references
+outside that explicitly documented data-pool record.
 
 ### Unions
 
-A discriminated union carries `type`, and its value is byte-identical to the
-one populated arm key. This grammar is used by `InfraProvider`,
-`InfraComponent`, `ClusterAddon`, `StoragePool.spec.ceph`, and the typed portion
-of `StorageExport`. Inactive arms are rejected. The
-`ContainerCluster.spec.install.platform` discriminator is the exception: its
-matching configuration arm is optional, while every nonmatching arm remains
-forbidden. `StoragePool.spec.ceph` is the value-shape exception: `erasure`
-requires its matching arm, while `replicated` may omit its arm; an empty or
-all-zero `replicated` block is semantically unpopulated, so only non-zero
-replicated members conflict with `type: erasure` or a placement policy.
+A discriminated union retains `type` when it identifies a meaningful domain
+variant, including `StorageCluster`, `StoragePool`, `StorageExport`, and
+container installation platforms. Inactive configuration arms are rejected.
+A matching configuration arm need not exist where the owning schema defines
+only a type value. `ContainerCluster.spec.install.platform` may omit its
+matching configuration arm. `StoragePool.spec` requires `erasure` configuration
+for that type, while a replicated pool may omit `replicated`; an empty or
+all-zero replicated block is unpopulated, so only nonzero replicated members
+conflict with an erasure type or a placement policy.
 
-A presence union carries no discriminator; one populated arm selects the
-variant, and the owning field states whether omission is invalid or selects a
-default. It is used where the surrounding type already fixes the allowed
-choice, including provider network attachments, machine-install backends and
-package sources, access authentication, and `Secret.spec.source` (whose
-omission selects `contextStore`).
+A presence union carries no discriminator. Exactly one implementation arm
+selects `InfraProvider`, `InfraComponent`, and `ClusterAddon`; their former
+`type` fields are unknown. An implementation arm must satisfy its own required
+fields after defaulting. Presence choices also cover provider attachments,
+machine-install backends and package sources, authentication, proxy choices,
+and `Secret.spec.source`. The owning field specifies whether an empty arm is a
+valid selection and whether omission is invalid or selects a default. In
+particular, Secret source omission selects `contextStore`.
 
 `Entitlement.spec.type` is the one set-of-arms discriminator: each product type
 requires the `rhsm`, `registry`, and `license` arm set defined in
@@ -303,8 +353,8 @@ Optional features are normally enabled by block presence. An `enabled`
 boolean is used only when its owning field defines how omission differs from
 explicit `false`; otherwise absence and false are the same. `type` is reserved
 for kind-of-thing discriminators. The who-runs-it axis is always
-`management: managed|external`, and `none` is a catalog-selection sentinel,
-not a management value.
+`management: managed|external`. Direct proxy access is the presence choice
+`direct: {}`; `none` is not a proxy-selection or management value.
 
 ## Kind catalog
 
@@ -345,6 +395,20 @@ rules; each schema page adds its own:
 
 ## Defaults, normalization, and effective state
 
+[Environment kind defaults](api/environment.md#kind-defaults) are applied before
+owning-kind fallback and validation. Partial specs keep their declared scalar
+types and absence information; they are not independently normalized with
+built-in defaults or completed into objects. This prevents an unused default
+entry from silently supplying additional fields. Canonical defaults emit kind
+keys in the catalog's canonical kind order, and each partial spec in its
+owning kind's field order, without creating absent keys.
+
+An expanded candidate desired-state tree remains within the depth and aggregate
+representation-node ceilings above (64 and 1,000,000). Count inherited copies
+at each recipient, not just once at their declaration; exceeding either bound
+returns `input.limit` without partial state or further expansion. Retain source
+provenance separately for safe diagnostics; it is not authored/effective data.
+
 Normalization returns a deep copy, reads no secret or custom-code source,
 performs no random generation or network lookup, and selects no concrete
 runtime implementation. API-owned defaults consumed across multiple stages are
@@ -354,12 +418,32 @@ such as `Secret.spec.source` selecting `contextStore`, remains in its canonical
 omitted representation. Defaults owned by a native consumer remain
 absent until an authorized version-specific renderer deliberately applies them.
 
+Normalization and internal effective-state serialization must preserve the
+resolved meaning of defaults. Do not erase an explicit empty/zero value when
+that would lose a suppression of an Environment fallback. Preserve its
+permitted literal or emit the owning schema's explicit equivalent; for
+example, an authored empty Secret source emits `contextStore: {}` instead of
+disappearing. Explicit conditional-mode choices continue to suppress
+incompatible inherited branches under the Environment rules.
+
+Authored input and the normalized effective inspection representation are
+distinct immutable values. Derived Machine access and managed endpoint
+addresses may appear in effective inspection output even where the authored
+schema forbids those fields. Effective output is not a replacement authored
+input format: the compiler never accepts a trust flag, marker, alternate
+entrypoint or decoder mode that bypasses authored-field checks. Internal
+serialization stability does not imply that inspection YAML can be submitted
+to `validate`. The [context store](contexts.md#frozen-input-and-provenance)
+retains exact authored input and its origins separately, never reconstructing them from
+inspection output.
+
 Names, enums, reference names, versions, paths, and URLs satisfy their authored
 lexical rules and otherwise remain unchanged. MAC addresses normalize to
-lowercase colon notation. IPs normalize to compressed canonical text; CIDRs
-mask host bits. Digest algorithms and hexadecimal digests normalize to
-lowercase. Set-valued lists sort only where their owning schema says so;
-ordered lists retain authored order.
+lowercase colon notation. IPs normalize to compressed canonical text. Network
+CIDRs mask host bits; Machine interface-address IP/prefix values retain host
+bits and normalize the host and prefix separately. Digest algorithms and
+hexadecimal digests normalize to lowercase. Set-valued lists sort only where
+their owning schema says so; ordered lists retain authored order.
 
 Composed machine and cluster hostnames, Environment defaults, provider and
 component defaults, cluster networking defaults, and other normalized values
@@ -393,8 +477,21 @@ encoder golden fixtures are normative for encoder details not fixed above.
 ## Native and implementation-shaped fields
 
 Only explicitly documented native/open fields accept passthrough, preserving
-their consumer's spelling and structured values. They remain inert during
-desired-state compilation. A native renderer composes references and Secrets
-in memory, projects only documented values and validates them against its
-pinned supported release. Upgrading a native dependency must never silently
-reinterpret authored `bootwright.io/v1alpha1` state.
+their consumer's spelling and structured values. Open mappings require string
+keys. Their values may recursively contain mappings, lists, strings, lowercase
+YAML booleans, arbitrary-width decimal integers, and finite base-10 binary64
+numbers under the numeric lexical rules above. Preserve large integers exactly;
+never round them through binary64. Integer-versus-floating representation is
+not semantic for a native numeric value, but its value is: canonical output
+may select an equivalent integer spelling for an integral binary64 value.
+Nulls, aliases, duplicate keys, unsupported tags, non-finite numbers and
+non-decimal numeric spellings remain forbidden. A field documented as
+`map<string,string>` continues to require strings; an open nested field never
+opens its containing typed schema.
+
+Native maps remain inert during desired-state compilation, except for the
+explicit [NMState composition subset](api/machines.md#nmstate-composition-subset)
+needed to validate Machine declarations. A native renderer composes references
+and Secrets in memory, projects only documented values and validates them
+against its pinned supported release. Upgrading a native dependency must never
+silently reinterpret authored `bootwright.io/v1alpha1` state.

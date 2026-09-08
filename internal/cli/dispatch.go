@@ -4,59 +4,77 @@ import (
 	"context"
 	"errors"
 
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
 )
 
 var errMissingService = errors.New("application service is not configured")
 
-func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet, args []string) error {
+// commandResult is the closed set of successful application results understood
+// by this executable. Unavailable error-only ports return its zero value.
+type commandResult struct {
+	validation *compilation.Report
+	admission  *contexts.AdmissionResult
+	use        *contexts.UseResult
+	list       *contexts.ListResult
+	current    *contexts.CurrentResult
+	deletion   *contexts.DeleteResult
+	effective  *compilation.EffectiveResult
+}
+
+func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet, args []string) (commandResult, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return commandResult{}, err
 	}
 	if flags == nil {
-		return errors.New("command flags are not configured")
+		return commandResult{}, errors.New("command flags are not configured")
 	}
 	values := requestValues{flags: flags}
 	switch path {
 	case "context init", "context update", "context use", "context list", "context current", "context delete":
 		return s.invokeContexts(ctx, path, &values, args)
 	case "add-ons list", "add-ons add", "add-ons delete":
-		return s.invokeAddOnCatalog(ctx, path, &values, args)
+		return commandResult{}, s.invokeAddOnCatalog(ctx, path, &values, args)
 	case "secret set", "secret generate", "secret check", "secret list", "secret show", "secret delete":
-		return s.invokeSecrets(ctx, path, &values, args)
+		return commandResult{}, s.invokeSecrets(ctx, path, &values, args)
 	case "secret encryption init", "secret encryption status", "secret encryption rotate":
-		return s.invokeEncryption(ctx, path, &values, args)
+		return commandResult{}, s.invokeEncryption(ctx, path, &values, args)
 	case "media add", "media list", "media delete":
-		return s.invokeMedia(ctx, path, &values, args)
+		return commandResult{}, s.invokeMedia(ctx, path, &values, args)
 	case "validate", "render effective":
 		return s.invokeDesiredState(ctx, path, &values, args)
 	case "preflight bastion", "bastion setup":
-		return s.invokeController(ctx, path, &values, args)
-	case "preflight infra", "preflight clusters", "preflight all", "cluster list", "cluster info", "cluster rsh", "cluster exec":
-		return s.invokeEnvironment(ctx, path, &values, args)
+		return commandResult{}, s.invokeController(ctx, path, &values, args)
+	case "preflight infra", "preflight clusters", "preflight all":
+		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
+	case "cluster list", "cluster info":
+		return commandResult{}, s.invokeEnvironmentInspection(ctx, path, &values, args)
+	case "cluster rsh", "cluster exec":
+		return commandResult{}, s.invokeEnvironmentAccess(ctx, path, &values, args)
 	case "preflight container-cluster":
-		return s.invokeContainerPreflight(ctx, path, &values, args)
+		return commandResult{}, s.invokeContainerPreflight(ctx, path, &values, args)
 	case "preflight storage-cluster":
-		return s.invokeStoragePreflight(ctx, path, &values, args)
+		return commandResult{}, s.invokeStoragePreflight(ctx, path, &values, args)
 	case "preflight add-ons":
-		return s.invokeAddOnPreflight(ctx, path, &values, args)
+		return commandResult{}, s.invokeAddOnPreflight(ctx, path, &values, args)
 	case "plan", "status", "apply", "destroy":
-		return s.invokeLifecycle(ctx, path, &values, args)
+		return commandResult{}, s.invokeLifecycle(ctx, path, &values, args)
 	case "render":
-		return s.invokeArtifacts(ctx, path, &values, args)
+		return commandResult{}, s.invokeArtifacts(ctx, path, &values, args)
 	case "render installer":
-		return s.invokeInstaller(ctx, path, &values, args)
+		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
 	case "render storage":
-		return s.invokeStorageArtifacts(ctx, path, &values, args)
+		return commandResult{}, s.invokeStorageArtifacts(ctx, path, &values, args)
 	case "machine list":
-		return s.invokeMachineInventory(ctx, path, &values, args)
+		return commandResult{}, s.invokeMachineInventory(ctx, path, &values, args)
 	case "machine rsh", "machine exec":
-		return s.invokeMachineAccess(ctx, path, &values, args)
+		return commandResult{}, s.invokeMachineAccess(ctx, path, &values, args)
 	case "machine trust":
-		return s.invokeMachineTrust(ctx, path, &values, args)
+		return commandResult{}, s.invokeMachineTrust(ctx, path, &values, args)
 	case "cluster oc", "cluster kubectl", "cluster kubeconfig":
-		return s.invokeClusterAccess(ctx, path, &values, args)
+		return commandResult{}, s.invokeClusterAccess(ctx, path, &values, args)
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }

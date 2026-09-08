@@ -12,49 +12,67 @@ support; all declarations obey [the compiler boundary](../api.md#compiler-bounda
 References are plain scalar names in fixed namespaces: `clusterRef` names a
 `ContainerCluster`, `profileRefs` name `ClusterAddonProfile` objects,
 `addonRefs` and `addonRef` name `ClusterAddon` objects, and `secretRefs` name
-`Secret` objects. An accepted `resourceRef.kind` supplies the namespace for its
-binding value.
+`Secret` objects. An input's `resourceKind` or `secretType` constrains its
+binding value as described below. [Environment kind defaults](environment.md#kind-defaults)
+may supply only the fields permitted by that closed contract; this page owns
+their kind-specific validation and built-in defaults.
 
 ## ClusterAddon
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.type` | string | yes | — | `olm` or `manifestSet`. |
 | `spec.provides` | array of strings | no | `[]` | Set of capability tokens. |
 | `spec.requires` | array of strings | no | `[]` | Set of capability tokens. |
-| `spec.accepts` | object | no | — | Contains only `inputs`. |
-| `spec.olm` | object | conditional | — | Required exactly for `type: olm`. |
-| `spec.manifestSet` | object | conditional | — | Required exactly for `type: manifestSet`. |
+| `spec.inputs` | array of objects | no | `[]` | Accepted inputs, keyed by unique `name`. |
+| `spec.olm` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
+| `spec.manifestSet` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.readiness` | object | no | — | Timeout and readiness checks. |
 | `spec.steps` | array of objects | no | `[]` | Ordered lifecycle-step declarations. |
+
+The implementation arm selects the add-on variant. Missing, multiple, or
+unknown arms are invalid; the selected arm must satisfy its required fields.
+`spec.type` and `spec.accepts` are unknown fields, not compatibility aliases.
 
 Capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique in each
 list. `provides` and `requires` are not closed enums. The names `kubevirt`,
 `dataFoundation`, and `nmstate` have defined downstream meanings, but all
 valid tokens participate in dependency ordering. An add-on with any
-`provides` value declares at least one readiness check.
+`provides` value requires at least one effective readiness check after the
+readiness defaults below apply.
 
 ### Accepted inputs and effects
 
-`spec.accepts.inputs` is a set keyed by `name`. Each entry is:
+`spec.inputs` is an array with set semantics keyed by author-defined `name`.
+Each entry is:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `name` | string | yes | — | Unique within the add-on. |
-| `required` | boolean | no | `false` | Every binding must supply a value when true. |
-| `resourceRef` | object | conditional | — | Exactly one of `resourceRef` and `secretRef`. |
-| `resourceRef.kind` | string | conditional | — | A registered Bootwright kind; the scalar binding value names that kind. |
-| `secretRef` | empty object | conditional | — | Presence arm; the scalar binding value names a `Secret`. |
+| `resourceKind` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; names a registered kind other than `Secret`. |
+| `secretType` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; one of the [Secret types](secrets.md#secret). |
+| `required` | boolean | no | `true` | Every binding must supply a value when true; explicit false makes the input optional. |
 | `effects` | array | no | `[]` | Each entry is one effect union below. |
 
-Each effect entry sets exactly one arm:
+Names do not determine input types or effects. `resourceKind: Secret` is
+invalid; Secret inputs use `secretType`. The former `resourceRef` and
+`secretRef` input declaration fields are unknown.
+
+Effects declare how a supplied input is consumed. Their names belong to a
+closed vocabulary, unlike input names. Each effect entry sets exactly one
+known arm:
 
 | Arm | Shape | Rule |
 | --- | --- | --- |
-| `storageExportAttachment` | `{}` | Input is `resourceRef: {kind: StorageExport}` and the add-on provides `dataFoundation`. |
-| `globalPullSecretMerge` | `{registry?, username?}` | Input uses `secretRef: {}`; both strings are required by semantic validation. |
+| `storageExportAttachment` | `{}` | Input is `resourceKind: StorageExport` and the add-on provides `dataFoundation`; the bound export supplies storage integration for the binding's cluster. |
+| `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. |
 
 Validation checks effect compatibility and resolves supplied object names.
+The storage attachment also defines the relationship used by
+[Environment cluster selection](environment.md#resource-and-cluster-selection).
+An empty effect list declares no such built-in relationship or operation.
+Effects never grant execution authority. The [add-on contract](../add-ons.md#closed-execution-vocabulary)
+requires qualified implementations and refuses unsupported effects, including
+global pull-secret merging without a proven ownership-aware inverse.
 
 ### OLM arm
 
@@ -63,11 +81,11 @@ Validation checks effect compatibility and resolves supplied object names.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `namespace.name` | string | yes | — | Kubernetes namespace. |
-| `namespace.create` | boolean | no | `false` | Whether the lifecycle creates it. |
+| `namespace.management` | string | no | `managed` | `managed` requests namespace creation; `external` selects an existing externally managed namespace. |
 | `namespace.labels` | map of string to string | no | `{}` | Kubernetes label keys and values. |
 | `operatorGroup` | object | no | — | Optional OperatorGroup. |
-| `operatorGroup.name` | string | conditional | — | Required when the block is present. |
-| `operatorGroup.targetNamespaces` | array of strings | no | `[]` | Ordered non-empty namespaces. |
+| `operatorGroup.name` | string | no | `namespace.name` | Applies only when the OperatorGroup block is present. |
+| `operatorGroup.targetNamespaces` | array of strings | no | `[namespace.name]` | Ordered non-empty namespace strings; an authored list replaces this default. |
 | `catalogSource` | object | no | — | Optional shipped CatalogSource. |
 | `catalogSource.name` | string | conditional | — | Required when the block is present. |
 | `catalogSource.image` | string | conditional | — | Required when the block is present. |
@@ -75,7 +93,7 @@ Validation checks effect compatibility and resolves supplied object names.
 | `catalogSource.publisher` | string | no | — | Optional publisher. |
 | `catalogSource.pollInterval` | string | no | — | Valid Go duration. |
 | `catalogSource.grpcPodConfig.securityContextConfig` | string | conditional | — | `legacy` or `restricted` when the block is present. |
-| `subscription.name` | string | yes | — | Kubernetes Subscription name. |
+| `subscription.name` | string | no | `subscription.package` | Kubernetes Subscription name. |
 | `subscription.package` | string | yes | — | OLM package. |
 | `subscription.channel` | string | yes | — | OLM channel. |
 | `subscription.startingCSV` | string | no | — | Optional starting CSV. |
@@ -84,9 +102,14 @@ Validation checks effect compatibility and resolves supplied object names.
 | `subscription.installPlanApproval` | string | yes after normalization | `Automatic` | `Automatic` or `Manual`. |
 | `customResources` | array of objects | no | `[]` | Raw Kubernetes resources preserved as structured maps. |
 
+Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
+namespace-named group targeting that namespace. An explicit `targetNamespaces`
+list remains as authored, including an empty list. Empty authored names are
+invalid, not a request for a default. `namespace.create` is unknown.
+
 A shipped catalog requires both name and image, and subscription source must
 match its name. When a shipped `catalogSource` is present and
-`namespace.create: true`, `subscription.sourceNamespace` must differ from
+`namespace.management` is `managed`, `subscription.sourceNamespace` must differ from
 `namespace.name` because the CatalogSource namespace must already exist. Each
 custom resource requires string `apiVersion`, string `kind`, and
 `metadata.name`. A `kind: Secret` custom resource cannot carry `data` or
@@ -108,7 +131,18 @@ contract's package, native-schema and content-safety gates.
 ### Readiness
 
 `readiness.timeout` is a positive Go duration and normalizes to `30m`.
-`readiness.checks` is an ordered array. Each check sets exactly one arm:
+`readiness.checks` is an ordered array. If it is still omitted on an OLM add-on
+after Environment defaults, built-in normalization supplies one `csvSucceeded`
+check with `namespace` equal to `olm.namespace.name` and `subscription` equal
+to the effective `olm.subscription.name`. This applies when `readiness` is omitted too.
+Manifest-set add-ons default to no checks.
+
+An authored check list replaces the default completely; no hidden check is
+appended. An explicit `[]` selects no checks and therefore fails when
+`provides` is non-empty. These defaults apply only to top-level
+`readiness.checks`, not to a step's `requires` list. Every authored check must
+supply its arm's required fields; no missing identity is inferred inside it.
+Each check sets exactly one arm:
 
 | Arm | Exact fields |
 | --- | --- |
@@ -158,7 +192,7 @@ A playbook target sets exactly one selection arm and an optional limit:
 | Field | Shape | Rule |
 | --- | --- | --- |
 | `boundCluster` | `{}` | Machines of the binding's `ContainerCluster`. |
-| `fromInput` | `{input: <name>}` | A declared `resourceRef` input of kind `StorageExport`, `StorageCluster`, `ContainerCluster`, or `Machine`. A `StorageExport` input also declares `storageExportAttachment`. |
+| `fromInput` | `{input: <name>}` | A declared `resourceKind` input of kind `StorageExport`, `StorageCluster`, `ContainerCluster`, or `Machine`. A `StorageExport` input also declares `storageExportAttachment`. |
 | `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `ContainerCluster` or `StorageCluster`; machine names resolve to SSH-accessible `Machine` objects. |
 | `limit` | string | `firstReachable` by default, or `all`. |
 
@@ -208,9 +242,11 @@ At least one profile or direct add-on is selected. Every config has:
 | `inputs[].name` | string | yes | — | Must be declared by the selected add-on. |
 | `inputs[].value` | string | yes | — | Non-empty scalar resource or Secret name. |
 
-For a `resourceRef` input, `value` resolves to the declared kind. For a
-`secretRef` input, it resolves to `Secret`. Every required accepted input is
-supplied exactly once and undeclared inputs are rejected.
+For a `resourceKind` input, `value` resolves to the declared kind. For a
+`secretType` input, it resolves to a `Secret` with that exact type. Every
+required accepted input is supplied exactly once and undeclared inputs are
+rejected. These remain generic named lists: input names and values are not
+add-on-specific schema fields. Input order does not define installation order.
 
 Only one binding may apply a given add-on to a given cluster after profile
 expansion. A selected add-on's required capabilities must be provided by
@@ -219,11 +255,16 @@ acyclic. Config entries never select otherwise absent add-ons.
 
 ## Normalization and canonical state
 
-Normalization materializes the table defaults for readiness timeout and OLM
-subscription source, source namespace and install-plan approval.
+After Environment kind defaults, normalization materializes input `required`,
+readiness timeout, omitted OLM readiness checks, namespace management, present
+OperatorGroup name and target namespaces, and subscription name, source,
+source namespace and install-plan approval. These built-in defaults never
+create an OperatorGroup still omitted after Environment defaults or append to
+a supplied readiness-check list.
 
 The step timeout, target limit, and output format have effective defaults
 `10m`, `firstReachable`, and `text` for their effectful consumers. They remain
-absent in effective state when unauthored. Boolean zero values stay false.
+absent in effective state when unauthored. Explicit false remains false,
+including an optional input's `required` value.
 Ordered arrays retain order; set-valued arrays and map keys canonicalize under
 the common API rules.

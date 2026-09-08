@@ -2,14 +2,14 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: bare-metal
-spec:
-  type: baremetal
 
+spec:
   baremetal:
     boot:
       method: external
     defaults:
       bmc:
+        credentialsRef: ocp-bmc-credentials
         tls:
           verify: true
         virtualMedia:
@@ -20,6 +20,7 @@ spec:
     - name: ocp-bare-metal-network
       baremetal:
         vlan: 100
+
     - name: ceph-network
       baremetal:
         vlan: 200

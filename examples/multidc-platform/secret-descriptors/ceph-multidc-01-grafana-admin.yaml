@@ -2,8 +2,9 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: ceph-multidc-01-grafana-admin
+
 spec:
   type: opaque
+
   source:
-    file:
-      path: ../secrets/sources/ceph-multidc-01-grafana-admin.txt
+    contextStore: {}

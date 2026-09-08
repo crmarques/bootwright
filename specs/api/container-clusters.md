@@ -10,7 +10,6 @@ derived outputs. [The compiler boundary](../api.md#compiler-boundary) applies;
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
-
 metadata:
   name: edge
 
@@ -128,7 +127,7 @@ Every endpoint has this exact shape:
 | `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6. |
 | `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits. |
 | `source.type` | string | no | `openshift` | `openshift`, `external`, `infraComponent`, or `node`. |
-| `source.componentRef` | string | conditional | — | Global `InfraComponent` whose type is `loadBalancer`; valid only for `infraComponent`. |
+| `source.componentRef` | string | conditional | — | Global `InfraComponent` selecting the `loadBalancer` arm; valid only for `infraComponent`. |
 | `source.bindAddressRef` | string | conditional | sole bind address | Component-local `bindAddresses[].name`; valid only for `infraComponent`. |
 
 `openshift` and `external` may own an authored `address`; otherwise `dnsName`
@@ -137,9 +136,10 @@ component and optional bind-address ref resolve it. `bindAddressRef` may be
 omitted only when the selected load balancer has one bind address.
 
 `node` is valid only for a one-node cluster and also forbids an authored
-address. Effective normalization resolves the unique install address selected
-by that node machine's `network.config.interfaceAddresses[]` and materializes
-it. Zero or multiple candidates are errors. Single-node clusters reject the
+address. Effective normalization resolves that node Machine's
+`network.installAddressRef` using the [Machine selection rules](machines.md#network-configuration)
+and materializes the selected host IP without its prefix. Missing or ambiguous
+installation candidates are errors. Single-node clusters reject the
 default `openshift` source for all three slots; `source.type: node` is the
 recommended form so one machine address is not repeated in three places, while
 `external` with a sufficient `dnsName` is also valid.
@@ -152,10 +152,11 @@ node install IPs, and endpoint/network address families are consistent.
 
 ## Credentials and certificates
 
-For OpenShift, `pullSecretRef` first defaults from
-`Environment.spec.defaults.install.pullSecretRef`; if absent there too,
-normalization injects `openshift-pull-secret`. The resulting name must still
-resolve to a declared `dockerConfigJson` `Secret`.
+[Environment kind defaults](environment.md#kind-defaults) apply before the
+following conventional fallbacks. An omitted OpenShift `pullSecretRef` may
+receive `Environment.spec.defaults.ContainerCluster.install.pullSecretRef`;
+if absent there too, normalization injects `openshift-pull-secret`. The
+resulting name must still resolve to a declared `dockerConfigJson` `Secret`.
 
 `install.nodeSSH` is a presence union:
 
@@ -165,10 +166,12 @@ resolve to a declared `dockerConfigJson` `Secret`.
   is authored; optional `privateKeyRef` names the matching private material.
 
 When the whole block is omitted, it defaults from
-`Environment.spec.defaults.install.nodeSSH`; if that is absent, normalization
-injects `keyPairRef: <cluster-name>-cluster-admin-ssh-key`. The reference must
-still resolve. Public-only material is sufficient to declare installation but
-cannot authorize a cluster SSH command.
+`Environment.spec.defaults.ContainerCluster.install.nodeSSH`; if that is
+absent, normalization injects
+`keyPairRef: <cluster-name>-cluster-admin-ssh-key`. An authored block wins as a
+whole; key-pair and split-key choices are never combined through defaults.
+The reference must still resolve. Public-only material is sufficient to
+declare installation but cannot authorize a cluster SSH command.
 
 `servingCertificates` admits only:
 
@@ -202,7 +205,7 @@ membership and order while effective output canonicalizes CIDR text:
 
 Every cluster-network `cidr` is valid and its required `hostPrefix` is larger
 than the CIDR prefix and no larger than `32` or `128`. Service CIDRs are valid.
-The consumed `NetworkConfig.machineNetwork` values, cluster networks, service
+The consumed `NetworkConfig.spec.machineNetwork` values, cluster networks, service
 networks, node install addresses, and endpoint addresses form one supported
 address family; dual-stack or mixed-family input is rejected by this contract.
 
@@ -215,11 +218,17 @@ address family; dual-stack or mixed-family input is rejected by this contract.
 | `spec.security.diskEncryption.unlock.tpm2` | empty object | with encryption | — | The only unlock arm; `pcrBank` and `pcrIds` are forbidden here. |
 | `spec.security.diskEncryption.roles` | array of strings | no | all represented pools | Unique values from `master`, `worker`, and `infra`. |
 
-An authored role selection resolves to at least one declared node. `infra`
-folds into the worker machine-config pool. TPM2 inventory and install-time
-projection are fail-closed effect-time checks; the desired-state declaration
-never triggers a hardware read or disk operation. General destructive and
-secret boundaries are defined in [security.md](../security.md) and
+Roles select the native machine-config pools receiving this one encryption
+configuration; they do not assign node roles or access permissions. When
+encryption is present, omission selects every represented node role. An
+authored role selection resolves to at least one declared node. `infra` folds
+into the worker machine-config pool: selecting `worker` or `infra` targets that
+pool, and selecting both produces one configuration. This cannot express an
+independent infra-only encryption boundary or contradictory per-node
+overrides. TPM2 inventory and install-time projection are fail-closed
+effect-time checks; the desired-state declaration never triggers a hardware
+read or disk operation. General destructive and secret boundaries are defined
+in [security.md](../security.md) and
 [state-reconciliation.md](../state-reconciliation.md).
 
 ## Nodes

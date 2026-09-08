@@ -9,16 +9,16 @@ this page defines no accepted input, compatibility rule, or delivery state.
 
 The proposed split duplicated closely related concepts and weakened the
 established Environment-selected graph. The accepted alignment kept one strict
-catalog, restored the existing public grammar and defaults, and rejected
+catalog, restored the then-current public grammar and defaults, and rejected
 aliases or translation paths from the proposal.
 
 | Superseded shape | Aligned authored shape |
 | --- | --- |
-| `Environment` without selection, access, or service defaults | `Environment` with `resources`, cluster selection, domains, access/install defaults, service catalogs, secret custody mode, mirror/trust, rescue, and component-image intent. |
+| `Environment` without selection, access, or service defaults | `Environment` with `resources`, cluster selection, domains, access/install defaults, service catalogs, Secret references, mirror/trust, rescue, and component-image intent. |
 | `RedHatSubscription`, `IBMStorageCephSubscription` | One type-discriminated `Entitlement`. |
 | `Machine` with inline NMState only | `Machine` plus reusable `NetworkConfig`. |
 | `InfrastructureProvider` | `InfraProvider`. |
-| `ArtifactServer`, `LoadBalancer`, `HTTPProxy`, `DNSResolver`, `NTPServer`, `ContainerRegistry` | One type-discriminated `InfraComponent`. |
+| `ArtifactServer`, `LoadBalancer`, `HTTPProxy`, `DNSResolver`, `NTPServer`, `ContainerRegistry` | One `InfraComponent` with service implementation arms. |
 | `OpenShiftCluster` | `ContainerCluster`. |
 | `CephCluster`, `CephCrushRule`, `CephPool`, `CephFilesystem`, `CephObjectGateway` | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`. |
 | Separate `CephNFSService` and `CephNFSExport` | One `StorageNFSExport`. |
@@ -27,5 +27,6 @@ aliases or translation paths from the proposal.
 
 `MachineImage`, `MachineInstallProfile`, `ClusterAddon`,
 `ClusterAddonProfile`, `ClusterAddonBinding`, and `CustomPlaybook` kept their
-kind names. Exact fields, validation, ordering, and effect boundaries live only
-in the authoritative schema pages.
+kind names. Subsequent API authoring changes retained this catalog while
+simplifying fields and defaults. Exact fields, validation, ordering, and effect
+boundaries live only in the authoritative schema pages.

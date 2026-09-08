@@ -2,25 +2,29 @@ apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
 metadata:
   name: ceph-multidc-01
+
 spec:
   type: ceph
-
   management: managed
 
   ceph:
     distribution: ibm
     release: "9.0.0.0"
     packageVersion: "20.1.0-1.el9cp"
+
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
       version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+
     ibm:
       callHome: disabled
       packages:
         source: subscription
         subscriptionRepos:
           - "example-ceph-9-for-rhel-9-x86_64-rpms"
+
     entitlementRef: ceph-entitlement
+
     cephadm:
       ansible:
         packageVersion: "5.0.0-1.el9cp"
@@ -32,27 +36,49 @@ spec:
         keyRef: ceph-multidc-01-cephadm-ssh-key
       bootstrap:
         node: node-01
+        addressRef: ssh
+        singleHostDefaults: false
+
     networks:
       publicCIDRs:
         - "198.51.100.0/25"
         - "198.51.100.128/25"
       clusterCIDRs:
         - "203.0.113.0/24"
+
     security:
       fips:
         enabled: true
       cephx:
         keyType: aes
+
     monitoring:
+      enabled: true
       prometheus:
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-04
+            - node-05
         retentionTime: 14d
         retentionSize: 5GB
+        networks: []
       grafana:
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-04
+            - node-05
+        networks: []
         initialAdminPasswordRef: ceph-multidc-01-grafana-admin
+
     mgmtGateway:
       dnsLabel: mgr
       port: 10443
       exposure: http
+      enableAuth: false
       ingress:
         name: mgmt
         address: 198.51.100.58
@@ -60,24 +86,43 @@ spec:
         virtualInterfaceNetworks:
           - "198.51.100.0/25"
         firstVirtualRouterID: 42
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-03
+            - node-04
+            - node-05
+            - node-06
+
     config:
       global:
         mon_osd_down_out_subtree_limit: "host"
         osd_pool_default_pg_autoscale_mode: "on"
       mgr:
         mgr/balancer/mode: "upmap"
+
     mgrModules:
       - balancer
       - pg_autoscaler
       - devicehealth
+
     topology:
       stretch:
         failureDomain: datacenter
+        dataSites:
+          - site-a
+          - site-b
         tiebreaker:
           node: node-07
+          site: site-c
+        ruleName: stretch-rule
+
       nodes:
         - name: node-01
+          fqdn: node-01.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-01
+          site: site-a
           roles:
             - mon
             - mgr
@@ -90,8 +135,11 @@ spec:
             - alertmanager
           labels:
             - _admin
+
         - name: node-02
+          fqdn: node-02.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-02
+          site: site-a
           roles:
             - mon
             - mgr
@@ -104,15 +152,22 @@ spec:
             - alertmanager
           labels:
             - _admin
+
         - name: node-03
+          fqdn: node-03.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-03
+          site: site-a
           roles:
             - osd
             - mds
             - rgw
             - ingress
+          labels: []
+
         - name: node-04
+          fqdn: node-04.ceph-multidc-01.clusters.example.com
           machineRef: storage-b-01
+          site: site-b
           roles:
             - mon
             - mgr
@@ -125,8 +180,11 @@ spec:
             - alertmanager
           labels:
             - _admin
+
         - name: node-05
+          fqdn: node-05.ceph-multidc-01.clusters.example.com
           machineRef: storage-b-02
+          site: site-b
           roles:
             - mon
             - mgr
@@ -139,17 +197,26 @@ spec:
             - alertmanager
           labels:
             - _admin
+
         - name: node-06
+          fqdn: node-06.ceph-multidc-01.clusters.example.com
           machineRef: storage-b-03
+          site: site-b
           roles:
             - osd
             - mds
             - rgw
             - ingress
+          labels: []
+
         - name: node-07
+          fqdn: node-07.ceph-multidc-01.clusters.example.com
           machineRef: storage-witness-01
+          site: site-c
           roles:
             - mon
+          labels: []
+
       osdDrivegroups:
         - serviceID: data
           placement:
@@ -169,4 +236,9 @@ spec:
                 - /dev/disk/by-id/nvme-example-data-04
                 - /dev/disk/by-id/nvme-example-data-05
             encrypted: true
+            filterLogic: AND
+            dataAllocateFraction: 1
             tpm2: true
+            unmanaged: false
+
+    services: []

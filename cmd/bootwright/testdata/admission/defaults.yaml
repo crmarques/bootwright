@@ -1,0 +1,91 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: precedence
+
+spec:
+  domains:
+    base: example.test
+
+  defaults:
+    Machine:
+      network:
+        addresses:
+          - name: ssh
+            address: contact.example.test
+
+      access:
+        ssh:
+          port: 2200
+          auth:
+            operatorIdentity: {}
+
+    CustomPlaybook:
+      enabled: true
+      order: 5
+      tags:
+        - inherited
+
+    ContainerCluster:
+      install:
+        pullSecretRef: unused-reference
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: inherited
+
+spec:
+  os:
+    provided: true
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: explicit
+
+spec:
+  os:
+    provided: true
+
+  network:
+    addresses: []
+
+  access:
+    ssh:
+      port: 2222
+      auth:
+        operatorIdentity: {}
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: local
+
+spec:
+  os:
+    provided: true
+
+  access:
+    local: true
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: CustomPlaybook
+metadata:
+  name: disabled
+
+spec:
+  follows: machines
+  playbook: playbooks/does-not-exist.yaml
+
+  target:
+    machines:
+      - inherited
+
+  enabled: false
+  order: 0
+  tags: []

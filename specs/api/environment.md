@@ -18,9 +18,9 @@ Environment fields emit in this order:
 | `spec.containerClusters` | array of strings | no | all loaded container clusters | Non-empty unique `ContainerCluster` root selection. |
 | `spec.storageClusters` | array of strings | no | all loaded storage clusters | Non-empty unique `StorageCluster` root selection. |
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
-| `spec.defaults` | object | no | — | Cluster-install material and client mirrors. |
-| `spec.secretStorage` | object | no | `mode: source` | Custody mode for file-sourced Secrets. |
-| `spec.proxyFor` | object | no | each consumer inherits the default proxy | Per-consumer proxy catalog selection. |
+| `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
+| `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
+| `spec.proxy` | object | no | direct access | Default and per-consumer proxy selection below. |
 | `spec.infraComponents` | object | no | — | External/managed shared-service access catalogs. |
 | `spec.registries` | object | no | — | Disconnected registry mirror intent. |
 | `spec.trustedCAs` | object | no | — | Fleet-wide additional CA trust for native install rendering. |
@@ -109,8 +109,11 @@ selection only, never package authenticity or execution authority; see
 [the add-on package contract](../add-ons.md#package-standard).
 
 An excluded-file warning identifies its relative path, Bootwright object
-identities and a path that can be added to `resources`. Non-Bootwright files
-produce no such warning.
+identities and safe recovery guidance under the
+[validation-report contract](../cli/output.md#json-output). Only a path within
+the Environment directory can be suggested for `resources`; an outside file
+requires relocating its declaration first. Non-Bootwright files produce no
+such warning.
 
 `spec.containerClusters` and `spec.storageClusters` select effective cluster
 roots after resource decoding and reference-independent normalization. Each
@@ -150,42 +153,141 @@ The fleet key must differ from every Machine access key and every
 also differ from every Machine-authored private key. Validation checks
 reference identity and type, preventing Ceph key reuse for fleet access.
 
-`spec.defaults` emits `install`, `clientsMirror`, `virtctlMirror`, then
-`helmMirror`:
+## Kind defaults
+
+`spec.defaults` is a closed map keyed by exact, case-sensitive names from the
+21-kind catalog. Each value is a partial copy of that kind's `spec`, without
+an additional `spec` wrapper. For example:
+
+```yaml
+spec:
+  defaults:
+    ContainerCluster:
+      install:
+        pullSecretRef: openshift-pull-secret
+```
+
+Every loaded `ContainerCluster` missing `spec.install.pullSecretRef` receives
+that reference. The mechanism applies to every registered kind, not only
+installation material. It never creates objects or supplies `apiVersion`,
+`kind`, or `metadata`. Unknown kinds or fields are errors.
+
+Defaults obey these rules in order:
+
+1. Read the authored defaults map from the selected Environment. Validate each
+   entry against its kind's partial schema: field names, YAML types, scalar
+   grammar/ranges still apply, but required record fields, discriminators, and
+   arms may be omitted in a fragment. Conflicting present arms and locally
+   provable type violations remain errors. Recipient-dependent requirements
+   and references are checked after application. An unused entry must still be
+   a valid partial spec; it creates no object or retention edge by itself.
+2. Apply `defaults.Environment`, if present, once to the selected Environment's
+   other spec fields before resource and cluster selection. That entry cannot
+   contain `defaults`. It cannot widen the acquired filesystem source universe
+   or change the selected Environment identity. The authored defaults map is
+   never itself defaulted or recursively reloaded.
+3. Apply each other kind entry once to each resource-selected object before
+   provider, catalog, conventional, built-in, or reference-derived fallbacks.
+   Explicit object values win over Environment values; the owning kind's
+   existing fallback order applies only to values still absent.
+4. Fill absent attributes recursively inside nonempty schema-defined record
+   objects. An explicit scalar, including `false`, `0`, or an empty string,
+   remains explicit and must be valid. An explicit empty nested object is a
+   whole authored value; it does not request Environment inheritance. The
+   recipient's root `spec` is the container of attributes, not such a nested
+   value. Explicit null is invalid and never requests fallback.
+5. Lists, open/native maps, authentication choices, `install.nodeSSH`, and
+   `Secret.source` are whole values. Copy them only when absent; never append
+   records, patch native payloads, or combine different key/source material.
+   A valid explicit empty collection or source block wins completely.
+6. An authored discriminator or populated implementation arm selects the
+   variant, using that union's own arm-population rules. An explicitly unset
+   value-shape arm, such as an empty/all-zero replicated pool block, does not
+   select a variant.
+   Defaults never introduce an alternative arm or change that selection.
+   Compatible ordinary records within the selected arm may inherit missing
+   fields. Without an authored selection, defaults may select one variant.
+   Applied defaults must produce a valid complete union; inactive default arms
+   are not applied to a differently selected variant.
+   The same protection applies to schema-declared forbidden branches controlled
+   by an explicit mode or feature choice: HTTP suppresses inherited TLS,
+   disabled authentication suppresses inherited OAuth configuration, and
+   external storage management suppresses inherited managed Ceph configuration.
+   This does not remove authored forbidden fields or repair arbitrary failed
+   prerequisites; those remain errors.
+7. Check required fields and every cross-field, reference, domain, and graph
+   constraint on the resulting objects. Invalid explicit or inherited values
+   fail; they never trigger another fallback or silently weaken constraints.
+   Default-introduced references participate in the ordinary dependency closure.
+
+Inherited fields retain their authored origin for intent checks. Recheck
+forbidden-input and authored-intent constraints after applying defaults and
+before normalization can replace or erase a value. For example, a Machine
+default cannot add authored access to a Bootwright-installed Machine whose
+access must be derived. An explicitly declared default is authored intent;
+an intrinsic built-in fallback is not.
+
+Omitted `defaults`, `defaults: {}`, and an omitted or empty kind entry add no
+Environment fallback for that scope. Schema-defined omission defaults remain
+in force after Environment defaults; required means required in the resulting
+object unless the field is explicitly an authored-intent requirement.
+
+Relative paths copied from defaults retain the recipient kind's declaring-file
+or source-root rules. They are not rebased against the Environment directory.
+Diagnostics identify the default's source path, recipient object/field, and
+recipient resolution base without opening a payload. Defaulting performs no
+file access, Secret read, generation, or materialization. The common API
+[normalization rules](../api.md#defaults-normalization-and-effective-state)
+own expansion limits, canonical output, and immutable source provenance.
+
+## Download mirrors
+
+`spec.downloads` is a closed map with these fields in order:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `install.pullSecretRef` | string | no | cluster convention | Default `dockerConfigJson` Secret name copied only to a `ContainerCluster` that omits its install pull secret. |
-| `install.nodeSSH` | object | no | cluster convention | Same closed shape as `ContainerCluster.spec.install.nodeSSH`; copied only when that cluster omits it. |
-| `clientsMirror` | string | no | upstream source | Absolute HTTP(S) base URL for OpenShift client downloads. |
+| `openshiftClientsMirror` | string | no | upstream source | Absolute HTTP(S) base URL for OpenShift client downloads. |
 | `virtctlMirror` | string | no | host-cluster source | Absolute HTTP(S) base URL for the matching `virtctl`. |
 | `helmMirror` | string | no | upstream source | Absolute HTTP(S) base URL for Helm's `latest` channel. |
 
-URLs must include scheme and host and must not embed credentials. A diagnostic
-against a copied pull-secret or node-SSH reference identifies the value as
-defaulted and names the cluster field that overrides it.
+URLs require scheme and host and reject embedded credentials. These fields
+select download sources; they do not fill attributes on cluster objects.
 
-## Secret storage
-
-`spec.secretStorage.mode` accepts `source` or `context` and defaults to
-`source`:
-
-- `source` leaves `Secret.spec.source.file` material at its declared
-  operator-owned paths; and
-- `context` requires an explicit materialization command to copy that
-  material into confidential context storage before a secret-consuming
-  operation.
-
-This field selects custody policy only; materialization is an explicit effect.
+Secret source and custody declarations belong to
+[each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
+setting. A default may supply an omitted Secret source, but cannot override an
+authored source or copy material. Moving operator-owned file material into
+context storage requires an explicit source migration and authorized import.
 
 ## Proxy selection and service catalogs
 
-`spec.proxyFor` contains only `bootwright`, `containerClusterInstall`, and
-`machineOSInstall`. Each value is empty, the literal `none`, or the name of one
-`spec.infraComponents.proxies[]` entry. Empty inherits the one default proxy,
-or the sole proxy when exactly one exists; `none` opts out. The machine-OS
-install consumer may resolve only to an external proxy because a managed proxy
-does not exist before that OS is installed.
+`spec.proxy` is a closed object with fields in this order:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `defaultRef` | string | no | direct access | Nonempty name of one `infraComponents.proxies[]` row. |
+| `bootwright` | choice object | no | `defaultRef`, otherwise direct | Controller-side proxy choice. |
+| `containerClusterInstall` | choice object | no | `defaultRef`, otherwise direct | Container installation proxy choice. |
+| `machineOSInstall` | choice object | no | `defaultRef`, otherwise direct | Machine OS installation proxy choice; a selected proxy must be external. |
+
+Each authored consumer choice contains exactly one `proxyRef: <catalog-name>`
+or `direct: {}`. `proxyRef` is a nonempty string resolving to a proxy row;
+`direct` accepts no parameters and opts out even if `defaultRef` exists.
+An empty consumer object, null, unknown key/reference, or conflicting arm is
+invalid. Empty strings and the former string `none` selector are not choices.
+
+Resolve choices after applying kind defaults. An omitted consumer inherits
+`defaultRef`; with no default it uses direct access. If no `proxy` remains, or
+it is explicitly `{}`, all consumers use direct access. Proxy catalog presence,
+row order, singleton status, and ambient proxy variables never select a route.
+`defaultRef` is the only proxy default selector; proxy rows have no default flag.
+A row named `default` is an ordinary row, not a keyword. Existing catalog name
+constraints remain in force.
+
+Managed proxy dependencies must be ready before their consumers run. Failure
+or unavailability never silently falls back to direct access. Machine OS
+installation may select only an external proxy because a managed proxy does
+not exist before its own host's OS is installed.
 
 `spec.infraComponents` contains catalogs in this field order: `proxies`,
 `nameResolution`, `artifactServers`, `registries`, then `ntp`. Every entry has
@@ -200,7 +302,6 @@ facts named below.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `name` | string | yes | — | Catalog identity. |
-| `default` | boolean | no | `false` | At most one proxy row is marked default. |
 | `management` | string | yes | — | `external` or `managed`. |
 | `componentRef` | string | conditional | — | Required for managed; selects `InfraComponent.spec.proxy`. |
 | `endpointRef` | string | no | — | Managed endpoint name on the selected component. |
@@ -246,7 +347,8 @@ A consumer's `artifactServerEndpoint` is a closed object with string fields
 `serverRef` then `endpointRef`. The optional `serverRef` names a catalog row;
 omission selects its default or sole row. The required `endpointRef` names an
 endpoint on that row's managed component or external endpoint list. Consumers
-state which management mode they permit. No default supplies `endpointRef`.
+state which management mode they permit. No catalog or built-in fallback
+supplies `endpointRef`; an applicable kind default may supply it explicitly.
 
 ### Registry catalog
 

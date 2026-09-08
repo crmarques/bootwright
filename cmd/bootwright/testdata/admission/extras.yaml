@@ -1,0 +1,322 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNFSExport
+metadata:
+  name: acceptance-nfs
+
+spec:
+  clusterRef: ceph-multidc-01
+  serviceID: acceptance-nfs
+
+  placement:
+    hosts:
+      - node-01
+
+  exports:
+    - pseudo: /acceptance
+      filesystemRef: odf-cephfs
+      clients:
+        - 192.0.2.123/24
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: CustomPlaybook
+metadata:
+  name: acceptance-playbook
+
+spec:
+  follows: base
+  playbook: playbooks/does-not-exist.yaml
+
+  target:
+    clusters:
+      - ceph-multidc-01
+
+  enabled: false
+
+  extraVars:
+    literal: 'true'
+    enabled: false
+    count: 3
+    fraction: 1.25
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-hypervisor
+
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+
+  os:
+    provided: true
+
+  access:
+    local: true
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-provider-credentials
+
+spec:
+  type: usernamePassword
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: acceptance-libvirt
+
+spec:
+  libvirt:
+    machineRef: acceptance-hypervisor
+    uri: qemu:///system
+
+    bmcEmulationDefaults:
+      auth:
+        credentialsRef: acceptance-provider-credentials
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: acceptance-vsphere
+
+spec:
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        datacenters:
+          - example-dc
+        credentialsRef: acceptance-provider-credentials
+
+    failureDomains:
+      - name: example-zone
+        server: vcenter.example.test
+        region: example-region
+        zone: example-zone
+        topology:
+          datacenter: example-dc
+          computeCluster: example-compute
+          datastore: example-store
+          networks:
+            - example-network
+
+    machineProfiles:
+      - name: clone
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 80
+        template: Templates/example-rhel
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: acceptance-clone
+
+spec:
+  os:
+    family: RHEL
+    version: '9.99'
+    architecture: x86_64
+
+  installer:
+    templateClone:
+      seed:
+        cloudInit: {}
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-clone-node
+
+spec:
+  substrate:
+    providerRef: acceptance-vsphere
+    profileRef: clone
+
+  os:
+    provided: false
+    installProfileRef: acceptance-clone
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: acceptance-load-balancer
+
+spec:
+  loadBalancer:
+    implementation: haproxy
+    machineRef: acceptance-hypervisor
+    bindAddresses:
+      - address: 192.0.2.200
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: acceptance-proxy
+
+spec:
+  proxy:
+    implementation: squid
+    machineRef: acceptance-hypervisor
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: acceptance-dns
+
+spec:
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: acceptance-hypervisor
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: acceptance-ntp
+
+spec:
+  ntp:
+    implementation: chrony
+    machineRef: acceptance-hypervisor
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: acceptance-registry
+
+spec:
+  registry:
+    implementation: mirror-registry
+    machineRef: acceptance-hypervisor
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: acceptance-redhat-ceph
+
+spec:
+  type: redhat-ceph
+
+  rhsm:
+    management: external
+
+  registry:
+    credentialsRef: acceptance-provider-credentials
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: acceptance-external-storage
+
+spec:
+  type: ceph
+  management: external
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: acceptance-external-export
+
+spec:
+  type: dataFoundation
+  clusterRef: acceptance-external-storage
+
+  externalDetails:
+    fromSecretRef: acceptance-external-details
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-external-details
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-sno-node
+
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+
+  os:
+    provided: false
+
+  network:
+    configRef: hub-vm-network
+
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+
+    addresses:
+      - name: primary
+        address: 192.0.2.220/24
+        interface: primary
+
+      - name: storage
+        address: 198.51.100.120/25
+        interface: ceph-public
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: acceptance-sno
+
+spec:
+  distribution:
+    type: okd
+    release:
+      image: quay.io/example/okd:4.99.1
+
+  install:
+    endpoints:
+      api:
+        source:
+          type: node
+
+      ingress:
+        source:
+          type: node
+
+  nodes:
+    - name: master
+      role: master
+      machineRef: acceptance-sno-node
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-sno-cluster-admin-ssh-key
+
+spec:
+  type: sshKeyPair

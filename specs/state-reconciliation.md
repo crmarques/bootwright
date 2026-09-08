@@ -47,7 +47,33 @@ Public `destroy` remains unavailable in that staged build. Plans remain
 complete and immutable; later artifact generation cannot append blocks or
 expand the operation. Expansion requires destroy followed by fresh apply.
 
+## Context mutation evidence
+
+Reconciliation owns a closed version-1 mutation record initialized with
+`operation: none` and `ownership: none`. Recognized operation states are `none`,
+`pending`, `failed`, `unknown` and `applied`; ownership is `none` or `retained`.
+This record establishes only local disposal/update restrictions, not native
+execution, readiness, ownership release or permission to run lifecycle work.
+Future lifecycle publication must participate in the same context lease and
+update its evidence before any remote mutation. Missing or unknown evidence
+fails closed. A live lease refuses every context mutation, including archival.
+
+The guard allows update only without pending, failed or unknown operations;
+recreation/final deletion requires `none` operation and `none` ownership.
+An explicitly requested `--abandon-resources` may instead archive recognized
+protected state as recovery-only. It never turns unknown/corrupt evidence into
+proof and never releases ownership. Recovery-only contexts remain named and
+selectable for future status/continue/destroy; input inspection remains allowed,
+but update, recreation and new apply are forbidden.
+
+The [Workspace context contract](contexts.md) defines the held lease, registry
+publication and retained archives that enforce this guard. The staged apply
+restriction above adds a stronger update prohibition when destroy is unavailable.
+
 ## Durable identities and private paths
+
+[Contexts](contexts.md) owns the versioned registry, immutable input revisions,
+selection transactions and archive format.
 
 Workspace owns selection and verification of `<state-root>` and allocation of
 `<context-id>`. `<state-root>` is a canonical absolute Bootwright-owned runtime

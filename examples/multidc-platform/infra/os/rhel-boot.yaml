@@ -2,6 +2,7 @@ apiVersion: bootwright.io/v1alpha1
 kind: MachineImage
 metadata:
   name: rhel-boot
+
 spec:
   bootMedia: local-media:rhel-9.99-x86_64-boot.iso
-  checksum: 0000000000000000000000000000000000000000000000000000000000000000
+  checksum: '0000000000000000000000000000000000000000000000000000000000000000'

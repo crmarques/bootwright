@@ -1,6 +1,7 @@
 package architecture_test
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -10,39 +11,236 @@ import (
 	"testing"
 )
 
-func TestSkeletonEffectBoundary(t *testing.T) {
-	root := filepath.Join("..", "..", "internal")
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-		if err != nil {
-			return err
-		}
-		isCLI := strings.HasPrefix(path, filepath.Join(root, "cli")+string(filepath.Separator))
-		for _, imp := range file.Imports {
-			name, err := strconv.Unquote(imp.Path.Value)
+type packageRole string
+
+const (
+	domainRole      packageRole = "domain"
+	applicationRole packageRole = "application"
+	adapterRole     packageRole = "adapter"
+	cliRole         packageRole = "CLI"
+	technicalRole   packageRole = "technical"
+	compositionRole packageRole = "composition"
+)
+
+func packageRoles() map[string]packageRole {
+	roles := map[string]packageRole{
+		"api/v1alpha1":                          domainRole,
+		"internal/substrate":                    domainRole,
+		"internal/infrastructureservices":       domainRole,
+		"internal/desiredstate/customplaybooks": domainRole,
+		"internal/desiredstate/inputfs":         adapterRole,
+		"internal/desiredstate/yamlstream":      adapterRole,
+		"internal/desiredstate/encoding":        adapterRole,
+		"internal/workspace/contextfs":          adapterRole,
+		"internal/reconciliation/contextguard":  applicationRole,
+		"cmd/bootwright":                        compositionRole,
+		"internal/cli":                          cliRole,
+		"internal/availability":                 technicalRole,
+	}
+	for _, capability := range []string{
+		"addons/catalog", "addons/preflight",
+		"containercluster/access", "containercluster/installation", "containercluster/preflight",
+		"controller/prerequisites", "desiredstate/compilation",
+		"environment/access", "environment/inspection", "environment/preflight",
+		"machine/access", "machine/inventory", "managedos/media",
+		"nativeartifacts/rendering", "reconciliation/lifecycle",
+		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering",
+		"trust/enrollment", "workspace/contexts",
+	} {
+		owner, _, _ := strings.Cut(capability, "/")
+		roles["internal/"+owner] = domainRole
+		roles["internal/"+capability] = applicationRole
+	}
+	return roles
+}
+
+func permitsDependency(consumer, provider packageRole) bool {
+	switch consumer {
+	case domainRole:
+		return provider == domainRole || provider == technicalRole
+	case applicationRole:
+		return provider == domainRole || provider == applicationRole || provider == technicalRole
+	case cliRole:
+		return provider != adapterRole && provider != compositionRole
+	case technicalRole:
+		return provider == technicalRole
+	case adapterRole:
+		return provider != cliRole && provider != compositionRole
+	case compositionRole:
+		return true
+	default:
+		return false
+	}
+}
+
+type sourceFile struct {
+	path    string
+	owner   string
+	syntax  *ast.File
+	imports []packageImport
+}
+
+type packageImport struct {
+	alias string
+	path  string
+}
+
+func productionSources(t *testing.T) []sourceFile {
+	t.Helper()
+	var sources []sourceFile
+	root := filepath.Join("..", "..")
+	for _, directory := range []string{"api", "internal", filepath.Join("cmd", "bootwright")} {
+		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			importsEffectCapability := name == "os" || strings.HasPrefix(name, "os/") || name == "net" ||
-				(strings.HasPrefix(name, "net/") && name != "net/url") ||
-				name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || name == "syscall" ||
-				name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys")
-			if importsEffectCapability {
-				t.Errorf("%s imports effect capability %s", path, name)
+			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
 			}
-			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" || name == "fmt") {
-				t.Errorf("%s depends on presentation %s", path, name)
+			syntax, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+			if err != nil {
+				return err
+			}
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			source := sourceFile{path: filepath.ToSlash(relative), owner: filepath.ToSlash(filepath.Dir(relative)), syntax: syntax}
+			for _, imp := range syntax.Imports {
+				name, err := strconv.Unquote(imp.Path.Value)
+				if err != nil {
+					return err
+				}
+				alias := filepath.Base(name)
+				if imp.Name != nil {
+					alias = imp.Name.Name
+				}
+				source.imports = append(source.imports, packageImport{alias: alias, path: name})
+			}
+			sources = append(sources, source)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return sources
+}
+
+func TestPackageDependencyDirection(t *testing.T) {
+	roles := packageRoles()
+	for _, source := range productionSources(t) {
+		consumer, ok := roles[source.owner]
+		if !ok {
+			t.Errorf("%s has no declared package role", source.owner)
+			continue
+		}
+		for _, imported := range source.imports {
+			providerPath, local := strings.CutPrefix(imported.path, "github.com/crmarques/bootwright/")
+			if !local {
+				continue
+			}
+			provider, ok := roles[providerPath]
+			if !ok {
+				t.Errorf("%s imports unclassified package %s", source.path, providerPath)
+				continue
+			}
+			if !permitsDependency(consumer, provider) {
+				t.Errorf("%s (%s) depends on %s (%s)", source.path, consumer, providerPath, provider)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
+	}
+}
+
+func TestConcreteServicesAreBoundAtComposition(t *testing.T) {
+	roles := packageRoles()
+	sources := productionSources(t)
+	concreteServices := map[string]bool{}
+	for _, source := range sources {
+		if roles[source.owner] != applicationRole {
+			continue
+		}
+		ast.Inspect(source.syntax, func(node ast.Node) bool {
+			declaration, ok := node.(*ast.TypeSpec)
+			if ok && declaration.Name.Name == "Service" {
+				if _, concrete := declaration.Type.(*ast.StructType); concrete {
+					concreteServices["github.com/crmarques/bootwright/"+source.owner] = true
+				}
+			}
+			return true
+		})
+	}
+	for _, source := range sources {
+		if roles[source.owner] == compositionRole {
+			continue
+		}
+		for _, imported := range source.imports {
+			if imported.alias == "." && concreteServices[imported.path] {
+				t.Errorf("%s dot-imports application package %s", source.path, imported.path)
+			}
+		}
+		ast.Inspect(source.syntax, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if !ok || selector.Sel.Name != "Service" {
+				return true
+			}
+			qualifier, ok := selector.X.(*ast.Ident)
+			if !ok || qualifier.Obj != nil {
+				return true
+			}
+			for _, imported := range source.imports {
+				if imported.alias == qualifier.Name && concreteServices[imported.path] {
+					t.Errorf("%s references concrete service %s.Service outside composition", source.path, qualifier.Name)
+				}
+			}
+			return true
+		})
+	}
+}
+
+func TestAdmissionEffectBoundary(t *testing.T) {
+	for _, source := range productionSources(t) {
+		if source.owner == "cmd/bootwright" {
+			continue
+		}
+		isCLI := source.owner == "internal/cli"
+		input := source.owner == "internal/desiredstate/inputfs"
+		storage := source.owner == "internal/workspace/contextfs"
+		guard := source.owner == "internal/reconciliation/contextguard"
+		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
+		for _, imported := range source.imports {
+			name := imported.path
+			forbidden := strings.HasPrefix(name, "os/") || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && (name == "os" || name == "syscall")
+			if forbidden {
+				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
+			}
+			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard) {
+				t.Errorf("%s depends on presentation or unrestricted I/O %s", source.path, name)
+			}
+			ast.Inspect(source.syntax, func(node ast.Node) bool {
+				selector, ok := node.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				qualifier, ok := selector.X.(*ast.Ident)
+				if !ok || qualifier.Obj != nil || qualifier.Name != imported.alias {
+					return true
+				}
+				member := selector.Sel.Name
+				if name == "net" && member != "ParseMAC" {
+					t.Errorf("%s accesses networking through net.%s", source.path, member)
+				}
+				if name == "fmt" && !isCLI && (strings.HasPrefix(member, "Print") || strings.HasPrefix(member, "Fprint") || strings.HasPrefix(member, "Scan") || strings.HasPrefix(member, "Fscan")) {
+					t.Errorf("%s performs presentation outside the CLI", source.path)
+				}
+				if name == "os" && input && member != "File" && member != "DirEntry" && member != "NewFile" {
+					t.Errorf("%s accesses filesystem outside held handles through os.%s", source.path, member)
+				}
+				if name == "syscall" && input && (member == "O_WRONLY" || member == "O_RDWR" || member == "O_CREAT" || member == "O_TRUNC" || member == "Write" || member == "Unlink" || member == "Rename") {
+					t.Errorf("%s grants input mutation through syscall.%s", source.path, member)
+				}
+				return true
+			})
+		}
 	}
 }

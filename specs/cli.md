@@ -212,6 +212,8 @@ usage failure. Explicit help remains human under the precedence above.
 
 A context is a user-facing name for one self-contained lifecycle unit and its
 workspace-owned durable identity. Context names are lowercase DNS labels.
+[Contexts](contexts.md) defines storage, identity-preserving replacement,
+selection, ordinary confirmation and successful context command results.
 `context init` validates its source before exclusive, owner-only publication,
 then makes the new context current. Reinitialization with `--yes` is allowed
 only when no running, failed, unknown, applied, owned, or recovery-relevant
@@ -270,8 +272,9 @@ named by `--input-dir`. Context-backed whole render requires `--output-dir` and
 context-owned artifact roots.
 `render effective` is the read-only exception: text mode emits canonical
 effective YAML and JSON mode places the complete canonical effective-state
-object in its result; neither mode writes an artifact. Rendering contacts no
-host, management controller, cluster, or provider, launches no managed
+array in `result.effectiveState`, alongside admission `counts`; neither mode
+writes an artifact. Rendering contacts no host, management controller, cluster,
+or provider, launches no managed
 operation, and creates no ownership evidence. Generated native scripts are
 artifacts only and are never executed by render.
 

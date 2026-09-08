@@ -2,38 +2,40 @@ apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
   name: fusion-data-foundation
-spec:
-  type: olm
 
+spec:
   provides:
     - dataFoundation
 
-  accepts:
-    inputs:
-      - name: external-storage
-        required: true
-        resourceRef:
-          kind: StorageExport
-        effects:
-          - storageExportAttachment: {}
-      - name: ibm-entitlement
-        required: true
-        secretRef: {}
-        effects:
-          - globalPullSecretMerge:
-              registry: cp.icr.io
-              username: cp
+  requires: []
+
+  inputs:
+    - name: external-storage
+      resourceKind: StorageExport
+      required: true
+      effects:
+        - storageExportAttachment: {}
+
+    - name: ibm-entitlement
+      secretType: token
+      required: true
+      effects:
+        - globalPullSecretMerge:
+            registry: cp.icr.io
+            username: cp
 
   olm:
     namespace:
       name: openshift-storage
-      create: true
+      management: managed
       labels:
         openshift.io/cluster-monitoring: "true"
+
     operatorGroup:
       name: openshift-storage
       targetNamespaces:
         - openshift-storage
+
     catalogSource:
       name: isf-data-foundation-catalog
       image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
@@ -41,10 +43,16 @@ spec:
       publisher: IBM
       grpcPodConfig:
         securityContextConfig: restricted
+
     subscription:
       name: odf-operator
       package: odf-operator
       channel: stable-4.99
+      source: isf-data-foundation-catalog
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+
+    customResources: []
 
   readiness:
     timeout: 45m
@@ -60,3 +68,5 @@ spec:
           condition:
             type: Available
             status: "True"
+
+  steps: []

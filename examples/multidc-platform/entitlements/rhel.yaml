@@ -2,6 +2,7 @@ apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
 metadata:
   name: rhel-satellite
+
 spec:
   type: redhat-rhel
 
@@ -9,7 +10,8 @@ spec:
     management: managed
     organizationRef: satellite-org
     activationKeyRef: satellite-activation-key
+    connectToInsights: false
     satellite:
       hostname: subscription.example.com
-      contentBaseURL: https://subscription.example.com/pulp/content
       trustBundleRef: satellite-ca-bundle
+      contentBaseURL: https://subscription.example.com/pulp/content

@@ -2,6 +2,7 @@ apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
   name: storage-a-01
+
 spec:
   capabilities:
     - ceph-node
@@ -19,51 +20,62 @@ spec:
       rootDeviceHints:
         deviceName: /dev/sda
 
-  addresses:
-    - name: fqdn
-      address: storage-a-01.example.com
-    - name: ssh
-      address: 198.51.100.1
-    - name: cluster
-      address: 203.0.113.1
-
   network:
-    config:
-      networkConfigRef: ceph-network
-      attachmentRef: ceph-network
-      interfaceAddresses:
-        - interface: bond0.200
-          addressRef: ssh
-          prefixLength: 25
-        - interface: bond0.300
-          addressRef: cluster
-          prefixLength: 24
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+
+    addresses:
+      - name: fqdn
+        address: storage-a-01.example.com
+
+      - name: ssh
+        address: 198.51.100.1/25
+        interface: bond0.200
+
+      - name: cluster
+        address: 203.0.113.1/24
+        interface: bond0.300
+
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
+
       - nicRef: eth1
         interfaceName: eth1
+
       - nicRef: eth2
         interfaceName: eth2
+
       - nicRef: eth3
         interfaceName: eth3
+
+    overrides: {}
 
   hardware:
     nics:
       - name: eth0
         macAddress: 02:00:00:00:00:00
+
       - name: eth1
         macAddress: 02:00:00:00:00:01
+
       - name: eth2
         macAddress: 02:00:00:00:00:02
+
       - name: eth3
         macAddress: 02:00:00:00:00:03
+
     boot:
       nicRef: eth0
+
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
+        protocol: redfish
         credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
         virtualMedia:
           tls:
             trust: established

@@ -2,10 +2,10 @@ apiVersion: bootwright.io/v1alpha1
 kind: StoragePool
 metadata:
   name: odf-hub-multidc-01-rbd
+
 spec:
-  storageClusterRef: ceph-multidc-01
-
+  clusterRef: ceph-multidc-01
   placementPolicyRef: stretch-datacenter
-
-  ceph:
-    role: rbd
+  type: replicated
+  role: rbd
+  application: rbd

@@ -2,8 +2,10 @@ apiVersion: bootwright.io/v1alpha1
 kind: StorageExport
 metadata:
   name: ceph-multidc-01-odf-hub-multidc-01
+
 spec:
-  storageClusterRef: ceph-multidc-01
+  type: dataFoundation
+  clusterRef: ceph-multidc-01
 
   dataFoundation:
     rbdPoolRef: odf-hub-multidc-01-rbd

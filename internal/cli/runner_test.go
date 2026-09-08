@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/availability"
-	"github.com/crmarques/bootwright/internal/containercluster"
-	"github.com/crmarques/bootwright/internal/environment"
-	"github.com/crmarques/bootwright/internal/machine"
+	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
+	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 )
 
 func runRecorded(args []string) (int, string, string, *dispatchRecord) {
@@ -147,13 +147,13 @@ func TestPayloadParsing(t *testing.T) {
 			}
 			var got []string
 			switch request := record.request.(type) {
-			case machine.ExecRequest:
+			case machineaccess.ExecRequest:
 				got = request.Command
-			case environment.ClusterExecRequest:
+			case environmentaccess.ClusterExecRequest:
 				got = request.Command
-			case containercluster.OCRequest:
+			case containeraccess.OCRequest:
 				got = request.Command
-			case containercluster.KubectlRequest:
+			case containeraccess.KubectlRequest:
 				got = request.Command
 			default:
 				t.Fatalf("unexpected request %T", request)

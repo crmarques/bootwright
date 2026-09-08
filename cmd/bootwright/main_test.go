@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -27,7 +30,9 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 }
 
 func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	commandsWithSyntheticInputs := [][]string{
+		{"validate", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
 		{"context", "init", "--name", "example", "-f", "inputs"},
 		{"context", "update", "--name", "example", "-f", "inputs"},
 		{"context", "use", "--name", "example"},
@@ -82,9 +87,102 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := run(context.Background(), args, &stdout, &stderr)
-			if code != 1 || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), "[FAIL] cli.not-implemented: bootwright ") {
+			prefix := "[FAIL] cli.not-implemented: bootwright "
+			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") {
+				prefix = "[FAIL] input.not-found "
+			} else if args[0] == "context" || args[0] == "validate" || args[0] == "render" && len(args) > 1 && args[1] == "effective" {
+				prefix = "[FAIL] context.state:"
+			}
+			if args[0] == "context" && args[1] == "list" {
+				if code != 0 || stderr.Len() != 0 {
+					t.Fatalf("empty list: %d %s %s", code, stdout.String(), stderr.String())
+				}
+				return
+			}
+			if code != 1 || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), prefix) {
 				t.Fatalf("composition result: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
 		})
+	}
+}
+
+func TestComposedExplicitValidationIsContextFree(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("input admission is qualified for linux/amd64")
+	}
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	if err := os.Mkdir(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	input := filepath.Join(root, "environment.yaml")
+	content := []byte("apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n")
+	if err := os.WriteFile(input, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"validate", "-f", input, "--context", "missing"},
+		{"validate", "-f", input, "--context", "missing", "--output", "json"},
+	} {
+		var out, errOut bytes.Buffer
+		if code := run(context.Background(), args, &out, &errOut); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("explicit validation: %d %s %s", code, out.String(), errOut.String())
+		}
+		if args[len(args)-1] == "json" {
+			var envelope struct {
+				OK     bool
+				Result struct {
+					Counts struct{ FilesSeen, ObjectsDecoded int }
+				}
+				Diagnostics []any
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || !envelope.OK || envelope.Result.Counts.FilesSeen != 1 || envelope.Result.Counts.ObjectsDecoded != 1 || len(envelope.Diagnostics) != 0 {
+				t.Fatalf("complete compiler result %s: %v", out.String(), err)
+			}
+		} else if out.String() != "[OK] Desired state is valid (files seen: 1, objects decoded: 1)\n" {
+			t.Fatal(out.String())
+		}
+	}
+	for _, args := range [][]string{{"validate", "--context", "missing"}, {"render", "effective", "--context", "missing"}} {
+		var out, errOut bytes.Buffer
+		if code := run(context.Background(), args, &out, &errOut); code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), "context.state") {
+			t.Fatal("absent context failed without a typed state diagnostic", code, out.String(), errOut.String())
+		}
+	}
+	for _, args := range [][]string{{"version"}, {"validate", "-f", input, "--help"}, {"__bootwright_complete", "validate", ""}, {"validate", "-f", input, "--unknown"}} {
+		var out, errOut bytes.Buffer
+		run(context.Background(), args, &out, &errOut)
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("read-only composition created workspace state", entries, err)
+	}
+	got, err := os.ReadFile(input)
+	if err != nil || !bytes.Equal(got, content) {
+		t.Fatal("validation modified input")
+	}
+}
+
+func TestComposedValidationPreservesTypedInputFailures(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("input admission is qualified for linux/amd64")
+	}
+	var out, errOut bytes.Buffer
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+	code := run(context.Background(), []string{"validate", "-f", path, "--output", "json"}, &out, &errOut)
+	var envelope struct {
+		OK          bool
+		Result      any
+		Diagnostics []struct {
+			Code   string
+			Source struct{ Path string }
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || code != 1 || errOut.Len() != 0 || envelope.OK || envelope.Result != nil || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "input.not-found" || envelope.Diagnostics[0].Source.Path != path {
+		t.Fatalf("typed input failure: %d %s %s %v", code, out.String(), errOut.String(), err)
 	}
 }

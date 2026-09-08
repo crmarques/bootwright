@@ -1,0 +1,307 @@
+//go:build linux && amd64
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/workspace/contextfs"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
+)
+
+const syntheticEnvironment = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n"
+
+func contextFixture(t *testing.T) (cli.Services, *contextfs.Store, string, string) {
+	t.Helper()
+	parent := t.TempDir()
+	input := filepath.Join(parent, "input")
+	root := filepath.Join(parent, "state")
+	if err := os.Mkdir(input, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
+		t.Fatal(err)
+	}
+	repository := contextfs.New(contextfs.Options{Root: root})
+	return wireContextServices(repository, nil), repository, input, root
+}
+
+func contextRun(t *testing.T, services cli.Services, want int, args ...string) (string, string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	code := runServices(ctx, args, &out, &errOut, services)
+	if code != want {
+		t.Fatalf("%v: code=%d want=%d\nstdout=%s\nstderr=%s", args, code, want, out.String(), errOut.String())
+	}
+	return out.String(), errOut.String()
+}
+
+func stateFingerprint(t *testing.T, root string) map[string]string {
+	t.Helper()
+	result := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		value := fmt.Sprintf("%v %d %d", info.Mode(), info.Size(), info.ModTime().UnixNano())
+		if info.Mode().IsRegular() {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			value += fmt.Sprintf(" %x", sha256.Sum256(data))
+		}
+		result[relative] = value
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestCompleteContextJourney(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	contextRun(t, services, 0, "context", "list")
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("read-only list created state: %v", err)
+	}
+	contextRun(t, services, 1, "context", "current", "--short")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	registry, err := repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registry.Contexts) != 1 {
+		t.Fatal(registry)
+	}
+	first := registry.Contexts[0]
+	short, _ := contextRun(t, services, 0, "context", "current", "--short")
+	if short != "alpha\n" {
+		t.Fatal(short)
+	}
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "-f", input)
+	contextRun(t, services, 1, "context", "init", "--name", "other", "-f", input, "--yes")
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "-f", input)
+	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	registry, err = repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Contexts[0].ID != first.ID || registry.Contexts[0].Revision == first.Revision {
+		t.Fatal("update changed identity or did not replace revision", registry)
+	}
+	other := filepath.Join(t.TempDir(), "input")
+	if err := os.Mkdir(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
+		t.Fatal(err)
+	}
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "-f", other, "--yes")
+	contextRun(t, services, 0, "context", "init", "--name", "beta", "-f", other)
+	contextRun(t, services, 0, "context", "use", "--name", "alpha")
+	list, _ := contextRun(t, services, 0, "context", "list")
+	if strings.Index(list, "alpha") > strings.Index(list, "beta") {
+		t.Fatal(list)
+	}
+	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
+	contextRun(t, services, 1, "context", "current", "--short")
+	contextRun(t, services, 1, "validate", "--context", "alpha")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	registry, err = repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range registry.Contexts {
+		if record.Name == "alpha" && record.ID != first.ID {
+			t.Fatal("reinitialization lost permanent identity")
+		}
+	}
+}
+
+func TestContextReplayAndReadOnlyEffects(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: credential\nspec:\n  type: opaque\n  source:\n    file:\n      path: secrets/value\n"
+	if err := os.WriteFile(filepath.Join(input, "credential.yaml"), []byte(secret), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(input, "secrets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(input, "secrets", "value"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	explicit, _ := contextRun(t, services, 0, "validate", "-f", input, "--output", "json")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	frozen, _ := contextRun(t, services, 0, "validate", "--output", "json")
+	if explicit != frozen {
+		t.Fatalf("frozen admission changed results:\n%s\n%s", explicit, frozen)
+	}
+	registry, err := repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutation := filepath.Join(root, "contexts", registry.Contexts[0].ID, "mutation.json")
+	if err := os.Remove(mutation); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(mutation, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(input); err != nil {
+		t.Fatal(err)
+	}
+	before := stateFingerprint(t, root)
+	yaml, stderr := contextRun(t, services, 0, "render", "effective")
+	if stderr != "" || !strings.Contains(yaml, "secrets/value") {
+		t.Fatal(yaml, stderr)
+	}
+	output, stderr := contextRun(t, services, 0, "render", "effective", "--output", "json")
+	if stderr != "" {
+		t.Fatal(stderr)
+	}
+	var envelope struct {
+		OK     bool
+		Result struct {
+			Counts         struct{ FilesSeen, ObjectsDecoded int }
+			EffectiveState []json.RawMessage
+		}
+		Diagnostics []json.RawMessage
+		Logs        []json.RawMessage
+	}
+	if err := json.Unmarshal([]byte(output), &envelope); err != nil || !envelope.OK || len(envelope.Result.EffectiveState) != 2 || envelope.Result.Counts.FilesSeen != 2 || len(envelope.Diagnostics) != 0 || len(envelope.Logs) != 0 {
+		t.Fatalf("effective result %s: %v", output, err)
+	}
+	frozen, _ = contextRun(t, services, 0, "validate", "--context", "alpha", "--output", "json")
+	if frozen != explicit {
+		t.Fatal("original deletion changed replay")
+	}
+	after := stateFingerprint(t, root)
+	if fmt.Sprint(before) != fmt.Sprint(after) {
+		t.Fatal("inspection modified stored data")
+	}
+}
+
+func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
+	services, _, input, root := contextFixture(t)
+	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte("invalid: ["), 0600); err != nil {
+		t.Fatal(err)
+	}
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "-f", input)
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("failed admission created state: %v", err)
+	}
+	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"secret", "generate", "--context", "alpha"}, {"render", "installer", "--context", "alpha"}, {"status", "--context", "alpha"}} {
+		_, stderr := contextRun(t, services, 1, args...)
+		if !strings.Contains(stderr, "cli.not-implemented") {
+			t.Fatal(stderr)
+		}
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("unavailable route created state: %v", err)
+	}
+	nested := filepath.Join(input, "state")
+	nestedServices := wireContextServices(contextfs.New(contextfs.Options{Root: nested}), nil)
+	_, stderr := contextRun(t, nestedServices, 1, "context", "init", "--name", "alpha", "-f", input)
+	if !strings.Contains(stderr, "context.state") {
+		t.Fatal("nested store did not fail before parsing input", stderr)
+	}
+}
+
+func TestProtectedContextArchival(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	registry, err := repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := registry.Contexts[0].ID
+	mutation := filepath.Join(root, "contexts", id, "mutation.json")
+	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"failed","ownership":"retained"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes")
+	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes", "--abandon-resources")
+	registry, err = repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registry.Contexts) != 1 || registry.Contexts[0].Mode != contexts.RecoveryOnly || registry.Current != "alpha" {
+		t.Fatal(registry)
+	}
+	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "context", "use", "--name", "alpha")
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "-f", input, "--yes")
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	retained, err := os.ReadFile(mutation)
+	if err != nil || !bytes.Contains(retained, []byte("retained")) {
+		t.Fatal("archive lost recovery evidence", err)
+	}
+}
+
+func TestCompleteExampleContextRoundTrip(t *testing.T) {
+	services, _, input, _ := contextFixture(t)
+	if err := os.RemoveAll(input); err != nil {
+		t.Fatal(err)
+	}
+	sources := exampleSources(t)
+	for _, collection := range [][]desiredstate.SourceFile{sources.Files, sources.Markers} {
+		for _, file := range collection {
+			relative, err := filepath.Rel(sources.Roots[0], file.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			destination := filepath.Join(input, relative)
+			if err := os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(destination, file.Bytes(), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	direct, _ := contextRun(t, services, 0, "validate", "-f", input, "--output", "json")
+	contextRun(t, services, 0, "context", "init", "--name", "complete", "-f", input)
+	if err := os.RemoveAll(input); err != nil {
+		t.Fatal(err)
+	}
+	replay, _ := contextRun(t, services, 0, "validate", "--output", "json")
+	if replay != direct {
+		t.Fatal("complete example did not replay equivalently")
+	}
+	rendered, stderr := contextRun(t, services, 0, "render", "effective", "--output", "json")
+	var result struct {
+		Result struct{ EffectiveState []json.RawMessage }
+	}
+	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 93 || stderr != "" {
+		t.Fatalf("complete effective state: count=%d stderr=%s err=%v", len(result.Result.EffectiveState), stderr, err)
+	}
+}

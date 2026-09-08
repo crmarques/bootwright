@@ -2,8 +2,10 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: hub-multidc-01-cluster-admin-ssh-key
+
 spec:
   type: sshKeyPair
+
   source:
     generated:
       keyType: rsa

@@ -6,6 +6,22 @@ selected for this skeleton. Its pflag dependency supplies established Boolean,
 scalar, and repeated-flag parsing; the standard library handles encoding and
 context-independent value validation.
 
+Desired-state parsing selects unmodified
+[go.yaml.in/yaml/v3 v3.0.5](https://github.com/yaml/go-yaml/releases/tag/v3.0.5)
+as its stable v3 baseline. The node representation exposes scalar tags, styles,
+mapping entries and source coordinates needed by Bootwright's strict decoder.
+Bootwright owns schema and lexical validation instead of relying on automatic
+Go-value unmarshalling. This choice adds no local parser patch or fork and
+does not select a prerelease parser API.
+
+The adapter verifies bounded source bytes before parsing, then checks each
+composed document's representation budget before decoding or retaining it.
+Its one-document lookahead, parser-error precedence and cooperative
+cancellation limits are defined by the
+[API parser boundary](../specs/api.md#parser-boundary). The isolated 1 GiB RSS
+and 120-second watchdog qualification is a required M1b check; this dependency
+choice alone is not evidence that the check passed.
+
 Completion candidates derive from the same Cobra tree. The private adapter
 implements the [completion boundary](../specs/cli/commands.md#completion).
 Its framework constraints and shell harness findings are indexed in
@@ -47,7 +63,9 @@ cancellation, and effect boundaries. Completion verification additionally
 sources and exercises generated scripts in Bash, Zsh, Fish, and PowerShell.
 Unavailable shell runtimes are missing verification evidence, not passes.
 
-Future lifecycle, filesystem, secret, and remote implementations remain in
-their [owning milestones](../specs/milestones.md). Stub request structures are
-internal scaffolding, not a committed public desired-state API or successful
-result format.
+The active [M1b delivery](../specs/milestones.md#first-delivery-context-free-desired-state-admission)
+implements context-free `validate -f`. Durable contexts, context-backed
+validation, public effective rendering, secrets and lifecycle/remote work
+remain in their owning delivery slices. Unavailable stub requests remain
+internal scaffolding; admission's public grammar and successful report belong
+to the API and CLI specifications.

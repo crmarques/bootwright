@@ -2,8 +2,9 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: ibm-entitlement-key
+
 spec:
   type: token
+
   source:
-    file:
-      path: ../secrets/sources/ibm-entitlement-key.txt
+    contextStore: {}

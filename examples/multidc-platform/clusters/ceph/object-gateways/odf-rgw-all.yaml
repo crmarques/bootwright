@@ -2,21 +2,32 @@ apiVersion: bootwright.io/v1alpha1
 kind: StorageObjectGateway
 metadata:
   name: odf-rgw-all
-spec:
-  storageClusterRef: ceph-multidc-01
 
-  public:
+spec:
+  clusterRef: ceph-multidc-01
+  serviceID: odf.all
+
+  placement:
+    hosts:
+      - node-01
+      - node-02
+      - node-03
+      - node-04
+      - node-05
+      - node-06
+    countPerHost: 1
+
+  frontendPort: 8080
+  config: {}
+
+  endpoint:
     dnsLabel: rgw
     scheme: https
     port: 443
 
-  ceph:
-    serviceID: odf.all
-    placement:
-      sites:
-        - site-a
-        - site-b
-      countPerHost: 1
+    tls:
+      secretRef: ceph-multidc-01-rgw-all-tls
+
     ingresses:
       - name: ha
         address: 198.51.100.59
@@ -24,10 +35,11 @@ spec:
         virtualInterfaceNetworks:
           - "198.51.100.0/25"
         firstVirtualRouterID: 43
-        tls:
-          certificateRef: ceph-multidc-01-rgw-all-tls
-          keyRef: ceph-multidc-01-rgw-all-tls
         placement:
-          sites:
-            - site-a
-            - site-b
+          hosts:
+            - node-01
+            - node-02
+            - node-03
+            - node-04
+            - node-05
+            - node-06

@@ -2,7 +2,10 @@ apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata:
   name: physical-cluster-addons
+
 spec:
+  profileRefs: []
+
   addonRefs:
     - fusion-data-foundation
     - openshift-virtualization

@@ -39,9 +39,9 @@ Use two-space indentation, block mappings/sequences unless an empty or atomic
 flow value is clearer, lowercase `true`/`false`/`null`, and quoting when plain style
 would change a scalar's intended type.
 
-- Keep root identity scalars together; separate subsequent top-level mapping
-  or sequence sections. In Bootwright resources, `apiVersion`/`kind`, `metadata`,
-  and `spec` are separate blocks.
+- Keep the Kubernetes-style identity envelope contiguous: `apiVersion`, `kind`,
+  and `metadata` have no intervening blank lines. Separate `spec` and subsequent
+  top-level mapping or sequence sections from that envelope.
 - Among direct `spec` children, each scalar/empty-collection run is one block;
   each non-empty mapping or sequence is its own block. Separate these blocks.
 - Keep nested compact records contiguous. Separate schema-defined sections,

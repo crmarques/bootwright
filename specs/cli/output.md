@@ -108,6 +108,46 @@ Successful result objects have stable top-level fields:
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
 
+The `validate` result orders its fields as listed above and has this exact
+shape:
+
+```json
+{"counts":{"filesSeen":2,"objectsDecoded":4},"excludedContainerClusters":[],"excludedStorageClusters":[],"excludedResourceFiles":[],"advisories":[]}
+```
+
+`counts` contains only `filesSeen` and `objectsDecoded`, in that order, with
+[the API loader's counting semantics](../api.md#yaml-streams-and-decoding).
+The cluster-exclusion arrays contain unique names in ascending bytewise order.
+`excludedResourceFiles` contains unique, sorted paths of resource-excluded files
+that declare Bootwright objects. These slash-separated display paths are
+relative to the selected Environment file's directory; an informational `..`
+segment grants no filesystem or resource-selection authority. A file outside
+that directory receives remediation to place its declaration within the
+directory before adding it to `resources`, never an invalid traversal selector.
+Exclusion diagnostics carry the object identities and safe remediation.
+
+`advisories` contains the ordered `api.deferred` warning subset using the
+diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
+human output presents each diagnostic only once. All four arrays are always
+present, including when empty. Every failed `validate` invocation returns
+`result: null`; partial loader counts remain internal.
+
+`render effective` returns admission `counts` and `effectiveState`, the canonical
+ordered array of complete effective objects. Successful `diagnostics` and
+`logs` are empty. Text mode emits the exact canonical YAML bytes, including
+the final LF, with empty stderr. [Context command results](../contexts.md#command-results-and-confirmation)
+remain text-only.
+
+A successful human `validate` writes exactly one summary line to standard
+output, substituting the decimal counts:
+
+```text
+[OK] Desired state is valid (files seen: <N>, objects decoded: <M>)
+```
+
+Ordered exclusion and advisory warnings use the ordinary diagnostic lines on
+standard error. Warnings do not change success or add duplicate summary groups.
+
 An unavailable optional collection is an empty array, not `null`; an unavailable
 optional scalar or object is omitted unless its command contract requires a
 stable nullable field. Counts are non-negative integers. Paths are safe,
@@ -200,7 +240,10 @@ unavailable command still follows the no-context-read
 
 ## Diagnostic taxonomy and order
 
-Diagnostic codes are stable machine identifiers. The shared codes are:
+Diagnostic codes are stable machine identifiers. Include an object identity
+only when its kind and name form a valid API identity; malformed names are
+reported through the source coordinates and `$.metadata.name` field without
+repeating unbounded authored text in every diagnostic. The shared codes are:
 
 | Code | Meaning |
 | --- | --- |

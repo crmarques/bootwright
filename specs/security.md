@@ -15,14 +15,18 @@ Parse once into closed typed structures, normalize once, and pass only those
 values across ports. Unknown fields, duplicate meanings, implicit coercions,
 and adapter-invented defaults are errors.
 
-Every input boundary defines and tests fixed limits before proportional
-allocation or work: bytes per file and operation, directory depth and entry
-count, YAML depth and node count, object and reference count, string and
-collection length, decoded payload size, diagnostic count, log and subprocess
+Every input boundary defines and tests fixed limits: bytes per file and
+operation, directory depth and entry count, YAML depth and node count, object
+and reference count, string and collection length, decoded payload size,
+diagnostic count, log and subprocess
 output, target concurrency, redirects, retries, and wall-clock duration. Limit
 failures are explicit and deterministic; partial input is never accepted as
-complete. Cancellation stops admission of new work and releases bounded
-resources.
+complete. Enforce limits before proportional allocation or work except for
+the explicitly qualified desired-state
+[per-document parser boundary](api.md#parser-boundary): verified source-byte
+limits precede parsing, while representation limits follow composition of one
+document. Cancellation stops admission of new work and releases bounded
+resources at the owning boundary's documented cancellation points.
 
 Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
@@ -52,6 +56,11 @@ context-backed invocation may read only the metadata required to resolve the
 selected context and its immutable desired-state input view; it reads no
 lifecycle or confidential state. An in-tree file source uses the reserved
 `secrets` path segment so API discovery never reads it as desired state.
+
+The [durable context boundary](contexts.md#storage-locking-and-publication)
+adds held-root publication, strict bounded records, lock-free immutable reads
+and conservative corruption refusal. Its manifest freezes authored input only;
+source paths never authorize payload access during admission or inspection.
 
 Secret materialization requires an explicit context-scoped authority and must
 not fall back to ambient credentials. Secret bytes stay in bounded memory, an

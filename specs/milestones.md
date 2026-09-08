@@ -1,9 +1,9 @@
 # Milestones
 
-**Current milestone: M1a — completed.** The Cobra CLI implements the complete
-catalog, help, version, and completion. All 49 application commands call typed,
-injected stubs and report `cli.not-implemented` without effects. M1b remains
-unstarted; this completion does not authorize its implementation.
+**Current milestone: M1b — completed.** Desired-state admission for all 21 API
+kinds, durable contexts, context-backed validation and public `render effective`
+are implemented. M1a's catalog, help, version, completion and unavailable-command
+guarantees remain in force. M1c is the next delivery and remains unimplemented.
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. Keep detailed implementation plans
@@ -106,20 +106,115 @@ Delivered evidence:
 ## M1b — durable contexts and desired-state admission
 
 **Owners:** Workspace (context state), Desired state and Environment (compiler
-and immutable admitted input). **Requires:** M1a. **Definition:** Needs definition.
+and immutable admitted input). **Requires:** M1a.
 
-Implement all `context` commands, `validate` and `render effective` with all 21
-[API kinds](api.md). Before implementation, define canonical context/current
-selection and immutable-input formats, copied file set and provenance, locking,
-crash/migration/refusal/archival behavior, and relative Secret paths without
-copying or rebasing confidential bytes.
+### First delivery: context-free desired-state admission
 
-Exit: deterministic discovery, strict decoding, bounds, normalization,
-references, graph validation, diagnostics and canonical YAML/JSON; an injected
-CLI/application boundary; complete context journeys; and tests for concurrent
-access, rooted atomic durable publication, corruption/crash recovery and safe
-archival. Read-only commands must prove no payload/secret reads, writes,
-processes or network access.
+**Definition:** Specified. **Delivery:** Completed.
+
+Implement `validate` only when at least one `-f/--file` source is supplied,
+with all 21 [API kinds](api.md), on Linux/amd64 with the existing Go 1.26.7
+toolchain. Use unmodified `go.yaml.in/yaml/v3` v3.0.5 under the
+[parser boundary](api.md#parser-boundary). The CLI returns a typed validation
+report through the existing text/JSON modes. Without `-f`, `validate` retains
+the unavailable result before any state-root or context lookup. Every other
+unavailable use case retains its typed stub and no-effect boundary.
+
+The compiler owns immutable authored input, provenance, normalization and an
+internal effective inspection representation. This delivery adds neither
+context persistence nor public effective rendering, payload access, native
+rendering, process or network work.
+
+Admission coverage must include kind-default precedence, empty/atomic values,
+variant/conditional-arm inheritance, internal effective-state serialization
+stability for empty and zero values, self-default rejection, expansion bounds,
+recipient path bases and dependency closure; unified Machine IP/prefix assignments,
+installation eligibility and exact NIC binding; native NMState composition;
+storage child ownership and endpoint TLS; and typed add-on inputs and OLM
+readiness. The specifications and examples do not constitute this compiler.
+
+Exit evidence, required before claiming this delivery complete:
+
+- Deterministic rooted discovery, strict decoding, all fixed bounds, complete
+  normalization, reference and graph validation, and ordered text/JSON reports.
+- Immutable authored and normalized representations, retained safe provenance,
+  and canonical encoder fixtures without an authored-input trust bypass.
+- Parser qualification against malformed, oversized, deeply nested and
+  high-cardinality fixtures in an isolated helper with a 1 GiB RSS ceiling and
+  120-second watchdog, including the documented composition lookahead and
+  cooperative cancellation limits.
+- All-kind and cross-kind positive/negative fixtures, determinism and
+  non-mutation tests, bounded fuzzing, injected CLI/application tests, and
+  proof of no state lookup, payload/secret reads, writes, processes or network
+  access. Help, completion, version, invalid usage and unavailable commands
+  retain their stricter no-effect tests.
+- Repository verification and dependency review on the integrated commit;
+  passed checks are recorded only after they have run.
+
+Delivered evidence:
+
+- `make check`, `make build`, and `./scripts/go test -race ./...` pass with
+  Go 1.26.7 on Linux/amd64. Both module graphs pass `go mod tidy -diff` and
+  verification. The complete official vulnerability database was mirrored
+  locally for the pinned scanner; no known reachable vulnerabilities were found.
+  All four [qualified shell integrations](../docs/development.md) pass.
+- The composed CLI validates the unchanged synthetic example as 93 files and
+  93 objects. The expanded acceptance fixture admits 113 objects spanning all
+  21 kinds, including StorageNFSExport and reserved CustomPlaybook declarations.
+  [Acceptance tests](../cmd/bootwright/admission_acceptance_test.go) cover
+  precedence, order independence, derived values and authored restrictions.
+- [Parser qualification](../internal/desiredstate/yamlstream/qualification_linux_test.go)
+  passed all seven isolated adversarial cases within the 1 GiB/120-second
+  budgets. The measured maximum RSS was 423,936,000 bytes; the suite took
+  2.848 seconds. These measurements do not change the cooperative parser
+  cancellation contract.
+- A 20-second `FuzzAdmissionCompiler` run with two workers completed 112,854
+  executions without failure. Parser and reserved-content fuzzing, strict
+  decoding, graph/default/cancellation/limit regressions, safe acquisition,
+  immutable provenance, effective codec round trips and CLI output-failure
+  checks also pass. Independent effect, dependency, full-tree and diff reviews
+  are complete.
+
+### Second delivery: durable contexts and admitted input
+
+**Definition:** Complete in [Contexts](contexts.md). **Delivery:** Completed.
+
+All `context` commands, context-backed `validate`, and public `render effective`
+use the versioned registry, frozen acquisition manifests, original provenance,
+mutation leases and atomic publication. Authored input remains separate from
+effective inspection output.
+
+Exit: complete context journeys; canonical public YAML/JSON; concurrent access,
+rooted atomic durable publication, corruption/crash recovery and safe archival
+tests. Read-only commands prove no payload/secret reads, writes, processes or
+network access.
+
+Delivered evidence:
+
+- Complete init/update/use/list/current/delete journeys, identity-preserving
+  replacement and reinitialization, current-selection clearing, ordinary
+  confirmation, guarded disposal and recovery-only archival pass.
+- The synthetic 93-object example imports, survives removal of its original
+  tree, validates equivalently and renders complete canonical YAML/JSON.
+  Frozen excluded streams, markers and original Secret path bases are retained.
+  FIFO payload and lifecycle fixtures prove inspection does not open them.
+- Closed metadata, duplicate/null/unknown-field refusal, preallocation bounds,
+  immutable blob digests, unsafe paths/types/modes/links, input/state overlap,
+  concurrent replacement and complete old/new reader observations pass.
+  Every publication checkpoint admits injected interruption; subprocess exits
+  on both sides of the registry commit prove safe selection and lock release.
+- A real PTY confirmation interrupted by an OS signal returns exit `130`, keeps
+  selection unchanged and releases leases. Input descriptor flags, cancellation,
+  output failures and informational/unavailable effect boundaries pass.
+- Final `make check` (including four-shell completion and the complete local
+  vulnerability database), `make build`, `./scripts/go test -race ./...`, both
+  modules' `go mod tidy -diff`, and `git diff --check` pass. The ordinary suite
+  includes parser qualification under its 1 GiB/120-second acceptance budgets.
+- Final 20-second, two-worker fuzz runs pass: `FuzzAdmissionCompiler` completes
+  51,507 executions and `FuzzPersistedRecords` completes 364,043 executions.
+  Storage qualification passes on available tmpfs and Btrfs filesystems. Other
+  allowlisted local filesystem types were not individually exercised; no
+  power-loss or remote-filesystem qualification is claimed.
 
 ## M1c — context secret management
 
@@ -141,6 +236,10 @@ permissions, concurrency, cancellation and cryptographic failure.
 **Owners:** State reconciliation and Infrastructure services, using Workspace,
 Secrets, Machine and Trust. **Requires:** M1c and one exact supported server and
 host-runtime matrix. **Definition:** Needs definition.
+
+Extend the context mutation guard to enforce the staged-availability update
+restriction after apply registration while destroy remains unavailable, as
+required by [state reconciliation](state-reconciliation.md#lifecycle-unit).
 
 Enable full-context apply and exact continuation for an Environment whose only
 lifecycle capabilities are persistent managed `artifactServer` components on

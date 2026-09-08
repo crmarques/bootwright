@@ -2,9 +2,9 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: artifact-server-tls
+
 spec:
   type: tlsCertificate
+
   source:
-    file:
-      cert: ../secrets/sources/artifact-server-tls.crt
-      key: ../secrets/sources/artifact-server-tls.key
+    contextStore: {}

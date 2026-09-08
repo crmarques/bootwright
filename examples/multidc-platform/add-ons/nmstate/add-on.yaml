@@ -2,25 +2,33 @@ apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
   name: nmstate
-spec:
-  type: olm
 
+spec:
   provides:
     - nmstate
+
+  requires: []
+  inputs: []
 
   olm:
     namespace:
       name: openshift-nmstate
-      create: true
+      management: managed
+      labels: {}
+
     operatorGroup:
       name: openshift-nmstate
       targetNamespaces:
         - openshift-nmstate
+
     subscription:
       name: kubernetes-nmstate-operator
       package: kubernetes-nmstate-operator
       channel: stable
       source: redhat-operators
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+
     customResources:
       - apiVersion: nmstate.io/v1
         kind: NMState
@@ -45,3 +53,5 @@ spec:
           condition:
             type: Available
             status: "True"
+
+  steps: []

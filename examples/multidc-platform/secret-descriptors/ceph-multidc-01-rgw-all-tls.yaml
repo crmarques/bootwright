@@ -2,10 +2,13 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: ceph-multidc-01-rgw-all-tls
+
 spec:
   type: tlsCertificate
+
   source:
     generated:
       commonName: rgw.ceph-multidc-01.clusters.example.com
       dnsNames:
         - rgw.ceph-multidc-01.clusters.example.com
+      validityDays: 3650

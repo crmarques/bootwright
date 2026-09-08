@@ -2,12 +2,25 @@ apiVersion: bootwright.io/v1alpha1
 kind: StorageFilesystem
 metadata:
   name: odf-cephfs
-spec:
-  storageClusterRef: ceph-multidc-01
 
-  cephfs:
-    metadataPoolRef: odf-cephfs-metadata
-    dataPoolRefs:
-      - odf-cephfs-data
-    mds:
-      activeCount: 2
+spec:
+  clusterRef: ceph-multidc-01
+  metadataPoolRef: odf-cephfs-metadata
+
+  dataPoolRefs:
+    - name: odf-cephfs-data
+      default: true
+
+  mds:
+    activeCount: 2
+    standbyReplay: false
+    placement:
+      hosts:
+        - node-01
+        - node-02
+        - node-03
+        - node-04
+        - node-05
+        - node-06
+
+  subvolumeGroups: []
